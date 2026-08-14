@@ -293,13 +293,23 @@ not know it happened. Run the transition afterwards and the end state is correct
 `check-closing-keywords` and `publish-review` report the cause, not just the symptom: a keyword is a
 hard stop (exit `1`), a branch link is reported with the follow-up it mandates and does not block.
 
-`publish-review` scans for a keyword **before its first remote mutation** — the commit messages
-`origin/<base>..<branch>` adds, and the body it is about to write are all readable locally. So that
-refusal leaves the branch unpushed and no pull request opened, and says so. The scan after the
-readback stays, because a keyword can also arrive from the remote side of a reused pull request; a
-refusal from *there* carries `"world": "committed"`, and every surface reads that as **the write
-landed; what failed came after it** rather than as nothing having happened. Any refusal without that
-field means what it always meant.
+`publish-review` scans for a keyword **before its first remote call** — before it lists open pull
+requests, before a reused one is drafted or its body refreshed, and before the push. The sources are
+the commit messages `origin/<base>..<branch>` adds and the body it is about to write, both readable
+locally, so that refusal leaves the remote exactly as it found it and says so.
+
+*Before the push* is not far enough, and the difference is not academic: a reused pull request is
+drafted and has its title and body replaced first, and a body carrying `Closes #<n>` is written
+verbatim, so a refusal there has already published the hazard it exists to refuse.
+
+The scan after the readback stays — a keyword can also arrive from the remote side of a pull request
+this run did not write, and it settles a branch-derived link that needs the PR to exist. A refusal
+from *there* carries `"world": "committed"`, which every surface reads as **the write landed; what
+failed came after it** rather than as nothing having happened. Any refusal without that field means
+what it always meant.
+
+A `git log` that does not answer is not a branch with no keywords: both this scan and
+`check-closing-keywords` refuse on it rather than continuing with an empty list.
 
 **An issue that is not finished when its PR merges is a separate case**, because the auto-close does
 not care whether the delivery was the whole issue or one slice of it. Marking a partly-delivered

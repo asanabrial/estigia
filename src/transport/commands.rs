@@ -1101,13 +1101,9 @@ pub(super) fn assess_autoclose(
         }
     }
     if let (Some(base), Some(branch)) = (base, branch) {
-        let range = format!("origin/{base}..{branch}");
-        let log = super::run(
-            &["git", "log", &range, "--format=%B"],
-            Some(&context.repo_dir),
-            super::How::tolerated(),
-        )?;
-        for text in super::closing::keywords_naming(&log.stdout, issue) {
+        for text in
+            super::closing::keywords_in_commits(context, &context.repo_dir, base, branch, issue)?
+        {
             hits.push(serde_json::json!({ "where": "commit message", "text": text }));
         }
     }

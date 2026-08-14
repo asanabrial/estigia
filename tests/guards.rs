@@ -468,7 +468,14 @@ const AFFIRMED: &[(&str, u64)] = &[
     // declared it had already written. The population is unchanged — still the
     // codes `0` through `5` — and so is the fail-closed boundary: a code nobody
     // has read still lands in `Unknown` rather than in the stop arm.
-    ("exit-code", 5892094398140142819),
+    //
+    // Re-affirmed again the same day, after review: the second axis of that new
+    // arm was wrong. It answered `ExactReplaySafe` beside an action reading *do
+    // not bind review or CI to anything yet: re-read the pull request*, and
+    // repeating the identical call mints a fresh epoch over a head somebody else
+    // pushed. `StatusRequired` is the one that matches the sentence. The
+    // population and the boundary are still untouched.
+    ("exit-code", 6935824797548370733),
     // `writing-shell` — new on 2026-08-01, closing the hole `repository-shell`
     // used to claim and never covered. Read against the function: the four
     // shapes it names (redirect, in-place edit, inline code, the copy/move/

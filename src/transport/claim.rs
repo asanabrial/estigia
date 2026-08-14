@@ -1561,6 +1561,48 @@ pub fn publish_review(
     // Discover and, when needed, draft a reused PR before the push. A ready PR
     // would otherwise emit synchronize and expose the new head before the
     // review barrier was restored.
+    // The closing-keyword refusal, where it can be true.
+    //
+    // It used to fire two hundred lines below, after the push and after the pull
+    // request was opened, and it is a `Stop` — whose outcome line reads *nothing
+    // was written*. It had written a branch and a PR. A run believing that
+    // message leaves both orphaned, and the next call fails for an unrelated
+    // reason with the operator debugging from a false premise this tool supplied.
+    //
+    // Every source of a keyword this run introduces is readable before the
+    // remote is touched: the commit messages this branch adds, and the body
+    // about to be written. So it is read here, above `open_prs` — **above every
+    // remote call**, not merely above the push.
+    //
+    // It sat below `open_prs` first, which was the same defect wearing a
+    // shorter distance. On the reused-PR path `ensure_draft` runs `gh pr ready
+    // --undo` and `edit_pr` replaces the live title and body, and `pr_body_text`
+    // leaves a body naming `#<n>` exactly as written — so a body carrying
+    // `Closes #<n>` was published to the pull request, and the refusal that
+    // followed still said nothing had been written. That is the field report's
+    // own shape: its PR already existed on the retry.
+    //
+    // The check below stays — it also settles a branch-derived link, and a
+    // keyword can arrive from the remote side of a PR this run did not write —
+    // but it can no longer be the first thing to notice one.
+    let mut wrote_keyword = super::closing::keywords_in_commits(context, at, base, branch, issue)?;
+    if let Some(file) = pr_body_file
+        && let Ok(text) = std::fs::read_to_string(file)
+    {
+        wrote_keyword.extend(super::closing::keywords_naming(&text, issue));
+    }
+    if !wrote_keyword.is_empty() {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "closing-keyword-live",
+            "cause": "closing-keyword",
+            "keyword_sources": wrote_keyword,
+            "action": "the issue WOULD auto-close on merge, bypassing transition and the mirror \
+                       \u{2014} remove the keyword (use `Refs #<n>`) and re-run; nothing has been \
+                       pushed and no pull request was opened",
+        })));
+    }
+
     let existing = open_prs(context, branch)?;
     if existing.len() > 1 {
         return Err(Failure::Stop(serde_json::json!({
@@ -1583,48 +1625,6 @@ pub fn publish_review(
         return Err(Failure::Stop(serde_json::json!({
             "ok": false, "reason": "missing-pr-body",
             "action": "pass --pr-body-file for a new PR",
-        })));
-    }
-
-    // The closing-keyword refusal, where it can be true.
-    //
-    // It used to fire two hundred lines below, after the push and after the pull
-    // request was opened, and it is a `Stop` — whose outcome line reads *nothing
-    // was written*. It had written a branch and a PR. A run believing that
-    // message leaves both orphaned, and the next call fails for an unrelated
-    // reason with the operator debugging from a false premise this tool supplied.
-    //
-    // Every source of a keyword is readable before the remote is touched: the
-    // commit messages this branch adds, and the body about to be written. The
-    // check below stays where it is — it also settles a branch-derived link,
-    // which needs the pull request to exist — but it can no longer be the first
-    // thing to notice a keyword.
-    let mut wrote_keyword: Vec<String> = Vec::new();
-    let commits = super::run(
-        &[
-            "git",
-            "log",
-            "--format=%B",
-            &format!("origin/{base}..{branch}"),
-        ],
-        Some(at),
-        super::How::read(),
-    )?;
-    wrote_keyword.extend(super::closing::keywords_naming(&commits.stdout, issue));
-    if let Some(file) = pr_body_file
-        && let Ok(text) = std::fs::read_to_string(file)
-    {
-        wrote_keyword.extend(super::closing::keywords_naming(&text, issue));
-    }
-    if !wrote_keyword.is_empty() {
-        return Err(Failure::Stop(serde_json::json!({
-            "ok": false,
-            "reason": "closing-keyword-live",
-            "cause": "closing-keyword",
-            "keyword_sources": wrote_keyword,
-            "action": "the issue WOULD auto-close on merge, bypassing transition and the mirror \
-                       \u{2014} remove the keyword (use `Refs #<n>`) and re-run; nothing has been \
-                       pushed and no pull request was opened",
         })));
     }
 

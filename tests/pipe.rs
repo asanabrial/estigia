@@ -8242,6 +8242,202 @@ fn a_closing_keyword_refuses_before_the_branch_reaches_the_remote() {
          horizon=2099-01-01T00:00Z op-id={} -->",
         "a".repeat(32)
     );
+    // Both shapes. The reused one is the field report's own — its pull request
+    // already existed on the retry — and it is the one that stayed broken when
+    // the scan merely moved above the push: `ensure_draft` and `edit_pr` write
+    // to the live pull request before it.
+    for listed in [
+        "[]",
+        "[{\"number\":99,\"url\":\"u\",\"headRefOid\":\"x\",\"baseRefOid\":\"y\",\"isDraft\":true}]",
+    ] {
+        let answers = serde_json::to_string(&serde_json::json!([
+            {
+                "matches": "issue view",
+                "stdout": serde_json::json!({
+                    "state": "OPEN",
+                    "labels": [{"name": "status:in-progress"}],
+                    "comments": [{
+                        "id": "IC_1",
+                        "createdAt": "2026-01-01T00:00Z",
+                        "viewerDidAuthor": true,
+                        "includesCreatedEdit": false,
+                        "body": format!("Claimed.\n\n{claim}\n"),
+                    }],
+                }).to_string(),
+                "status": 0,
+            },
+            { "matches": "pr list", "stdout": listed, "status": 0 },
+            { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+        ]))
+        .expect("the fake tracker script serialises");
+
+        let runs = home.join(".estigia").join("runs");
+        // The store is revision-guarded, so the second shape needs a clean pointer.
+        let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
+        let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+        run.issue = Some(12);
+        run.state = Some("in-progress".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "publish_review",
+                "arguments": {
+                    "issue": 12,
+                    "run_id": run_id,
+                    "branch": branch,
+                    "base": "main",
+                    "pr_title": "Something",
+                    "pr_body_file": body.display().to_string(),
+                    "worktree": repo.display().to_string(),
+                }
+            }
+        })
+        .to_string();
+
+        let log = trace.path().join("calls.log");
+        let count = trace.path().join("count.json");
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_COUNT", &count)
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+
+        assert_eq!(response["result"]["isError"], true, "{response}");
+        assert!(
+            text.contains("closing-keyword-live"),
+            "the keyword was not what refused it: {text}"
+        );
+
+        // The acceptance criterion, literally: the remote is unchanged.
+        let refs = Command::new("git")
+            .arg("-C")
+            .arg(origin.path())
+            .args(["for-each-ref", "--format=%(refname)"])
+            .output()
+            .expect("the origin is readable");
+        let refs = String::from_utf8_lossy(&refs.stdout).into_owned();
+        assert!(
+            !refs.contains(branch),
+            "the branch reached the remote before the refusal: {refs}"
+        );
+        let calls = std::fs::read_to_string(&log).unwrap_or_default();
+        for wrote in ["pr create", "pr edit", "pr ready"] {
+            assert!(
+                !calls.contains(wrote),
+                "`{wrote}` reached the remote before the refusal ({listed}): {calls}"
+            );
+        }
+    }
+}
+
+/// A refusal that arrives after the push says the write landed.
+///
+/// The transport had no way to say it: the outcome is derived from the exit
+/// code, and a stop is `1` whether it refused before touching anything or after
+/// pushing a branch and opening a pull request — so every refusal claimed
+/// nothing had happened. The channel that fixes it was itself untested: renaming
+/// the field in both producers left the whole suite green, which is this
+/// repository's own definition of an untested fix.
+///
+/// Driven through the readback disagreement, which is a real post-push refusal:
+/// the branch is on the remote and the pull request is open by the time the
+/// head comes back wrong.
+#[test]
+fn a_refusal_after_the_push_reports_that_the_write_landed() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-published";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    assert!(git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string()
+    ]));
+    assert!(git(&["branch", "-M", "main"]));
+    std::fs::write(repo.join("kept.txt"), "base\n").expect("the base file");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "base content",
+    ]));
+    assert!(git(&["push", "-q", "origin", "main"]));
+    assert!(git(&["checkout", "-q", "-b", branch]));
+    std::fs::write(repo.join("kept.txt"), "changed\n").expect("the change");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        // No keyword: this run must reach the push.
+        "a change that names no issue",
+    ]));
+
+    let body = trace.path().join("pr-body.md");
+    std::fs::write(&body, "A body that names nothing.\n").expect("the body");
+
+    let claim = format!(
+        "<!-- issue-flow: claim run-id={run_id} runtime=claude \
+         horizon=2099-01-01T00:00Z op-id={} -->",
+        "a".repeat(32)
+    );
     let answers = serde_json::to_string(&serde_json::json!([
         {
             "matches": "issue view",
@@ -8258,7 +8454,34 @@ fn a_closing_keyword_refuses_before_the_branch_reaches_the_remote() {
             }).to_string(),
             "status": 0,
         },
-        { "matches": "pr list", "stdout": "[]", "status": 0 },
+        // Nothing open before; the freshly created one after. `published`
+        // lists twice, and the second list is how it learns the number.
+        { "matches": "pr list", "nth": 1, "stdout": "[]", "status": 0 },
+        {
+            "matches": "pr list",
+            "stdout": serde_json::json!([{
+                "number": 7,
+                "url": "https://github.com/o/r/pull/7",
+                "headRefOid": "0".repeat(40),
+                "baseRefOid": "0".repeat(40),
+                "isDraft": true,
+            }]).to_string(),
+            "status": 0,
+        },
+        { "matches": "pr create", "stdout": "https://github.com/o/r/pull/7\n", "status": 0 },
+        // The readback, disagreeing: a head nobody published.
+        {
+            "matches": "pr view",
+            "stdout": serde_json::json!({
+                "number": 7,
+                "url": "https://github.com/o/r/pull/7",
+                "headRefOid": "f".repeat(40),
+                "baseRefOid": "e".repeat(40),
+                "state": "OPEN",
+                "isDraft": true,
+            }).to_string(),
+            "status": 0,
+        },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
     .expect("the fake tracker script serialises");
@@ -8319,26 +8542,24 @@ fn a_closing_keyword_refuses_before_the_branch_reaches_the_remote() {
         .to_owned();
 
     assert_eq!(response["result"]["isError"], true, "{response}");
-    assert!(
-        text.contains("closing-keyword-live"),
-        "the keyword was not what refused it: {text}"
-    );
-
-    // The acceptance criterion, literally: the remote is unchanged.
+    // The branch really did reach the remote, which is what makes the wording
+    // load-bearing rather than decorative.
     let refs = Command::new("git")
         .arg("-C")
         .arg(origin.path())
         .args(["for-each-ref", "--format=%(refname)"])
         .output()
         .expect("the origin is readable");
-    let refs = String::from_utf8_lossy(&refs.stdout).into_owned();
     assert!(
-        !refs.contains(branch),
-        "the branch reached the remote before the refusal: {refs}"
+        String::from_utf8_lossy(&refs.stdout).contains(branch),
+        "the fixture never got as far as pushing, so it proves nothing"
     );
-    let calls = std::fs::read_to_string(&log).unwrap_or_default();
     assert!(
-        !calls.contains("pr create"),
-        "a pull request was opened before the refusal: {calls}"
+        text.contains("the write landed"),
+        "a refusal after the push still claimed nothing was written: {text}"
+    );
+    assert!(
+        !text.contains("nothing was written"),
+        "a refusal after the push claimed both: {text}"
     );
 }

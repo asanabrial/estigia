@@ -167,7 +167,11 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
         // had happened is the one thing this taxonomy exists to refuse.
         1 if answer.already_wrote() => (
             MutationOutcome::Committed,
-            Replayability::ExactReplaySafe,
+            // Not `ExactReplaySafe`. `publication-readback-disagrees` reaches
+            // here saying *do not bind review or CI to anything yet: re-read the
+            // pull request*, and repeating the identical call mints a fresh
+            // epoch over a head somebody else pushed. Read first, then decide.
+            Replayability::StatusRequired,
             match answer.action() {
                 Some(action) => Resolution::no_command(NoCommandReason::WorldAction, action),
                 None => Resolution::no_command(

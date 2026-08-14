@@ -388,3 +388,32 @@ fn is_word(c: char) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+/// The closing keywords the commits this branch adds name, read where it lives.
+///
+/// One place because it was two, and the two disagreed about the thing that
+/// matters most: what a `git log` that did not answer means. `publish_review`'s
+/// copy refused; `assess_autoclose`'s tolerated the failure and carried on with
+/// an empty list, which turns an unread source into *no keyword found* — and a
+/// keyword nobody read is exactly how an issue auto-closes behind the workflow.
+/// A read that did not answer is not clearance, so this refuses, and both
+/// callers now learn the same way.
+///
+/// `at` rather than the repository root: the commits live in the isolated
+/// checkout, and the two copies had drifted about that as well.
+pub fn keywords_in_commits(
+    context: &Context,
+    at: &std::path::Path,
+    base: &str,
+    branch: &str,
+    issue: u64,
+) -> Result<Vec<String>, Failure> {
+    let _ = context;
+    let range = format!("origin/{base}..{branch}");
+    let log = super::run(
+        &["git", "log", &range, "--format=%B"],
+        Some(at),
+        super::How::read(),
+    )?;
+    Ok(keywords_naming(&log.stdout, issue))
+}
