@@ -8155,3 +8155,190 @@ fn release_does_not_report_a_release_the_transport_did_not_perform() {
         "the pointer stopped holding the issue nobody released:\n{after}"
     );
 }
+
+/// A closing keyword refuses **before** the branch reaches the remote.
+///
+/// It refused after: the push had landed and the pull request was open when
+/// `publish_review` answered `closing-keyword-live`, whose outcome line reads
+/// *"nothing was written"*. A run that believes it leaves an orphan branch and
+/// an orphan pull request nobody knows exist, and the next call fails for an
+/// unrelated reason — the operator debugging it starting from a false premise
+/// supplied by the tool whose whole job is to be the honest one.
+///
+/// `Closes #n` in a commit message is readable locally, so the refusal costs
+/// nothing where it belongs. The assertion is the acceptance criterion's own:
+/// the remote is unchanged.
+#[test]
+fn a_closing_keyword_refuses_before_the_branch_reaches_the_remote() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-something";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success()),
+        "the bare origin was not created"
+    );
+    let origin_url = origin.path().display().to_string();
+    assert!(git(&["remote", "add", "origin", &origin_url]));
+    assert!(git(&["branch", "-M", "main"]));
+    // A tree with something in it: an empty one is not a delivery target, and
+    // `clean_target` says so before anything about keywords is decided.
+    std::fs::write(repo.join("kept.txt"), "base\n").expect("the base file is written");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "base content",
+    ]));
+    assert!(
+        git(&["push", "-q", "origin", "main"]),
+        "the base did not push"
+    );
+    assert!(git(&["checkout", "-q", "-b", branch]));
+    std::fs::write(repo.join("kept.txt"), "changed\n").expect("the change is written");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(
+        git(&[
+            "-c",
+            "user.email=nobody@example.invalid",
+            "-c",
+            "user.name=nobody",
+            "commit",
+            "--quiet",
+            "-m",
+            // The keyword, in the one place the issue says is readable locally.
+            "make it better\n\nCloses #12",
+        ]),
+        "the keyword commit was not made"
+    );
+
+    let body = trace.path().join("pr-body.md");
+    std::fs::write(&body, "A body that names nothing.\n").expect("the body is written");
+
+    let claim = format!(
+        "<!-- issue-flow: claim run-id={run_id} runtime=claude \
+         horizon=2099-01-01T00:00Z op-id={} -->",
+        "a".repeat(32)
+    );
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "labels": [{"name": "status:in-progress"}],
+                "comments": [{
+                    "id": "IC_1",
+                    "createdAt": "2026-01-01T00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!("Claimed.\n\n{claim}\n"),
+                }],
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "pr list", "stdout": "[]", "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.issue = Some(12);
+    run.state = Some("in-progress".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "publish_review",
+            "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "branch": branch,
+                "base": "main",
+                "pr_title": "Something",
+                "pr_body_file": body.display().to_string(),
+                "worktree": repo.display().to_string(),
+            }
+        }
+    })
+    .to_string();
+
+    let log = trace.path().join("calls.log");
+    let count = trace.path().join("count.json");
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_COUNT", &count)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    assert_eq!(response["result"]["isError"], true, "{response}");
+    assert!(
+        text.contains("closing-keyword-live"),
+        "the keyword was not what refused it: {text}"
+    );
+
+    // The acceptance criterion, literally: the remote is unchanged.
+    let refs = Command::new("git")
+        .arg("-C")
+        .arg(origin.path())
+        .args(["for-each-ref", "--format=%(refname)"])
+        .output()
+        .expect("the origin is readable");
+    let refs = String::from_utf8_lossy(&refs.stdout).into_owned();
+    assert!(
+        !refs.contains(branch),
+        "the branch reached the remote before the refusal: {refs}"
+    );
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        !calls.contains("pr create"),
+        "a pull request was opened before the refusal: {calls}"
+    );
+}

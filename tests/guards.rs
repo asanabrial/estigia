@@ -464,7 +464,11 @@ const AFFIRMED: &[(&str, u64)] = &[
     // anything else to `Unknown`, never to the stop arm. Moved onto the item
     // while reading it: as a `//` comment inside the function body, `syn` never
     // saw it and no test had ever checked it.
-    ("exit-code", 4259271790196236529),
+    // Re-affirmed 2026-08-14: `1` is now read twice, on whether the transport
+    // declared it had already written. The population is unchanged — still the
+    // codes `0` through `5` — and so is the fail-closed boundary: a code nobody
+    // has read still lands in `Unknown` rather than in the stop arm.
+    ("exit-code", 5892094398140142819),
     // `writing-shell` — new on 2026-08-01, closing the hole `repository-shell`
     // used to claim and never covered. Read against the function: the four
     // shapes it names (redirect, in-place edit, inline code, the copy/move/

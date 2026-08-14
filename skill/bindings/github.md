@@ -293,6 +293,14 @@ not know it happened. Run the transition afterwards and the end state is correct
 `check-closing-keywords` and `publish-review` report the cause, not just the symptom: a keyword is a
 hard stop (exit `1`), a branch link is reported with the follow-up it mandates and does not block.
 
+`publish-review` scans for a keyword **before its first remote mutation** — the commit messages
+`origin/<base>..<branch>` adds, and the body it is about to write are all readable locally. So that
+refusal leaves the branch unpushed and no pull request opened, and says so. The scan after the
+readback stays, because a keyword can also arrive from the remote side of a reused pull request; a
+refusal from *there* carries `"world": "committed"`, and every surface reads that as **the write
+landed; what failed came after it** rather than as nothing having happened. Any refusal without that
+field means what it always meant.
+
 **An issue that is not finished when its PR merges is a separate case**, because the auto-close does
 not care whether the delivery was the whole issue or one slice of it. Marking a partly-delivered
 parent `done` because GitHub closed it is the failure; the continuation model — a verified renewal
