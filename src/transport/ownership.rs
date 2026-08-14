@@ -486,7 +486,9 @@ pub const OPERATION_FIELDS: &[(&str, &[&str])] = &[
     ),
     (
         "review-verdict",
-        &["run-id", "epoch", "pr", "head", "base", "digest", "outcome"],
+        &[
+            "run-id", "reviewer", "epoch", "pr", "head", "base", "digest", "outcome",
+        ],
     ),
 ];
 

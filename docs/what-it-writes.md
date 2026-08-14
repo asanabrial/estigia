@@ -41,7 +41,7 @@ Five invariants, and the tests are named after them:
    **And on the way out.** `uninstall` used to take a file you had edited with the rest, named on its
    own `remove` line like every other and in no way marked as one you had touched — measured: a
    `bindings/github.md` rewritten whole and an `rdd.md` with a note appended were both taken, each
-   printed among the twenty. The same digest answers it: a file whose contents have moved since
+   printed among the eighteen. The same digest answers it: a file whose contents have moved since
    Estigia wrote them is **kept**, and named on its own line so nothing is left silently. An
    untouched one still goes, and so does every file on a machine whose record predates digests —
    otherwise the fix would leave whole installations behind, which is the failure it exists to

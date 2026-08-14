@@ -110,7 +110,7 @@ GET /members/me?key=<key>&token=<token>
 | `label` | `POST /boards/{board}/labels` if it does not exist yet, then `POST /cards/{id}/idLabels` with its id — **adds**, it does not replace |
 | `unassign` | `DELETE /cards/{id}/idMembers/{memberId}` **and** `DELETE /cards/{id}/idLabels/{devLabelId}`. **Exception — releasing work another run still holds** (lost race, stand-down): remove only your `dev:<runtime>` label; agents usually share one Trello member, so deleting the membership strips the active holder too |
 | `handoff_review` | unsupported / fail-closed: this binding has no immutable receipt-bound handoff reducer or requester-aware queue |
-| `review_verdict` | unsupported / fail-closed: this binding cannot record and verify the Tier-1 exact-receipt verdict marker |
+| `review_verdict` | unsupported / fail-closed: this binding cannot record and verify the exact-receipt verdict marker |
 | `publish_version` | unavailable: Trello is the task tracker, not the repository host. A version bump cannot close until the active repository-host binding publishes and verifies its tag; if no such binding is available, fail closed |
 | `close` | `transition` to **Done**, with a comment stating what was verified |
 

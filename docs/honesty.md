@@ -68,15 +68,32 @@ suite. Everything else here is prose held by review.
 - **Estigia cannot prove reviewers or blind judges ran.** `publish_review` mechanically freezes a
   coherent clean draft receipt over epoch, PR, head, base and manifest digest. `handoff_review`
   records that exact receipt before releasing one ownership epoch, and `review_verdict` records an
-  immutable outcome naming a distinct run. Either outcome resolves the handoff so the publisher can
-  resume; rejection permits repair but never delivery. `release_ci` checks the globally latest
-  receipt, the distinct accepted marker, current draft PR and re-derived clean target before marking
-  ready. This
-  is Tier-1 attribution and exact-byte binding only. It does not prove an independent context existed,
-  that one or two judges read those bytes, that two judges were blind to each other, or that their
-  verdicts were honest. A trusted marker can still be forged by a collaborator acting outside
-  Estigia. `single` and `two blind` remain operator-selected review contracts, not observations the
-  harness can make.
+  immutable outcome crediting a reviewer that is not the publishing run. Either outcome resolves the
+  handoff so the publisher can resume; rejection permits repair but never delivery. `release_ci`
+  checks the globally latest receipt, that accepted marker, the current draft PR and a re-derived
+  clean target before marking ready.
+
+  **What that is worth differs by route, and the marker says which.** After a handoff the reviewing
+  run holds the claim and records its own verdict, so the tracker timeline attributes it to a run
+  that really did acquire the issue. A run that acquires a reviewer without releasing the claim
+  records that reviewer's outcome itself; the marker's `run-id` and `reviewer` then differ, and the
+  answer says `self_attested`. In that case the distinctness check is comparing a name the recording
+  run chose — it establishes that the run declared somebody else reviewed, not that anybody did.
+  Estigia asks for the declaration because an unstated review is one nobody can audit, not because
+  it can check it.
+
+  None of it proves an independent context existed, that one or two judges read those bytes, that
+  two judges were blind to each other, or that their verdicts were honest. A marker can still be
+  forged by a collaborator acting outside Estigia. `single` and `two blind` remain operator-selected
+  review contracts, not observations the harness can make.
+- **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
+  not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
+  bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read
+  as clearance. Delivery asks for the same accepted verdict on both routes, so removing any protocol
+  comment can only refuse. It can still cost liveness rather than integrity: editing or deleting a
+  handoff comment lifts the requester exclusion that comment carries, returning the publishing run
+  to the queue for work no verdict covers. Estigia exposes no operation that edits or deletes a
+  comment; reaching either needs a `gh` call outside it.
 - **The draft/ready CI barrier is cooperative, not adversarial.** Compatible repositories start PR
   CI on `ready_for_review`, not topic push/open/synchronize/reopen. GitHub has no atomic
   conditional-ready operation. Collaborators or repository workflows acting outside Estigia can mark
@@ -312,8 +329,8 @@ suite. Everything else here is prose held by review.
   epoch over PR/head/base/digest while the PR is confirmed draft. `release_ci` re-verifies the live
   `review` claim, globally latest receipt across runs, latest distinct accepted verdict marker,
   current draft PR and coherent clean target, then marks ready and reads back every outcome. The
-  marker is a one-verdict Tier-1 floor; it does not enforce the two-blind policy's two-context
-  agreement. An identical-byte republish still invalidates old evidence because it creates a new
+  gate asks for one accepted verdict; it does not enforce the two-blind policy's two-context
+  agreement, and it cannot tell one context from two. An identical-byte republish still invalidates old evidence because it creates a new
   epoch. GitHub has no atomic conditional-ready operation, so an out-of-band ready or push can bypass
   this cooperative order.
   The local delivery gate still checks the published head at the
@@ -562,9 +579,11 @@ suite. Everything else here is prose held by review.
   is now built and read back by `somebody_elses_hook_is_not_this_agents_gate`.
 - **Estigia cannot check who reviewed.** The contract requires that a review *"MUST NOT be
   performed by the context that wrote the change"*. The harness now sees a `review-verdict` marker
-  and checks that its run-id differs from the publishing and requesting run-ids, but a run-id is
-  attribution rather than proof of a distinct context. The judgement still belongs to the agent;
-  Estigia records its outcome and receipt but does not observe who or what produced it.
+  and checks that the reviewer it credits is neither the publishing run nor any run that asked for
+  review. Where the reviewing run recorded its own verdict that is timeline attribution; where the
+  claim holder recorded somebody else's, it is a name that run supplied. The judgement still belongs
+  to the agent; Estigia records its outcome and receipt but does not observe who or what produced
+  it.
 - **The harness holds tools for GitHub only.** `linear` and `trello` ship a binding the agent reads
   and no executable, so the tools refuse (`tracker-has-no-transport`) and the gate stands aside.
   Estigia can install and configure those trackers; it cannot enforce anything for them.

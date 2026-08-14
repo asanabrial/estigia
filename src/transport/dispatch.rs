@@ -299,6 +299,7 @@ pub fn dispatch(
             &super::claim::VerdictReview {
                 issue: issue()?,
                 run_id: run_id()?,
+                reviewer: f.need("reviewer", operation)?,
                 operation_id: f.need("operation-id", operation)?,
                 epoch: f.need("epoch", operation)?,
                 pr: f.number("pr", operation)?,

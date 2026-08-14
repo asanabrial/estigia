@@ -759,6 +759,7 @@ pub fn run_tool(
             "review-verdict",
             &[
                 run_id,
+                field("reviewer"),
                 field("epoch"),
                 &pr,
                 field("head"),

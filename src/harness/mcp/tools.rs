@@ -424,12 +424,20 @@ pub const TOOLS: &[Tool] = &[
         name: "record_review_verdict",
         contract_name: "review_verdict",
         description: "Record an immutable verdict for the latest complete publication receipt. \
-                      Requires a live review claim and rejects the publishing or requesting run; \
-                      either outcome resolves the handoff, but only `accepted` releases delivery.",
+                      Requires a live review claim and refuses to credit the publishing or \
+                      requesting run; either outcome resolves a handoff, but only `accepted` \
+                      releases delivery.",
         operation: "review-verdict",
         arguments: &[
             ISSUE,
             RUN_ID,
+            Argument::required(
+                "reviewer",
+                "string",
+                "The context credited with the review. After a handoff this is the recording run \
+                 itself; a run that acquired a reviewer without releasing the claim names that \
+                 reviewer instead. Never the run that published.",
+            ),
             Argument::required("epoch", "string", "The publication epoch."),
             Argument::required("pr", "integer", "The pull request number.").counting_from(1),
             Argument::required("head", "string", "The full published head SHA."),

@@ -622,11 +622,21 @@ impl ReviewHandoff {
 }
 
 /// One immutable verdict over a complete publication receipt.
+///
+/// The attester and the reviewer are separate because the two review routes
+/// differ in exactly that: after a handoff the reviewing run claims the issue
+/// and records its own verdict, so the two identities coincide and the timeline
+/// attributes it. A run that acquired its reviewer directly never releases the
+/// claim, so it records its reviewer's outcome itself and the two differ. What
+/// Estigia can check is the same in both cases — that the *reviewer* is not the
+/// run that published — and no more; see `docs/honesty.md`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReviewVerdict {
     /// The operation that wrote this marker.
     pub operation_id: String,
-    /// The distinct run that reviewed the receipt.
+    /// The run that recorded it, holding the live `review` claim.
+    pub attester: String,
+    /// The context credited with the review. Never the publisher.
     pub reviewer: String,
     /// The immutable publication identity.
     pub receipt: ReviewReceipt,
@@ -637,9 +647,11 @@ pub struct ReviewVerdict {
 impl ReviewVerdict {
     fn from_marker(marker: &super::markers::Marker) -> Option<Self> {
         let operation_id = marker.get("op-id")?.clone();
-        let reviewer = marker.get("run-id")?.clone();
+        let attester = marker.get("run-id")?.clone();
+        let reviewer = marker.get("reviewer")?.clone();
         let outcome = marker.get("outcome")?.clone();
         if !ownership::is_operation_id(&operation_id)
+            || attester.is_empty()
             || reviewer.is_empty()
             || !matches!(outcome.as_str(), "accepted" | "rejected")
         {
@@ -647,6 +659,7 @@ impl ReviewVerdict {
         }
         Some(Self {
             operation_id,
+            attester,
             reviewer,
             receipt: ReviewReceipt::from_marker(marker)?,
             outcome,
@@ -686,13 +699,18 @@ fn latest_distinct_review_verdict(
     if publication.receipt != *receipt {
         return None;
     }
-    let handoffs = handoffs_for(comments, receipt);
-    if handoffs.is_empty() {
-        return None;
-    }
-    let mut forbidden: std::collections::BTreeSet<&str> =
-        [publication.publisher.as_str()].into_iter().collect();
-    forbidden.extend(handoffs.iter().map(|handoff| handoff.requester.as_str()));
+    // Deliberately not conditioned on a handoff existing. Making the verdict
+    // requirement appear only once a handoff is recorded would mean a deleted
+    // handoff comment *lowers* the bar from "a distinct reviewer accepted these
+    // bytes" to "nothing", and an erased record must never read as clearance.
+    // Delivery therefore asks for the same evidence on both review routes.
+    let mut forbidden: std::collections::BTreeSet<String> =
+        [publication.publisher].into_iter().collect();
+    forbidden.extend(
+        handoffs_for(comments, receipt)
+            .into_iter()
+            .map(|handoff| handoff.requester),
+    );
     first_protocol_markers(comments, "review-verdict")
         .iter()
         .filter_map(ReviewVerdict::from_marker)
@@ -752,6 +770,22 @@ pub fn review_eligibility(comments: &[ownership::Comment], run_id: &str) -> Revi
         requesters,
         handoff: Box::new(handoff),
     }
+}
+
+/// Composes one review protocol comment whose prose came from an agent.
+///
+/// `comment_with_body` posts what it is handed, and its contract is a body this
+/// crate composed. A blocker, a discharger and a run-id are caller text, so a
+/// body quoting a marker would **be** that marker once posted — the publishing
+/// run could carry a forged `review-verdict` inside its own handoff comment and
+/// clear the gate it is the one run forbidden to clear. `comment` and
+/// `heartbeat` already escape for this reason; these two writers were the first
+/// to route agent text through the unescaped door.
+fn protocol_body(prose: &str, marker: &str) -> String {
+    format!(
+        "{}\n\n{marker}\n",
+        super::markers::escape_control_input(prose).trim_end()
+    )
 }
 
 /// Refuses the runs an unresolved handoff excludes, whatever route they take.
@@ -1072,9 +1106,12 @@ pub fn handoff_review(
                     serde_json::json!({"ok": false, "reason": "invalid-marker-attribute"}),
                 )
             })?;
-            let body = format!(
-                "Review handoff requested by `{}` for publication epoch `{}`.\n\nBlocker: {}\n\nDischarger: {}\n\n{marker}\n",
-                handoff.run_id, handoff.epoch, handoff.blocker, handoff.discharger
+            let body = protocol_body(
+                &format!(
+                    "Review handoff requested by `{}` for publication epoch `{}`.\n\nBlocker: {}\n\nDischarger: {}",
+                    handoff.run_id, handoff.epoch, handoff.blocker, handoff.discharger
+                ),
+                &marker,
             );
             super::commands::comment_with_body(context, handoff.issue, &body)?;
 
@@ -1192,8 +1229,14 @@ pub fn handoff_review(
 pub struct VerdictReview<'a> {
     /// The issue whose receipt was reviewed.
     pub issue: u64,
-    /// The distinct reviewer run.
+    /// The run recording it, which must hold the live `review` claim.
     pub run_id: &'a str,
+    /// The context credited with the review, never the publishing run.
+    ///
+    /// After a handoff this is the recording run itself. A run that acquired a
+    /// reviewer without releasing the claim names that reviewer here instead,
+    /// which is what lets the direct route reach delivery at all.
+    pub reviewer: &'a str,
     /// Stable across every retry of this verdict.
     pub operation_id: &'a str,
     /// The publication epoch.
@@ -1215,7 +1258,35 @@ pub struct VerdictReview<'a> {
     pub now: &'a str,
 }
 
-/// Records an immutable exact-receipt verdict from a distinct current reviewer.
+/// The one rule a verdict must satisfy, whichever route produced it.
+///
+/// Written once because it had been written twice, and the two copies had
+/// already drifted: the replay path returned a refusal naming neither the
+/// publisher nor the requesters that the first-write path names, for the
+/// identical condition. A caller hitting a retry got the poorer answer.
+fn require_distinct_reviewer(
+    comments: &[ownership::Comment],
+    receipt: &ReviewReceipt,
+    reviewer: &str,
+) -> Result<(), Failure> {
+    let publication = require_latest_receipt(comments, receipt)?;
+    let requesters: Vec<String> = handoffs_for(comments, receipt)
+        .into_iter()
+        .map(|handoff| handoff.requester)
+        .collect();
+    if publication.publisher == reviewer || requesters.iter().any(|run| run == reviewer) {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "reviewer-not-distinct",
+            "publisher": publication.publisher,
+            "requesters": requesters,
+            "action": "the publishing run, and every run that asked somebody else to review, cannot be credited with reviewing their own receipt",
+        })));
+    }
+    Ok(())
+}
+
+/// Records an immutable exact-receipt verdict crediting a distinct reviewer.
 pub fn record_review_verdict(
     context: &Context,
     verdict: &VerdictReview<'_>,
@@ -1248,6 +1319,7 @@ pub fn record_review_verdict(
     };
     let expected = [
         ("run-id", verdict.run_id),
+        ("reviewer", verdict.reviewer),
         ("epoch", verdict.epoch),
         ("pr", &verdict.pr.to_string()),
         ("head", verdict.head),
@@ -1264,26 +1336,7 @@ pub fn record_review_verdict(
                 "ok": false, "reason": "review-verdict-operation-conflict",
             }))
         })?;
-        let publication = require_latest_receipt(&comments, &receipt)?;
-        let handoffs = handoffs_for(&comments, &receipt);
-        if handoffs.is_empty() {
-            return Err(Failure::Stop(serde_json::json!({
-                "ok": false,
-                "reason": "review-handoff-missing",
-                "action": "a verdict resolves a durable handoff; no handoff for this receipt is recorded",
-            })));
-        }
-        if publication.publisher == verdict.run_id
-            || handoffs
-                .iter()
-                .any(|handoff| handoff.requester == verdict.run_id)
-        {
-            return Err(Failure::Stop(serde_json::json!({
-                "ok": false,
-                "reason": "reviewer-not-distinct",
-                "action": "the publishing or requesting run cannot satisfy its own review handoff",
-            })));
-        }
+        require_distinct_reviewer(&comments, &receipt, verdict.reviewer)?;
         let qualifies = qualifying_review_verdict(&comments, &receipt)
             .is_some_and(|qualifying| qualifying.operation_id == persisted.operation_id);
         let resolves = latest_distinct_review_verdict(&comments, &receipt)
@@ -1292,6 +1345,8 @@ pub fn record_review_verdict(
             "ok": true,
             "issue": verdict.issue,
             "reviewer": persisted.reviewer,
+            "attester": persisted.attester,
+            "self_attested": persisted.reviewer != persisted.attester,
             "outcome": persisted.outcome,
             "qualifies": qualifies,
             "resolves_handoff": resolves,
@@ -1309,33 +1364,13 @@ pub fn record_review_verdict(
     )?;
     let current = read()?;
     let comments = comments_of(&current);
-    let publication = require_latest_receipt(&comments, &receipt)?;
-    let handoffs = handoffs_for(&comments, &receipt);
-    if handoffs.is_empty() {
-        return Err(Failure::Stop(serde_json::json!({
-            "ok": false,
-            "reason": "review-handoff-missing",
-            "action": "a verdict resolves a durable handoff; no handoff for this receipt is recorded",
-        })));
-    }
-    if publication.publisher == verdict.run_id
-        || handoffs
-            .iter()
-            .any(|handoff| handoff.requester == verdict.run_id)
-    {
-        return Err(Failure::Stop(serde_json::json!({
-            "ok": false,
-            "reason": "reviewer-not-distinct",
-            "publisher": publication.publisher,
-            "requesters": handoffs.iter().map(|handoff| &handoff.requester).collect::<Vec<_>>(),
-            "action": "the publishing or requesting run cannot satisfy its own review handoff",
-        })));
-    }
+    require_distinct_reviewer(&comments, &receipt, verdict.reviewer)?;
 
     let marker = super::markers::render(
         "review-verdict",
         &[
             ("run-id", verdict.run_id),
+            ("reviewer", verdict.reviewer),
             ("op-id", &operation_id),
             ("epoch", verdict.epoch),
             ("pr", &verdict.pr.to_string()),
@@ -1348,9 +1383,12 @@ pub fn record_review_verdict(
     .ok_or_else(|| {
         Failure::Stop(serde_json::json!({"ok": false, "reason": "invalid-marker-attribute"}))
     })?;
-    let body = format!(
-        "Review verdict `{}` by `{}` for publication epoch `{}`.\n\n{marker}\n",
-        verdict.outcome, verdict.run_id, verdict.epoch
+    let body = protocol_body(
+        &format!(
+            "Review verdict `{}` by `{}` for publication epoch `{}`, recorded by `{}`.",
+            verdict.outcome, verdict.reviewer, verdict.epoch, verdict.run_id
+        ),
+        &marker,
     );
     super::commands::comment_with_body(context, verdict.issue, &body)?;
 
@@ -1395,7 +1433,9 @@ pub fn record_review_verdict(
     Ok(serde_json::json!({
         "ok": true,
         "issue": verdict.issue,
-        "reviewer": verdict.run_id,
+        "reviewer": verdict.reviewer,
+        "attester": verdict.run_id,
+        "self_attested": verdict.reviewer != verdict.run_id,
         "outcome": verdict.outcome,
         "qualifies": qualifies,
         "resolves_handoff": resolves,

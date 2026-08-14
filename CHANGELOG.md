@@ -20,10 +20,14 @@ the workflow, it holds the tools.
   to move a few lines of JSON across a pipe.
 - Review handoff is now a durable, receipt-bound compound operation. It records and reads back the
   latest publication receipt and exact ownership epoch before idempotently unassigning, keeps the
-  issue in `review`, excludes the publishing/requesting run from selection until a distinct run's
-  immutable exact-receipt verdict, and accepts delivery evidence only when that verdict is accepted.
-  Rejection returns the work for repair. Timed requests record one deadline without scheduling or
-  treating expiry as review.
+  issue in `review`, and excludes the publishing/requesting run from selection and reclaim until a
+  distinct reviewer's immutable exact-receipt verdict. Rejection returns the work for repair. Timed
+  requests record one deadline without scheduling or treating expiry as review.
+- Delivery now requires one accepted `review_verdict` over the exact latest receipt, crediting a
+  reviewer that is neither the publisher nor any run that asked for review. Both routes record it:
+  after a handoff the reviewing run names itself, and a run that acquired a reviewer without
+  releasing the claim names that reviewer, marked `self_attested`. The requirement is unconditional
+  precisely so that deleting a protocol comment can only refuse — never clear.
 - Review publication now forms a cooperative draft/ready CI barrier. `publish_review` drafts and
   confirms reused PRs before push, creates new PRs draft, and records a fresh epoch over
   PR/head/base/clean-target digest, invalidating old evidence even for identical bytes.
