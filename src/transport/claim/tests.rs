@@ -808,6 +808,451 @@ fn published(receipt: &ReviewReceipt) -> ownership::Comment {
     published_by("claude-a", receipt)
 }
 
+fn handoff_by(
+    run_id: &str,
+    target: &str,
+    operation: &str,
+    receipt: &ReviewReceipt,
+) -> ownership::Comment {
+    wrote(
+        "4",
+        super::super::markers::render(
+            "review-handoff",
+            &[
+                ("run-id", run_id),
+                ("target-op", target),
+                ("op-id", operation),
+                ("epoch", &receipt.epoch),
+                ("pr", &receipt.pr.to_string()),
+                ("head", &receipt.head),
+                ("base", &receipt.base),
+                ("digest", &receipt.digest),
+                ("authority", "ask 30m"),
+                ("requested-at", "2026-07-26T04:00:00Z"),
+                ("deadline", "2026-07-26T04:30:00Z"),
+                ("blocker", "independent reviewer unavailable"),
+                (
+                    "discharger",
+                    "another run records the exact-receipt verdict",
+                ),
+            ],
+        )
+        .expect("a handoff marker"),
+    )
+}
+
+fn verdict_by(
+    run_id: &str,
+    outcome: &str,
+    operation: &str,
+    receipt: &ReviewReceipt,
+) -> ownership::Comment {
+    wrote(
+        "5",
+        super::super::markers::render(
+            "review-verdict",
+            &[
+                ("run-id", run_id),
+                ("op-id", operation),
+                ("epoch", &receipt.epoch),
+                ("pr", &receipt.pr.to_string()),
+                ("head", &receipt.head),
+                ("base", &receipt.base),
+                ("digest", &receipt.digest),
+                ("outcome", outcome),
+            ],
+        )
+        .expect("a verdict marker"),
+    )
+}
+
+#[test]
+fn an_unresolved_handoff_excludes_its_publisher_and_requesters_but_not_another_run() {
+    let receipt = ReviewReceipt {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+    let comments = [
+        published(&receipt),
+        handoff_by(
+            "claude-a",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "11111111111111111111111111111111",
+            &receipt,
+        ),
+        handoff_by(
+            "codex-b",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "22222222222222222222222222222222",
+            &receipt,
+        ),
+    ];
+
+    for excluded in ["claude-a", "codex-b"] {
+        let ReviewEligibility::Excluded {
+            publisher,
+            requesters,
+            handoff,
+        } = review_eligibility(&comments, excluded)
+        else {
+            panic!("{excluded} was offered its own unresolved handoff")
+        };
+        let handoff = *handoff;
+        assert_eq!(publisher, "claude-a");
+        assert_eq!(requesters, ["claude-a", "codex-b"]);
+        assert_eq!(handoff.receipt, receipt);
+        assert_eq!(handoff.blocker, "independent reviewer unavailable");
+        assert_eq!(handoff.deadline, "2026-07-26T04:30:00Z");
+    }
+    assert_eq!(
+        review_eligibility(&comments, "gemini-c"),
+        ReviewEligibility::Eligible,
+        "a different run cannot discover the review handoff"
+    );
+}
+
+/// `SKILL.md` promises the requesting run cannot *select or reclaim* an
+/// unresolved handoff. Selection was refused inside `claim` and reclaim was
+/// not, so a requester whose replacement went stale could take the item back
+/// and become, once again, the only holder forbidden to produce its verdict —
+/// the exact livelock the handoff exists to end. One guard, consulted by both
+/// routes, is what keeps the two from disagreeing again.
+#[test]
+fn no_acquisition_route_returns_an_unresolved_handoff_to_its_requester() {
+    let receipt = ReviewReceipt {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+    let comments = [
+        published(&receipt),
+        handoff_by(
+            "claude-a",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "11111111111111111111111111111111",
+            &receipt,
+        ),
+    ];
+
+    assert_eq!(
+        reason(
+            require_review_eligibility(&comments, "claude-a")
+                .expect_err("the requesting run was offered its own handoff back")
+        ),
+        "review-handoff-requester-excluded"
+    );
+    require_review_eligibility(&comments, "gemini-c")
+        .expect("a distinct run must still be able to acquire the item");
+
+    let source = include_str!("../claim.rs");
+    let body_of = |entry: &str| {
+        let body = source.split_once(entry).expect("the entry point exists").1;
+        body.split_once("\npub fn ")
+            .map_or(body, |(body, _)| body)
+            .to_owned()
+    };
+    for (entry, planner) in [
+        ("\npub fn claim(", "operation_marker("),
+        ("\npub fn reclaim(", "plan_takeover("),
+    ] {
+        let body = body_of(entry);
+        let guard = body
+            .find("require_review_eligibility(")
+            .unwrap_or_else(|| panic!("{entry} never consults the handoff exclusion"));
+        let planned = body
+            .find(planner)
+            .unwrap_or_else(|| panic!("{entry} no longer plans through {planner}"));
+        assert!(
+            guard < planned,
+            "{entry} plans an acquisition before refusing the excluded requester"
+        );
+    }
+}
+
+#[test]
+fn a_distinct_exact_receipt_verdict_resolves_but_only_acceptance_qualifies_delivery() {
+    let receipt = ReviewReceipt {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+    let base = vec![
+        published(&receipt),
+        handoff_by(
+            "claude-a",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "11111111111111111111111111111111",
+            &receipt,
+        ),
+    ];
+
+    for (reviewer, outcome) in [("claude-a", "accepted"), ("codex-b", "approved")] {
+        let mut comments = base.clone();
+        comments.push(verdict_by(
+            reviewer,
+            outcome,
+            "33333333333333333333333333333333",
+            &receipt,
+        ));
+        assert!(
+            matches!(
+                review_eligibility(&comments, "claude-a"),
+                ReviewEligibility::Excluded { .. }
+            ),
+            "{reviewer}'s {outcome} marker incorrectly resolved the handoff"
+        );
+    }
+
+    let mut rejected = base.clone();
+    rejected.push(verdict_by(
+        "codex-b",
+        "rejected",
+        "33333333333333333333333333333333",
+        &receipt,
+    ));
+    assert_eq!(
+        review_eligibility(&rejected, "claude-a"),
+        ReviewEligibility::Eligible,
+        "a rejected review must let the author resume to fix the receipt"
+    );
+    assert!(qualifying_review_verdict(&rejected, &receipt).is_none());
+
+    let mut accepted = base;
+    accepted.push(verdict_by(
+        "codex-b",
+        "accepted",
+        "33333333333333333333333333333333",
+        &receipt,
+    ));
+    assert_eq!(
+        review_eligibility(&accepted, "claude-a"),
+        ReviewEligibility::Eligible
+    );
+    assert_eq!(
+        qualifying_review_verdict(&accepted, &receipt)
+            .expect("a qualifying verdict")
+            .reviewer,
+        "codex-b"
+    );
+
+    accepted.push(verdict_by(
+        "codex-b",
+        "rejected",
+        "44444444444444444444444444444444",
+        &receipt,
+    ));
+    assert!(qualifying_review_verdict(&accepted, &receipt).is_none());
+    assert_eq!(
+        review_eligibility(&accepted, "claude-a"),
+        ReviewEligibility::Eligible,
+        "the later rejection resolves the transfer but withdraws delivery qualification"
+    );
+}
+
+#[test]
+fn stale_edited_untrusted_and_prose_verdicts_never_resolve_a_handoff() {
+    let receipt = ReviewReceipt {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+    let mut stale = receipt.clone();
+    stale.head = "d".repeat(40);
+    let handoff = handoff_by(
+        "claude-a",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "11111111111111111111111111111111",
+        &receipt,
+    );
+    let marker = verdict_by(
+        "codex-b",
+        "accepted",
+        "33333333333333333333333333333333",
+        &receipt,
+    );
+    let mut edited = marker.clone();
+    edited.includes_created_edit = true;
+    let mut untrusted = marker;
+    untrusted.viewer_did_author = false;
+
+    for evidence in [
+        verdict_by(
+            "codex-b",
+            "accepted",
+            "33333333333333333333333333333333",
+            &stale,
+        ),
+        edited,
+        untrusted,
+        wrote(
+            "5",
+            "codex-b accepted epoch 11111111111111111111111111111111".to_owned(),
+        ),
+    ] {
+        let comments = [published(&receipt), handoff.clone(), evidence];
+        assert!(
+            matches!(
+                review_eligibility(&comments, "claude-a"),
+                ReviewEligibility::Excluded { .. }
+            ),
+            "non-qualifying evidence released the publisher"
+        );
+    }
+
+    let mut edited_handoff = handoff;
+    edited_handoff.includes_created_edit = true;
+    assert_eq!(
+        review_eligibility(&[published(&receipt), edited_handoff], "claude-a"),
+        ReviewEligibility::Eligible,
+        "an edited request became durable queue authority"
+    );
+}
+
+#[test]
+fn review_protocol_operation_ids_are_stable_only_for_the_same_immutable_event() {
+    let fields = [
+        "claude-a",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "11111111111111111111111111111111",
+        "7",
+        "blocker",
+    ];
+    let first = review_operation_id("review-handoff", &fields);
+    assert_eq!(first, review_operation_id("review-handoff", &fields));
+    assert_eq!(first.len(), 32);
+    assert!(first.bytes().all(|byte| byte.is_ascii_hexdigit()));
+
+    let mut changed = fields;
+    changed[4] = "different blocker";
+    assert_ne!(first, review_operation_id("review-handoff", &changed));
+    assert_ne!(first, review_operation_id("review-verdict", &fields));
+}
+
+#[test]
+fn a_handoff_operation_replays_identically_and_refuses_conflicting_copies() {
+    let receipt = ReviewReceipt {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+    let operation = "11111111111111111111111111111111";
+    let first = handoff_by(
+        "claude-a",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        operation,
+        &receipt,
+    );
+    let expected = [
+        ("run-id", "claude-a"),
+        ("target-op", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+    ];
+    assert!(
+        operation_marker(
+            &[first.clone(), first.clone()],
+            operation,
+            "review-handoff",
+            &expected,
+        )
+        .expect("identical replay")
+        .is_some()
+    );
+
+    let mut conflict = first.clone();
+    conflict.body = conflict.body.replace(
+        "independent%20reviewer%20unavailable",
+        "different%20blocker",
+    );
+    assert_eq!(
+        reason(
+            operation_marker(&[first, conflict], operation, "review-handoff", &expected,)
+                .expect_err("one operation was rebound")
+        ),
+        "review-handoff-operation-conflict"
+    );
+}
+
+#[test]
+fn review_authority_records_one_deadline_without_turning_auto_into_a_capability() {
+    let root = tempfile::tempdir().expect("a context root");
+    let context = |value: &str| super::super::Context {
+        skill_dir: root.path().to_path_buf(),
+        repo_dir: root.path().to_path_buf(),
+        config: vec![("Review delegation".to_owned(), value.to_owned())],
+        repo: None,
+    };
+    assert_eq!(
+        review_authority(&context("ask 30m"), "2026-07-26T04:00:00Z").expect("a timed request"),
+        ("ask 30m".to_owned(), "2026-07-26T04:30:00Z".to_owned())
+    );
+    assert_eq!(
+        review_authority(&context("auto"), "2026-07-26T04:00:00Z")
+            .expect("auto records immediately"),
+        ("auto".to_owned(), "2026-07-26T04:00:00Z".to_owned())
+    );
+}
+
+#[test]
+fn the_compound_handoff_records_before_release_and_checks_review_afterwards() {
+    let source = include_str!("../claim.rs");
+    let body = source
+        .split_once("pub fn handoff_review(")
+        .expect("the compound operation exists")
+        .1
+        .split_once("pub struct VerdictReview")
+        .expect("the compound operation ends")
+        .0;
+    let verify = body.find("verify_claim(").expect("renews first");
+    let receipt = body
+        .find("require_latest_receipt")
+        .expect("checks the receipt");
+    let record = body.find("comment_with_body").expect("records the handoff");
+    let receipt_retry = body
+        .rfind("require_latest_receipt")
+        .expect("rechecks the receipt on retry");
+    let release = body.find("unassign(").expect("releases ownership");
+    let state = body
+        .rfind("status_labels")
+        .expect("checks the retained state");
+    assert!(
+        verify < receipt
+            && receipt < record
+            && record < receipt_retry
+            && receipt_retry < release
+            && release < state
+    );
+}
+
+#[test]
+fn ci_release_spends_the_receipt_only_after_a_qualifying_verdict() {
+    let source = include_str!("../claim.rs");
+    let body = source
+        .split_once("pub fn release_ci(")
+        .expect("CI release exists")
+        .1
+        .split_once("fn require_pr_matches(")
+        .expect("CI release ends")
+        .0;
+    let receipt = body
+        .find("recorded_receipt")
+        .expect("checks the latest receipt");
+    let verdict = body
+        .find("qualifying_review_verdict")
+        .expect("checks the distinct verdict");
+    let ready = body.find("ready_write").expect("marks the PR ready");
+    assert!(receipt < verdict && verdict < ready);
+}
+
 #[test]
 fn a_release_requires_the_latest_complete_publication_receipt() {
     let first = ReviewReceipt {

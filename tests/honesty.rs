@@ -488,6 +488,7 @@ fn every_tool_the_readme_lists_is_one_this_server_exposes() {
             match exposed.len() {
                 17 => "Seventeen",
                 18 => "Eighteen",
+                20 => "Twenty",
                 other => panic!("{other} tools, and this test has no word for that"),
             }
         )),

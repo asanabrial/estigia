@@ -39,6 +39,13 @@ The runtime decides how to obtain the second context: subagent, teammate, or sep
 qualify. If the runtime or operator forbids delegation, use a separate session. Inability to spawn a
 helper changes the mechanism, never the review requirement.
 
+`Review delegation: auto` is permission, not capability. It lets a run acquire a reviewer when its
+runtime can provide one; it does not make Estigia spawn a model, open a session, or prove a context is
+independent. When the capability is absent, use the binding's durable review handoff so another run
+can discover the exact receipt. An `ask` timeout records one server-visible deadline in that handoff.
+Estigia does not sleep, schedule a wake-up, reset the deadline on retry, keep ownership until it
+expires, or treat expiry as a verdict.
+
 ## Analyst enforcement and delegation
 
 Where supported, enforce analyst read-only behavior with a tool allowlist that excludes file-writing

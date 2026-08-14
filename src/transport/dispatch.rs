@@ -153,6 +153,7 @@ pub fn dispatch(
         "list-state" => super::commands::list_state(
             context,
             f.need("state", operation)?,
+            run_id()?,
             // 200, which is the transport's own default. It was 30 here, and a
             // tool that leaves `--limit` off — its schema marks it optional —
             // got a list cut to a seventh of what it asked for, reported as the
@@ -272,6 +273,39 @@ pub fn dispatch(
                 operation_id: f.need("operation-id", operation)?,
                 target_operation: f.get("target-operation"),
                 held_by_other: f.on("held-by-other"),
+                now,
+            },
+        ),
+        "handoff-review" => super::claim::handoff_review(
+            context,
+            &super::claim::HandoffReview {
+                issue: issue()?,
+                run_id: run_id()?,
+                runtime: f.need("runtime", operation)?,
+                operation_id: f.need("operation-id", operation)?,
+                target_operation: f.need("target-operation", operation)?,
+                epoch: f.need("epoch", operation)?,
+                pr: f.number("pr", operation)?,
+                head: f.need("head", operation)?,
+                base: f.need("base", operation)?,
+                digest: f.need("digest", operation)?,
+                blocker: f.need("blocker", operation)?,
+                discharger: f.need("discharger", operation)?,
+                now,
+            },
+        ),
+        "review-verdict" => super::claim::record_review_verdict(
+            context,
+            &super::claim::VerdictReview {
+                issue: issue()?,
+                run_id: run_id()?,
+                operation_id: f.need("operation-id", operation)?,
+                epoch: f.need("epoch", operation)?,
+                pr: f.number("pr", operation)?,
+                head: f.need("head", operation)?,
+                base: f.need("base", operation)?,
+                digest: f.need("digest", operation)?,
+                outcome: f.need("outcome", operation)?,
                 now,
             },
         ),

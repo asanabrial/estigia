@@ -27,6 +27,8 @@ const SCRIPTED: &[&str] = &[
     "heartbeat",
     "start-branch",
     "publish-review",
+    "handoff-review",
+    "review-verdict",
     "release-ci",
     "unassign",
     "changelog-notes",
@@ -231,6 +233,7 @@ pub fn comment(
 pub fn list_state(
     context: &Context,
     state: &str,
+    run_id: &str,
     limit: u32,
 ) -> Result<serde_json::Value, Failure> {
     let label = format!("status:{state}");
@@ -257,10 +260,57 @@ pub fn list_state(
         .as_ref()
         .and_then(serde_json::Value::as_array)
         .cloned()
-        .unwrap_or_default();
+        .ok_or_else(|| Failure::Read(format!("gh issue list returned no list for {label}")))?;
+
+    let mut eligible = Vec::new();
+    let mut excluded = Vec::new();
+    for item in &items {
+        if state != "review" {
+            eligible.push(item.clone());
+            continue;
+        }
+        let number = item
+            .get("number")
+            .and_then(serde_json::Value::as_u64)
+            .ok_or_else(|| {
+                Failure::Read("a review queue candidate had no issue number".to_owned())
+            })?;
+        // The queue list does not carry comments. Each candidate timeline is a
+        // required input to requester exclusion, so one unreadable candidate
+        // makes the queue unreadable rather than silently eligible.
+        let issue = issue_view(context, number, "comments")?;
+        let comments = queue_comments(&issue, number)?;
+        match super::claim::review_eligibility(&comments, run_id) {
+            super::claim::ReviewEligibility::Eligible => eligible.push(item.clone()),
+            super::claim::ReviewEligibility::Excluded {
+                publisher,
+                requesters,
+                handoff,
+            } => {
+                let handoff = *handoff;
+                excluded.push(serde_json::json!({
+                    "number": number,
+                    "reason": "review-handoff-requester-excluded",
+                    "publisher": publisher,
+                    "requesters": requesters,
+                    "receipt": {
+                        "epoch": handoff.receipt.epoch,
+                        "pr": handoff.receipt.pr,
+                        "head": handoff.receipt.head,
+                        "base": handoff.receipt.base,
+                        "digest": handoff.receipt.digest,
+                    },
+                    "blocker": handoff.blocker,
+                    "discharger": handoff.discharger,
+                    "requested_at": handoff.requested_at,
+                    "deadline": handoff.deadline,
+                }))
+            }
+        }
+    }
 
     let mut partitions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-    for item in &items {
+    for item in &eligible {
         let names: Vec<String> = item
             .get("labels")
             .and_then(serde_json::Value::as_array)
@@ -309,11 +359,14 @@ pub fn list_state(
     Ok(serde_json::json!({
         "ok": true,
         "state": state,
-        "count": items.len(),
+        "requester": run_id,
+        "count": eligible.len(),
+        "excluded_count": excluded.len(),
+        "excluded": excluded,
         // Whether this answer *is* the queue, or the ceiling cut it off. The
-        // fact was in hand — the count and the limit are both right here — and
-        // the answer carried only the count, which is the number returned and
-        // not the number there are.
+        // fetched count and the limit are both right here. `count` may be lower
+        // after requester exclusion, so this deliberately uses the pre-filter
+        // list rather than making a full queue look complete.
         //
         // The tool's `limit` argument already says it in prose: *"an answer
         // holding exactly that many may be a longer queue read to its limit"*.
@@ -329,6 +382,21 @@ pub fn list_state(
         "partitions": partitions,
         "note": "ordering inside a partition needs the domain's scale contract — apply it yourself",
     }))
+}
+
+pub(super) fn queue_comments(
+    issue: &serde_json::Value,
+    number: u64,
+) -> Result<Vec<super::ownership::Comment>, Failure> {
+    issue
+        .get("comments")
+        .and_then(serde_json::Value::as_array)
+        .map(|comments| comments.iter().map(super::claim::comment_of).collect())
+        .ok_or_else(|| {
+            Failure::Read(format!(
+                "gh issue view {number} returned no comment timeline for review eligibility"
+            ))
+        })
 }
 
 /// One issue's fields, or a read failure.

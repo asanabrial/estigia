@@ -6407,19 +6407,8 @@ fn run_with_tracker(
     arguments: &[&str],
     stdin: &str,
 ) -> (String, String, bool) {
-    let mut path = std::ffi::OsString::from(bin);
-    path.push(if cfg!(windows) { ";" } else { ":" });
-    path.push(std::env::var_os("PATH").unwrap_or_default());
-
-    let mut child = Command::new(estigia())
+    let mut child = tracker_command(home, here, bin, answers)
         .args(arguments)
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("APPDATA", home.join("AppData").join("Roaming"))
-        .env("XDG_CONFIG_HOME", home.join(".config"))
-        .env("PATH", path)
-        .env("ESTIGIA_FAKE_ANSWERS", answers)
-        .current_dir(here)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -6438,6 +6427,265 @@ fn run_with_tracker(
         String::from_utf8_lossy(&output.stderr).into_owned(),
         output.status.success(),
     )
+}
+
+/// A child whose GitHub boundary is the stateful fake process.
+fn tracker_command(
+    home: &std::path::Path,
+    here: &std::path::Path,
+    bin: &std::path::Path,
+    answers: &str,
+) -> Command {
+    let mut path = std::ffi::OsString::from(bin);
+    path.push(if cfg!(windows) { ";" } else { ":" });
+    path.push(std::env::var_os("PATH").unwrap_or_default());
+
+    let mut command = Command::new(estigia());
+    command
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("APPDATA", home.join("AppData").join("Roaming"))
+        .env("XDG_CONFIG_HOME", home.join(".config"))
+        .env("PATH", path)
+        .env("ESTIGIA_FAKE_ANSWERS", answers)
+        .current_dir(here);
+    command
+}
+
+/// The compound handoff must make its evidence visible before it releases the
+/// named epoch, and only final convergence may clear the local pointer.
+#[test]
+fn review_handoff_orders_evidence_release_and_pointer_clear() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let count = trace.path().join("count.json");
+    let log = trace.path().join("calls.log");
+    let run_id = "claude-abcd1234";
+    let target = "a".repeat(32);
+    let epoch = "e".repeat(32);
+    let head = "b".repeat(40);
+    let base = "c".repeat(40);
+    let digest = "d".repeat(64);
+    let blocker = "no independent context in this run";
+    let discharger = "another run records the exact-receipt verdict";
+    let operation = estigia::transport::claim::review_operation_id(
+        "review-handoff",
+        &[
+            run_id, &target, &epoch, "7", &head, &base, &digest, blocker, discharger,
+        ],
+    );
+    let release =
+        estigia::transport::claim::review_operation_id("review-handoff-release", &[&operation]);
+    let marker = |kind, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let claim = marker(
+        "claim",
+        &[
+            ("run-id", run_id),
+            ("runtime", "claude"),
+            ("horizon", "2099-01-01T00:00Z"),
+            ("op-id", &target),
+        ],
+    );
+    let publication = marker(
+        "published",
+        &[
+            ("run-id", run_id),
+            ("epoch", &epoch),
+            ("pr", "7"),
+            ("head", &head),
+            ("base", &base),
+            ("digest", &digest),
+        ],
+    );
+    let handoff = marker(
+        "review-handoff",
+        &[
+            ("run-id", run_id),
+            ("target-op", &target),
+            ("op-id", &operation),
+            ("epoch", &epoch),
+            ("pr", "7"),
+            ("head", &head),
+            ("base", &base),
+            ("digest", &digest),
+            ("authority", "ask"),
+            ("requested-at", "2026-08-14T10:00:00Z"),
+            ("deadline", "2026-08-14T10:00:00Z"),
+            ("blocker", blocker),
+            ("discharger", discharger),
+        ],
+    );
+    let unassign = marker(
+        "unassign",
+        &[
+            ("run-id", run_id),
+            ("runtime", "claude"),
+            ("target-op", &target),
+            ("op-id", &release),
+        ],
+    );
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let before = vec![
+        comment("IC_claim", "2026-08-14T09:00:00Z", claim),
+        comment("IC_publication", "2026-08-14T09:10:00Z", publication),
+    ];
+    let mut after_handoff = before.clone();
+    after_handoff.push(comment("IC_handoff", "2026-08-14T10:00:00Z", handoff));
+    let mut after_release = after_handoff.clone();
+    after_release.push(comment("IC_release", "2026-08-14T10:01:00Z", unassign));
+    let issue = |state: &str, comments: &[serde_json::Value]| {
+        serde_json::json!({
+            "state": "OPEN",
+            "assignees": [],
+            "labels": [{"name": format!("status:{state}")}],
+            "comments": comments,
+        })
+        .to_string()
+    };
+    let scripted = |final_state: &str| {
+        let mut bodies = vec![
+            issue("review", &before),
+            issue("review", &before),
+            issue("review", &before),
+            issue("review", &after_handoff),
+            issue("review", &after_handoff),
+            issue("review", &after_handoff),
+        ];
+        // Unassign reads once after its marker, then ownership projection takes
+        // two complete seven-read samples even when the first two agree.
+        bodies.extend((0..16).map(|_| issue("review", &after_release)));
+        bodies.push(issue(final_state, &after_release));
+        let mut answers = bodies
+            .iter()
+            .enumerate()
+            .map(|(index, stdout)| {
+                serde_json::json!({
+                    "matches": "issue view",
+                    "nth": index + 1,
+                    "stdout": stdout,
+                    "status": 0,
+                })
+            })
+            .collect::<Vec<_>>();
+        answers.push(serde_json::json!({
+            "matches": "api user",
+            "stdout": "{\"login\":\"fixture\"}",
+            "status": 0,
+        }));
+        serde_json::to_string(&answers).expect("the fake tracker script serialises")
+    };
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "handoff_review",
+            "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "target_operation": target,
+                "epoch": epoch,
+                "pr": 7,
+                "head": head,
+                "base": base,
+                "digest": digest,
+                "blocker": blocker,
+                "discharger": discharger,
+            }
+        }
+    })
+    .to_string();
+    let runs = home.join(".estigia").join("runs");
+    let put_pointer = || {
+        let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
+        let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+        run.issue = Some(12);
+        run.state = Some("review".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+    };
+    let invoke = |answers: &str| {
+        let _ = std::fs::remove_file(&count);
+        let _ = std::fs::remove_file(&log);
+        let mut child = tracker_command(home, repo, bin, answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_COUNT", &count)
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        child.wait_with_output().expect("the MCP server exits")
+    };
+
+    put_pointer();
+    let output = invoke(&scripted("review"));
+    assert!(output.status.success(), "the MCP process failed");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    assert_eq!(response["result"]["isError"], false, "{response}");
+    assert_eq!(
+        estigia::harness::session::load(&runs, run_id).issue,
+        None,
+        "a converged handoff left the publishing run's pointer held"
+    );
+    let calls = std::fs::read_to_string(&log).expect("the fake tracker logged its calls");
+    let calls: Vec<&str> = calls.lines().collect();
+    let handoff_write = calls
+        .iter()
+        .position(|line| line.contains("issue comment 12") && line.contains("12-published.md"))
+        .expect("the handoff marker was written");
+    let release_write = calls
+        .iter()
+        .position(|line| line.contains("issue comment 12") && line.contains("unassign-12"))
+        .expect("the release marker was written");
+    assert!(
+        calls[handoff_write + 1..release_write]
+            .iter()
+            .filter(|line| line.contains("issue view 12"))
+            .count()
+            >= 3,
+        "the operation released before handoff readback and the final receipt check: {calls:#?}"
+    );
+
+    put_pointer();
+    let output = invoke(&scripted("in-progress"));
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP refusal is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    assert_eq!(response["result"]["isError"], true, "{response}");
+    assert_eq!(
+        estigia::harness::session::load(&runs, run_id).issue,
+        Some(12),
+        "a handoff that failed final state convergence cleared the run pointer"
+    );
 }
 
 /// What the gate let through, named in the ledger by the real binary.

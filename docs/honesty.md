@@ -66,12 +66,17 @@ suite. Everything else here is prose held by review.
   **Nothing here has been tested against a live tracker**: no check in this suite reaches the
   network.
 - **Estigia cannot prove reviewers or blind judges ran.** `publish_review` mechanically freezes a
-  coherent clean draft receipt over epoch, PR, head, base and manifest digest. `release_ci` checks the
-  globally latest receipt, current draft PR and re-derived clean target before marking ready. That
-  binds Estigia's cooperative order to exact bytes. It does not prove an independent context existed,
+  coherent clean draft receipt over epoch, PR, head, base and manifest digest. `handoff_review`
+  records that exact receipt before releasing one ownership epoch, and `review_verdict` records an
+  immutable outcome naming a distinct run. Either outcome resolves the handoff so the publisher can
+  resume; rejection permits repair but never delivery. `release_ci` checks the globally latest
+  receipt, the distinct accepted marker, current draft PR and re-derived clean target before marking
+  ready. This
+  is Tier-1 attribution and exact-byte binding only. It does not prove an independent context existed,
   that one or two judges read those bytes, that two judges were blind to each other, or that their
-  verdicts were honest. `single` and `two blind` remain operator-selected review contracts, not
-  observations the harness can make.
+  verdicts were honest. A trusted marker can still be forged by a collaborator acting outside
+  Estigia. `single` and `two blind` remain operator-selected review contracts, not observations the
+  harness can make.
 - **The draft/ready CI barrier is cooperative, not adversarial.** Compatible repositories start PR
   CI on `ready_for_review`, not topic push/open/synchronize/reopen. GitHub has no atomic
   conditional-ready operation. Collaborators or repository workflows acting outside Estigia can mark
@@ -305,10 +310,12 @@ suite. Everything else here is prose held by review.
 - **The verdict's binding is checked at delivery only for what this run published through Estigia's
   own tools, with an earlier exact-receipt check at CI release.** `publish_review` records a fresh
   epoch over PR/head/base/digest while the PR is confirmed draft. `release_ci` re-verifies the live
-  `review` claim, globally latest receipt across runs, current draft PR and coherent clean target,
-  then marks ready and reads back every outcome. An identical-byte republish still invalidates old
-  evidence because it creates a new epoch. GitHub has no atomic conditional-ready operation, so an
-  out-of-band ready or push can bypass this cooperative order.
+  `review` claim, globally latest receipt across runs, latest distinct accepted verdict marker,
+  current draft PR and coherent clean target, then marks ready and reads back every outcome. The
+  marker is a one-verdict Tier-1 floor; it does not enforce the two-blind policy's two-context
+  agreement. An identical-byte republish still invalidates old evidence because it creates a new
+  epoch. GitHub has no atomic conditional-ready operation, so an out-of-band ready or push can bypass
+  this cooperative order.
   The local delivery gate still checks the published head at the
   boundary that spends it: a `git merge`, `gh pr merge`, `git tag` or `gh release` from a run whose
   recorded review head is not this checkout's head is refused as `verdict-bound-to-other-bytes`.
@@ -554,8 +561,10 @@ suite. Everything else here is prose held by review.
   hook and no Estigia entry beside it, and there a yes prints `gate on` over no gate. That machine
   is now built and read back by `somebody_elses_hook_is_not_this_agents_gate`.
 - **Estigia cannot check who reviewed.** The contract requires that a review *"MUST NOT be
-  performed by the context that wrote the change"*, and the harness never sees the verdict — the
-  binding maps `review_status` to a raw `gh` call, not the transport. That rule is still a document.
+  performed by the context that wrote the change"*. The harness now sees a `review-verdict` marker
+  and checks that its run-id differs from the publishing and requesting run-ids, but a run-id is
+  attribution rather than proof of a distinct context. The judgement still belongs to the agent;
+  Estigia records its outcome and receipt but does not observe who or what produced it.
 - **The harness holds tools for GitHub only.** `linear` and `trello` ship a binding the agent reads
   and no executable, so the tools refuse (`tracker-has-no-transport`) and the gate stands aside.
   Estigia can install and configure those trackers; it cannot enforce anything for them.

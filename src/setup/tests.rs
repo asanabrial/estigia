@@ -2262,8 +2262,10 @@ fn only_the_rows_the_gate_decides_carry_a_caveat_and_the_list_is_pinned() {
     for adapter in AGENTS {
         for setting in SETTINGS {
             let applies = adapter.applies(*setting);
-            // A gated agent has no caveat on any row: that is what the gate is.
-            if adapter.can_gate_tools() {
+            // Review authority permits a handoff; it cannot make a runtime
+            // provide the distinct context that performs it. That caveat is
+            // true even where Estigia gates the runtime's other tool calls.
+            if adapter.can_gate_tools() && *setting != Setting::Review {
                 assert_eq!(
                     applies,
                     Applies::Held,
@@ -2274,7 +2276,7 @@ fn only_the_rows_the_gate_decides_carry_a_caveat_and_the_list_is_pinned() {
             }
             let expected = if inert.contains(setting) {
                 "inert"
-            } else if asked.contains(setting) {
+            } else if asked.contains(setting) || *setting == Setting::Review {
                 "asked"
             } else {
                 "held"

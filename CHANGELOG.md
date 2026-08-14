@@ -12,12 +12,18 @@ the workflow, it holds the tools.
 
 ### The harness
 
-- `estigia mcp` serves the workflow operations as **18 MCP tools** over stdio —
+- `estigia mcp` serves the workflow operations as **20 MCP tools** over stdio —
   claim, verify_claim, heartbeat, transition, comment, reclaim, release,
   start_branch, publish_review, and the read-only checks. Hand-written
   JSON-RPC rather than `rmcp`: the same binary answers a `PreToolUse` hook on
   every edit, so an async runtime per process is a cost paid thousands of times
   to move a few lines of JSON across a pipe.
+- Review handoff is now a durable, receipt-bound compound operation. It records and reads back the
+  latest publication receipt and exact ownership epoch before idempotently unassigning, keeps the
+  issue in `review`, excludes the publishing/requesting run from selection until a distinct run's
+  immutable exact-receipt verdict, and accepts delivery evidence only when that verdict is accepted.
+  Rejection returns the work for repair. Timed requests record one deadline without scheduling or
+  treating expiry as review.
 - Review publication now forms a cooperative draft/ready CI barrier. `publish_review` drafts and
   confirms reused PRs before push, creates new PRs draft, and records a fresh epoch over
   PR/head/base/clean-target digest, invalidating old evidence even for identical bytes.
