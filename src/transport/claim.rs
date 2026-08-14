@@ -586,12 +586,12 @@ impl ReviewHandoff {
             .get("discharger")
             .filter(|value| !value.is_empty())?
             .clone();
-        let valid_authority = authority == "auto"
-            || authority == "ask"
-            || authority.strip_prefix("ask ").is_some_and(|duration| {
-                let (amount, unit) = duration.split_at(duration.len().saturating_sub(1));
-                amount.parse::<u64>().is_ok() && matches!(unit, "s" | "m" | "h")
-            });
+        // The configuration's own grammar, not a second copy of it. This was a
+        // third spelling that disagreed with the other two, and it read the
+        // duration's unit by byte offset — a marker whose authority ended in a
+        // multi-byte character panicked whoever parsed the timeline, which is
+        // `claim`, `reclaim` and every candidate of the review queue.
+        let valid_authority = crate::config::authority_of(&authority).is_some();
         let valid_target = ownership::is_operation_id(&target_operation)
             || target_operation
                 .strip_prefix("legacy-")
@@ -903,41 +903,32 @@ pub fn review_operation_id(kind: &str, fields: &[&str]) -> String {
 }
 
 fn review_authority(context: &Context, now: &str) -> Result<(String, String), Failure> {
-    let authority = context.get("review delegation").unwrap_or("ask").trim();
-    let seconds = match authority {
-        "auto" => 0,
-        "ask" => crate::config::DEFAULT_ASK_TIMEOUT.as_secs(),
-        asked if asked.starts_with("ask ") => {
-            let duration = asked.trim_start_matches("ask ").trim();
-            let (amount, unit) = duration.split_at(duration.len().saturating_sub(1));
-            let amount = amount.parse::<u64>().map_err(|_| {
-                Failure::ConfigDefect(serde_json::json!({
-                    "ok": false, "reason": "invalid-review-authority", "value": authority,
-                }))
-            })?;
-            match unit {
-                "s" => amount,
-                "m" => amount.saturating_mul(60),
-                "h" => amount.saturating_mul(60 * 60),
-                _ => {
-                    return Err(Failure::ConfigDefect(serde_json::json!({
-                        "ok": false, "reason": "invalid-review-authority", "value": authority,
-                    })));
-                }
-            }
-        }
-        _ => {
-            return Err(Failure::ConfigDefect(serde_json::json!({
-                "ok": false, "reason": "invalid-review-authority", "value": authority,
-            })));
-        }
+    let configured = context.get("review delegation").unwrap_or("ask").trim();
+    // The configuration's own parser. This was a second spelling of that
+    // grammar, stricter than the reader an operator's table goes through, so
+    // four values `estigia config` accepts — `Auto`, `AUTO`, `Ask 30m`,
+    // `ask 30 m` — refused the one operation that ends a blocked run's wait.
+    let parsed = crate::config::authority_of(configured).ok_or_else(|| {
+        Failure::ConfigDefect(serde_json::json!({
+            "ok": false, "reason": "invalid-review-authority", "value": configured,
+        }))
+    })?;
+    let seconds = match parsed {
+        crate::config::Authority::Auto => 0,
+        crate::config::Authority::Ask { timeout } => timeout.as_secs(),
     };
+    // Written back in this crate's spelling rather than the operator's, so what
+    // the marker carries is what its own reader will accept. `ask  30m` passed
+    // here verbatim and was then refused by that reader, which left the handoff
+    // comment posted, its readback failing, and every retry answering
+    // `review-handoff-operation-conflict` with the claim never released.
+    let authority = crate::config::rendered_authority(parsed);
     let requested = ownership::parse_stamp(now).ok_or_else(|| {
         Failure::Read("the machine clock did not produce a review request timestamp".to_owned())
     })?;
     let seconds = i64::try_from(seconds).map_err(|_| {
         Failure::ConfigDefect(serde_json::json!({
-            "ok": false, "reason": "invalid-review-authority", "value": authority,
+            "ok": false, "reason": "invalid-review-authority", "value": configured,
         }))
     })?;
     let deadline = requested.checked_add(seconds).ok_or_else(|| {
@@ -946,10 +937,7 @@ fn review_authority(context: &Context, now: &str) -> Result<(String, String), Fa
     let deadline = u64::try_from(deadline).map_err(|_| {
         Failure::Read("the review request deadline predates the system clock".to_owned())
     })?;
-    Ok((
-        authority.to_owned(),
-        crate::harness::session::stamp_of(deadline),
-    ))
+    Ok((authority, crate::harness::session::stamp_of(deadline)))
 }
 
 fn review_receipt<'a>(

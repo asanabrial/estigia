@@ -6752,6 +6752,161 @@ fn no_acquisition_route_returns_an_unresolved_handoff_to_its_requester_over_the_
     }
 }
 
+/// A handoff names the latest receipt or it names nothing.
+///
+/// `handoff_review` carries this check twice — before the marker and before the
+/// release — and neither copy was held: neutering both left the whole suite
+/// green. It is load-bearing, not belt-and-braces. `review_eligibility` collects
+/// handoffs only for the *latest* publication, so a handoff recorded against a
+/// superseded receipt excludes nobody while the ownership epoch has already been
+/// released — the publishing run is immediately eligible again for the item it
+/// is the one run forbidden to review. That is this issue's own livelock, with
+/// an audit trail.
+#[test]
+fn a_handoff_against_a_superseded_receipt_is_refused_before_anything_is_written() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let count = trace.path().join("count.json");
+    let log = trace.path().join("calls.log");
+    let run_id = "claude-abcd1234";
+    let target = "a".repeat(32);
+    let superseded = "e".repeat(32);
+    let latest = "f".repeat(32);
+    let head = "b".repeat(40);
+    let base = "c".repeat(40);
+    let digest = "d".repeat(64);
+    let marker = |kind, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let publication = |epoch: &str| {
+        marker(
+            "published",
+            &[
+                ("run-id", run_id),
+                ("epoch", epoch),
+                ("pr", "7"),
+                ("head", &head),
+                ("base", &base),
+                ("digest", &digest),
+            ],
+        )
+    };
+    // A live claim, and a republish after the epoch this request names.
+    let comments = vec![
+        comment(
+            "IC_claim",
+            "2026-08-14T09:00:00Z",
+            marker(
+                "claim",
+                &[
+                    ("run-id", run_id),
+                    ("runtime", "claude"),
+                    ("horizon", "2099-01-01T00:00Z"),
+                    ("op-id", &target),
+                ],
+            ),
+        ),
+        comment("IC_first", "2026-08-14T09:10:00Z", publication(&superseded)),
+        comment("IC_second", "2026-08-14T09:20:00Z", publication(&latest)),
+    ];
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "assignees": [],
+                "labels": [{"name": "status:review"}],
+                "comments": comments,
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "handoff_review",
+            "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "target_operation": target,
+                // The epoch a republish has already invalidated.
+                "epoch": superseded,
+                "pr": 7,
+                "head": head,
+                "base": base,
+                "digest": digest,
+                "blocker": "no independent context in this run",
+                "discharger": "another run records the verdict",
+            }
+        }
+    })
+    .to_string();
+
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.issue = Some(12);
+    run.state = Some("review".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_COUNT", &count)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert_eq!(response["result"]["isError"], true, "{response}");
+    assert!(
+        text.contains("published-receipt-mismatch"),
+        "a superseded receipt was refused for the wrong reason: {text}"
+    );
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        !calls.contains("issue comment"),
+        "a handoff for a superseded receipt was written to the timeline: {calls}"
+    );
+    assert!(
+        !calls.contains("issue edit"),
+        "a handoff for a superseded receipt released ownership: {calls}"
+    );
+}
+
 /// A run that does not hold the live claim cannot hand the review off.
 ///
 /// This check was wired by a string search for `verify_claim(` and nothing else,

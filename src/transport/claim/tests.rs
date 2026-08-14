@@ -1538,6 +1538,119 @@ fn a_handoff_operation_replays_identically_and_refuses_conflicting_copies() {
     );
 }
 
+/// One grammar reads `Review delegation`, wherever it is read from.
+///
+/// It had been written three times — the configuration's parser, the
+/// transport's, and the handoff marker's own validator — and the three
+/// disagreed. Four spellings `estigia config` accepts were refused by the
+/// transport, and the review handoff is the one operation that ends a blocked
+/// run's wait, so a mis-cased row left it holding the issue for good. `ask  30m`
+/// was worse: it passed the transport, was stamped into the marker verbatim, and
+/// was refused by the marker's reader — comment posted, readback failing, every
+/// retry answering `review-handoff-operation-conflict` with the claim never
+/// released. Both of the transport's copies also cut the duration at a byte
+/// offset, so a value ending in a multi-byte character panicked the process
+/// instead of being refused, and `review_eligibility` is what `claim`, `reclaim`
+/// and every review-queue candidate go through.
+#[test]
+fn one_grammar_reads_every_authority_row_the_configuration_accepts() {
+    let root = tempfile::tempdir().expect("a context root");
+    let context = |value: &str| super::super::Context {
+        skill_dir: root.path().to_path_buf(),
+        repo_dir: root.path().to_path_buf(),
+        config: vec![("Review delegation".to_owned(), value.to_owned())],
+        repo: None,
+    };
+    let receipt = ReviewReceipt {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+
+    // Every spelling the configuration reader accepts is one the transport
+    // accepts, and what it writes down is one the marker reader reads back.
+    for spelling in [
+        "auto", "Auto", "AUTO", "ask", "Ask", "ask 30m", "Ask 30m", "ask 30 m", "ask  30m",
+        "ask 2h", "ask 45s",
+    ] {
+        assert!(
+            crate::config::authority_of(spelling).is_some(),
+            "{spelling} is not a value the configuration accepts; fix the fixture, not the rule"
+        );
+        let (recorded, _deadline) = review_authority(&context(spelling), "2026-07-26T04:00:00Z")
+            .unwrap_or_else(|failure| {
+                panic!(
+                    "{spelling} was refused by the transport: {:?}",
+                    failure.envelope()
+                )
+            });
+        let marker = super::super::markers::render(
+            "review-handoff",
+            &[
+                ("run-id", "claude-a"),
+                ("target-op", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                ("op-id", "11111111111111111111111111111111"),
+                ("epoch", &receipt.epoch),
+                ("pr", &receipt.pr.to_string()),
+                ("head", &receipt.head),
+                ("base", &receipt.base),
+                ("digest", &receipt.digest),
+                ("authority", &recorded),
+                ("requested-at", "2026-07-26T04:00:00Z"),
+                ("deadline", "2026-07-26T04:30:00Z"),
+                ("blocker", "no reviewer"),
+                ("discharger", "another run"),
+            ],
+        )
+        .expect("a handoff marker");
+        let parsed = super::super::markers::parse(&marker)
+            .pop()
+            .expect("the marker parses");
+        assert!(
+            ReviewHandoff::from_marker(&parsed).is_some(),
+            "{spelling} was recorded as {recorded:?}, which its own reader refuses"
+        );
+    }
+
+    // And a value that is not one. Refused on both sides, and — the reason this
+    // test exists — refused rather than fatal: these cut at a byte offset, and
+    // `review_eligibility` parses timelines for the queue and both acquisitions.
+    for broken in ["whenever", "ask 30y", "ask 30é", "ask é"] {
+        assert!(crate::config::authority_of(broken).is_none(), "{broken}");
+        assert!(
+            review_authority(&context(broken), "2026-07-26T04:00:00Z").is_err(),
+            "{broken} was accepted by the transport"
+        );
+        let marker = super::super::markers::render(
+            "review-handoff",
+            &[
+                ("run-id", "claude-a"),
+                ("target-op", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                ("op-id", "11111111111111111111111111111111"),
+                ("epoch", &receipt.epoch),
+                ("pr", &receipt.pr.to_string()),
+                ("head", &receipt.head),
+                ("base", &receipt.base),
+                ("digest", &receipt.digest),
+                ("authority", broken),
+                ("requested-at", "2026-07-26T04:00:00Z"),
+                ("deadline", "2026-07-26T04:30:00Z"),
+                ("blocker", "no reviewer"),
+                ("discharger", "another run"),
+            ],
+        )
+        .expect("a handoff marker");
+        let comments = [published(&receipt), wrote("4", marker)];
+        assert_eq!(
+            review_eligibility(&comments, "codex-b"),
+            ReviewEligibility::Eligible,
+            "{broken} was read as a durable handoff"
+        );
+    }
+}
+
 #[test]
 fn review_authority_records_one_deadline_without_turning_auto_into_a_capability() {
     let root = tempfile::tempdir().expect("a context root");

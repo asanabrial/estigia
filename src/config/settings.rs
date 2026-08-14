@@ -1031,22 +1031,46 @@ fn normalize_label(label: &str) -> String {
         .join(" ")
 }
 
-fn parse_authority(setting: Setting, value: &str) -> Result<Authority, Refusal> {
+/// The one grammar for an authority row: `auto`, `ask`, or `ask <duration>`.
+///
+/// Public because the transport reads `Review delegation` as well, and this rule
+/// had been written three times — here, in the transport's `review_authority`,
+/// and again in the handoff marker's own validator. The three already disagreed.
+/// `Auto`, `Ask 30m` and `ask 30 m` parse here and were refused by the transport,
+/// which mattered because the review handoff is the only exit from the livelock
+/// a blocked run has: a mis-cased row left it holding the issue for good. Worse,
+/// `ask  30m` passed the transport, was stamped into the marker, and was then
+/// refused by the marker's reader — comment posted, readback failed, and every
+/// retry answering `review-handoff-operation-conflict` forever.
+///
+/// Both of those spellings also read the duration by byte offset, so a value
+/// ending in a multi-byte character panicked the process rather than being
+/// refused. Here the split is taken at the first non-digit **character**, which
+/// is a boundary by construction.
+pub fn authority_of(value: &str) -> Option<Authority> {
     let value = lower(value);
     if value == "auto" {
-        return Ok(Authority::Auto);
+        return Some(Authority::Auto);
     }
-    let Some(rest) = value.strip_prefix("ask") else {
-        return Err(setting.reject(&value));
-    };
-    let rest = rest.trim();
+    let rest = value.strip_prefix("ask")?.trim().to_owned();
     if rest.is_empty() {
-        return Ok(Authority::Ask {
+        return Some(Authority::Ask {
             timeout: DEFAULT_ASK_TIMEOUT,
         });
     }
-    let timeout = parse_duration(rest).ok_or_else(|| setting.reject(&value))?;
-    Ok(Authority::Ask { timeout })
+    parse_duration(&rest).map(|timeout| Authority::Ask { timeout })
+}
+
+/// One authority value as this crate spells it, for writing back down.
+///
+/// A marker records this rather than the operator's own spelling, so that what
+/// is written is what [`authority_of`] will read.
+pub fn rendered_authority(authority: Authority) -> String {
+    render_authority(authority)
+}
+
+fn parse_authority(setting: Setting, value: &str) -> Result<Authority, Refusal> {
+    authority_of(value).ok_or_else(|| setting.reject(&lower(value)))
 }
 
 /// `30s`, `15m`, `2h`. Small on purpose: a timeout grammar wide enough to be

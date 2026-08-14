@@ -90,11 +90,18 @@ suite. Everything else here is prose held by review.
   review protocol's guards were mutated one at a time — each disabled, the whole suite run, the tree
   restored from a byte copy. Held by a test that goes red: all three enforcement points of the
   requester exclusion (`claim`, `reclaim`, the review queue), the queue's fail-closed candidate read,
-  the verdict's distinctness rule on *both* its halves, its live-claim requirement, the exactness of
-  the receipt on the write paths, the CI-release gate, the comment escaping, the read-side requester
-  filter, and every field-shape validator on the three markers — receipt widths, the handoff's
-  authority, target, timestamps and its blocker/discharger, the verdict's two identities and its
-  outcome vocabulary.
+  the verdict's distinctness rule on *both* its halves, its live-claim requirement, the receipt's
+  exactness on each write path **before** it writes, the CI-release gate, the comment escaping, the
+  read-side requester filter, and every field-shape validator on the three markers — receipt widths,
+  the handoff's authority, target, timestamps and its blocker/discharger, the verdict's two
+  identities and its outcome vocabulary.
+
+  That sentence used to say "on the write paths" without the qualifier, and it was false: neutering
+  both of `handoff_review`'s receipt checks left the suite green, and a handoff recorded against a
+  superseded receipt excludes nobody while its ownership epoch has already gone — the publishing run
+  eligible again for the item it may not review, which is this repository's own livelock with an
+  audit trail. It is held now. The *second* copy, the one guarding a retry, is a different matter and
+  is named below.
 
   **Many of the smaller ones are not, and this entry does not claim to have found them all.**
   `handoff_review`'s post-release readback, which proves the released ownership epoch is no longer
@@ -118,10 +125,6 @@ suite. Everything else here is prose held by review.
   `claim.rs`, so a mutation harness that rewrites line endings — Python's text mode on Windows will,
   silently — produces failures that look like a guard being caught and are not. Two of the
   measurements behind this entry had to be discarded and rerun for that reason.
-
-  One caution for whoever mutates next: this crate has tests that anchor on exact whitespace in
-  `claim.rs`, so a mutation harness that rewrites line endings — Python's text mode on Windows will,
-  silently — produces failures that look like a guard being caught and are not.
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
   bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read
