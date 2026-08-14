@@ -1107,6 +1107,30 @@ fn a_distinct_exact_receipt_verdict_resolves_but_only_acceptance_qualifies_deliv
     );
     assert!(qualifying_review_verdict(&rejected, &receipt).is_none());
 
+    // The read side keeps its own copy of the requester rule, and it is not
+    // redundant with the one the writer enforces: a verdict crediting a
+    // requester can predate the handoff that made them one, and the writer
+    // never saw it. Dropping this filter would let exactly that marker qualify.
+    let mut credits_requester = base.clone();
+    credits_requester.push(verdict_attested_by(
+        "gemini-c",
+        "claude-a",
+        "accepted",
+        "44444444444444444444444444444444",
+        &receipt,
+    ));
+    assert!(
+        qualifying_review_verdict(&credits_requester, &receipt).is_none(),
+        "a verdict crediting the run that asked for the review qualified delivery"
+    );
+    assert!(
+        matches!(
+            review_eligibility(&credits_requester, "claude-a"),
+            ReviewEligibility::Excluded { .. }
+        ),
+        "crediting the requester resolved its own handoff"
+    );
+
     let mut accepted = base;
     accepted.push(verdict_by(
         "codex-b",

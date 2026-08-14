@@ -86,6 +86,19 @@ suite. Everything else here is prose held by review.
   two judges were blind to each other, or that their verdicts were honest. A marker can still be
   forged by a collaborator acting outside Estigia. `single` and `two blind` remain operator-selected
   review contracts, not observations the harness can make.
+- **Five of the review protocol's smaller checks are unmeasured, and here is the measurement that
+  says so.** A reviewer mutated the tree one guard at a time and ran the suite. Every enforcement
+  point of the requester exclusion — `claim`, `reclaim` and the review queue — is now held by a
+  test that fails when the guard is neutered, as are the verdict's distinctness rule, its live-claim
+  requirement, the CI-release gate and the comment escaping. These five are not, and each was
+  confirmed by deleting it and watching the suite stay green: `ReviewReceipt::is_complete`'s
+  field-shape checks; `require_latest_receipt`'s exactness on the write paths (the read side still
+  refuses a stale receipt, which is why this is a lost early refusal rather than a hole);
+  `handoff_review`'s retry-path receipt recheck; `ReviewHandoff::from_marker`'s
+  `deadline >= requested-at` ordering; and `ReviewVerdict::from_marker`'s emptiness checks. They are
+  written and they work — nothing here says otherwise — but a later change could remove any of them
+  and no test would say a word. Named rather than quietly left, because the difference between a
+  guard that is tested and one that merely exists is exactly what this document is for.
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
   bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read
@@ -531,11 +544,14 @@ suite. Everything else here is prose held by review.
   accented pair rather than an ASCII one, because an ASCII pair cannot tell the two rules apart.
 - **Three settings are read by nobody, and two more were until this change.**
   An operator sets eighteen rows and `config list` reports all of them. Measured: `context.get` is
-  called for exactly two labels, the gate reads `Irreversible commands`, and the payload's prose
+  called for exactly three labels — `project board`, `worktree location` and, since the review
+  handoff, `Review delegation`, which the transport reads to stamp one deadline on a request it
+  never waits for. The gate reads `Irreversible commands`, and the payload's prose
   named eleven — leaving `Delivery authorisation`, `Transition authorisation`, `Delivery route`,
-  `Merge strategy` and `Model routing` read by nothing at all. `setup::Applies::Asked` says of four
+  `Merge strategy` and `Model routing` read by nothing at all. `setup::Applies::Asked` says of three
   of them *"the contract asks, and the agent may still honour it, but nothing checks"*, and for
-  three the contract did not ask either.
+  three the contract did not ask either. `Review delegation` left that arm with the review handoff:
+  it carries its own sentence now, because what it asks of a runtime is a reviewer, not a decision.
 
   The two authorisations are closed: `SKILL.md` now says, in the steps where a state moves and where
   a change is delivered, that doing it unasked needs the row's permission. The other three stay

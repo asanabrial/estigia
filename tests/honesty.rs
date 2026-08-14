@@ -1988,14 +1988,15 @@ fn the_readme_counts_what_the_crate_actually_has() {
 /// nothing for. Nothing asked the plainer question: does anything at all read
 /// this row.
 ///
-/// Measured, and five did not. `context.get` is called for exactly two labels —
-/// `project board` and `worktree location`, which is what `READ_BY_THE_TRANSPORT`
+/// Measured, and five did not. `context.get` is called for exactly three labels —
+/// `project board`, `worktree location` and `Review delegation`, which is what
+/// `READ_BY_THE_TRANSPORT`
 /// says — the gate reads `Irreversible commands`, and the payload's prose names
 /// eleven. That left `Delivery authorisation`, `Transition authorisation`,
 /// `Delivery route`, `Merge strategy` and `Model routing` read by nobody: not
 /// the gate, not the transport, and no sentence an agent is given.
 ///
-/// `setup::Applies::Asked` says of four of them *"the contract asks, and the
+/// `setup::Applies::Asked` says of three of them *"the contract asks, and the
 /// agent may still honour it, but nothing checks"* — and for three the contract
 /// did not ask either. A sentence that describes a mechanism is not the
 /// mechanism.

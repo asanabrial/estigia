@@ -979,13 +979,16 @@ fn lower(value: &str) -> String {
 /// somebody's hand-edited table does not silently drop their setting.
 /// The settings the transport itself reads out of the table.
 ///
-/// Two, and only two: `github.py` calls `cfg(config, …)` for `project board` and
-/// `worktree location` and for nothing else. Every other row is read by the
-/// agent out of the prose, or by the gate. Held here because the check below is
-/// only worth making for rows a second reader actually consults, and crossed by
+/// Three, and only three: the transport calls `context.get` for `project board`,
+/// `worktree location` and `Review delegation`, and for nothing else. The third
+/// arrived with the review handoff, which stamps the configured authority and one
+/// deadline into the request marker — it is read to be *recorded*, never to
+/// decide whether to wait. Every other row is read by the agent out of the prose,
+/// or by the gate. Held here because the check below is only worth making for
+/// rows a second reader actually consults, and crossed by
 /// `the_transport_reads_the_settings_this_crate_says_it_does` so the list cannot
-/// drift away from the script it describes.
-pub const READ_BY_THE_TRANSPORT: &[Setting] = &[Setting::Board, Setting::Worktree];
+/// drift away from the code it describes.
+pub const READ_BY_THE_TRANSPORT: &[Setting] = &[Setting::Board, Setting::Worktree, Setting::Review];
 
 /// Whether a row a person typed is one the transport will match.
 ///

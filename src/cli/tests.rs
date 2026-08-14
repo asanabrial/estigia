@@ -2366,7 +2366,15 @@ fn an_entry_names_the_same_kind_of_way_out_as_the_code_that_raises_it() {
                 let end = rest
                     .find("Refusal::not_started(")
                     .map_or(rest.len(), |next| next);
-                let block = &rest[..end.min(900)];
+                // Back off to a character boundary. The cap is a byte count and
+                // this crate's source is full of em dashes, so slicing at a flat
+                // 900 panics the moment one straddles it — a test that fails on
+                // where a sentence happens to fall, not on what it says.
+                let mut cap = end.min(900);
+                while !rest.is_char_boundary(cap) {
+                    cap -= 1;
+                }
+                let block = &rest[..cap];
                 if block.contains("Resolution::run(") {
                     return Some("run");
                 }

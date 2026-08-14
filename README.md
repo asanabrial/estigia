@@ -300,7 +300,7 @@ WRITE  start_branch     (issue, run_id, branch, base)
 WRITE  create           (identity, title, body_file, priority, domain, runtime, run_id)
 WRITE  publish_review   (issue, run_id, branch, base, pr_title, pr_body_file)
 WRITE  handoff_review   (issue, run_id, target_operation, epoch, pr, head, base, digest, blocker, discharger)
-WRITE  record_review_verdict (issue, run_id, epoch, pr, head, base, digest, outcome)
+WRITE  record_review_verdict (issue, run_id, reviewer, epoch, pr, head, base, digest, outcome)
 WRITE  release_ci       (issue, run_id, epoch, pr, head, base, digest)
 ```
 

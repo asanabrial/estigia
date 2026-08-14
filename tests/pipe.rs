@@ -6597,6 +6597,505 @@ fn ci_release_refuses_a_receipt_no_distinct_reviewer_accepted() {
     );
 }
 
+/// Neither acquisition route hands an unresolved handoff back to the run that
+/// asked for the review.
+///
+/// This is the whole mechanism of the change, and it was wired by a source-order
+/// assertion alone: replacing `require_review_eligibility(..)?` with
+/// `let _ = require_review_eligibility(..)` in both `claim` and `reclaim` leaves
+/// the identifiers exactly where a string test looks for them, and the suite
+/// stayed green while a publishing run could take back the item it is forbidden
+/// to review. That is a gate deciding nothing — the failure this crate exists to
+/// refuse — so both routes are now driven through the real server.
+#[test]
+fn no_acquisition_route_returns_an_unresolved_handoff_to_its_requester_over_the_wire() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let run_id = "claude-abcd1234";
+    let target = "a".repeat(32);
+    let epoch = "e".repeat(32);
+    let head = "b".repeat(40);
+    let base = "c".repeat(40);
+    let digest = "d".repeat(64);
+    let marker = |kind, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let comments = vec![
+        comment(
+            "IC_publication",
+            "2026-08-14T09:10:00Z",
+            marker(
+                "published",
+                &[
+                    ("run-id", run_id),
+                    ("epoch", &epoch),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                ],
+            ),
+        ),
+        comment(
+            "IC_handoff",
+            "2026-08-14T10:00:00Z",
+            marker(
+                "review-handoff",
+                &[
+                    ("run-id", run_id),
+                    ("target-op", &target),
+                    ("op-id", &"f".repeat(32)),
+                    ("epoch", &epoch),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                    ("authority", "ask"),
+                    ("requested-at", "2026-08-14T10:00:00Z"),
+                    ("deadline", "2026-08-14T10:30:00Z"),
+                    ("blocker", "no independent context in this run"),
+                    ("discharger", "another run records the verdict"),
+                ],
+            ),
+        ),
+    ];
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "assignees": [],
+                "labels": [{"name": "status:review"}],
+                "comments": comments,
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    // Both doors, one fixture: the requester is refused whichever it tries.
+    for (tool, arguments) in [
+        (
+            "claim",
+            serde_json::json!({
+                "issue": 12,
+                "run_id": run_id,
+                "horizon": "2099-01-01T00:00Z",
+                "state": "review",
+            }),
+        ),
+        (
+            "reclaim",
+            serde_json::json!({
+                "issue": 12,
+                "run_id": run_id,
+                "horizon": "2099-01-01T00:00Z",
+            }),
+        ),
+    ] {
+        let log = trace.path().join(format!("{tool}.log"));
+        let count = trace.path().join(format!("{tool}-count.json"));
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": { "name": tool, "arguments": arguments },
+        })
+        .to_string();
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_COUNT", &count)
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        assert_eq!(response["result"]["isError"], true, "{tool}: {response}");
+        assert!(
+            text.contains("review-handoff-requester-excluded"),
+            "{tool} did not refuse the requesting run: {text}"
+        );
+        let calls = std::fs::read_to_string(&log).unwrap_or_default();
+        assert!(
+            !calls.contains("issue comment") && !calls.contains("issue edit"),
+            "{tool} wrote to the tracker before refusing: {calls}"
+        );
+    }
+}
+
+/// The review queue is the third place the same exclusion is enforced, and it
+/// hides the item from its requester without hiding it from anybody else. It
+/// also refuses the whole queue when one candidate timeline cannot be read.
+///
+/// Both were promised in `bindings/github.md` and the tool description while
+/// nothing measured either: pushing every candidate to `eligible` regardless of
+/// eligibility, or falling back to an empty timeline on an unreadable candidate,
+/// each left the suite green.
+#[test]
+fn the_review_queue_hides_a_handoff_from_its_requester_and_fails_closed_on_an_unreadable_one() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let requester = "claude-abcd1234";
+    let epoch = "e".repeat(32);
+    let head = "b".repeat(40);
+    let base = "c".repeat(40);
+    let digest = "d".repeat(64);
+    let marker = |kind, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let timeline = vec![
+        comment(
+            "IC_publication",
+            "2026-08-14T09:10:00Z",
+            marker(
+                "published",
+                &[
+                    ("run-id", requester),
+                    ("epoch", &epoch),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                ],
+            ),
+        ),
+        comment(
+            "IC_handoff",
+            "2026-08-14T10:00:00Z",
+            marker(
+                "review-handoff",
+                &[
+                    ("run-id", requester),
+                    ("target-op", &"a".repeat(32)),
+                    ("op-id", &"f".repeat(32)),
+                    ("epoch", &epoch),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                    ("authority", "ask"),
+                    ("requested-at", "2026-08-14T10:00:00Z"),
+                    ("deadline", "2026-08-14T10:30:00Z"),
+                    ("blocker", "no independent context in this run"),
+                    ("discharger", "another run records the verdict"),
+                ],
+            ),
+        ),
+    ];
+    let queue = serde_json::json!([{
+        "number": 12,
+        "title": "a published receipt awaiting review",
+        "labels": [{"name": "status:review"}, {"name": "domain:general"}],
+        "createdAt": "2026-08-14T08:00:00Z",
+    }])
+    .to_string();
+    let answers = |candidate: serde_json::Value| {
+        serde_json::to_string(&serde_json::json!([
+            { "matches": "issue list", "stdout": queue, "status": 0 },
+            candidate,
+            { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+        ]))
+        .expect("the fake tracker script serialises")
+    };
+    let readable = answers(serde_json::json!({
+        "matches": "issue view",
+        "stdout": serde_json::json!({ "comments": timeline }).to_string(),
+        "status": 0,
+    }));
+    // A candidate whose timeline cannot be read. Not an empty queue — an
+    // unreadable one, and the difference is the whole point.
+    let unreadable = answers(serde_json::json!({
+        "matches": "issue view",
+        "stdout": "",
+        "stderr": "gh: could not read the issue",
+        "status": 1,
+    }));
+
+    let ask = |run_id: &str, answers: &str, label: &str| -> serde_json::Value {
+        let log = trace.path().join(format!("{label}.log"));
+        let count = trace.path().join(format!("{label}-count.json"));
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "list_state",
+                "arguments": { "state": "review", "run_id": run_id },
+            },
+        })
+        .to_string();
+        let mut child = tracker_command(home, repo, bin, answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_COUNT", &count)
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+            panic!(
+                "the MCP response is not JSON: {}",
+                String::from_utf8_lossy(&output.stdout)
+            )
+        })
+    };
+
+    let mine = ask(requester, &readable, "requester");
+    let text = mine["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert_eq!(mine["result"]["isError"], false, "{mine}");
+    let answer: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or_else(|_| panic!("the queue answer is JSON: {text}"));
+    assert_eq!(
+        answer["count"], 0,
+        "the requesting run was offered its own unresolved handoff: {text}"
+    );
+    assert_eq!(answer["excluded_count"], 1, "{text}");
+    assert_eq!(
+        answer["excluded"][0]["reason"], "review-handoff-requester-excluded",
+        "{text}"
+    );
+
+    let theirs = ask("codex-99999999", &readable, "distinct");
+    let text = theirs["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert_eq!(theirs["result"]["isError"], false, "{theirs}");
+    let answer: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or_else(|_| panic!("the queue answer is JSON: {text}"));
+    assert_eq!(
+        answer["count"], 1,
+        "a distinct run could not see the handed-off item: {text}"
+    );
+    assert_eq!(answer["excluded_count"], 0, "{text}");
+
+    let blind = ask("codex-99999999", &unreadable, "unreadable");
+    assert_eq!(
+        blind["result"]["isError"], true,
+        "an unreadable candidate timeline was answered as a queue: {blind}"
+    );
+}
+
+/// A verdict needs a live claim, and it cannot credit a run that asked for the
+/// review rather than performing it.
+///
+/// Both halves were unmeasured. Narrowing the distinctness rule to the publisher
+/// alone left the suite green, and so did `let _ = verify_claim(..)` — the second
+/// being the only thing that stops an excluded publisher recording a verdict for
+/// its own handoff and lifting its own exclusion. Each case here writes nothing,
+/// which is what a neutered check would give away.
+#[test]
+fn a_verdict_needs_a_live_claim_and_a_reviewer_nobody_asked_for() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let publisher = "claude-abcd1234";
+    let requester = "codex-beef0000";
+    let epoch = "e".repeat(32);
+    let head = "b".repeat(40);
+    let base = "c".repeat(40);
+    let digest = "d".repeat(64);
+    let marker = |kind, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let claim_by = |run: &str| {
+        comment(
+            "IC_claim",
+            "2026-08-14T09:00:00Z",
+            marker(
+                "claim",
+                &[
+                    ("run-id", run),
+                    ("runtime", "claude"),
+                    ("horizon", "2099-01-01T00:00Z"),
+                    ("op-id", &"a".repeat(32)),
+                ],
+            ),
+        )
+    };
+    let published = comment(
+        "IC_publication",
+        "2026-08-14T09:10:00Z",
+        marker(
+            "published",
+            &[
+                ("run-id", publisher),
+                ("epoch", &epoch),
+                ("pr", "7"),
+                ("head", &head),
+                ("base", &base),
+                ("digest", &digest),
+            ],
+        ),
+    );
+    // A handoff written by somebody who is not the publisher, so the requester
+    // half of the rule is the only thing that can refuse them.
+    let handoff = comment(
+        "IC_handoff",
+        "2026-08-14T10:00:00Z",
+        marker(
+            "review-handoff",
+            &[
+                ("run-id", requester),
+                ("target-op", &"a".repeat(32)),
+                ("op-id", &"f".repeat(32)),
+                ("epoch", &epoch),
+                ("pr", "7"),
+                ("head", &head),
+                ("base", &base),
+                ("digest", &digest),
+                ("authority", "ask"),
+                ("requested-at", "2026-08-14T10:00:00Z"),
+                ("deadline", "2026-08-14T10:30:00Z"),
+                ("blocker", "no independent context in this run"),
+                ("discharger", "another run records the verdict"),
+            ],
+        ),
+    );
+
+    for (label, holder, caller, reviewer) in [
+        // The claim holder tries to credit the run that asked for the review.
+        ("requester", publisher, publisher, requester),
+        // A run that does not hold the claim tries to record at all.
+        ("no-claim", requester, publisher, "gemini-c0ffee00"),
+    ] {
+        let log = trace.path().join(format!("{label}.log"));
+        let count = trace.path().join(format!("{label}-count.json"));
+        let answers = serde_json::to_string(&serde_json::json!([
+            {
+                "matches": "issue view",
+                "stdout": serde_json::json!({
+                    "state": "OPEN",
+                    "assignees": [],
+                    "labels": [{"name": "status:review"}],
+                    "comments": [claim_by(holder), published.clone(), handoff.clone()],
+                }).to_string(),
+                "status": 0,
+            },
+            { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+        ]))
+        .expect("the fake tracker script serialises");
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "record_review_verdict",
+                "arguments": {
+                    "issue": 12,
+                    "run_id": caller,
+                    "reviewer": reviewer,
+                    "epoch": epoch,
+                    "pr": 7,
+                    "head": head,
+                    "base": base,
+                    "digest": digest,
+                    "outcome": "accepted",
+                }
+            }
+        })
+        .to_string();
+
+        let runs = home.join(".estigia").join("runs");
+        let _ = std::fs::remove_file(runs.join(format!("{caller}.json")));
+        let mut run = estigia::harness::session::Run::new(caller.to_owned());
+        run.issue = Some(12);
+        run.state = Some("review".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_COUNT", &count)
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        assert_eq!(response["result"]["isError"], true, "{label}: {response}");
+        let calls = std::fs::read_to_string(&log).unwrap_or_default();
+        assert!(
+            !calls.contains("issue comment"),
+            "{label}: a refused verdict still wrote to the timeline: {calls}"
+        );
+    }
+}
+
 /// The run that published cannot be the run credited with reviewing it.
 ///
 /// `record_review_verdict` had no test of any kind: both of its refusals could
