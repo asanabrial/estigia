@@ -27,7 +27,8 @@ the workflow, it holds the tools.
   reviewer that is neither the publisher nor any run that asked for review. Both routes record it:
   after a handoff the reviewing run names itself, and a run that acquired a reviewer without
   releasing the claim names that reviewer, marked `self_attested`. The requirement is unconditional
-  precisely so that deleting a protocol comment can only refuse — never clear.
+  precisely so that no deletion can manufacture evidence that was never recorded; `docs/honesty.md`
+  names the narrower cases where a deletion restores evidence a later marker disqualified.
 - Review publication now forms a cooperative draft/ready CI barrier. `publish_review` drafts and
   confirms reused PRs before push, creates new PRs draft, and records a fresh epoch over
   PR/head/base/clean-target digest, invalidating old evidence even for identical bytes.

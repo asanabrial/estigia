@@ -6752,6 +6752,153 @@ fn no_acquisition_route_returns_an_unresolved_handoff_to_its_requester_over_the_
     }
 }
 
+/// A run that does not hold the live claim cannot hand the review off.
+///
+/// This check was wired by a string search for `verify_claim(` and nothing else,
+/// and it is not cosmetic: `plan_release` accepts a run found live **or** stale,
+/// so without it a run whose horizon has passed could still write the immutable
+/// handoff marker — which excludes the publisher from both acquisition routes
+/// and from the queue — and release the epoch underneath whoever now holds it.
+/// The state readback only fires after that write.
+#[test]
+fn a_run_that_lost_the_claim_cannot_hand_the_review_off() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let count = trace.path().join("count.json");
+    let log = trace.path().join("calls.log");
+    let publisher = "claude-abcd1234";
+    // Nobody else needs to hold it: an expired claim is enough.
+    let target = "a".repeat(32);
+    let epoch = "e".repeat(32);
+    let head = "b".repeat(40);
+    let base = "c".repeat(40);
+    let digest = "d".repeat(64);
+    let marker = |kind, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    // The publisher's own claim, expired. This is the case that isolates the
+    // check: `plan_release` accepts a run found live **or** stale, so it would
+    // happily release this epoch, and an absent claim would have been refused by
+    // `plan_release` alone — measuring nothing.
+    let comments = vec![
+        comment(
+            "IC_claim",
+            "2026-08-14T09:00:00Z",
+            marker(
+                "claim",
+                &[
+                    ("run-id", publisher),
+                    ("runtime", "claude"),
+                    ("horizon", "2020-01-01T00:00Z"),
+                    ("op-id", &target),
+                ],
+            ),
+        ),
+        comment(
+            "IC_publication",
+            "2026-08-14T09:10:00Z",
+            marker(
+                "published",
+                &[
+                    ("run-id", publisher),
+                    ("epoch", &epoch),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                ],
+            ),
+        ),
+    ];
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "assignees": [],
+                "labels": [{"name": "status:review"}],
+                "comments": comments,
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "handoff_review",
+            "arguments": {
+                "issue": 12,
+                "run_id": publisher,
+                "target_operation": target,
+                "epoch": epoch,
+                "pr": 7,
+                "head": head,
+                "base": base,
+                "digest": digest,
+                "blocker": "no independent context in this run",
+                "discharger": "another run records the verdict",
+            }
+        }
+    })
+    .to_string();
+
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(publisher.to_owned());
+    run.issue = Some(12);
+    run.state = Some("review".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_COUNT", &count)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    assert_eq!(response["result"]["isError"], true, "{response}");
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        !calls.contains("issue comment"),
+        "a run that had lost the claim still wrote the handoff marker: {calls}"
+    );
+    assert!(
+        !calls.contains("issue edit"),
+        "a run that had lost the claim still released ownership: {calls}"
+    );
+}
+
 /// The review queue is the third place the same exclusion is enforced, and it
 /// hides the item from its requester without hiding it from anybody else. It
 /// also refuses the whole queue when one candidate timeline cannot be read.
@@ -6923,6 +7070,21 @@ fn the_review_queue_hides_a_handoff_from_its_requester_and_fails_closed_on_an_un
         blind["result"]["isError"], true,
         "an unreadable candidate timeline was answered as a queue: {blind}"
     );
+
+    // And the list itself, answering something that is not a list. A failed
+    // `gh` call never reaches this — the transport refuses that already — so
+    // the case left is a success whose body is not a queue, and treating it as
+    // an empty one sends a run to triage believing there is no work.
+    let no_list = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue list", "stdout": "null", "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let unread = ask("codex-99999999", &no_list, "no-list");
+    assert_eq!(
+        unread["result"]["isError"], true,
+        "an unreadable queue was answered as an empty one: {unread}"
+    );
 }
 
 /// A verdict needs a live claim, and it cannot credit a run that asked for the
@@ -7013,11 +7175,17 @@ fn a_verdict_needs_a_live_claim_and_a_reviewer_nobody_asked_for() {
         ),
     );
 
-    for (label, holder, caller, reviewer) in [
+    let stale = "9".repeat(32);
+    for (label, holder, caller, reviewer, named) in [
         // The claim holder tries to credit the run that asked for the review.
-        ("requester", publisher, publisher, requester),
+        ("requester", publisher, publisher, requester, &epoch),
         // A run that does not hold the claim tries to record at all.
-        ("no-claim", requester, publisher, "gemini-c0ffee00"),
+        ("no-claim", requester, publisher, "gemini-c0ffee00", &epoch),
+        // A verdict over an epoch that is not the one on the timeline. The read
+        // side ignores a stale receipt anyway, so this is the earlier refusal —
+        // the one that keeps a superseded epoch from ever being written down as
+        // reviewed.
+        ("stale", publisher, publisher, "gemini-c0ffee00", &stale),
     ] {
         let log = trace.path().join(format!("{label}.log"));
         let count = trace.path().join(format!("{label}-count.json"));
@@ -7045,7 +7213,7 @@ fn a_verdict_needs_a_live_claim_and_a_reviewer_nobody_asked_for() {
                     "issue": 12,
                     "run_id": caller,
                     "reviewer": reviewer,
-                    "epoch": epoch,
+                    "epoch": named,
                     "pr": 7,
                     "head": head,
                     "base": base,

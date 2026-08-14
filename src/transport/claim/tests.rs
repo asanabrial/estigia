@@ -925,6 +925,242 @@ fn an_unresolved_handoff_excludes_its_publisher_and_requesters_but_not_another_r
         ReviewEligibility::Eligible,
         "a different run cannot discover the review handoff"
     );
+
+    // The two arms, separated. Above, `claude-a` is publisher *and* requester,
+    // so either arm alone satisfies every assertion and neither is measured.
+    // Here the publisher asked nobody and a different run did the asking.
+    let split = [
+        published(&receipt),
+        handoff_by(
+            "codex-b",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "22222222222222222222222222222222",
+            &receipt,
+        ),
+    ];
+    assert!(
+        matches!(
+            review_eligibility(&split, "claude-a"),
+            ReviewEligibility::Excluded { .. }
+        ),
+        "the publishing run was offered work whose review is unresolved"
+    );
+    assert!(
+        matches!(
+            review_eligibility(&split, "codex-b"),
+            ReviewEligibility::Excluded { .. }
+        ),
+        "the requesting run was offered the handoff it asked somebody else to take"
+    );
+    assert_eq!(
+        review_eligibility(&split, "gemini-c"),
+        ReviewEligibility::Eligible
+    );
+}
+
+/// Every field-shape check on the three review markers, measured rather than
+/// asserted.
+///
+/// A reviewer deleted each of these one at a time and watched the suite stay
+/// green, and an earlier version of `docs/honesty.md` then *listed* them as
+/// unmeasured — from somebody else's measurement, not one this repository had
+/// run. Both are the same mistake in different directions: a validator nothing
+/// exercises, and a document naming a number nobody counted. These are the
+/// validators, exercised. What a malformed marker must never be is *readable*,
+/// because a half-read receipt still compares equal to itself and would bind a
+/// verdict to bytes nobody can name.
+#[test]
+fn a_malformed_review_marker_is_not_a_marker_at_all() {
+    let receipt = ReviewReceipt {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+    let fields = |overrides: &[(&str, &str)]| -> Vec<(String, String)> {
+        let mut all: Vec<(String, String)> = vec![
+            ("epoch".to_owned(), receipt.epoch.clone()),
+            ("pr".to_owned(), receipt.pr.to_string()),
+            ("head".to_owned(), receipt.head.clone()),
+            ("base".to_owned(), receipt.base.clone()),
+            ("digest".to_owned(), receipt.digest.clone()),
+        ];
+        for (name, value) in overrides {
+            match all.iter_mut().find(|(field, _)| field == name) {
+                Some(slot) => slot.1 = (*value).to_owned(),
+                None => all.push(((*name).to_owned(), (*value).to_owned())),
+            }
+        }
+        all
+    };
+    let marker = |kind: &str, fields: &[(String, String)]| {
+        let borrowed: Vec<(&str, &str)> = fields
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .collect();
+        super::super::markers::parse(
+            &super::super::markers::render(kind, &borrowed).expect("a marker renders"),
+        )
+        .pop()
+        .expect("one marker parses back")
+    };
+
+    // The receipt's own shape, through the publication reader that uses it.
+    for broken in [
+        ("epoch", "1".repeat(31)),
+        ("epoch", "Z".repeat(32)),
+        ("pr", "0".to_owned()),
+        ("head", "a".repeat(39)),
+        ("base", "b".repeat(41)),
+        ("digest", "c".repeat(63)),
+    ] {
+        let overrides = fields(&[("run-id", "claude-a"), (broken.0, broken.1.as_str())]);
+        assert!(
+            ReviewReceipt::from_marker(&marker("published", &overrides)).is_none(),
+            "a receipt with a malformed {} was read as complete",
+            broken.0
+        );
+    }
+
+    // A publication nobody can be attributed to is not a publication.
+    //
+    // Emptied after rendering, because `render` drops an empty attribute rather
+    // than writing one: the only way to reach these checks is the way they exist
+    // for — a marker somebody wrote or edited by hand on the tracker.
+    let emptied = |body: String, key: &str, value: &str| {
+        let found = format!(" {key}={value} ");
+        assert!(body.contains(&found), "nothing to empty in {body}");
+        body.replace(&found, &format!(" {key}= "))
+    };
+    let anonymous = [wrote(
+        "3",
+        emptied(
+            super::super::markers::render(
+                "published",
+                &[
+                    ("run-id", "claude-a"),
+                    ("epoch", &receipt.epoch),
+                    ("pr", &receipt.pr.to_string()),
+                    ("head", &receipt.head),
+                    ("base", &receipt.base),
+                    ("digest", &receipt.digest),
+                ],
+            )
+            .expect("a receipt marker"),
+            "run-id",
+            "claude-a",
+        ),
+    )];
+    assert!(
+        latest_publication(&anonymous).is_none(),
+        "a publication crediting nobody was read as the latest one"
+    );
+
+    // The handoff's own fields: an authority nobody can parse, a target that is
+    // not an epoch, a deadline before its request, and the two free-text fields
+    // whose whole purpose is naming what is missing and who can supply it.
+    let handoff = |overrides: &[(&str, &str)]| {
+        let mut base = vec![
+            ("run-id", "claude-a"),
+            ("target-op", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            ("op-id", "11111111111111111111111111111111"),
+            ("authority", "ask 30m"),
+            ("requested-at", "2026-07-26T04:00:00Z"),
+            ("deadline", "2026-07-26T04:30:00Z"),
+            ("blocker", "no reviewer"),
+            ("discharger", "another run"),
+        ];
+        for (name, value) in overrides {
+            match base.iter_mut().find(|(field, _)| field == name) {
+                Some(slot) => slot.1 = value,
+                None => base.push((name, value)),
+            }
+        }
+        let owned: Vec<(String, String)> = base
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value.to_owned()))
+            .chain(fields(&[]))
+            .collect();
+        ReviewHandoff::from_marker(&marker("review-handoff", &owned))
+    };
+    assert!(
+        handoff(&[]).is_some(),
+        "the well-formed handoff was refused"
+    );
+    for broken in [
+        ("authority", "whenever"),
+        ("authority", "ask 30y"),
+        ("target-op", "not-an-epoch"),
+        ("requested-at", "yesterday"),
+        ("blocker", ""),
+        ("discharger", ""),
+    ] {
+        assert!(
+            handoff(&[broken]).is_none(),
+            "a handoff with {} = {:?} was read as durable",
+            broken.0,
+            broken.1
+        );
+    }
+    assert!(
+        handoff(&[("deadline", "2026-07-26T03:59:00Z")]).is_none(),
+        "a deadline before its own request was read as a deadline"
+    );
+
+    // And the verdict's two identities. Either one missing leaves a verdict
+    // that credits nobody or is attributed to nobody.
+    let verdict = |attester: &str, reviewer: &str, outcome: &str| {
+        let owned: Vec<(String, String)> = [
+            ("run-id".to_owned(), attester.to_owned()),
+            ("reviewer".to_owned(), reviewer.to_owned()),
+            (
+                "op-id".to_owned(),
+                "22222222222222222222222222222222".to_owned(),
+            ),
+            ("outcome".to_owned(), outcome.to_owned()),
+        ]
+        .into_iter()
+        .chain(fields(&[]))
+        .collect();
+        ReviewVerdict::from_marker(&marker("review-verdict", &owned))
+    };
+    assert!(verdict("gemini-c", "codex-b", "accepted").is_some());
+    assert!(
+        verdict("gemini-c", "codex-b", "approved").is_none(),
+        "an outcome outside the vocabulary was read as a verdict"
+    );
+    // Both identities, emptied by hand for the same reason as above.
+    for (key, value) in [("run-id", "gemini-c"), ("reviewer", "codex-b")] {
+        let owned: Vec<(String, String)> = [
+            ("run-id".to_owned(), "gemini-c".to_owned()),
+            ("reviewer".to_owned(), "codex-b".to_owned()),
+            (
+                "op-id".to_owned(),
+                "22222222222222222222222222222222".to_owned(),
+            ),
+            ("outcome".to_owned(), "accepted".to_owned()),
+        ]
+        .into_iter()
+        .chain(fields(&[]))
+        .collect();
+        let borrowed: Vec<(&str, &str)> = owned
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .collect();
+        let body = emptied(
+            super::super::markers::render("review-verdict", &borrowed).expect("a marker renders"),
+            key,
+            value,
+        );
+        let marker = super::super::markers::parse(&body)
+            .pop()
+            .expect("the edited marker still parses");
+        assert!(
+            ReviewVerdict::from_marker(&marker).is_none(),
+            "a verdict with an empty {key} was read"
+        );
+    }
 }
 
 /// `SKILL.md` promises the requesting run cannot *select or reclaim* an
@@ -1110,22 +1346,35 @@ fn a_distinct_exact_receipt_verdict_resolves_but_only_acceptance_qualifies_deliv
     // The read side keeps its own copy of the requester rule, and it is not
     // redundant with the one the writer enforces: a verdict crediting a
     // requester can predate the handoff that made them one, and the writer
-    // never saw it. Dropping this filter would let exactly that marker qualify.
-    let mut credits_requester = base.clone();
-    credits_requester.push(verdict_attested_by(
-        "gemini-c",
-        "claude-a",
-        "accepted",
-        "44444444444444444444444444444444",
-        &receipt,
-    ));
+    // never saw it.
+    //
+    // The requester here is deliberately **not** the publisher. With the two the
+    // same run, the publisher half refuses on its own and this asserts nothing —
+    // which is what an earlier version of this block did, while its comment
+    // claimed a measurement the fixture could not make.
+    let requester_only = [
+        published(&receipt),
+        handoff_by(
+            "codex-b",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "22222222222222222222222222222222",
+            &receipt,
+        ),
+        verdict_attested_by(
+            "gemini-c",
+            "codex-b",
+            "accepted",
+            "44444444444444444444444444444444",
+            &receipt,
+        ),
+    ];
     assert!(
-        qualifying_review_verdict(&credits_requester, &receipt).is_none(),
+        qualifying_review_verdict(&requester_only, &receipt).is_none(),
         "a verdict crediting the run that asked for the review qualified delivery"
     );
     assert!(
         matches!(
-            review_eligibility(&credits_requester, "claude-a"),
+            review_eligibility(&requester_only, "codex-b"),
             ReviewEligibility::Excluded { .. }
         ),
         "crediting the requester resolved its own handoff"

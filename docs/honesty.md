@@ -86,27 +86,58 @@ suite. Everything else here is prose held by review.
   two judges were blind to each other, or that their verdicts were honest. A marker can still be
   forged by a collaborator acting outside Estigia. `single` and `two blind` remain operator-selected
   review contracts, not observations the harness can make.
-- **Five of the review protocol's smaller checks are unmeasured, and here is the measurement that
-  says so.** A reviewer mutated the tree one guard at a time and ran the suite. Every enforcement
-  point of the requester exclusion — `claim`, `reclaim` and the review queue — is now held by a
-  test that fails when the guard is neutered, as are the verdict's distinctness rule, its live-claim
-  requirement, the CI-release gate and the comment escaping. These five are not, and each was
-  confirmed by deleting it and watching the suite stay green: `ReviewReceipt::is_complete`'s
-  field-shape checks; `require_latest_receipt`'s exactness on the write paths (the read side still
-  refuses a stale receipt, which is why this is a lost early refusal rather than a hole);
-  `handoff_review`'s retry-path receipt recheck; `ReviewHandoff::from_marker`'s
-  `deadline >= requested-at` ordering; and `ReviewVerdict::from_marker`'s emptiness checks. They are
-  written and they work — nothing here says otherwise — but a later change could remove any of them
-  and no test would say a word. Named rather than quietly left, because the difference between a
-  guard that is tested and one that merely exists is exactly what this document is for.
+- **One review-protocol readback is held by no test, and one is held only by a string search.** The
+  review protocol's guards were mutated one at a time — each disabled, the whole suite run, the tree
+  restored from a byte copy. Held by a test that goes red: all three enforcement points of the
+  requester exclusion (`claim`, `reclaim`, the review queue), the queue's fail-closed candidate read,
+  the verdict's distinctness rule on *both* its halves, its live-claim requirement, the exactness of
+  the receipt on the write paths, the CI-release gate, the comment escaping, the read-side requester
+  filter, and every field-shape validator on the three markers — receipt widths, the handoff's
+  authority, target, timestamps and its blocker/discharger, the verdict's two identities and its
+  outcome vocabulary.
+
+  **Many of the smaller ones are not, and this entry does not claim to have found them all.**
+  `handoff_review`'s post-release readback, which proves the released ownership epoch is no longer
+  authoritative, can be disabled with the suite entirely green. Its retry-path receipt recheck is
+  caught only by `the_compound_handoff_records_before_release_and_checks_review_afterwards`, which
+  searches the source text for the call: that catches deletion, and would not catch the call being
+  made and its answer ignored. Beyond those, an adversarial sweep of forty-nine mutations found a
+  further score of defensive checks — replay-path repeats of rules whose first-write copy *is* held,
+  operation-id and marker-field validators, idempotency and visibility readbacks — that can each be
+  removed with the suite green. They are one class: belt to a brace that a test does hold, which is
+  why the load-bearing list above is the one this file stands behind.
+
+  Two earlier versions of this entry were wrong, in both directions, and how they were wrong is the
+  useful part. The first named five checks as unmeasured on somebody else's report rather than a
+  measurement run here — one of the five was in fact held, and there were more than five. The second
+  said only two were unheld, which understated it by roughly a factor of ten. A count nobody counted
+  is exactly what this document exists to refuse, and it refused itself twice before this sentence
+  was written.
+
+  One caution for whoever mutates next: this crate has tests that anchor on exact whitespace in
+  `claim.rs`, so a mutation harness that rewrites line endings — Python's text mode on Windows will,
+  silently — produces failures that look like a guard being caught and are not. Two of the
+  measurements behind this entry had to be discarded and rerun for that reason.
+
+  One caution for whoever mutates next: this crate has tests that anchor on exact whitespace in
+  `claim.rs`, so a mutation harness that rewrites line endings — Python's text mode on Windows will,
+  silently — produces failures that look like a guard being caught and are not.
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
   bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read
-  as clearance. Delivery asks for the same accepted verdict on both routes, so removing any protocol
-  comment can only refuse. It can still cost liveness rather than integrity: editing or deleting a
-  handoff comment lifts the requester exclusion that comment carries, returning the publishing run
-  to the queue for work no verdict covers. Estigia exposes no operation that edits or deletes a
-  comment; reaching either needs a `gh` call outside it.
+  as clearance. Delivery asks for the same accepted verdict on both routes, so no deletion can
+  manufacture evidence that was never recorded.
+
+  It can still **restore** evidence that a later marker had disqualified, and that is a narrower
+  claim than "a deletion can only refuse". Two cases, both reachable only with a `gh` call outside
+  Estigia, which exposes no operation that edits or deletes a comment. Deleting a handoff comment
+  lifts the requester exclusion it carries, returning the publishing run to the queue for work no
+  verdict covers — liveness, not integrity. And where a run recorded a verdict and *then* requested
+  a review handoff for the same receipt, that request disqualifies its own earlier verdict;
+  deleting the handoff makes the verdict qualify again, turning a refused `release_ci` into a
+  cleared one. The bytes it clears were still reviewed and still accepted by a run that was not the
+  publisher, so this is a lost later objection rather than an unreviewed merge — but it is a
+  deletion that clears, and saying otherwise would be the sentence, not the code, doing the work.
 - **The draft/ready CI barrier is cooperative, not adversarial.** Compatible repositories start PR
   CI on `ready_for_review`, not topic push/open/synchronize/reopen. GitHub has no atomic
   conditional-ready operation. Collaborators or repository workflows acting outside Estigia can mark

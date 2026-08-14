@@ -2360,3 +2360,58 @@ fn a_prefix_that_decides_a_meaning_is_written_once() {
         );
     }
 }
+
+/// The transport reads the settings this crate says it reads.
+///
+/// `READ_BY_THE_TRANSPORT` claimed this crossing in its own doc comment and no
+/// such test existed: the list was read by a re-export and nothing else, so
+/// "two, and only two" — and then "three, and only three" — was prose wearing
+/// the clothes of a measurement, in the one crate whose point is that its
+/// measurements are real. A row added to the transport without being declared
+/// here, or declared here without being read, now fails.
+#[test]
+fn the_transport_reads_the_settings_this_crate_says_it_does() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut read: Vec<String> = Vec::new();
+    let mut stack = vec![root.join("src")];
+    while let Some(at) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&at) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|kind| kind == "rs")
+                && path.file_name().is_some_and(|name| name != "tests.rs")
+                && let Ok(text) = std::fs::read_to_string(&path)
+            {
+                // The shipped half only: a fixture building a `Context` is not
+                // the transport consulting the operator's table.
+                let shipped = text
+                    .find("#[cfg(test)]\nmod tests {")
+                    .map_or(text.as_str(), |end| &text[..end]);
+                let mut rest = shipped;
+                while let Some(at) = rest.find("context.get(\"") {
+                    rest = &rest[at + "context.get(\"".len()..];
+                    if let Some(end) = rest.find('"') {
+                        read.push(rest[..end].to_lowercase());
+                    }
+                }
+            }
+        }
+    }
+    read.sort();
+    read.dedup();
+
+    let mut declared: Vec<String> = estigia::config::READ_BY_THE_TRANSPORT
+        .iter()
+        .map(|setting| setting.label().to_lowercase())
+        .collect();
+    declared.sort();
+
+    assert_eq!(
+        read, declared,
+        "the transport's `context.get` labels and `READ_BY_THE_TRANSPORT` disagree"
+    );
+}

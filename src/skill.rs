@@ -507,9 +507,18 @@ fn selected_documents(config: &Config) -> String {
     // `Authority::Ask` — "on expiry, records the proposed transition as a
     // comment on the issue instead of applying it. A run that dies leaves a
     // legible record rather than a state nobody wrote" — and nowhere the agent
-    // reads. No Estigia code enforces it either; nothing even reads the
-    // timeout. So the operator could set `ask 30m`, be shown it on the screen
-    // and in the table, and have it oblige nobody.
+    // reads. No Estigia code enforced it either, and nothing read the timeout.
+    // So the operator could set `ask 30m`, be shown it on the screen and in the
+    // table, and have it oblige nobody.
+    //
+    // One of the three is no longer in that state: `review_authority` reads
+    // `Review delegation`'s timeout and stamps the deadline into the handoff
+    // marker. It still obliges nobody to *wait* — Estigia does not sleep — but
+    // the deadline is now a durable server-visible fact rather than a number
+    // only the screen ever saw. Its sentence is written separately below,
+    // because what that row asks for is a reviewer and not a transition, and a
+    // row whose guidance describes the wrong action is guidance for a different
+    // setting.
     //
     // This is the rule three lines above applied to a fourth axis: *a setting
     // the agent cannot act on is a setting that does nothing.*
@@ -519,7 +528,7 @@ fn selected_documents(config: &Config) -> String {
     // own tests, all of which asserted it in the direction that says no. So it
     // could answer `false` for everything with the whole suite green, while the
     // one place that needed the answer spelled it out again, inverted.
-    if [config.delivery, config.review, config.transitions]
+    if [config.delivery, config.transitions]
         .iter()
         .any(|authority| !authority.is_autonomous())
     {
@@ -528,6 +537,18 @@ fn selected_documents(config: &Config) -> String {
              duration (`ask 30m`), that is how long to wait for an answer before recording the \
              proposed transition as a comment on the issue **instead of applying it** \u{2014} so a run \
              that dies leaves a legible record rather than a state nobody wrote.
+
+",
+        );
+    }
+    if !config.review.is_autonomous() {
+        lines.push_str(
+            "`Review delegation` set to `ask` means **propose and wait** for permission to acquire \
+             a reviewer \u{2014} not a workflow transition, and nothing here proposes one. Where it \
+             carries a duration (`ask 30m`), that duration is recorded once, as the deadline on \
+             the durable review handoff. Estigia does not sleep, schedule a wake-up, reset that \
+             deadline when the request is retried, hold the issue until it passes, or read expiry \
+             as a verdict: a review that nobody performed is still a review that nobody performed.
 
 ",
         );
@@ -2687,9 +2708,15 @@ mod tests {
         // duration, and what the duration does — wait, then record the proposed
         // transition as a comment instead of applying it — lived in a doc
         // comment on `Authority::Ask` and nowhere the agent reads. Nothing in
-        // Estigia enforces it either; nothing reads the timeout at all. So
+        // Estigia enforced it either, and nothing read the timeout. So
         // `ask 30m` was a value the screen offered, the table recorded, and
         // nobody was obliged by.
+        //
+        // `Review delegation` is now written separately, because what it asks
+        // permission for is a **reviewer** and the shared sentence promised a
+        // proposed transition. Guidance describing the wrong action is guidance
+        // for a different setting, and an agent that believed it would wait for
+        // a transition Estigia never proposes.
         let asking = Config::default();
         assert!(
             matches!(asking.delivery, crate::config::Authority::Ask { .. }),
@@ -2703,6 +2730,29 @@ mod tests {
         assert!(
             body.contains("instead of applying it"),
             "it says to wait and not what the waiting ends in"
+        );
+
+        // The review row asks for a reviewer, and says so in its own words.
+        let reviewing = Config {
+            delivery: crate::config::Authority::Auto,
+            transitions: crate::config::Authority::Auto,
+            review: crate::config::Authority::Ask {
+                timeout: std::time::Duration::from_secs(30 * 60),
+            },
+            ..Config::default()
+        };
+        let body = configuration_body(&reviewing);
+        assert!(
+            body.contains("permission to acquire a reviewer"),
+            "the review row is explained as though it proposed a transition"
+        );
+        assert!(
+            !body.contains("proposed transition"),
+            "the review row still carries the transition wording it does not do"
+        );
+        assert!(
+            body.contains("read expiry as a verdict"),
+            "the review row does not say what its deadline is not"
         );
 
         // And a machine that decides on its own is not told about a rule it
