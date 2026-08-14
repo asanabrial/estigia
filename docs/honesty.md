@@ -136,7 +136,18 @@ suite. Everything else here is prose held by review.
   condition in `if false &&` leaves the whole suite green, so neither door is held. They sit before
   the push rather than after it, which is how both fell outside the bar the issue set and outside the
   enumeration that answered it; it is the same lie in the same function, and naming it here is cheaper
-  than pretending the sweep was complete.
+  than pretending the sweep was complete. It is two doors onto a **gate** and not only onto a report:
+  with `draft-readback-failed` disabled nothing stops a still-ready reused pull request exposing the
+  new head to CI, which is the barrier that refusal exists to hold.
+
+  Three more, from the same reviews and left with their measurements. The `[world-action]` guidance
+  naming `Refs #<n>` is held by no test — stripping it from either refusal leaves the suite green —
+  though the issue lists it under *unchanged*. `Answer::already_wrote` decides which exit-code arm
+  `translate` takes and sits outside the `exit-code` population fingerprint, and that arm's
+  `StatusRequired` axis is held by the fingerprint alone: a tripwire that says *go and read this*
+  rather than a test of what it does. And the pull-request body is read three times — by the scan,
+  by `edit_pr`, and by `pr create` — so a body edited between the scan and the write is published
+  unscanned. Narrow, and one place rather than three is the fix if it ever matters.
 
   Two smaller things found in the same review and left: the commit-range scan is one function now, but
   its two callers still read from different checkouts — `publish_review` from the isolated one where

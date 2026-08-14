@@ -1558,9 +1558,6 @@ pub fn publish_review(
     )?;
     let target = super::target::clean_target(context, &format!("origin/{base}"), Some(at))?;
 
-    // Discover and, when needed, draft a reused PR before the push. A ready PR
-    // would otherwise emit synchronize and expose the new head before the
-    // review barrier was restored.
     // The closing-keyword refusal, where it can be true.
     //
     // It used to fire two hundred lines below, after the push and after the pull
@@ -1611,6 +1608,9 @@ pub fn publish_review(
         })));
     }
 
+    // Discover and, when needed, draft a reused PR before the push. A ready PR
+    // would otherwise emit synchronize and expose the new head before the
+    // review barrier was restored.
     let existing = open_prs(context, branch)?;
     if existing.len() > 1 {
         return Err(Failure::Stop(serde_json::json!({

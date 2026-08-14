@@ -24,9 +24,9 @@ the workflow, it holds the tools.
   orphaned for a run that believed the message. `MutationOutcome::Committed` already carried the
   right words and the transport had no way to reach it; it does now, and a refusal that does not
   claim to have written behaves exactly as before. The same operation also scans for a closing
-  keyword *before its first remote call* — before listing pull requests, before a reused one is
+  keyword *before its first remote mutation* — before listing pull requests, before a reused one is
   drafted and its body replaced, and before the push — so that refusal leaves the remote exactly as
-  it found it. That scan is one function now rather than two that disagreed about what a `git log`
+  it found it. Reads precede it, the claim renewal and the base fetch, and no write does. That scan is one function now rather than two that disagreed about what a `git log`
   which did not answer means; it refuses, on both sides, because a source nobody read is not a source
   with no keyword in it.
 - Review handoff is now a durable, receipt-bound compound operation. It records and reads back the

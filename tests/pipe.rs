@@ -8157,6 +8157,9 @@ fn release_does_not_report_a_release_the_transport_did_not_perform() {
 }
 
 /// One open pull request, as `gh pr list` answers it.
+/// The pull request `published` finds on its second list, once created.
+const LISTED_SEVEN: &str = "[{\"number\":7,\"url\":\"https://github.com/o/r/pull/7\",\"headRefOid\":\"0000000000000000000000000000000000000000\",\"baseRefOid\":\"0000000000000000000000000000000000000000\",\"isDraft\":true}]";
+
 const LISTED_PR: &str =
     "[{\"number\":99,\"url\":\"u\",\"headRefOid\":\"x\",\"baseRefOid\":\"y\",\"isDraft\":true}]";
 
@@ -8498,9 +8501,20 @@ fn a_refusal_after_the_push_reports_that_the_write_landed() {
     // producer of the channel and only one of them was held: the readback
     // disagreeing, and a keyword arriving from the remote side of the pull
     // request — which the local precondition cannot see and does not claim to.
-    for (which, readback_head, remote_body) in [
-        ("readback", "f".repeat(40), "names nothing"),
-        ("remote keyword", head_sha, "Closes #12"),
+    // A third case whose honest answer is *unconfirmed* rather than *landed*:
+    // the pull request is created and the list that follows does not show it.
+    // That path is a `Failure::Read`, and the only thing keeping it from saying
+    // `nothing was written` after a push is a `map_err` nothing tested.
+    for (which, readback_head, remote_body, listed_after, landed) in [
+        (
+            "readback",
+            "f".repeat(40),
+            "names nothing",
+            LISTED_SEVEN,
+            true,
+        ),
+        ("remote keyword", head_sha, "Closes #12", LISTED_SEVEN, true),
+        ("unconfirmed", "f".repeat(40), "names nothing", "[]", false),
     ] {
         let answers = serde_json::to_string(&serde_json::json!([
         {
@@ -8523,13 +8537,7 @@ fn a_refusal_after_the_push_reports_that_the_write_landed() {
         { "matches": "pr list", "nth": 1, "stdout": "[]", "status": 0 },
         {
             "matches": "pr list",
-            "stdout": serde_json::json!([{
-                "number": 7,
-                "url": "https://github.com/o/r/pull/7",
-                "headRefOid": "0".repeat(40),
-                "baseRefOid": "0".repeat(40),
-                "isDraft": true,
-            }]).to_string(),
+            "stdout": listed_after,
             "status": 0,
         },
         { "matches": "pr create", "stdout": "https://github.com/o/r/pull/7\n", "status": 0 },
@@ -8644,10 +8652,18 @@ fn a_refusal_after_the_push_reports_that_the_write_landed() {
             String::from_utf8_lossy(&refs.stdout).contains(branch),
             "the {which} case never got as far as pushing, so it proves nothing"
         );
+        // Every case: the sentence this issue exists to eliminate must not be
+        // the answer once the branch is on the remote.
         assert!(
-            text.contains("the write landed"),
-            "the {which} refusal after the push still claimed nothing was written: {text}"
+            !text.contains("nothing was written"),
+            "the {which} refusal after the push claimed nothing was written: {text}"
         );
+        if landed {
+            assert!(
+                text.contains("the write landed"),
+                "the {which} refusal did not report the write as landed: {text}"
+            );
+        }
         assert!(
             !text.contains("nothing was written"),
             "the {which} refusal after the push claimed both: {text}"
@@ -8845,5 +8861,124 @@ fn an_unreadable_pr_body_refuses_before_the_remote_is_touched() {
     assert!(
         text.contains("nothing was written"),
         "the refusal did not say the world was untouched: {text}"
+    );
+}
+
+/// `check-closing-keywords` refuses an unreadable commit range too.
+///
+/// The scan is one function now, and the function's own strictness is held —
+/// but the *caller* was not. Restoring `assess_autoclose`'s old tolerant copy,
+/// or dropping the `?`, left the whole suite green, so the sentence this change
+/// put into the installed contract — *"both this scan and
+/// `check-closing-keywords` refuse on it rather than continuing with an empty
+/// list"* — could be made false with nothing objecting.
+///
+/// What tolerating it costs is not abstract: the assessment answers
+/// `cause: "branch-link"` where the truth is `closing-keyword`, which points the
+/// operator at the one cause no edit can undo.
+#[test]
+fn the_closing_keyword_check_refuses_a_range_it_cannot_read() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-unreadable-range";
+
+    // A branch that exists, and a base whose remote-tracking ref does not, so
+    // `origin/<base>..<branch>` is a range git cannot resolve.
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(git(&["checkout", "-q", "-b", branch]));
+
+    let answers = serde_json::to_string(&serde_json::json!([
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        {
+            "matches": "api graphql",
+            "stdout": serde_json::json!({
+                "data": { "repository": { "issue": { "closedByPullRequestsReferences": {
+                    "nodes": [{
+                        "number": 7,
+                        "state": "OPEN",
+                        "headRefName": "fix/12-unreadable-range",
+                        "baseRefName": "no-such-base",
+                    }],
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                } } } },
+            }).to_string(),
+            "status": 0,
+        },
+        // No keyword on the remote side, so the commit range is the only source
+        // left and reading it is the only thing that can decide.
+        {
+            "matches": "json body",
+            "stdout": "{\"body\":\"a body that names nothing\"}",
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.issue = Some(12);
+    run.state = Some("in-progress".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "check_closing_keywords",
+            "arguments": { "issue": 12, "branch": branch, "base": "no-such-base" }
+        }
+    })
+    .to_string();
+
+    let log = trace.path().join("calls.log");
+    let count = trace.path().join("count.json");
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_COUNT", &count)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    assert_eq!(
+        response["result"]["isError"], true,
+        "an unreadable commit range was answered as an assessment: {text}"
+    );
+    assert!(
+        !text.contains("branch-link"),
+        "an unreadable range was reported as the cause no edit can undo: {text}"
     );
 }
