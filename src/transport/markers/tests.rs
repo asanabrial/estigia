@@ -94,6 +94,14 @@ fn the_two_vocabularies_overlap_only_where_they_are_meant_to() {
     assert!(control.contains(&"adjudication"));
 }
 
+#[test]
+fn review_evidence_neither_releases_nor_renews_ownership() {
+    for kind in ["review-handoff", "review-verdict"] {
+        assert!(!RELEASE_KINDS.contains(&kind));
+        assert!(!ACTIVITY_KINDS.contains(&kind));
+    }
+}
+
 /// A percent escape is two hex digits, and nothing else is one.
 ///
 /// `u8::from_str_radix` accepts a leading sign, so `%+4` came back as the byte

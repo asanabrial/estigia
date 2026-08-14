@@ -979,13 +979,16 @@ fn lower(value: &str) -> String {
 /// somebody's hand-edited table does not silently drop their setting.
 /// The settings the transport itself reads out of the table.
 ///
-/// Two, and only two: `github.py` calls `cfg(config, …)` for `project board` and
-/// `worktree location` and for nothing else. Every other row is read by the
-/// agent out of the prose, or by the gate. Held here because the check below is
-/// only worth making for rows a second reader actually consults, and crossed by
+/// Three, and only three: the transport calls `context.get` for `project board`,
+/// `worktree location` and `Review delegation`, and for nothing else. The third
+/// arrived with the review handoff, which stamps the configured authority and one
+/// deadline into the request marker — it is read to be *recorded*, never to
+/// decide whether to wait. Every other row is read by the agent out of the prose,
+/// or by the gate. Held here because the check below is only worth making for
+/// rows a second reader actually consults, and crossed by
 /// `the_transport_reads_the_settings_this_crate_says_it_does` so the list cannot
-/// drift away from the script it describes.
-pub const READ_BY_THE_TRANSPORT: &[Setting] = &[Setting::Board, Setting::Worktree];
+/// drift away from the code it describes.
+pub const READ_BY_THE_TRANSPORT: &[Setting] = &[Setting::Board, Setting::Worktree, Setting::Review];
 
 /// Whether a row a person typed is one the transport will match.
 ///
@@ -1028,22 +1031,46 @@ fn normalize_label(label: &str) -> String {
         .join(" ")
 }
 
-fn parse_authority(setting: Setting, value: &str) -> Result<Authority, Refusal> {
+/// The one grammar for an authority row: `auto`, `ask`, or `ask <duration>`.
+///
+/// Public because the transport reads `Review delegation` as well, and this rule
+/// had been written three times — here, in the transport's `review_authority`,
+/// and again in the handoff marker's own validator. The three already disagreed.
+/// `Auto`, `Ask 30m` and `ask 30 m` parse here and were refused by the transport,
+/// which mattered because the review handoff is the only exit from the livelock
+/// a blocked run has: a mis-cased row left it holding the issue for good. Worse,
+/// `ask  30m` passed the transport, was stamped into the marker, and was then
+/// refused by the marker's reader — comment posted, readback failed, and every
+/// retry answering `review-handoff-operation-conflict` forever.
+///
+/// Both of those spellings also read the duration by byte offset, so a value
+/// ending in a multi-byte character panicked the process rather than being
+/// refused. Here the split is taken at the first non-digit **character**, which
+/// is a boundary by construction.
+pub fn authority_of(value: &str) -> Option<Authority> {
     let value = lower(value);
     if value == "auto" {
-        return Ok(Authority::Auto);
+        return Some(Authority::Auto);
     }
-    let Some(rest) = value.strip_prefix("ask") else {
-        return Err(setting.reject(&value));
-    };
-    let rest = rest.trim();
+    let rest = value.strip_prefix("ask")?.trim().to_owned();
     if rest.is_empty() {
-        return Ok(Authority::Ask {
+        return Some(Authority::Ask {
             timeout: DEFAULT_ASK_TIMEOUT,
         });
     }
-    let timeout = parse_duration(rest).ok_or_else(|| setting.reject(&value))?;
-    Ok(Authority::Ask { timeout })
+    parse_duration(&rest).map(|timeout| Authority::Ask { timeout })
+}
+
+/// One authority value as this crate spells it, for writing back down.
+///
+/// A marker records this rather than the operator's own spelling, so that what
+/// is written is what [`authority_of`] will read.
+pub fn rendered_authority(authority: Authority) -> String {
+    render_authority(authority)
+}
+
+fn parse_authority(setting: Setting, value: &str) -> Result<Authority, Refusal> {
+    authority_of(value).ok_or_else(|| setting.reject(&lower(value)))
 }
 
 /// `30s`, `15m`, `2h`. Small on purpose: a timeout grammar wide enough to be

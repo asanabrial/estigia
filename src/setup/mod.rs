@@ -579,6 +579,12 @@ impl AgentAdapter {
     /// second list would be a second thing to keep in step.
     pub fn applies(&self, setting: crate::config::Setting) -> Applies {
         use crate::config::Setting;
+        if setting == Setting::Review {
+            return Applies::Asked(
+                "Estigia records and releases the review handoff, but this runtime must still \
+                 provide a distinct reviewer context",
+            );
+        }
         if self.can_gate_tools() {
             return Applies::Held;
         }
@@ -593,12 +599,10 @@ impl AgentAdapter {
             // These three name who authorises something. The gate is what
             // stops and asks; without one the contract still says it, and the
             // agent may still honour it, but nothing checks.
-            Setting::Delivery | Setting::Review | Setting::Transitions | Setting::Boundaries => {
-                Applies::Asked(
-                    "Estigia does not gate this agent's tool calls — the contract asks, and the \
+            Setting::Delivery | Setting::Transitions | Setting::Boundaries => Applies::Asked(
+                "Estigia does not gate this agent's tool calls — the contract asks, and the \
                      pre-push guard still holds the push",
-                )
-            }
+            ),
             _ => Applies::Held,
         }
     }

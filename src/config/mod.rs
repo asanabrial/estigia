@@ -25,7 +25,8 @@ pub use block::{BLOCK_BEGIN, BLOCK_END, CONFIG_FENCE};
 pub use settings::{
     AGENT_SETTINGS, Answers, CutBy, CutShort, EVERYWHERE_SETTINGS, MACHINE_SETTINGS,
     OPTIONS_SETTINGS, OPTIONS_SETTINGS_WITHOUT_BOARD, READ_BY_THE_TRANSPORT, SETTINGS, Scope,
-    Setting, reaches_the_transport, rows as table_rows, rows_split_by_a_separator,
+    Setting, authority_of, reaches_the_transport, rendered_authority, rows as table_rows,
+    rows_split_by_a_separator,
 };
 
 /// The name of the ignored local file that overrides the versioned table.

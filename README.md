@@ -16,7 +16,7 @@
   <a href="https://github.com/asanabrial/estigia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/asanabrial/estigia/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" /></a>
   <a href="https://www.rust-lang.org"><img alt="Rust 1.97+" src="https://img.shields.io/badge/rust-1.97%2B-orange.svg" /></a>
-  <a href="#the-tools"><img alt="MCP: 18 tools" src="https://img.shields.io/badge/MCP-18%20tools-purple.svg" /></a>
+  <a href="#the-tools"><img alt="MCP: 20 tools" src="https://img.shields.io/badge/MCP-20%20tools-purple.svg" /></a>
   <a href="#install"><img alt="Linux, macOS, Windows" src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg" /></a>
 </p>
 
@@ -222,7 +222,7 @@ git
        └─ refuses a push no live claim authorises, whoever typed it
 ```
 
-Two halves, and both are needed. The **tools** are how an agent does workflow work at all — eighteen
+Two halves, and both are needed. The **tools** are how an agent does workflow work at all — twenty
 operations with schemas, instead of composing `gh` by hand and hoping. The **gate** is what happens
 when it tries to work around them.
 
@@ -277,21 +277,21 @@ being wrong costs a refused write, never a damaged issue. A test enforces that s
 
 ## The tools
 
-Eighteen operations, table-driven, each mapping to one the contract requires the binding to provide.
+Twenty operations, table-driven, each mapping to one the contract requires the binding to provide.
 `tools/list` carries a schema and a `readOnlyHint`, so an agent can tell a read from a write without
 reading this source:
 
 ```
 read   verify_claim     (issue, run_id, expect_state)
-read   list_state       (state)
+read   list_state       (state, run_id)
 read   expected_target  (base)
 read   base_movement    (base, recorded_base)
 read   check_closing_keywords (issue)
-read   changelog_notes  (version, file)
+WRITE  changelog_notes  (version, file)
 WRITE  audit_board      ()
 WRITE  claim            (issue, run_id, horizon)
 WRITE  heartbeat        (issue, run_id, expect_state, body_file)
-WRITE  transition       (issue, to)
+WRITE  transition       (issue, to, run_id)
 WRITE  comment          (issue, body_file)
 WRITE  reclaim          (issue, run_id, horizon)
 WRITE  release          (issue, run_id)
@@ -299,10 +299,12 @@ WRITE  ensure_states    ()
 WRITE  start_branch     (issue, run_id, branch, base)
 WRITE  create           (identity, title, body_file, priority, domain, runtime, run_id)
 WRITE  publish_review   (issue, run_id, branch, base, pr_title, pr_body_file)
+WRITE  handoff_review   (issue, run_id, target_operation, epoch, pr, head, base, digest, blocker, discharger)
+WRITE  record_review_verdict (issue, run_id, reviewer, epoch, pr, head, base, digest, outcome)
 WRITE  release_ci       (issue, run_id, epoch, pr, head, base, digest)
 ```
 
-Eighteen tools. The contract names sixteen operations every binding must map; four are not exposed and each says
+Twenty tools. The contract names eighteen operations every binding must map; four are not exposed and each says
 why in `NOT_EXPOSED` — `publish_version` and `close` are declared *(agent, not scripted)* upstream,
 `last_activity` maps to a raw `gh` call rather than the transport, and `label` is not mapped by the
 GitHub binding at all. A seam test holds the two lists together: an operation that is neither

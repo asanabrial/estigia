@@ -525,6 +525,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("not held", "(sin puerta)"),
     ("no effect", "(sin efecto)"),
     ("Estigia does not gate this agent's tool calls — the contract asks, and the pre-push guard still holds the push", "Estigia no pone puerta a las llamadas de herramienta de este agente — el contrato lo pide, y la guardia de pre-push sigue sosteniendo el push"),
+    ("Estigia records and releases the review handoff, but this runtime must still provide a distinct reviewer context", "Estigia registra y libera la entrega de revisión, pero este entorno todavía debe proporcionar un contexto de revisión distinto"),
     ("whether this agent may deliver a reviewed change, or has to ask", "si este agente puede entregar un cambio revisado, o tiene que pedirlo"),
     ("how a reviewed change reaches the base branch", "cómo llega un cambio revisado a la rama base"),
     ("whether this agent may fetch its own review, or has to ask", "si este agente puede conseguir su propia revisión, o tiene que pedirlo"),

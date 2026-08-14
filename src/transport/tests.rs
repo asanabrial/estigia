@@ -538,3 +538,25 @@ fn a_repository_nobody_named_is_a_read_that_did_not_answer() {
         );
     }
 }
+
+#[test]
+fn an_unreadable_review_candidate_timeline_makes_the_queue_unreadable() {
+    assert!(
+        super::commands::queue_comments(&serde_json::json!({"comments": []}), 12)
+            .expect("an empty but readable timeline")
+            .is_empty()
+    );
+    for unreadable in [
+        serde_json::json!({}),
+        serde_json::json!({"comments": null}),
+        serde_json::json!({"comments": {}}),
+    ] {
+        assert!(
+            matches!(
+                super::commands::queue_comments(&unreadable, 12),
+                Err(super::Failure::Read(_))
+            ),
+            "an unreadable candidate became eligible: {unreadable}"
+        );
+    }
+}

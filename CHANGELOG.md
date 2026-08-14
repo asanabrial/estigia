@@ -12,12 +12,23 @@ the workflow, it holds the tools.
 
 ### The harness
 
-- `estigia mcp` serves the workflow operations as **18 MCP tools** over stdio —
+- `estigia mcp` serves the workflow operations as **20 MCP tools** over stdio —
   claim, verify_claim, heartbeat, transition, comment, reclaim, release,
   start_branch, publish_review, and the read-only checks. Hand-written
   JSON-RPC rather than `rmcp`: the same binary answers a `PreToolUse` hook on
   every edit, so an async runtime per process is a cost paid thousands of times
   to move a few lines of JSON across a pipe.
+- Review handoff is now a durable, receipt-bound compound operation. It records and reads back the
+  latest publication receipt and exact ownership epoch before idempotently unassigning, keeps the
+  issue in `review`, and excludes the publishing/requesting run from selection and reclaim until a
+  distinct reviewer's immutable exact-receipt verdict. Rejection returns the work for repair. Timed
+  requests record one deadline without scheduling or treating expiry as review.
+- Delivery now requires one accepted `review_verdict` over the exact latest receipt, crediting a
+  reviewer that is neither the publisher nor any run that asked for review. Both routes record it:
+  after a handoff the reviewing run names itself, and a run that acquired a reviewer without
+  releasing the claim names that reviewer, marked `self_attested`. The requirement is unconditional
+  precisely so that no deletion can manufacture evidence that was never recorded; `docs/honesty.md`
+  names the narrower cases where a deletion restores evidence a later marker disqualified.
 - Review publication now forms a cooperative draft/ready CI barrier. `publish_review` drafts and
   confirms reused PRs before push, creates new PRs draft, and records a fresh epoch over
   PR/head/base/clean-target digest, invalidating old evidence even for identical bytes.

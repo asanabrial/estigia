@@ -192,6 +192,7 @@ const RUN_ID: Argument = Argument::required(
 );
 const ISSUE: Argument =
     Argument::required("issue", "integer", "The issue number.").counting_from(1);
+const REVIEW_OUTCOMES: &[&str] = &["accepted", "rejected"];
 
 /// Every operation Estigia exposes.
 pub const TOOLS: &[Tool] = &[
@@ -386,13 +387,77 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "handoff_review",
+        contract_name: "handoff_review",
+        description: "Record one exact review request, read it back, then release only the current \
+                      ownership epoch while keeping the issue in review. The same publishing or \
+                      requesting run is excluded until a distinct exact-receipt verdict resolves it.",
+        operation: "handoff-review",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::required(
+                "target_operation",
+                "string",
+                "The exact current ownership epoch this handoff may release.",
+            ),
+            Argument::required("epoch", "string", "The publication epoch."),
+            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
+            Argument::required("head", "string", "The full published head SHA."),
+            Argument::required("base", "string", "The full published base SHA."),
+            Argument::required("digest", "string", "The complete-target manifest digest."),
+            Argument::required(
+                "blocker",
+                "string",
+                "The exact condition preventing this run from completing review.",
+            ),
+            Argument::required(
+                "discharger",
+                "string",
+                "Who or what can discharge the blocker.",
+            ),
+        ],
+        effect: PointerEffect::Forget,
+        writes: true,
+    },
+    Tool {
+        name: "record_review_verdict",
+        contract_name: "review_verdict",
+        description: "Record an immutable verdict for the latest complete publication receipt. \
+                      Requires a live review claim and refuses to credit the publishing or \
+                      requesting run; either outcome resolves a handoff, but only `accepted` \
+                      releases delivery.",
+        operation: "review-verdict",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::required(
+                "reviewer",
+                "string",
+                "The context credited with the review. After a handoff this is the recording run \
+                 itself; a run that acquired a reviewer without releasing the claim names that \
+                 reviewer instead. Never the run that published.",
+            ),
+            Argument::required("epoch", "string", "The publication epoch."),
+            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
+            Argument::required("head", "string", "The full published head SHA."),
+            Argument::required("base", "string", "The full published base SHA."),
+            Argument::required("digest", "string", "The complete-target manifest digest."),
+            Argument::required("outcome", "string", "The review verdict.").of(REVIEW_OUTCOMES),
+        ],
+        effect: PointerEffect::Renew,
+        writes: true,
+    },
+    Tool {
         name: "list_state",
         contract_name: "list_state",
-        description: "The unassigned queue for one state, partitioned by domain. It refuses to \
-                      rank across partitions.",
+        description: "The requester-aware unassigned queue for one state, partitioned by domain. \
+                      It excludes unresolved review handoffs from their publishing/requesting run, \
+                      fails closed on candidate timeline reads, and never ranks across partitions.",
         operation: "list-state",
         arguments: &[
             Argument::required("state", "string", "The workflow state.").of(crate::config::STATES),
+            RUN_ID,
             // Published because it is a **ceiling**, not a preference. The
             // transport passes `--limit` to `gh issue list` and defaults it to
             // 200, and the answer carries `count: len(data)` — the number

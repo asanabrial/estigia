@@ -499,14 +499,332 @@ pub struct ReviewReceipt {
 
 impl ReviewReceipt {
     fn from_marker(marker: &super::markers::Marker) -> Option<Self> {
-        Some(Self {
+        let receipt = Self {
             epoch: marker.get("epoch")?.clone(),
             pr: marker.get("pr")?.parse().ok()?,
             head: marker.get("head")?.clone(),
             base: marker.get("base")?.clone(),
             digest: marker.get("digest")?.clone(),
+        };
+        receipt.is_complete().then_some(receipt)
+    }
+
+    fn is_complete(&self) -> bool {
+        let exact_hex = |value: &str, width: usize| {
+            value.len() == width
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        };
+        ownership::is_operation_id(&self.epoch)
+            && self.pr > 0
+            && exact_hex(&self.head, 40)
+            && exact_hex(&self.base, 40)
+            && exact_hex(&self.digest, 64)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LatestPublication {
+    publisher: String,
+    receipt: ReviewReceipt,
+}
+
+fn latest_publication(comments: &[ownership::Comment]) -> Option<LatestPublication> {
+    comments
+        .iter()
+        .filter(|comment| comment.viewer_did_author && !comment.includes_created_edit)
+        .flat_map(|comment| super::markers::parse(&comment.body))
+        .filter(|marker| marker.get("kind").map(String::as_str) == Some("published"))
+        .filter_map(|marker| {
+            let publication = LatestPublication {
+                publisher: marker.get("run-id")?.clone(),
+                receipt: ReviewReceipt::from_marker(&marker)?,
+            };
+            (!publication.publisher.is_empty()).then_some(publication)
+        })
+        .next_back()
+}
+
+/// One durable request for another run to review an exact publication receipt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewHandoff {
+    /// The operation that wrote this marker.
+    pub operation_id: String,
+    /// The run putting the review down.
+    pub requester: String,
+    /// The exact ownership epoch released after this marker became visible.
+    pub target_operation: String,
+    /// The immutable publication identity.
+    pub receipt: ReviewReceipt,
+    /// The configured permission under which review was requested.
+    pub authority: String,
+    /// When the request was recorded.
+    pub requested_at: String,
+    /// The one deadline recorded for the request. Elapsing it changes nothing.
+    pub deadline: String,
+    /// The exact condition preventing this run from completing review.
+    pub blocker: String,
+    /// Who or what can discharge that condition.
+    pub discharger: String,
+}
+
+impl ReviewHandoff {
+    fn from_marker(marker: &super::markers::Marker) -> Option<Self> {
+        let operation_id = marker.get("op-id")?.clone();
+        let target_operation = marker.get("target-op")?.clone();
+        let requester = marker.get("run-id")?.clone();
+        let receipt = ReviewReceipt::from_marker(marker)?;
+        let authority = marker.get("authority")?.clone();
+        let requested_at = marker.get("requested-at")?.clone();
+        let deadline = marker.get("deadline")?.clone();
+        let blocker = marker
+            .get("blocker")
+            .filter(|value| !value.is_empty())?
+            .clone();
+        let discharger = marker
+            .get("discharger")
+            .filter(|value| !value.is_empty())?
+            .clone();
+        // The configuration's own grammar, not a second copy of it. This was a
+        // third spelling that disagreed with the other two, and it read the
+        // duration's unit by byte offset — a marker whose authority ended in a
+        // multi-byte character panicked whoever parsed the timeline, which is
+        // `claim`, `reclaim` and every candidate of the review queue.
+        let valid_authority = crate::config::authority_of(&authority).is_some();
+        let valid_target = ownership::is_operation_id(&target_operation)
+            || target_operation
+                .strip_prefix("legacy-")
+                .is_some_and(|identity| !identity.is_empty());
+        if !(ownership::is_operation_id(&operation_id)
+            && valid_target
+            && valid_authority
+            && ownership::parse_stamp(&requested_at).is_some()
+            && ownership::parse_stamp(&deadline).is_some_and(|deadline| {
+                ownership::parse_stamp(&requested_at).is_some_and(|requested| deadline >= requested)
+            }))
+        {
+            return None;
+        }
+        Some(Self {
+            operation_id,
+            requester,
+            target_operation,
+            receipt,
+            authority,
+            requested_at,
+            deadline,
+            blocker,
+            discharger,
+        })
+        .filter(|handoff| !handoff.requester.is_empty())
+    }
+}
+
+/// One immutable verdict over a complete publication receipt.
+///
+/// The attester and the reviewer are separate because the two review routes
+/// differ in exactly that: after a handoff the reviewing run claims the issue
+/// and records its own verdict, so the two identities coincide and the timeline
+/// attributes it. A run that acquired its reviewer directly never releases the
+/// claim, so it records its reviewer's outcome itself and the two differ. What
+/// Estigia can check is the same in both cases — that the *reviewer* is not the
+/// run that published — and no more; see `docs/honesty.md`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewVerdict {
+    /// The operation that wrote this marker.
+    pub operation_id: String,
+    /// The run that recorded it, holding the live `review` claim.
+    pub attester: String,
+    /// The context credited with the review. Never the publisher.
+    pub reviewer: String,
+    /// The immutable publication identity.
+    pub receipt: ReviewReceipt,
+    /// `accepted` or `rejected`; both resolve a handoff, but only acceptance qualifies delivery.
+    pub outcome: String,
+}
+
+impl ReviewVerdict {
+    fn from_marker(marker: &super::markers::Marker) -> Option<Self> {
+        let operation_id = marker.get("op-id")?.clone();
+        let attester = marker.get("run-id")?.clone();
+        let reviewer = marker.get("reviewer")?.clone();
+        let outcome = marker.get("outcome")?.clone();
+        if !ownership::is_operation_id(&operation_id)
+            || attester.is_empty()
+            || reviewer.is_empty()
+            || !matches!(outcome.as_str(), "accepted" | "rejected")
+        {
+            return None;
+        }
+        Some(Self {
+            operation_id,
+            attester,
+            reviewer,
+            receipt: ReviewReceipt::from_marker(marker)?,
+            outcome,
         })
     }
+}
+
+fn first_protocol_markers(
+    comments: &[ownership::Comment],
+    kind: &str,
+) -> Vec<super::markers::Marker> {
+    let mut markers: Vec<(usize, usize, super::markers::Marker)> =
+        ownership::first_operation_markers(comments)
+            .into_values()
+            .filter(|(_, _, marker, unedited)| {
+                *unedited && marker.get("kind").map(String::as_str) == Some(kind)
+            })
+            .map(|(position, index, marker, _)| (position, index, marker))
+            .collect();
+    markers.sort_by_key(|(position, index, _)| (*position, *index));
+    markers.into_iter().map(|(_, _, marker)| marker).collect()
+}
+
+fn handoffs_for(comments: &[ownership::Comment], receipt: &ReviewReceipt) -> Vec<ReviewHandoff> {
+    first_protocol_markers(comments, "review-handoff")
+        .iter()
+        .filter_map(ReviewHandoff::from_marker)
+        .filter(|handoff| handoff.receipt == *receipt)
+        .collect()
+}
+
+fn latest_distinct_review_verdict(
+    comments: &[ownership::Comment],
+    receipt: &ReviewReceipt,
+) -> Option<ReviewVerdict> {
+    let publication = latest_publication(comments)?;
+    if publication.receipt != *receipt {
+        return None;
+    }
+    // Deliberately not conditioned on a handoff existing. Making the verdict
+    // requirement appear only once a handoff is recorded would mean a deleted
+    // handoff comment *lowers* the bar from "a distinct reviewer accepted these
+    // bytes" to "nothing", and an erased record must never read as clearance.
+    // Delivery therefore asks for the same evidence on both review routes.
+    let mut forbidden: std::collections::BTreeSet<String> =
+        [publication.publisher].into_iter().collect();
+    forbidden.extend(
+        handoffs_for(comments, receipt)
+            .into_iter()
+            .map(|handoff| handoff.requester),
+    );
+    first_protocol_markers(comments, "review-verdict")
+        .iter()
+        .filter_map(ReviewVerdict::from_marker)
+        .rfind(|verdict| {
+            verdict.receipt == *receipt && !forbidden.contains(verdict.reviewer.as_str())
+        })
+}
+
+/// A distinct accepted verdict for this exact latest receipt, if one exists.
+pub fn qualifying_review_verdict(
+    comments: &[ownership::Comment],
+    receipt: &ReviewReceipt,
+) -> Option<ReviewVerdict> {
+    latest_distinct_review_verdict(comments, receipt)
+        .filter(|verdict| verdict.outcome == "accepted")
+}
+
+/// Whether one run may select or directly claim an unassigned review item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReviewEligibility {
+    /// No unresolved handoff excludes this run.
+    Eligible,
+    /// This run published or requested the unresolved review.
+    Excluded {
+        /// The run that published the latest receipt.
+        publisher: String,
+        /// Every run that requested another reviewer for this receipt.
+        requesters: Vec<String>,
+        /// The newest durable handoff, for clear queue metadata.
+        handoff: Box<ReviewHandoff>,
+    },
+}
+
+/// Reduces publication, handoff and verdict markers into requester eligibility.
+pub fn review_eligibility(comments: &[ownership::Comment], run_id: &str) -> ReviewEligibility {
+    let Some(publication) = latest_publication(comments) else {
+        return ReviewEligibility::Eligible;
+    };
+    let handoffs = handoffs_for(comments, &publication.receipt);
+    let Some(handoff) = handoffs.last().cloned() else {
+        return ReviewEligibility::Eligible;
+    };
+    if latest_distinct_review_verdict(comments, &publication.receipt).is_some() {
+        return ReviewEligibility::Eligible;
+    }
+    let mut requesters: Vec<String> = handoffs
+        .iter()
+        .map(|handoff| handoff.requester.clone())
+        .collect();
+    requesters.sort();
+    requesters.dedup();
+    if publication.publisher != run_id && !requesters.iter().any(|requester| requester == run_id) {
+        return ReviewEligibility::Eligible;
+    }
+    ReviewEligibility::Excluded {
+        publisher: publication.publisher,
+        requesters,
+        handoff: Box::new(handoff),
+    }
+}
+
+/// Composes one review protocol comment whose prose came from an agent.
+///
+/// `comment_with_body` posts what it is handed, and its contract is a body this
+/// crate composed. A blocker, a discharger and a run-id are caller text, so a
+/// body quoting a marker would **be** that marker once posted — the publishing
+/// run could carry a forged `review-verdict` inside its own handoff comment and
+/// clear the gate it is the one run forbidden to clear. `comment` and
+/// `heartbeat` already escape for this reason; these two writers were the first
+/// to route agent text through the unescaped door.
+fn protocol_body(prose: &str, marker: &str) -> String {
+    format!(
+        "{}\n\n{marker}\n",
+        super::markers::escape_control_input(prose).trim_end()
+    )
+}
+
+/// Refuses the runs an unresolved handoff excludes, whatever route they take.
+///
+/// Both acquisitions end here rather than each carrying its own copy of the
+/// refusal. `claim` checked this and `reclaim` did not, so a requester whose
+/// replacement went stale could take the item back and be, again, the only
+/// holder forbidden to review it — while `SKILL.md` described a single rule
+/// covering both. A rule held in two places is one that disagrees with itself.
+pub fn require_review_eligibility(
+    comments: &[ownership::Comment],
+    run_id: &str,
+) -> Result<(), Failure> {
+    let ReviewEligibility::Excluded {
+        publisher,
+        requesters,
+        handoff,
+    } = review_eligibility(comments, run_id)
+    else {
+        return Ok(());
+    };
+    let handoff = *handoff;
+    Err(Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "review-handoff-requester-excluded",
+        "publisher": publisher,
+        "requesters": requesters,
+        "receipt": {
+            "epoch": handoff.receipt.epoch,
+            "pr": handoff.receipt.pr,
+            "head": handoff.receipt.head,
+            "base": handoff.receipt.base,
+            "digest": handoff.receipt.digest,
+        },
+        "blocker": handoff.blocker,
+        "discharger": handoff.discharger,
+        "deadline": handoff.deadline,
+        "action": "another run must claim and review this exact receipt; elapsed time does not satisfy the handoff",
+    })))
 }
 
 /// Requires the caller's receipt to be the latest complete publication globally.
@@ -515,36 +833,607 @@ pub fn recorded_receipt(
     run_id: &str,
     supplied: &ReviewReceipt,
 ) -> Result<ReviewReceipt, Failure> {
-    let latest = comments
-        .iter()
-        .filter(|comment| comment.viewer_did_author && !comment.includes_created_edit)
-        .flat_map(|comment| super::markers::parse(&comment.body))
-        .filter(|marker| marker.get("kind").map(String::as_str) == Some("published"))
-        .filter_map(|marker| ReviewReceipt::from_marker(&marker).map(|receipt| (marker, receipt)))
-        .next_back()
-        .ok_or_else(|| {
-            stop(
-                "published-receipt-missing",
-                format!("issue has no complete published receipt for {run_id}"),
-                "publish the review target again; incomplete or absent evidence cannot release CI",
-            )
-        })?;
-    if latest.1 != *supplied || latest.0.get("run-id").map(String::as_str) != Some(run_id) {
+    let latest = latest_publication(comments).ok_or_else(|| {
+        stop(
+            "published-receipt-missing",
+            format!("issue has no complete published receipt for {run_id}"),
+            "publish the review target again; incomplete or absent evidence cannot release CI",
+        )
+    })?;
+    if latest.receipt != *supplied || latest.publisher != run_id {
         return Err(Failure::Stop(serde_json::json!({
             "ok": false,
             "reason": "published-receipt-mismatch",
             "recorded": {
-                "run_id": latest.0.get("run-id"),
-                "epoch": latest.1.epoch,
-                "pr": latest.1.pr,
-                "head": latest.1.head,
-                "base": latest.1.base,
-                "digest": latest.1.digest,
+                "run_id": latest.publisher,
+                "epoch": latest.receipt.epoch,
+                "pr": latest.receipt.pr,
+                "head": latest.receipt.head,
+                "base": latest.receipt.base,
+                "digest": latest.receipt.digest,
             },
             "action": "use the latest complete publication receipt; a republish invalidates every earlier epoch",
         })));
     }
-    Ok(latest.1)
+    Ok(latest.receipt)
+}
+
+fn require_latest_receipt(
+    comments: &[ownership::Comment],
+    supplied: &ReviewReceipt,
+) -> Result<LatestPublication, Failure> {
+    let latest = latest_publication(comments).ok_or_else(|| {
+        stop(
+            "published-receipt-missing",
+            "issue has no complete published receipt".to_owned(),
+            "publish the review target again; incomplete or absent evidence cannot be handed off",
+        )
+    })?;
+    if latest.receipt != *supplied {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "published-receipt-mismatch",
+            "recorded": {
+                "run_id": latest.publisher,
+                "epoch": latest.receipt.epoch,
+                "pr": latest.receipt.pr,
+                "head": latest.receipt.head,
+                "base": latest.receipt.base,
+                "digest": latest.receipt.digest,
+            },
+            "action": "use the latest complete publication receipt; a republish invalidates every earlier epoch",
+        })));
+    }
+    Ok(latest)
+}
+
+/// A stable operation identity for one immutable review protocol event.
+pub fn review_operation_id(kind: &str, fields: &[&str]) -> String {
+    let mut identity = format!("{}:{kind}", kind.len());
+    for field in fields {
+        identity.push('|');
+        identity.push_str(&field.len().to_string());
+        identity.push(':');
+        identity.push_str(field);
+    }
+    ownership::sha256_hex(identity.as_bytes())
+        .chars()
+        .take(32)
+        .collect()
+}
+
+fn review_authority(context: &Context, now: &str) -> Result<(String, String), Failure> {
+    let configured = context.get("review delegation").unwrap_or("ask").trim();
+    // The configuration's own parser. This was a second spelling of that
+    // grammar, stricter than the reader an operator's table goes through, so
+    // four values `estigia config` accepts — `Auto`, `AUTO`, `Ask 30m`,
+    // `ask 30 m` — refused the one operation that ends a blocked run's wait.
+    let parsed = crate::config::authority_of(configured).ok_or_else(|| {
+        Failure::ConfigDefect(serde_json::json!({
+            "ok": false, "reason": "invalid-review-authority", "value": configured,
+        }))
+    })?;
+    let seconds = match parsed {
+        crate::config::Authority::Auto => 0,
+        crate::config::Authority::Ask { timeout } => timeout.as_secs(),
+    };
+    // Written back in this crate's spelling rather than the operator's, so what
+    // the marker carries is what its own reader will accept. `ask  30m` passed
+    // here verbatim and was then refused by that reader, which left the handoff
+    // comment posted, its readback failing, and every retry answering
+    // `review-handoff-operation-conflict` with the claim never released.
+    let authority = crate::config::rendered_authority(parsed);
+    let requested = ownership::parse_stamp(now).ok_or_else(|| {
+        Failure::Read("the machine clock did not produce a review request timestamp".to_owned())
+    })?;
+    let seconds = i64::try_from(seconds).map_err(|_| {
+        Failure::ConfigDefect(serde_json::json!({
+            "ok": false, "reason": "invalid-review-authority", "value": configured,
+        }))
+    })?;
+    let deadline = requested.checked_add(seconds).ok_or_else(|| {
+        Failure::Read("the review request deadline overflowed the machine clock".to_owned())
+    })?;
+    let deadline = u64::try_from(deadline).map_err(|_| {
+        Failure::Read("the review request deadline predates the system clock".to_owned())
+    })?;
+    Ok((authority, crate::harness::session::stamp_of(deadline)))
+}
+
+fn review_receipt<'a>(
+    epoch: &'a str,
+    pr: u64,
+    head: &'a str,
+    base: &'a str,
+    digest: &'a str,
+) -> Result<ReviewReceipt, Failure> {
+    let receipt = ReviewReceipt {
+        epoch: epoch.to_owned(),
+        pr,
+        head: head.to_owned(),
+        base: base.to_owned(),
+        digest: digest.to_owned(),
+    };
+    if !receipt.is_complete() {
+        return Err(Failure::ConfigDefect(serde_json::json!({
+            "ok": false, "reason": "incomplete-review-receipt",
+        })));
+    }
+    Ok(receipt)
+}
+
+/// Everything the compound review handoff binds before ownership is released.
+#[derive(Debug, Clone)]
+pub struct HandoffReview<'a> {
+    /// The issue remaining in `review`.
+    pub issue: u64,
+    /// The current holder requesting another reviewer.
+    pub run_id: &'a str,
+    /// The holder's runtime projection.
+    pub runtime: &'a str,
+    /// Stable across every retry of this handoff.
+    pub operation_id: &'a str,
+    /// The exact ownership epoch this call may release.
+    pub target_operation: &'a str,
+    /// The publication epoch.
+    pub epoch: &'a str,
+    /// The pull request number.
+    pub pr: u64,
+    /// The full published head SHA.
+    pub head: &'a str,
+    /// The full published base SHA.
+    pub base: &'a str,
+    /// The complete-target digest.
+    pub digest: &'a str,
+    /// The precise condition this run cannot discharge itself.
+    pub blocker: &'a str,
+    /// Who or what can discharge the blocker.
+    pub discharger: &'a str,
+    /// The moment the timeline is judged and the request is recorded.
+    ///
+    /// Read from the machine, never from the run being judged. A test may pass
+    /// a chosen value; production obtains it from the MCP server's clock.
+    pub now: &'a str,
+}
+
+/// Records one exact review request, then releases only its named ownership epoch.
+pub fn handoff_review(
+    context: &Context,
+    handoff: &HandoffReview<'_>,
+) -> Result<serde_json::Value, Failure> {
+    let operation_id = require_operation_id(Some(handoff.operation_id))?;
+    let receipt = review_receipt(
+        handoff.epoch,
+        handoff.pr,
+        handoff.head,
+        handoff.base,
+        handoff.digest,
+    )?;
+    let read = || -> Result<serde_json::Value, Failure> {
+        super::gh_json(
+            &[
+                "issue",
+                "view",
+                &handoff.issue.to_string(),
+                "--json",
+                "assignees,labels,comments",
+            ],
+            Some(&context.repo_dir),
+        )?
+        .ok_or_else(|| Failure::Read(format!("gh issue view {} returned nothing", handoff.issue)))
+    };
+    let expected = [
+        ("run-id", handoff.run_id),
+        ("target-op", handoff.target_operation),
+        ("epoch", handoff.epoch),
+        ("pr", &handoff.pr.to_string()),
+        ("head", handoff.head),
+        ("base", handoff.base),
+        ("digest", handoff.digest),
+        ("blocker", handoff.blocker),
+        ("discharger", handoff.discharger),
+    ];
+    let data = read()?;
+    let comments = comments_of(&data);
+    reject_operation_kind_conflict(&comments, &operation_id, &["review-handoff"])?;
+    let existing = operation_marker(&comments, &operation_id, "review-handoff", &expected)?;
+
+    let recorded = match existing {
+        Some(marker) => ReviewHandoff::from_marker(&marker).ok_or_else(|| {
+            Failure::Stop(serde_json::json!({
+                "ok": false, "reason": "review-handoff-operation-conflict",
+            }))
+        })?,
+        None => {
+            // The marker changes what the queue and claim gate decide, so the
+            // live review claim is re-read immediately before that first write.
+            verify_claim(
+                context,
+                handoff.issue,
+                handoff.run_id,
+                "review",
+                handoff.now,
+                None,
+            )?;
+            let current = read()?;
+            let comments = comments_of(&current);
+            require_latest_receipt(&comments, &receipt)?;
+            let ownership = holding(&comments, handoff.now);
+            match plan_release(
+                &ownership,
+                handoff.run_id,
+                handoff.runtime,
+                false,
+                Some(handoff.target_operation),
+                &labels_of(&current),
+            )? {
+                Release::Write { .. } => {}
+                Release::Confirm { .. } => unreachable!("the target was supplied"),
+            }
+            let (authority, deadline) = review_authority(context, handoff.now)?;
+            let marker = super::markers::render(
+                "review-handoff",
+                &[
+                    ("run-id", handoff.run_id),
+                    ("target-op", handoff.target_operation),
+                    ("op-id", &operation_id),
+                    ("epoch", handoff.epoch),
+                    ("pr", &handoff.pr.to_string()),
+                    ("head", handoff.head),
+                    ("base", handoff.base),
+                    ("digest", handoff.digest),
+                    ("authority", &authority),
+                    ("requested-at", handoff.now),
+                    ("deadline", &deadline),
+                    ("blocker", handoff.blocker),
+                    ("discharger", handoff.discharger),
+                ],
+            )
+            .ok_or_else(|| {
+                Failure::Stop(
+                    serde_json::json!({"ok": false, "reason": "invalid-marker-attribute"}),
+                )
+            })?;
+            let body = protocol_body(
+                &format!(
+                    "Review handoff requested by `{}` for publication epoch `{}`.\n\nBlocker: {}\n\nDischarger: {}",
+                    handoff.run_id, handoff.epoch, handoff.blocker, handoff.discharger
+                ),
+                &marker,
+            );
+            super::commands::comment_with_body(context, handoff.issue, &body)?;
+
+            let mut seen = Vec::new();
+            for _ in 0..VISIBILITY_ATTEMPTS {
+                let observed = read().ok();
+                let visible = observed.as_ref().is_some_and(|data| {
+                    operation_marker(
+                        &comments_of(data),
+                        &operation_id,
+                        "review-handoff",
+                        &expected,
+                    )
+                    .is_ok_and(|found| found.is_some())
+                });
+                seen.push(observed);
+                if visible {
+                    break;
+                }
+            }
+            let Some(marker) = seen.iter().flatten().last().and_then(|data| {
+                operation_marker(
+                    &comments_of(data),
+                    &operation_id,
+                    "review-handoff",
+                    &expected,
+                )
+                .ok()
+                .flatten()
+            }) else {
+                return Err(Failure::Write(
+                    "review handoff is not visible; retry the same request unchanged".to_owned(),
+                ));
+            };
+            ReviewHandoff::from_marker(&marker).ok_or_else(|| {
+                Failure::Write("the visible review handoff is incomplete".to_owned())
+            })?
+        }
+    };
+
+    // A persisted handoff can be retried after an ambiguous marker write. Recheck
+    // its subject here so that a republish cannot turn that retry into release of
+    // an epoch whose review request is no longer current.
+    let before_release = read()?;
+    require_latest_receipt(&comments_of(&before_release), &receipt)?;
+    let release_id = review_operation_id("review-handoff-release", &[&operation_id]);
+    unassign(
+        context,
+        &Departure {
+            issue: handoff.issue,
+            run_id: handoff.run_id,
+            runtime: handoff.runtime,
+            operation_id: &release_id,
+            target_operation: Some(handoff.target_operation),
+            held_by_other: false,
+            now: handoff.now,
+        },
+    )?;
+
+    let after = read().map_err(|failure| {
+        Failure::Write(format!(
+            "review handoff and release were written, but final state could not be read: {}",
+            failure.detail()
+        ))
+    })?;
+    if super::commands::status_labels(&after) != ["status:review"] {
+        return Err(Failure::Write(
+            "review handoff released ownership but the issue did not remain exactly in review"
+                .to_owned(),
+        ));
+    }
+    let after_holding = holding(&comments_of(&after), handoff.now);
+    let target_still_authoritative =
+        after_holding
+            .live
+            .iter()
+            .chain(&after_holding.stale)
+            .any(|event| {
+                ownership::ownership_epoch(
+                    event.operation_id.as_deref(),
+                    event.comment.id.as_deref(),
+                    &event.comment.created_at,
+                    &event.comment.body,
+                ) == handoff.target_operation
+            });
+    if target_still_authoritative {
+        return Err(Failure::Write(
+            "review handoff is visible but its released ownership epoch remains authoritative"
+                .to_owned(),
+        ));
+    }
+
+    Ok(serde_json::json!({
+        "ok": true,
+        "issue": handoff.issue,
+        "state": "review",
+        "requester": recorded.requester,
+        "target_operation": recorded.target_operation,
+        "epoch": recorded.receipt.epoch,
+        "pr": recorded.receipt.pr,
+        "head": recorded.receipt.head,
+        "base": recorded.receipt.base,
+        "digest": recorded.receipt.digest,
+        "authority": recorded.authority,
+        "requested_at": recorded.requested_at,
+        "deadline": recorded.deadline,
+        "blocker": recorded.blocker,
+        "discharger": recorded.discharger,
+        "holder": after_holding.holder,
+    }))
+}
+
+/// Everything one independent review verdict records.
+#[derive(Debug, Clone)]
+pub struct VerdictReview<'a> {
+    /// The issue whose receipt was reviewed.
+    pub issue: u64,
+    /// The run recording it, which must hold the live `review` claim.
+    pub run_id: &'a str,
+    /// The context credited with the review, never the publishing run.
+    ///
+    /// After a handoff this is the recording run itself. A run that acquired a
+    /// reviewer without releasing the claim names that reviewer here instead,
+    /// which is what lets the direct route reach delivery at all.
+    pub reviewer: &'a str,
+    /// Stable across every retry of this verdict.
+    pub operation_id: &'a str,
+    /// The publication epoch.
+    pub epoch: &'a str,
+    /// The pull request number.
+    pub pr: u64,
+    /// The full published head SHA.
+    pub head: &'a str,
+    /// The full published base SHA.
+    pub base: &'a str,
+    /// The complete-target digest.
+    pub digest: &'a str,
+    /// `accepted` or `rejected`.
+    pub outcome: &'a str,
+    /// The moment the live review claim is judged.
+    ///
+    /// Read from the machine, never from the run being judged. A test may pass
+    /// a chosen value; production obtains it from the MCP server's clock.
+    pub now: &'a str,
+}
+
+/// The one rule a verdict must satisfy, whichever route produced it.
+///
+/// Written once because it had been written twice, and the two copies had
+/// already drifted: the replay path returned a refusal naming neither the
+/// publisher nor the requesters that the first-write path names, for the
+/// identical condition. A caller hitting a retry got the poorer answer.
+fn require_distinct_reviewer(
+    comments: &[ownership::Comment],
+    receipt: &ReviewReceipt,
+    reviewer: &str,
+) -> Result<(), Failure> {
+    let publication = require_latest_receipt(comments, receipt)?;
+    let requesters: Vec<String> = handoffs_for(comments, receipt)
+        .into_iter()
+        .map(|handoff| handoff.requester)
+        .collect();
+    if publication.publisher == reviewer || requesters.iter().any(|run| run == reviewer) {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "reviewer-not-distinct",
+            "publisher": publication.publisher,
+            "requesters": requesters,
+            "action": "the publishing run, and every run that asked somebody else to review, cannot be credited with reviewing their own receipt",
+        })));
+    }
+    Ok(())
+}
+
+/// Records an immutable exact-receipt verdict crediting a distinct reviewer.
+pub fn record_review_verdict(
+    context: &Context,
+    verdict: &VerdictReview<'_>,
+) -> Result<serde_json::Value, Failure> {
+    let operation_id = require_operation_id(Some(verdict.operation_id))?;
+    if !matches!(verdict.outcome, "accepted" | "rejected") {
+        return Err(Failure::ConfigDefect(serde_json::json!({
+            "ok": false, "reason": "invalid-review-verdict", "value": verdict.outcome,
+        })));
+    }
+    let receipt = review_receipt(
+        verdict.epoch,
+        verdict.pr,
+        verdict.head,
+        verdict.base,
+        verdict.digest,
+    )?;
+    let read = || -> Result<serde_json::Value, Failure> {
+        super::gh_json(
+            &[
+                "issue",
+                "view",
+                &verdict.issue.to_string(),
+                "--json",
+                "labels,comments",
+            ],
+            Some(&context.repo_dir),
+        )?
+        .ok_or_else(|| Failure::Read(format!("gh issue view {} returned nothing", verdict.issue)))
+    };
+    let expected = [
+        ("run-id", verdict.run_id),
+        ("reviewer", verdict.reviewer),
+        ("epoch", verdict.epoch),
+        ("pr", &verdict.pr.to_string()),
+        ("head", verdict.head),
+        ("base", verdict.base),
+        ("digest", verdict.digest),
+        ("outcome", verdict.outcome),
+    ];
+    let data = read()?;
+    let comments = comments_of(&data);
+    reject_operation_kind_conflict(&comments, &operation_id, &["review-verdict"])?;
+    if let Some(marker) = operation_marker(&comments, &operation_id, "review-verdict", &expected)? {
+        let persisted = ReviewVerdict::from_marker(&marker).ok_or_else(|| {
+            Failure::Stop(serde_json::json!({
+                "ok": false, "reason": "review-verdict-operation-conflict",
+            }))
+        })?;
+        require_distinct_reviewer(&comments, &receipt, verdict.reviewer)?;
+        let qualifies = qualifying_review_verdict(&comments, &receipt)
+            .is_some_and(|qualifying| qualifying.operation_id == persisted.operation_id);
+        let resolves = latest_distinct_review_verdict(&comments, &receipt)
+            .is_some_and(|recorded| recorded.operation_id == persisted.operation_id);
+        return Ok(serde_json::json!({
+            "ok": true,
+            "issue": verdict.issue,
+            "reviewer": persisted.reviewer,
+            "attester": persisted.attester,
+            "self_attested": persisted.reviewer != persisted.attester,
+            "outcome": persisted.outcome,
+            "qualifies": qualifies,
+            "resolves_handoff": resolves,
+            "reused_existing_verdict": true,
+        }));
+    }
+
+    verify_claim(
+        context,
+        verdict.issue,
+        verdict.run_id,
+        "review",
+        verdict.now,
+        None,
+    )?;
+    let current = read()?;
+    let comments = comments_of(&current);
+    require_distinct_reviewer(&comments, &receipt, verdict.reviewer)?;
+
+    let marker = super::markers::render(
+        "review-verdict",
+        &[
+            ("run-id", verdict.run_id),
+            ("reviewer", verdict.reviewer),
+            ("op-id", &operation_id),
+            ("epoch", verdict.epoch),
+            ("pr", &verdict.pr.to_string()),
+            ("head", verdict.head),
+            ("base", verdict.base),
+            ("digest", verdict.digest),
+            ("outcome", verdict.outcome),
+        ],
+    )
+    .ok_or_else(|| {
+        Failure::Stop(serde_json::json!({"ok": false, "reason": "invalid-marker-attribute"}))
+    })?;
+    let body = protocol_body(
+        &format!(
+            "Review verdict `{}` by `{}` for publication epoch `{}`, recorded by `{}`.",
+            verdict.outcome, verdict.reviewer, verdict.epoch, verdict.run_id
+        ),
+        &marker,
+    );
+    super::commands::comment_with_body(context, verdict.issue, &body)?;
+
+    let mut seen = Vec::new();
+    for _ in 0..VISIBILITY_ATTEMPTS {
+        let observed = read().ok();
+        let visible = observed.as_ref().is_some_and(|data| {
+            operation_marker(
+                &comments_of(data),
+                &operation_id,
+                "review-verdict",
+                &expected,
+            )
+            .is_ok_and(|found| found.is_some())
+        });
+        seen.push(observed);
+        if visible {
+            break;
+        }
+    }
+    let Some(final_data) = seen.iter().flatten().last() else {
+        return Err(Failure::Write(
+            "review verdict is not visible; retry the same verdict unchanged".to_owned(),
+        ));
+    };
+    if operation_marker(
+        &comments_of(final_data),
+        &operation_id,
+        "review-verdict",
+        &expected,
+    )
+    .is_ok_and(|found| found.is_none())
+    {
+        return Err(Failure::Write(
+            "review verdict is not visible; retry the same verdict unchanged".to_owned(),
+        ));
+    }
+    let qualifies = qualifying_review_verdict(&comments_of(final_data), &receipt)
+        .is_some_and(|qualifying| qualifying.operation_id == operation_id);
+    let resolves = latest_distinct_review_verdict(&comments_of(final_data), &receipt)
+        .is_some_and(|recorded| recorded.operation_id == operation_id);
+    Ok(serde_json::json!({
+        "ok": true,
+        "issue": verdict.issue,
+        "reviewer": verdict.reviewer,
+        "attester": verdict.run_id,
+        "self_attested": verdict.reviewer != verdict.run_id,
+        "outcome": verdict.outcome,
+        "qualifies": qualifies,
+        "resolves_handoff": resolves,
+        "epoch": verdict.epoch,
+        "pr": verdict.pr,
+        "head": verdict.head,
+        "base": verdict.base,
+        "digest": verdict.digest,
+        "reused_existing_verdict": false,
+    }))
 }
 
 fn ready_outcome(
@@ -1063,6 +1952,21 @@ pub fn release_ci(
         digest: release.digest.to_owned(),
     };
     recorded_receipt(&comments_of(&issue), release.run_id, &supplied)?;
+    let comments = comments_of(&issue);
+    let review_verdict = qualifying_review_verdict(&comments, &supplied).ok_or_else(|| {
+        Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "qualifying-review-verdict-missing",
+            "receipt": {
+                "epoch": release.epoch,
+                "pr": release.pr,
+                "head": release.head,
+                "base": release.base,
+                "digest": release.digest,
+            },
+            "action": "keep the PR draft; a distinct reviewer run must record an accepted verdict for this exact latest receipt",
+        }))
+    })?;
 
     let current = view_pr(context, release.pr)?;
     require_pr_matches(&current, &supplied, true)?;
@@ -1095,6 +1999,7 @@ pub fn release_ci(
         "head": release.head,
         "base": release.base,
         "digest": release.digest,
+        "reviewer": review_verdict.reviewer,
         "draft": false,
         "ci_released": true,
     }))
@@ -1913,6 +2818,7 @@ pub fn claim(context: &Context, what: &Acquisition<'_>) -> Result<serde_json::Va
 
     let data = read(FIELDS)?;
     let comments = comments_of(&data);
+    require_review_eligibility(&comments, what.run_id)?;
     reject_operation_kind_conflict(&comments, &operation_id, &["claim", "standdown"])?;
     let expected = [
         ("run-id", what.run_id),
@@ -2540,6 +3446,7 @@ pub fn reclaim(context: &Context, what: &Reclaim<'_>) -> Result<serde_json::Valu
         ));
     }
     let comments = comments_of(&data);
+    require_review_eligibility(&comments, what.run_id)?;
     reject_operation_kind_conflict(&comments, &operation_id, &["reclaim"])?;
 
     require_horizon(what.horizon, Some(what.now))?;

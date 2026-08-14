@@ -66,12 +66,81 @@ suite. Everything else here is prose held by review.
   **Nothing here has been tested against a live tracker**: no check in this suite reaches the
   network.
 - **Estigia cannot prove reviewers or blind judges ran.** `publish_review` mechanically freezes a
-  coherent clean draft receipt over epoch, PR, head, base and manifest digest. `release_ci` checks the
-  globally latest receipt, current draft PR and re-derived clean target before marking ready. That
-  binds Estigia's cooperative order to exact bytes. It does not prove an independent context existed,
-  that one or two judges read those bytes, that two judges were blind to each other, or that their
-  verdicts were honest. `single` and `two blind` remain operator-selected review contracts, not
-  observations the harness can make.
+  coherent clean draft receipt over epoch, PR, head, base and manifest digest. `handoff_review`
+  records that exact receipt before releasing one ownership epoch, and `review_verdict` records an
+  immutable outcome crediting a reviewer that is not the publishing run. Either outcome resolves the
+  handoff so the publisher can resume; rejection permits repair but never delivery. `release_ci`
+  checks the globally latest receipt, that accepted marker, the current draft PR and a re-derived
+  clean target before marking ready.
+
+  **What that is worth differs by route, and the marker says which.** After a handoff the reviewing
+  run holds the claim and records its own verdict, so the tracker timeline attributes it to a run
+  that really did acquire the issue. A run that acquires a reviewer without releasing the claim
+  records that reviewer's outcome itself; the marker's `run-id` and `reviewer` then differ, and the
+  answer says `self_attested`. In that case the distinctness check is comparing a name the recording
+  run chose — it establishes that the run declared somebody else reviewed, not that anybody did.
+  Estigia asks for the declaration because an unstated review is one nobody can audit, not because
+  it can check it.
+
+  None of it proves an independent context existed, that one or two judges read those bytes, that
+  two judges were blind to each other, or that their verdicts were honest. A marker can still be
+  forged by a collaborator acting outside Estigia. `single` and `two blind` remain operator-selected
+  review contracts, not observations the harness can make.
+- **One review-protocol readback is held by no test, and one is held only by a string search.** The
+  review protocol's guards were mutated one at a time — each disabled, the whole suite run, the tree
+  restored from a byte copy. Held by a test that goes red: all three enforcement points of the
+  requester exclusion (`claim`, `reclaim`, the review queue), the queue's fail-closed candidate read,
+  the verdict's distinctness rule on *both* its halves, its live-claim requirement, the receipt's
+  exactness on each write path **before** it writes, the CI-release gate, the comment escaping, the
+  read-side requester filter, and every field-shape validator on the three markers — receipt widths,
+  the handoff's authority, target, timestamps and its blocker/discharger, the verdict's two
+  identities and its outcome vocabulary.
+
+  That sentence used to say "on the write paths" without the qualifier, and it was false: neutering
+  both of `handoff_review`'s receipt checks left the suite green, and a handoff recorded against a
+  superseded receipt excludes nobody while its ownership epoch has already gone — the publishing run
+  eligible again for the item it may not review, which is this repository's own livelock with an
+  audit trail. It is held now. The *second* copy, the one guarding a retry, is a different matter and
+  is named below.
+
+  **Many of the smaller ones are not, and this entry does not claim to have found them all.**
+  `handoff_review`'s post-release readback, which proves the released ownership epoch is no longer
+  authoritative, can be disabled with the suite entirely green. Its retry-path receipt recheck is
+  caught only by `the_compound_handoff_records_before_release_and_checks_review_afterwards`, which
+  searches the source text for the call: that catches deletion, and would not catch the call being
+  made and its answer ignored. Beyond those, an adversarial sweep of forty-nine mutations found a
+  further score of defensive checks — replay-path repeats of rules whose first-write copy *is* held,
+  operation-id and marker-field validators, idempotency and visibility readbacks — that can each be
+  removed with the suite green. They are one class: belt to a brace that a test does hold, which is
+  why the load-bearing list above is the one this file stands behind.
+
+  Two earlier versions of this entry were wrong, in both directions, and how they were wrong is the
+  useful part. The first named five checks as unmeasured on somebody else's report rather than a
+  measurement run here — one of the five was in fact held, and there were more than five. The second
+  said only two were unheld, which understated it by roughly a factor of ten. A count nobody counted
+  is exactly what this document exists to refuse, and it refused itself twice before this sentence
+  was written.
+
+  One caution for whoever mutates next: this crate has tests that anchor on exact whitespace in
+  `claim.rs`, so a mutation harness that rewrites line endings — Python's text mode on Windows will,
+  silently — produces failures that look like a guard being caught and are not. Two of the
+  measurements behind this entry had to be discarded and rerun for that reason.
+- **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
+  not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
+  bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read
+  as clearance. Delivery asks for the same accepted verdict on both routes, so no deletion can
+  manufacture evidence that was never recorded.
+
+  It can still **restore** evidence that a later marker had disqualified, and that is a narrower
+  claim than "a deletion can only refuse". Two cases, both reachable only with a `gh` call outside
+  Estigia, which exposes no operation that edits or deletes a comment. Deleting a handoff comment
+  lifts the requester exclusion it carries, returning the publishing run to the queue for work no
+  verdict covers — liveness, not integrity. And where a run recorded a verdict and *then* requested
+  a review handoff for the same receipt, that request disqualifies its own earlier verdict;
+  deleting the handoff makes the verdict qualify again, turning a refused `release_ci` into a
+  cleared one. The bytes it clears were still reviewed and still accepted by a run that was not the
+  publisher, so this is a lost later objection rather than an unreviewed merge — but it is a
+  deletion that clears, and saying otherwise would be the sentence, not the code, doing the work.
 - **The draft/ready CI barrier is cooperative, not adversarial.** Compatible repositories start PR
   CI on `ready_for_review`, not topic push/open/synchronize/reopen. GitHub has no atomic
   conditional-ready operation. Collaborators or repository workflows acting outside Estigia can mark
@@ -305,10 +374,12 @@ suite. Everything else here is prose held by review.
 - **The verdict's binding is checked at delivery only for what this run published through Estigia's
   own tools, with an earlier exact-receipt check at CI release.** `publish_review` records a fresh
   epoch over PR/head/base/digest while the PR is confirmed draft. `release_ci` re-verifies the live
-  `review` claim, globally latest receipt across runs, current draft PR and coherent clean target,
-  then marks ready and reads back every outcome. An identical-byte republish still invalidates old
-  evidence because it creates a new epoch. GitHub has no atomic conditional-ready operation, so an
-  out-of-band ready or push can bypass this cooperative order.
+  `review` claim, globally latest receipt across runs, latest distinct accepted verdict marker,
+  current draft PR and coherent clean target, then marks ready and reads back every outcome. The
+  gate asks for one accepted verdict; it does not enforce the two-blind policy's two-context
+  agreement, and it cannot tell one context from two. An identical-byte republish still invalidates old evidence because it creates a new
+  epoch. GitHub has no atomic conditional-ready operation, so an out-of-band ready or push can bypass
+  this cooperative order.
   The local delivery gate still checks the published head at the
   boundary that spends it: a `git merge`, `gh pr merge`, `git tag` or `gh release` from a run whose
   recorded review head is not this checkout's head is refused as `verdict-bound-to-other-bytes`.
@@ -507,11 +578,14 @@ suite. Everything else here is prose held by review.
   accented pair rather than an ASCII one, because an ASCII pair cannot tell the two rules apart.
 - **Three settings are read by nobody, and two more were until this change.**
   An operator sets eighteen rows and `config list` reports all of them. Measured: `context.get` is
-  called for exactly two labels, the gate reads `Irreversible commands`, and the payload's prose
+  called for exactly three labels — `project board`, `worktree location` and, since the review
+  handoff, `Review delegation`, which the transport reads to stamp one deadline on a request it
+  never waits for. The gate reads `Irreversible commands`, and the payload's prose
   named eleven — leaving `Delivery authorisation`, `Transition authorisation`, `Delivery route`,
-  `Merge strategy` and `Model routing` read by nothing at all. `setup::Applies::Asked` says of four
+  `Merge strategy` and `Model routing` read by nothing at all. `setup::Applies::Asked` says of three
   of them *"the contract asks, and the agent may still honour it, but nothing checks"*, and for
-  three the contract did not ask either.
+  three the contract did not ask either. `Review delegation` left that arm with the review handoff:
+  it carries its own sentence now, because what it asks of a runtime is a reviewer, not a decision.
 
   The two authorisations are closed: `SKILL.md` now says, in the steps where a state moves and where
   a change is delivered, that doing it unasked needs the row's permission. The other three stay
@@ -554,8 +628,12 @@ suite. Everything else here is prose held by review.
   hook and no Estigia entry beside it, and there a yes prints `gate on` over no gate. That machine
   is now built and read back by `somebody_elses_hook_is_not_this_agents_gate`.
 - **Estigia cannot check who reviewed.** The contract requires that a review *"MUST NOT be
-  performed by the context that wrote the change"*, and the harness never sees the verdict — the
-  binding maps `review_status` to a raw `gh` call, not the transport. That rule is still a document.
+  performed by the context that wrote the change"*. The harness now sees a `review-verdict` marker
+  and checks that the reviewer it credits is neither the publishing run nor any run that asked for
+  review. Where the reviewing run recorded its own verdict that is timeline attribution; where the
+  claim holder recorded somebody else's, it is a name that run supplied. The judgement still belongs
+  to the agent; Estigia records its outcome and receipt but does not observe who or what produced
+  it.
 - **The harness holds tools for GitHub only.** `linear` and `trello` ship a binding the agent reads
   and no executable, so the tools refuse (`tracker-has-no-transport`) and the gate stands aside.
   Estigia can install and configure those trackers; it cannot enforce anything for them.

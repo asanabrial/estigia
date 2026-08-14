@@ -589,16 +589,25 @@ fn an_agent_estigia_cannot_gate_says_so_on_every_row_that_would_need_one() {
         );
     }
 
-    // A gated agent has no caveat on any row.
+    // A gated agent holds every row except review: the gate can enforce the
+    // handoff, but no gate can manufacture its independent context.
     let gated = crate::setup::AGENTS
         .iter()
         .find(|adapter| adapter.can_gate_tools())
         .expect("at least one adapter is gated");
     for setting in SETTINGS {
+        let expected = if *setting == Setting::Review {
+            crate::setup::Applies::Asked(
+                "Estigia records and releases the review handoff, but this runtime must still \
+                 provide a distinct reviewer context",
+            )
+        } else {
+            crate::setup::Applies::Held
+        };
         assert_eq!(
             gated.applies(*setting),
-            crate::setup::Applies::Held,
-            "{setting:?} is qualified for an agent Estigia gates"
+            expected,
+            "{setting:?} has the wrong capability caveat for an agent Estigia gates"
         );
     }
 }

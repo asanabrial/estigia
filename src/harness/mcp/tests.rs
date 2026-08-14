@@ -2093,6 +2093,8 @@ fn every_tool_sends_flags_the_transport_accepts() {
         // Estigia adds these itself, after the declared arguments.
         let added: &[&str] = match tool.operation {
             "claim" | "reclaim" | "unassign" => &["--operation-id", "--runtime"],
+            "handoff-review" => &["--operation-id", "--runtime"],
+            "review-verdict" => &["--operation-id"],
             _ => &[],
         };
 
@@ -2817,17 +2819,26 @@ fn an_argument_a_tool_does_not_take_is_refused_rather_than_dropped() {
     // The floor, both halves: the spelling it does take reaches the transport,
     // and leaving it out is still fine — this refuses a wrong key, not an
     // absent one.
-    let asked = super::flags_for(tool, &serde_json::json!({"state": "ready", "limit": 500}))
-        .expect("the declared spelling was refused");
+    let asked = super::flags_for(
+        tool,
+        &serde_json::json!({"state": "ready", "run_id": "codex-a", "limit": 500}),
+    )
+    .expect("the declared spelling was refused");
     assert!(
         asked.iter().any(|flag| flag == "500"),
         "the limit no longer reaches the transport: {asked:?}"
     );
-    super::flags_for(tool, &serde_json::json!({"state": "ready"}))
-        .expect("an optional argument is still optional");
+    super::flags_for(
+        tool,
+        &serde_json::json!({"state": "ready", "run_id": "codex-a"}),
+    )
+    .expect("an optional argument is still optional");
 
-    let refused = super::flags_for(tool, &serde_json::json!({"state": "ready", "limt": 500}))
-        .expect_err("a misspelled optional argument was dropped in silence");
+    let refused = super::flags_for(
+        tool,
+        &serde_json::json!({"state": "ready", "run_id": "codex-a", "limt": 500}),
+    )
+    .expect_err("a misspelled optional argument was dropped in silence");
     let said = format!("{refused}");
     assert!(
         said.contains("limt"),

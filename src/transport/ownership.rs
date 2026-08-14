@@ -467,6 +467,29 @@ pub const OPERATION_FIELDS: &[(&str, &[&str])] = &[
     ),
     ("standdown", &["run-id", "target-op"]),
     ("unassign", &["run-id", "runtime", "target-op"]),
+    (
+        "review-handoff",
+        &[
+            "run-id",
+            "target-op",
+            "epoch",
+            "pr",
+            "head",
+            "base",
+            "digest",
+            "authority",
+            "requested-at",
+            "deadline",
+            "blocker",
+            "discharger",
+        ],
+    ),
+    (
+        "review-verdict",
+        &[
+            "run-id", "reviewer", "epoch", "pr", "head", "base", "digest", "outcome",
+        ],
+    ),
 ];
 
 /// Whether this kind is one an operation id may reserve.

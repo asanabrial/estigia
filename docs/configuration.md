@@ -46,6 +46,11 @@ confused: reading one as the other *would move an operator's answer onto a row t
 something different, and leave the row it actually decided sitting at the default*. A reader who
 set what this table named got exactly that.
 
+`Review delegation` controls permission, not runtime capability. `auto` permits the run to acquire a
+distinct reviewer but does not make Estigia spawn one. If none is available, the run records a durable
+exact-receipt handoff and releases ownership. `ask <duration>` records one request deadline in that
+handoff; no scheduler, sleep, deadline reset, retained claim, or expiry-as-verdict behavior is implied.
+
 ### Model routing suggestions are agent-specific
 
 The stored value remains exactly the one `key=model` cell above, and the CLI remains the place to edit

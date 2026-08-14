@@ -712,6 +712,65 @@ pub fn run_tool(
         flags.push("--runtime".to_owned());
         flags.push(session::DEFAULT_RUNTIME.to_owned());
     }
+    if tool.operation == "handoff-review" {
+        let field = |name: &str| {
+            arguments
+                .get(name)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+        };
+        let pr = arguments
+            .get("pr")
+            .and_then(Value::as_u64)
+            .unwrap_or_default()
+            .to_string();
+        let key = crate::transport::claim::review_operation_id(
+            "review-handoff",
+            &[
+                run_id,
+                field("target_operation"),
+                field("epoch"),
+                &pr,
+                field("head"),
+                field("base"),
+                field("digest"),
+                field("blocker"),
+                field("discharger"),
+            ],
+        );
+        flags.push("--operation-id".to_owned());
+        flags.push(key);
+        flags.push("--runtime".to_owned());
+        flags.push(session::DEFAULT_RUNTIME.to_owned());
+    }
+    if tool.operation == "review-verdict" {
+        let field = |name: &str| {
+            arguments
+                .get(name)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+        };
+        let pr = arguments
+            .get("pr")
+            .and_then(Value::as_u64)
+            .unwrap_or_default()
+            .to_string();
+        let key = crate::transport::claim::review_operation_id(
+            "review-verdict",
+            &[
+                run_id,
+                field("reviewer"),
+                field("epoch"),
+                &pr,
+                field("head"),
+                field("base"),
+                field("digest"),
+                field("outcome"),
+            ],
+        );
+        flags.push("--operation-id".to_owned());
+        flags.push(key);
+    }
 
     // The isolated checkout, when this run has one and the caller did not name
     // it. `publish-review` reads the head it binds the review to from
