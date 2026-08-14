@@ -125,6 +125,23 @@ suite. Everything else here is prose held by review.
   `claim.rs`, so a mutation harness that rewrites line endings — Python's text mode on Windows will,
   silently — produces failures that look like a guard being caught and are not. Two of the
   measurements behind this entry had to be discarded and rerun for that reason.
+- **One refusal still says nothing was written after a write, and it is not the one this was about.**
+  A stop can now declare that it already wrote, and `publish_review`'s two post-push refusals do —
+  each held by a test that fails when its own marker is renamed. `ensure_draft` is not one of them:
+  it runs `gh pr ready --undo`, a remote write, and its `draft-readback-failed` is a plain stop, so it
+  still reports *nothing was written* after that succeeded. It sits before the push rather than after
+  it, which is why it fell outside the bar the issue set and outside the enumeration that answered it;
+  it is the same lie in the same function, and naming it here is cheaper than pretending the sweep was
+  complete.
+
+  Two smaller things found in the same review and left: the commit-range scan is one function now, but
+  its two callers still read from different checkouts — `publish_review` from the isolated one where
+  the commits are, `assess_autoclose` from the repository root — and unifying that changes which tree
+  a standalone `check-closing-keywords` inspects, which is a decision rather than a tidy-up. And
+  `keyword_sources` carries two shapes under one key, a list of strings from the precondition and a
+  list of `{where, text}` from `assess_autoclose`. Nothing parses it today, which is the only reason
+  that is a note and not a defect.
+
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
   bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read

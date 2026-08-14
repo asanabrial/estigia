@@ -399,16 +399,18 @@ mod tests;
 /// A read that did not answer is not clearance, so this refuses, and both
 /// callers now learn the same way.
 ///
-/// `at` rather than the repository root: the commits live in the isolated
-/// checkout, and the two copies had drifted about that as well.
+/// The checkout is the caller's to name. `publish_review` reads the isolated
+/// one, where the commits are; `assess_autoclose` reads the repository root.
+/// They still differ, and that difference is **not** settled here — it is
+/// recorded in `docs/honesty.md`, because unifying it changes which tree a
+/// standalone `check-closing-keywords` inspects and that is a decision, not a
+/// tidy-up.
 pub fn keywords_in_commits(
-    context: &Context,
     at: &std::path::Path,
     base: &str,
     branch: &str,
     issue: u64,
 ) -> Result<Vec<String>, Failure> {
-    let _ = context;
     let range = format!("origin/{base}..{branch}");
     let log = super::run(
         &["git", "log", &range, "--format=%B"],

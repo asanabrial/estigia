@@ -1101,9 +1101,7 @@ pub(super) fn assess_autoclose(
         }
     }
     if let (Some(base), Some(branch)) = (base, branch) {
-        for text in
-            super::closing::keywords_in_commits(context, &context.repo_dir, base, branch, issue)?
-        {
+        for text in super::closing::keywords_in_commits(&context.repo_dir, base, branch, issue)? {
             hits.push(serde_json::json!({ "where": "commit message", "text": text }));
         }
     }

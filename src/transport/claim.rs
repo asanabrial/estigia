@@ -1585,10 +1585,15 @@ pub fn publish_review(
     // The check below stays — it also settles a branch-derived link, and a
     // keyword can arrive from the remote side of a PR this run did not write —
     // but it can no longer be the first thing to notice one.
-    let mut wrote_keyword = super::closing::keywords_in_commits(context, at, base, branch, issue)?;
-    if let Some(file) = pr_body_file
-        && let Ok(text) = std::fs::read_to_string(file)
-    {
+    let mut wrote_keyword = super::closing::keywords_in_commits(at, base, branch, issue)?;
+    if let Some(file) = pr_body_file {
+        // Not `if let Ok(..)`. A body this run cannot read is not a body with no
+        // keyword in it — the same sentence `keywords_in_commits` is written
+        // against, three lines away. Swallowing it here would have refused later
+        // instead, after `ensure_draft` may already have run `gh pr ready
+        // --undo`, and reported that nothing was written.
+        let text = std::fs::read_to_string(file)
+            .map_err(|error| Failure::Read(format!("the PR body could not be read: {error}")))?;
         wrote_keyword.extend(super::closing::keywords_naming(&text, issue));
     }
     if !wrote_keyword.is_empty() {

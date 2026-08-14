@@ -155,3 +155,25 @@ fn the_three_spellings_github_documents_are_three_this_scan_reads() {
         vec!["fix #42".to_owned()]
     );
 }
+
+/// A `git log` that did not answer is not a branch with no keywords.
+///
+/// This scan was written twice, and the two copies disagreed about exactly
+/// that: `publish_review`'s refused, `assess_autoclose`'s tolerated the failure
+/// and carried on with an empty list. Tolerating it turns an unread source into
+/// *no keyword found*, and a keyword nobody read is how an issue auto-closes
+/// behind the workflow's back — the thing the refusal exists to prevent.
+///
+/// Unified into one function refusing on both sides, and the strictness is the
+/// whole point of the unification, so it is measured rather than asserted: the
+/// documentation says so in three places and nothing held it.
+#[test]
+fn an_unreadable_commit_range_is_not_a_range_without_keywords() {
+    let nowhere = tempfile::tempdir().expect("a directory that is not a checkout");
+    let failed = super::keywords_in_commits(nowhere.path(), "main", "some-branch", 42)
+        .expect_err("a `git log` outside any repository was read as an answer");
+    assert!(
+        !matches!(failed, super::Failure::Stop(_)),
+        "an unreadable range answered as a decision rather than a failed read"
+    );
+}

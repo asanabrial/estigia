@@ -160,8 +160,6 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
 
     // See the `exit-code` population declaration on this function.
     let (outcome, replay, resolution) = match answer.code {
-        // The control surface was READ, and it answered stop. Authority changed
-        // under this run: retrying the identical command repeats the answer.
         // A stop that already wrote. Same decision, different world: the
         // refusal is still the tracker's answer, but reporting it as if nothing
         // had happened is the one thing this taxonomy exists to refuse.
@@ -180,6 +178,8 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
                 ),
             },
         ),
+        // The control surface was READ, and it answered stop. Authority changed
+        // under this run: retrying the identical command repeats the answer.
         1 => (
             MutationOutcome::NotStarted,
             Replayability::NotReplayable,
