@@ -127,12 +127,16 @@ suite. Everything else here is prose held by review.
   measurements behind this entry had to be discarded and rerun for that reason.
 - **One refusal still says nothing was written after a write, and it is not the one this was about.**
   A stop can now declare that it already wrote, and `publish_review`'s two post-push refusals do —
-  each held by a test that fails when its own marker is renamed. `ensure_draft` is not one of them:
-  it runs `gh pr ready --undo`, a remote write, and its `draft-readback-failed` is a plain stop, so it
-  still reports *nothing was written* after that succeeded. It sits before the push rather than after
-  it, which is why it fell outside the bar the issue set and outside the enumeration that answered it;
-  it is the same lie in the same function, and naming it here is cheaper than pretending the sweep was
-  complete.
+  each held by a test that fails when its own marker is renamed. `ensure_draft` is not one of them,
+  and it has **two** doors onto the same lie: it runs `gh pr ready --undo`, a remote write, and after
+  that succeeds both its `draft-readback-failed` stop and a failed `view_pr` read report *nothing was
+  written*. Measured rather than read: driving the operation with a reused ready pull request and an
+  unreadable body, the reverted read reaches `ensure_draft`, the wire log carries
+  `pr ready 99 --undo`, and the answer is *nothing was written*. Wrapping the `draft-readback-failed`
+  condition in `if false &&` leaves the whole suite green, so neither door is held. They sit before
+  the push rather than after it, which is how both fell outside the bar the issue set and outside the
+  enumeration that answered it; it is the same lie in the same function, and naming it here is cheaper
+  than pretending the sweep was complete.
 
   Two smaller things found in the same review and left: the commit-range scan is one function now, but
   its two callers still read from different checkouts — `publish_review` from the isolated one where

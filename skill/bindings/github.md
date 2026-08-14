@@ -293,8 +293,9 @@ not know it happened. Run the transition afterwards and the end state is correct
 `check-closing-keywords` and `publish-review` report the cause, not just the symptom: a keyword is a
 hard stop (exit `1`), a branch link is reported with the follow-up it mandates and does not block.
 
-`publish-review` scans for a keyword **before its first remote call** — before it lists open pull
-requests, before a reused one is drafted or its body refreshed, and before the push. The sources are
+`publish-review` scans for a keyword **before its first remote mutation** — before it lists open pull
+requests, before a reused one is drafted or its body refreshed, and before the push. Reads precede it —
+the claim renewal and the base fetch — and no write does. The sources are
 the commit messages `origin/<base>..<branch>` adds and the body it is about to write, both readable
 locally, so that refusal leaves the remote exactly as it found it and says so.
 

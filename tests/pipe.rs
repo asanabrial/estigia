@@ -8375,6 +8375,10 @@ Closes #12",
             text.contains("closing-keyword-live"),
             "the keyword was not what refused it: {text}"
         );
+        assert!(
+            text.contains("nothing was written"),
+            "the pre-push refusal did not report the world untouched ({source}): {text}"
+        );
 
         // The acceptance criterion, literally: the remote is unchanged.
         let refs = Command::new("git")
@@ -8649,4 +8653,197 @@ fn a_refusal_after_the_push_reports_that_the_write_landed() {
             "the {which} refusal after the push claimed both: {text}"
         );
     }
+}
+
+/// A body this run cannot read refuses before it touches the remote.
+///
+/// The read was `if let Ok(..)`, which treats a file that is not there as a
+/// body with no keyword in it — the sentence `keywords_in_commits` was rewritten
+/// to refuse, three lines away in the same commit. Propagating it was claimed
+/// and not held: reverting those three lines left the whole suite green, and the
+/// reverted code reaches `ensure_draft`, runs `gh pr ready --undo` against the
+/// live pull request, and *then* answers *nothing was written*.
+///
+/// The pull request here is deliberately not a draft, so `ensure_draft` has
+/// something to do; that write is the one the revert performs and this refuses.
+#[test]
+fn an_unreadable_pr_body_refuses_before_the_remote_is_touched() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-unreadable";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    assert!(git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string()
+    ]));
+    assert!(git(&["branch", "-M", "main"]));
+    std::fs::write(repo.join("kept.txt"), "base\n").expect("the base file");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "base content",
+    ]));
+    assert!(git(&["push", "-q", "origin", "main"]));
+    assert!(git(&["checkout", "-q", "-b", branch]));
+    std::fs::write(repo.join("kept.txt"), "changed\n").expect("the change");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        // No keyword anywhere: the body being unreadable is the only fault.
+        "a change that names no issue",
+    ]));
+
+    // Never written. That is the point.
+    let body = trace.path().join("absent-body.md");
+
+    let claim = format!(
+        "<!-- issue-flow: claim run-id={run_id} runtime=claude \
+         horizon=2099-01-01T00:00Z op-id={} -->",
+        "a".repeat(32)
+    );
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "labels": [{"name": "status:in-progress"}],
+                "comments": [{
+                    "id": "IC_1",
+                    "createdAt": "2026-01-01T00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!("Claimed.\n\n{claim}\n"),
+                }],
+            }).to_string(),
+            "status": 0,
+        },
+        // Open, and **ready** — so `ensure_draft` has a write to perform. That
+        // write is what the reverted read reaches before refusing.
+        {
+            "matches": "pr list",
+            "stdout": serde_json::json!([{
+                "number": 99,
+                "url": "https://github.com/o/r/pull/99",
+                "headRefOid": "0".repeat(40),
+                "baseRefOid": "0".repeat(40),
+                "isDraft": false,
+            }]).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.issue = Some(12);
+    run.state = Some("in-progress".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "publish_review",
+            "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "branch": branch,
+                "base": "main",
+                "pr_title": "Something",
+                "pr_body_file": body.display().to_string(),
+                "worktree": repo.display().to_string(),
+            }
+        }
+    })
+    .to_string();
+
+    let log = trace.path().join("calls.log");
+    let count = trace.path().join("count.json");
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_COUNT", &count)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    assert_eq!(response["result"]["isError"], true, "{response}");
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    for wrote in ["pr ready", "pr edit", "pr create"] {
+        assert!(
+            !calls.contains(wrote),
+            "`{wrote}` reached the remote before an unreadable body was refused: {calls}"
+        );
+    }
+    let refs = Command::new("git")
+        .arg("-C")
+        .arg(origin.path())
+        .args(["for-each-ref", "--format=%(refname)"])
+        .output()
+        .expect("the origin is readable");
+    assert!(
+        !String::from_utf8_lossy(&refs.stdout).contains(branch),
+        "the branch reached the remote before an unreadable body was refused"
+    );
+    // And the sentence is true, which is the whole subject of this issue.
+    assert!(
+        text.contains("nothing was written"),
+        "the refusal did not say the world was untouched: {text}"
+    );
 }

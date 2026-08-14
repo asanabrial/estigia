@@ -1572,7 +1572,10 @@ pub fn publish_review(
     // Every source of a keyword this run introduces is readable before the
     // remote is touched: the commit messages this branch adds, and the body
     // about to be written. So it is read here, above `open_prs` — **above every
-    // remote call**, not merely above the push.
+    // remote mutation**, not merely above the push. Not above every remote
+    // *call*: `verify_claim` and the base fetch precede it, and both are reads.
+    // The distinction is the whole claim, so it is stated as the narrower one
+    // that is true rather than the wider one that reads better.
     //
     // It sat below `open_prs` first, which was the same defect wearing a
     // shorter distance. On the reused-PR path `ensure_draft` runs `gh pr ready
