@@ -1,0 +1,40 @@
+# Conventions this repository works under.
+#
+# Convention, not a validated schema: nothing parses this into a contract. A
+# field you do not recognise is somebody's note — leave it alone.
+# See openspec/README.md, and skill/protocols/sdd.md for the protocol itself.
+
+schema: spec-driven
+
+context: >-
+  Estigia is a workflow authority for coding agents over an issue tracker. It is a harness: it does
+  not ask an agent to follow the workflow, it holds the tools. A Rust binary gates writes and
+  irreversible boundaries, and answers the tracker transport in its own process. Nothing here needs
+  an interpreter: the Python this transport was ported from is deleted, and so is the corpus that
+  used to cross the two.
+
+strict_tdd: false
+# Not TDD, and the reason is specific: a fix here starts by reproducing the defect — a test that
+# goes red against the code as it stands, for the reason the defect exists. "prove-RED" in the
+# commit prose. A test written before the defect is understood tends to encode the guess.
+
+rules:
+  - A claim is adjudicated, not asserted.
+  - A verdict is bound to exact bytes; every push invalidates it.
+  - An unknown result is not clearance.
+  # Stated with its one known exception, because a rule written as absolute is one somebody will
+  # rely on. An unreadable installed contract loses the operator's declared boundary list, and an
+  # empty list loosens. See "an unreadable contract costs the operator's declared boundaries" in
+  # the README's honesty contract for what is taken back and what is not.
+  - Configuration may only tighten. An unreadable value falls back to a looser default in exactly
+    one place, and that place is written down.
+  - A message may name a command only when running it discharges the block.
+  - Uninstalling removes everything Estigia created and nothing else.
+
+testing:
+  - cargo test          # the whole suite: unit, guards, honesty, payload, pipe, release
+  - cargo clippy --all-targets
+  - cargo fmt
+# Nothing on that list needs an interpreter. It used to: the differential suite ran a vendored
+# Python transport as the oracle the Rust port was measured against. Both the transport and the
+# corpus recorded off it are deleted — see *what this instrument does not measure* in the README.

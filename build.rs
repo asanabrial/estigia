@@ -1,0 +1,305 @@
+//! Reads the transport's own vocabulary at build time.
+//!
+//! `harness::tracker` turns a transport `reason` into a stable `&'static str`
+//! code, and a code that is not in its list collapses to `transport-refused` —
+//! which is the exact defect the whole outcome taxonomy exists to prevent,
+//! committed one level down. A hand-maintained copy of that vocabulary had 24
+//! entries when the transport had **69**, so fifty-three distinguishable
+//! refusals arrived as one.
+//!
+//! Two lists cannot disagree if there is only one. This extracts the reasons
+//! from `src/transport` and writes them out as an array the crate includes, so
+//! a refusal added to the transport re-derives the vocabulary and no drift is
+//! possible.
+//!
+//! It read the vendored `skill/scripts/github.py` as well, while that file was
+//! the implementation that ran. It is gone — this repository holds one
+//! transport, in one language — and a reason the port does not have is a reason
+//! nothing can answer with.
+//!
+//! Deterministic and offline: it reads a file that ships in the repository.
+
+// A build script has no caller to hand a `Result` to: failing loudly at build
+// time is the correct behaviour, and it is the one place in this crate where a
+// panic is the honest answer rather than a backtrace where a refusal belonged.
+#![allow(clippy::expect_used)]
+
+use std::collections::BTreeSet;
+use std::path::Path;
+use std::{env, fs};
+
+/// The transport, which answers in this process.
+const PORT: &str = "src/transport";
+
+/// Every `.rs` file under a directory.
+fn rust_sources(root: &Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(directory) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|kind| kind == "rs")
+                && path.file_name().is_some_and(|name| name != "tests.rs")
+            {
+                found.push(path);
+            }
+        }
+    }
+    found
+}
+
+fn main() {
+    println!("cargo::rerun-if-changed=build.rs");
+
+    let mut reasons: BTreeSet<String> = BTreeSet::new();
+
+    // The port answers `missing-argument`, `unknown-operation` and four more
+    // the original never had — it does its own argument handling where the
+    // Python had `argparse` — and every one of them reached a caller as
+    // `transport-refused`, which is the defect stated at the top of this file,
+    // committed again one implementation over.
+    //
+    // Measured through the server: `start_branch` refused with
+    // `missing-argument` in the envelope and `(transport-refused)` on the
+    // screen, and the operator was sent to `estigia config list`.
+    //
+    // The same extractor over both, for the reason the header gives: two lists
+    // cannot disagree if there is only one.
+    let mut ported = 0;
+    for file in rust_sources(Path::new(PORT)) {
+        println!("cargo::rerun-if-changed={}", file.display());
+        let source = fs::read_to_string(&file)
+            .unwrap_or_else(|error| panic!("{} must be readable: {error}", file.display()));
+        // Tests build whatever envelope they need, and a fixture's reason is not
+        // one the product can answer with. So the file is cut where its inline
+        // test module starts — and *only* there.
+        //
+        // It used to cut at the first `#[cfg(test)]` of any kind. In
+        // `transport/mod.rs` that attribute is on `mod tests;` at line 47, a
+        // one-line declaration of a file this walk already skips, so the cut
+        // threw away the other nine tenths of the module. `Failure::envelope`
+        // lives in there, and with it `read-failed`, `write-failed` and
+        // `ambiguous-write` — three answers whose whole purpose is to be told
+        // apart, arriving at the harness as one `transport-refused`.
+        let shipped = shipped_part(&source);
+        for reason in extract_reasons(shipped)
+            .into_iter()
+            .chain(extract_constructed(shipped))
+        {
+            if reasons.insert(reason) {
+                ported += 1;
+            }
+        }
+    }
+    // A port that contributes nothing is a walk that stopped finding files.
+    assert!(
+        ported > 0,
+        "the port added no reasons of its own; the walk over {PORT} is broken"
+    );
+
+    // A transport that suddenly answers with a handful of reasons is a file
+    // that failed to parse, not a transport that got simpler. Failing the build
+    // beats silently generating a vocabulary that collapses everything.
+    assert!(
+        reasons.len() >= 40,
+        "only {} reasons were found in {PORT}; the extraction is broken",
+        reasons.len()
+    );
+
+    let mut rendered = String::from(
+        "// Generated by build.rs from the transport source. Do not edit.\n\
+         /// Every `reason` the transport can answer with, as stable codes.\n\
+         ///\n\
+         /// Derived from `src/transport` at build time so the vocabulary\n\
+         /// and the refusals cannot drift. See `build.rs` for why that.\n\
+         pub const TRANSPORT_VOCABULARY: &[&str] = &[\n",
+    );
+    for reason in &reasons {
+        rendered.push_str(&format!("    {reason:?},\n"));
+    }
+    rendered.push_str("];\n");
+
+    let out = Path::new(&env::var("OUT_DIR").expect("cargo sets OUT_DIR"))
+        .join("transport_vocabulary.rs");
+    fs::write(&out, rendered).expect("write the generated vocabulary");
+}
+
+/// The part of a source file that ships, without its inline test module.
+///
+/// `#[cfg(test)]` on `mod tests;` declares a file that is skipped anyway;
+/// `#[cfg(test)]` on `mod tests {` opens one that is right here. Only the
+/// second is a place to stop reading.
+fn shipped_part(source: &str) -> &str {
+    let mut at = 0;
+    while let Some(found) = source[at..].find("#[cfg(test)]") {
+        let start = at + found;
+        let rest = &source[start..];
+        // The declaration and the block differ in one character, and it is the
+        // one that decides whether the rest of the file is product code.
+        let inline = rest
+            .find("mod tests")
+            .is_some_and(|mods| rest[mods..].starts_with("mod tests {"));
+        if inline {
+            return &source[..start];
+        }
+        at = start + "#[cfg(test)]".len();
+    }
+    source
+}
+
+/// Every reason the transport hands to a refusal constructor.
+///
+/// The port does not always spell the pair. `claim.rs` has `stop(reason, …)`,
+/// and thirty-one of the codes it answers with reach a caller only through it —
+/// so the generated vocabulary had them all missing, and every one of them
+/// collapsed to `transport-refused` in the harness. That is the defect at the
+/// top of this file, and it survived the change that was supposed to end it,
+/// because the reference implementation happened to spell the pair literally
+/// and the extractor was written against that spelling rather than against the
+/// idea.
+///
+/// Matched on the call, not on any quoted kebab-case word: a literal argument
+/// to something *named* `stop` is a refusal code, and a branch name that
+/// happens to look like one is not passed to it.
+fn extract_constructed(source: &str) -> BTreeSet<String> {
+    let mut reasons = BTreeSet::new();
+    // The envelope's own table. `Failure::Read`, `Timeout`, `Write` and their
+    // neighbours do not construct a payload at all — they name their reason in
+    // a `match self` that builds `(reason, detail, action)`, which is a third
+    // spelling and was the third one missed. `read-failed` is in it, and a
+    // `read-failed` that reaches the harness as `transport-refused` tells a run
+    // to stop where the answer was *retry the read*.
+    if let Some(at) = source.find("pub fn envelope(") {
+        let rest = &source[at..];
+        let body = rest
+            .find(
+                "
+    }",
+            )
+            .map_or(rest, |end| &rest[..end]);
+        let mut cursor = body;
+        while let Some(quote) = cursor.find('"') {
+            cursor = &cursor[quote + 1..];
+            let Some(end) = cursor.find('"') else { break };
+            let word = &cursor[..end];
+            if word.contains('-')
+                && word
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            {
+                reasons.insert(word.to_owned());
+            }
+            cursor = &cursor[end + 1..];
+        }
+    }
+    for call in ["stop(", "refuse("] {
+        let mut rest = source;
+        while let Some(at) = rest.find(call) {
+            rest = &rest[at + call.len()..];
+            // The whole first argument, not the character after the bracket.
+            //
+            // `rustfmt` breaks a three-argument call across lines, so the quote
+            // is rarely against it — and an argument is not always a literal at
+            // all. `cmd_reclaim`'s refusal is
+            // `stop(if before.stale.is_empty() { "nothing-to-reclaim" } else {
+            // "stale-self-requires-claim" }, …)`, two of the five reclaim
+            // refusals whose own documentation says the distinctions between
+            // them *are the point*, each sending the caller somewhere
+            // different. Both were missing from the vocabulary and both reached
+            // the harness as one `transport-refused`, while their sibling
+            // `holder-not-stale` — written as a plain literal three lines away —
+            // came through intact.
+            for reason in literals_in(first_argument(rest)) {
+                reasons.insert(reason);
+            }
+        }
+    }
+    reasons
+}
+
+/// The text of a call's first argument, from just after the opening bracket.
+///
+/// Bracket-counting rather than a comma search: the argument can be a `match`,
+/// an `if`, a `format!` or a tuple, and every one of those holds commas of its
+/// own that mean nothing to the caller.
+fn first_argument(rest: &str) -> &str {
+    let (mut depth, mut in_string, mut escaped) = (0usize, false, false);
+    for (at, c) in rest.char_indices() {
+        if in_string {
+            match c {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match c {
+            '"' => in_string = true,
+            '(' | '[' | '{' => depth += 1,
+            ')' if depth == 0 => return &rest[..at],
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => return &rest[..at],
+            _ => {}
+        }
+    }
+    rest
+}
+
+/// Every kebab-case string literal in a fragment of source.
+///
+/// The shape a reason has, and one no prose in an argument shares: a `detail`
+/// is a sentence and an `action` is an instruction, both full of spaces.
+fn literals_in(fragment: &str) -> BTreeSet<String> {
+    let mut found = BTreeSet::new();
+    let mut rest = fragment;
+    while let Some(at) = rest.find('"') {
+        rest = &rest[at + 1..];
+        let Some(end) = rest.find('"') else { break };
+        let word = &rest[..end];
+        if word.contains('-')
+            && word
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        {
+            found.insert(word.to_owned());
+        }
+        rest = &rest[end + 1..];
+    }
+    found
+}
+
+/// Every `"reason": "..."` the transport can emit.
+///
+/// Matched on the literal pair rather than on any quoted lowercase word: the
+/// transport is thousands of lines of shell-outs and prose, and a looser
+/// pattern would sweep up branch names, label names and error text as though
+/// they were codes.
+fn extract_reasons(source: &str) -> BTreeSet<String> {
+    let mut reasons = BTreeSet::new();
+    let mut rest = source;
+    while let Some(at) = rest.find("\"reason\":") {
+        rest = &rest[at + "\"reason\":".len()..];
+        let trimmed = rest.trim_start();
+        let Some(body) = trimmed.strip_prefix('"') else {
+            // `"reason": reason` — a variable, whose values are literals
+            // elsewhere in the file and are picked up there.
+            continue;
+        };
+        let Some(end) = body.find('"') else { break };
+        let reason = &body[..end];
+        if !reason.is_empty()
+            && reason
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        {
+            reasons.insert(reason.to_owned());
+        }
+    }
+    reasons
+}

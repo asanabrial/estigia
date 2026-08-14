@@ -1,0 +1,173 @@
+# Builds the six archives the installers already know how to fetch.
+#
+# The names here are not free: `scripts/install.sh` and `scripts/install.ps1` compose
+# `estigia-<version>-<triple>` and append `.tar.gz` or `.zip`, and they were
+# written before this file existed. A workflow that publishes anything else
+# publishes assets nobody can install, and the failure looks like a network
+# problem rather than a naming one. `release::tests` cross-checks this file
+# against both scripts so the two cannot drift.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  # Buildable without publishing, so the matrix can be exercised on a branch
+  # rather than discovered to be wrong at the moment of a release.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  # Provenance is signed with a short-lived OIDC identity from this workflow
+  # run, not with a key anybody holds. That is what makes the attestation say
+  # "this workflow built this" rather than "somebody with the key said so".
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Every target is built even when one fails: a matrix that stops at the
+      # first failure reports one broken platform and hides the other five.
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: aarch64-pc-windows-msvc
+            os: windows-11-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Estigia does not choose the version — `publish_version` is declared
+      # `(agent, not scripted)` — but the number in the tag and the number in
+      # the tree have to be the same one. They are not checked anywhere else:
+      # the archive is named from the tag and the binary reports Cargo.toml, so
+      # tagging `v0.2.0` on a tree that says `0.1.0` ships
+      # `estigia-v0.2.0-*.tar.gz` containing something that calls itself 0.1.0.
+      # Nothing downstream would catch it, and every later claim about "which
+      # version fixed this" inherits the lie.
+      - name: The tag and the tree name the same version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          tagged="${GITHUB_REF_NAME#v}"
+          # `cargo pkgid`, not a JSON reader. This shelled out to `python3`,
+          # which meant a release could not be cut without an interpreter this
+          # repository no longer uses anywhere — and on Windows `python3` is as
+          # often an execution alias as an interpreter, so the check that
+          # protects every tag was the most fragile step in the file.
+          declared="$(cargo pkgid | sed 's/.*[#@]//')"
+          if [ "$tagged" != "$declared" ]; then
+            echo "tag ${GITHUB_REF_NAME} but Cargo.toml says ${declared}" >&2
+            echo "the archive would be named for one version and report the other" >&2
+            exit 1
+          fi
+
+      - name: Install the toolchain
+        run: rustup target add ${{ matrix.target }}
+
+      # The suite runs on every target that can run it. A cross-built archive
+      # is published having compiled and nothing more, and saying which is
+      # which is the honest part.
+      - name: Test
+        run: cargo test --release --target ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package (tar.gz)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME}"
+          package="estigia-${version}-${{ matrix.target }}"
+          mkdir -p "dist/${package}"
+          cp "target/${{ matrix.target }}/release/estigia" "dist/${package}/"
+          cp README.md LICENSE "dist/${package}/" 2>/dev/null || true
+          tar -C dist -czf "dist/${package}.tar.gz" "${package}"
+          # The installers verify what they download, so the sums ship beside
+          # the archives rather than being left for somebody to compute.
+          (cd dist && shasum -a 256 "${package}.tar.gz" > "${package}.tar.gz.sha256")
+
+      - name: Package (zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = $env:GITHUB_REF_NAME
+          $package = "estigia-$version-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force -Path "dist/$package" | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/estigia.exe" "dist/$package/"
+          Copy-Item README.md, LICENSE "dist/$package/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "dist/$package" -DestinationPath "dist/$package.zip" -Force
+          $sum = (Get-FileHash "dist/$package.zip" -Algorithm SHA256).Hash.ToLower()
+          "$sum  $package.zip" | Out-File -Encoding ascii "dist/$package.zip.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # All six or none. A release with four assets is one where two platforms
+      # get "could not reach GitHub" from an installer that is working
+      # perfectly — the worst possible reading of a partial publish.
+      - name: Refuse a partial release
+        shell: bash
+        run: |
+          set -euo pipefail
+          found=$(find dist -name 'estigia-*' \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l)
+          if [ "$found" -ne 6 ]; then
+            echo "expected 6 archives, found ${found}:" >&2
+            find dist -name 'estigia-*' >&2
+            exit 1
+          fi
+
+      # SLSA provenance, for the same reason Estigia refuses a delivery without
+      # evidence: an archive that cannot say where it came from asks whoever
+      # downloads it to take the name on trust. The subject is every published
+      # archive, so the attestation covers what people actually fetch — not the
+      # binary inside it, which nobody downloads on its own.
+      #
+      # Verified with:
+      #   gh attestation verify estigia-<version>-<triple>.tar.gz --repo <repo>
+      - name: Attest the archives
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+          fail_on_unmatched_files: true

@@ -1,0 +1,71 @@
+# Every guard in this repository runs here, or it is documentation.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [ready_for_review]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: formatting
+        run: cargo fmt --all --check
+
+      - name: lints
+        run: cargo clippy --all-targets --all-features
+
+      - name: tests
+        run: cargo test --all-features
+
+      - name: documentation
+        run: cargo doc --no-deps --all-features
+
+      - name: release build
+        run: cargo build --release
+
+      - name: the binary answers and refuses
+        shell: bash
+        run: |
+          set -eu
+          binary=target/release/estigia
+          [ "${{ matrix.os }}" = "windows-latest" ] && binary=target/release/estigia.exe
+          "$binary" --version
+          if "$binary" setup 2>/dev/null; then
+            echo "setup with no agent should have refused" >&2
+            exit 1
+          fi
+          # Captured, then searched. This step runs under `-o pipefail`, and the
+          # command under test exits non-zero *because refusing is its job* — so
+          # `setup | grep` failed the whole step even when grep found the phrase.
+          # The pipeline was reporting the refusal it exists to require.
+          #
+          # It went unseen because no run ever reached this step: `tests` failed
+          # first on every one of them, on all three platforms.
+          refusal=$("$binary" setup 2>&1 || true)
+          printf '%s\n' "$refusal" | grep -q "estigia setup --all"

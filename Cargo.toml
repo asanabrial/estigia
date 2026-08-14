@@ -1,0 +1,77 @@
+[package]
+name = "estigia"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Workflow authority for coding agents over an issue tracker: timeline-adjudicated claims, states, exact review binding, and delivery evidence"
+repository = "https://github.com/asanabrial/estigia"
+rust-version = "1.97"
+# What `cargo publish` must not carry. Stated here rather than left to
+# `.gitignore`, because the two are not the same gate: cargo only consults git's
+# ignore rules inside a git checkout, so a publish from a plain directory ships
+# everything those rules were supposed to hold back. Measured before this line
+# existed: `cargo package --list` reported 331 files, 210 of them mutation-test
+# output and one of them the operator's own working log.
+exclude = [
+    "/mutants.out",
+    "/mutants.out.old",
+    "/HANDOFF.md",
+]
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.6.4", features = ["derive", "env"] }
+crossterm = "0.29"
+directories = "6.0.0"
+ratatui = "0.30"
+serde = { version = "1.0.228", features = ["derive"] }
+# `preserve_order` keeps a user's keys in the order they wrote them. Without it
+# serde_json backs objects with a BTreeMap and every edit silently re-sorts
+# somebody else's settings file — `"type","command"` comes back as
+# `"command","type"`, which is a diff nobody asked for in a file Estigia was
+# only supposed to add one entry to.
+serde_json = { version = "1.0.149", features = ["preserve_order"] }
+semver = { version = "1.0.27", features = ["serde"] }
+sha2 = "0.11.0"
+thiserror = "2.0.17"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.189"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+# Parsing the crate's own source, so a `guard:population` declaration is bound
+# to the syntax node it describes rather than to the line it happens to sit
+# above. A dev-dependency: it never ships in the binary.
+# Token streams, not `Debug`. `syn`'s `Debug` prints spans, so a fingerprint
+# taken from it moves when a comment above the code is deleted — which made the
+# guard reopen a claim for a reason its own documentation said it would not.
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
+tempfile = "3.23.0"
+
+[lints.rust]
+missing_docs = "warn"
+
+[lints.clippy]
+# The three that catch the defects this project is most exposed to: silent
+# panics in a tool people run unattended, and clones in code that walks a
+# settings table on every invocation.
+unwrap_used = "warn"
+expect_used = "warn"
+redundant_clone = "warn"
+needless_collect = "warn"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = true

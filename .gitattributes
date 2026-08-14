@@ -1,0 +1,23 @@
+# One line ending in the index and in every checkout.
+#
+# Without this, a checkout on Windows converts LF to CRLF, and two things break
+# that look nothing alike:
+#
+#   * `scripts/install.sh` stops being a shell script. `bash install.sh` answers
+#     `$'\r': command not found` and `set: -^M: invalid option`, from a file that
+#     reads correctly in every editor. Measured on 2026-08-13.
+#   * Tests that parse this repository's own shipped text fail. Three of them
+#     look for a phrase followed by `\n` — `"## Direct Work Delegation\n"` in
+#     `skill/SKILL.md`, `"\"pr\",\n"` in the crate's own source — and a `\r`
+#     between the two makes the search find nothing. They pass on a working tree
+#     that was never checked out and fail on CI, which is the worst way round.
+#
+# `eol=lf` rather than `text=auto` alone: `auto` still honours `core.autocrlf`
+# on checkout, which is exactly the setting that differs between machines.
+* text=auto eol=lf
+
+# Bytes, not text. Normalising these corrupts them.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
