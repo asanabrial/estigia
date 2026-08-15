@@ -8982,3 +8982,88 @@ fn the_closing_keyword_check_refuses_a_range_it_cannot_read() {
         "an unreadable range was reported as the cause no edit can undo: {text}"
     );
 }
+
+/// A closed issue still refuses a write inside the checkout it claimed.
+///
+/// This is the half of issue 2 that says what must **not** change, and nothing
+/// held it: no fixture in this crate had ever put an issue in the closed state,
+/// before or after the change. A judge measured what that costs by relaxing the
+/// classification to `writes_outside_the_claim(..) || run.state == Some("done")`
+/// — every routine repository write standing aside once the run carries the
+/// state a delivery leaves it in, which is exactly what the issue puts out of
+/// scope — and the whole suite stayed green.
+///
+/// So the tracker really answers `CLOSED` here, and the write really is inside
+/// the claimed checkout.
+#[test]
+fn a_closed_issue_still_refuses_a_write_inside_the_checkout() {
+    let Some(rig) = tracker_rig() else {
+        return;
+    };
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    // Derived the way the hook derives it. Stored under a guessed name the
+    // pointer is one nothing loads, the gate stands aside for having sworn
+    // nothing, and an empty answer looks exactly like the refusal working.
+    let session = "closed-issue-fixture";
+    let run_id = estigia::harness::session::run_id("claude", session);
+
+    let claim = format!(
+        "<!-- issue-flow: claim run-id={run_id} runtime=claude \
+         horizon=2099-01-01T00:00Z op-id={} -->",
+        "a".repeat(32)
+    );
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                // The state a delivery leaves behind, which is when the refusal
+                // this test is about actually fires.
+                "state": "CLOSED",
+                "labels": [{"name": "status:done"}],
+                "comments": [{
+                    "id": "IC_1",
+                    "createdAt": "2026-01-01T00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!("Claimed.\n\n{claim}\n"),
+                }],
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id);
+    run.issue = Some(12);
+    run.state = Some("done".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    // Inside the claimed checkout, and a file that does not exist yet — the
+    // shape the classification is most likely to get wrong.
+    let inside = repo.join("src").join("new.rs");
+
+    let output = run_with_tracker(
+        home,
+        repo,
+        bin,
+        &answers,
+        &["hook", "pre-tool-use"],
+        &serde_json::json!({
+            "session_id": session,
+            "tool_name": "Write",
+            "tool_input": { "file_path": inside.display().to_string() },
+        })
+        .to_string(),
+    );
+    let (stdout, _stderr, _ok) = output;
+    assert!(
+        stdout.contains("CLOSED") || stdout.contains("issue-not-open"),
+        "a write inside the claimed checkout was not refused after the issue closed: {stdout}"
+    );
+}

@@ -239,6 +239,15 @@ pub fn placed(target: &Path) -> Option<PathBuf> {
     let mut suffix: Vec<std::ffi::OsString> = Vec::new();
     let mut probe = lexical.as_path();
     loop {
+        // An entry that is **there** and will not resolve is not the same as no
+        // entry at all, and walking up past it is how a dangling symlink got
+        // placed at its own spelling: `<outside>/alias.rs` pointing at
+        // `<repo>/src/planted.rs` answered *outside*, and writing through it
+        // created the file inside the checkout. `canonicalize` fails the same
+        // way for both, so the difference has to be asked for.
+        if probe.symlink_metadata().is_ok() && probe.canonicalize().is_err() {
+            return None;
+        }
         if let Ok(real) = probe.canonicalize() {
             let mut placed = remove_windows_verbatim_prefix(real);
             for part in suffix.iter().rev() {

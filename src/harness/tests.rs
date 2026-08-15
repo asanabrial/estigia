@@ -199,10 +199,6 @@ fn every_reason_for_standing_aside_has_a_stable_name() {
             "the code is the Rust identifier, which changes when the variant is renamed"
         );
         assert!(seen.insert(code), "`{code}` names two reasons");
-        // The compiler's half of the crossing, exercised so it cannot rot into
-        // dead code: `listed` is exhaustive, so a variant missing from `ALL`
-        // stops the build rather than quietly shrinking this loop.
-        assert!(aside.listed());
         // And the sentence, which is the half a program does not read and a
         // person does. An empty one tells an agent nothing about why the
         // harness stood aside.
@@ -217,6 +213,29 @@ fn every_reason_for_standing_aside_has_a_stable_name() {
         );
     }
     assert_eq!(seen.len(), asides.len(), "a reason lost its name");
+
+    // And the population itself, read out of the source rather than trusted.
+    // `ALL` is hand-written, so the way it goes stale is a variant that gains a
+    // code and never joins the list — measured: that leaves two asides able to
+    // share a code and one able to carry no sentence, with the suite green.
+    let source = include_str!("mod.rs");
+    let body = source
+        .split_once("pub fn code(self) -> &'static str {")
+        .expect("the code map exists")
+        .1
+        .split_once(
+            "
+    }",
+        )
+        .expect("the code map ends")
+        .0;
+    let arms = body.matches("Self::").count();
+    assert_eq!(
+        arms,
+        asides.len(),
+        "`code` answers for {arms} reasons and `ALL` lists {}; one is checked by nothing",
+        asides.len()
+    );
 }
 
 #[test]
@@ -2934,4 +2953,124 @@ fn a_new_file_inside_a_linked_checkout_is_gated() {
             "{what} inside the linked checkout was taken out of the gate"
         );
     }
+}
+
+/// A link whose target is inside the checkout is a write inside the checkout.
+///
+/// The classification walked up past an entry that would not resolve, treating
+/// *"nothing here"* and *"something here that dangles"* as the same answer. So a
+/// symlink at `<outside>/alias.rs` pointing at `<repo>/src/planted.rs` — whose
+/// target does not exist yet, which is the ordinary shape of a write — was
+/// placed at its own spelling and read as outside. Writing through it created
+/// the file inside the claimed checkout.
+///
+/// The same defect as the junction, one level down: whether the thing is there
+/// yet decided whether the gate applied.
+#[test]
+fn a_link_pointing_into_the_checkout_is_gated() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("a checkout");
+    let outside = root.path().join("outside");
+    std::fs::create_dir_all(&outside).expect("a directory that is not the checkout");
+
+    let planted = repo.join("src").join("planted.rs");
+    let alias = outside.join("alias.rs");
+    #[cfg(windows)]
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink"])
+        .arg(&alias)
+        .arg(&planted)
+        .output()
+        .is_ok_and(|out| out.status.success());
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(&planted, &alias).is_ok();
+    if !made {
+        eprintln!("skipped: this platform would not create a file link");
+        return;
+    }
+
+    let run = sworn(164, &repo);
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: alias.display().to_string()
+            }
+        ),
+        "a link whose target is inside the claimed checkout was taken out of the gate"
+    );
+    // And the reason it matters, measured rather than argued.
+    std::fs::write(&alias, "planted\n").expect("the link really does write through");
+    assert!(
+        planted.is_file(),
+        "the fixture does not reproduce the link it is about"
+    );
+}
+
+/// The covered checkout is resolved the same way the target is.
+///
+/// `covers` leaves a path it cannot canonicalise literal. A covered checkout
+/// that is not on disk — or one reached through a link, which is what macOS
+/// hands every temporary directory as `/var/folders` against `/private/var` —
+/// left the two sides of the comparison in different vocabularies, and a write
+/// **into** the checkout read as outside. This crate had already measured that
+/// asymmetry one module over, in `transport::branch`'s own note about 8.3 names
+/// and `/private/var`.
+#[test]
+fn a_checkout_reached_by_another_name_still_covers_its_own_writes() {
+    let root = tempfile::tempdir().expect("a root");
+    let real = root.path().join("real");
+    std::fs::create_dir_all(real.join("repo").join("src")).expect("a checkout");
+    let alias = root.path().join("alias");
+
+    #[cfg(windows)]
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(&alias)
+        .arg(&real)
+        .output()
+        .is_ok_and(|out| out.status.success());
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(&real, &alias).is_ok();
+    if !made {
+        eprintln!("skipped: this platform would not create a directory link");
+        return;
+    }
+
+    // The claim names one spelling and the write names the other, in both
+    // directions — neither is more correct than the other, and a run is handed
+    // whichever its worktree was created under.
+    for (claimed, written) in [(&alias, &real), (&real, &alias)] {
+        let run = sworn(164, &claimed.join("repo"));
+        let target = written.join("repo").join("src").join("new.rs");
+        assert!(
+            !writes_outside_the_claim(
+                &run,
+                &Action::Write {
+                    target: target.display().to_string()
+                }
+            ),
+            "a write into the claimed checkout read as outside it, claimed as {}, written as {}",
+            claimed.display(),
+            written.display()
+        );
+    }
+
+    // The case that makes the asymmetry visible on a machine whose temporary
+    // directory is already canonical — which is most Windows boxes, and is why
+    // this was green here and would have been red on the `macos-latest` lane.
+    // The covered checkout does not exist, so `covers` keeps it literal, while
+    // the target resolves through the link. Two vocabularies, one path.
+    let unborn = alias.join("never-created");
+    let absent = sworn(164, &unborn);
+    assert!(
+        !writes_outside_the_claim(
+            &absent,
+            &Action::Write {
+                target: unborn.join("x.rs").display().to_string()
+            }
+        ),
+        "a write into a covered checkout that is not on disk yet read as outside it"
+    );
 }

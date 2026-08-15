@@ -146,13 +146,14 @@ pub enum Aside {
 impl Aside {
     /// Every reason, for the crossing that keeps their names honest.
     ///
-    /// Hand-written, like the other populations here — and hand-written lists go
-    /// stale, which this one did: a variant was added and the test that checks
-    /// the shape and the uniqueness of these codes went on walking four. Two
-    /// asides could share a code, and one could carry no sentence at all, with
-    /// the suite green. `listed` is what stops that happening twice: it
-    /// `listed` below is exhaustive, so a new variant does not compile until
-    /// somebody stands where this list is.
+    /// Hand-written, and **not** held by the compiler — an earlier version of
+    /// this comment said it was, on the strength of a `#[cfg(test)]` predicate
+    /// that a normal build never compiles and that a new variant could satisfy
+    /// without ever joining this list. What holds it is
+    /// `every_reason_for_standing_aside_has_a_stable_name`, which reads the arms
+    /// of `code` out of this file's own source and refuses to walk fewer than it
+    /// finds. That is the technique the code inventory in `cli::tests` uses, and
+    /// it is what caught the fifth reason arriving with no entry anywhere.
     pub const ALL: &'static [Self] = &[
         Self::NotWatched,
         Self::NothingSworn,
@@ -160,22 +161,6 @@ impl Aside {
         Self::AnotherCheckout,
         Self::OutsideTheClaim,
     ];
-
-    /// A total function over the enum, so the compiler holds `ALL`.
-    ///
-    /// It answers nothing a caller needs. Its whole purpose is the `match`: add
-    /// a variant and this stops compiling, in the one place where the list that
-    /// must learn about it is on screen.
-    #[cfg(test)]
-    const fn listed(self) -> bool {
-        match self {
-            Self::NotWatched
-            | Self::NothingSworn
-            | Self::NoTracker
-            | Self::AnotherCheckout
-            | Self::OutsideTheClaim => true,
-        }
-    }
 
     /// The stable name a program matches on.
     ///
@@ -307,6 +292,14 @@ pub(crate) const SHELL_TOOLS: &[&str] = &["bash", "run_shell_command", "shell", 
 /// matches, which is a false positive costing one tracker read, and that is the
 /// direction this chooses on purpose.
 ///
+/// `gh`'s hosts file joined the population on 2026-08-15. It is not Estigia's
+/// file and no Estigia decision is read from it, so it sits at the edge of the
+/// legitimate population as stated — but it decides **which account** every `gh`
+/// call the transport makes acts as, which is what this list is for once a write
+/// outside the repository can stand aside without the tracker being asked. Issue
+/// 2 asked for exactly this: name the path that can reach tracker state rather
+/// than relax the class around it.
+///
 /// That boundary sentence is about `is_control_surface`, and this declaration
 /// sits on the **list**, so the fingerprint covers the rule and the population
 /// and not the code that matches against them. Changing the matcher does not
@@ -333,6 +326,16 @@ pub(crate) const SHELL_TOOLS: &[&str] = &["bash", "run_shell_command", "shell", 
 /// renew it here. An operator editing their own contract is not going through
 /// this gate at all; an agent doing it mid-oath now says so on the record.
 const CONTROL_SURFACE: &[&str] = &[
+    // `gh`'s hosts file, which is not Estigia's and decides the identity every
+    // tracker call acts as. Named here because issue 2 asked for exactly that:
+    // *"whether any write outside the repository can still affect tracker
+    // state. If one can, it is that path that needs naming rather than the
+    // whole class."* This one can — rewriting it changes which account answers
+    // every `gh` call the transport makes — and standing aside outside the
+    // repository is what would otherwise have let it through ungated. The wider
+    // gap, the instruction file each adapter's setup writes, is its own change.
+    ".config/gh/",
+    "github cli/hosts.yml",
     // Estigia's own state: run pointers, the stand-down record, the ledger.
     ".estigia/",
     // The tree the **previous** name installed into. The tree this build writes
@@ -1336,7 +1339,15 @@ fn writes_outside_the_claim(run: &Run, action: &Action) -> bool {
     if covered.peek().is_none() {
         return false;
     }
-    !covered.any(|checkout| crate::paths::covers(checkout, &landing))
+    // Both sides through the same resolver. `covers` leaves an unresolvable
+    // path literal, so a covered checkout that is not on disk — or a temp root
+    // reached through a link, which is what macOS hands every test — left the
+    // two sides in different vocabularies and a write into the checkout read as
+    // outside. A checkout this process cannot place is one it cannot rule out.
+    !covered.any(|checkout| {
+        crate::paths::placed(checkout)
+            .is_none_or(|checkout| crate::paths::covers(&checkout, &landing))
+    })
 }
 
 /// What the gate decides before any stand-down is considered.
