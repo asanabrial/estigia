@@ -320,8 +320,10 @@ suite. Everything else here is prose held by review.
   **The guard that holds the rig catches an accident. It does not catch an author, and this is the
   measurement of how far short it falls.** Four reviewers walked past
   `the_tracker_rig_cannot_answer_that_it_did_not_run` nine times, each attempt measured with the
-  fixture removed. Where the outcome is `106 passed`, that is issue 22's defect reproduced whole with
-  every gate in this repository green.
+  fixture removed — except the two about *where* the fixture is looked for, which are measured with it
+  present, since their point is that the rig looks in the wrong place rather than that it is missing.
+  Where the outcome is `106 passed`, that is issue 22's defect reproduced whole with every gate in
+  this repository green.
 
   | Route | Outcome | Held now |
   |---|---|---|
@@ -331,10 +333,11 @@ suite. Everything else here is prose held by review.
   | the fixture located from `CARGO_MANIFEST_DIR` again | whole suite green | yes |
   | `return Default::default();` | 106 passed | yes |
   | `std::process::exit(0)` in the rig | **no result line at all**, exit 0 | yes |
-  | a decoy `//` comment naming the rig, moving the body split | no result line, exit 0 | yes |
-  | a decoy `/* */` comment carrying the **whole signature line** | 106 passed | **no** |
+  | a decoy comment *naming* the rig, moving the body split | no result line, exit 0 | yes |
+  | a decoy comment carrying the **whole signature line**, `//` or `/* */` | 106 passed | **no** |
   | `process::exit` in a caller, or in a helper below the rig | no result line, exit 0 | yes |
   | `use std::process::exit as leave;` | no result line, exit 0 | yes |
+  | `use std::process as sys;` then `sys::exit(0)` | no result line, exit 0 | **no** |
   | `use std::process::{exit as leave};` | no result line, exit 0 | **no** |
   | a decoy `current_exe()` call, the real lookup in a helper | whole suite green | **no** |
   | a macro expanding to `return`, defined before the first `#[test]` | 106 passed | **no** |
@@ -347,21 +350,27 @@ suite. Everything else here is prose held by review.
   extraction bound to the first text in the file matching `fn tracker_rig()`, which a two-line comment
   could claim, and the `process::exit` refusal was scoped to the rig's body when its sentence meant
   the suite. Both fixes are **narrower than the first draft of this table said**, and a reviewer
-  measured the difference: the body extraction now splits on the whole signature line rather than on
-  `fn tracker_rig()`, which a block comment carrying that whole line still claims; and the file-wide
-  `process::exit` scan catches `use std::process::exit as leave;`, because that spelling contains the
-  substring, while `use std::process::{exit as leave};` does not. Two rows of this table said the
-  opposite of each, in the direction that flattered the guard. The rest are declared rather than
-  chased. A seventh substring would not close them: a
+  measured the difference. The body extraction now splits on the whole signature line rather than on
+  `fn tracker_rig()`, which raised the price of the decoy from *mentioning the rig* to *quoting its
+  signature verbatim* and did not close it — measured both ways, a comment naming the rig is caught
+  and a comment carrying the whole line, in either comment syntax, is not. And the file-wide
+  `process::exit` scan catches `use std::process::exit as leave;`, because that line contains the
+  substring, while `use std::process as sys;` and `use std::process::{exit as leave};` do not. Rows of
+  this table said the opposite of each, every time in the direction that flattered the guard, which is
+  the direction to be suspicious of. The rest are declared rather than chased. A seventh substring would not close them: a
   macro puts the refused word in a region the scan never visits, a labelled `break` is a return under
   another name, and a body skip never leaves the function at all. Telling any of them from correct
   code needs to know which statements assert, which is a semantic question and not a textual one.
 
   **What actually holds the accidental path is the compiler.** `let Some(rig) = tracker_rig()` does
-  not compile against a non-`Option`, so nobody reintroduces this by copying a neighbour — which is
-  how all sixteen callers came to have it. The guard adds three things a single careless edit could
-  do and the compiler would not see: reverting the signature, moving where the fixture is looked for,
-  and writing `return` in a test that reaches the rig. That is its honest scope. An earlier version
+  not compile against a non-`Option` — measured, `error[E0308]: mismatched types` — so nobody
+  reintroduces this by copying a neighbour, which is how all sixteen callers came to have it. The
+  guard adds four things a single careless edit could do and the compiler would not see: reverting the
+  signature, moving where the fixture is looked for, ending the process instead of failing, and
+  writing `return` in a test that reaches the rig. An earlier draft of this paragraph said three and
+  left out the `process::exit` refusal — which is the check that actually catches four of the rows
+  above, so the omission understated the guard in the paragraph somebody reads to learn what it
+  holds. That is its honest scope. An earlier version
   of this entry said six routes were closed and two things remained unseen; both numbers were wrong
   when they were written, and the sentence claiming completeness is the reason they were worth
   writing down.
