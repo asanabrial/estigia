@@ -358,7 +358,7 @@ const CONTROL_SURFACE: &[&str] = &[
     // `github cli/hosts.yml` on both roads.
     "cli/hosts.yml",
     // Estigia's own state: run pointers, the stand-down record, the ledger.
-    ".estigia/",
+    ".estigia",
     // The tree the **previous** name installed into. The tree this build writes
     // is derived from `skill::DIRECTORY` in `is_control_surface` rather than
     // named here, so a rename cannot leave it unmeasured; this entry is the
@@ -366,7 +366,7 @@ const CONTROL_SURFACE: &[&str] = &[
     // still has that contract on disk until an upgrade moves it. Until then it
     // is a file an agent reads, and therefore one a run must not rewrite
     // unmeasured.
-    "skills/issue-flow/",
+    "skills/issue-flow",
     // The one boundary no agent can go around, when it is not going around it.
     "hooks/pre-push",
     // Where each adapter registers the gate, and where it registers the tools.
@@ -399,16 +399,38 @@ const CONTROL_SURFACE: &[&str] = &[
     // is the better argument for crossing a hand-spelled entry than any reasoning
     // about reachability.
     ".claude/agents",
+    // The rules **directories**, not only Estigia's own filename inside them.
+    // Four adapters apply every file in one of these, and `paths_in`'s comments
+    // say so where it resolves them — Continue applies any rule that is not
+    // `invokable` and declares no globs, Cline loads the directory for every
+    // task. So gating `estigia.md` and leaving the directory open is defeated by
+    // a neighbour: a reviewer measured `~/.cline/rules/zz-override.md` answering
+    // `Routine`, and a sibling saying *Estigia is retired* changes exactly what
+    // the restated population clause is about — what an agent is told this
+    // harness may enforce — without touching a `Boundary` path.
+    //
+    // No trailing slashes, for the split the entry above records.
+    ".cline/rules",
+    ".continue/rules",
+    "windsurf/memories",
+    ".cursor/rules",
     ".claude.json",
     ".codex/hooks.json",
     ".codex/config.toml",
-    // Without the `.config/` prefix, for the reason the derived instruction
-    // fragments already refuse it: `XDG_CONFIG_HOME` moves that root, and
-    // `Environment::xdg_config` honours the variable. Measured with it relocated
-    // — opencode's plugin, which is that adapter's only deny mechanism, and its
-    // MCP config both answered `Routine` on all three platforms. The tail is what
-    // the installer actually writes; the prefix is what an operator can move.
-    "opencode/",
+    // Anchored to what the installer writes, not to the directory around it.
+    // `XDG_CONFIG_HOME` moves the `.config/` prefix, so anchoring there left
+    // opencode's plugin — that adapter's only deny mechanism — and its MCP config
+    // answering `Routine` when the variable was set. But dropping the prefix
+    // entirely left `opencode` as a bare directory name matched anywhere: a
+    // reviewer measured `node_modules/opencode/**`, `packages/opencode/**` and a
+    // checkout *named* `opencode` answering `Boundary` on every file in them, at
+    // about 1.2s of tracker read per write, unwindowed, and refused outright with
+    // no network. Both ends were wrong; the tail the installer actually writes is
+    // neither. `opencode/agents` covers the instruction file and the definition
+    // root that `harness::roles` enforces from.
+    "opencode/agents",
+    "opencode/plugins",
+    "opencode/opencode.json",
     // Both roots, because Gemini keeps its settings under `%APPDATA%` on Windows
     // and `~/.gemini` everywhere else, and only the POSIX spelling was here. The
     // Windows one is where this harness's own gate is registered for that
@@ -521,7 +543,7 @@ fn is_control_surface(target: &str) -> bool {
     // `flow` and leaving this alone made the contract writable on a `Routine`
     // answer — the cheapest disarmament there is, through the tool an agent uses
     // most, and the suite stayed green. One place now holds the name.
-    let installed = format!("skills/{}/", crate::skill::DIRECTORY);
+    let installed = format!("skills/{}", crate::skill::DIRECTORY);
     // The instruction files, derived from the adapter table for the same reason
     // the skill tree is derived from `skill::DIRECTORY`: a hand-spelled copy
     // agrees with the installer only until somebody renames one. Each adapter

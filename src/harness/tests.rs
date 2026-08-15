@@ -3247,37 +3247,37 @@ fn the_local_settings_and_the_agent_definitions_are_boundaries_on_both_roads() {
     }
 }
 
-/// Every adapter's instruction file is a boundary, on both roads.
+/// The instruction files, spelled as a reader would recognise them.
 ///
-/// Spelled out, not derived. The first version of this built its subject from
+/// Spelled out, not derived. The first version built its subject from
 /// `instruction_fragment()` and then asserted the fragment matched — which
 /// reduces to `contains(f)` on a string built as `home + f`, and cannot fail for
-/// the reason its own name gives. A reviewer proved it: setting one adapter's
-/// fragment to a filename nothing writes left this green while only the
-/// `resolve_paths` crossing reddened.
+/// the reason its own name gives. A reviewer proved it by setting one adapter's
+/// fragment to a filename nothing writes and watching this stay green.
 ///
-/// So these are the paths as a reader would recognise them. The crossing in
-/// `src/setup/tests.rs` is what ties them to what the installer actually
-/// resolves, on all three platforms; this fixes the *reason* in place, and it
-/// covers the shell as well as the write tool because `surface_of` splits a
-/// command on whitespace and an entry that works on one road only is one an
-/// agent walks round with `rm`.
+/// The crossing in `src/setup/tests.rs` ties these to what the installer
+/// resolves, on three platforms and two XDG layouts, on both roads. This fixes
+/// the *reason* in place, and it covers the shell too because `surface_of`
+/// splits a command on whitespace and an entry that works on one road only is
+/// one an agent walks round with `rm`.
+const SPELLED_INSTRUCTION_FILES: &[&str] = &[
+    "/home/me/.agents/AGENTS.md",
+    "/home/me/.claude/CLAUDE.md",
+    "/home/me/.codex/AGENTS.md",
+    "/home/me/.config/opencode/AGENTS.md",
+    "/home/me/.gemini/GEMINI.md",
+    r"C:\Users\me\AppData\Roaming\gemini\GEMINI.md",
+    "/home/me/.cursor/estigia-workflow-authority.md",
+    "/home/me/.qwen/QWEN.md",
+    "/home/me/.config/crush/CRUSH.md",
+    "/home/me/.continue/rules/estigia.md",
+    "/home/me/.cline/rules/estigia.md",
+    "/home/me/.codeium/windsurf/memories/global_rules.md",
+];
+
 #[test]
 fn the_directive_that_names_the_authority_is_a_boundary_for_every_agent() {
-    for spelled in [
-        "/home/me/.agents/AGENTS.md",
-        "/home/me/.claude/CLAUDE.md",
-        "/home/me/.codex/AGENTS.md",
-        "/home/me/.config/opencode/AGENTS.md",
-        "/home/me/.gemini/GEMINI.md",
-        r"C:\Users\me\AppData\Roaming\gemini\GEMINI.md",
-        "/home/me/.cursor/estigia-workflow-authority.md",
-        "/home/me/.qwen/QWEN.md",
-        "/home/me/.config/crush/CRUSH.md",
-        "/home/me/.continue/rules/estigia.md",
-        "/home/me/.cline/rules/estigia.md",
-        "/home/me/.codeium/windsurf/memories/global_rules.md",
-    ] {
+    for spelled in SPELLED_INSTRUCTION_FILES {
         let (_, written) = classify("Write", &serde_json::json!({ "file_path": spelled }));
         assert_eq!(
             written,
@@ -3299,26 +3299,103 @@ fn the_directive_that_names_the_authority_is_a_boundary_for_every_agent() {
     }
 }
 
-/// The spelled list above has one entry per adapter, and stays that way.
+/// The spelled list and the adapter table say the same thing.
 ///
-/// A hand-written list is readable and goes stale. This is the cheap half of
-/// keeping it honest: a twelfth adapter, or one whose instruction file moves,
-/// changes the count and fails here. What the list *says* is crossed against the
-/// installer by `every_control_file_an_adapter_has_is_one_the_gate_measures`,
-/// which resolves the real path per adapter on every platform.
+/// A hand-written list is readable and goes stale, and the first version of this
+/// only counted fragments — it never read the list at all, so deleting an entry
+/// left the suite green. A reviewer measured that. It reads both now: every
+/// adapter's fragment has to appear in some spelled path, and every spelled path
+/// has to be there for an adapter. A twelfth adapter, or one whose instruction
+/// file moves, breaks one side or the other.
 #[test]
-fn the_spelled_instruction_files_cover_every_adapter() {
-    let fragments: std::collections::BTreeSet<&str> = crate::setup::AGENTS
+fn the_spelled_instruction_files_and_the_adapter_table_agree() {
+    let folded: Vec<String> = SPELLED_INSTRUCTION_FILES
         .iter()
-        .map(|adapter| adapter.instruction_fragment())
+        .map(|path| path.replace('\\', "/").to_ascii_lowercase())
         .collect();
-    assert_eq!(
-        fragments.len(),
-        11,
-        "the adapter table answers {} distinct instruction fragments, so the list spelled \
-         out beside this is no longer one per adapter",
-        fragments.len()
-    );
+
+    for adapter in crate::setup::AGENTS {
+        let fragment = adapter.instruction_fragment();
+        assert!(
+            folded.iter().any(|path| path.contains(fragment)),
+            "{}: no spelled path contains its fragment `{fragment}`, so the list above \
+             no longer shows what the gate matches",
+            adapter.slug
+        );
+    }
+
+    for (path, folded) in SPELLED_INSTRUCTION_FILES.iter().zip(&folded) {
+        assert!(
+            crate::setup::AGENTS
+                .iter()
+                .any(|adapter| folded.contains(adapter.instruction_fragment())),
+            "{path} is spelled here but matches no adapter's fragment, so it is not an \
+             instruction file this crate writes"
+        );
+    }
+}
+
+/// A neighbour in a directory the host reads whole carries the same authority.
+///
+/// Four adapters apply *every* file in a rules directory — `paths_in`'s comments
+/// say so where it resolves them, and Continue's says a markdown file with no
+/// frontmatter is always applied. So gating Estigia's own filename and leaving
+/// the directory open is defeated by adding a sibling: a reviewer measured
+/// `~/.cline/rules/zz-override.md` answering `Routine`, and a file there saying
+/// *Estigia is retired* changes what the agent is told this harness may enforce
+/// without touching a `Boundary` path.
+#[test]
+fn a_sibling_in_a_rules_directory_is_a_boundary_too() {
+    for spelled in [
+        "/home/me/.cline/rules/zz-override.md",
+        "/home/me/.continue/rules/zz-override.md",
+        "/home/me/.codeium/windsurf/memories/zz-override.md",
+        "/home/me/.cursor/rules/zz-override.mdc",
+    ] {
+        let (_, written) = classify("Write", &serde_json::json!({ "file_path": spelled }));
+        assert_eq!(
+            written,
+            Sensitivity::Boundary,
+            "a write to {spelled} answers routine, and the host applies every file in that \
+             directory — so the directive beside it can be overridden by a neighbour"
+        );
+    }
+}
+
+/// A directory this harness reads from is a boundary spelled bare, on both roads.
+///
+/// The entries used to carry a trailing slash. `surface_of` appends a separator
+/// to every token of a command, so `rm <dir>` matched and a write to the bare
+/// directory did not — one road gated and the other not, on the state directory
+/// and the installed contract among others. A reviewer found it in one entry;
+/// the crossing found the rest once it was asked about bare roots rather than
+/// only about a file inside them.
+#[test]
+fn a_control_directory_named_bare_is_a_boundary_on_both_roads() {
+    for spelled in [
+        "/home/me/.claude/skills/flow",
+        "/home/me/.claude/skills/issue-flow",
+        "/repo/.estigia",
+        "/home/me/.claude/agents",
+    ] {
+        let (_, written) = classify("Write", &serde_json::json!({ "file_path": spelled }));
+        assert_eq!(
+            written,
+            Sensitivity::Boundary,
+            "a write to the bare directory {spelled} answers routine while removing it \
+             through the shell does not — the two roads disagree"
+        );
+
+        let (_, removed) = classify(
+            "Bash",
+            &serde_json::json!({ "command": format!("rm -rf {spelled}") }),
+        );
+        assert_eq!(
+            removed,
+            Sensitivity::Boundary,
+            "removing {spelled} through the shell answers routine"
+        );
+    }
 }
 
 /// The covered checkout is resolved the same way the target is.

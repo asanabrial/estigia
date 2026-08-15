@@ -2650,47 +2650,84 @@ fn every_control_file_an_adapter_has_is_one_the_gate_measures() {
     // was caught. The neighbouring `a_moved_home_moves_every_root_under_it`
     // already loops all three; this had no reason not to.
     let (_home, base) = sandbox();
+    // Two XDG layouts as well as three platforms. A reviewer measured that this
+    // walked one of each, and both surfaces a relocated `XDG_CONFIG_HOME` left
+    // ungated were found by a person rather than by this test — which is the work
+    // it exists to make unnecessary.
     for platform in [Platform::Windows, Platform::MacOs, Platform::Unix] {
-        let options = SetupOptions {
-            platform: Some(platform),
-            ..base.clone()
-        };
-        for adapter in AGENTS {
-            let paths = resolve_paths(adapter, &options).expect("paths resolve");
-            let mut watched: Vec<std::path::PathBuf> = vec![paths.skill_root.join("SKILL.md")];
-            watched.extend(paths.hooks.clone());
-            watched.extend(paths.plugin.clone());
-            watched.extend(paths.mcp_config.clone());
-            // The instruction file, which this walk did not reach for as long as it
-            // existed. It is the file `setup` writes the workflow-authority directive
-            // into — the sentence telling an agent this harness holds the authority
-            // at all — so an agent that rewrites it removes the reason it obeys, and
-            // it answered `Routine`. Eleven paths on any one platform, twelve
-            // spellings across all three — gemini-cli is the one adapter whose
-            // instruction file moves with the platform. An earlier version of this
-            // said thirteen and "the two that differ by platform": thirteen is the
-            // issue's own count, which includes two `~/.claude` paths this walk does
-            // not touch, and only one adapter has a platform branch.
-            watched.push(paths.instructions.clone());
-            // And the agent-definition root, which was the one path this change
-            // hand-spelled and the one it left uncrossed — a reviewer named that
-            // as the shape the change's own prose condemns. `definition_for`
-            // reads the tool allowlist it enforces from here.
-            watched.extend(paths.agents_root.clone());
+        for moved in [false, true] {
+            let options = SetupOptions {
+                platform: Some(platform),
+                config_home: if moved {
+                    Some(_home.path().join("moved-xdg"))
+                } else {
+                    base.config_home.clone()
+                },
+                ..base.clone()
+            };
+            for adapter in AGENTS {
+                let paths = resolve_paths(adapter, &options).expect("paths resolve");
+                // The bare root as well as a file under it. A reviewer measured the
+                // split that a trailing slash makes: `surface_of` appends a separator,
+                // so `rm <root>` was `Boundary` while a write to the bare directory was
+                // `Routine` — and this walk only ever asked about `SKILL.md` inside it.
+                // Asking about the directory is what found the same split in four more
+                // entries.
+                //
+                // Held by no test today, and worth saying rather than leaving to be
+                // discovered: with the trailing slashes gone, the bare directory
+                // matches whether or not this line asks, so removing it changes
+                // nothing measurable. What it is for is the adapter added later
+                // whose root is a directory — the fixture that covers this
+                // behaviour spells its paths by hand and would not know about it.
+                let mut watched: Vec<std::path::PathBuf> =
+                    vec![paths.skill_root.clone(), paths.skill_root.join("SKILL.md")];
+                watched.extend(paths.hooks.clone());
+                watched.extend(paths.plugin.clone());
+                watched.extend(paths.mcp_config.clone());
+                // The instruction file, which this walk did not reach for as long as it
+                // existed. It is the file `setup` writes the workflow-authority directive
+                // into — the sentence telling an agent this harness holds the authority
+                // at all — so an agent that rewrites it removes the reason it obeys, and
+                // it answered `Routine`. Eleven paths on any one platform, twelve
+                // spellings across all three — gemini-cli is the one adapter whose
+                // instruction file moves with the platform. An earlier version of this
+                // said thirteen and "the two that differ by platform": thirteen is the
+                // issue's own count, which includes two `~/.claude` paths this walk does
+                // not touch, and only one adapter has a platform branch.
+                watched.push(paths.instructions.clone());
+                // And the agent-definition root, which was the one path this change
+                // hand-spelled and the one it left uncrossed — a reviewer named that
+                // as the shape the change's own prose condemns. `definition_for`
+                // reads the tool allowlist it enforces from here.
+                watched.extend(paths.agents_root.clone());
 
-            for file in watched {
-                let target = file.display().to_string();
-                let (_, how) = crate::harness::classify(
-                    "Write",
-                    &serde_json::json!({ "file_path": target.clone() }),
-                );
-                assert_eq!(
-                    how,
-                    crate::harness::Sensitivity::Boundary,
-                    "{platform:?}/{}: a write to {target} is where its gate lives and the gate \
-                 calls it routine",
-                    adapter.slug
-                );
+                for file in watched {
+                    let target = file.display().to_string();
+                    // Both roads. `surface_of` splits a command on whitespace before
+                    // matching, so a path containing a space can answer `Boundary` on
+                    // the write tool and `Routine` through the shell — which is the
+                    // road an agent takes to delete something, and the reason the
+                    // `cli/hosts.yml` entry exists at all. This walk asked only about
+                    // writes, so the next entry of that shape would have arrived
+                    // unnoticed; a reviewer named it before it did.
+                    for (road, payload) in [
+                        ("Write", serde_json::json!({ "file_path": target.clone() })),
+                        (
+                            "Bash",
+                            serde_json::json!({ "command": format!("rm {target}") }),
+                        ),
+                    ] {
+                        let (_, how) = crate::harness::classify(road, &payload);
+                        assert_eq!(
+                            how,
+                            crate::harness::Sensitivity::Boundary,
+                            "{platform:?}/{}: {road} on {target} is where its gate lives and \
+                         the gate calls it routine",
+                            adapter.slug
+                        );
+                    }
+                }
             }
         }
     }

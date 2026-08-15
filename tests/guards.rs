@@ -557,14 +557,28 @@ const AFFIRMED: &[(&str, u64)] = &[
     // the reason `README.md` gives about this whole crate, and the declaration
     // now names both kinds instead of stretching one over the other.
     //
-    // Three literal entries also moved, each found by the crossing once it walked
-    // every platform rather than the host's: `gemini/settings.json` alongside the
-    // POSIX spelling, because that is where the gate is registered on Windows;
-    // `opencode/` and `crush/crush.json` without the `.config/` prefix, because
-    // `XDG_CONFIG_HOME` moves that root and the derived fragments already refuse
-    // to anchor on it; and `.claude/agents` lost its trailing slash, which had
-    // split the two roads.
-    ("control-surface", 15301435493678792690),
+    // Re-affirmed again after four more blind reviews of the same head. The
+    // population is wider and the *shape* of the entries changed, so the claim is
+    // read rather than carried:
+    //
+    // - `gemini/settings.json` beside the POSIX spelling, because that is where
+    //   the gate is registered on Windows. Found by the crossing, once it walked
+    //   every platform instead of the host's.
+    // - `opencode/agents`, `opencode/plugins`, `opencode/opencode.json` and
+    //   `crush/crush.json` — anchored to what the installer writes. The
+    //   `.config/` prefix they carried is moved by `XDG_CONFIG_HOME`; dropping it
+    //   entirely, which was the first attempt, left `opencode` as a bare
+    //   directory name gating `node_modules/opencode/**` and any checkout named
+    //   that. Both ends were wrong. Found by reviewers, not by the crossing —
+    //   which walks two XDG layouts now, so it would be.
+    // - Four trailing slashes gone (`.estigia`, `skills/issue-flow`, the derived
+    //   skill tree, `.claude/agents`), because `surface_of` appends a separator
+    //   and they gated `rm <dir>` while leaving a write to the bare directory
+    //   `Routine`.
+    // - The four rules **directories**. Gating Estigia's filename inside a
+    //   directory the host reads whole is defeated by a neighbour, and the
+    //   restated population clause is exactly what a neighbour changes.
+    ("control-surface", 8512866001911076261),
     // Reopened 2026-08-05 by measuring the enumeration instead of reading it.
     // Thirty command lines that visibly put bytes on disk were classified and
     // twenty-six came back Untouched, among them "wget -O src/main.rs URL" —

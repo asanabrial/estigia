@@ -157,33 +157,67 @@ suite. Everything else here is prose held by review.
   list of `{where, text}` from `assess_autoclose`. Nothing parses it today, which is the only reason
   that is a note and not a defect.
 
-- **The control surface covers the files that govern a run, and this entry records what it cost to
-  find that out.** Closed by issue 26. A write whose path lies outside every checkout the claim covers
-  is answered `outside-the-claim` without asking the tracker — right for a scratch note, right for a
-  `Boundary` write because those stay gated, and wrong for a `Routine` write to a file that governs
-  the harness. **Twelve** such paths were `Routine`, and the count is worth stating exactly because
-  three earlier drafts of this sentence said thirteen and none of them had been measured: ten of the
-  eleven adapters' instruction files, gemini-cli's second spelling under `%APPDATA%`, and
-  `~/.claude/settings.local.json` with `~/.claude/agents/`. OpenCode's was **already** `Boundary` at
-  the base commit — the pre-existing `.config/opencode/` entry covered it — which is exactly the kind
-  of thing a count taken from memory gets wrong. Every one of the twelve is outside every checkout by
-  construction, so issue 2's stand-aside had moved them from *measured against the claim* to *not
-  gated at all*.
+- **The control surface reaches further than it did, and what it costs is here too.** Issue 26. A
+  write whose path lies outside every checkout the claim covers is answered `outside-the-claim`
+  without asking the tracker — right for a scratch note, right for a `Boundary` write because those
+  stay gated, and wrong for a `Routine` write to a file that governs the harness. The instruction file
+  each adapter's `setup` writes its workflow-authority directive into was exactly that, and so were
+  `~/.claude/settings.local.json` and `~/.claude/agents`.
 
-  The instruction files are derived from the adapter table now rather than spelled, the way the skill
-  tree is derived from `skill::DIRECTORY` — a hand-spelled copy agrees with the installer only until
+  Counted on one platform: ten of the eleven adapters' instruction files answered `Routine` at the
+  base commit, OpenCode's being already covered by the `.config/opencode/` entry. Counting spellings
+  rather than adapters adds gemini-cli's `%APPDATA%` path, and the two `~/.claude` entries make
+  thirteen. The basis is stated because three drafts of this sentence carried a bare number, each
+  measured wrong by a different reviewer, and the fourth said twelve over a list of thirteen.
+
+  The instruction files are derived from the adapter table rather than spelled, the way the skill tree
+  is derived from `skill::DIRECTORY` — a hand-spelled copy agrees with the installer only until
   somebody renames one, which this crate has already paid for once. The crossing that keeps them
-  honest is `every_control_file_an_adapter_has_is_one_the_gate_measures`, which resolves the real path
-  per adapter and asks the gate; it walks `paths.instructions` now and did not before, which is why
-  the gap existed at all. Measured: changing **qwen's** fragment to a stale filename reddens that test
-  alone. It does not hold for every adapter, which a reviewer found and the unqualified sentence that
-  used to sit here did not say — OpenCode's fragment can go stale in silence, because the `opencode/`
-  directory entry covers that path independently. The crossing catches a fragment that stops matching
-  only where nothing else already matches it.
+  honest is `every_control_file_an_adapter_has_is_one_the_gate_measures`: it resolves the real path
+  per adapter, on all three platforms, under two `XDG_CONFIG_HOME` layouts, and asks the gate on both
+  roads. Every one of those four dimensions was added because a reviewer found a hole behind it, and
+  the holes are the entry below.
 
-  The two settings paths were missed for a smaller reason worth keeping: the match is `contains`, so
-  `.claude/settings.json` never reached `.claude/settings.local.json` — the file an operator is *told*
-  to put machine-local overrides in. The entry is `.claude/settings` now.
+  **What the crossing found once it stopped walking one of everything.**
+  `%APPDATA%\gemini\settings.json` — where this harness registers Gemini's own deny hook — answered
+  `Routine`, because only the POSIX spelling with its leading dot was listed. `opencode`'s plugin,
+  that adapter's only deny mechanism, and `crush`'s settings answered `Routine` whenever
+  `XDG_CONFIG_HOME` was moved. Four entries carried a trailing slash, which split the two roads:
+  `surface_of` appends a separator, so `rm <dir>` was `Boundary` while a write to the bare directory
+  was `Routine`. And the crossing asked only about writes, so a path containing a space — the shape
+  that produced the `cli/hosts.yml` entry — would have arrived unnoticed. All closed here, each with
+  a dimension of the crossing that now holds it.
+
+  **Gating a file in a directory the host reads whole is defeated by a neighbour.** Four adapters
+  apply *every* file in a rules directory; `paths_in`'s own comments say so where it resolves them.
+  Estigia's filename was gated and the directory was not, so `~/.cline/rules/zz-override.md` answered
+  `Routine` — and a sibling saying *Estigia is retired* changes what an agent is told this harness may
+  enforce without touching a `Boundary` path. The directories are named now.
+
+  **The cost, which the population's own declaration understated.** That declaration says a false
+  positive costs one tracker read "and that is the direction this chooses on purpose", illustrated by
+  a one-character typo on a path already listed. Measured, the real figure is about **1.2 seconds per
+  write** — a `Boundary` never rides the renewal window and never stands aside outside the claim, so
+  it is a live `gh issue view` every time — and with no network it is a refusal rather than a delay.
+  A first attempt at the `XDG_CONFIG_HOME` fix dropped the prefix entirely, which left `opencode` as a
+  bare directory name matched anywhere: a reviewer measured `node_modules/opencode/**`,
+  `packages/opencode/**` and a checkout *named* `opencode` answering `Boundary` on every file in them.
+  The entries are anchored to what the installer writes instead — `opencode/agents`,
+  `opencode/plugins`, `opencode/opencode.json` — and those six shapes are `Routine` again.
+
+  What over-gating remains is narrower and recorded rather than argued: `crates/crush/crush.json`,
+  `docs/gemini/settings.json` and `tests/fixtures/gemini/settings.json` answer `Boundary`, because
+  two-component fragments still match anywhere. A repository with a directory called `gemini` or
+  `crush` holding a file of that name pays one tracker read per write to it. No file tracked in this
+  repository trips any fragment.
+
+  Still `Routine`, and not closed here: a project's own `AGENTS.md` or `CLAUDE.md` at its root,
+  `.cursorrules`, `.clinerules`, `.windsurfrules`, `.github/copilot-instructions.md` and `.mcp.json`.
+  They carry the same always-loaded authority, and they are **inside** a checkout, so they stay
+  measured against the claim rather than standing aside — which is why they are a smaller thing than
+  what this issue closed, not the same thing. `harness::roles::definition_for` reads its four
+  definition roots from a hand-spelled list that nothing crosses against the gate; all four answer
+  `Boundary` today, and a fifth would not.
 
   `gh`'s hosts file would have belonged on that list and is not on it. It decides which account
   every tracker call acts as, so it is named in `CONTROL_SURFACE` instead — which is what the issue
@@ -209,14 +243,11 @@ suite. Everything else here is prose held by review.
   *without an exception*, which was an absolute the code does not hold; a reviewer measured it by
   adding one `mark_verified()` line to that fixture.
 
-  What is still lost, and it is narrower than the paragraph that used to sit here: two adapter
-  surfaces the crossing does not reach because it resolves one platform and one XDG layout.
-  `%APPDATA%\gemini\settings.json` was one of them and is closed — the crossing walks all three
-  platforms now, and it found that hole the moment it did. The two that remain are measured: with
-  `XDG_CONFIG_HOME` relocated, `opencode`'s plugin and MCP config and `crush`'s settings answer
-  `Routine`, because `.config/opencode/` and `.config/crush/crush.json` anchor on a prefix the
-  variable moves. The instruction fragments deliberately do not anchor there, which is why they hold
-  and these do not. `gh`'s hosts file is declared for exactly this shape below.
+  What was still lost when this entry first said so is closed, and the entry above says how. Three
+  drafts of this paragraph described the state before the fix that shipped in the same commit — the
+  last of them naming two `CONTROL_SURFACE` entries that the same diff had already replaced. Four
+  reviewers found it, one after another, which is the measure of how easily a paragraph written
+  before the code survives the code.
 
   And one boundary this cannot cross at all: a **hard link** outside the checkout pointing at a
   file inside it. Measured — `mklink /H <outside>/alias.rs <repo>/src/kept.rs`, classified
