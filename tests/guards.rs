@@ -668,13 +668,27 @@ fn nothing_writes_a_file_another_program_reads_by_truncating_it() {
 ///
 /// Removing the `Option` fixed the sixteen the compiler could see. Nothing
 /// stopped it coming back, and a reviewer said so: the fix was held by no test,
-/// so the base commit *is* the fix turned off and the suite is green there. This
-/// is that guard. It reads the source rather than the types because the defect
-/// is a signature, and a signature that returns to `Option` compiles perfectly.
+/// so the base commit *is* the fix turned off and the suite is green there.
 ///
-/// Not a lint against `Option` in fixtures generally — `repository()` in
-/// `src/harness/guard/tests.rs` still answers one, and `docs/honesty.md` records
-/// what that costs. This holds the one that was measured lying.
+/// This is that guard, and it holds three separate things, because reviewers
+/// walked past each of them in turn:
+///
+/// 1. **The whole signature.** A prefix match let `-> TrackerRigMaybe`, aliased
+///    to `Option<TrackerRig>`, through.
+/// 2. **Where the fixture is looked for.** The path was once
+///    `CARGO_MANIFEST_DIR/target/debug/examples`, which does not exist under
+///    `cargo test --release --target <triple>` — all six release lanes would have
+///    hard-failed. Reverting that left the whole suite green, this guard
+///    included, so it was a fix nothing held.
+/// 3. **That no test reaching the rig can leave without asserting.** Not the
+///    spelling of a skip — the skip itself. `return;` was matched literally at
+///    first, and `return Default::default();` walked past it by two words while
+///    every gate in this repository stayed green.
+///
+/// It reads source text rather than types because each of these compiles
+/// perfectly when it is wrong. Not a lint against `Option` in fixtures generally
+/// — `repository()` in `src/harness/guard/tests.rs` still answers one, and
+/// `docs/honesty.md` records what that costs. This holds the one measured lying.
 #[test]
 fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     let source = std::fs::read_to_string(root().join("tests").join("pipe.rs"))
@@ -718,6 +732,16 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
         "the fixture is located from the manifest again, which names `target/debug` \
          however the suite was actually built"
     );
+    // And the rig may not end the process instead of failing. A reviewer replaced
+    // the assertion with `eprintln!` plus `std::process::exit(0)`: the fixture
+    // absent, `cargo test --test pipe` printed `running 106 tests`, no result line
+    // at all, and exited 0. Worse than the defect this issue is named for, which
+    // at least claimed 106 passed.
+    assert!(
+        !body.contains("process::exit"),
+        "the rig ends the process instead of failing, which cargo reports as success \
+         with no test result at all"
+    );
 
     // Per test function, not per line. Both routes a reviewer found are
     // caller-side: splitting `let Some(rig) = tracker_rig() else` across two
@@ -743,7 +767,18 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
             .filter(|line| !line.trim_start().starts_with("//"))
             .collect::<Vec<_>>()
             .join("\n");
-        if code.contains("return;") || code.contains("return }") {
+        // The keyword, not a spelling of it. `return;` and `return }` were
+        // matched literally at first and `return Default::default();` walked past
+        // them — legal, left alone by `cargo fmt`, clean under clippy, and enough
+        // to put 106 tests back to passing on nothing with every gate green. A
+        // `return` inside a string literal or a block comment reddens this too;
+        // that is a false positive in the safe direction, and this file's own
+        // subject is prose about the pattern it refuses, so it will happen.
+        let returns = code.lines().any(|line| {
+            line.split(|c: char| !c.is_alphanumeric() && c != '_')
+                .any(|word| word == "return")
+        });
+        if returns {
             skipping.push(name.to_owned());
         }
     }
@@ -754,11 +789,22 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     );
 
     // The exemption is not vacuous: the callers have to be there for their
-    // absence to mean anything. Sixteen at the time this was written.
-    let callers = source.matches("tracker_rig()").count();
+    // absence to mean anything. Sixteen at the time this was written — and
+    // counted as call sites in code, which is not what `matches()` over the raw
+    // file returns. That counted seventeen, because the definition line contains
+    // the needle, and it counted commented-out callers too: a reviewer commented
+    // out all sixteen and this still passed.
+    let callers = source
+        .lines()
+        .filter(|line| {
+            let line = line.trim_start();
+            !line.starts_with("//") && !line.starts_with("fn ") && line.contains("tracker_rig()")
+        })
+        .count();
     assert!(
-        callers > 10,
-        "only {callers} use(s) of `tracker_rig` found, so this guard is reading a \
-         spelling the suite no longer uses and would pass on an empty file"
+        callers >= 12,
+        "only {callers} call site(s) of `tracker_rig` found in code, so this guard \
+         is reading a spelling the suite no longer uses and would pass on a file \
+         where nothing calls the rig at all"
     );
 }

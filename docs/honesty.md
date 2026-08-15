@@ -317,21 +317,37 @@ suite. Everything else here is prose held by review.
   failure, so the crate currently holds two opposite policies for one condition — set in the same
   change. Filed as its own issue.
 
-  The guard that holds the rig, `the_tracker_rig_cannot_answer_that_it_did_not_run`, was three
-  substring matches when it was written and two reviewers walked past it: a
-  `type TrackerRigMaybe = Option<TrackerRig>` alias satisfied a `contains("-> TrackerRig")` prefix
-  match, a caller split over two lines defeated a line-wise scan for `Some`, and a caller-side
-  `if … { return; }` before the call needed no option at all. Each was measured with the fixture
-  removed and 106 tests passing on nothing while the guard said `ok`. It now compares the whole
-  signature, scans per test function with comments stripped, and — the part the fix needed and did
-  not have — asserts the fixture is located from `current_exe` and not from the manifest, because a
-  reviewer measured that reverting *that* left the entire suite green, this guard included. All four
-  routes redden it now.
+  The guard that holds the rig, `the_tracker_rig_cannot_answer_that_it_did_not_run`, was walked past
+  by every reviewer who tried, six times, and each attempt was measured with the fixture removed and
+  106 tests passing on nothing while the guard said `ok`:
 
-  What it still cannot see is a **body skip**: `if condition { …assertions… }` with no `else` never
-  returns and never asserts. That is the shape two of `repository()`'s twelve call sites already use,
-  and the shape of `a_row_that_is_broken_comes_out_of_the_report_broken` below. A guard that caught it
-  would have to understand which statements assert, which is beyond reading text.
+  | Route | What it defeated |
+  |---|---|
+  | `type TrackerRigMaybe = Option<TrackerRig>` in the signature | a `contains("-> TrackerRig")` prefix match |
+  | a caller split over two lines | a line-wise scan for `Some` |
+  | `if … { return; }` before the call | needed no option at all |
+  | the fixture located from `CARGO_MANIFEST_DIR` again | nothing held it; the whole suite stayed green |
+  | `return Default::default();` | a literal match on `return;` — two words past it, and `cargo fmt` leaves it alone |
+  | `std::process::exit(0)` inside the rig | everything; cargo printed no result line and exited 0 |
+
+  The last is worth naming separately: it is **worse** than the defect this issue is about, which at
+  least claimed 106 passed. The guard now compares the whole signature, refuses `process::exit` in the
+  rig, asserts the fixture is located from `current_exe`, and scans per test function for the `return`
+  **keyword** rather than for two spellings of it. All six redden it.
+
+  Two things it still cannot see, and only one of them is closable by reading text.
+
+  A **body skip** — `if condition { …assertions… }` with no `else` — never returns and never asserts.
+  Measured by a reviewer: wrapping all sixteen callers that way, with the fixture moved aside, gives
+  `106 passed` and a green guard. That is issue 22's defect reproduced whole. It is the shape two of
+  `repository()`'s twelve call sites already use, and the shape of
+  `a_row_that_is_broken_comes_out_of_the_report_broken` above. Catching it needs knowing which
+  statements assert, which is past what reading text can do.
+
+  And the two path assertions are `contains` checks, so a decoy `current_exe()` call plus an
+  `env!("CARGO_MANIFEST_DIR")` moved into a helper outside the rig body would satisfy both. A reviewer
+  named that by reading rather than running, and it is recorded the same way — as a property of two
+  substring checks, not as a measured result.
 
   One more control-surface path of the hosts file's shape, found by a reviewer of this change and
   not closed here:
