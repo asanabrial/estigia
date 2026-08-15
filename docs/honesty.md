@@ -319,8 +319,8 @@ suite. Everything else here is prose held by review.
 
   **The guard that holds the rig catches an accident. It does not catch an author, and this is the
   measurement of how far short it falls.** Reviewers walked past
-  `the_tracker_rig_cannot_answer_that_it_did_not_run` twenty-one times — eleven of those routes are
-  held now and ten are not, which is the last column below. That split is counted from the table
+  `the_tracker_rig_cannot_answer_that_it_did_not_run` twenty-three times — eleven of those routes are
+  held now and twelve are not, which is the last column below. That split is counted from the table
   rather than remembered: every version of this paragraph that carried a number from memory carried
   a wrong one. Each attempt was measured with the
   fixture removed — except those about *where* the fixture is looked for, which are measured with it
@@ -351,6 +351,8 @@ suite. Everything else here is prose held by review.
   | `#[ignore]` on all sixteen | 90 passed, 16 ignored | **no** |
   | `#[should_panic]` on all sixteen | 106 passed — the rig's own panic is swallowed | **no** |
   | `#[cfg(feature = "rig-tests")]` on all sixteen | 90 passed, **0 ignored** — no trace at all | **no** |
+  | a block decoy plus the real definition written `pub fn` | whole suite green | **no** |
+  | a `}` at column zero inside a string, truncating the body | whole suite green | **no** |
   | a second `tests/*.rs` with its own `Option` rig | its own suite green | **no** |
   | a body skip — `if built { … } else { eprintln!(…) }`, no return | 106 passed | **no** |
 
@@ -361,10 +363,18 @@ suite. Everything else here is prose held by review.
   measured the difference. The decoy took three rounds to close and each round narrowed it rather
   than ending it: from *any text matching `fn tracker_rig()`* to *the whole signature line* to — now —
   the definition itself. The last step is what a check should have done first: there must be exactly
-  one line in the file that reads as a definition, and the body runs from that line rather than from
-  the first substring that matches it. A reviewer had put the signature inside a `/* */` block at
-  column zero, where a comment does not begin with `//`, and taken the signature check itself. All
-  three comment shapes are red now. And the file-wide
+  one line the *filter* reads as a definition, and the body runs from that line rather than from the
+  first substring that matches it. A reviewer had put the signature inside a `/* */` block at column
+  zero, where a comment does not begin with `//`, and taken the signature check itself. All three
+  comment shapes are red now — **against a definition the filter recognises**, which is the load in
+  that sentence. The filter is `trim_start().starts_with("fn tracker_rig(")`, so a real definition
+  written `pub fn` is invisible to it and a decoy becomes the unique match: measured, with
+  `pub struct TrackerRig` to keep `-D warnings` quiet, the whole suite is green and so is the guard,
+  while the fixture is looked for under the manifest again. The body's end is the first line that
+  trims to `}`, which a multi-line string literal can supply from column zero — also measured, also
+  green, also `cargo fmt` clean. Both restore a route this table calls held, and both are one more
+  needle away from being caught; that is the reason neither is chased. Recognising a Rust item is
+  parsing it. And the file-wide
   `process::exit` scan catches `use std::process::exit as leave;`, because that line contains the
   substring, while `use std::process as sys;` and `use std::process::{exit as leave};` do not. Rows of
   this table said the opposite of each, every time in the direction that flattered the guard, which is
@@ -378,8 +388,9 @@ suite. Everything else here is prose held by review.
   reintroduces this by copying a neighbour, which is how all sixteen callers came to have it. The
   guard adds four things a single careless edit could do and the compiler would not see: reverting the
   signature, moving where the fixture is looked for, ending the process instead of failing, and
-  writing `return` in a test that reaches the rig. It holds those against a decoy definition too,
-  which it did not until a reviewer took the signature check with a block comment. An earlier draft of this paragraph said three and
+  writing `return` in a test that reaches the rig. It holds those against a decoy definition too —
+  which it did not until a reviewer took the signature check with a block comment — but only while the
+  real definition is spelled the way its filter reads. An earlier draft of this paragraph said three and
   left out the `process::exit` refusal — which is the check that actually catches four of the rows
   above, so the omission understated the guard in the paragraph somebody reads to learn what it
   holds. That is its honest scope. An earlier version

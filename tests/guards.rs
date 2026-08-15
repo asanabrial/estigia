@@ -670,8 +670,15 @@ fn nothing_writes_a_file_another_program_reads_by_truncating_it() {
 /// stopped it coming back, and a reviewer said so: the fix was held by no test,
 /// so the base commit *is* the fix turned off and the suite is green there.
 ///
-/// This is that guard, and it holds four separate things, because reviewers
-/// walked past each of them in turn:
+/// Everything below is found from **the** definition of the rig, not from text
+/// that reads like it: exactly one line in the file may pass the filter, and the
+/// body runs from that line by index. Three decoy routes existed because those
+/// two things were substring matches, and one of them took the signature check
+/// itself from inside a `/* */` block. The filter is still a filter, so a real
+/// definition written `pub fn` is invisible to it — `docs/honesty.md` measures
+/// what that costs.
+///
+/// It holds four separate things, because reviewers walked past each in turn:
 ///
 /// 1. **The whole signature.** A prefix match let `-> TrackerRigMaybe`, aliased
 ///    to `Option<TrackerRig>`, through.
@@ -729,7 +736,8 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     assert_eq!(
         defining.len(),
         1,
-        "tests/pipe.rs holds {} lines that read as a definition of `tracker_rig`, so          every check below would bind to whichever comes first: {defining:?}",
+        "tests/pipe.rs holds {} lines that read as a definition of `tracker_rig`, \
+         so every check below would bind to whichever comes first: {defining:?}",
         defining.len()
     );
     let signature = defining[0];
