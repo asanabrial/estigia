@@ -299,13 +299,31 @@ pub fn placed(target: &Path) -> Option<PathBuf> {
             //
             // Mapping a share back to the drive it serves means asking the
             // machine what it is sharing, which cannot be answered offline and
-            // where a wrong answer removes a gate. So a landing that names
-            // anything other than a drive is declined, and the caller reads that
-            // as *inside*.
-            if let Some(std::path::Component::Prefix(prefix)) = placed.components().next()
+            // where a wrong answer removes a gate. So a landing that is not on a
+            // drive is declined, and the caller reads that as *inside*.
+            //
+            // A share is the only such landing anybody has produced here. The
+            // device namespaces read as if they would be — `\\.\C:\Windows`,
+            // `\\?\Volume{...}\Windows`, `\\?\GLOBALROOT\Device\HarddiskVolume3\Windows`
+            // — and all three resolve to `C:\Windows`, so they place normally and
+            // are compared like any other path. They were declined by the first
+            // version of this guard, which read the spelling; that they are not
+            // any more is a real change and the right one.
+            //
+            // Written as a requirement rather than a rejection, and that shape is
+            // deliberate: a landing with no prefix component at all would sail
+            // past `if let ... && !matches!` and be compared as though it were
+            // relative. Nothing this process can canonicalise produces one — two
+            // reviewers looked — so the branch is unmeasurable rather than
+            // measured, and it is written the way whose failure is a refusal.
+            if cfg!(windows)
                 && !matches!(
-                    prefix.kind(),
-                    std::path::Prefix::Disk(_) | std::path::Prefix::VerbatimDisk(_)
+                    placed.components().next(),
+                    Some(std::path::Component::Prefix(prefix))
+                        if matches!(
+                            prefix.kind(),
+                            std::path::Prefix::Disk(_) | std::path::Prefix::VerbatimDisk(_)
+                        )
                 )
             {
                 return None;

@@ -31,13 +31,16 @@ the workflow, it holds the tools.
   boundary write in both spellings rather than something the stand-aside carries past. The answer is
   given after the contract check, not before it, so outside the renewal window *an unreadable control
   surface permits no write* reaches it as it reaches everything else; inside the window nothing is
-  consulted, which is older than this change. A path that **lands** anywhere other than a drive — a
-  UNC share, a device namespace — is declined rather than placed, and a declined path reads as
-  inside. Windows serves every local drive as an administrative share, so
-  `\\localhost\C$\repo\src\main.rs` against `C:\repo\...` is one file under two spellings, which
-  stood the gate aside for a write that landed inside the claim. Judging the landing rather than the
-  spelling is what also covers a drive letter mapped onto that share, and a directory link pointing
-  at it: both arrive wearing a drive and resolve onto the share anyway.
+  consulted, which is older than this change. A path that **lands** anywhere other than a drive is
+  declined rather than placed, and a declined path reads as inside. Windows serves every local drive
+  as an administrative share, so `\\localhost\C$\repo\src\main.rs` against `C:\repo\...` is one file
+  under two spellings, which stood the gate aside for a write that landed inside the claim. Judging
+  the landing rather than the spelling is what also covers a drive letter mapped onto that share, and
+  a directory link pointing at it: both arrive wearing a drive and resolve onto the share anyway. A
+  share is the only non-drive landing anyone has produced — the device namespaces read as though they
+  would be another, and `\\.\C:\Windows`, `\\?\Volume{...}\Windows` and
+  `\\?\GLOBALROOT\Device\HarddiskVolume3\Windows` all resolve to `C:\Windows`, so they place normally
+  and a write through one of them outside every checkout now stands aside where it used to be gated.
 - A refusal can now say that it already wrote. The outcome an agent is told was derived from the exit
   code alone, so every stop reported *nothing was written* — including `publish_review` refusing a
   closing keyword after it had pushed the branch and opened the pull request, which left both

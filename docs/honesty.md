@@ -216,7 +216,7 @@ suite. Everything else here is prose held by review.
   also left `config.yml` `Routine`, which is deliberate: it holds the default host and protocol, not
   the credential that decides which account acts.
 
-  Two limits of the stand-aside itself, both in the over-gating direction and neither closed here.
+  Three limits of the stand-aside itself, none closed here.
   A landing that is not on a drive cannot be compared to a checkout that is, so `placed` declines it
   and the caller reads that as *inside*. That is what shuts the administrative-share hole, and it
   also means the whole feature is **off** on UNC ground: measured, a claim over `C:\...\repo` gates
@@ -226,12 +226,22 @@ suite. Everything else here is prose held by review.
   this issue exists to end. Closing it means deciding what a share is the same *place* as, which is
   the question that made declining the honest answer in the first place.
 
-  And the guard has no measurement on a machine that does not serve its drives as shares. Widening
-  its allow-list to accept UNC reddens both share fixtures here; on a runner without
-  `\\localhost\C$` it would redden nothing and they would report pass having asserted nothing. A
-  machine-independent companion was written, measured passing against that same widened allow-list,
-  and deleted rather than kept — the guard only fires on a landing `canonicalize` actually produced,
-  and producing one takes a real share.
+  The second limit is not over-gating but measurement: the guard has none on a machine that does
+  not serve its drives as shares. Widening its allow-list to accept UNC reddens both share fixtures
+  here; on a runner without `\\localhost\C$` it would redden nothing and they would report pass
+  having asserted nothing. A machine-independent companion was written, measured passing against
+  that same widened allow-list, and deleted rather than kept — the guard only fires on a landing
+  `canonicalize` actually produced, and producing one takes a real share. There is a second silent
+  road on the newer of the two fixtures: it also passes when `mklink /D` is refused for want of
+  Developer Mode or elevation. Measured by sabotaging the flag with the guard deleted — it printed
+  its skip line and reported pass, while the older fixture still went red, so a machine that will
+  not link loses the landing-versus-spelling measurement and not the guard's existence.
+
+  The third is latent and could not be measured at all. The guard requires the landing to carry a
+  drive prefix rather than rejecting the prefixes it knows, so a landing with no prefix component
+  would be refused instead of compared as though it were relative. Nothing `canonicalize` produced
+  on this machine has that shape and two reviewers went looking, so the branch is written for its
+  failure direction and is held by no test.
 
   One more path of the same shape, found by a reviewer of this change and not closed here:
   `<checkout>/.git/config`, which answers `Routine` while `<checkout>/.git/hooks/pre-push` answers

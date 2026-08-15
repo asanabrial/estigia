@@ -1482,8 +1482,8 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
     // whatever state the issue is in.
     //
     // After the contract because *an unreadable control surface permits no
-    // write* is written without an exception, and standing aside is a permission
-    // like any other. It sat above that refusal for one published head, which
+    // write* is written without an exception **in the contract**, and standing
+    // aside is a permission like any other. It sat above that refusal for one published head, which
     // meant that with no `SKILL.md` installed the agent instruction files —
     // outside every checkout by construction, and carrying the directive that
     // says this harness holds the authority at all — were writable with nothing
