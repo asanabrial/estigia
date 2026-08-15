@@ -460,6 +460,17 @@ suite. Everything else here is prose held by review.
   shell writes. The shape that would close it already works next door: `~/.config/opencode` and
   `~/.estigia` are `Boundary` because those entries name the directory.
 
+  Two more `Routine` at both commits, each found by a different reviewer and neither closed here.
+  `<repo>/.opencode/plugins` is not reached: `.opencode/agents/` was added for the repository-local
+  definition root, and the plugin directory beside it has no entry, because `opencode/plugins/` is
+  anchored and `.opencode` is not it. Estigia reads nothing from a project-local plugin directory, so
+  it is not the same class as the definition root — but it is the same *shape* as the hole this change
+  closed one directory over, and it is named here so the next reader does not have to find it twice.
+  And `curl "-o<path>"` with the value attached **and quoted** is not seen as a write at all: the gap
+  is upstream of `surface_of`, in `shell::writes_a_file`'s reading of the `curl -o` idiom, which this
+  change does not touch — `src/harness/shell.rs` is byte-identical between the two commits. `wget
+  "-O<path>"` is a `Boundary` in the same spelling, which is what makes the asymmetry visible.
+
   Still `Routine`, and not closed here: a project's own `AGENTS.md` or `CLAUDE.md` at its root,
   `.cursorrules`, `.clinerules`, `.windsurfrules`, `.github/copilot-instructions.md` and `.mcp.json`.
   They carry the same always-loaded authority, and they are **inside** a checkout, so they stay
