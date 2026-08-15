@@ -192,6 +192,66 @@ pub fn coverage_depth(covered: &Path, working_dir: &Path) -> Option<usize> {
     (inside || same_directory(covered, &working_dir)).then(|| resolved.components().count())
 }
 
+/// Where a write will actually land, as far as this process can place it.
+///
+/// [`coverage_depth`] was written for **working directories**, which exist, and
+/// its fallback resolves an unresolvable path literally. A write target usually
+/// does not exist yet — that is the ordinary case, not the edge — so handing it
+/// to that comparison answers on two different spellings of one path:
+///
+/// - `<root>/decoy/../repo/src/main.rs` compared literally is not inside
+///   `<root>/repo`, and the write lands there anyway;
+/// - a checkout reached through a junction resolves on the covered side and not
+///   on the target side, so a **new** file inside it reads as outside while an
+///   **existing** one reads as inside. The only difference is whether the file
+///   is there yet.
+///
+/// Both were measured against the gate this feeds, where a wrong `outside`
+/// removes the gate. So: collapse the spelling first, then resolve as much of
+/// the filesystem as exists.
+///
+/// `None` when the path cannot be placed at all, and the caller must read that
+/// as **inside**. `same_directory` states the rule this follows: *a path this
+/// process cannot resolve loosening the gate is the declared asymmetry run
+/// backwards.*
+pub fn placed(target: &Path) -> Option<PathBuf> {
+    // Lexical, because `..` is a spelling and not a boundary. The same
+    // collapse `is_control_surface` performs on the control-surface fragments,
+    // for the same reason it gives: *it is the same path, spelled the way a
+    // shell writes it.* Never past the root — a path that climbs out of what it
+    // names cannot be placed.
+    let mut lexical = PathBuf::new();
+    for component in target.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                if !lexical.pop() {
+                    return None;
+                }
+            }
+            std::path::Component::CurDir => {}
+            other => lexical.push(other.as_os_str()),
+        }
+    }
+    // Then the filesystem, for as much of it as is there. A junction is not a
+    // spelling, and the deepest existing ancestor is the most this process can
+    // honestly resolve — resolving it puts both sides of the comparison in the
+    // same vocabulary.
+    let mut suffix: Vec<std::ffi::OsString> = Vec::new();
+    let mut probe = lexical.as_path();
+    loop {
+        if let Ok(real) = probe.canonicalize() {
+            let mut placed = remove_windows_verbatim_prefix(real);
+            for part in suffix.iter().rev() {
+                placed.push(part);
+            }
+            return Some(placed);
+        }
+        let parent = probe.parent()?;
+        suffix.push(probe.file_name()?.to_os_string());
+        probe = parent;
+    }
+}
+
 /// Rejects a path that is not absolute, naming which one it was.
 pub fn require_absolute(path: &Path, name: &str) -> Result<()> {
     if !path.is_absolute() {

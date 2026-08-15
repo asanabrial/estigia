@@ -180,14 +180,14 @@ fn every_gated_spelling_has_a_command_line_written_out() {
 /// of them the Rust spelling.
 #[test]
 fn every_reason_for_standing_aside_has_a_stable_name() {
-    let asides = [
-        Aside::NotWatched,
-        Aside::NothingSworn,
-        Aside::NoTracker,
-        Aside::AnotherCheckout,
-    ];
+    // Walked from the enum's own list rather than from a copy here, which is
+    // what went stale: a fifth reason was added and this test went on checking
+    // four, so two asides could have shared a code and one could have carried no
+    // sentence, with the suite green.
+    let asides = Aside::ALL;
     let mut seen = std::collections::BTreeSet::new();
-    for aside in asides {
+    let mut sentences = std::collections::BTreeSet::new();
+    for aside in asides.iter().copied() {
         let code = aside.code();
         assert!(
             !code.is_empty() && code.chars().all(|c| c.is_ascii_lowercase() || c == '-'),
@@ -199,6 +199,22 @@ fn every_reason_for_standing_aside_has_a_stable_name() {
             "the code is the Rust identifier, which changes when the variant is renamed"
         );
         assert!(seen.insert(code), "`{code}` names two reasons");
+        // The compiler's half of the crossing, exercised so it cannot rot into
+        // dead code: `listed` is exhaustive, so a variant missing from `ALL`
+        // stops the build rather than quietly shrinking this loop.
+        assert!(aside.listed());
+        // And the sentence, which is the half a program does not read and a
+        // person does. An empty one tells an agent nothing about why the
+        // harness stood aside.
+        let sentence = aside.why("Write");
+        assert!(
+            sentence.contains("Write") && sentence.len() > 40,
+            "`{code}` stands aside without saying why: {sentence:?}"
+        );
+        assert!(
+            sentences.insert(sentence.clone()),
+            "`{code}` reuses another reason's sentence: {sentence:?}"
+        );
     }
     assert_eq!(seen.len(), asides.len(), "a reason lost its name");
 }
@@ -2742,9 +2758,10 @@ fn a_write_outside_every_covered_checkout_is_outside_the_claim() {
 /// This is the ordering the field report is about: the refusal that fired was
 /// the tracker's — *issue #164 is CLOSED* — so the fix is worth nothing unless
 /// the classification happens **before** the tracker is asked. Asserted by
-/// answering at all: reaching the tracker from this fixture would mean running
-/// `gh` against a directory that is not a checkout, so an `Outside` here is
-/// proof the decision was taken earlier.
+/// which answer comes back: without the classification this fixture gets as
+/// far as `control-surface-not-installed`, a deny raised after the point a
+/// write is measured against the claim. An `Outside` is proof the decision was
+/// taken before any of that.
 ///
 /// The run's state says `done`, which is the shape a run has after the delivery
 /// that closed its issue — the exact moment the evidence still has to be
@@ -2784,4 +2801,137 @@ fn a_closed_issue_does_not_refuse_a_scratch_note() {
         !matches!(boundary, Decision::Outside(Aside::OutsideTheClaim)),
         "a boundary write was waved through for being outside the repository"
     );
+}
+
+/// A write that lands inside the claim is gated however it is spelled.
+///
+/// Two judges built this from opposite ends and it is one defect: the
+/// comparison resolved a path with `canonicalize().unwrap_or_else(literal)`,
+/// and a write target usually does not exist yet, so the two sides of the
+/// comparison were in different vocabularies.
+///
+/// - `<root>/decoy/../repo/src/main.rs` compared literally is not inside
+///   `<root>/repo` — and `std::fs::write` to that string lands there. `decoy`
+///   need not exist: the pop is lexical.
+/// - a checkout reached through a junction resolves on the covered side and not
+///   on the target side, so a **new** file inside it read as outside while an
+///   existing one read as inside. Whether the file is there yet decided whether
+///   the gate applied.
+///
+/// Both took a repository write out of the gate, which is what issue 2 puts out
+/// of scope, so both are measured here against a real filesystem.
+#[test]
+fn a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("a checkout");
+    let run = sworn(164, &repo);
+
+    // Through a `..` that climbs back in. Written, then read back, so the
+    // assertion is about where it lands rather than about what it says.
+    // Asked **before** the file exists, which is the whole of the attack: a
+    // write target that is already there canonicalises, and the defect only
+    // shows on one that does not. An earlier version of this test wrote the
+    // file first and passed against the broken code.
+    let sideways = root
+        .path()
+        .join("decoy")
+        .join("..")
+        .join("repo")
+        .join("src")
+        .join("main.rs");
+    assert!(
+        !sideways.exists(),
+        "the fixture must ask about a file that is not there yet"
+    );
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: sideways.display().to_string()
+            }
+        ),
+        "a write that lands in the claimed checkout was taken out of the gate by a `..`"
+    );
+    // Then written, so the claim about where it lands is measured and not read.
+    std::fs::write(&sideways, "landed\n").expect("the spelling really does write there");
+    assert!(
+        repo.join("src").join("main.rs").is_file(),
+        "the fixture does not reproduce the spelling it is about"
+    );
+
+    // A path that climbs past the root cannot be placed, and unplaceable is
+    // read as inside.
+    let mut climbing = std::path::PathBuf::from(&repo);
+    for _ in 0..64 {
+        climbing.push("..");
+    }
+    climbing.push("escaped.md");
+    assert!(!writes_outside_the_claim(
+        &run,
+        &Action::Write {
+            target: climbing.display().to_string()
+        }
+    ));
+
+    // And a scratch path, which is the case the feature exists for: outside,
+    // even though the file does not exist yet either.
+    assert!(writes_outside_the_claim(
+        &run,
+        &Action::Write {
+            target: root
+                .path()
+                .join("scratch")
+                .join("note.md")
+                .display()
+                .to_string()
+        }
+    ));
+}
+
+/// The same defect through a junction, which is a link and not a spelling.
+///
+/// Skipped where the platform will not make one — a skip that says so is honest;
+/// a green that ran nothing is the thing this crate keeps finding.
+#[test]
+fn a_new_file_inside_a_linked_checkout_is_gated() {
+    let root = tempfile::tempdir().expect("a root");
+    let real = root.path().join("real").join("repo");
+    std::fs::create_dir_all(real.join("src")).expect("a checkout");
+    let link = root.path().join("link");
+
+    #[cfg(windows)]
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(&link)
+        .arg(&real)
+        .output()
+        .is_ok_and(|out| out.status.success());
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(&real, &link).is_ok();
+    if !made {
+        eprintln!("skipped: this platform would not create a directory link");
+        return;
+    }
+
+    // The claim covers the link spelling, which is how a worktree given to a
+    // run is usually named.
+    let run = sworn(164, &link);
+    let existing = link.join("src").join("kept.rs");
+    std::fs::write(&existing, "kept\n").expect("an existing file");
+
+    for (what, target) in [
+        ("a new file", link.join("src").join("new.rs")),
+        ("an existing file", existing),
+    ] {
+        assert!(
+            !writes_outside_the_claim(
+                &run,
+                &Action::Write {
+                    target: target.display().to_string()
+                }
+            ),
+            "{what} inside the linked checkout was taken out of the gate"
+        );
+    }
 }

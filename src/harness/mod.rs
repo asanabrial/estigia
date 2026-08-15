@@ -144,6 +144,39 @@ pub enum Aside {
 }
 
 impl Aside {
+    /// Every reason, for the crossing that keeps their names honest.
+    ///
+    /// Hand-written, like the other populations here — and hand-written lists go
+    /// stale, which this one did: a variant was added and the test that checks
+    /// the shape and the uniqueness of these codes went on walking four. Two
+    /// asides could share a code, and one could carry no sentence at all, with
+    /// the suite green. `listed` is what stops that happening twice: it
+    /// `listed` below is exhaustive, so a new variant does not compile until
+    /// somebody stands where this list is.
+    pub const ALL: &'static [Self] = &[
+        Self::NotWatched,
+        Self::NothingSworn,
+        Self::NoTracker,
+        Self::AnotherCheckout,
+        Self::OutsideTheClaim,
+    ];
+
+    /// A total function over the enum, so the compiler holds `ALL`.
+    ///
+    /// It answers nothing a caller needs. Its whole purpose is the `match`: add
+    /// a variant and this stops compiling, in the one place where the list that
+    /// must learn about it is on screen.
+    #[cfg(test)]
+    const fn listed(self) -> bool {
+        match self {
+            Self::NotWatched
+            | Self::NothingSworn
+            | Self::NoTracker
+            | Self::AnotherCheckout
+            | Self::OutsideTheClaim => true,
+        }
+    }
+
     /// The stable name a program matches on.
     ///
     /// `estigia gate --json` printed this field as `format!("{aside:?}")` — the
@@ -1291,11 +1324,19 @@ fn writes_outside_the_claim(run: &Run, action: &Action) -> bool {
     if !path.is_absolute() {
         return false;
     }
+    // Where it lands, not how it is spelled. Comparing the spelling answered
+    // `outside` for a `..` that climbs back into the checkout, and for a new
+    // file inside a checkout reached through a junction — both of them writes
+    // this would have taken out of the gate. A path that cannot be placed is
+    // read as inside, because a wrong answer here removes the gate.
+    let Some(landing) = crate::paths::placed(path) else {
+        return false;
+    };
     let mut covered = run.covered().peekable();
     if covered.peek().is_none() {
         return false;
     }
-    !covered.any(|checkout| crate::paths::covers(checkout, path))
+    !covered.any(|checkout| crate::paths::covers(checkout, &landing))
 }
 
 /// What the gate decides before any stand-down is considered.

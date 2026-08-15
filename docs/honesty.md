@@ -157,6 +157,28 @@ suite. Everything else here is prose held by review.
   list of `{where, text}` from `assess_autoclose`. Nothing parses it today, which is the only reason
   that is a note and not a defect.
 
+- **The control surface does not cover every file that governs a run, and standing aside outside the
+  repository is now what makes that matter.** A write whose path lies outside every checkout the
+  claim covers is answered `outside-the-claim` without asking the tracker. That is right for a scratch
+  note; it is right for a `Boundary` write too, because those stay gated. What it is not right for is
+  a `Routine` write to a file that governs the harness and is not in `CONTROL_SURFACE`. Measured
+  through `classify`: `~/.claude/settings.json` and `~/.claude/skills/flow/SKILL.md` answer
+  `Boundary`, but `~/.claude/CLAUDE.md`, `~/.agents/AGENTS.md`, `~/.codex/AGENTS.md`,
+  `~/.qwen/QWEN.md`, `~/.cursor/estigia-workflow-authority.md`, `~/.continue/rules/estigia.md`,
+  `~/.cline/rules/estigia.md`, `~/.codeium/windsurf/memories/global_rules.md`,
+  `~/.config/crush/CRUSH.md`, `%APPDATA%/gemini/GEMINI.md`, `~/.claude/settings.local.json`,
+  `~/.claude/agents/` and `~/.config/gh/hosts.yml` all answer `Routine` — and each of them is outside
+  every checkout by construction. `gh`'s hosts file decides which account every tracker call acts as;
+  the instruction files carry the workflow-authority directive `setup` writes.
+
+  The hole predates this: those paths were never `Boundary`, so before this change they were measured
+  against the claim and allowed under a valid one. What is newly lost is the refusal when the claim is
+  *not* valid. The population test that keeps the list honest
+  (`every_control_file_an_adapter_has_is_one_the_gate_measures`) walks each adapter's skill root,
+  hooks, plugin and MCP config, and never `paths.instructions`, which is why nothing said so. Closing
+  it means extending `CONTROL_SURFACE` and that test together, which is its own change with its own
+  risk, so it is filed rather than done here.
+
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
   bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read
