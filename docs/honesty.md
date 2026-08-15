@@ -268,17 +268,44 @@ suite. Everything else here is prose held by review.
   claimed them — the first with a deliberate type error inside the arm, which failed the build on
   Windows.
 
-  And the lanes measured less than "the lanes" suggests, on two counts, both since closed by issue
-  22. `cargo test` is fail-fast across targets, so when the lib target failed on Linux and macOS the
-  integration targets never ran there at all — `tests/pipe.rs`, which is where this change's
-  end-to-end evidence lives, never executed on POSIX on this branch. And underneath that, the sixteen
-  tests in that file which drive the binary against a stand-in `gh` had never executed on **any**
-  runner: the stand-in is a cargo example, `cargo test` does not build examples, and
-  `cargo clippy --all-targets` leaves an `.rmeta` and no runnable file. Measured cold —
-  `cargo test --test pipe` answered *106 passed* in 5.53s with `target/debug/examples/` not existing.
-  The workflow now builds the examples before it tests and passes `--no-fail-fast`, and the rig
-  raises instead of returning a value that means *did not run*; with the helper removed the same
-  command answers *90 passed; 16 failed*.
+  And the lanes measure less than "the lanes" suggests: `cargo test` is fail-fast across targets, so
+  when the lib target failed on Linux and macOS the integration targets never ran there at all —
+  `tests/pipe.rs`, which is where this change's end-to-end evidence lives, never executed on POSIX on
+  this branch. That is issue #30.
+
+  What is **not** true, and was written here for one commit: that those sixteen tests had never run
+  on any runner. They had. A bare `cargo test` builds examples — cargo says so, and
+  `cargo test --all-features --no-run` in a cold tree at this base leaves a runnable
+  `fake_process.exe`. The measurement that produced the wrong claim was taken with
+  `cargo test --test pipe`, a **filtered** invocation that builds no other target and appears nowhere
+  in the workflow. A reviewer caught it before it shipped. The exposure is real and narrower: a
+  filtered run in a cold tree, which is exactly how every mutation measurement in this document is
+  taken. Issue #22 removed the skip from the rig's type; `cargo clippy --all-targets` remains no help
+  there, leaving a `.d` and a zero-byte `.rmeta`.
+
+- **A skip spelled as a pass, in the places issue #22 did not reach.** That issue took the skip out of
+  `tracker_rig`'s *type*, so no caller of it can be handed a value meaning *did not run*. Two other
+  fixtures still answer one, and neither was measured before.
+
+  `repository()` in `src/harness/guard/tests.rs` is the exact twin — `-> Option<tempfile::TempDir>`,
+  followed by thirteen early returns. Measured with `git` off `PATH`: the guard module answers
+  `28 passed; 1 failed`, with seven `SKIPPED:` lines that are only visible under `--nocapture`. A
+  normal run shows seven plain `ok`. Its subject is the **push guard** — the one gate no agent can
+  route around, because it sits under git rather than under an agent, and the one `estigia doctor`
+  currently reports as not installed on the operator's machine.
+
+  Four more sit in `tests/pipe.rs` itself, at the read-only-file capability and at git usability. They
+  are the same shape and were not touched, because whether they should raise or be `#[ignore]` is a
+  decision rather than a mechanical edit: `#[ignore]` is reported as *ignored* and a `return;` after
+  an `eprintln!` is reported as *passed*.
+
+  The line between this and a legitimate skip is whether the machine could have run it. Symlink
+  privilege, `mklink /D`, administrative shares and drive letters cannot be conjured, and the ten
+  fixtures that skip on those are correct. `git` is not that: this is a git workflow harness, and a
+  machine without git cannot measure the push guard **at all**, so `ok` claims something never
+  checked. Issue #22 already decided this for the tracker rig, where git absence is now a hard
+  failure, so the crate currently holds two opposite policies for one condition — set in the same
+  change. Filed as its own issue.
 
   One more control-surface path of the hosts file's shape, found by a reviewer of this change and
   not closed here:

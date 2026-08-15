@@ -41,19 +41,18 @@ the workflow, it holds the tools.
   would be another, and `\\.\C:\Windows`, `\\?\Volume{...}\Windows` and
   `\\?\GLOBALROOT\Device\HarddiskVolume3\Windows` all resolve to `C:\Windows`, so they place normally
   and a write through one of them outside every checkout now stands aside where it used to be gated.
-- The end-to-end tests of the review protocol now run. Sixteen tests in `tests/pipe.rs` drive the real
-  binary against a stand-in `gh`, and that stand-in is a cargo example: `cargo test` does not build
-  examples, `cargo clippy --all-targets` leaves metadata and no runnable file, and the rig answered
-  `Option` so every one of them returned early **reporting pass**. Measured in a cold worktree,
-  `cargo test --test pipe` said *106 passed* in 5.53s with `target/debug/examples/` absent. That is
-  every CI run this repository has ever had, on every platform: the requester exclusion, the review
-  queue's fail-closed reads, the CI-release verdict gate, the verdict's distinctness rules, the
-  handoff's ordering and the comment escaping were all green ticks for functions that returned
-  immediately. The skip is now gone from the type rather than from the callers — the rig raises,
-  naming the command that fixes it, so there is no value it can return that means *did not run*. CI
-  builds the examples before it tests, and passes `--no-fail-fast`, without which a lib failure hides
-  every later target and this file would still not run on Linux or macOS.
-
+- A test can no longer report pass without running. Sixteen tests in `tests/pipe.rs` drive the real
+  binary against a stand-in `gh`, and that stand-in is a cargo example; the rig answered `Option` and
+  every caller opened with `let Some(rig) = … else { return; }`, so wherever the example was missing
+  all sixteen returned early **reporting pass**. Measured at the previous commit with the fixture
+  moved aside: `cargo test --test pipe` answered *106 passed*. The skip is now gone from the type
+  rather than from the callers — the rig raises, naming the command that fixes it, so there is no
+  value it can return that means *did not run*, and no later caller can reintroduce the early return
+  by copying its neighbours, which is how sixteen came to have it. The fixture is located from the
+  running test binary rather than from a hardcoded `target/debug`, so it is found under whatever
+  profile and target triple built it. Which invocations were exposed: a bare `cargo test` builds
+  examples and always did, so CI was not blind; a **filtered** run — `--test`, `--lib`, any target
+  selection — does not, and that is how every mutation measurement in this repository is taken.
 - A refusal can now say that it already wrote. The outcome an agent is told was derived from the exit
   code alone, so every stop reported *nothing was written* — including `publish_review` refusing a
   closing keyword after it had pushed the branch and opened the pull request, which left both

@@ -6299,22 +6299,41 @@ struct TrackerRig {
 /// The rig, or a failure that says what to run.
 ///
 /// It used to answer `Option` and every caller opened with `let Some(rig) = …
-/// else { return; }`, so on a machine without `target/debug/examples/fake_process`
-/// all sixteen of these tests reported **pass** having executed nothing. That is
-/// not a hypothetical: `cargo test` does not build examples, and neither does
-/// `cargo clippy --all-targets`, which leaves an `.rmeta` and no runnable file.
-/// Measured in a worktree created that morning — `cargo test --test pipe`,
-/// 106 passed in 5.53s, `target/debug/examples/` absent entirely. CI runs exactly
-/// that command, so the end-to-end evidence for the whole review protocol had
-/// never once executed on a runner.
+/// else { return; }`, so where the example was missing all sixteen of these tests
+/// reported **pass** having executed nothing. Measured at the base commit with
+/// the fixture moved aside: `cargo test --test pipe` answered *106 passed*.
+///
+/// Which invocations are exposed is worth being exact about, because the first
+/// version of this comment was not. A bare `cargo test` **does** build examples
+/// — cargo documents it, *"examples — to ensure they compile"*, and
+/// `cargo test --all-features --no-run` in a cold tree leaves a runnable
+/// `fake_process.exe`. What does not build them is a **filtered** invocation:
+/// `cargo test --test pipe`, `cargo test --lib <name>`, anything that selects a
+/// target. That is not a corner — it is how every mutation measurement in this
+/// repository is taken, which is the evidence `docs/honesty.md` is made of. A
+/// cold worktree plus a filtered run is a green answer from sixteen functions
+/// that returned on their first line. (`cargo clippy --all-targets` does not
+/// help: it leaves a `.d` and a zero-byte `.rmeta`, no runnable file.)
 ///
 /// So the skip is gone from the type rather than from the callers. There is no
 /// value this can return that means *did not run*, and a missing helper is a
 /// loud failure naming the command that fixes it.
 fn tracker_rig() -> TrackerRig {
-    let built = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target")
-        .join("debug")
+    // Found from the test binary rather than from the manifest, because the
+    // profile and the target triple are not knowable from here. `release.yml`
+    // runs `cargo test --release --target <triple>`, which puts the example under
+    // `target/<triple>/release/examples/` — a hardcoded `target/debug/examples`
+    // was absent there, so the first version of this assertion turned a silent
+    // skip on all six release targets into a hard failure on all six, and no tag
+    // could have been cut. A reviewer measured that before it shipped.
+    //
+    // `current_exe` is this test binary at `<…>/deps/pipe-<hash>`, so the example
+    // sits beside its parent directory whatever the profile and triple are.
+    let here = std::env::current_exe().expect("the test binary knows where it is");
+    let built = here
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("the test binary is under a profile directory")
         .join("examples")
         .join(if cfg!(windows) {
             "fake_process.exe"
@@ -6323,8 +6342,9 @@ fn tracker_rig() -> TrackerRig {
         });
     assert!(
         built.is_file(),
-        "the process fixture is not built, so this test would have measured nothing: \
-         run `cargo build --examples` first ({})",
+        "the process fixture is not built, so this test would have measured \
+         nothing: run `cargo build --examples` first, or drop the target filter \
+         — a bare `cargo test` builds it and `cargo test --test pipe` does not ({})",
         built.display()
     );
     let bin = tempfile::tempdir().expect("a directory for the fake gh");

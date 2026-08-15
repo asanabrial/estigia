@@ -655,3 +655,58 @@ fn nothing_writes_a_file_another_program_reads_by_truncating_it() {
         )
     );
 }
+
+/// A fixture may not answer a value that means *did not run*.
+///
+/// `tracker_rig` used to return `Option<TrackerRig>`, and all sixteen of its
+/// callers opened with `let Some(rig) = tracker_rig() else { return; }`. In a
+/// tree where the example it needs had not been built — which a **filtered**
+/// `cargo test --test pipe` never builds — every one of them reported **pass**
+/// having executed nothing. Measured at the commit before the fix, with the
+/// fixture moved aside: `106 passed`, and one rig test alone in `0.00s` against
+/// `0.42s` with it present.
+///
+/// Removing the `Option` fixed the sixteen the compiler could see. Nothing
+/// stopped it coming back, and a reviewer said so: the fix was held by no test,
+/// so the base commit *is* the fix turned off and the suite is green there. This
+/// is that guard. It reads the source rather than the types because the defect
+/// is a signature, and a signature that returns to `Option` compiles perfectly.
+///
+/// Not a lint against `Option` in fixtures generally — `repository()` in
+/// `src/harness/guard/tests.rs` still answers one, and `docs/honesty.md` records
+/// what that costs. This holds the one that was measured lying.
+#[test]
+fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
+    let source = std::fs::read_to_string(root().join("tests").join("pipe.rs"))
+        .expect("the pipe suite is readable");
+
+    let signature = source
+        .lines()
+        .find(|line| line.trim_start().starts_with("fn tracker_rig("))
+        .expect("tests/pipe.rs still defines tracker_rig — if it was renamed, rename it here too");
+    assert!(
+        signature.contains("-> TrackerRig"),
+        "`tracker_rig` no longer answers the rig itself, so a caller can be handed \
+         a value meaning *did not run*: {}",
+        signature.trim()
+    );
+
+    let skips = source
+        .lines()
+        .filter(|line| line.contains("tracker_rig()") && line.contains("Some"))
+        .count();
+    assert_eq!(
+        skips, 0,
+        "a caller of `tracker_rig` is matching on an option again, which is how \
+         sixteen tests came to report pass without running"
+    );
+
+    // The exemption is not vacuous: the callers have to be there for their
+    // absence to mean anything. Sixteen at the time this was written.
+    let callers = source.matches("tracker_rig()").count();
+    assert!(
+        callers > 10,
+        "only {callers} use(s) of `tracker_rig` found, so this guard is reading a \
+         spelling the suite no longer uses and would pass on an empty file"
+    );
+}
