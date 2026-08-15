@@ -32,7 +32,7 @@ rules:
   - Uninstalling removes everything Estigia created and nothing else.
 
 testing:
-  - cargo test          # the whole suite: unit, guards, honesty, payload, pipe, release
+  - cargo test          # the whole suite: unit, guards, honesty, lifecycle, payload, pipe, release
   - cargo clippy --all-targets
   - cargo fmt
   - cargo doc --no-deps  # on the list because it was not, and had been failing outright

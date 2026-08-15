@@ -67,12 +67,18 @@ that will disagree.
    nor CI ever asked. A crate that keeps its reasoning in doc comments and cannot build them is one
    nobody reads.
 
-   **A filtered run needs `cargo build --examples` first.** A bare `cargo test` builds examples, so
-   the list above is complete as it stands. But `cargo test --test pipe` or `cargo test --lib <name>`
-   selects a target and builds nothing else — and sixteen tests in `tests/pipe.rs` drive the binary
-   against a stand-in `gh` that is an example. In a cold tree those sixteen used to report **pass**
-   having executed nothing; they now fail loudly, naming the command. This matters because a filtered
-   run is how mutation is measured here, which is what `docs/honesty.md` is made of.
+   **Anything but a bare `cargo test` needs `cargo build --examples` first.** A bare `cargo test`
+   builds examples, so the list above is complete as it stands. Narrowing the run does not:
+   `cargo test --test pipe` and `cargo test --lib <name>` select a target and build nothing else.
+   Neither does **widening** it, which is the surprising half — `cargo test --all-targets` builds the
+   example as a hashed *test* target and never writes the plain `fake_process` binary, so it answers
+   `90 passed; 16 failed` on every run until the examples are built separately. That is the same flag
+   this list prescribes for clippy one line above.
+
+   Sixteen tests in `tests/pipe.rs` drive the binary against a stand-in `gh` that is an example. They
+   used to report **pass** having executed nothing; they now fail loudly, naming the command that
+   clears it. This matters because a filtered run is how mutation is measured here, which is what
+   `docs/honesty.md` is made of.
 
 ## What not to do
 
