@@ -171,17 +171,22 @@ suite. Everything else here is prose held by review.
   construction. They carry the workflow-authority directive `setup` writes, which is the sentence
   telling an agent this harness holds the authority at all.
 
-  `gh`'s hosts file was on that list until this change and is not any more. It decides which
-  account every tracker call acts as, so it was named in `CONTROL_SURFACE` instead of left here —
-  which is what the issue asked for: *if one can reach tracker state, it is that path that needs
-  naming rather than the whole class*. Both spellings, and through the shell as well as the write
-  tool, which the first attempt got wrong by using a fragment with a space in it.
+  `gh`'s hosts file would have belonged on that list and is not on it. It decides which account
+  every tracker call acts as, so it is named in `CONTROL_SURFACE` instead — which is what the issue
+  asked for: *if one can reach tracker state, it is that path that needs naming rather than the whole
+  class*. Both spellings, and through the shell as well as the write tool, which the first attempt
+  got wrong by using a fragment with a space in it. (An earlier draft of this paragraph said the file
+  "was on that list until this change", which was a claim about a previous shipped state that never
+  existed — the whole entry is new. A reviewer checked it against `2477de0` and it was not there.)
 
   The hole predates this: the paths still listed were never `Boundary`, so before this change they
   were measured against the claim and allowed under a valid one. What is newly lost is the refusal
-  when the claim is *not* valid, and when no contract is installed at all: the new answer returns
-  before the `control-surface-not-installed` refusal, so *an unreadable control surface permits no
-  write* stops applying to a path outside every checkout. The population test that keeps the list
+  when the claim is *not* valid. It is **not** lost when no contract is installed: the answer is given
+  after the `control-surface-not-installed` refusal, so *an unreadable control surface permits no
+  write* keeps applying without an exception. One published head had it the other way round, both
+  reviewers of that head raised the cost, and it moved rather than staying here as a declared limit —
+  `an_unreadable_control_surface_refuses_even_a_write_outside_the_claim` is what stops it drifting
+  back. The population test that keeps the list
   (`every_control_file_an_adapter_has_is_one_the_gate_measures`) walks each adapter's skill root,
   hooks, plugin and MCP config, and never `paths.instructions`, which is why nothing said so. Closing
   it means extending `CONTROL_SURFACE` and that test together, which is its own change with its own
@@ -203,6 +208,14 @@ suite. Everything else here is prose held by review.
   also left `config.yml` `Routine`, which is deliberate: it holds the default host and protocol, not
   the credential that decides which account acts.
 
+  One more path of the same shape, found by a reviewer of this change and not closed here:
+  `<checkout>/.git/config`, which answers `Routine` while `<checkout>/.git/hooks/pre-push` answers
+  `Boundary`. `core.hooksPath` in that file decides whether the push guard runs at all. In the
+  ordinary shape it is harmless because `covered()` yields both `repo_dir` and the worktree, so the
+  base checkout's `.git` is inside the claim — but measured with a pointer carrying only a worktree
+  (`repo_dir = <project>/worktrees/wt-a`), writes to `<project>/src/x.rs` **and** to
+  `<project>/.git/config` both stand aside. Whether the fix is naming the file or widening what a
+  worktree run covers is the question, and it is not this issue's.
 
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the

@@ -28,7 +28,12 @@ the workflow, it holds the tools.
   `Routine` write — the control surface sits outside the repository by nature, and watching it is the
   defence against an agent switching the gate off with the tool it uses most. `gh`'s hosts file joins
   that surface in the same change: it decides which account every tracker call acts as, so it is a
-  boundary write in both spellings rather than something the stand-aside carries past.
+  boundary write in both spellings rather than something the stand-aside carries past. The answer is
+  given after the contract check, not before it, so *an unreadable control surface permits no write*
+  keeps applying without an exception. A path that names anything other than a drive — a UNC share,
+  a device namespace — is declined rather than placed: Windows serves every local drive as an
+  administrative share, and `\\localhost\C$\repo\src\main.rs` compared against `C:\repo\...` is one
+  file under two spellings, which stood the gate aside for a write that landed inside the claim.
 - A refusal can now say that it already wrote. The outcome an agent is told was derived from the exit
   code alone, so every stop reported *nothing was written* — including `publish_review` refusing a
   closing keyword after it had pushed the branch and opened the pull request, which left both

@@ -215,6 +215,28 @@ pub fn coverage_depth(covered: &Path, working_dir: &Path) -> Option<usize> {
 /// process cannot resolve loosening the gate is the declared asymmetry run
 /// backwards.*
 pub fn placed(target: &Path) -> Option<PathBuf> {
+    // A drive has more than one name, and only one of them can be compared.
+    //
+    // Windows serves every local drive as an administrative share, so
+    // `\\localhost\C$\repo\src\main.rs` is the same file as `C:\repo\src\main.rs`
+    // with no link in it anywhere. `canonicalize` keeps the vocabulary it was
+    // given — the share resolves to `\\?\UNC\localhost\C$\...` and the covered
+    // checkout to `C:\...` — so one file was compared under two spellings,
+    // neither a prefix of the other, and the gate stood aside for a write that
+    // landed inside the claimed checkout.
+    //
+    // Mapping a share back to the drive it serves means asking the machine what
+    // it is sharing, which is a question this process cannot answer offline and
+    // a wrong answer here removes a gate. So a path that names anything other
+    // than a drive is declined, and the caller reads that as *inside*.
+    if let Some(std::path::Component::Prefix(prefix)) = target.components().next()
+        && !matches!(
+            prefix.kind(),
+            std::path::Prefix::Disk(_) | std::path::Prefix::VerbatimDisk(_)
+        )
+    {
+        return None;
+    }
     // `..` is where the two platforms genuinely disagree, and answering for the
     // wrong one is what puts the spelling and the landing in different places.
     //
@@ -243,7 +265,13 @@ pub fn placed(target: &Path) -> Option<PathBuf> {
                     return None;
                 }
             }
-            std::path::Component::CurDir => {}
+            // No arm for `CurDir`. There was one, and both reviewers of this
+            // change measured it surviving deletion with the suite green: an
+            // interior `.` never reaches here because `components` drops it, and
+            // a leading one only survives on a relative path, where `pop` eats it
+            // and the walk up ends at the same `None` either way. A branch no
+            // input can distinguish is a branch that reads as a guard and is not
+            // one.
             other => lexical.push(other.as_os_str()),
         }
     }
@@ -426,6 +454,37 @@ pub fn powershell_quoted(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// What `placed` hands back is a spelling anything else can be compared to.
+    ///
+    /// Both reviewers of this change measured the same thing: the line that
+    /// strips the verbatim prefix could be deleted and the whole suite stayed
+    /// green, because every caller today puts *both* sides of its comparison
+    /// through here and two verbatim spellings compare as well as two literal
+    /// ones. That makes it unmeasured, not unimportant — the next caller to
+    /// compare this output against a path that came from anywhere else inherits
+    /// `\\?\C:\x` against `C:\x`, which is the exact two-vocabularies failure
+    /// this function exists to end. So the guarantee is asserted here, on the
+    /// output itself, rather than left resting on what the callers happen to do.
+    #[test]
+    fn a_placed_path_carries_no_verbatim_prefix() {
+        let root = tempfile::tempdir().expect("a root");
+        let deep = root.path().join("a").join("b");
+        std::fs::create_dir_all(&deep).expect("a directory to place");
+        // A tail that does not exist yet, which is the ordinary case for a write
+        // target and the one that takes the literal-suffix road.
+        let target = deep.join("not-yet.rs");
+
+        let placed = placed(&target).expect("a real directory places");
+        assert!(
+            !placed.display().to_string().starts_with(r"\\?\"),
+            "placed handed back a verbatim spelling: {placed:?}"
+        );
+        assert!(
+            placed.ends_with("not-yet.rs"),
+            "placed lost the part of the path that does not exist yet: {placed:?}"
+        );
+    }
 
     #[test]
     fn home_resolves_to_an_absolute_path() {

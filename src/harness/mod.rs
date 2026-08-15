@@ -1430,19 +1430,6 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
         return Decision::Outside(Aside::AnotherCheckout);
     }
 
-    // Before the tracker is asked, because the tracker's answer is what refuses
-    // here: a closed issue answers `issue-not-open`, and it was answering it
-    // about a scratch note. A claim governs the repository it was made in; what
-    // a run writes outside every checkout it covers is not the claim's to
-    // decide, whatever state the issue is in.
-    //
-    // `Routine` only. A `Boundary` write is watched *because* of where it lands
-    // — the control surface sits outside the repository by nature — so placing
-    // it outside must never be what waves it through.
-    if how == Sensitivity::Routine && writes_outside_the_claim(run, action) {
-        return Decision::Outside(Aside::OutsideTheClaim);
-    }
-
     if how == Sensitivity::Routine && run.within_window(context.window) {
         return Decision::Allow(format!(
             "issue #{issue} was verified inside the renewal window"
@@ -1484,6 +1471,31 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
             ),
             &subject,
         )));
+    }
+
+    // After the contract, and before the tracker.
+    //
+    // Before the tracker because the tracker's answer is what refuses here: a
+    // closed issue answers `issue-not-open`, and it was answering it about a
+    // scratch note. A claim governs the repository it was made in; what a run
+    // writes outside every checkout it covers is not the claim's to decide,
+    // whatever state the issue is in.
+    //
+    // After the contract because *an unreadable control surface permits no
+    // write* is written without an exception, and standing aside is a permission
+    // like any other. It sat above that refusal for one published head, which
+    // meant that with no `SKILL.md` installed the agent instruction files —
+    // outside every checkout by construction, and carrying the directive that
+    // says this harness holds the authority at all — were writable with nothing
+    // consulted. Both reviewers of that head raised the ordering; one measured
+    // that moving it down costs no test, so it moved rather than being written
+    // up as a limit.
+    //
+    // `Routine` only. A `Boundary` write is watched *because* of where it lands
+    // — the control surface sits outside the repository by nature — so placing
+    // it outside must never be what waves it through.
+    if how == Sensitivity::Routine && writes_outside_the_claim(run, action) {
+        return Decision::Outside(Aside::OutsideTheClaim);
     }
 
     // Asked in this process. This was the last call in the crate that spawned

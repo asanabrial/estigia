@@ -2776,11 +2776,15 @@ fn a_write_outside_every_covered_checkout_is_outside_the_claim() {
 ///
 /// This is the ordering the field report is about: the refusal that fired was
 /// the tracker's — *issue #164 is CLOSED* — so the fix is worth nothing unless
-/// the classification happens **before** the tracker is asked. Asserted by
-/// which answer comes back: without the classification this fixture gets as
-/// far as `control-surface-not-installed`, a deny raised after the point a
-/// write is measured against the claim. An `Outside` is proof the decision was
-/// taken before any of that.
+/// the classification happens **before** the tracker is asked.
+///
+/// The contract is installed here, and that is the half of the ordering this
+/// fixture got wrong first time round. It was passing on a sandbox with no
+/// `SKILL.md` in it, which made the answer proof of something weaker than it
+/// looked: the classification only had to outrank `control-surface-not-installed`,
+/// and it did, which is precisely the ordering that had to be given up. With a
+/// readable contract the `Outside` can only have come from a decision taken
+/// before the tracker, which is what the issue is about.
 ///
 /// The run's state says `done`, which is the shape a run has after the delivery
 /// that closed its issue — the exact moment the evidence still has to be
@@ -2789,6 +2793,12 @@ fn a_write_outside_every_covered_checkout_is_outside_the_claim() {
 fn a_closed_issue_does_not_refuse_a_scratch_note() {
     let root = tempfile::tempdir().expect("a root");
     let context = context(root.path());
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
     let mut run = sworn(164, &context.repo_dir);
     run.state = Some("done".to_owned());
     let scratch = root.path().join("scratch").join("close-note.md");
@@ -3005,6 +3015,104 @@ fn a_link_pointing_into_the_checkout_is_gated() {
     assert!(
         planted.is_file(),
         "the fixture does not reproduce the link it is about"
+    );
+}
+
+/// An unreadable control surface permits no write, including one to stand aside.
+///
+/// The contract's rule is written without an exception, and standing aside is a
+/// permission like any other. For one published head this classification was
+/// asked first, so with no `SKILL.md` installed a routine write outside every
+/// checkout went through with nothing consulted at all — and the files that are
+/// outside every checkout by construction are the agent instruction files that
+/// carry the directive naming this harness as the authority.
+///
+/// This is the fixture the move needed: put the classification back above the
+/// contract refusal and this goes red, which is what stops the ordering
+/// drifting back the way it came.
+#[test]
+fn an_unreadable_control_surface_refuses_even_a_write_outside_the_claim() {
+    let root = tempfile::tempdir().expect("a root");
+    let mut context = context(root.path());
+    // Nothing installed: not the contract, not the directory holding it.
+    context.skill_root = root.path().join("never-installed");
+    let mut run = sworn(166, &context.repo_dir);
+    run.state = Some("done".to_owned());
+    let outside = root.path().join("elsewhere").join("note.md");
+
+    let decision = decide(
+        &context,
+        &mut run,
+        &Action::Write {
+            target: outside.display().to_string(),
+        },
+        Sensitivity::Routine,
+    );
+    let Decision::Deny(refusal) = &decision else {
+        panic!("a write was permitted while the control surface was unreadable: {decision:?}");
+    };
+    assert_eq!(
+        refusal.code, "control-surface-not-installed",
+        "the refusal was not the contract's: {decision:?}"
+    );
+}
+
+/// A second name for the same drive does not take a write out of the gate.
+///
+/// Windows serves every local drive as an administrative share, so
+/// `\\localhost\C$\Users\...` is the very same file as `C:\Users\...` with no
+/// link anywhere in it. A judge measured what that costs: the classification
+/// answered *outside* and `std::fs::write` on that spelling created the file
+/// **inside** the claimed checkout — a gate that no longer decides, reachable
+/// on the operator's own repository as `\\localhost\H$\REPO\estigia`.
+///
+/// The cause is not the share, it is the vocabulary. `canonicalize` hands back
+/// `\\?\UNC\localhost\C$\...` for the target while the covered checkout places
+/// to `C:\...`, so one file is compared under two spellings and neither is a
+/// prefix of the other. Resolving a share back to the drive it serves is not
+/// something this process can do without asking the machine what it shares, so
+/// `placed` declines the path instead — and declining reads as *inside*, which
+/// is the direction that keeps the gate on.
+#[test]
+#[cfg(windows)]
+fn a_drive_reached_through_its_administrative_share_is_still_inside() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("a checkout");
+
+    let planted = repo.join("src").join("planted.rs");
+    std::fs::write(&planted, "kept\n").expect("a file inside the checkout");
+    let full = planted.canonicalize().expect("the planted file resolves");
+    let spelled = crate::paths::remove_windows_verbatim_prefix(full)
+        .display()
+        .to_string();
+    let Some((drive, rest)) = spelled.split_once(':') else {
+        eprintln!("skipped: the temporary directory has no drive letter");
+        return;
+    };
+    let share = format!(r"\\localhost\{drive}${rest}");
+
+    // The share has to really be the same file, or this test is about nothing.
+    if std::fs::write(&share, "through the share\n").is_err() {
+        eprintln!("skipped: this machine does not serve its drives as admin shares");
+        return;
+    }
+    assert_eq!(
+        std::fs::read_to_string(&planted).expect("the planted file is readable"),
+        "through the share\n",
+        "the fixture does not reproduce the share it is about"
+    );
+
+    let run = sworn(165, &repo);
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: share.clone()
+            }
+        ),
+        "a write spelled through the administrative share was taken out of the \
+         gate, and it lands inside the claimed checkout: {share}"
     );
 }
 
