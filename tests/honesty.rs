@@ -121,8 +121,16 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
     // Whole words, because "ten" sits inside "written" and "one" inside "none".
     // The old reading took the last *substring* hit, which happened to be right
     // while the words were short and would have quietly stopped being right.
+    //
+    // The hyphen is part of a word here, and that is the whole of what makes
+    // this able to count past twenty. Splitting on it turns `twenty-one` into
+    // `twenty` and `one`, and the reader takes the **last** number it sees — so
+    // a README saying twenty-one reported **1**, and the count guard failed
+    // naming a number nobody had written. A reading that is wrong by twenty is
+    // worse than one that gives up, because the message it produces sends the
+    // reader to the wrong file.
     let words: Vec<&str> = window
-        .split(|character: char| !character.is_ascii_alphabetic())
+        .split(|character: char| !(character.is_ascii_alphabetic() || character == '-'))
         .filter(|word| !word.is_empty())
         .collect();
     [
@@ -153,6 +161,14 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
         ("eighteen", 18),
         ("nineteen", 19),
         ("twenty", 20),
+        // Hyphenated, because the words are split on whitespace and `twenty-one`
+        // arrives as one of them: an entry for `twenty` does not answer for it,
+        // and the reader would report *no number there* for a sentence carrying
+        // one. Two past the current count rather than one, which is the same
+        // ceiling the note above describes arriving on the day somebody adds a
+        // thirteenth check.
+        ("twenty-one", 21),
+        ("twenty-two", 22),
     ]
     .iter()
     .filter_map(|(name, value)| {
@@ -489,6 +505,7 @@ fn every_tool_the_readme_lists_is_one_this_server_exposes() {
                 17 => "Seventeen",
                 18 => "Eighteen",
                 20 => "Twenty",
+                21 => "Twenty-one",
                 other => panic!("{other} tools, and this test has no word for that"),
             }
         )),
@@ -808,12 +825,17 @@ fn the_documents_count_what_the_crate_actually_has() {
 }
 
 /// One function's body, from its signature to the next item at column zero.
+///
+/// Public **or** private. It read only `pub fn` while every body it was asked
+/// for was an entry point; a body shared by two entry points is not one, and
+/// panicking `publish_with is not in that file` would have read as the function
+/// having been deleted rather than as this helper not looking for it.
 fn body_of(source: &str, name: &str) -> String {
-    let signature = format!("pub fn {name}(");
-    let start = source
-        .find(&signature)
+    let start = [format!("pub fn {name}("), format!("\nfn {name}(")]
+        .iter()
+        .find_map(|signature| source.find(signature).map(|at| at + signature.len()))
         .unwrap_or_else(|| panic!("{name} is not in that file"));
-    let rest = &source[start + signature.len()..];
+    let rest = &source[start..];
     let end = rest
         .match_indices("\npub fn ")
         .chain(rest.match_indices("\nfn "))
@@ -1172,7 +1194,29 @@ const ADJUDICATED_BY_THE_BINDING: &[&str] = &[
     "heartbeat",
     "start_branch",
     "publish_review",
+    // Not measured off `github.py`, which never had it: the retired binding had
+    // no republish at all, which is the defect the operation was added to close.
+    // It is in the population because it is a boundary that adjudicates, and the
+    // sentence above says a boundary added to the port has to be added here by
+    // the review that adds one.
+    "republish_review",
     "release_ci",
+];
+
+/// Entry points whose adjudication lives in a body they share.
+///
+/// `publish_review` and `republish_review` differ in the push and in nothing
+/// else, so the verification either performs is written **once**, in the body
+/// they both call. Following one named hop keeps the check measuring what it
+/// measured before the split: take `verify_claim` out of `publish_with` and both
+/// entries go red together.
+///
+/// A pair of names rather than a delegation-follower. Parsing which function a
+/// body forwards to is a second parser to keep honest, for a table that is two
+/// lines long and whose growth is a review's problem either way.
+const ADJUDICATED_THROUGH: &[(&str, &str)] = &[
+    ("publish_review", "publish_with"),
+    ("republish_review", "publish_with"),
 ];
 
 #[test]
@@ -1222,9 +1266,16 @@ fn every_boundary_the_binding_adjudicates_is_one_the_port_adjudicates_too() {
         } else {
             &claim
         };
-        let body = body_of(source, name);
+        let adjudicates = ADJUDICATED_THROUGH
+            .iter()
+            .find(|(entry, _)| entry == name)
+            .map_or_else(
+                || body_of(source, name),
+                |(_, shared)| body_of(source, shared),
+            )
+            .contains("verify_claim(");
         assert!(
-            body.contains("verify_claim("),
+            adjudicates,
             "`cmd_{name}` adjudicates the claim and `{name}` does not \u{2014} and the \
              differential oracle does not run that subcommand, so nothing else would say so"
         );

@@ -1533,10 +1533,108 @@ pub struct Publication<'a> {
     pub now: &'a str,
 }
 
+/// How the branch reaches the remote.
+///
+/// The **only** difference between `publish-review` and `republish-review`, and
+/// it is an enum rather than a boolean argument for the reason the second entry
+/// point exists at all: a run cannot arrive at the destroying push by leaving a
+/// flag at its default, mistyping one, or copying a call from a neighbouring
+/// site. `publish_review` constructs [`Push::FastForward`] and has no way to
+/// name the other variant.
+#[derive(Debug, Clone, Copy)]
+enum Push<'a> {
+    /// The ordinary publication. The remote refuses anything that is not a
+    /// fast-forward, and that refusal is the whole safety of this path.
+    FastForward,
+    /// The republication of a branch whose history was rewritten — a rebase
+    /// onto a base that moved, or an amended commit.
+    ///
+    /// `recorded_head` is the head the **latest `published` marker on this
+    /// issue's timeline** carries, and the lease is taken against exactly that.
+    /// Not the bare `--force-with-lease`, whose implicit expectation is the
+    /// remote-tracking ref: any fetch — including the one this operation itself
+    /// runs against the base — can refresh that ref, and a lease against a
+    /// value the run has only just learned protects nothing. The recorded head
+    /// is a value a human reviewed and a receipt bound, which is the only
+    /// expectation worth leasing against.
+    Leased { recorded_head: &'a str },
+}
+
 /// See [`Publication`].
+///
+/// This is the fast-forward entry point, and the last of the issue's acceptance
+/// criteria is that it stay one: it never force-pushes, under any argument.
+/// [`republish_review`] is the other one.
 pub fn publish_review(
     context: &Context,
     what: &Publication<'_>,
+) -> Result<serde_json::Value, Failure> {
+    publish_with(context, what, Push::FastForward)
+}
+
+/// `republish-review` — publish a rewritten branch over its own last publication.
+///
+/// The operation this crate did not have, and the gap was not cosmetic: after a
+/// rebase or an amend the ordinary push is refused as a non-fast-forward, so the
+/// sequence a run actually performed was *leave Estigia, `git push
+/// --force-with-lease` by hand, come back*. The single most destructive git
+/// operation was the one step of the delivery path with no claim verification,
+/// no timeline re-read and no record — and a run that had lost its claim in the
+/// meantime could still force-push, because nothing asked.
+///
+/// What it adds over [`publish_review`] is the lease and one more renewal. What
+/// it deliberately does not add is a plain `--force`: without a lease this is a
+/// write that cannot be refused, and an operation that cannot be refused is not
+/// a gate.
+pub fn republish_review(
+    context: &Context,
+    what: &Publication<'_>,
+) -> Result<serde_json::Value, Failure> {
+    let issue = super::gh_json(
+        &[
+            "issue",
+            "view",
+            &what.issue.to_string(),
+            "--json",
+            "comments",
+        ],
+        Some(&context.repo_dir),
+    )?
+    .ok_or_else(|| Failure::Read(format!("gh issue view {} returned nothing", what.issue)))?;
+    // No recorded publication is not *nothing to protect*, it is a caller in the
+    // wrong operation. A first publication is `publish-review`, whose refusal on
+    // a non-fast-forward is meaningful; forcing over a branch this issue never
+    // published means overwriting somebody else's work with no expectation to
+    // check it against, which is the plain `--force` this issue rules out
+    // wearing a different name.
+    let Some(latest) = latest_publication(&comments_of(&issue)) else {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "published-receipt-missing",
+            "issue": what.issue,
+            "action": "there is no recorded publication on this issue to lease against \u{2014} \
+                       publish-review makes the first one, and its refusal on a non-fast-forward \
+                       is the check that would be skipped here",
+        })));
+    };
+    // Whose publication it was is not asked, and that is deliberate rather than
+    // overlooked. Authority here is the live claim, which `publish_with` verifies
+    // twice; a run that reclaimed an abandoned issue is entitled to republish the
+    // head the previous holder left, and requiring self-attribution would strand
+    // exactly the reclaim the workflow provides for.
+    publish_with(
+        context,
+        what,
+        Push::Leased {
+            recorded_head: &latest.receipt.head,
+        },
+    )
+}
+
+fn publish_with(
+    context: &Context,
+    what: &Publication<'_>,
+    push: Push<'_>,
 ) -> Result<serde_json::Value, Failure> {
     let Publication {
         issue,
@@ -1636,13 +1734,21 @@ pub fn publish_review(
         })));
     }
 
-    super::run(
-        &["git", "push", "-u", "origin", "--", branch],
-        Some(at),
-        super::How::write(),
-    )?;
+    if matches!(push, Push::Leased { .. }) {
+        // The renewal the issue asks for, *immediately* before the push and not
+        // merely somewhere above it. The verification at the top of this body is
+        // separated from here by a fetch, a target derivation, a keyword scan
+        // over every commit the branch adds, a pull request listing and — on the
+        // reused path — a `gh pr ready --undo` and a body edit. Every one of
+        // those is a network round trip, and a claim can be reclaimed across any
+        // of them. For the fast-forward push that gap costs a refused push; for
+        // this one it costs history, which is why only this route pays for the
+        // second read.
+        verify_claim(context, issue, run_id, expect_state, now, None)?;
+    }
+    push_to_origin(at, branch, push)?;
 
-    published(
+    let answer = published(
         context,
         issue,
         run_id,
@@ -1663,7 +1769,64 @@ pub fn publish_review(
             )),
             other => other,
         }
+    });
+    // Which route ran, in the answer, because the two are not interchangeable to
+    // whoever reads it back: a leased push moved bytes the remote already had,
+    // and an incident review that cannot tell the two apart from the record has
+    // to reconstruct it from the shell history nobody kept.
+    let Push::Leased { recorded_head } = push else {
+        return answer;
+    };
+    answer.map(|mut answer| {
+        if let Some(answer) = answer.as_object_mut() {
+            answer.insert("republished".to_owned(), serde_json::json!(true));
+            answer.insert(
+                "leased_against".to_owned(),
+                serde_json::json!(recorded_head),
+            );
+        }
+        answer
     })
+}
+
+/// The `--force-with-lease` argument, spelled once.
+///
+/// Its own function because the spelling is the safety. `--force-with-lease`
+/// **with no value** leases against the remote-tracking ref, which this very
+/// operation refreshes when it fetches the base, and `--force-with-lease=<ref>`
+/// with no `:<expect>` does the same for that one ref. Only the three-part form
+/// names the commit the remote must currently be at, and only that form refuses
+/// when somebody else pushed. A future edit that drops the `:{expected}` half
+/// would still compile, still push, and still look like a lease.
+fn lease_for(branch: &str, expected: &str) -> String {
+    format!("--force-with-lease={branch}:{expected}")
+}
+
+/// The push, and the only place either route reaches the remote.
+///
+/// Separated from [`publish_with`] so a test can drive both routes against a
+/// real bare repository. What that buys is the acceptance criterion nothing else
+/// could check: *a test proves the lease refuses when the remote has moved
+/// since*. Asserting the argument string would only prove this crate can format
+/// one — git decides whether a lease refuses, and a lease git silently accepts
+/// as a plain force would pass every assertion made about the text.
+fn push_to_origin(at: &std::path::Path, branch: &str, push: Push<'_>) -> Result<(), Failure> {
+    match push {
+        Push::FastForward => super::run(
+            &["git", "push", "-u", "origin", "--", branch],
+            Some(at),
+            super::How::write(),
+        ),
+        Push::Leased { recorded_head } => {
+            let lease = lease_for(branch, recorded_head);
+            super::run(
+                &["git", "push", &lease, "-u", "origin", "--", branch],
+                Some(at),
+                super::How::write(),
+            )
+        }
+    }
+    .map(|_| ())
 }
 
 fn open_prs(context: &Context, branch: &str) -> Result<Vec<serde_json::Value>, Failure> {

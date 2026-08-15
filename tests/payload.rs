@@ -54,8 +54,8 @@ fn no_test_material_is_installed_beside_the_contract() {
 
 #[test]
 fn the_changelog_is_readable_by_the_tool_estigia_ships() {
-    // A closed loop worth keeping closed: `changelog_notes` is one of the
-    // eighteen tools Estigia exposes, and this repository has a changelog it
+    // A closed loop worth keeping closed: `changelog_notes` is one of the tools
+    // Estigia exposes, and this repository has a changelog it
     // will one day be asked to read. It fails closed on a missing or empty
     // entry, because a tag is immutable and notes invented at tag time are
     // permanent — so a format drift here is a release that cannot be cut.

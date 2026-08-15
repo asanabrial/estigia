@@ -554,6 +554,35 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "republish_review",
+        contract_name: "republish_review",
+        description: "Republish a branch whose history was rewritten \u{2014} rebased onto a moved \
+                      base, or amended. Leases against the head the last publication recorded and \
+                      refuses when the remote moved since. Use publish_review for every ordinary \
+                      publication; this one destroys remote history.",
+        operation: "republish-review",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::required("branch", "string", "The branch to republish."),
+            Argument::required("base", "string", "The base branch."),
+            Argument::required("pr_title", "string", "The pull request title."),
+            Argument::required("pr_body_file", "string", "Path to the pull request body."),
+            Argument::optional("worktree", "string", "The isolated checkout."),
+            Argument::optional(
+                "expect_state",
+                "string",
+                concat!(
+                    "The state this run believes the issue is in. Defaults to in-progress; a ",
+                    "republish after a review sent work back is made from review."
+                ),
+            )
+            .of(crate::config::STATES),
+        ],
+        effect: PointerEffect::Published,
+        writes: true,
+    },
+    Tool {
         name: "release_ci",
         contract_name: "release_ci",
         description: "Release one exact reviewed draft target to CI. Re-verifies the live review claim, globally latest publication receipt, current draft PR identity, and coherent clean target before marking ready, then confirms every outcome by readback.",

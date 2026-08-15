@@ -1076,6 +1076,20 @@ suite. Everything else here is prose held by review.
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
   What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still
   `verify-claim --issue --run-id --expect-state`; the head comparison is local, against the checkout.
+- **A `republish_review` the lease refuses has already edited the pull request.** The lease is taken
+  against the head the latest `published` marker recorded, and git evaluates it at the push — which
+  is after the reused pull request has been converted back to draft and its title and body replaced.
+  So a remote somebody else moved leaves the branch untouched, which is what the operation is for,
+  and leaves the pull request drafted and re-described by a call that answers *refused*. This is the
+  same shape a refused `publish_review` has, and it is written down here rather than there because it
+  is the difference between an accident and a designed outcome: the lease refusing is the case that
+  operation exists to produce, so it is the one that will actually be met. The refusal names the
+  push, so the pull request's state is the thing a reader has to check for themselves.
+  What the lease does **not** prove is that the rewritten history still contains the reviewed change.
+  It compares one commit id to another; a rebase that dropped a hunk leases exactly as cleanly as one
+  that did not. Every republish creates a new epoch and invalidates the prior review evidence for
+  that reason, and the answer to *is this still the change that was approved* is a fresh verdict
+  against the new receipt, never the lease.
 - **This section is checked against the code.** `tests/honesty.rs` crosses the *countable* claims
   here — how many agents are gated, how many things `doctor` looks at, which mechanisms the code
   still uses — against the thing they describe, and fails when they drift. The claims about *kind*
