@@ -1322,6 +1322,12 @@ pub fn gate(context: &GateContext, run: &mut Run, action: &Action, how: Sensitiv
 ///   shell write cannot be placed, and one that cannot be placed stays gated.
 /// - a run covering nothing has no claim to be outside of.
 ///
+/// And one limit no amount of placing reaches: a **hard link**, or a bind mount,
+/// has no path to resolve to, so an alias outside the checkout pointing at a
+/// file inside it classifies outside and the write lands inside. Both measured.
+/// `is_control_surface` declares the same boundary for its own matcher and this
+/// inherits it; `docs/honesty.md` carries the measurements.
+///
 /// The caller adds the last condition, which cannot be seen from here: only a
 /// `Routine` write. The control surface lives outside the repository by nature,
 /// and watching it is the whole defence against an agent switching the gate off

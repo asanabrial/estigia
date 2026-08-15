@@ -175,7 +175,7 @@ fn every_gated_spelling_has_a_command_line_written_out() {
 /// also the one built out of a `Debug` rendering — which is not an interface:
 /// rename the variant and a caller reads something else with nothing said.
 ///
-/// Crossed over the four, because a code is only useful if it is stable, whole
+/// Crossed over the five, because a code is only useful if it is stable, whole
 /// and distinct: kebab-case like every refusal code, one per reason, and none
 /// of them the Rust spelling.
 #[test]
@@ -3172,4 +3172,91 @@ fn a_covered_checkout_that_cannot_be_placed_still_covers() {
         ),
         "a run whose covered checkout cannot be placed had a write waved through"
     );
+}
+
+/// And the same parent segment on Windows, which resolves it the other way.
+///
+/// The `cfg!(unix)` split is load-bearing on **both** sides and only one had a
+/// fixture: flipping it to `true` left the entire Windows suite green, while a
+/// junction plus `..` then placed the write outside a checkout it lands in.
+/// Windows collapses `..` before touching the filesystem, so the spelling *is*
+/// the landing here — and asserting POSIX's answer on this platform removes the
+/// gate exactly as asserting Windows' answer removed it there.
+#[cfg(windows)]
+#[test]
+fn a_parent_segment_after_a_link_is_resolved_the_way_windows_resolves_it() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("a checkout");
+    let outside = root.path().join("outside");
+    std::fs::create_dir_all(&outside).expect("a directory that is not the checkout");
+
+    // The link lives **inside** the checkout and points out of it. Windows pops
+    // the `..` lexically, so the write lands back inside; POSIX would follow the
+    // link first and land outside.
+    let link = repo.join("link");
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(&link)
+        .arg(&outside)
+        .output()
+        .is_ok_and(|out| out.status.success());
+    if !made {
+        eprintln!("skipped: this platform would not create a directory link");
+        return;
+    }
+
+    let run = sworn(164, &repo);
+    let spelled = link.join("..").join("planted.rs");
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: spelled.display().to_string()
+            }
+        ),
+        "a write that lands in the claimed checkout was taken out of the gate by `..` after a link"
+    );
+
+    std::fs::write(&spelled, "planted\n").expect("the spelling really does write there");
+    assert!(
+        repo.join("planted.rs").is_file(),
+        "the fixture does not reproduce the resolution order it is about"
+    );
+}
+
+/// `gh`'s hosts file is a boundary write on both spellings and both roads.
+///
+/// It is the one path issue 2 asked to be **named** rather than left in a
+/// class, because it decides which account every tracker call acts as. Nothing
+/// held it: deleting both entries from `CONTROL_SURFACE` left every suite green,
+/// and only the population fingerprint moved — which fires on any byte in the
+/// list and measures no behaviour.
+///
+/// Both roads, because the first attempt covered only one. `surface_of` splits a
+/// command on whitespace and appends `/` to each token, so a fragment carrying a
+/// space could never fire through the shell: the Windows spelling answered
+/// `Boundary` to the write tool and `Routine` to `rm`, which is the road an
+/// agent would actually take.
+#[test]
+fn the_hosts_file_that_names_the_account_is_a_boundary_on_both_roads() {
+    for path in [
+        "/home/somebody/.config/gh/hosts.yml",
+        r"C:\Users\somebody\AppData\Roaming\GitHub CLI\hosts.yml",
+    ] {
+        let (_, write) = classify("Write", &json!({ "file_path": path }));
+        assert_eq!(
+            write,
+            Sensitivity::Boundary,
+            "{path} is not measured when written through the write tool"
+        );
+        for verb in ["rm", "mv"] {
+            let (_, shell) = classify("Bash", &json!({ "command": format!("{verb} \"{path}\"") }));
+            assert_eq!(
+                shell,
+                Sensitivity::Boundary,
+                "{path} is not measured when reached through `{verb}`"
+            );
+        }
+    }
 }

@@ -167,13 +167,21 @@ suite. Everything else here is prose held by review.
   `~/.qwen/QWEN.md`, `~/.cursor/estigia-workflow-authority.md`, `~/.continue/rules/estigia.md`,
   `~/.cline/rules/estigia.md`, `~/.codeium/windsurf/memories/global_rules.md`,
   `~/.config/crush/CRUSH.md`, `%APPDATA%/gemini/GEMINI.md`, `~/.claude/settings.local.json`,
-  `~/.claude/agents/` and `~/.config/gh/hosts.yml` all answer `Routine` — and each of them is outside
-  every checkout by construction. `gh`'s hosts file decides which account every tracker call acts as;
-  the instruction files carry the workflow-authority directive `setup` writes.
+  `~/.claude/agents/` all answer `Routine` — and each of them is outside every checkout by
+  construction. They carry the workflow-authority directive `setup` writes, which is the sentence
+  telling an agent this harness holds the authority at all.
 
-  The hole predates this: those paths were never `Boundary`, so before this change they were measured
-  against the claim and allowed under a valid one. What is newly lost is the refusal when the claim is
-  *not* valid. The population test that keeps the list honest
+  `gh`'s hosts file was on that list until this change and is not any more. It decides which
+  account every tracker call acts as, so it was named in `CONTROL_SURFACE` instead of left here —
+  which is what the issue asked for: *if one can reach tracker state, it is that path that needs
+  naming rather than the whole class*. Both spellings, and through the shell as well as the write
+  tool, which the first attempt got wrong by using a fragment with a space in it.
+
+  The hole predates this: the paths still listed were never `Boundary`, so before this change they
+  were measured against the claim and allowed under a valid one. What is newly lost is the refusal
+  when the claim is *not* valid, and when no contract is installed at all: the new answer returns
+  before the `control-surface-not-installed` refusal, so *an unreadable control surface permits no
+  write* stops applying to a path outside every checkout. The population test that keeps the list
   (`every_control_file_an_adapter_has_is_one_the_gate_measures`) walks each adapter's skill root,
   hooks, plugin and MCP config, and never `paths.instructions`, which is why nothing said so. Closing
   it means extending `CONTROL_SURFACE` and that test together, which is its own change with its own
@@ -183,8 +191,18 @@ suite. Everything else here is prose held by review.
   file inside it. Measured — `mklink /H <outside>/alias.rs <repo>/src/kept.rs`, classified
   outside, and writing through the alias rewrote the file in the checkout; `ln` does the same on
   POSIX. A hard link has no path to resolve to, so no amount of placing finds it.
-  `is_control_surface` declares that same limit for its own matcher; `writes_outside_the_claim`
-  inherits it, and now says so.
+  `is_control_surface` declares that same limit for its own matcher, and `writes_outside_the_claim`'s
+  own doc comment now carries it too. A Linux `mount --bind` is the same shape and equally out of
+  reach. Two more that path resolution cannot answer: the classification is taken before the write,
+  so a link created in between is not seen, and a write tool that creates missing parents can make a
+  directory inside the checkout on the way to a target that is honestly outside it.
+
+  `gh`'s hosts file is named at its default location only. `GH_CONFIG_DIR` and `XDG_CONFIG_HOME` move
+  it, and those spellings answer `Routine` — measured at `/home/me/xdg/gh/hosts.yml` and at a
+  `gh-config` directory under a Windows profile. Narrowing the entry from the directory to the file
+  also left `config.yml` `Routine`, which is deliberate: it holds the default host and protocol, not
+  the credential that decides which account acts.
+
 
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
