@@ -2866,11 +2866,10 @@ fn a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled() {
     // tidiness. Windows collapses `..` in the spelling before the filesystem is
     // consulted, so the write lands whether or not the directory is there;
     // POSIX resolves each segment, and `decoy/..` on a directory that does not
-    // exist is `ENOENT`. Without this line the fixture was green on Windows for
-    // every published head of this branch until CI first saw it, and red on both
-    // POSIX lanes the moment it did. `docs/honesty.md` carries how many heads
-    // that was and what it cost; the number lives there and not here, because it
-    // is one fact and this comment already disagreed with it once.
+    // exist is `ENOENT`. Without it this fixture is green here and red on both
+    // POSIX lanes, which is what it did. `docs/honesty.md` carries the history —
+    // how long that lasted and what it cost — and this comment does not repeat
+    // any of it, having twice now got the count wrong in the retelling.
     std::fs::create_dir_all(root.path().join("decoy")).expect("a directory to climb out of");
     let sideways = root
         .path()
