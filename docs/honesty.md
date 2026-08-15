@@ -273,7 +273,8 @@ suite. Everything else here is prose held by review.
   `tests/pipe.rs`, which is where this change's end-to-end evidence lives, has never executed on
   POSIX on this branch.
 
-  One more path of the same shape, found by a reviewer of this change and not closed here:
+  One more control-surface path of the hosts file's shape, found by a reviewer of this change and
+  not closed here:
   `<checkout>/.git/config`, which answers `Routine` while `<checkout>/.git/hooks/pre-push` answers
   `Boundary`. `core.hooksPath` in that file decides whether the push guard runs at all. In the
   ordinary shape it is harmless because `covered()` yields both `repo_dir` and the worktree, so the
