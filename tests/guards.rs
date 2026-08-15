@@ -571,14 +571,32 @@ const AFFIRMED: &[(&str, u64)] = &[
     //   directory name gating `node_modules/opencode/**` and any checkout named
     //   that. Both ends were wrong. Found by reviewers, not by the crossing —
     //   which walks two XDG layouts now, so it would be.
-    // - Four trailing slashes gone (`.estigia`, `skills/issue-flow`, the derived
-    //   skill tree, `.claude/agents`), because `surface_of` appends a separator
-    //   and they gated `rm <dir>` while leaving a write to the bare directory
-    //   `Routine`.
+    // - Four trailing slashes gone. Three shipped with one — `.estigia/`,
+    //   `skills/issue-flow/` and the derived skill tree — and the fourth,
+    //   `.config/opencode/`, lost its along with its prefix. `.claude/agents`
+    //   carried one for a single unshipped head. `surface_of` appends a
+    //   separator, so each gated `rm <dir>` and left a write to the bare
+    //   directory `Routine`.
     // - The four rules **directories**. Gating Estigia's filename inside a
     //   directory the host reads whole is defeated by a neighbour, and the
     //   restated population clause is exactly what a neighbour changes.
-    ("control-surface", 8512866001911076261),
+    // Re-affirmed once more, and the reason is the entry's own shape rather than
+    // its members: a fragment ending in `/` now names a **directory**, matched by
+    // what is under it or by itself and never by a name that only starts alike.
+    // Both earlier spellings were wrong in opposite directions — with the slash
+    // the bare directory was `Routine` on the write road while `rm <dir>` was
+    // `Boundary`; without it, `.estigiaignore` and `skills/flow.md` became
+    // `Boundary`. The boundary sentence above says what a false positive costs and
+    // now says what that is in seconds, because the population reaches a project's
+    // own files and the old one-line account of the trade was written when it did
+    // not.
+    //
+    // `.config/opencode/` is back beside the tails that cover the relocated root.
+    // Replacing it with them alone was a **loosening** — nine paths under it that
+    // Estigia does not write lost their boundary — which is an existing entry's
+    // sensitivity changing, and it was recorded as an over-gating fix until a
+    // reviewer measured it.
+    ("control-surface", 6738328471156835869),
     // Reopened 2026-08-05 by measuring the enumeration instead of reading it.
     // Thirty command lines that visibly put bytes on disk were classified and
     // twenty-six came back Untouched, among them "wget -O src/main.rs URL" —

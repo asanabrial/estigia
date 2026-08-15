@@ -412,9 +412,16 @@ impl AgentAdapter {
     /// directory alone would be too wide.
     pub fn instruction_fragment(&self) -> &'static str {
         match self.instructions {
-            InstructionFile::Neutral => ".agents/agents.md",
-            InstructionFile::ClaudeCode => ".claude/claude.md",
-            InstructionFile::Codex => ".codex/agents.md",
+            // Without the extension, the same trimming `.claude/settings` needed
+            // and for the same reason: `contains` never reaches a `.local.`
+            // sibling. `~/.claude/CLAUDE.local.md` and `~/.codex/AGENTS.local.md`
+            // are read with the same authority as the files beside them and
+            // answered `Routine` — the identical shape this change fixed one entry
+            // over, applied to the entries it introduced only after a reviewer
+            // pointed at them.
+            InstructionFile::Neutral => ".agents/agents",
+            InstructionFile::ClaudeCode => ".claude/claude",
+            InstructionFile::Codex => ".codex/agents",
             InstructionFile::OpenCode => "opencode/agents.md",
             // `%APPDATA%/gemini/` on Windows and `~/.gemini/` elsewhere; the
             // last two components are the same on both.

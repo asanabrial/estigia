@@ -306,6 +306,16 @@ pub(crate) const SHELL_TOOLS: &[&str] = &["bash", "run_shell_command", "shell", 
 /// matches, which is a false positive costing one tracker read, and that is the
 /// direction this chooses on purpose.
 ///
+/// What one tracker read costs is worth stating where the trade is made, because
+/// this sentence used to be the whole account of it and a reviewer measured the
+/// rest. A `Boundary` never rides the renewal window and never stands aside
+/// outside the claim, so it is a live `gh issue view` on **every** write — about
+/// 0.5 to 1.2 seconds, no caching — and with no network it is a refusal rather
+/// than a delay. The population grew in issue 26 to cover a project's own
+/// `.claude/agents/` and rules directories, so that cost now lands on ordinary
+/// per-project files and not only on an operator's home. `docs/honesty.md`
+/// carries the measurements; this is here so the trade is not read as free.
+///
 /// `gh`'s hosts file joined the population on 2026-08-15, in both spellings and
 /// the file rather than the directory around it. It is not Estigia's
 /// file and no Estigia decision is read from it, so it sits at the edge of the
@@ -348,7 +358,9 @@ const CONTROL_SURFACE: &[&str] = &[
     // whole class."* This one can — rewriting it changes which account answers
     // every `gh` call the transport makes — and standing aside outside the
     // repository is what would otherwise have let it through ungated. The wider
-    // gap, the instruction file each adapter's setup writes, is its own change.
+    // gap it pointed at — the instruction file each adapter's `setup` writes —
+    // was closed by issue 26, and those are derived below rather than listed
+    // here.
     ".config/gh/hosts.yml",
     // No space, deliberately. `surface_of` splits a command on whitespace and
     // appends `/` to every token, so a fragment containing one can never match
@@ -358,7 +370,7 @@ const CONTROL_SURFACE: &[&str] = &[
     // `github cli/hosts.yml` on both roads.
     "cli/hosts.yml",
     // Estigia's own state: run pointers, the stand-down record, the ledger.
-    ".estigia",
+    ".estigia/",
     // The tree the **previous** name installed into. The tree this build writes
     // is derived from `skill::DIRECTORY` in `is_control_surface` rather than
     // named here, so a rename cannot leave it unmeasured; this entry is the
@@ -366,7 +378,7 @@ const CONTROL_SURFACE: &[&str] = &[
     // still has that contract on disk until an upgrade moves it. Until then it
     // is a file an agent reads, and therefore one a run must not rewrite
     // unmeasured.
-    "skills/issue-flow",
+    "skills/issue-flow/",
     // The one boundary no agent can go around, when it is not going around it.
     "hooks/pre-push",
     // Where each adapter registers the gate, and where it registers the tools.
@@ -398,7 +410,7 @@ const CONTROL_SURFACE: &[&str] = &[
     // crossing found it the moment that root was added to what it walks — which
     // is the better argument for crossing a hand-spelled entry than any reasoning
     // about reachability.
-    ".claude/agents",
+    ".claude/agents/",
     // The rules **directories**, not only Estigia's own filename inside them.
     // Four adapters apply every file in one of these, and `paths_in`'s comments
     // say so where it resolves them — Continue applies any rule that is not
@@ -410,10 +422,10 @@ const CONTROL_SURFACE: &[&str] = &[
     // harness may enforce — without touching a `Boundary` path.
     //
     // No trailing slashes, for the split the entry above records.
-    ".cline/rules",
-    ".continue/rules",
-    "windsurf/memories",
-    ".cursor/rules",
+    ".cline/rules/",
+    ".continue/rules/",
+    "windsurf/memories/",
+    ".cursor/rules/",
     ".claude.json",
     ".codex/hooks.json",
     ".codex/config.toml",
@@ -428,8 +440,9 @@ const CONTROL_SURFACE: &[&str] = &[
     // no network. Both ends were wrong; the tail the installer actually writes is
     // neither. `opencode/agents` covers the instruction file and the definition
     // root that `harness::roles` enforces from.
-    "opencode/agents",
-    "opencode/plugins",
+    ".config/opencode/",
+    "opencode/agents/",
+    "opencode/plugins/",
     "opencode/opencode.json",
     // Both roots, because Gemini keeps its settings under `%APPDATA%` on Windows
     // and `~/.gemini` everywhere else, and only the POSIX spelling was here. The
@@ -543,7 +556,7 @@ fn is_control_surface(target: &str) -> bool {
     // `flow` and leaving this alone made the contract writable on a `Routine`
     // answer — the cheapest disarmament there is, through the tool an agent uses
     // most, and the suite stayed green. One place now holds the name.
-    let installed = format!("skills/{}", crate::skill::DIRECTORY);
+    let installed = format!("skills/{}/", crate::skill::DIRECTORY);
     // The instruction files, derived from the adapter table for the same reason
     // the skill tree is derived from `skill::DIRECTORY`: a hand-spelled copy
     // agrees with the installer only until somebody renames one. Each adapter
@@ -554,18 +567,36 @@ fn is_control_surface(target: &str) -> bool {
     // stops matching fails a test instead of quietly leaving a file open.
     //
     // Ten of the eleven were `Routine` until now — OpenCode's was already covered
-    // by the `opencode/` directory entry — and issue 2 is what made that matter: a
+    // by the `.config/opencode/` entry that stood here then — and issue 2 is what
+    // made that matter: a
     // write outside every checkout the claim covers stands aside without asking
     // the tracker, and every one of these is outside every checkout by
     // construction. So they went from *measured against the claim* to *not gated
     // at all*.
-    path.contains(&installed)
+    // A fragment ending in `/` names a **directory**, and a directory is matched
+    // by what is under it or by itself — never by a name that merely starts the
+    // same way.
+    //
+    // Both halves were wrong in turn, one round apart. With the slash, a write to
+    // the bare directory answered `Routine` while `rm <dir>` answered `Boundary`,
+    // because `surface_of` appends a separator: one road gated and the other not,
+    // on the state directory among others. Dropping the slash closed that and
+    // opened a prefix bleed instead — measured, `.estigiaignore`, `skills/flow.md`
+    // and `.claude/agentsmith.md` all became `Boundary`, which is a tracker read
+    // on ordinary files for nothing. Neither trade was necessary: the slash says
+    // what the entry means and the matcher can honour it.
+    let names = |fragment: &str| {
+        fragment.strip_suffix('/').map_or_else(
+            || path.contains(fragment),
+            |bare| path.contains(fragment) || path.ends_with(bare),
+        )
+    };
+
+    names(&installed)
         || crate::setup::AGENTS
             .iter()
-            .any(|adapter| path.contains(adapter.instruction_fragment()))
-        || CONTROL_SURFACE
-            .iter()
-            .any(|fragment| path.contains(*fragment))
+            .any(|adapter| names(adapter.instruction_fragment()))
+        || CONTROL_SURFACE.iter().any(|fragment| names(fragment))
 }
 
 /// The command line with every spelling of this binary reduced to `estigia`.

@@ -175,10 +175,19 @@ suite. Everything else here is prose held by review.
   somebody renames one, which this crate has already paid for once. The crossing that keeps them
   honest is `every_control_file_an_adapter_has_is_one_the_gate_measures`: it resolves the real path
   per adapter, on all three platforms, under two `XDG_CONFIG_HOME` layouts, and asks the gate on both
-  roads. Every one of those four dimensions was added because a reviewer found a hole behind it, and
-  the holes are the entry below.
+  roads. Every one of those four dimensions was added because a reviewer found a hole the crossing
+  could not see, and the holes are the entry below. Only the first of them was then found by the
+  crossing itself, once it had the dimension — the rest were measured by people, which is the
+  honest attribution and not the flattering one.
 
-  **What the crossing found once it stopped walking one of everything.**
+  And the crossing catches a stale fragment **only where nothing else already matches the path** —
+  four of the eleven now rather than one, because opencode, cline, continue and windsurf are each
+  covered independently by a directory entry, so staling their fragment leaves it green. All four are
+  still caught, by `the_spelled_instruction_files_and_the_adapter_table_agree`, which reads the
+  spelled list against the table. This caveat was true and got deleted along with the version of the
+  fix it described; a reviewer noticed it was gone and that it had grown.
+
+  **What the missing dimensions were hiding.**
   `%APPDATA%\gemini\settings.json` — where this harness registers Gemini's own deny hook — answered
   `Routine`, because only the POSIX spelling with its leading dot was listed. `opencode`'s plugin,
   that adapter's only deny mechanism, and `crush`'s settings answered `Routine` whenever
@@ -188,28 +197,57 @@ suite. Everything else here is prose held by review.
   that produced the `cli/hosts.yml` entry — would have arrived unnoticed. All closed here, each with
   a dimension of the crossing that now holds it.
 
-  **Gating a file in a directory the host reads whole is defeated by a neighbour.** Four adapters
-  apply *every* file in a rules directory; `paths_in`'s own comments say so where it resolves them.
-  Estigia's filename was gated and the directory was not, so `~/.cline/rules/zz-override.md` answered
-  `Routine` — and a sibling saying *Estigia is retired* changes what an agent is told this harness may
-  enforce without touching a `Boundary` path. The directories are named now.
+  **Gating a file in a directory the host reads whole is defeated by a neighbour.** `paths_in`'s own
+  comments say so for two of them: Continue applies any rule with no frontmatter, and Cline loads its
+  rules directory for every task. Estigia's filename was gated and the directory was not, so
+  `~/.cline/rules/zz-override.md` answered `Routine` — and a sibling saying *Estigia is retired*
+  changes what an agent is told this harness may enforce without touching a `Boundary` path.
+
+  Two more directories are named alongside them on a weaker basis, and it is worth being exact about
+  which: `windsurf/memories` and `.cursor/rules` are locations those hosts read, but `paths_in` says
+  nothing about them reading a directory whole — its Windsurf comment is about a six-thousand
+  character cap on one file — and Estigia writes nothing into `.cursor/rules` at all. They are in the
+  population because the restated rule covers them, not because this crate has verified the
+  read-whole behaviour. A first draft of this paragraph claimed all four were documented; a reviewer
+  read `paths_in` and found two.
 
   **The cost, which the population's own declaration understated.** That declaration says a false
   positive costs one tracker read "and that is the direction this chooses on purpose", illustrated by
   a one-character typo on a path already listed. Measured, the real figure is about **1.2 seconds per
   write** — a `Boundary` never rides the renewal window and never stands aside outside the claim, so
   it is a live `gh issue view` every time — and with no network it is a refusal rather than a delay.
-  A first attempt at the `XDG_CONFIG_HOME` fix dropped the prefix entirely, which left `opencode` as a
-  bare directory name matched anywhere: a reviewer measured `node_modules/opencode/**`,
-  `packages/opencode/**` and a checkout *named* `opencode` answering `Boundary` on every file in them.
-  The entries are anchored to what the installer writes instead — `opencode/agents`,
-  `opencode/plugins`, `opencode/opencode.json` — and those six shapes are `Routine` again.
+  Two attempts at the `XDG_CONFIG_HOME` fix were wrong in opposite directions before this one, and
+  both were found by reviewers rather than by a test. Dropping the `.config/` prefix left `opencode`
+  as a bare directory name matched anywhere: `node_modules/opencode/**`, `packages/opencode/**` and a
+  checkout *named* `opencode` answered `Boundary` on every file in them. Replacing the directory
+  entry with three tails then **loosened** it — nine paths under `~/.config/opencode/` that Estigia
+  does not write went `Boundary` to `Routine`, which is an existing entry's sensitivity changing and
+  was recorded here as an over-gating fix. The directory entry is back *beside* the tails, which
+  cover the relocated root it cannot.
 
-  What over-gating remains is narrower and recorded rather than argued: `crates/crush/crush.json`,
-  `docs/gemini/settings.json` and `tests/fixtures/gemini/settings.json` answer `Boundary`, because
-  two-component fragments still match anywhere. A repository with a directory called `gemini` or
-  `crush` holding a file of that name pays one tracker read per write to it. No file tracked in this
-  repository trips any fragment.
+  What that leaves, measured rather than claimed: `node_modules/opencode/index.js` and
+  `packages/opencode/src/main.ts` are `Routine` again, and `node_modules/opencode/agents/**`,
+  `node_modules/opencode/plugins/**` and `node_modules/opencode/opencode.json` are not — a vendored
+  copy of that agent with those exact subdirectories pays a tracker read per write. An earlier
+  sentence here said six shapes had come back, then three; the number was never the point and
+  neither figure was measured. This is the list.
+
+  What over-gating remains, measured rather than argued. A fragment ending in `/` names a directory
+  and the matcher honours that, so a name that merely starts alike — `.estigiaignore`,
+  `skills/flow.md`, `.claude/agentsmith.md`, `.cursor/rulesets.md` — stays `Routine`, and a fixture
+  holds that direction, which nothing did before: every other guard here asserts something *is*
+  `Boundary`, so over-gating was invisible to all of them.
+
+  What still over-matches is the fragments that name a file: `.claude/settings` reaches
+  `.claude/settingsmap.ts`, and `crates/crush/crush.json`, `docs/gemini/settings.json` and
+  `tests/fixtures/gemini/settings.json` answer `Boundary` because two-component fragments match
+  anywhere. Deliberate — `.claude/settings` is trimmed on purpose to reach `settings.local.json`.
+
+  And a per-project cost that is new and worth naming plainly: `<repo>/.claude/agents/*`,
+  `<repo>/.cursor/rules/*`, `<repo>/.cline/rules/*`, `<repo>/.continue/rules/*` and
+  `<repo>/.claude/settings.local.json` are `Boundary` now. A project that keeps its own agent
+  definitions or rules — this crate ships such files — pays a live tracker read on every write to
+  them. No file tracked in this repository trips any fragment today.
 
   Still `Routine`, and not closed here: a project's own `AGENTS.md` or `CLAUDE.md` at its root,
   `.cursorrules`, `.clinerules`, `.windsurfrules`, `.github/copilot-instructions.md` and `.mcp.json`.
@@ -217,7 +255,8 @@ suite. Everything else here is prose held by review.
   measured against the claim rather than standing aside — which is why they are a smaller thing than
   what this issue closed, not the same thing. `harness::roles::definition_for` reads its four
   definition roots from a hand-spelled list that nothing crosses against the gate; all four answer
-  `Boundary` today, and a fifth would not.
+  `Boundary` today, and a fifth would not. One of the four, `~/.claude/agents`, is crossed now — it
+  is `paths.agents_root` and the walk reaches it; the other three are held by reading.
 
   `gh`'s hosts file would have belonged on that list and is not on it. It decides which account
   every tracker call acts as, so it is named in `CONTROL_SURFACE` instead — which is what the issue
@@ -227,8 +266,8 @@ suite. Everything else here is prose held by review.
   "was on that list until this change", which was a claim about a previous shipped state that never
   existed — the whole entry is new. A reviewer checked it against `2477de0` and it was not there.)
 
-  The hole predates this: those paths were never `Boundary`, so before issue 2 they were measured
-  against the claim and allowed under a valid one. What was newly lost is the refusal when the claim
+  The hole predates this: the instruction files and the two `~/.claude` paths were never `Boundary`,
+  so before issue 2 they were measured against the claim and allowed under a valid one. What was newly lost is the refusal when the claim
   is *not* valid — which is what issue 26 closed for them, and this paragraph is kept because the
   ordering it goes on to describe is what makes any of it hold. It is no longer lost when no contract is installed **outside the
   renewal window**: the answer is given after the `control-surface-not-installed` refusal, and

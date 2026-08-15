@@ -426,3 +426,46 @@ fn a_shipped_planning_phase_cannot_write_to_the_repository() {
         "expected the five planning phases in the payload, found {checked}"
     );
 }
+
+/// A moved config home does not remove a sub-agent's allowlist.
+///
+/// The OpenCode root was spelled `~/.config/opencode/agents` by hand while
+/// `setup` resolved the same tree through `XDG_CONFIG_HOME`. With that variable
+/// set, this looked in a directory nothing writes — and a definition that is not
+/// found is `Ok(None)`, which `declared_policy` reads as *the sub-agent may use
+/// every tool*. So the failure was not a refusal, it was the allowlist quietly
+/// going away: the loosening direction, at the gate whose whole subject is what a
+/// delegated context may not do.
+///
+/// A reviewer of the change that moved four `CONTROL_SURFACE` entries for this
+/// exact variable measured that the enforcement road had been left behind.
+#[test]
+fn a_moved_config_home_still_finds_an_opencode_definition() {
+    let home = tempfile::tempdir().expect("a home");
+    let moved = tempfile::tempdir().expect("a relocated config home");
+    let repo = tempfile::tempdir().expect("a checkout");
+
+    let agents = moved.path().join("opencode").join("agents");
+    std::fs::create_dir_all(&agents).expect("the definition directory");
+    std::fs::write(
+        agents.join("scribe.md"),
+        "---\ntools: Read, Grep\n---\nread only\n",
+    )
+    .expect("a definition to find");
+
+    // SAFETY: the gate answers one hook invocation per process, and this test
+    // sets the variable the invocation is about before reading it back.
+    unsafe {
+        std::env::set_var("XDG_CONFIG_HOME", moved.path());
+    }
+    let found = definition_for(repo.path(), Some(home.path()), "scribe");
+    unsafe {
+        std::env::remove_var("XDG_CONFIG_HOME");
+    }
+
+    assert!(
+        matches!(found, Ok(Some(ref text)) if text.contains("Read, Grep")),
+        "a relocated XDG config home hid the definition, and a definition that is \
+         not found is read as every tool allowed: {found:?}"
+    );
+}

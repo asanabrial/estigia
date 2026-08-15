@@ -3351,6 +3351,12 @@ fn a_sibling_in_a_rules_directory_is_a_boundary_too() {
         "/home/me/.continue/rules/zz-override.md",
         "/home/me/.codeium/windsurf/memories/zz-override.md",
         "/home/me/.cursor/rules/zz-override.mdc",
+        // The `.local.` siblings, which are the same shape one directory up:
+        // read with the same authority as the file beside them, and `contains`
+        // did not reach them until the fragments lost their extension.
+        "/home/me/.claude/CLAUDE.local.md",
+        "/home/me/.codex/AGENTS.local.md",
+        "/home/me/.agents/AGENTS.local.md",
     ] {
         let (_, written) = classify("Write", &serde_json::json!({ "file_path": spelled }));
         assert_eq!(
@@ -3394,6 +3400,107 @@ fn a_control_directory_named_bare_is_a_boundary_on_both_roads() {
             removed,
             Sensitivity::Boundary,
             "removing {spelled} through the shell answers routine"
+        );
+    }
+}
+
+/// A fragment naming a directory does not gate a name that merely starts alike.
+///
+/// Both halves of this were wrong in turn, one round apart, and nothing in the
+/// suite watched the second one — every guard here asserts that something *is*
+/// `Boundary`, so over-gating was invisible to all of them.
+///
+/// With a trailing slash the entries gated `rm <dir>` and left a write to the
+/// bare directory `Routine`: `surface_of` appends a separator, so one road
+/// matched and the other did not. Dropping the slash closed that and made every
+/// entry a prefix — `.estigiaignore`, `skills/flow.md` and `.claude/agentsmith.md`
+/// all became `Boundary`, a tracker read on ordinary files for nothing. The
+/// matcher honours the slash now, so the entry can say *directory* and mean it.
+#[test]
+fn a_directory_entry_does_not_gate_a_name_that_only_starts_the_same() {
+    for ordinary in [
+        "/repo/.estigiaignore",
+        "/repo/docs/.estigia.md",
+        "/repo/skills/flow.md",
+        "/repo/docs/skills/flow-diagram.md",
+        "/home/me/.claude/agentsmith.md",
+        "/home/me/.cursor/rulesets.md",
+        "/home/me/.continue/rules-archive/a.md",
+        // A vendored copy of the agent itself, which is somebody's ordinary
+        // source tree and not a control surface. All six shapes a reviewer
+        // measured against the bare `opencode` entry that stood here for one
+        // head — they were recorded as `Routine` again with nothing holding
+        // them, which is how the entry came to be bare in the first place.
+        "/repo/node_modules/opencode/index.js",
+        "/repo/packages/opencode/src/main.ts",
+        "/repo/vendor/opencode/README.md",
+        "/repo/my-opencode/README.md",
+        "/repo/assets/opencode/logo.svg",
+        "/repo/target/debug/build/opencode/out.rs",
+    ] {
+        let (_, how) = classify("Write", &serde_json::json!({ "file_path": ordinary }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "{ordinary} is an ordinary file and answers boundary, so every write to it \
+             pays a live tracker read for nothing"
+        );
+    }
+}
+
+/// The directory itself, and what is under it, on both roads.
+///
+/// The other half of the same rule: a fragment naming a directory has to reach
+/// the directory. This is what the trailing slash cost before the matcher
+/// honoured it — measured on the state directory, the installed contract, the
+/// agent definitions and a rules directory.
+#[test]
+fn a_directory_entry_reaches_the_directory_itself_on_both_roads() {
+    for named in [
+        "/home/me/.claude/skills/flow",
+        "/repo/.estigia",
+        "/home/me/.claude/agents",
+        "/home/me/.cline/rules",
+        "/home/me/.config/opencode",
+    ] {
+        let (_, written) = classify("Write", &serde_json::json!({ "file_path": named }));
+        assert_eq!(
+            written,
+            Sensitivity::Boundary,
+            "a write to the bare directory {named} answers routine"
+        );
+
+        let (_, removed) = classify(
+            "Bash",
+            &serde_json::json!({ "command": format!("rm -rf {named}") }),
+        );
+        assert_eq!(
+            removed,
+            Sensitivity::Boundary,
+            "removing {named} through the shell answers routine"
+        );
+    }
+}
+
+/// An existing entry's sensitivity did not change on the way past.
+///
+/// `.config/opencode/` covered everything under it. A first attempt at the
+/// `XDG_CONFIG_HOME` fix replaced it with three tails, and a reviewer measured
+/// what that quietly gave up: nine paths under that directory that Estigia does
+/// not write went `Boundary` to `Routine` — a loosening, presented in the entry
+/// as an over-gating fix. The directory entry is back beside the tails, which
+/// cover the relocated case it could not.
+#[test]
+fn the_opencode_config_directory_is_still_covered_whole() {
+    for under in [
+        "/home/me/.config/opencode/mcp.json",
+        "/home/me/.config/opencode/themes/dark.json",
+    ] {
+        let (_, how) = classify("Write", &serde_json::json!({ "file_path": under }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "{under} was covered before this change and answers routine now"
         );
     }
 }

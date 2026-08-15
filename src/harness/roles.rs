@@ -394,8 +394,24 @@ pub fn definition_for(
     if let Some(home) = home {
         roots.push(home.join(".claude").join("agents"));
         // OpenCode keeps its own under the XDG config directory, not the home
-        // root — verified against a real installation.
-        roots.push(home.join(".config").join("opencode").join("agents"));
+        // root — verified against a real installation. And **the** XDG config
+        // directory, not `~/.config`: this was spelled by hand while `setup`
+        // resolved the same root through `XDG_CONFIG_HOME`, so with that variable
+        // set an OpenCode sub-agent's definition sat where this never looked.
+        //
+        // The failure is silent and it is a loosening. A definition that is not
+        // found is `Ok(None)`, which `declared_policy` reads as *the sub-agent may
+        // use every tool* — so a moved config home did not refuse the delegation,
+        // it removed the allowlist from it. Measured by a reviewer of the very
+        // change that moved four `CONTROL_SURFACE` entries for this variable and
+        // left the enforcement road on `.config`.
+        roots.push(
+            std::env::var_os("XDG_CONFIG_HOME")
+                .filter(|value| !value.is_empty())
+                .map_or_else(|| home.join(".config"), std::path::PathBuf::from)
+                .join("opencode")
+                .join("agents"),
+        );
     }
     for file in roots
         .into_iter()
