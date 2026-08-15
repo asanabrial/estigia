@@ -3660,6 +3660,89 @@ fn an_option_prefix_does_not_gate_an_ordinary_line() {
     }
 }
 
+/// Every character in the folded set, one at a time, spelled rather than read.
+///
+/// The set was justified four characters at a time, each added because a
+/// reviewer measured a spelling that had lost its boundary — and the ones nobody
+/// had measured were justified by the sentence *"the rest terminate a word the
+/// same way"*. A reviewer mutated them and found ten of fourteen could be
+/// dropped with the whole suite green. The brace was the proof the reasoning was
+/// not enough: it was missing from the set entirely and cost a real boundary.
+///
+/// The list is **spelled here** and crossed against the constant below. A first
+/// draft iterated `NOT_IN_A_PATH_SEGMENT` instead, which reads like coverage and
+/// is none: dropping a character from the constant also drops it from the test,
+/// so eleven of the sixteen mutations still survived green. A fixture that reads
+/// the thing it is checking asserts only that the code equals itself.
+///
+/// The shape is the one every loss had in common: an ordinary letter, the
+/// character, then the fragment — unreachable by the left anchoring unless the
+/// character folds to a separator.
+const FOLDED_CHARACTERS: &[char] = &[
+    '"', '\'', '`', '<', '>', '=', '|', ';', '&', '(', ')', '$', '*', ',', '{', '}',
+];
+
+#[test]
+fn every_folded_character_reaches_a_control_surface_behind_it() {
+    for divider in FOLDED_CHARACTERS {
+        let line = format!("rm -rf x{divider}.estigia/stand-down.json");
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": &line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, so {divider:?} is in the folded set without being folded"
+        );
+    }
+}
+
+/// The spelled list and the constant agree.
+///
+/// So a character added to the set without a row above fails here rather than
+/// arriving untested, and one removed from the set fails rather than quietly
+/// taking its own coverage with it.
+#[test]
+fn the_spelled_folded_characters_and_the_constant_agree() {
+    let spelled: String = FOLDED_CHARACTERS.iter().collect();
+    assert_eq!(
+        spelled,
+        super::NOT_IN_A_PATH_SEGMENT,
+        "the folded set and the list the fixture walks have diverged"
+    );
+}
+
+/// The two halves of the wrap, and which of them is holding anything.
+///
+/// The trailing half **is** load-bearing, and only became so when the
+/// option-prefix rule landed: the suffixes it offers are appended after the
+/// wrap, so without the trailing separator the first suffix runs straight into
+/// the folded line and the last segment of a command stops being a whole one.
+/// Three fixtures redden without it. An earlier draft of `docs/honesty.md` said
+/// it was not load-bearing — true when written, false one commit later, and
+/// nobody re-measured it. That is the failure this crate keeps paying for.
+///
+/// The leading half is inert and structurally cannot hide anything, because
+/// `anchored` already tests `starts_with` as well as `contains`. Dropping it can
+/// only *add* matches, never remove one. Measured over every fragment the gate
+/// consults, five spellings and five write verbs — 975 command lines, zero
+/// answers changed. It stays for symmetry, and this says so rather than letting
+/// a reader infer a guard that is not there.
+#[test]
+fn the_trailing_wrap_keeps_the_last_segment_whole() {
+    for line in [
+        "rm -rf /home/me/.claude/agents",
+        "rm -rf /repo/.estigia",
+        "curl -o/home/me/.claude/settings.json https://x",
+        "7z x pack.7z -o/repo/.estigia",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and its last segment names a control surface"
+        );
+    }
+}
+
 /// A control surface is reached however the line is punctuated.
 ///
 /// `surface_of` folds every character a path segment cannot contain into a

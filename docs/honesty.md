@@ -336,14 +336,28 @@ suite. Everything else here is prose held by review.
   rules directory, which is intended. A reviewer found this one by classifying paths a developer would
   plausibly create rather than paths this crate already talks about.
 
-  The **trailing** half of the wrap is not load-bearing at this head, and it is kept anyway. Measured:
-  every fragment the gate consults — all 28 `CONTROL_SURFACE` entries and all 11 derived instruction
-  fragments — as the last token of a removal, in three spellings each, answers `Boundary` identically
-  with the trailing separator and without it. What covers for it is the bare-directory branch of
-  `names`, which reaches a directory by `ends_with`. It stays because "wrap the line" is one rule and
-  removing the half that is currently redundant is how the leading half came to be missing for three
-  heads; but no fixture can tell the difference, and a reader should know that rather than infer a
-  guard that is not there.
+  **The two halves of the wrap are not alike, and the paragraph that used to stand here got it
+  backwards one commit before it was read.** It said the trailing half was not load-bearing. That was
+  true when it was written and false as soon as the option-prefix rule landed, because the suffixes
+  that rule offers are appended *after* the wrap: without the trailing separator the first suffix runs
+  straight into the folded line and the last segment of a command stops being a whole one. Three
+  fixtures redden without it now. Nobody re-measured the sentence when the code under it moved, which
+  is the failure this document exists to catch, committed inside this document.
+
+  The **leading** half is the inert one, and it is inert structurally rather than by luck: `anchored`
+  tests `starts_with` as well as `contains`, so a fragment at position 0 is reached either way, and
+  dropping the wrap can only *add* matches. Measured over every fragment the gate consults, five
+  spellings and five write verbs — 975 command lines, **zero answers changed**. It stays for symmetry
+  and nothing holds it, which a reader should know rather than infer a guard that is not there.
+
+  Each of the sixteen folded characters is now held individually, and that took two attempts as well.
+  A reviewer mutated the set character by character and found ten of the then-fourteen could be
+  dropped with the whole suite green — the set had been justified four characters at a time by
+  measurement and the rest by the sentence *"the rest terminate a word the same way"*, which the
+  missing brace had already disproved. The first fixture written for it **iterated the constant**,
+  which reads like coverage and is none: dropping a character from the set also drops it from the
+  test, and eleven mutations still survived. The characters are spelled in the fixture now and crossed
+  against the constant, so all sixteen die.
 
   A fragment naming a **file** without a leading dot still cannot be anchored, because `cli/hosts.yml`
   exists to match **mid-segment**: the Windows path is `%APPDATA%\GitHub CLI\hosts.yml`, and
@@ -387,7 +401,7 @@ suite. Everything else here is prose held by review.
     `opencode/agents.md` are covered by the same over-gating fixture.
   - Four are silent, measured one at a time with the full suite: `.agents/agents` → `.agents/`,
     `.codex/agents` → `.codex/`, `.qwen/qwen.md` → `.qwen/` and `.cline/rules/estigia.md` →
-    `.cline/` each **leave all 1,153 tests green.** Nothing in this crate names a path under those
+    `.cline/` each **leave all 1,156 tests green.** Nothing in this crate names a path under those
     directories in the `Routine` direction. An earlier draft of this list said *one*, naming only
     qwen; a reviewer counted them.
 
