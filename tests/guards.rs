@@ -758,12 +758,17 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     // for, which at least claimed 106 passed. Scoped to the rig's body at first,
     // which two reviewers then walked round by putting the call in a caller or in
     // a helper below the rig. The whole file is the scope the sentence always
-    // meant. An alias (`use std::process::exit as leave`) still walks past it, and
-    // that is in `docs/honesty.md` rather than chased with a second substring.
+    // meant — and it catches `use std::process::exit as leave;` too, because that
+    // line contains the substring. `use std::process::{exit as leave};` does not,
+    // and that is in `docs/honesty.md` rather than chased with a second substring.
+    let exiting = source
+        .lines()
+        .find(|line| line.contains("process::exit"))
+        .map(str::trim);
     assert!(
-        !source.contains("process::exit"),
-        "something in this suite ends the process instead of failing, which cargo \
-         reports as success with no test result at all"
+        exiting.is_none(),
+        "this suite ends the process instead of failing, which cargo reports as \
+         success with no test result at all: {exiting:?}"
     );
 
     // Per test function, not per line. Both routes a reviewer found are
@@ -794,31 +799,23 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
         // matched literally at first and `return Default::default();` walked past
         // them by two words, with every gate in this repository green.
         //
-        // String literals are cut out first, because this repository writes long
-        // English assertion messages and two shipped ones say "did not return".
-        // Blocking an assertion because of a word in its own message is stopping
-        // correct work, which is worse than the miss it prevents.
+        // The whole line, string literals included. A version of this cut strings
+        // out first, to spare an assertion message with the word in it — and a
+        // reviewer measured what that cost: the stripper toggled on any `"`,
+        // including a char literal, so `let _sep = '"'; if !built { return; }` hid
+        // a plain `return;` and put 106 tests back to passing on nothing. It was
+        // guarding against a hazard that cannot happen here either, since this
+        // reads `tests/pipe.rs` and the messages that say "did not return" are in
+        // `src/tui/models.rs`, which it never opens. A false positive over prose
+        // is cheap and visible; a false negative over the one spelling this exists
+        // to catch is neither.
         //
-        // A `return` inside a **closure** still reddens this, and cannot skip the
-        // test — it is a false positive over correct code, not a safe one.
-        // Telling them apart needs to know what a closure is, which is where
-        // reading text ends; `docs/honesty.md` says so rather than this pretending
-        // otherwise.
+        // So both false positives stand and are declared: a `return` in a string
+        // literal, and one inside a **closure**, which cannot skip the test at
+        // all. Telling either from a real skip needs to know what a closure and a
+        // literal are, which is where reading text ends.
         let offender = code.lines().find(|line| {
-            let mut outside = String::new();
-            let mut in_string = false;
-            let mut escaped = false;
-            for character in line.chars() {
-                match character {
-                    _ if escaped => escaped = false,
-                    '\\' if in_string => escaped = true,
-                    '"' => in_string = !in_string,
-                    _ if in_string => {}
-                    _ => outside.push(character),
-                }
-            }
-            outside
-                .split(|c: char| !c.is_alphanumeric() && c != '_')
+            line.split(|c: char| !c.is_alphanumeric() && c != '_')
                 .any(|word| word == "return")
         });
         if let Some(line) = offender {
@@ -828,9 +825,11 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     assert!(
         skipping.is_empty(),
         "these reach the rig and write `return`, which is how sixteen tests came to \
-         report pass without running. If the word is inside a closure it cannot skip \
-         the test and this is a false positive — see the entry in `docs/honesty.md`, \
-         and move it rather than arguing with it: {skipping:#?}"
+         report pass without running. If the word is inside a closure or a string \
+         rather than in the test's own control flow, it cannot skip anything and \
+         this is a known false positive: put that line in a helper outside the test, \
+         or rephrase the message. `docs/honesty.md` records both cases and why \
+         neither is worth a semantic parser: {skipping:#?}"
     );
 
     // The exemption is not vacuous: the callers have to be there for their

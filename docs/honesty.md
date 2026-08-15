@@ -331,19 +331,28 @@ suite. Everything else here is prose held by review.
   | the fixture located from `CARGO_MANIFEST_DIR` again | whole suite green | yes |
   | `return Default::default();` | 106 passed | yes |
   | `std::process::exit(0)` in the rig | **no result line at all**, exit 0 | yes |
-  | a decoy **comment** naming the rig, moving the body split | no result line, exit 0 | yes |
+  | a decoy `//` comment naming the rig, moving the body split | no result line, exit 0 | yes |
+  | a decoy `/* */` comment carrying the **whole signature line** | 106 passed | **no** |
   | `process::exit` in a caller, or in a helper below the rig | no result line, exit 0 | yes |
-  | `use std::process::exit as leave;` | no result line, exit 0 | **no** |
+  | `use std::process::exit as leave;` | no result line, exit 0 | yes |
+  | `use std::process::{exit as leave};` | no result line, exit 0 | **no** |
+  | a decoy `current_exe()` call, the real lookup in a helper | whole suite green | **no** |
   | a macro expanding to `return`, defined before the first `#[test]` | 106 passed | **no** |
   | `'rig: { … break 'rig; }` around each body | 106 passed | **no** |
   | `#[ignore]` on all sixteen | 90 passed, 16 ignored | **no** |
   | a second `tests/*.rs` with its own `Option` rig | its own suite green | **no** |
   | a body skip — `if built { … } else { eprintln!(…) }`, no return | 106 passed | **no** |
 
-  Two of those were fixed here because the guard was not reading what it claimed to read: the body
+  Two of those were fixed because the guard was not reading what it claimed to read: the body
   extraction bound to the first text in the file matching `fn tracker_rig()`, which a two-line comment
   could claim, and the `process::exit` refusal was scoped to the rig's body when its sentence meant
-  the suite. The rest are declared rather than chased. A seventh substring would not close them: a
+  the suite. Both fixes are **narrower than the first draft of this table said**, and a reviewer
+  measured the difference: the body extraction now splits on the whole signature line rather than on
+  `fn tracker_rig()`, which a block comment carrying that whole line still claims; and the file-wide
+  `process::exit` scan catches `use std::process::exit as leave;`, because that spelling contains the
+  substring, while `use std::process::{exit as leave};` does not. Two rows of this table said the
+  opposite of each, in the direction that flattered the guard. The rest are declared rather than
+  chased. A seventh substring would not close them: a
   macro puts the refused word in a region the scan never visits, a labelled `break` is a return under
   another name, and a body skip never leaves the function at all. Telling any of them from correct
   code needs to know which statements assert, which is a semantic question and not a textual one.
@@ -357,13 +366,21 @@ suite. Everything else here is prose held by review.
   when they were written, and the sentence claiming completeness is the reason they were worth
   writing down.
 
-  The `return` scan has a cost, and it is not in the safe direction. It cuts string literals out
-  first — this repository ships assertion messages saying *"did not return"*, and blocking an
-  assertion because of a word in its own message is stopping correct work. But a `return` inside a
-  **closure** still reddens it, and a closure cannot skip the test. Measured, both: the literal is
-  green, the closure is red. The failure message names the offending line and says it may be a false
-  positive, because the person who hits it is reading a claim about early returns and looking at a
-  closure.
+  The `return` scan reads whole lines, string literals included, and that is a decision made twice.
+  A version of it cut strings out first, to spare an assertion message with the word in it. A reviewer
+  measured what that cost: the stripper toggled on any `"`, a char literal among them, so
+  `let _sep = '"'; if !built { return; }` hid a plain `return;` and put 106 tests back to passing on
+  nothing — a false negative on the one spelling this guard exists to catch, introduced by the change
+  meant to make it kinder. It also guarded a hazard that cannot arise where it runs: this reads
+  `tests/pipe.rs`, and the two shipped messages saying *"did not return"* are in `src/tui/models.rs`,
+  which it never opens.
+
+  So the scan is back to whole lines, and its two false positives are declared rather than engineered
+  around. A `return` in a string literal reddens it, and so does one inside a **closure**, which
+  cannot skip the test at all. Both measured. The failure message names the offending line, says both
+  cases are known, and says what to do — move the line into a helper outside the test, or rephrase the
+  message — because an earlier version sent the reader to an entry about closures while they were
+  holding a string.
 
   One more control-surface path of the hosts file's shape, found by a reviewer of this change and
   not closed here:
