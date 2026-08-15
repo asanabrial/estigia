@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_env::with_config_home;
 
 /// The real thing, copied from a published `agents/builder.md`.
 const BUILDER: &str = "---\n\
@@ -502,40 +503,14 @@ fn an_unusable_config_home_falls_back_the_way_setup_does() {
     }
 }
 
-/// Run a closure with `XDG_CONFIG_HOME` set, under a lock, restoring what was
-/// there.
-///
-/// `set_var` is process-wide and this test binary is multi-threaded. The first
-/// version of these fixtures set it inline with a SAFETY note reasoning about the
-/// shipped binary — "the gate answers one hook invocation per process" — which is
-/// true of the binary and false of the process the `unsafe` actually runs in. A
-/// reviewer pointed out that the second is the only one `set_var`'s contract
-/// cares about, and that `remove_var` afterwards destroys a pre-existing value
-/// rather than restoring it.
-///
-/// One mutex, and the previous value put back.
-fn with_config_home<T>(value: &std::path::Path, body: impl FnOnce() -> T) -> T {
-    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let guard = LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-
-    let before = std::env::var_os("XDG_CONFIG_HOME");
-    // SAFETY: the lock above makes this the only thread touching the variable
-    // for the duration, and the previous value is restored before it is released.
-    unsafe {
-        std::env::set_var("XDG_CONFIG_HOME", value);
-    }
-    let answer = body();
-    unsafe {
-        match before {
-            Some(previous) => std::env::set_var("XDG_CONFIG_HOME", previous),
-            None => std::env::remove_var("XDG_CONFIG_HOME"),
-        }
-    }
-    drop(guard);
-    answer
-}
+// The helper these fixtures use is `crate::test_env::with_config_home`, and the
+// history that shaped it is written there: `set_var` is process-wide, this test
+// binary is multi-threaded, and an earlier SAFETY note reasoned about the shipped
+// binary — "the gate answers one hook invocation per process" — which is true of
+// the binary and false of the process the `unsafe` runs in. A copy of the helper
+// then stood in `setup::tests` too, justified by a comment saying these were two
+// binaries; they are one, so the two mutexes excluded nothing and a reviewer
+// reproduced the cross-talk. One lock now, in one place.
 
 /// A moved config home does not hide a definition at the default root.
 ///

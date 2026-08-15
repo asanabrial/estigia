@@ -586,10 +586,35 @@ const NOT_IN_A_PATH_SEGMENT: &str = "\"'`<>=|;&()$*,{}%^";
 /// extract-to spelling is `-oDIR` and a space there is a syntax error, so the
 /// only correct way to write it is the way that was not gated.
 fn surface_of(command: &str) -> Sensitivity {
+    if text_names_a_control_surface(command) {
+        Sensitivity::Boundary
+    } else {
+        Sensitivity::Routine
+    }
+}
+
+/// Whether free text names a control surface anywhere in it.
+///
+/// A command line and a patch body are the same problem: a path sits somewhere
+/// inside prose, with whatever the writer put next to it. The payload fallback
+/// used to hand the whole JSON blob to `is_control_surface` directly, which was
+/// right while the fragments were matched by a bare `contains` and wrong the
+/// moment they were anchored — a relative path in a patch body sits after a
+/// space, so every relative spelling stopped matching on that road while `Write`
+/// still gated the same file. A reviewer measured thirteen of them, including
+/// the run pointer and the stand-down record. One reading now, for both roads.
+fn text_names_a_control_surface(text: &str) -> bool {
+    let command = text;
+    // No whitespace clause here, and a reviewer had to measure that to find out:
+    // `fold` only ever sees tokens from `split_whitespace`, which uses the same
+    // predicate, so a `c.is_whitespace()` arm could not execute. It stood here
+    // anyway, and the pull request's evidence table named a fixture as holding
+    // it — a row pointing at a line that decides nothing. What actually carries
+    // whitespace-as-separator is the separator pushed between tokens below.
     let fold = |text: &str| {
         text.chars()
             .map(|c| {
-                if c.is_whitespace() || NOT_IN_A_PATH_SEGMENT.contains(c) {
+                if NOT_IN_A_PATH_SEGMENT.contains(c) {
                     '/'
                 } else {
                     c
@@ -635,23 +660,33 @@ fn surface_of(command: &str) -> Sensitivity {
             .enumerate()
             .filter(|&(at, byte)| (byte == b'-' || byte == b'~') && starts_a_segment(at))
             .flat_map(|(at, _)| {
-                (at + 1..folded.len())
+                // Only within the marker's **own segment**. An option prefix and
+                // a shell expansion are both short and both end before the first
+                // separator — `-o`, `-Lo`, `~dp0` — so cutting past one is not
+                // reading a prefix, it is deleting path segments.
+                //
+                // Unbounded, the ladder voided the left anchoring for every token
+                // beginning with `~`, which is how a home path is written: the
+                // rungs of `~/my.claude/agents` include `.claude/agents`, so a
+                // reviewer measured `~/my.claude/agents`, `~/notwindsurf/memories`
+                // and `~/xyzopencode/agents` answering `Boundary` — the exact
+                // names three paragraphs of `docs/honesty.md` declare `Routine`,
+                // and `Routine` at the base. Eighteen of the thirty-one rows of
+                // the fixture that holds the anchoring answered the opposite when
+                // respelled with `~`, and every row of it was spelled absolute.
+                let segment = folded[at..].find('/').map_or(folded.len(), |end| at + end);
+                (at + 1..=segment)
                     .filter(|cut| folded.is_char_boundary(*cut))
                     .map(|cut| format!("/{}/", normalise(&folded[cut..])))
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>()
     };
-    if matches_a_fragment(&view)
+    matches_a_fragment(&view)
         || command
             .split_whitespace()
             .flat_map(ladder)
             .any(|rung| matches_a_fragment(&rung))
-    {
-        Sensitivity::Boundary
-    } else {
-        Sensitivity::Routine
-    }
 }
 
 /// Whether this path is one whose contents decide what the harness enforces.
@@ -1504,7 +1539,7 @@ pub fn classify_with(
         // surface, so `~/.claude/settings.json` could be rewritten through them
         // on an answer from inside the renewal window.
         let how = if is_control_surface(&target)
-            || (named.is_none() && is_control_surface(&input.to_string()))
+            || (named.is_none() && text_names_a_control_surface(&input.to_string()))
         {
             Sensitivity::Boundary
         } else {

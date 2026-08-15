@@ -3545,6 +3545,111 @@ fn the_declared_over_gating_is_the_shape_the_document_names() {
     }
 }
 
+/// A patch body names a control surface the same way a command line does.
+///
+/// Two of the eleven write tools put the path in a patch body rather than a
+/// field — Codex's `apply_patch` and OpenCode's `patch` — so `classify_with`
+/// falls back to reading the whole payload. Handing that blob straight to
+/// `is_control_surface` was right while the fragments were matched by a bare
+/// `contains` and wrong the moment they were anchored: in a patch body the path
+/// sits after a space, so every **relative** spelling stopped matching on that
+/// road while `Write` still gated the same file. A reviewer measured thirteen,
+/// including the run pointer and the stand-down record, and the fixture that
+/// holds this road stayed green because it spells its surface absolutely.
+///
+/// Both roads read the text the same way now.
+#[test]
+fn a_patch_body_reaches_a_relative_control_surface() {
+    for named in [
+        ".estigia/run.json",
+        ".estigia/stand-down.json",
+        ".claude/settings.json",
+        ".claude/settings.local.json",
+        ".claude.json",
+        ".config/gh/hosts.yml",
+        ".codex/config.toml",
+        ".cursor/mcp.json",
+        "/home/me/.claude/settings.json",
+    ] {
+        let body =
+            format!("*** Begin Patch\n*** Update File: {named}\n@@\n-old\n+new\n*** End Patch");
+        for tool in ["apply_patch", "patch"] {
+            let (_, how) = classify(tool, &serde_json::json!({ "input": &body }));
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "{tool} answers routine for a patch body naming {named}"
+            );
+        }
+    }
+    // And an ordinary file in a patch body is still ordinary.
+    for named in ["src/main.rs", "README.md", "tests/guards.rs"] {
+        let body =
+            format!("*** Begin Patch\n*** Update File: {named}\n@@\n-old\n+new\n*** End Patch");
+        let (_, how) = classify("apply_patch", &serde_json::json!({ "input": &body }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "a patch body naming {named} answers boundary"
+        );
+    }
+}
+
+/// The ladder is bounded to the marker's own segment.
+///
+/// An option prefix and a shell expansion are both short and both end before the
+/// first separator — `-o`, `-Lo`, `~dp0` — so a cut past one is not reading a
+/// prefix, it is deleting path segments. Unbounded, the ladder voided the left
+/// anchoring for **every** token beginning with `~`, which is how a home path is
+/// written: the rungs of `~/my.claude/agents` include `.claude/agents`. A
+/// reviewer measured eighteen of the thirty-one rows of the anchoring fixture
+/// answering the opposite when respelled with `~`, against three paragraphs of
+/// `docs/honesty.md` that name those exact paths as `Routine` — and every row of
+/// that fixture was spelled with an absolute root, which is why it stayed green.
+#[test]
+fn a_home_prefix_does_not_void_the_anchoring() {
+    for line in [
+        "rm -rf ~/my.claude/agents",
+        "rm -rf ~/my.claude/agents/note.md",
+        "rm -rf ~/my.claude/settings.json",
+        "rm -rf ~/my.claude/settings.local.json",
+        "rm -rf ~/my.claude.json",
+        "rm -rf ~/xyz.claude.json",
+        "rm -rf ~/my.codex/config.toml",
+        "rm -rf ~/x.qwen/settings.json",
+        "rm -rf ~/xyz.cursor/rules",
+        "rm -rf ~/zz.continue/rules/note.md",
+        "rm -rf ~/x.estigia/state",
+        "rm -rf ~/notwindsurf/memories",
+        "rm -rf ~/xyzopencode/agents",
+        "rm -rf ~/dev/myrepo/.opencode/plugins",
+        "rm -rf ~/.claude/myskills/issue-flow",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "`{line}` answers boundary, and the ladder has eaten the anchoring behind a `~`"
+        );
+    }
+    // The real ones behind the same prefix are untouched.
+    for line in [
+        "rm -rf ~/.claude/settings.json",
+        "rm -rf ~/.claude/settings.local.json",
+        "rm -rf ~/.claude/agents",
+        "rm -rf ~/.config/gh/hosts.yml",
+        "rm -rf ~/.estigia/run.json",
+        "rm -rf %~dp0.estigia/run.json",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and it names a control surface"
+        );
+    }
+}
+
 /// The suffix ladder does not build a path nobody wrote.
 ///
 /// The rungs offered for a `-` or `~` prefixed token used to be appended into
@@ -3848,7 +3953,8 @@ fn the_spelled_folded_characters_and_the_constant_agree() {
 /// option-prefix rule landed: the suffixes it offers are appended after the
 /// wrap, so without the trailing separator the first suffix runs straight into
 /// the folded line and the last segment of a command stops being a whole one.
-/// Eight fixtures redden without it. An earlier draft of `docs/honesty.md` said
+/// Two fixtures redden without it, and it is the separator between tokens
+/// that carries it rather than a wrap at the end of the line. An earlier draft of `docs/honesty.md` said
 /// it was not load-bearing — true when written, false one commit later, and
 /// nobody re-measured it. That is the failure this crate keeps paying for.
 ///

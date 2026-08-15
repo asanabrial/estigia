@@ -31,6 +31,9 @@ pub mod outcome;
 pub mod paths;
 pub mod setup;
 pub mod skill;
+/// One lock over the process environment, for the tests that set one.
+#[cfg(test)]
+pub(crate) mod test_env;
 pub mod transport;
 pub mod tui;
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_env::with_config_home;
 
 fn sandbox() -> (tempfile::TempDir, SetupOptions) {
     let home = tempfile::tempdir().expect("a temporary home");
@@ -4960,34 +4961,6 @@ fn a_phase_is_not_written_in_a_dialect_its_host_cannot_read() {
         5,
         "the host this crate can spell for received no phases"
     );
-}
-
-/// Set `XDG_CONFIG_HOME` for the duration, and put back what was there.
-///
-/// A copy of the helper in `harness::roles::tests`, kept because these are two
-/// test binaries and neither can call the other's. The lock makes this the only
-/// thread touching the variable while the body runs. An empty value stands for
-/// *absent*, which is what `absolute_or_none` already made of it.
-fn with_config_home<T>(value: &std::path::Path, body: impl FnOnce() -> T) -> T {
-    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let guard = LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let before = std::env::var_os("XDG_CONFIG_HOME");
-    // SAFETY: the lock above makes this the only thread touching the variable
-    // for the duration, and the previous value is restored before it is released.
-    unsafe {
-        std::env::set_var("XDG_CONFIG_HOME", value);
-    }
-    let answer = body();
-    unsafe {
-        match before {
-            Some(previous) => std::env::set_var("XDG_CONFIG_HOME", previous),
-            None => std::env::remove_var("XDG_CONFIG_HOME"),
-        }
-    }
-    drop(guard);
-    answer
 }
 
 /// Where a config home comes from, for every shape a caller can supply.

@@ -323,6 +323,19 @@ suite. Everything else here is prose held by review.
      same. Introduced by the sixth, found by a reviewer, and it had already made the
      containing-directories paragraph below false about the very directories that paragraph declares
      open.
+  8. **Bound the ladder to the marker's own segment, and read a patch body the same way.** Two halves,
+     both found by one reviewer. Unbounded, the ladder voided the left anchoring for every token
+     beginning with `~` — which is how a home path is written — because the rungs of
+     `~/my.claude/agents` include `.claude/agents`. Eighteen of the thirty-one rows of the anchoring
+     fixture answered the opposite when respelled with `~`, against three paragraphs here that name
+     those paths as `Routine`, and every row of that fixture was spelled absolute. An option prefix and
+     a shell expansion both end before the first separator, so cutting past one is not reading a
+     prefix, it is deleting path segments. And the payload road — the fallback `classify_with` takes
+     for Codex's `apply_patch` and OpenCode's `patch`, where the path sits in a patch body rather than
+     a field — handed the whole blob to `is_control_surface` directly. That was right under a bare
+     `contains` and wrong once the fragments were anchored: thirteen relative spellings, the run
+     pointer and the stand-down record among them, stopped matching on that road while `Write` still
+     gated the same file. Both roads read free text the same way now.
 
   `7z` is why the fourth is not optional: its extract-to spelling is `-oDIR`, a space there is a
   syntax error, and it is in `WRITES_A_FILE` deliberately — so the only correct way to write "extract
@@ -331,14 +344,14 @@ suite. Everything else here is prose held by review.
   Each attempt was measured against the base by a reviewer classifying raw command strings through
   the built binary, and each time the whole suite was green over the loss — because every fixture in
   this crate spelled its commands the way the last fix had taught it to. That is the same blind spot
-  **seven** times: a narrowing nothing asserts, found by a reader who spells the command differently
+  **eight** times: a narrowing nothing asserts, found by a reader who spells the command differently
   than the fixture does. It is recorded at this length because the count is the finding, and the count
   is the honest summary of this work: anchoring a matcher against a shell is not one change. Each
   spelling that reaches a path is its own claim, the suite went green over every loss until somebody
-  wrote the spelling down, and three of the seven were introduced by the fix for the one before it.
+  wrote the spelling down, and **four of the eight were introduced by the fix for the one before it**.
 
-  What follows from that, and is not a claim this branch can settle: a seventh is likelier than not.
-  The fixtures here hold the six spellings that were found, plus the sixteen folded characters and the
+  What follows from that, and is not a claim this branch can settle: a ninth is likelier than not. The
+  fixtures here hold the eight spellings that were found, plus the eighteen folded characters and the
   ordinary-line direction. They do not hold *the space of spellings*, because nothing in this crate
   enumerates it. A property test over generated command lines, crossed against a second reading of the
   same path, is the shape that would — and there is none. `punctuation_does_not_hide_a_control_surface`,
@@ -375,8 +388,12 @@ suite. Everything else here is prose held by review.
   backwards one commit before it was read.** It said the trailing half was not load-bearing. That was
   true when it was written and false as soon as the option-prefix rule landed, because the suffixes
   that rule offers are appended *after* the wrap: without the trailing separator the first suffix runs
-  straight into the folded line and the last segment of a command stops being a whole one. Eight
-  fixtures redden without it now. Nobody re-measured the sentence when the code under it moved, which
+  straight into the folded line and the last segment of a command stops being a whole one. **Two**
+  fixtures redden without it now — `a_relative_operand_is_measured_like_an_absolute_one` and
+  `a_later_operand_does_not_collapse_an_earlier_surface` — and it is the separator pushed **between
+  tokens** that carries it, not a wrap at the end of the line: dropping the final separator alone, or
+  the one closing each ladder rung, leaves the whole suite green. This paragraph said *eight*, which
+  was measured before the ladder rungs were split out and never measured again; a reviewer counted. Nobody re-measured the sentence when the code under it moved, which
   is the failure this document exists to catch, committed inside this document.
 
   The **leading** half is the inert one, and it is inert structurally rather than by luck: `anchored`
@@ -385,14 +402,14 @@ suite. Everything else here is prose held by review.
   spellings and five write verbs — 975 command lines, **zero answers changed**. It stays for symmetry
   and nothing holds it, which a reader should know rather than infer a guard that is not there.
 
-  Each of the sixteen folded characters is now held individually, and that took two attempts as well.
+  Each of the eighteen folded characters is now held individually, and that took two attempts as well.
   A reviewer mutated the set character by character and found ten of the then-fourteen could be
   dropped with the whole suite green — the set had been justified four characters at a time by
   measurement and the rest by the sentence *"the rest terminate a word the same way"*, which the
   missing brace had already disproved. The first fixture written for it **iterated the constant**,
   which reads like coverage and is none: dropping a character from the set also drops it from the
   test, and eleven mutations still survived. The characters are spelled in the fixture now and crossed
-  against the constant, so all sixteen die.
+  against the constant, so all eighteen die.
 
   A fragment naming a **file** without a leading dot still cannot be anchored, because `cli/hosts.yml`
   exists to match **mid-segment**: the Windows path is `%APPDATA%\GitHub CLI\hosts.yml`, and
@@ -434,11 +451,12 @@ suite. Everything else here is prose held by review.
     names `vendor/mycrush/crush.md`. So does `.cursor/estigia-workflow-authority.md` → `.cursor/`,
     through the `.cursor/rulesets.md` row in the ends-alike fixture. `gemini/gemini.md` and
     `opencode/agents.md` are covered by the same over-gating fixture.
-  - Four are silent, measured one at a time with the full suite: `.agents/agents` → `.agents/`,
-    `.codex/agents` → `.codex/`, `.qwen/qwen.md` → `.qwen/` and `.cline/rules/estigia.md` →
-    `.cline/` each **leave all 1,159 tests green.** Nothing in this crate names a path under those
-    directories in the `Routine` direction. An earlier draft of this list said *one*, naming only
-    qwen; a reviewer counted them.
+  - **Two** are silent, measured one at a time with the full suite: `.qwen/qwen.md` → `.qwen/` and
+    `.cline/rules/estigia.md` → `.cline/` leave every test green. Nothing in this crate names a path
+    under those two directories in the `Routine` direction. This list has now said *one*, then *four*,
+    then two — the four was true until `the_suffix_ladder_does_not_synthesise_a_path` landed in this
+    same branch and began catching `.agents/` and `.codex/`, and nobody re-ran it. Both re-counts came
+    from a reviewer rather than from this repository.
 
   The earlier draft of this paragraph used crush as its example of the silent case, which stopped
   being true in the same change that added the fixture above; qwen is the measurement now. The
