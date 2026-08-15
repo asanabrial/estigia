@@ -134,6 +134,13 @@ pub enum Aside {
     NoTracker,
     /// Sworn, but over a different checkout than this write is in.
     AnotherCheckout,
+    /// Sworn, and this write lands where no covered checkout reaches.
+    ///
+    /// Distinct from [`Self::AnotherCheckout`], which is about *this* checkout
+    /// being somebody else's. This one is about the **path**: a scratch note or
+    /// an agent's own store is in no checkout at all, and answering
+    /// `another-checkout` for it would name a thing that does not exist.
+    OutsideTheClaim,
 }
 
 impl Aside {
@@ -156,6 +163,7 @@ impl Aside {
             Self::NothingSworn => "nothing-sworn",
             Self::NoTracker => "no-tracker",
             Self::AnotherCheckout => "another-checkout",
+            Self::OutsideTheClaim => "outside-the-claim",
         }
     }
 
@@ -173,6 +181,10 @@ impl Aside {
             Self::AnotherCheckout => format!(
                 "{tool} is watched, and this run's claim covers a different checkout than this one"
             ),
+            Self::OutsideTheClaim => format!(
+                "{tool} is watched, and this write lands outside every checkout this run's claim \
+                 covers \u{2014} a claim governs a repository, not the machine"
+            ),
         }
     }
 }
@@ -184,7 +196,7 @@ pub enum Decision {
     Allow(String),
     /// Stop, with everything needed to act on it.
     Deny(Box<Refusal>),
-    /// Not Estigia's call, and which of the four reasons it was.
+    /// Not Estigia's call, and which of the five reasons it was.
     Outside(Aside),
 }
 
@@ -1249,6 +1261,43 @@ pub fn gate(context: &GateContext, run: &mut Run, action: &Action, how: Sensitiv
     )
 }
 
+/// Whether this write lands where no checkout the claim covers can reach.
+///
+/// A claim governs a repository. It was governing the machine: after an issue
+/// auto-closed on merge the gate refused a scratch note and the agent's own
+/// memory store, each with *issue #164 is CLOSED*, because nothing here
+/// classified the **path being written** — [`Aside::AnotherCheckout`] compares
+/// the checkout the hook was invoked in, not the file. A run that had just
+/// delivered could not write down the evidence of the delivery, which is the
+/// outcome this crate exists to prevent, and the way past it was raw tooling.
+///
+/// Narrow on purpose, because standing aside is a statement and an unknown is
+/// not one:
+///
+/// - the target must be an **absolute** path. The shell classifier answers with
+///   the verb it recognised — *"a redirect into a file"*, `rm`, `mv` — so a
+///   shell write cannot be placed, and one that cannot be placed stays gated.
+/// - a run covering nothing has no claim to be outside of.
+///
+/// The caller adds the last condition, which cannot be seen from here: only a
+/// `Routine` write. The control surface lives outside the repository by nature,
+/// and watching it is the whole defence against an agent switching the gate off
+/// with the tool it uses most.
+fn writes_outside_the_claim(run: &Run, action: &Action) -> bool {
+    let Action::Write { target } = action else {
+        return false;
+    };
+    let path = std::path::Path::new(target);
+    if !path.is_absolute() {
+        return false;
+    }
+    let mut covered = run.covered().peekable();
+    if covered.peek().is_none() {
+        return false;
+    }
+    !covered.any(|checkout| crate::paths::covers(checkout, path))
+}
+
 /// What the gate decides before any stand-down is considered.
 fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivity) -> Decision {
     let verifier = match action {
@@ -1314,6 +1363,19 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
             .any(|covered| crate::paths::covers(covered, &context.repo_dir))
     {
         return Decision::Outside(Aside::AnotherCheckout);
+    }
+
+    // Before the tracker is asked, because the tracker's answer is what refuses
+    // here: a closed issue answers `issue-not-open`, and it was answering it
+    // about a scratch note. A claim governs the repository it was made in; what
+    // a run writes outside every checkout it covers is not the claim's to
+    // decide, whatever state the issue is in.
+    //
+    // `Routine` only. A `Boundary` write is watched *because* of where it lands
+    // — the control surface sits outside the repository by nature — so placing
+    // it outside must never be what waves it through.
+    if how == Sensitivity::Routine && writes_outside_the_claim(run, action) {
+        return Decision::Outside(Aside::OutsideTheClaim);
     }
 
     if how == Sensitivity::Routine && run.within_window(context.window) {

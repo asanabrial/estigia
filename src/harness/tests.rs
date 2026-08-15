@@ -2642,3 +2642,146 @@ fn a_claim_covers_the_work_happening_below_the_checkout_root() {
         "a sibling sharing a prefix was read as living inside"
     );
 }
+
+/// A write outside every checkout the claim covers is not the claim's business.
+///
+/// Measured in the field: after an issue auto-closed on merge, the gate refused
+/// writes to a scratch directory and to the agent's own memory store, each with
+/// *issue #164 is CLOSED*. Neither can affect the tracker. What it produced is
+/// the outcome the harness exists to prevent — a delivery whose evidence could
+/// not be written down — and it teaches an operator to reach around the gate,
+/// which is worse than no gate.
+///
+/// The cause is that nothing classified the **path being written**:
+/// `AnotherCheckout` compares the checkout the hook was invoked in, not the
+/// file. So a scratch path, written from inside the claimed repository, was a
+/// repository write.
+///
+/// Deliberately narrow, because standing aside is a statement and an unknown is
+/// not one. It stands aside only when the target is an absolute path that no
+/// covered checkout contains. A shell verb — `writes_a_file` answers *"a
+/// redirect into a file"*, not a path — is not absolute, so it stays gated, and
+/// so does anything the classifier marked `Boundary`: the control surface lives
+/// outside the repository by nature, and the whole reason it is watched is that
+/// an agent could switch the gate off with it.
+#[test]
+fn a_write_outside_every_covered_checkout_is_outside_the_claim() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    let scratch = root.path().join("scratch").join("note.md");
+    let run = sworn(164, &repo);
+
+    assert!(
+        writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: scratch.display().to_string()
+            }
+        ),
+        "a scratch path no checkout contains was read as a repository write"
+    );
+    // The agent's own store, the other path the field report names.
+    assert!(writes_outside_the_claim(
+        &run,
+        &Action::Write {
+            target: root
+                .path()
+                .join("memory")
+                .join("note.md")
+                .display()
+                .to_string(),
+        }
+    ));
+
+    // Inside the claimed checkout: unchanged, and the closed-issue refusal that
+    // this is about must go on reaching it.
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: repo.join("src").join("main.rs").display().to_string()
+            }
+        ),
+        "a write inside the claimed repository was waved through"
+    );
+
+    // What the shell classifier answers is a verb, not a path. Not knowing
+    // where a write lands is not knowing it lands outside.
+    for verb in ["a redirect into a file", "rm", "mv"] {
+        assert!(
+            !writes_outside_the_claim(
+                &run,
+                &Action::Write {
+                    target: verb.to_owned()
+                }
+            ),
+            "{verb:?} is not a path and was treated as one"
+        );
+    }
+    // A relative path is not one this can place either.
+    assert!(!writes_outside_the_claim(
+        &run,
+        &Action::Write {
+            target: "src/main.rs".to_owned()
+        }
+    ));
+
+    // A run that covers nothing has no claim to be outside of.
+    let mut nowhere = Run::new("claude-abcd1234".to_owned());
+    nowhere.issue = Some(164);
+    assert!(!writes_outside_the_claim(
+        &nowhere,
+        &Action::Write {
+            target: scratch.display().to_string()
+        }
+    ));
+}
+
+/// The state of the issue does not reach a write the claim does not cover.
+///
+/// This is the ordering the field report is about: the refusal that fired was
+/// the tracker's — *issue #164 is CLOSED* — so the fix is worth nothing unless
+/// the classification happens **before** the tracker is asked. Asserted by
+/// answering at all: reaching the tracker from this fixture would mean running
+/// `gh` against a directory that is not a checkout, so an `Outside` here is
+/// proof the decision was taken earlier.
+///
+/// The run's state says `done`, which is the shape a run has after the delivery
+/// that closed its issue — the exact moment the evidence still has to be
+/// written down.
+#[test]
+fn a_closed_issue_does_not_refuse_a_scratch_note() {
+    let root = tempfile::tempdir().expect("a root");
+    let context = context(root.path());
+    let mut run = sworn(164, &context.repo_dir);
+    run.state = Some("done".to_owned());
+    let scratch = root.path().join("scratch").join("close-note.md");
+
+    let decision = decide(
+        &context,
+        &mut run,
+        &Action::Write {
+            target: scratch.display().to_string(),
+        },
+        Sensitivity::Routine,
+    );
+    assert!(
+        matches!(decision, Decision::Outside(Aside::OutsideTheClaim)),
+        "a scratch note was gated on the issue's state: {decision:?}"
+    );
+
+    // And the defence that must survive it: a boundary write is watched for
+    // where it lands, so landing outside cannot be what excuses it.
+    let boundary = decide(
+        &context,
+        &mut run,
+        &Action::Write {
+            target: scratch.display().to_string(),
+        },
+        Sensitivity::Boundary,
+    );
+    assert!(
+        !matches!(boundary, Decision::Outside(Aside::OutsideTheClaim)),
+        "a boundary write was waved through for being outside the repository"
+    );
+}
