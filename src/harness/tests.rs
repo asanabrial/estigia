@@ -3197,6 +3197,97 @@ fn a_drive_that_resolves_onto_a_share_is_still_inside() {
     );
 }
 
+/// The file an operator is told to put local overrides in is a boundary.
+///
+/// `contains` is the match, so `.claude/settings.json` never reached
+/// `.claude/settings.local.json` — and that is the file Claude Code documents for
+/// machine-local settings, read with the same authority as the one beside it. It
+/// answered `Routine`, which means the gate could be switched off through the
+/// file an operator is *told* to edit, on an answer a renewal window may already
+/// have paid for. The same held for `~/.claude/agents/`, where an agent
+/// definition carries a tool allowlist — instructions in another shape.
+///
+/// Both roads, because `surface_of` splits a command on whitespace and appends a
+/// separator: an entry that only works for the write tool is one an agent walks
+/// round with `rm`.
+#[test]
+fn the_local_settings_and_the_agent_definitions_are_boundaries_on_both_roads() {
+    let home = crate::paths::home_dir().expect("a home directory");
+    for relative in [
+        [".claude", "settings.local.json"].as_slice(),
+        [".claude", "settings.json"].as_slice(),
+        [".claude", "agents", "reviewer.md"].as_slice(),
+    ] {
+        let mut target = home.clone();
+        for part in relative {
+            target.push(part);
+        }
+        let spelled = target.display().to_string();
+
+        let (_, written) = classify(
+            "Write",
+            &serde_json::json!({ "file_path": spelled.clone() }),
+        );
+        assert_eq!(
+            written,
+            Sensitivity::Boundary,
+            "a write to {spelled} answers routine, so the gate can be switched off through it"
+        );
+
+        let (_, removed) = classify(
+            "Bash",
+            &serde_json::json!({ "command": format!("rm {spelled}") }),
+        );
+        assert_eq!(
+            removed,
+            Sensitivity::Boundary,
+            "removing {spelled} through the shell answers routine, which is the road an \
+             agent would actually take"
+        );
+    }
+}
+
+/// Every adapter's instruction file is a boundary, on both roads.
+///
+/// `every_control_file_an_adapter_has_is_one_the_gate_measures` crosses the
+/// resolved paths against the gate, and that is the guard that keeps the derived
+/// fragments honest. This is the other half: it fixes the *reason* in place, on
+/// spellings a reader recognises, and it covers the shell as well as the write
+/// tool. The directive in these files is the sentence telling an agent this
+/// harness holds the authority — an agent that rewrites one removes its own
+/// reason to obey, and until issue 26 every one of them answered `Routine`.
+#[test]
+fn the_directive_that_names_the_authority_is_a_boundary_for_every_agent() {
+    let home = crate::paths::home_dir().expect("a home directory");
+    for adapter in crate::setup::AGENTS {
+        let fragment = adapter.instruction_fragment();
+        let spelled = home.join(fragment.replace('/', std::path::MAIN_SEPARATOR_STR));
+        let spelled = spelled.display().to_string();
+
+        let (_, written) = classify(
+            "Write",
+            &serde_json::json!({ "file_path": spelled.clone() }),
+        );
+        assert_eq!(
+            written,
+            Sensitivity::Boundary,
+            "{}: a write to its instruction file answers routine",
+            adapter.slug
+        );
+
+        let (_, removed) = classify(
+            "Bash",
+            &serde_json::json!({ "command": format!("rm {spelled}") }),
+        );
+        assert_eq!(
+            removed,
+            Sensitivity::Boundary,
+            "{}: removing its instruction file through the shell answers routine",
+            adapter.slug
+        );
+    }
+}
+
 /// The covered checkout is resolved the same way the target is.
 ///
 /// `covers` leaves a path it cannot canonicalise literal. A covered checkout

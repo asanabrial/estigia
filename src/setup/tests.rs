@@ -2648,6 +2648,13 @@ fn every_control_file_an_adapter_has_is_one_the_gate_measures() {
         watched.extend(paths.hooks.clone());
         watched.extend(paths.plugin.clone());
         watched.extend(paths.mcp_config.clone());
+        // The instruction file, which this walk did not reach for as long as it
+        // existed. It is the file `setup` writes the workflow-authority directive
+        // into — the sentence telling an agent this harness holds the authority
+        // at all — so an agent that rewrites it removes the reason it obeys, and
+        // it answered `Routine`. Eleven adapters, thirteen paths counting the two
+        // that differ by platform.
+        watched.push(paths.instructions.clone());
 
         for file in watched {
             let target = file.display().to_string();

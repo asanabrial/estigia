@@ -365,7 +365,17 @@ const CONTROL_SURFACE: &[&str] = &[
     // what `resolve_paths` actually produces, per adapter, in
     // `every_control_file_an_adapter_has_is_one_the_gate_measures` — which is
     // the half that catches the next one.
-    ".claude/settings.json",
+    // Without the extension, deliberately. `contains` is the match, so
+    // `.claude/settings.json` does not reach `.claude/settings.local.json` —
+    // which is the file an operator is *told* to put machine-local overrides in,
+    // and which Claude Code reads with the same authority. It answered `Routine`
+    // and the gate could be switched off through it. `.claude/settings` reaches
+    // both, and reaches nothing else under that directory that is not settings.
+    ".claude/settings",
+    // The agent definitions, which are instructions with a tool allowlist. An
+    // agent that writes one is choosing what a delegated context may do, which
+    // is the same authority as the directive itself.
+    ".claude/agents/",
     ".claude.json",
     ".codex/hooks.json",
     ".codex/config.toml",
@@ -475,7 +485,24 @@ fn is_control_surface(target: &str) -> bool {
     // answer — the cheapest disarmament there is, through the tool an agent uses
     // most, and the suite stayed green. One place now holds the name.
     let installed = format!("skills/{}/", crate::skill::DIRECTORY);
+    // The instruction files, derived from the adapter table for the same reason
+    // the skill tree is derived from `skill::DIRECTORY`: a hand-spelled copy
+    // agrees with the installer only until somebody renames one. Each adapter
+    // answers the tail of the file `setup` writes its directive into — the
+    // sentence telling that agent this harness holds the authority — and
+    // `every_control_file_an_adapter_has_is_one_the_gate_measures` resolves the
+    // real path for every adapter and asks this function, so a fragment that
+    // stops matching fails a test instead of quietly leaving a file open.
+    //
+    // They were `Routine` until now, and issue 2 is what made that matter: a
+    // write outside every checkout the claim covers stands aside without asking
+    // the tracker, and every one of these is outside every checkout by
+    // construction. So they went from *measured against the claim* to *not
+    // gated at all*.
     path.contains(&installed)
+        || crate::setup::AGENTS
+            .iter()
+            .any(|adapter| path.contains(adapter.instruction_fragment()))
         || CONTROL_SURFACE
             .iter()
             .any(|fragment| path.contains(*fragment))

@@ -157,19 +157,26 @@ suite. Everything else here is prose held by review.
   list of `{where, text}` from `assess_autoclose`. Nothing parses it today, which is the only reason
   that is a note and not a defect.
 
-- **The control surface does not cover every file that governs a run, and standing aside outside the
-  repository is now what makes that matter.** A write whose path lies outside every checkout the
-  claim covers is answered `outside-the-claim` without asking the tracker. That is right for a scratch
-  note; it is right for a `Boundary` write too, because those stay gated. What it is not right for is
-  a `Routine` write to a file that governs the harness and is not in `CONTROL_SURFACE`. Measured
-  through `classify`: `~/.claude/settings.json` and `~/.claude/skills/flow/SKILL.md` answer
-  `Boundary`, but `~/.claude/CLAUDE.md`, `~/.agents/AGENTS.md`, `~/.codex/AGENTS.md`,
-  `~/.qwen/QWEN.md`, `~/.cursor/estigia-workflow-authority.md`, `~/.continue/rules/estigia.md`,
-  `~/.cline/rules/estigia.md`, `~/.codeium/windsurf/memories/global_rules.md`,
-  `~/.config/crush/CRUSH.md`, `%APPDATA%/gemini/GEMINI.md`, `~/.claude/settings.local.json`,
-  `~/.claude/agents/` all answer `Routine` — and each of them is outside every checkout by
-  construction. They carry the workflow-authority directive `setup` writes, which is the sentence
-  telling an agent this harness holds the authority at all.
+- **The control surface covers the files that govern a run, and this entry records what it cost to
+  find that out.** Closed by issue 26. A write whose path lies outside every checkout the claim covers
+  is answered `outside-the-claim` without asking the tracker — right for a scratch note, right for a
+  `Boundary` write because those stay gated, and wrong for a `Routine` write to a file that governs
+  the harness. Thirteen such paths were `Routine`: the instruction file each adapter's `setup` writes
+  its workflow-authority directive into, plus `~/.claude/settings.local.json` and `~/.claude/agents/`.
+  Every one is outside every checkout by construction, so issue 2's stand-aside moved them from
+  *measured against the claim* to *not gated at all*.
+
+  The instruction files are derived from the adapter table now rather than spelled, the way the skill
+  tree is derived from `skill::DIRECTORY` — a hand-spelled copy agrees with the installer only until
+  somebody renames one, which this crate has already paid for once. The crossing that keeps them
+  honest is `every_control_file_an_adapter_has_is_one_the_gate_measures`, which resolves the real path
+  per adapter and asks the gate; it walks `paths.instructions` now and did not before, which is why
+  the gap existed at all. Measured: changing one adapter's fragment to a stale filename reddens that
+  test alone.
+
+  The two settings paths were missed for a smaller reason worth keeping: the match is `contains`, so
+  `.claude/settings.json` never reached `.claude/settings.local.json` — the file an operator is *told*
+  to put machine-local overrides in. The entry is `.claude/settings` now.
 
   `gh`'s hosts file would have belonged on that list and is not on it. It decides which account
   every tracker call acts as, so it is named in `CONTROL_SURFACE` instead — which is what the issue

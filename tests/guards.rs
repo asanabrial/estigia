@@ -531,7 +531,24 @@ const AFFIRMED: &[(&str, u64)] = &[
     // that entry could never fire through the shell — `Write` on the path
     // answered `Boundary` while `rm` on the same path answered `Routine`. Both
     // spellings now name the file without one. Population and boundary unchanged.
-    ("control-surface", 1111875050449119905),
+    // Re-affirmed 2026-08-15 for issue 26, and the population is genuinely wider
+    // this time. Two entries changed and the rule did not: `.claude/settings.json`
+    // became `.claude/settings`, because `contains` never reached
+    // `settings.local.json` — the file an operator is told to put local overrides
+    // in, read with the same authority, through which the gate could be switched
+    // off; and `.claude/agents/` joined, because an agent definition is an
+    // instruction with a tool allowlist, which is the same authority in another
+    // shape. Both are files this harness's decisions are read from, so the rule as
+    // stated already covered them and the list did not.
+    //
+    // The eleven instruction files are *not* in this list. They are derived from
+    // the adapter table in `is_control_surface`, the way the skill tree is derived
+    // from `skill::DIRECTORY` and for the same reason — a hand-spelled copy agrees
+    // with the installer only until somebody renames one. This declaration covers
+    // the literals; the derived set is crossed against `resolve_paths` per adapter
+    // by `every_control_file_an_adapter_has_is_one_the_gate_measures`, which now
+    // walks `paths.instructions` and did not before.
+    ("control-surface", 6747193313278382829),
     // Reopened 2026-08-05 by measuring the enumeration instead of reading it.
     // Thirty command lines that visibly put bytes on disk were classified and
     // twenty-six came back Untouched, among them "wget -O src/main.rs URL" —

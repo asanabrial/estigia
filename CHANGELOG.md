@@ -41,6 +41,18 @@ the workflow, it holds the tools.
   would be another, and `\\.\C:\Windows`, `\\?\Volume{...}\Windows` and
   `\\?\GLOBALROOT\Device\HarddiskVolume3\Windows` all resolve to `C:\Windows`, so they place normally
   and a write through one of them outside every checkout now stands aside where it used to be gated.
+- The files carrying Estigia's own authority are watched. `setup` writes a workflow-authority
+  directive — the sentence telling an agent this harness holds the authority at all — into each
+  agent's instruction file, and the gate called every one of them `Routine`. So did
+  `~/.claude/settings.local.json`, the file an operator is told to put machine-local overrides in, and
+  `~/.claude/agents/`, where an agent definition carries a tool allowlist. Thirteen paths, each
+  outside every checkout by construction, which is what made it urgent: the stand-aside added for a
+  closed issue's scratch note answers before the tracker, so they had moved from *measured against the
+  claim* to *not gated at all*. They are `Boundary` now, on both roads — the write tool and the shell.
+  The instruction files are derived from the adapter table rather than spelled, because a hand-written
+  copy agrees with the installer only until somebody renames one, and the population test that crosses
+  them against `resolve_paths` walks the instruction file now; it never had.
+
 - A test can no longer report pass without running. Sixteen tests in `tests/pipe.rs` drive the real
   binary against a stand-in `gh`, and that stand-in is a cargo example; the rig answered `Option` and
   every caller opened with `let Some(rig) = … else { return; }`, so wherever the example was missing

@@ -391,6 +391,43 @@ pub const AGENTS: &[AgentAdapter] = &[
 
 /// Whether this adapter installs the skill where the agent finds it on its own.
 impl AgentAdapter {
+    /// The tail of this adapter's instruction file, as the gate spells paths.
+    ///
+    /// The gate cannot call `resolve_paths`: it answers one hook invocation
+    /// against a string, with no environment to resolve a home directory from.
+    /// So it matches a fragment, and a fragment is a second spelling of a path
+    /// the installer already decides — the shape that let the contract become
+    /// writable once before, when `skill::DIRECTORY` was renamed and a literal
+    /// in `CONTROL_SURFACE` was not.
+    ///
+    /// This lives beside the `match` that resolves the full path, so the two are
+    /// read together, and `every_control_file_an_adapter_has_is_one_the_gate_measures`
+    /// crosses them: it resolves the real path for every adapter and asks the
+    /// gate. A fragment that stops matching what `paths_in` writes fails that
+    /// test rather than silently leaving the file unmeasured.
+    ///
+    /// Lowercase with forward slashes, because `is_control_surface` folds both
+    /// before it matches. Two components where the last is generic — `AGENTS.md`
+    /// and `estigia.md` are each used by two adapters — and one where the
+    /// directory alone would be too wide.
+    pub fn instruction_fragment(&self) -> &'static str {
+        match self.instructions {
+            InstructionFile::Neutral => ".agents/agents.md",
+            InstructionFile::ClaudeCode => ".claude/claude.md",
+            InstructionFile::Codex => ".codex/agents.md",
+            InstructionFile::OpenCode => "opencode/agents.md",
+            // `%APPDATA%/gemini/` on Windows and `~/.gemini/` elsewhere; the
+            // last two components are the same on both.
+            InstructionFile::GeminiCli => "gemini/gemini.md",
+            InstructionFile::Cursor => ".cursor/estigia-workflow-authority.md",
+            InstructionFile::Qwen => ".qwen/qwen.md",
+            InstructionFile::Crush => "crush/crush.md",
+            InstructionFile::Continue => ".continue/rules/estigia.md",
+            InstructionFile::Cline => ".cline/rules/estigia.md",
+            InstructionFile::Windsurf => "windsurf/memories/global_rules.md",
+        }
+    }
+
     /// Reviewed presets this adapter can expand without probing the host.
     pub fn model_profiles(&self) -> &'static [ModelProfile] {
         match self.instructions {
