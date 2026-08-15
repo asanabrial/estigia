@@ -876,12 +876,14 @@ impl Environment {
         Ok(Self {
             platform,
             home,
-            config_home: absolute_or_none(
-                options
-                    .config_home
-                    .clone()
-                    .or_else(|| inherited("XDG_CONFIG_HOME")),
-            ),
+            // Through `xdg_config_home` rather than beside it. A reviewer
+            // measured that this read the variable inline while the gate read it
+            // through the public rule, so "one rule" described a shape the code
+            // did not have — two implementations that happened to agree, which is
+            // the arrangement this crate has already been bitten by twice. They
+            // agree by construction now.
+            config_home: absolute_or_none(options.config_home.clone())
+                .or_else(|| borrowed.then(xdg_config_home).flatten()),
             app_data: absolute_or_none(options.app_data.clone().or_else(|| inherited("APPDATA"))),
         })
     }
@@ -919,12 +921,12 @@ fn absolute_or_none(path: Option<PathBuf>) -> Option<PathBuf> {
 /// absolute value or nothing, which is what `Environment::resolve` has always
 /// applied through `absolute_or_none`. A relative or empty value is not a config
 /// home; it is a caller's mistake, and both roads treat it as absent.
+/// The empty-value filter that stood here was dead and a reviewer measured it:
+/// an empty `PathBuf` is not absolute, so `absolute_or_none` already answered
+/// `None` for it. Two conditions where one decides is how a rule starts to
+/// disagree with itself.
 pub fn xdg_config_home() -> Option<PathBuf> {
-    absolute_or_none(
-        std::env::var_os("XDG_CONFIG_HOME")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from),
-    )
+    absolute_or_none(std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from))
 }
 
 /// The adapter a slug names, or a refusal listing the ones that exist.

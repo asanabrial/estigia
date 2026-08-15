@@ -292,6 +292,15 @@ suite. Everything else here is prose held by review.
   on and pays one extra tracker read. Substitutions are still invisible — a path assembled from a
   variable or a subshell names nothing this can match, at the base commit as much as here.
 
+  The **trailing** half of the wrap is not load-bearing at this head, and it is kept anyway. Measured:
+  every fragment the gate consults — all 28 `CONTROL_SURFACE` entries and all 11 derived instruction
+  fragments — as the last token of a removal, in three spellings each, answers `Boundary` identically
+  with the trailing separator and without it. What covers for it is the bare-directory branch of
+  `names`, which reaches a directory by `ends_with`. It stays because "wrap the line" is one rule and
+  removing the half that is currently redundant is how the leading half came to be missing for three
+  heads; but no fixture can tell the difference, and a reader should know that rather than infer a
+  guard that is not there.
+
   A fragment naming a **file** without a leading dot still cannot be anchored, because `cli/hosts.yml`
   exists to match **mid-segment**: the Windows path is `%APPDATA%\GitHub CLI\hosts.yml`, and
   `github cli` is one segment holding a space. The cost is that a vendored copy of somebody else's
@@ -332,9 +341,11 @@ suite. Everything else here is prose held by review.
     names `vendor/mycrush/crush.md`. So does `.cursor/estigia-workflow-authority.md` → `.cursor/`,
     through the `.cursor/rulesets.md` row in the ends-alike fixture. `gemini/gemini.md` and
     `opencode/agents.md` are covered by the same over-gating fixture.
-  - `.qwen/qwen.md` → `.qwen/` **leaves all 1,149 tests green.** Nothing in this crate names a path
-    under a `.qwen` directory in the `Routine` direction, so that widening is silent — and it is
-    silent for every adapter no hand-written row happens to cover.
+  - Four are silent, measured one at a time with the full suite: `.agents/agents` → `.agents/`,
+    `.codex/agents` → `.codex/`, `.qwen/qwen.md` → `.qwen/` and `.cline/rules/estigia.md` →
+    `.cline/` each **leave all 1,149 tests green.** Nothing in this crate names a path under those
+    directories in the `Routine` direction. An earlier draft of this list said *one*, naming only
+    qwen; a reviewer counted them.
 
   The earlier draft of this paragraph used crush as its example of the silent case, which stopped
   being true in the same change that added the fixture above; qwen is the measurement now. The

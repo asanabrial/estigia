@@ -472,6 +472,17 @@ const CONTROL_SURFACE: &[&str] = &[
     // `Routine` — so the stand-aside issue 2 added waved it past without asking
     // the tracker. Found the moment the crossing below stopped walking one
     // platform.
+    //
+    // The POSIX spelling is behaviourally subsumed by the Windows one today, and
+    // a reviewer measured it: deleting it reddens only the population hash,
+    // because `gemini/settings.json` carries no leading dot and so is not
+    // anchored, which makes it match everything the dotted entry does and more.
+    // It is kept deliberately. That unanchored match is itself declared
+    // over-gating in `docs/honesty.md`, and anchoring the file fragments is the
+    // obvious next narrowing — at which moment this entry stops being redundant
+    // and becomes the only thing covering `~/.gemini/settings.json`. Removing it
+    // now would make that later change a silent loss, which is the failure this
+    // branch has already paid for three times.
     ".gemini/settings.json",
     "gemini/settings.json",
     ".qwen/settings.json",
