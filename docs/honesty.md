@@ -319,10 +319,14 @@ suite. Everything else here is prose held by review.
 
   **The guard that holds the rig catches an accident. It does not catch an author, and this is the
   measurement of how far short it falls.** Reviewers walked past
-  `the_tracker_rig_cannot_answer_that_it_did_not_run` eighteen times — nine of those routes are held
-  now and nine are not, which is the last column below. Each attempt was measured with the
-  fixture removed — except the two about *where* the fixture is looked for, which are measured with it
+  `the_tracker_rig_cannot_answer_that_it_did_not_run` twenty-one times — eleven of those routes are
+  held now and ten are not, which is the last column below. That split is counted from the table
+  rather than remembered: every version of this paragraph that carried a number from memory carried
+  a wrong one. Each attempt was measured with the
+  fixture removed — except those about *where* the fixture is looked for, which are measured with it
   present, since their point is that the rig looks in the wrong place rather than that it is missing.
+  One row is unchanged applied alone and only bites paired with another, and its outcome column says
+  so; a reviewer found that reading `no result line` there and measuring something else.
   Where the outcome is `106 passed`, that is issue 22's defect reproduced whole with every gate in
   this repository green.
 
@@ -334,8 +338,9 @@ suite. Everything else here is prose held by review.
   | the fixture located from `CARGO_MANIFEST_DIR` again | whole suite green | yes |
   | `return Default::default();` | 106 passed | yes |
   | `std::process::exit(0)` in the rig | **no result line at all**, exit 0 | yes |
-  | a decoy comment *naming* the rig, moving the body split | no result line, exit 0 | yes |
-  | a decoy comment carrying the **whole signature line**, `//` or `/* */` | 106 passed | **no** |
+  | a decoy comment *naming* the rig | unchanged alone; pairs with an exit | yes |
+  | a `//` comment carrying the **whole signature line** | whole suite green | yes |
+  | a `/* */` block putting the signature at column zero | 106 passed | yes |
   | `process::exit` in a caller, or in a helper below the rig | no result line, exit 0 | yes |
   | `use std::process::exit as leave;` | no result line, exit 0 | yes |
   | `use std::process as sys;` then `sys::exit(0)` | no result line, exit 0 | **no** |
@@ -344,6 +349,8 @@ suite. Everything else here is prose held by review.
   | a macro expanding to `return`, defined before the first `#[test]` | 106 passed | **no** |
   | `'rig: { … break 'rig; }` around each body | 106 passed | **no** |
   | `#[ignore]` on all sixteen | 90 passed, 16 ignored | **no** |
+  | `#[should_panic]` on all sixteen | 106 passed — the rig's own panic is swallowed | **no** |
+  | `#[cfg(feature = "rig-tests")]` on all sixteen | 90 passed, **0 ignored** — no trace at all | **no** |
   | a second `tests/*.rs` with its own `Option` rig | its own suite green | **no** |
   | a body skip — `if built { … } else { eprintln!(…) }`, no return | 106 passed | **no** |
 
@@ -351,10 +358,13 @@ suite. Everything else here is prose held by review.
   extraction bound to the first text in the file matching `fn tracker_rig()`, which a two-line comment
   could claim, and the `process::exit` refusal was scoped to the rig's body when its sentence meant
   the suite. Both fixes are **narrower than the first draft of this table said**, and a reviewer
-  measured the difference. The body extraction now splits on the whole signature line rather than on
-  `fn tracker_rig()`, which raised the price of the decoy from *mentioning the rig* to *quoting its
-  signature verbatim* and did not close it — measured both ways, a comment naming the rig is caught
-  and a comment carrying the whole line, in either comment syntax, is not. And the file-wide
+  measured the difference. The decoy took three rounds to close and each round narrowed it rather
+  than ending it: from *any text matching `fn tracker_rig()`* to *the whole signature line* to — now —
+  the definition itself. The last step is what a check should have done first: there must be exactly
+  one line in the file that reads as a definition, and the body runs from that line rather than from
+  the first substring that matches it. A reviewer had put the signature inside a `/* */` block at
+  column zero, where a comment does not begin with `//`, and taken the signature check itself. All
+  three comment shapes are red now. And the file-wide
   `process::exit` scan catches `use std::process::exit as leave;`, because that line contains the
   substring, while `use std::process as sys;` and `use std::process::{exit as leave};` do not. Rows of
   this table said the opposite of each, every time in the direction that flattered the guard, which is
@@ -368,7 +378,8 @@ suite. Everything else here is prose held by review.
   reintroduces this by copying a neighbour, which is how all sixteen callers came to have it. The
   guard adds four things a single careless edit could do and the compiler would not see: reverting the
   signature, moving where the fixture is looked for, ending the process instead of failing, and
-  writing `return` in a test that reaches the rig. An earlier draft of this paragraph said three and
+  writing `return` in a test that reaches the rig. It holds those against a decoy definition too,
+  which it did not until a reviewer took the signature check with a block comment. An earlier draft of this paragraph said three and
   left out the `process::exit` refusal — which is the check that actually catches four of the rows
   above, so the omission understated the guard in the paragraph somebody reads to learn what it
   holds. That is its honest scope. An earlier version

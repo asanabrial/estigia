@@ -716,10 +716,23 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     // and `fn tracker_rig() -> TrackerRigMaybe {`, which contains the needle and
     // answers an option — then removed the fixture and watched 106 tests pass on
     // nothing with this guard green.
-    let signature = source
+    // Exactly one, because "a line that looks like the definition" is not the
+    // definition. A reviewer put the signature inside a `/* */` block at column
+    // zero — a comment cannot start with `//` there, so the filter took the decoy,
+    // the real rig went back to `Option<TrackerRig>`, and 106 tests passed on
+    // nothing with this green. A second one is a decoy by construction: the
+    // callers can only bind to one.
+    let defining: Vec<&str> = source
         .lines()
-        .find(|line| line.trim_start().starts_with("fn tracker_rig("))
-        .expect("tests/pipe.rs still defines tracker_rig — if it was renamed, rename it here too");
+        .filter(|line| line.trim_start().starts_with("fn tracker_rig("))
+        .collect();
+    assert_eq!(
+        defining.len(),
+        1,
+        "tests/pipe.rs holds {} lines that read as a definition of `tracker_rig`, so          every check below would bind to whichever comes first: {defining:?}",
+        defining.len()
+    );
+    let signature = defining[0];
     assert_eq!(
         signature.trim(),
         "fn tracker_rig() -> TrackerRig {",
@@ -739,14 +752,23 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     // whichever came first — a reviewer put two comment lines mentioning the
     // rig near the top and every assertion below read those four lines instead,
     // passing while the real rig did both of the things they refuse.
-    let from_definition = source
-        .split_once(signature)
-        .expect("the signature line was found above")
-        .1;
-    let body = from_definition
-        .split_once("\n}")
-        .expect("the rig has an end")
-        .0;
+    // From the line, not from text that reads like it. `split_once(signature)`
+    // matched the first *substring*, so a `//` comment quoting the signature took
+    // the split even though the check above rejects it as a definition. Lines
+    // carry no such ambiguity: exactly one defines the rig, and the body runs
+    // from it to the next line that is only a closing brace.
+    let lines: Vec<&str> = source.lines().collect();
+    let at = lines
+        .iter()
+        .position(|line| *line == signature)
+        .expect("the definition line came out of this file");
+    let past = lines
+        .iter()
+        .skip(at)
+        .position(|line| line.trim_end() == "}")
+        .expect("the rig has an end");
+    let body = lines[at..=at + past].join("\n");
+    let body = body.as_str();
     assert!(
         body.contains("current_exe()"),
         "the fixture is no longer located from the running test binary, so it is \
