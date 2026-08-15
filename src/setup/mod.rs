@@ -391,6 +391,50 @@ pub const AGENTS: &[AgentAdapter] = &[
 
 /// Whether this adapter installs the skill where the agent finds it on its own.
 impl AgentAdapter {
+    /// The tail of this adapter's instruction file, as the gate spells paths.
+    ///
+    /// The gate cannot call `resolve_paths`: it answers one hook invocation
+    /// against a string, with no environment to resolve a home directory from.
+    /// So it matches a fragment, and a fragment is a second spelling of a path
+    /// the installer already decides — the shape that let the contract become
+    /// writable once before, when `skill::DIRECTORY` was renamed and a literal
+    /// in `CONTROL_SURFACE` was not.
+    ///
+    /// This lives beside the `match` that resolves the full path, so the two are
+    /// read together, and `every_control_file_an_adapter_has_is_one_the_gate_measures`
+    /// crosses them: it resolves the real path for every adapter and asks the
+    /// gate. A fragment that stops matching what `paths_in` writes fails that
+    /// test rather than silently leaving the file unmeasured.
+    ///
+    /// Lowercase with forward slashes, because `is_control_surface` folds both
+    /// before it matches. Two components where the last is generic — `AGENTS.md`
+    /// is used by three adapters and `estigia.md` by two — and one where the
+    /// directory alone would be too wide.
+    pub fn instruction_fragment(&self) -> &'static str {
+        match self.instructions {
+            // Without the extension, the same trimming `.claude/settings` needed
+            // and for the same reason: `contains` never reaches a `.local.`
+            // sibling. `~/.claude/CLAUDE.local.md` and `~/.codex/AGENTS.local.md`
+            // are read with the same authority as the files beside them and
+            // answered `Routine` — the identical shape this change fixed one entry
+            // over, applied to the entries it introduced only after a reviewer
+            // pointed at them.
+            InstructionFile::Neutral => ".agents/agents",
+            InstructionFile::ClaudeCode => ".claude/claude",
+            InstructionFile::Codex => ".codex/agents",
+            InstructionFile::OpenCode => "opencode/agents.md",
+            // `%APPDATA%/gemini/` on Windows and `~/.gemini/` elsewhere; the
+            // last two components are the same on both.
+            InstructionFile::GeminiCli => "gemini/gemini.md",
+            InstructionFile::Cursor => ".cursor/estigia-workflow-authority.md",
+            InstructionFile::Qwen => ".qwen/qwen.md",
+            InstructionFile::Crush => "crush/crush.md",
+            InstructionFile::Continue => ".continue/rules/estigia.md",
+            InstructionFile::Cline => ".cline/rules/estigia.md",
+            InstructionFile::Windsurf => "windsurf/memories/global_rules.md",
+        }
+    }
+
     /// Reviewed presets this adapter can expand without probing the host.
     pub fn model_profiles(&self) -> &'static [ModelProfile] {
         match self.instructions {
@@ -832,12 +876,25 @@ impl Environment {
         Ok(Self {
             platform,
             home,
-            config_home: absolute_or_none(
-                options
-                    .config_home
-                    .clone()
-                    .or_else(|| inherited("XDG_CONFIG_HOME")),
-            ),
+            // Through `xdg_config_home` rather than beside it. A reviewer
+            // measured that this read the variable inline while the gate read it
+            // through the public rule, so "one rule" described a shape the code
+            // did not have — two implementations that happened to agree, which is
+            // the arrangement this crate has already been bitten by twice. They
+            // agree by construction now.
+            //
+            // An explicit override is answered on its own, and never falls
+            // through to the variable. Folding the two together read the same on
+            // every path the binary can reach and diverged on one a library
+            // caller can: `config_home: Some(<relative>)` with the variable set
+            // absolute took the **variable** here and `$HOME/.config` before it.
+            // A reviewer measured it. A caller that named a config home and named
+            // it badly has made a mistake; inheriting the machine's instead is
+            // the half-move this whole block exists to refuse.
+            config_home: match options.config_home.clone() {
+                Some(explicit) => absolute_or_none(Some(explicit)),
+                None => borrowed.then(xdg_config_home).flatten(),
+            },
             app_data: absolute_or_none(options.app_data.clone().or_else(|| inherited("APPDATA"))),
         })
     }
@@ -857,6 +914,30 @@ impl Environment {
 
 fn absolute_or_none(path: Option<PathBuf>) -> Option<PathBuf> {
     path.filter(|path| path.is_absolute())
+}
+
+/// `XDG_CONFIG_HOME`, resolved the one way this crate resolves it.
+///
+/// Public because the gate needs the same answer, and asking for it is the only
+/// way the two roads stay together. `harness::roles::definition_for` reads
+/// OpenCode's definition root, and it spelled `~/.config` by hand until a
+/// reviewer measured that a relocated variable put the definitions where it never
+/// looked — which is `Ok(None)`, which `declared_policy` reads as *the sub-agent
+/// may use every tool*. The first fix read the variable itself and so introduced a
+/// **third** rule: empty and relative values were taken literally there and folded
+/// away here, so the two roads still disagreed on those two inputs. A reviewer
+/// measured that too.
+///
+/// So there is one rule and it lives beside the resolution that uses it: an
+/// absolute value or nothing, which is what `Environment::resolve` has always
+/// applied through `absolute_or_none`. A relative or empty value is not a config
+/// home; it is a caller's mistake, and both roads treat it as absent.
+/// The empty-value filter that stood here was dead and a reviewer measured it:
+/// an empty `PathBuf` is not absolute, so `absolute_or_none` already answered
+/// `None` for it. Two conditions where one decides is how a rule starts to
+/// disagree with itself.
+pub fn xdg_config_home() -> Option<PathBuf> {
+    absolute_or_none(std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from))
 }
 
 /// The adapter a slug names, or a refusal listing the ones that exist.

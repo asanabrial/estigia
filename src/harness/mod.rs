@@ -282,8 +282,22 @@ pub(crate) const SHELL_TOOLS: &[&str] = &["bash", "run_shell_command", "shell", 
 ///
 /// guard:population control-surface too-tight: the files Estigia's decisions
 /// are read from — its state directory, the contract, the entries it writes
-/// into an agent's own settings, and the push hook. Legitimate population: any
-/// path a write to which changes what this harness enforces. Boundary: matched
+/// into an agent's own settings, and the push hook — **and the files that carry
+/// its authority to an agent**: the instruction file each adapter's `setup`
+/// writes the workflow-authority directive into. Legitimate population: any path
+/// a write to which changes what this harness enforces, or what an agent is told
+/// this harness may enforce.
+///
+/// That second clause is a widening, recorded rather than slipped in. Issue 26
+/// added the instruction files, and a reviewer was right that they do not fit the
+/// rule as it stood: the gate reads nothing from `~/.claude/CLAUDE.md`, so a write
+/// there changes what the agent is *told* and not what the binary *does*. The
+/// reason they belong anyway is that this crate's authority over an agent is
+/// exactly that sentence — `README.md` says the harness does not ask an agent to
+/// follow the workflow, it holds the tools, and the directive is what makes the
+/// agent reach for those tools at all. An agent that rewrites it disarms the half
+/// of the system that is not code. Enforcement inputs and compliance inputs are
+/// different things and the population now names both. Boundary: matched
 /// on path fragments — after separators are folded, and after `/./`, `//` and
 /// **`../`** are collapsed away, because a matcher a redundant segment defeats
 /// is measuring a spelling and not a path. So a hard link, a junction, or a
@@ -291,6 +305,16 @@ pub(crate) const SHELL_TOOLS: &[&str] = &["bash", "run_shell_command", "shell", 
 /// fragment that merely *ends* the same way rejected — `..claude/settings.json`
 /// matches, which is a false positive costing one tracker read, and that is the
 /// direction this chooses on purpose.
+///
+/// What one tracker read costs is worth stating where the trade is made, because
+/// this sentence used to be the whole account of it and a reviewer measured the
+/// rest. A `Boundary` never rides the renewal window and never stands aside
+/// outside the claim, so it is a live `gh issue view` on **every** write — about
+/// 0.5 to 1.2 seconds, no caching — and with no network it is a refusal rather
+/// than a delay. The population grew in issue 26 to cover a project's own
+/// `.claude/agents/` and rules directories, so that cost now lands on ordinary
+/// per-project files and not only on an operator's home. `docs/honesty.md`
+/// carries the measurements; this is here so the trade is not read as free.
 ///
 /// `gh`'s hosts file joined the population on 2026-08-15, in both spellings and
 /// the file rather than the directory around it. It is not Estigia's
@@ -334,7 +358,9 @@ const CONTROL_SURFACE: &[&str] = &[
     // whole class."* This one can — rewriting it changes which account answers
     // every `gh` call the transport makes — and standing aside outside the
     // repository is what would otherwise have let it through ungated. The wider
-    // gap, the instruction file each adapter's setup writes, is its own change.
+    // gap it pointed at — the instruction file each adapter's `setup` writes —
+    // was closed by issue 26, and those are derived below rather than listed
+    // here.
     ".config/gh/hosts.yml",
     // No space, deliberately. `surface_of` splits a command on whitespace and
     // appends `/` to every token, so a fragment containing one can never match
@@ -365,17 +391,105 @@ const CONTROL_SURFACE: &[&str] = &[
     // what `resolve_paths` actually produces, per adapter, in
     // `every_control_file_an_adapter_has_is_one_the_gate_measures` — which is
     // the half that catches the next one.
-    ".claude/settings.json",
+    // Without the extension, deliberately. `contains` is the match, so
+    // `.claude/settings.json` does not reach `.claude/settings.local.json` —
+    // which is the file an operator is *told* to put machine-local overrides in,
+    // and which Claude Code reads with the same authority. It answered `Routine`
+    // and the gate could be switched off through it. No trailing slash, because
+    // this names a file and not a directory — so it is a prefix, and it reaches
+    // `.claude/settingsmap.ts` too. Measured, and kept: one tracker read on a file
+    // nobody has, against the gate switching off through one everybody is told to
+    // edit.
+    ".claude/settings",
+    // The agent definitions, which are instructions with a tool allowlist. An
+    // agent that writes one is choosing what a delegated context may do, which
+    // is the same authority as the directive itself, and `harness::roles`
+    // enforces exactly that allowlist.
+    //
+    // With a trailing slash, like every directory here. It lost one for a single
+    // head, because the slash split the two roads: `surface_of` appends a
+    // separator, so `rm ~/.claude/agents` was `Boundary` while a write to the bare
+    // directory was `Routine`. Removing it closed that and opened a prefix bleed
+    // instead — `.claude/agentsmith.md`. The matcher honours the slash now, so the
+    // entry can say *directory* and mean it. The crossing found the split the
+    // moment that root was added to what it walks, which is the better argument for
+    // crossing a hand-spelled entry than any reasoning about reachability.
+    ".claude/agents/",
+    // The rules **directories**, not only Estigia's own filename inside them.
+    // `paths_in`'s comments say so for two of these — Continue applies any rule
+    // that is not `invokable` and declares no globs, Cline loads the directory
+    // for every task. The other two are here on the restated rule rather than on
+    // anything this crate verified: Windsurf's comment is about a character cap
+    // on one file, and `.cursor/rules` holds no Estigia file at all — Cursor's
+    // directive is `~/.cursor/estigia-workflow-authority.md`. `docs/honesty.md`
+    // carries which is which. So gating `estigia.md` and leaving the directory open is defeated by
+    // a neighbour: a reviewer measured `~/.cline/rules/zz-override.md` answering
+    // `Routine`, and a sibling saying *Estigia is retired* changes exactly what
+    // the restated population clause is about — what an agent is told this
+    // harness may enforce — without touching a `Boundary` path.
+    //
+    // With trailing slashes, which `names` reads as *directory* — see the entry
+    // above for the round these spent without them.
+    ".cline/rules/",
+    ".continue/rules/",
+    "windsurf/memories/",
+    ".cursor/rules/",
     ".claude.json",
     ".codex/hooks.json",
     ".codex/config.toml",
+    // Anchored to what the installer writes, not to the directory around it.
+    // `XDG_CONFIG_HOME` moves the `.config/` prefix, so anchoring there left
+    // opencode's plugin — that adapter's only deny mechanism — and its MCP config
+    // answering `Routine` when the variable was set. But dropping the prefix
+    // entirely left `opencode` as a bare directory name matched anywhere: a
+    // reviewer measured `node_modules/opencode/**`, `packages/opencode/**` and a
+    // checkout *named* `opencode` answering `Boundary` on every file in them, at
+    // about 1.2s of tracker read per write, unwindowed, and refused outright with
+    // no network. Both ends were wrong; the tail the installer actually writes is
+    // neither. `opencode/agents` covers the instruction file and the definition
+    // root that `harness::roles` enforces from.
     ".config/opencode/",
+    "opencode/agents/",
+    "opencode/plugins/",
+    "opencode/opencode.json",
+    // The **repository-local** definition root, which is a different path and was
+    // reached by none of the three above: `roles::definition_for` searches
+    // `<repo>/.opencode/agents` as well as the home and XDG roots, and
+    // `opencode/agents/` is anchored on the left, so `.opencode` is not it. A
+    // reviewer measured that root answering `Routine` on both roads while
+    // `docs/honesty.md` and the pull request both claimed every definition root
+    // was watched. A definition that is not found is `Ok(None)`, which
+    // `declared_policy` reads as *every tool allowed* — so this is the file that
+    // writes an agent its own tool allowlist, and it sat inside the renewal
+    // window. `<repo>/.claude/agents` was already covered by `.claude/agents/`;
+    // this is its OpenCode twin, and the asymmetry was invisible because the two
+    // roots are spelled in one `vec!` and gated by two different fragments.
+    ".opencode/agents/",
+    // Both roots, because Gemini keeps its settings under `%APPDATA%` on Windows
+    // and `~/.gemini` everywhere else, and only the POSIX spelling was here. The
+    // Windows one is where this harness's own gate is registered for that
+    // adapter, it is outside every checkout by construction, and it answered
+    // `Routine` — so the stand-aside issue 2 added waved it past without asking
+    // the tracker. Found the moment the crossing below stopped walking one
+    // platform.
+    //
+    // The POSIX spelling is behaviourally subsumed by the Windows one today, and
+    // a reviewer measured it: deleting it reddens only the population hash,
+    // because `gemini/settings.json` carries no leading dot and so is not
+    // anchored, which makes it match everything the dotted entry does and more.
+    // It is kept deliberately. That unanchored match is itself declared
+    // over-gating in `docs/honesty.md`, and anchoring the file fragments is the
+    // obvious next narrowing — at which moment this entry stops being redundant
+    // and becomes the only thing covering `~/.gemini/settings.json`. Removing it
+    // now would make that later change a silent loss, which is the failure this
+    // branch has already paid for three times.
     ".gemini/settings.json",
+    "gemini/settings.json",
     ".qwen/settings.json",
     ".cursor/hooks.json",
     ".cursor/mcp.json",
     ".continue/settings.json",
-    ".config/crush/crush.json",
+    "crush/crush.json",
     ".codeium/windsurf/hooks.json",
     ".cline/hooks",
 ];
@@ -409,6 +523,26 @@ const CONTROL_SURFACE: &[&str] = &[
 /// this list is only ever consulted **together with** a control surface.
 const NEUTRALISES_A_FILE: &[&str] = &["chmod ", "chattr ", "chown "];
 
+/// Characters a shell puts next to a path that a path segment cannot contain.
+///
+/// Folded to a separator before matching, so the left anchoring reaches a
+/// fragment however the line is punctuated. Each one was measured against the
+/// base commit as a spelling that had lost its boundary: the quotes through a
+/// quoted operand, the redirects through one written with no space after `>`,
+/// `=` through an operand joined to a long flag, and `:` through the
+/// drive-relative Windows spelling, which is the one that reaches the write road
+/// as well. The rest terminate a word the same way, and leaving them out would
+/// make this a list of the shapes somebody happened to try. The braces joined
+/// them for the same reason the others did: a reviewer measured brace expansion
+/// putting a real path one character past a separator.
+///
+/// `-` is deliberately **not** here, and cannot be: three fragments carry one —
+/// `hooks/pre-push`, `.estigia/stand-down.json` and cursor's derived
+/// `.cursor/estigia-workflow-authority.md` — so folding it would cut them in
+/// half and lose them outright. The option prefix it belongs to is handled in
+/// `surface_of` as a prefix rather than as punctuation.
+const NOT_IN_A_PATH_SEGMENT: &str = "\"'`<>=|;&()$*,{}%^";
+
 /// How sensitive a command line is, by what it names.
 ///
 /// A whole command rather than one operand, on the asymmetry this module
@@ -416,21 +550,156 @@ const NEUTRALISES_A_FILE: &[&str] = &["chmod ", "chattr ", "chown "];
 /// elsewhere costs one extra tracker read, and a line that removes one
 /// unmeasured costs the gate for everything after it.
 ///
-/// Each token is given a trailing `/` before matching, because the fragments
-/// name directories with one and a command names them without: `rm -rf
-/// ~/.claude/skills/issue-flow` is the same directory as the path a `Write`
-/// would give as `.../skills/issue-flow/`.
+/// Every character that cannot be part of a path segment is read as a
+/// **separator**, and the whole line is wrapped in one at both ends. That is one
+/// rule rather than a list of shell shapes, and it is the third attempt at it.
+///
+/// The fragments name directories with a trailing separator and a command names
+/// them without, so a recursive removal of an installed skill directory has to
+/// reach the path a `Write` would give with the separator on the end. The
+/// fragments are also anchored on the **left**, and that is what the first two
+/// attempts kept missing. Splitting on whitespace and appending a separator left
+/// a relative operand with a space in front of it and never a separator — and
+/// never at position 0 either, because the verb is there — so removing the state
+/// directory by its bare relative name answered `Routine` while `Write` answered
+/// `Boundary` for the same path. Wrapping each **token** fixed exactly that and
+/// no more: a quote, a redirect written with no space, or an operand joined to a
+/// long flag all sit between the token boundary and the fragment, so those
+/// spellings stayed `Routine` — reaching the run pointer and the file the gate
+/// is registered in, by the shortest line there is. A reviewer measured all
+/// three families against the base, where a bare `contains` had gated them.
+///
+/// Folding the punctuation reaches all of them at once, because none of those
+/// characters can sit between a separator and a path segment in any spelling
+/// that names a real file. It over-gates a line that merely *mentions* a
+/// surface, which is the asymmetry this function already runs on.
+///
+/// The fourth family is a **short option carrying its value attached**, and it
+/// needs its own rule because the character in the way is an ordinary letter:
+/// `-o.estigia`, `-C.estigia`, `-d.estigia`, `-oskills/flow/SKILL.md`. Folding
+/// `-` would do it and cannot be done — three fragments carry one, and cutting
+/// them in half loses them outright. A shell gives no way to know where the
+/// option letters end and the value begins, so every split point of a token
+/// beginning with `-` is offered to the matcher. That is deliberately generous
+/// in one direction only: it can gate a token that merely ends like a surface,
+/// never miss one that is a surface. `7z` is why it is not optional — its
+/// extract-to spelling is `-oDIR` and a space there is a syntax error, so the
+/// only correct way to write it is the way that was not gated.
 fn surface_of(command: &str) -> Sensitivity {
-    let view = command
-        .split_whitespace()
-        .map(|token| format!("{token}/"))
-        .collect::<Vec<_>>()
-        .join(" ");
-    if is_control_surface(&view) {
+    if text_names_a_control_surface(command) {
         Sensitivity::Boundary
     } else {
         Sensitivity::Routine
     }
+}
+
+/// Whether free text names a control surface anywhere in it.
+///
+/// A command line and a patch body are the same problem: a path sits somewhere
+/// inside prose, with whatever the writer put next to it. The payload fallback
+/// used to hand the whole JSON blob to `is_control_surface` directly, which was
+/// right while the fragments were matched by a bare `contains` and wrong the
+/// moment they were anchored — a relative path in a patch body sits after a
+/// space, so every relative spelling stopped matching on that road while `Write`
+/// still gated the same file. A reviewer measured thirteen of them, including
+/// the run pointer and the stand-down record. One reading now, for both roads.
+fn text_names_a_control_surface(text: &str) -> bool {
+    let command = text;
+    // No whitespace clause here, and a reviewer had to measure that to find out:
+    // `fold` only ever sees tokens from `split_whitespace`, which uses the same
+    // predicate, so a `c.is_whitespace()` arm could not execute. It stood here
+    // anyway, and the pull request's evidence table named a fixture as holding
+    // it — a row pointing at a line that decides nothing. What actually carries
+    // whitespace-as-separator is the separator pushed between tokens below.
+    let fold = |text: &str| {
+        text.chars()
+            .map(|c| {
+                if NOT_IN_A_PATH_SEGMENT.contains(c) {
+                    '/'
+                } else {
+                    c
+                }
+            })
+            .collect::<String>()
+    };
+    // Per token, and joined afterwards rather than normalised as one string. A
+    // command line is not one path: normalising the joined line let the
+    // parent-segment collapse reach across an operand boundary and delete the
+    // surface named by the operand before it, so `mv .estigia ..` answered
+    // `Routine` where the base answered `Boundary`.
+    let mut view = String::from("/");
+    for token in command.split_whitespace() {
+        view.push_str(&normalise(&fold(token)));
+        view.push('/');
+    }
+    // A segment beginning with `-` or `~` is an option or an expansion, and the
+    // shell gives no way to know where its prefix ends and the path begins. Every
+    // split point from there is offered to the matcher, which can gate a token
+    // that merely ends like a surface and can never miss one that is a surface.
+    //
+    // Read off the **folded** token rather than the raw one, because a leading
+    // quote is what defeated the first version of this: `wget "-O.claude/…"`
+    // does not start with `-` before folding, and the option letters then sit
+    // between the separator and the fragment exactly as they did unquoted. A
+    // reviewer measured 38 of those, plus the batch idiom `%~dp0.estigia\…`,
+    // which is why `~` is here beside `-`.
+    // Each rung is asked **on its own**, never appended to the view. Pushing them
+    // into one string let adjacent rungs concatenate into a path that was never
+    // in the command: the ladder for `~/.claude` is `.claude/claude/laude/…`, and
+    // `.claude/claude` is ClaudeCode's derived instruction fragment, so a
+    // recursive delete of the home config directory answered `Boundary` for a
+    // path nobody wrote — and so did `~/backup.claude` and `-obackup.claude`. A
+    // reviewer measured it, and it had already made a paragraph of
+    // `docs/honesty.md` false about the very directories it was declaring open.
+    // `.agents/agents` has the same `A/A[1..]` shape and did the same thing.
+    let ladder = |token: &str| {
+        // The **same string the matcher sees**, which is what this got wrong: the
+        // view is built from `normalise(&fold(token))` and the entry test read
+        // `fold(token)` alone. `normalise` folds `:` and `\` and this does not, so
+        // in `${P:-.claude/settings.json}` the `-` starts a segment in the string
+        // that is matched and did not in the string the ladder inspected — no rung
+        // was offered, and a parameter expansion with a default word answered
+        // `Routine` for thirteen real surfaces the base gated, the run pointer and
+        // the stand-down record among them. `TARGET=${1:-.claude/settings.json}`
+        // over two lines is the ordinary script idiom for it, not a contrivance.
+        //
+        // A reviewer found it by sweeping **two**-character contexts; the sweep
+        // recorded in `docs/honesty.md` was one character wide and could not reach
+        // `:-`.
+        let folded = normalise(&fold(token));
+        let starts_a_segment = |at: usize| at == 0 || folded.as_bytes()[at - 1] == b'/';
+        folded
+            .bytes()
+            .enumerate()
+            .filter(|&(at, byte)| (byte == b'-' || byte == b'~') && starts_a_segment(at))
+            .flat_map(|(at, _)| {
+                // Only within the marker's **own segment**. An option prefix and
+                // a shell expansion are both short and both end before the first
+                // separator — `-o`, `-Lo`, `~dp0` — so cutting past one is not
+                // reading a prefix, it is deleting path segments.
+                //
+                // Unbounded, the ladder voided the left anchoring for every token
+                // beginning with `~`, which is how a home path is written: the
+                // rungs of `~/my.claude/agents` include `.claude/agents`, so a
+                // reviewer measured `~/my.claude/agents`, `~/notwindsurf/memories`
+                // and `~/xyzopencode/agents` answering `Boundary` — the exact
+                // names three paragraphs of `docs/honesty.md` declare `Routine`,
+                // and `Routine` at the base. Eighteen of the thirty-one rows of
+                // the fixture that holds the anchoring answered the opposite when
+                // respelled with `~`, and every row of it was spelled absolute.
+                let segment = folded[at..].find('/').map_or(folded.len(), |end| at + end);
+                (at + 1..=segment)
+                    .filter(|cut| folded.is_char_boundary(*cut))
+                    .map(|cut| format!("/{}/", normalise(&folded[cut..])))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    };
+    matches_a_fragment(&view)
+        || command
+            .split_whitespace()
+            .flat_map(ladder)
+            .any(|rung| matches_a_fragment(&rung))
 }
 
 /// Whether this path is one whose contents decide what the harness enforces.
@@ -438,7 +707,33 @@ fn surface_of(command: &str) -> Sensitivity {
 /// Read with both separators folded to `/`, because the tool sends whatever the
 /// platform hands it and half of these are written by this crate on Windows.
 fn is_control_surface(target: &str) -> bool {
-    let mut path = target.replace('\\', "/").to_ascii_lowercase();
+    matches_a_fragment(&normalise(target))
+}
+
+/// One path, folded and collapsed into the spelling the fragments are written
+/// in.
+///
+/// Split out from the matching so that `surface_of` can apply it **per token**.
+/// A command line is not one path, and normalising the joined line let the
+/// parent-segment collapse below reach across an operand boundary: `mv .estigia
+/// ..` became `mv/.estigia/../` and collapsed to `mv/`, deleting the very
+/// surface being moved. At the base commit the tokens were joined with a space,
+/// so `/../` never formed across the boundary and a bare `contains` gated it. A
+/// reviewer measured 66 of those, all of the shape *surface operand followed by
+/// an operand beginning `..`* — `mv .estigia ..`, `cp -r .estigia ../snapshot`,
+/// `mv ~/.claude/settings.json ..`. Ordinary ways to move a config file aside,
+/// not adversarial spellings.
+fn normalise(target: &str) -> String {
+    // A drive prefix is a separator too. `C:.estigia\stand-down.json` is the
+    // drive-relative spelling — the current directory *of that drive*, not the
+    // root — and it names the same file as `.estigia/stand-down.json`. It read
+    // as `Routine` on **both** roads once the fragments were anchored, because
+    // the `c:` sits between the start of the string and the fragment where a
+    // separator would be. A reviewer measured it against the base, where a bare
+    // `contains` had gated it. Folding the colon costs nothing: no fragment
+    // holds one, and an absolute `C:/...` only gains a redundant separator that
+    // the loop below removes.
+    let mut path = target.replace(['\\', ':'], "/").to_ascii_lowercase();
     // A separator that names nothing does not make this another file.
     // `~/.claude/./settings.json` is `~/.claude/settings.json`, and it read as
     // `Routine` — which means the harness could be disarmed on an answer from
@@ -466,6 +761,12 @@ fn is_control_surface(target: &str) -> bool {
         }
         path = format!("{}{}", &path[..cut], &path[at + 3..]);
     }
+    path
+}
+
+/// Whether an already-normalised path names something on the control surface.
+fn matches_a_fragment(path: &str) -> bool {
+    let path = path.to_string();
     // The skill tree is derived, not spelled. It used to be a literal in
     // `CONTROL_SURFACE`, and that put the installed directory's name in two
     // places: `skill::DIRECTORY`, which decides where the installer writes, and
@@ -475,10 +776,77 @@ fn is_control_surface(target: &str) -> bool {
     // answer — the cheapest disarmament there is, through the tool an agent uses
     // most, and the suite stayed green. One place now holds the name.
     let installed = format!("skills/{}/", crate::skill::DIRECTORY);
-    path.contains(&installed)
-        || CONTROL_SURFACE
+    // The instruction files, derived from the adapter table for the same reason
+    // the skill tree is derived from `skill::DIRECTORY`: a hand-spelled copy
+    // agrees with the installer only until somebody renames one. Each adapter
+    // answers the tail of the file `setup` writes its directive into — the
+    // sentence telling that agent this harness holds the authority — and
+    // `every_control_file_an_adapter_has_is_one_the_gate_measures` resolves the
+    // real path for every adapter and asks this function, so a fragment that
+    // stops matching fails a test instead of quietly leaving a file open.
+    //
+    // Ten of the eleven were `Routine` until now — OpenCode's was already covered
+    // by the `.config/opencode/` entry that stood here then — and issue 2 is what
+    // made that matter: a
+    // write outside every checkout the claim covers stands aside without asking
+    // the tracker, and every one of these is outside every checkout by
+    // construction. So they went from *measured against the claim* to *not gated
+    // at all*.
+    // A fragment ending in `/` names a **directory**, and a directory is matched
+    // by what is under it or by itself — never by a name that merely starts the
+    // same way.
+    //
+    // Both halves were wrong in turn, one round apart. With the slash, a write to
+    // the bare directory answered `Routine` while `rm <dir>` answered `Boundary`,
+    // because `surface_of` appends a separator: one road gated and the other not,
+    // on the state directory among others. Dropping the slash closed that and
+    // opened a prefix bleed instead — measured, `.estigiaignore`, `skills/flow.md`
+    // and `.claude/agentsmith.md` all became `Boundary`, which is a tracker read
+    // on ordinary files for nothing. Neither trade was necessary: the slash says
+    // what the entry means and the matcher can honour it.
+    // A fragment is anchored on the left when its first segment is a whole one in
+    // every path it has to reach. Two kinds qualify. A dot-directory always is, so
+    // `my.claude/agents` is not `.claude/agents`. A fragment naming a **directory**
+    // always is too — every real target of `opencode/agents/`, `windsurf/memories/`,
+    // `opencode/plugins/` and `skills/issue-flow/` has that first segment whole —
+    // and anchoring it is what stops the two roads disagreeing: `surface_of` gives
+    // every token a trailing `/`, so a bare `/repo/.opencode/agents` reached the
+    // unanchored branch through the shell and not through `Write`, answering
+    // `Boundary` one way and `Routine` the other. The right side was anchored from
+    // the start; leaving the left unanchored kept the split alive on exactly the
+    // fragments this entry added.
+    //
+    // A file fragment without a leading dot cannot be anchored: `cli/hosts.yml`
+    // exists to match **mid-segment**, because the Windows spelling is
+    // `GitHub CLI/hosts.yml` and `github cli` is one segment holding a space. That
+    // is the whole of what stays unanchored, and `docs/honesty.md` measures it.
+    let anchored = |needle: &str| {
+        if needle.starts_with('.') || needle.ends_with('/') {
+            path.starts_with(needle) || path.contains(&format!("/{needle}"))
+        } else {
+            path.contains(needle)
+        }
+    };
+    let names = |fragment: &str| {
+        fragment.strip_suffix('/').map_or_else(
+            || anchored(fragment),
+            |bare| {
+                // Both sides. The right by the trailing separator the fragment
+                // carries; the left because a reviewer measured `~/my.claude/agents`
+                // and `/repo/my.claude/agents/note.md` answering `Boundary` — the
+                // first through `ends_with`, which anchors nothing in front of it,
+                // and the second through `contains`, which the first attempt at
+                // this left alone while three documents said it was closed.
+                anchored(fragment) || path == bare || path.ends_with(&format!("/{bare}"))
+            },
+        )
+    };
+
+    names(&installed)
+        || crate::setup::AGENTS
             .iter()
-            .any(|fragment| path.contains(*fragment))
+            .any(|adapter| names(adapter.instruction_fragment()))
+        || CONTROL_SURFACE.iter().any(|fragment| names(fragment))
 }
 
 /// The command line with every spelling of this binary reduced to `estigia`.
@@ -1184,7 +1552,7 @@ pub fn classify_with(
         // surface, so `~/.claude/settings.json` could be rewritten through them
         // on an answer from inside the renewal window.
         let how = if is_control_surface(&target)
-            || (named.is_none() && is_control_surface(&input.to_string()))
+            || (named.is_none() && text_names_a_control_surface(&input.to_string()))
         {
             Sensitivity::Boundary
         } else {

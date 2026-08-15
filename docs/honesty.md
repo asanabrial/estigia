@@ -157,19 +157,408 @@ suite. Everything else here is prose held by review.
   list of `{where, text}` from `assess_autoclose`. Nothing parses it today, which is the only reason
   that is a note and not a defect.
 
-- **The control surface does not cover every file that governs a run, and standing aside outside the
-  repository is now what makes that matter.** A write whose path lies outside every checkout the
-  claim covers is answered `outside-the-claim` without asking the tracker. That is right for a scratch
-  note; it is right for a `Boundary` write too, because those stay gated. What it is not right for is
-  a `Routine` write to a file that governs the harness and is not in `CONTROL_SURFACE`. Measured
-  through `classify`: `~/.claude/settings.json` and `~/.claude/skills/flow/SKILL.md` answer
-  `Boundary`, but `~/.claude/CLAUDE.md`, `~/.agents/AGENTS.md`, `~/.codex/AGENTS.md`,
-  `~/.qwen/QWEN.md`, `~/.cursor/estigia-workflow-authority.md`, `~/.continue/rules/estigia.md`,
-  `~/.cline/rules/estigia.md`, `~/.codeium/windsurf/memories/global_rules.md`,
-  `~/.config/crush/CRUSH.md`, `%APPDATA%/gemini/GEMINI.md`, `~/.claude/settings.local.json`,
-  `~/.claude/agents/` all answer `Routine` — and each of them is outside every checkout by
-  construction. They carry the workflow-authority directive `setup` writes, which is the sentence
-  telling an agent this harness holds the authority at all.
+- **The control surface reaches further than it did, and what it costs is here too.** Issue 26. A
+  write whose path lies outside every checkout the claim covers is answered `outside-the-claim`
+  without asking the tracker — right for a scratch note, right for a `Boundary` write because those
+  stay gated, and wrong for a `Routine` write to a file that governs the harness. The instruction file
+  each adapter's `setup` writes its workflow-authority directive into was exactly that, and so were
+  `~/.claude/settings.local.json` and `~/.claude/agents`.
+
+  Counted on one platform: ten of the eleven adapters' instruction files answered `Routine` at the
+  base commit, OpenCode's being already covered by the `.config/opencode/` entry. Counting spellings
+  rather than adapters adds gemini-cli's `%APPDATA%` path, and the two `~/.claude` entries make
+  thirteen. The basis is stated because three drafts of this sentence carried a bare number, each
+  measured wrong by a different reviewer, and the fourth said twelve over a list of thirteen.
+
+  The instruction files are derived from the adapter table rather than spelled, the way the skill tree
+  is derived from `skill::DIRECTORY` — a hand-spelled copy agrees with the installer only until
+  somebody renames one, which this crate has already paid for once. The crossing that keeps them
+  honest is `every_control_file_an_adapter_has_is_one_the_gate_measures`: it resolves the real path
+  per adapter, on all three platforms, under two `XDG_CONFIG_HOME` layouts, on both roads, and asks
+  about the bare root as well as a file inside it. Every one of those four dimensions was added because a reviewer found a hole the crossing
+  could not see, and the holes are the entry below. Only the first of them was then found by the
+  crossing itself, once it had the dimension — the rest were measured by people, which is the
+  honest attribution and not the flattering one.
+
+  And the crossing catches a stale fragment **only where nothing else already matches the path**.
+  Measured by staling each of the eleven in turn: it reddens for eight and stays green for three —
+  continue, cline and windsurf, whose paths the rules-directory entries cover independently.
+  OpenCode's *is* caught, because the crossing walks the relocated `XDG_CONFIG_HOME` layout where
+  nothing else matches `<moved>/opencode/AGENTS.md`. All eleven are caught by
+  `the_spelled_instruction_files_and_the_adapter_table_agree`, which reads the spelled list against
+  the table. Three drafts of this sentence were wrong — it was deleted with the version of the fix it
+  described, restored saying four, and inverted to read as though eight was the small number.
+
+  **What the missing dimensions were hiding.**
+  `%APPDATA%\gemini\settings.json` — where this harness registers Gemini's own deny hook — answered
+  `Routine`, because only the POSIX spelling with its leading dot was listed. `opencode`'s plugin,
+  that adapter's only deny mechanism, and `crush`'s settings answered `Routine` whenever
+  `XDG_CONFIG_HOME` was moved. Four entries carried a trailing slash, which split the two roads:
+  `surface_of` appends a separator, so `rm <dir>` was `Boundary` while a write to the bare directory
+  was `Routine`. And the crossing asked only about writes, so a path containing a space — the shape
+  that produced the `cli/hosts.yml` entry — would have arrived unnoticed. All closed here, each with
+  a dimension of the crossing that now holds it.
+
+  **Gating a file in a directory the host reads whole is defeated by a neighbour.** `paths_in`'s own
+  comments say so for two of them: Continue applies any rule with no frontmatter, and Cline loads its
+  rules directory for every task. Estigia's filename was gated and the directory was not, so
+  `~/.cline/rules/zz-override.md` answered `Routine` — and a sibling saying *Estigia is retired*
+  changes what an agent is told this harness may enforce without touching a `Boundary` path.
+
+  Two more directories are named alongside them on a weaker basis, and it is worth being exact about
+  which: `windsurf/memories` and `.cursor/rules` are locations those hosts read, but `paths_in` says
+  nothing about them reading a directory whole — its Windsurf comment is about a six-thousand
+  character cap on one file — and Estigia writes nothing into `.cursor/rules` at all. They are in the
+  population because the restated rule covers them, not because this crate has verified the
+  read-whole behaviour. A first draft of this paragraph claimed all four were documented; a reviewer
+  read `paths_in` and found two.
+
+  **The cost, which the population's own declaration understated.** That declaration says a false
+  positive costs one tracker read "and that is the direction this chooses on purpose", illustrated by
+  a one-character typo on a path already listed. A `Boundary` never rides the renewal window and never
+  stands aside outside the claim, so it is a live `gh issue view` every time — measured, not inferred:
+  a reviewer drove 30 invocations of each class through the real hook against a `gh` with a real
+  process boundary and counted **30 tracker calls out of 30** for a `Boundary` against **0 out of 30**
+  for a `Routine`. With no network it is a refusal rather than a delay.
+
+  **What that read costs is the number to distrust, and three independent measurements disagree.**
+  0.61–1.22 s (mean 0.93, n=8); 0.58–0.92 s (mean 0.66, n=8); and 0.85–3.20 s (mean 1.74, n=10) —
+  the last one roughly double the first two and 2.6× their ceiling, taken against the same tracker on
+  a different machine and a different network. Against 0.05–0.42 s for a `Routine` write inside the
+  renewal window, likewise machine-dependent. So the honest statement is a **round trip to GitHub per
+  write to a watched path, between half a second and three seconds**, and any tighter figure here is a
+  sample of one environment rather than a property of the change. The earlier drafts of this paragraph
+  quoted the first measurement alone as though it bounded the cost, which is what a reader would have
+  believed.
+  Two attempts at the `XDG_CONFIG_HOME` fix were wrong in opposite directions before this one, and
+  both were found by reviewers rather than by a test. Dropping the `.config/` prefix left `opencode`
+  as a bare directory name matched anywhere: `node_modules/opencode/**`, `packages/opencode/**` and a
+  checkout *named* `opencode` answered `Boundary` on every file in them. Replacing the directory
+  entry with three tails then **loosened** it — everything under `~/.config/opencode/` that Estigia
+  does not write went `Boundary` to `Routine`, which is an existing entry's sensitivity changing and
+  was recorded here as an over-gating fix. Not a countable set: it is whatever OpenCode itself keeps
+  there, and three drafts of this sentence said *nine* without anybody being able to enumerate them.
+  A reviewer measured `auth.json`, `config.json`, `themes/`, `command/`, `instructions/`, `tui.json`
+  and `mcp.json` among them, and the bare directory. The directory entry is back *beside* the tails, which
+  cover the relocated root it cannot.
+
+  What that leaves, measured rather than claimed: `node_modules/opencode/index.js` and
+  `packages/opencode/src/main.ts` are `Routine` again, and `node_modules/opencode/agents/**`,
+  `node_modules/opencode/plugins/**` and `node_modules/opencode/opencode.json` are not — a vendored
+  copy of that agent with those exact subdirectories pays a tracker read per write. An earlier
+  sentence here said six shapes had come back, then three; the number was never the point and
+  neither figure was measured. This is the list.
+
+  What over-gating remains, measured rather than argued. A fragment ending in `/` names a directory
+  and the matcher honours that, so a name that merely *ends* alike — `.estigiaignore`,
+  `skills/flow.md`, `.claude/agentsmith.md`, `.cursor/rulesets.md` — stays `Routine`. A fixture holds
+  that direction, which nothing did before: every other guard here asserts something *is* `Boundary`,
+  so over-gating was invisible to all of them.
+
+  The left side is anchored for two kinds of fragment: those beginning with a **dot**, and those
+  naming a **directory**. A dot-directory is always a whole segment, so `my.claude/agents` is not
+  `.claude/agents`. Every real target of `opencode/agents/`, `opencode/plugins/`, `windsurf/memories/`
+  and `skills/issue-flow/` has that first segment whole too, so those anchor without losing anything —
+  measured, `~/.config/opencode/agents` stays `Boundary` on both roads.
+
+  It took three attempts, and each one is why the fixture lists what it lists. The first anchored
+  `ends_with` and left `contains` alone, so a bare `my.claude/agents` came back `Routine` while a file
+  under it stayed `Boundary`, and three documents said the case was closed. The second anchored the
+  dot fragments only — which left the road split alive on precisely the directory entries this change
+  added: `surface_of` gives every token a trailing `/`, so `/repo/.opencode/agents`, `/repo/.opencode/plugins`,
+  `/repo/xyzopencode/agents` and `/repo/notwindsurf/memories` each answered `Routine` to `Write` and
+  `Boundary` to `rm`. The suite was green over all of them, because nothing asserted the `Routine`
+  direction for a non-dot fragment. All four are in the fixture now, on both roads.
+
+  Anchoring cost coverage on the shell road three separate times, and the shape of that mistake is
+  worth more than the fix. `surface_of` builds a view of the command and matches the fragments against
+  it. Anchoring means a fragment now needs a separator in front of it, and each attempt supplied one
+  in a narrower place than the shell can put punctuation:
+
+  1. **Split on whitespace, append a separator.** A relative operand then has a *space* in front of
+     it and is never at position 0, because the verb is. Removing the state directory by its bare
+     relative name, or truncating the file the gate is registered in, went `Boundary` at the base to
+     `Routine`.
+  2. **Wrap each token on both sides.** That reached exactly the operands whose first character is
+     the fragment's, and no others. A quoted operand, a redirect written with no space after it, and
+     an operand joined to a long flag all put a character between the token boundary and the
+     fragment, so all three stayed `Routine` — again reaching the run pointer and the settings file,
+     by the shortest line there is. The drive-relative Windows spelling `C:` did the same thing and
+     reached the **write** road as well, which none of the others did.
+  3. **Fold every character a path segment cannot contain into a separator**, and wrap the line. That
+     reached the quotes, the redirects and the long flags at once — and not the fourth family, because
+     the character in the way there is an ordinary **letter**: a short option carrying its value
+     attached, `-o.estigia`, `-C.estigia`, `-oskills/flow/SKILL.md`. Brace expansion was the same
+     miss one character wide.
+  4. **Fold the braces too, and offer every split point of a token beginning with `-`.** The braces
+     could join the folded set because no fragment carries one. `-` could not: `hooks/pre-push`,
+     `.estigia/stand-down.json` and cursor's derived fragment all carry one, and folding it cuts them
+     in half and loses them outright. A shell gives no way to know where the option letters end and
+     the value begins, so every split point is offered instead. That is what is in the code.
+
+  5. **Normalise each token on its own and join afterwards.** Folding whitespace made the whole line
+     read as one path, and the parent-segment collapse then reached **across an operand boundary**:
+     `mv .estigia ..` became `mv/.estigia/../`, collapsed to `mv/`, and the surface being moved was
+     gone. At the base the tokens were joined with a space, so `/../` never formed there. 66 measured,
+     all of the shape *surface operand followed by an operand beginning `..`* — `mv .estigia ..`,
+     `cp -r .estigia ../snapshot`, `mv ~/.claude/settings.json ..`. These are the ordinary way to move
+     a config file aside, and this was the worst of the six because of that.
+  6. **Read the option prefix off the folded token, and let `~` start one too.** The suffix rule
+     filtered on the *raw* token beginning with `-`, so a leading quote defeated it while the fold
+     still left the option letters in the way: `wget "-O.claude/settings.json"` and
+     `7z x a.7z '-o.estigia/run.json'`, 38 measured. Quoting `-o<dir>` is the documented 7-Zip habit
+     for the reason the rule exists — the directory may hold a space. `%~dp0` expands *with* a
+     trailing separator, so `%~dp0.estigia\run.json` is the correct batch idiom and puts a digit where
+     the anchoring wants one; `%` joined the folded set and `~` joined `-` as a prefix marker. The
+     caret joined the set on the same round: under `cmd.exe` `^` escapes the next character, so
+     `del ^.estigia\run.json` names the state directory. It was the one character of 660 a reviewer
+     swept where the base's answer was right for a reason rather than by accident — `!`, `#`, `@`, `[`
+     and the rest name different files, and head stopped gating those on purpose.
+  7. **Ask each rung of the ladder on its own.** The suffixes were appended into one view, separated
+     by the same character that separates path segments, so adjacent rungs concatenated into a path
+     that was never in the command. The ladder for `~/.claude` is `.claude/claude/laude/…`, and
+     `.claude/claude` is ClaudeCode's derived instruction fragment — so a recursive delete of the home
+     config directory answered `Boundary` for a path nobody wrote, and so did `~/backup.claude`,
+     `~/notes.agents` and `-obackup.claude`. `.agents/agents` has the same `A/A[1..]` shape and did the
+     same. Introduced by the sixth, found by a reviewer, and it had already made the
+     containing-directories paragraph below false about the very directories that paragraph declares
+     open.
+  8. **Bound the ladder to the marker's own segment, and read a patch body the same way.** Two halves,
+     both found by one reviewer. Unbounded, the ladder voided the left anchoring for every token
+     beginning with `~` — which is how a home path is written — because the rungs of
+     `~/my.claude/agents` include `.claude/agents`. Eighteen of the thirty-one rows of the anchoring
+     fixture answered the opposite when respelled with `~`, against three paragraphs here that name
+     those paths as `Routine`, and every row of that fixture was spelled absolute. An option prefix and
+     a shell expansion both end before the first separator, so cutting past one is not reading a
+     prefix, it is deleting path segments. And the payload road — the fallback `classify_with` takes
+     for Codex's `apply_patch` and OpenCode's `patch`, where the path sits in a patch body rather than
+     a field — handed the whole blob to `is_control_surface` directly. That was right under a bare
+     `contains` and wrong once the fragments were anchored: thirteen relative spellings, the run
+     pointer and the stand-down record among them, stopped matching on that road while `Write` still
+     gated the same file. Both roads read free text the same way now.
+  9. **Read the ladder off the same string the matcher reads.** The view is built from
+     `normalise(&fold(token))` and the ladder's entry test read `fold(token)` alone — `normalise`
+     folds `:` and `\` and `fold` does not. So in `${P:-.claude/settings.json}` the `-` starts a
+     segment in the string that is matched and did not in the string the ladder inspected: no rung,
+     and **fourteen of the nineteen** relative surfaces answered `Routine` where the base answered
+     `Boundary`. The basis, because a number here is worth nothing without one: one relative spelling
+     per fragment in the **base's own** fragment set. The five that were never lost are the two file
+     fragments carrying no leading dot, `hooks/pre-push` and `cli/hosts.yml`, which the anchoring
+     never touched so the ladder was never needed to reach them, and `.config/opencode/opencode.json`,
+     `.gemini/settings.json` and `.config/crush/crush.json`, each reached by an unanchored sibling this
+     branch added. This sentence has now been wrong twice: first *thirteen*, with no basis and
+     unreproducible, then *every relative surface*, which is checkable and false — it would have told a
+     reader the push guard stopped being gated, and it never did. A reviewer measured both.
+     `TARGET=${1:-.claude/settings.json}` then `rm -f "$TARGET"` is the ordinary script idiom for a
+     defaulted path. A reviewer found it by sweeping **two**-character contexts; the 660-character
+     sweep recorded above is one character wide and could not reach `:-`. The same fix reaches `:~`,
+     `\-` and `\~`, which that reviewer's exhaustive two-character sweep names as the only other
+     non-lookalike contexts that were open.
+
+     **What stays open, why it is a limit rather than an oversight, and what it costs.** `${P-path}`,
+     `${P:+path}` and `${P:?path}` answer `Routine`. Not *still* — they answered `Boundary` at the base
+     commit, so this is a **loss against the base** on the same fourteen of nineteen relative surfaces
+     counted on the same basis as above, and unlike every
+     other spelling recorded in this section those three do address the file. Named that way because a
+     reviewer pointed out that the earlier wording read like a gap that had always been there.
+     Once `$`, `{`, `}` and `:` are folded away, `P-path` is
+     indistinguishable from a file named `P-path`, and `+`/`?` sit where a segment's first character
+     would. Laddering from a `-` in the *middle* of a segment would reach them and would also gate
+     `x-.claude/agents` and every `foo-bar` tail like it — trading a hole for over-gating on ordinary
+     names. Measured and left, rather than closed by widening.
+
+  `7z` is why the fourth is not optional: its extract-to spelling is `-oDIR`, a space there is a
+  syntax error, and it is in `WRITES_A_FILE` deliberately — so the only correct way to write "extract
+  into the state directory" was the one spelling that was not gated.
+
+  Each attempt was measured against the base by a reviewer classifying raw command strings through
+  the built binary, and each time the whole suite was green over the loss — because every fixture in
+  this crate spelled its commands the way the last fix had taught it to. That is the same blind spot
+  **nine** times: a narrowing nothing asserts, found by a reader who spells the command differently
+  than the fixture does. It is recorded at this length because the count is the finding, and the count
+  is the honest summary of this work: anchoring a matcher against a shell is not one change. Each
+  spelling that reaches a path is its own claim, the suite went green over every loss until somebody
+  wrote the spelling down, and **five of the nine were introduced by the fix for the one before it**.
+
+  The eighth paragraph of this section predicted a ninth and a reviewer found one in the next round,
+  which is the closest thing here to a measurement of the process rather than the code. A tenth is
+  likelier than not. The fixtures hold the nine spellings that were found, plus the eighteen folded
+  characters and the ordinary-line direction. They do not hold *the space of spellings*, because nothing in this crate
+  enumerates it. A property test over generated command lines, crossed against a second reading of the
+  same path, is the shape that would — and there is none. `punctuation_does_not_hide_a_control_surface`,
+  `a_drive_relative_spelling_is_measured_like_a_relative_one` and
+  `a_relative_operand_is_measured_like_an_absolute_one` hold the direction now, and
+  `folding_punctuation_does_not_gate_an_ordinary_line` holds the other one, because reading
+  punctuation as separators makes the view more permissive and a false `Boundary` costs a live
+  tracker read on every build.
+
+  What this leaves is stated rather than measured away. A command that *mentions* a control surface
+  while writing somewhere else is `Boundary`, which is the asymmetry `surface_of` already ran on and
+  pays one extra tracker read. Substitutions are still invisible — a path assembled from a variable or
+  a subshell names nothing any of this can match, at the base commit as much as here. So is a surface
+  split across a `cd`, and so is a glob that removes a directory's contents without naming the
+  directory; a reviewer measured all three at both commits, and they are the same at both.
+
+  The option-prefix rule is generous in one direction only — it can gate a token that merely ends like
+  a surface, never miss one that is a surface. That cost was priced rather than assumed: across 50
+  ordinary developer command lines, including the write-heavy ones whose flags take attached paths,
+  it gates **none**. `an_option_prefix_does_not_gate_an_ordinary_line` holds twelve of them. A reviewer
+  measured 149 lines the same way, 30 of them deliberately punctuation-heavy, and found the folding
+  costing **nothing** on any of them: folding only creates separators, and a separator only helps a
+  fragment that is already in the line.
+
+  What the *list* costs on an ordinary path is separate and is real. `mkdir -p
+  test/fixtures/windsurf/memories` — a project directory that happens to be spelled exactly like a
+  fragment — is `Boundary` here and was `Routine` at the base. That is not the lookalike class named
+  above, which is about names that merely resemble one; it is an exact collision inside somebody's own
+  tree, and it costs a tracker read per write. The same holds for a project's own `.claude/agents` or
+  rules directory, which is intended. A reviewer found this one by classifying paths a developer would
+  plausibly create rather than paths this crate already talks about.
+
+  **The two halves of the wrap are not alike, and the paragraph that used to stand here got it
+  backwards one commit before it was read.** It said the trailing half was not load-bearing. That was
+  true when it was written and false as soon as the option-prefix rule landed, because the suffixes
+  that rule offers are appended *after* the wrap: without the trailing separator the first suffix runs
+  straight into the folded line and the last segment of a command stops being a whole one. **Two**
+  fixtures redden without it now — `a_relative_operand_is_measured_like_an_absolute_one` and
+  `a_later_operand_does_not_collapse_an_earlier_surface` — and it is the separator pushed **between
+  tokens** that carries it, not a wrap at the end of the line: dropping the final separator alone, or
+  the one closing each ladder rung, leaves the whole suite green. This paragraph said *eight*, which
+  was measured before the ladder rungs were split out and never measured again; a reviewer counted. Nobody re-measured the sentence when the code under it moved, which
+  is the failure this document exists to catch, committed inside this document.
+
+  The **leading** half is the inert one, and it is inert structurally rather than by luck: `anchored`
+  tests `starts_with` as well as `contains`, so a fragment at position 0 is reached either way, and
+  dropping the wrap can only *add* matches. Measured over every fragment the gate consults, five
+  spellings and five write verbs — 975 command lines, **zero answers changed**. It stays for symmetry
+  and nothing holds it, which a reader should know rather than infer a guard that is not there.
+
+  Each of the eighteen folded characters is now held individually, and that took two attempts as well.
+  A reviewer mutated the set character by character and found ten of the then-fourteen could be
+  dropped with the whole suite green — the set had been justified four characters at a time by
+  measurement and the rest by the sentence *"the rest terminate a word the same way"*, which the
+  missing brace had already disproved. The first fixture written for it **iterated the constant**,
+  which reads like coverage and is none: dropping a character from the set also drops it from the
+  test, and eleven mutations still survived. The characters are spelled in the fixture now and crossed
+  against the constant, so all eighteen die.
+
+  A fragment naming a **file** without a leading dot still cannot be anchored, because `cli/hosts.yml`
+  exists to match **mid-segment**: the Windows path is `%APPDATA%\GitHub CLI\hosts.yml`, and
+  `github cli` is one segment holding a space. The cost is that a vendored copy of somebody else's
+  agent answers `Boundary`, and will keep doing so: `~/.codeium/notwindsurf/memories/global_rules.md`
+  through windsurf's derived fragment, and `vendor/myopencode/agents.md`, `vendor/mygemini/gemini.md`
+  and `vendor/mycrush/crush.md` through theirs. A draft of the fixture asserted the windsurf one away
+  and went red, which is why it is written here rather than believed.
+
+  The other three are here because two reviewers measured this paragraph and found it naming
+  `vendor/myopencode/agents/a.md`, which answers `Routine` — `opencode/agents/` is a **directory**
+  fragment and is therefore anchored, so a lookalike cannot reach it. The derived fragment that
+  demonstrates the limit is `opencode/agents.md`; the written path was off by a separator, and nothing
+  in the suite held it, because this file asserted the ends-alike direction and never this one. It is
+  held now, on both roads — which is the point of the paragraph: a declared limit nothing measures is
+  a limit that drifts from the code while the document keeps saying it.
+
+  What still over-matches is the fragments that name a file: `.claude/settings` reaches
+  `.claude/settingsmap.ts`, and `crates/crush/crush.json`, `docs/gemini/settings.json` and
+  `tests/fixtures/gemini/settings.json` answer `Boundary` because two-component fragments match
+  anywhere. Deliberate — `.claude/settings` is trimmed on purpose to reach `settings.local.json`.
+
+  And a per-project cost that is new and worth naming plainly: `<repo>/.claude/agents/*`,
+  `<repo>/.cursor/rules/*`, `<repo>/.cline/rules/*`, `<repo>/.continue/rules/*` and
+  `<repo>/.claude/settings.local.json` are `Boundary` now. A project that keeps its own agent
+  definitions or rules pays a live tracker read on every write to them. This crate ships agent
+  definitions under `skill/agents/`, which is not one of those paths — measured, no file tracked in
+  this repository trips any fragment today.
+
+  **Two things this change leaves open, both measured by reviewers of it.**
+
+  Over-gating is held only for hand-spelled shapes, and it is held **unevenly**. The fixtures that
+  watch the `Routine` direction list paths by name, and nothing derives an over-gating check from the
+  adapter table, so whether widening a *derived* fragment is caught depends on whether some hand-
+  written row happens to sit under it. Measured, one adapter at a time, each widened to its bare
+  directory and the full suite re-run:
+
+  - `crush/crush.md` → `crush/` **reddens** — `the_declared_over_gating_is_the_shape_the_document_names`
+    names `vendor/mycrush/crush.md`. So does `.cursor/estigia-workflow-authority.md` → `.cursor/`,
+    through the `.cursor/rulesets.md` row in the ends-alike fixture. `gemini/gemini.md` and
+    `opencode/agents.md` are covered by the same over-gating fixture.
+  - **Two** are silent, measured one at a time with the full suite: `.qwen/qwen.md` → `.qwen/` and
+    `.cline/rules/estigia.md` → `.cline/` leave every test green. Nothing in this crate names a path
+    under those two directories in the `Routine` direction. This list has now said *one*, then *four*,
+    then two — the four was true until `the_suffix_ladder_does_not_synthesise_a_path` landed in this
+    same branch and began catching `.agents/` and `.codex/`, and nobody re-ran it. Both re-counts came
+    from a reviewer rather than from this repository.
+
+  The earlier draft of this paragraph used crush as its example of the silent case, which stopped
+  being true in the same change that added the fixture above; qwen is the measurement now. The
+  under-gating direction is crossed against `resolve_paths` for all eleven adapters. This one is
+  crossed against nothing, and the coverage it has is incidental rather than derived.
+
+  And the **containing** directories are `Routine` on both roads while their contents are now
+  `Boundary`: `~/.claude`, `~/.claude/skills`, `~/.codex`, `~/.cursor`, `~/.qwen`, `~/.agents`,
+  `~/.gemini`, `~/.cline`, `~/.continue`, `~/.codeium`, `~/.codeium/windsurf`, `~/.config/crush`,
+  `~/.config/gh`. So a single recursive delete of `~/.claude` — taking the settings file the gate is
+  registered in, the workflow-authority directive, the agent definitions and the installed contract —
+  answers `Routine`, and being outside every checkout it is answered by `outside-the-claim` before the
+  tracker is asked. Identical at the base commit, so not a regression; recorded because *this* change
+  is what makes it matter, and re-measured because for one head it was **false** — the suffix ladder
+  concatenated `.claude/claude` out of its own rungs and answered `Boundary` for `~/.claude`, so this
+  paragraph declared open a gap that was not open, in the spelling it writes here and in no other. A
+  reviewer measured it; a fixture holds the sentence now, by moving thirteen files inside those directories to `Boundary` while the
+  directory around them stays open. It is not the declared hard-link limit — it is an ordinary path a
+  shell writes. The shape that would close it already works next door: `~/.config/opencode` and
+  `~/.estigia` are `Boundary` because those entries name the directory.
+
+  **There are two readings of the same text, and the difference is deliberate.** The write road hands
+  `is_control_surface` a `file_path`, which is a path; the shell and payload roads hand
+  `text_names_a_control_surface` a command line or a patch body, which is prose with a path in it.
+  Only the second folds punctuation, because only the second can have punctuation *next to* a path
+  that is not part of it. A reviewer measured what that leaves and then measured whether it matters:
+  on the write road a decorated relative spelling — `".claude/settings.json"` with the quotes inside
+  the field, or with a leading space, tab, `~`, `$`, `%`, `{`, backtick or `=` — is `Routine` at this
+  head and was `Boundary` at the base. A draft of this paragraph used `.claude/CLAUDE.md` as the
+  worked example, which cannot be true of it: that file was not on the control surface at the base at
+  all — it is the file issue 26 was filed about, and the fragment that reaches it arrived in this
+  branch's first commit. A reviewer caught the example contradicting the sentence around it. It is not a hole, and that was checked rather than assumed: writing
+  each of those spellings on this machine either fails outright or resolves to a different,
+  non-existent directory. Only the bare spelling reaches the file, and the bare spelling is gated. The
+  same reviewer confirmed it end to end — the quoted `file_path` costs zero tracker reads while the
+  bare one, the quoted absolute, the shell road and a patch body naming it each cost exactly one.
+
+  What is true and worth a reader's attention is that `punctuation_does_not_hide_a_control_surface`
+  drives only the shell road. The write road has no punctuation fixture, because there is no
+  punctuation behaviour there to hold — which is a fine reason and an easy one to forget.
+
+  Two more `Routine` at both commits, each found by a different reviewer and neither closed here.
+  `<repo>/.opencode/plugins` is not reached: `.opencode/agents/` was added for the repository-local
+  definition root, and the plugin directory beside it has no entry, because `opencode/plugins/` is
+  anchored and `.opencode` is not it. Estigia reads nothing from a project-local plugin directory, so
+  it is not the same class as the definition root — but it is the same *shape* as the hole this change
+  closed one directory over, and it is named here so the next reader does not have to find it twice.
+  And `curl "-o<path>"` with the value attached **and quoted** is not seen as a write at all: the gap
+  is upstream of `surface_of`, in `shell::writes_a_file`'s reading of the `curl -o` idiom, which this
+  change does not touch — `src/harness/shell.rs` is byte-identical between the two commits. `wget
+  "-O<path>"` is a `Boundary` in the same spelling, which is what makes the asymmetry visible.
+
+  Still `Routine`, and not closed here: a project's own `AGENTS.md` or `CLAUDE.md` at its root,
+  `.cursorrules`, `.clinerules`, `.windsurfrules`, `.github/copilot-instructions.md` and `.mcp.json`.
+  They carry the same always-loaded authority, and they are **inside** a checkout, so they stay
+  measured against the claim rather than standing aside — which is why they are a smaller thing than
+  what this issue closed, not the same thing. `harness::roles::definition_for` reads its **five**
+  definition roots from a hand-spelled list that nothing crosses against the gate. All five answer
+  `Boundary` today and a sixth would not — but that sentence said *four*, and said it while one of
+  them was `Routine` on both roads. `<repo>/.opencode/agents` is searched beside `<repo>/.claude/agents`
+  in a single `vec!`, and the two were gated by different fragments: `.claude/agents/` reached the
+  first, `opencode/agents/` is anchored on the left so `.opencode` is not it, and nothing reached the
+  second. A definition that is not found is `Ok(None)`, which `declared_policy` reads as *every tool
+  allowed*, so the file that writes an agent its own allowlist was the one riding the renewal window.
+  A reviewer measured it; the fixture in this repository had gone further and asserted the hole,
+  listing that root among the ordinary paths a directory entry must not gate. `.opencode/agents/` is
+  a `CONTROL_SURFACE` entry now, `every_definition_root_is_a_boundary_on_both_roads` crosses all five,
+  and one of them — `~/.claude/agents` — is additionally `paths.agents_root`, reached by the walk.
+
+  What is still not crossed is the **list itself**: adding a sixth root to `definition_for` reddens
+  nothing. The fixture spells the five by hand, exactly as the roots are spelled by hand.
 
   `gh`'s hosts file would have belonged on that list and is not on it. It decides which account
   every tracker call acts as, so it is named in `CONTROL_SURFACE` instead — which is what the issue
@@ -179,9 +568,10 @@ suite. Everything else here is prose held by review.
   "was on that list until this change", which was a claim about a previous shipped state that never
   existed — the whole entry is new. A reviewer checked it against `2477de0` and it was not there.)
 
-  The hole predates this: the paths still listed were never `Boundary`, so before this change they
-  were measured against the claim and allowed under a valid one. What is newly lost is the refusal
-  when the claim is *not* valid. It is no longer lost when no contract is installed **outside the
+  The hole predates this: the instruction files and the two `~/.claude` paths were never `Boundary`,
+  so before issue 2 they were measured against the claim and allowed under a valid one. What was newly lost is the refusal when the claim
+  is *not* valid — which is what issue 26 closed for them, and this paragraph is kept because the
+  ordering it goes on to describe is what makes any of it hold. It is no longer lost when no contract is installed **outside the
   renewal window**: the answer is given after the `control-surface-not-installed` refusal, and
   `an_unreadable_control_surface_refuses_even_a_write_outside_the_claim` is what stops that drifting
   back. One published head had it the other way round and both reviewers of that head raised the
@@ -194,11 +584,11 @@ suite. Everything else here is prose held by review.
   *without an exception*, which was an absolute the code does not hold; a reviewer measured it by
   adding one `mark_verified()` line to that fixture.
 
-  The population test that keeps the list
-  (`every_control_file_an_adapter_has_is_one_the_gate_measures`) walks each adapter's skill root,
-  hooks, plugin and MCP config, and never `paths.instructions`, which is why nothing said so. Closing
-  it means extending `CONTROL_SURFACE` and that test together, which is its own change with its own
-  risk, so it is filed rather than done here.
+  What was still lost when this entry first said so is closed, and the entry above says how. Three
+  drafts of this paragraph described the state before the fix that shipped in the same commit — the
+  last of them naming two `CONTROL_SURFACE` entries that the same diff had already replaced. Four
+  reviewers found it, one after another, which is the measure of how easily a paragraph written
+  before the code survives the code.
 
   And one boundary this cannot cross at all: a **hard link** outside the checkout pointing at a
   file inside it. Measured — `mklink /H <outside>/alias.rs <repo>/src/kept.rs`, classified

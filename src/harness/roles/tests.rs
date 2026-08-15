@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_env::with_config_home;
 
 /// The real thing, copied from a published `agents/builder.md`.
 const BUILDER: &str = "---\n\
@@ -424,5 +425,129 @@ fn a_shipped_planning_phase_cannot_write_to_the_repository() {
     assert_eq!(
         checked, 5,
         "expected the five planning phases in the payload, found {checked}"
+    );
+}
+
+/// A moved config home does not remove a sub-agent's allowlist.
+///
+/// The OpenCode root was spelled `~/.config/opencode/agents` by hand while
+/// `setup` resolved the same tree through `XDG_CONFIG_HOME`. With that variable
+/// set, this looked in a directory nothing writes — and a definition that is not
+/// found is `Ok(None)`, which `declared_policy` reads as *the sub-agent may use
+/// every tool*. So the failure was not a refusal, it was the allowlist quietly
+/// going away: the loosening direction, at the gate whose whole subject is what a
+/// delegated context may not do.
+///
+/// A reviewer of the change that moved four `CONTROL_SURFACE` entries for this
+/// exact variable measured that the enforcement road had been left behind.
+#[test]
+fn a_moved_config_home_still_finds_an_opencode_definition() {
+    let home = tempfile::tempdir().expect("a home");
+    let moved = tempfile::tempdir().expect("a relocated config home");
+    let repo = tempfile::tempdir().expect("a checkout");
+
+    let agents = moved.path().join("opencode").join("agents");
+    std::fs::create_dir_all(&agents).expect("the definition directory");
+    std::fs::write(
+        agents.join("scribe.md"),
+        "---\ntools: Read, Grep\n---\nread only\n",
+    )
+    .expect("a definition to find");
+
+    let found = with_config_home(moved.path(), || {
+        definition_for(repo.path(), Some(home.path()), "scribe")
+    });
+
+    assert!(
+        matches!(found, Ok(Some(ref text)) if text.contains("Read, Grep")),
+        "a relocated XDG config home hid the definition, and a definition that is \
+         not found is read as every tool allowed: {found:?}"
+    );
+}
+
+/// An unusable `XDG_CONFIG_HOME` means *the default*, on both roads.
+///
+/// The first fix for the hardcoded root read the variable directly and so
+/// introduced a third rule: `setup` folds an empty or relative value away through
+/// `absolute_or_none`, and reading it here took both literally. A reviewer
+/// measured what that cost — with `XDG_CONFIG_HOME=""` or a relative value, this
+/// found nothing while `setup` had written to `~/.config/opencode/agents`, and
+/// nothing found is `Ok(None)`, which `declared_policy` reads as *every tool
+/// allowed*. The same loosening the fix existed to close, through the two inputs
+/// the fix itself created.
+///
+/// One rule now, in `setup::xdg_config_home`, and this asks for it.
+#[test]
+fn an_unusable_config_home_falls_back_the_way_setup_does() {
+    let home = tempfile::tempdir().expect("a home");
+    let repo = tempfile::tempdir().expect("a checkout");
+
+    let agents = home.path().join(".config").join("opencode").join("agents");
+    std::fs::create_dir_all(&agents).expect("the default definition directory");
+    std::fs::write(
+        agents.join("scribe.md"),
+        "---\ntools: Read, Grep\n---\nread only\n",
+    )
+    .expect("a definition to find");
+
+    for unusable in ["", "relative/config"] {
+        let found = with_config_home(std::path::Path::new(unusable), || {
+            definition_for(repo.path(), Some(home.path()), "scribe")
+        });
+
+        assert!(
+            matches!(found, Ok(Some(ref text)) if text.contains("Read, Grep")),
+            "XDG_CONFIG_HOME={unusable:?} sent this somewhere `setup` never writes, and a \
+             definition that is not found is read as every tool allowed: {found:?}"
+        );
+    }
+}
+
+// The helper these fixtures use is `crate::test_env::with_config_home`, and the
+// history that shaped it is written there: `set_var` is process-wide, this test
+// binary is multi-threaded, and an earlier SAFETY note reasoned about the shipped
+// binary — "the gate answers one hook invocation per process" — which is true of
+// the binary and false of the process the `unsafe` runs in. A copy of the helper
+// then stood in `setup::tests` too, justified by a comment saying these were two
+// binaries; they are one, so the two mutexes excluded nothing and a reviewer
+// reproduced the cross-talk. One lock now, in one place.
+
+/// A moved config home does not hide a definition at the default root.
+///
+/// The mirror of the test above, and the direction nothing held: the first fix
+/// for the hardcoded root **replaced** it with the relocated one instead of
+/// adding it, so a definition sitting at `~/.config/opencode/agents` stopped
+/// being found the moment the variable pointed elsewhere. Not found is
+/// `Ok(None)`, which `declared_policy` reads as *the sub-agent may use every tool*
+/// — the same loosening that fix existed to close, one configuration over. A
+/// reviewer measured base ENFORCED against head NOT FOUND.
+///
+/// Searching both roots cannot loosen anything: a definition is enforced if any
+/// root has it.
+#[test]
+fn a_moved_config_home_does_not_hide_the_default_root() {
+    let home = tempfile::tempdir().expect("a home");
+    let moved = tempfile::tempdir().expect("a relocated config home");
+    let repo = tempfile::tempdir().expect("a checkout");
+
+    let default_root = home.path().join(".config").join("opencode").join("agents");
+    std::fs::create_dir_all(&default_root).expect("the default definition directory");
+    std::fs::write(
+        default_root.join("scribe.md"),
+        "---\ntools: Read, Grep\n---\nread only\n",
+    )
+    .expect("a definition at the default root");
+    // The relocated root exists and is empty, which is the shape that hid it.
+    std::fs::create_dir_all(moved.path().join("opencode").join("agents"))
+        .expect("an empty relocated root");
+
+    let found = with_config_home(moved.path(), || {
+        definition_for(repo.path(), Some(home.path()), "scribe")
+    });
+
+    assert!(
+        matches!(found, Ok(Some(ref text)) if text.contains("Read, Grep")),
+        "a relocated config home hid the definition at the default root, and a definition \
+         that is not found is read as every tool allowed: {found:?}"
     );
 }

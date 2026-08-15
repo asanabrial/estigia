@@ -394,8 +394,31 @@ pub fn definition_for(
     if let Some(home) = home {
         roots.push(home.join(".claude").join("agents"));
         // OpenCode keeps its own under the XDG config directory, not the home
-        // root — verified against a real installation.
+        // root — verified against a real installation. And **the** XDG config
+        // directory, not `~/.config`: this was spelled by hand while `setup`
+        // resolved the same root through `XDG_CONFIG_HOME`, so with that variable
+        // set an OpenCode sub-agent's definition sat where this never looked.
+        //
+        // The failure is silent and it is a loosening. A definition that is not
+        // found is `Ok(None)`, which `declared_policy` reads as *the sub-agent may
+        // use every tool* — so a moved config home did not refuse the delegation,
+        // it removed the allowlist from it. Measured by a reviewer of the very
+        // change that moved four `CONTROL_SURFACE` entries for this variable and
+        // left the enforcement road on `.config`.
+        // **Both**, not whichever the variable names. Replacing the default with
+        // the relocated root is the same loosening one configuration over: a
+        // definition sitting at `~/.config/opencode/agents` stopped being found
+        // the moment `XDG_CONFIG_HOME` pointed elsewhere, and not found is
+        // `Ok(None)`, which `declared_policy` reads as *every tool allowed*. A
+        // reviewer measured base ENFORCED / head NOT FOUND on exactly that input
+        // — the defect this root was being fixed for, introduced by the fix.
+        //
+        // Searching both costs one `NotFound` stat and cannot loosen anything: a
+        // definition is enforced if it is found in any root.
         roots.push(home.join(".config").join("opencode").join("agents"));
+        if let Some(moved) = crate::setup::xdg_config_home() {
+            roots.push(moved.join("opencode").join("agents"));
+        }
     }
     for file in roots
         .into_iter()
@@ -403,7 +426,7 @@ pub fn definition_for(
     {
         match std::fs::read_to_string(&file) {
             Ok(text) => return Ok(Some(text)),
-            // Almost every candidate is absent — four roots are searched and at
+            // Almost every candidate is absent — five roots are searched and at
             // most one holds the file.
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
             Err(error) => {

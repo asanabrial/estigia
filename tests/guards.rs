@@ -531,7 +531,91 @@ const AFFIRMED: &[(&str, u64)] = &[
     // that entry could never fire through the shell — `Write` on the path
     // answered `Boundary` while `rm` on the same path answered `Routine`. Both
     // spellings now name the file without one. Population and boundary unchanged.
-    ("control-surface", 1111875050449119905),
+    // Re-affirmed 2026-08-15 for issue 26, and the population is genuinely wider
+    // this time. Two entries changed and the rule did not: `.claude/settings.json`
+    // became `.claude/settings`, because `contains` never reached
+    // `settings.local.json` — the file an operator is told to put local overrides
+    // in, read with the same authority, through which the gate could be switched
+    // off; and `.claude/agents/` joined, because an agent definition is an
+    // instruction with a tool allowlist, which is the same authority in another
+    // shape. Both are files this harness's decisions are read from, so the rule as
+    // stated already covered them and the list did not.
+    //
+    // The eleven instruction files are *not* in this list. They are derived from
+    // the adapter table in `is_control_surface`, the way the skill tree is derived
+    // from `skill::DIRECTORY` and for the same reason — a hand-spelled copy agrees
+    // with the installer only until somebody renames one. This declaration covers
+    // the literals; the derived set is crossed against `resolve_paths` per adapter
+    // by `every_control_file_an_adapter_has_is_one_the_gate_measures`, which now
+    // walks `paths.instructions` and did not before.
+    // Re-affirmed 2026-08-15 after four blind reviews of the same head, and this
+    // time the **rule itself was restated** because the population genuinely
+    // outgrew it. A reviewer put it precisely: the gate reads nothing from
+    // `~/.claude/CLAUDE.md`, so a write there changes what the agent is *told*
+    // and not what the binary *does* — the declared rule covered enforcement
+    // inputs and the instruction files are compliance inputs. They belong, for
+    // the reason `README.md` gives about this whole crate, and the declaration
+    // now names both kinds instead of stretching one over the other.
+    //
+    // Re-affirmed again after four more blind reviews of the same head. The
+    // population is wider and the *shape* of the entries changed, so the claim is
+    // read rather than carried:
+    //
+    // - `gemini/settings.json` beside the POSIX spelling, because that is where
+    //   the gate is registered on Windows. Found by the crossing, once it walked
+    //   every platform instead of the host's.
+    // - `opencode/agents`, `opencode/plugins`, `opencode/opencode.json` and
+    //   `crush/crush.json` — anchored to what the installer writes. The
+    //   `.config/` prefix they carried is moved by `XDG_CONFIG_HOME`; dropping it
+    //   entirely, which was the first attempt, left `opencode` as a bare
+    //   directory name gating `node_modules/opencode/**` and any checkout named
+    //   that. Both ends were wrong. Found by reviewers, not by the crossing —
+    //   which walks two XDG layouts now, so it would be.
+    // - The trailing slashes are all still here, and now mean something: a
+    //   fragment ending in `/` names a directory, and `names` matches it by what
+    //   is under it or by itself. They spent one head removed — `surface_of`
+    //   appends a separator, so with a slash the bare directory was `Routine` on
+    //   the write road while `rm <dir>` was `Boundary` — and removing them
+    //   traded that for `.estigiaignore` and `skills/flow.md` becoming
+    //   `Boundary`. Neither trade was necessary once the matcher read the slash.
+    // - The four rules **directories**. Gating Estigia's filename inside a
+    //   directory the host reads whole is defeated by a neighbour, and the
+    //   restated population clause is exactly what a neighbour changes.
+    // Re-affirmed once more, and the reason is the entry's own shape rather than
+    // its members: a fragment ending in `/` now names a **directory**, matched by
+    // what is under it or by itself — and not by a name that merely ends alike,
+    // nor by one that starts alike, since a directory fragment is anchored on
+    // the left exactly as a dot-fragment is. Anchoring only the dot ones left
+    // the two roads disagreeing on the entries this change added. The file
+    // fragments without a dot stay unanchored because `cli/hosts.yml` has to
+    // match mid-segment; `docs/honesty.md` records what that leaves.
+    // Both earlier spellings were wrong in opposite directions — with the slash
+    // the bare directory was `Routine` on the write road while `rm <dir>` was
+    // `Boundary`; without it, `.estigiaignore` and `skills/flow.md` became
+    // `Boundary`. The boundary sentence above says what a false positive costs and
+    // now says what that is in seconds, because the population reaches a project's
+    // own files and the old one-line account of the trade was written when it did
+    // not.
+    //
+    // `.config/opencode/` is back beside the tails that cover the relocated root.
+    // Replacing it with them alone was a **loosening**: what Estigia does not
+    // write under that root lost its boundary, which is an existing entry's
+    // sensitivity changing, and it was recorded as an over-gating fix until a
+    // reviewer measured it. No count here on purpose — the set is whatever
+    // OpenCode itself keeps there, three drafts said *nine* without anybody
+    // enumerating them, and `docs/honesty.md` holds the shapes that were
+    // actually measured. A number in two files is a number that disagrees.
+    // Reopened once more, and by a member this time rather than the rule:
+    // `.opencode/agents/`. `roles::definition_for` searches the repository's own
+    // OpenCode definition root beside its Claude one, in a single `vec!`, and the
+    // two were gated by different fragments — `.claude/agents/` reached the
+    // first, and `opencode/agents/` is anchored on the left, so nothing reached
+    // the second. A reviewer measured it `Routine` on both roads while
+    // `docs/honesty.md` and the pull request both said every definition root was
+    // watched. A definition not found is `Ok(None)`, which `declared_policy`
+    // reads as *every tool allowed*, so the file that writes an agent its own
+    // allowlist was the one riding the renewal window.
+    ("control-surface", 2144014802560117266),
     // Reopened 2026-08-05 by measuring the enumeration instead of reading it.
     // Thirty command lines that visibly put bytes on disk were classified and
     // twenty-six came back Untouched, among them "wget -O src/main.rs URL" —

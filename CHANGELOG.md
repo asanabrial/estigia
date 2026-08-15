@@ -41,6 +41,72 @@ the workflow, it holds the tools.
   would be another, and `\\.\C:\Windows`, `\\?\Volume{...}\Windows` and
   `\\?\GLOBALROOT\Device\HarddiskVolume3\Windows` all resolve to `C:\Windows`, so they place normally
   and a write through one of them outside every checkout now stands aside where it used to be gated.
+- The files carrying Estigia's own authority are watched. `setup` writes a workflow-authority
+  directive — the sentence telling an agent this harness holds the authority at all — into each
+  agent's instruction file, and the gate called ten of the eleven `Routine`; OpenCode's was already
+  covered by the `.config/opencode/` entry. Those ten, plus gemini-cli's second spelling under
+  `%APPDATA%` — it is the one adapter whose file moves with the platform — plus
+  `~/.claude/settings.local.json`, the file an operator is told to put machine-local overrides in, and
+  `~/.claude/agents`, where a definition carries a tool allowlist: **thirteen**. Each is outside every
+  checkout by construction, which is what made it urgent — the stand-aside added for a closed issue's
+  scratch note answers before the tracker, so they had moved from *measured against the claim* to *not
+  gated at all*. They are `Boundary` now, on both roads.
+
+  The instruction files are derived from the adapter table rather than spelled, because a hand-written
+  copy agrees with the installer only until somebody renames one. The population test that crosses
+  them against `resolve_paths` gained four dimensions on the way, each because a reviewer found a
+  surface behind one: three platforms, two `XDG_CONFIG_HOME` layouts, both roads, and the bare root as
+  well as a file inside it. What that uncovered is in the same change —
+  `%APPDATA%\gemini\settings.json`, where the Gemini gate is registered on Windows; opencode's plugin
+  and crush's settings, anchored to what the installer writes *beside* the directory entry rather than
+  replacing it; and the rules **directories**, because gating a filename inside a directory the host
+  reads whole is defeated by a neighbour. A fragment ending in `/` names a directory now, matched by
+  what is under it or by itself, and not by a name that merely ends alike — nor by one that
+  starts alike, because a fragment naming a directory is anchored on the left as a dot-fragment
+  is. Anchoring only the dot ones kept the two roads disagreeing on the four entries this change
+  added: `surface_of` gives every token a trailing separator, so a bare `.opencode/agents` was
+  `Routine` to `Write` and `Boundary` to `rm`, with nothing red because no fixture asserted the
+  `Routine` direction for a fragment without a dot. What stays unanchored is the fragments naming
+  a **file** without one, and `cli/hosts.yml` is why: `%APPDATA%\GitHub CLI\hosts.yml` holds it
+  mid-segment. `docs/honesty.md` measures what that leaves.
+
+  Anchoring cost coverage on the shell road three times before it was right, and each loss was a
+  spelling the base commit had gated with a bare `contains`. Splitting on whitespace and appending a
+  separator left a relative operand with a space in front of it, never a separator, and never at
+  position 0 because the verb is there. Wrapping each token reached only the operands whose first
+  character *is* the fragment's — a quoted operand, a redirect written with no space, and an operand
+  joined to a long flag each put a character in between, and the drive-relative Windows `C:` did the
+  same while also reaching the **write** road. Every one of them named the run pointer or the file the
+  gate is registered in, by the shortest line there is, and every one of them left the whole suite
+  green, because the fixtures here spelled their commands plainly and their paths absolutely.
+
+  What is in the code is one rule rather than a list of shell shapes: every character a path segment
+  cannot contain is read as a separator, and the line is wrapped in one. Four fixtures hold it — three
+  for the surfaces, one for the ordinary commands a run issues all day, since a more permissive view
+  is a live tracker read on every build if it over-matches. Reviewers measured all three attempts;
+  `docs/honesty.md` carries the sequence, and says what the folding still cannot see.
+
+  `<repo>/.opencode/agents` joined the list for the same reason it was missed: `definition_for`
+  searches it beside `<repo>/.claude/agents` in one `vec!`, `.claude/agents/` reached the first,
+  and `opencode/agents/` is anchored so `.opencode` is not it. A definition that is not found is
+  `Ok(None)`, which `declared_policy` reads as *every tool allowed* — so the file that writes an
+  agent its own tool allowlist rode the renewal window, while two documents said every definition
+  root was watched and a fixture listed that root among the ordinary paths. All five roots are
+  crossed now, on both roads.
+
+  `harness::roles::definition_for` also stopped spelling OpenCode's definition root by hand: it now
+  searches the default root **and** the one `XDG_CONFIG_HOME` names, through the same rule `setup`
+  uses. Searching only one meant a definition it did not find — which `declared_policy` reads as
+  *every tool allowed*.
+
+  The declared population was **restated** rather than stretched: the gate reads nothing from an
+  instruction file, so it covers what an agent is *told* as well as what the binary *enforces*. The
+  cost is recorded with it — a `Boundary` never rides the renewal window, so it is a live tracker read
+  on every write — counted, 30 tracker calls out of 30 against 0 out of 30 for a routine one — and a
+  refusal rather than a delay with no network. Three independent measurements of what that read costs
+  disagree by a factor of two (0.61-1.22 s, 0.58-0.92 s, 0.85-3.20 s), so `docs/honesty.md` states it
+  as a round trip between half a second and three seconds rather than quoting the first sample as a
+  bound.
 - A test can no longer report pass without running. Sixteen tests in `tests/pipe.rs` drive the real
   binary against a stand-in `gh`, and that stand-in is a cargo example; the rig answered `Option` and
   every caller opened with `let Some(rig) = … else { return; }`, so wherever the example was missing

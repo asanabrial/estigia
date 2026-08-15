@@ -3197,6 +3197,1124 @@ fn a_drive_that_resolves_onto_a_share_is_still_inside() {
     );
 }
 
+/// The file an operator is told to put local overrides in is a boundary.
+///
+/// `contains` is the match, so `.claude/settings.json` never reached
+/// `.claude/settings.local.json` — and that is the file Claude Code documents for
+/// machine-local settings, read with the same authority as the one beside it. It
+/// answered `Routine`, which means the gate could be switched off through the
+/// file an operator is *told* to edit, on an answer a renewal window may already
+/// have paid for. The same held for `~/.claude/agents/`, where an agent
+/// definition carries a tool allowlist — instructions in another shape.
+///
+/// Both roads, because `surface_of` splits a command on whitespace and appends a
+/// separator: an entry that only works for the write tool is one an agent walks
+/// round with `rm`.
+#[test]
+fn the_local_settings_and_the_agent_definitions_are_boundaries_on_both_roads() {
+    let home = crate::paths::home_dir().expect("a home directory");
+    for relative in [
+        [".claude", "settings.local.json"].as_slice(),
+        [".claude", "settings.json"].as_slice(),
+        [".claude", "agents", "reviewer.md"].as_slice(),
+    ] {
+        let mut target = home.clone();
+        for part in relative {
+            target.push(part);
+        }
+        let spelled = target.display().to_string();
+
+        let (_, written) = classify(
+            "Write",
+            &serde_json::json!({ "file_path": spelled.clone() }),
+        );
+        assert_eq!(
+            written,
+            Sensitivity::Boundary,
+            "a write to {spelled} answers routine, so the gate can be switched off through it"
+        );
+
+        let (_, removed) = classify(
+            "Bash",
+            &serde_json::json!({ "command": format!("rm {spelled}") }),
+        );
+        assert_eq!(
+            removed,
+            Sensitivity::Boundary,
+            "removing {spelled} through the shell answers routine, which is the road an \
+             agent would actually take"
+        );
+    }
+}
+
+/// The instruction files, spelled as a reader would recognise them.
+///
+/// Spelled out, not derived. The first version built its subject from
+/// `instruction_fragment()` and then asserted the fragment matched — which
+/// reduces to `contains(f)` on a string built as `home + f`, and cannot fail for
+/// the reason its own name gives. A reviewer proved it by setting one adapter's
+/// fragment to a filename nothing writes and watching this stay green.
+///
+/// The crossing in `src/setup/tests.rs` ties these to what the installer
+/// resolves, on three platforms and two XDG layouts, on both roads. This fixes
+/// the *reason* in place, and it covers the shell too because `surface_of`
+/// splits a command on whitespace and an entry that works on one road only is
+/// one an agent walks round with `rm`.
+const SPELLED_INSTRUCTION_FILES: &[&str] = &[
+    "/home/me/.agents/AGENTS.md",
+    "/home/me/.claude/CLAUDE.md",
+    "/home/me/.codex/AGENTS.md",
+    "/home/me/.config/opencode/AGENTS.md",
+    "/home/me/.gemini/GEMINI.md",
+    r"C:\Users\me\AppData\Roaming\gemini\GEMINI.md",
+    "/home/me/.cursor/estigia-workflow-authority.md",
+    "/home/me/.qwen/QWEN.md",
+    "/home/me/.config/crush/CRUSH.md",
+    "/home/me/.continue/rules/estigia.md",
+    "/home/me/.cline/rules/estigia.md",
+    "/home/me/.codeium/windsurf/memories/global_rules.md",
+];
+
+#[test]
+fn the_directive_that_names_the_authority_is_a_boundary_for_every_agent() {
+    for spelled in SPELLED_INSTRUCTION_FILES {
+        let (_, written) = classify("Write", &serde_json::json!({ "file_path": spelled }));
+        assert_eq!(
+            written,
+            Sensitivity::Boundary,
+            "a write to {spelled} answers routine, and that file carries the directive \
+             naming this harness as the authority"
+        );
+
+        let (_, removed) = classify(
+            "Bash",
+            &serde_json::json!({ "command": format!("rm {spelled}") }),
+        );
+        assert_eq!(
+            removed,
+            Sensitivity::Boundary,
+            "removing {spelled} through the shell answers routine, which is the road an \
+             agent would actually take"
+        );
+    }
+}
+
+/// The spelled list and the adapter table say the same thing.
+///
+/// A hand-written list is readable and goes stale, and the first version of this
+/// only counted fragments — it never read the list at all, so deleting an entry
+/// left the suite green. A reviewer measured that. It reads both now: every
+/// adapter's fragment has to appear in some spelled path, and every spelled path
+/// has to be there for an adapter. A twelfth adapter, or one whose instruction
+/// file moves, breaks one side or the other.
+#[test]
+fn the_spelled_instruction_files_and_the_adapter_table_agree() {
+    let folded: Vec<String> = SPELLED_INSTRUCTION_FILES
+        .iter()
+        .map(|path| path.replace('\\', "/").to_ascii_lowercase())
+        .collect();
+
+    for adapter in crate::setup::AGENTS {
+        let fragment = adapter.instruction_fragment();
+        assert!(
+            folded.iter().any(|path| path.contains(fragment)),
+            "{}: no spelled path contains its fragment `{fragment}`, so the list above \
+             no longer shows what the gate matches",
+            adapter.slug
+        );
+    }
+
+    for (path, folded) in SPELLED_INSTRUCTION_FILES.iter().zip(&folded) {
+        assert!(
+            crate::setup::AGENTS
+                .iter()
+                .any(|adapter| folded.contains(adapter.instruction_fragment())),
+            "{path} is spelled here but matches no adapter's fragment, so it is not an \
+             instruction file this crate writes"
+        );
+    }
+}
+
+/// A neighbour in a directory the host reads whole carries the same authority.
+///
+/// `paths_in`'s comments say so for two of them — Continue applies any rule with
+/// no frontmatter, Cline loads its directory for every task. The other two are
+/// gated on the restated population rule rather than on anything verified here;
+/// `docs/honesty.md` says which. So gating Estigia's own filename and leaving
+/// the directory open is defeated by adding a sibling: a reviewer measured
+/// `~/.cline/rules/zz-override.md` answering `Routine`, and a file there saying
+/// *Estigia is retired* changes what the agent is told this harness may enforce
+/// without touching a `Boundary` path.
+#[test]
+fn a_sibling_in_a_rules_directory_is_a_boundary_too() {
+    for spelled in [
+        "/home/me/.cline/rules/zz-override.md",
+        "/home/me/.continue/rules/zz-override.md",
+        "/home/me/.codeium/windsurf/memories/zz-override.md",
+        "/home/me/.cursor/rules/zz-override.mdc",
+        // The `.local.` siblings, which are the same shape one directory up:
+        // read with the same authority as the file beside them, and `contains`
+        // did not reach them until the fragments lost their extension.
+        "/home/me/.claude/CLAUDE.local.md",
+        "/home/me/.codex/AGENTS.local.md",
+        "/home/me/.agents/AGENTS.local.md",
+    ] {
+        let (_, written) = classify("Write", &serde_json::json!({ "file_path": spelled }));
+        assert_eq!(
+            written,
+            Sensitivity::Boundary,
+            "a write to {spelled} answers routine, and the host applies every file in that \
+             directory — so the directive beside it can be overridden by a neighbour"
+        );
+    }
+}
+
+/// A directory this harness reads from is a boundary spelled bare, on both roads.
+///
+/// The entries used to carry a trailing slash. `surface_of` appends a separator
+/// to every token of a command, so `rm <dir>` matched and a write to the bare
+/// directory did not — one road gated and the other not, on the state directory
+/// and the installed contract among others. A reviewer found it in one entry;
+/// the crossing found the rest once it was asked about bare roots rather than
+/// only about a file inside them.
+#[test]
+fn a_control_directory_named_bare_is_a_boundary_on_both_roads() {
+    for spelled in [
+        "/home/me/.claude/skills/flow",
+        "/home/me/.claude/skills/issue-flow",
+        "/repo/.estigia",
+        "/home/me/.claude/agents",
+    ] {
+        let (_, written) = classify("Write", &serde_json::json!({ "file_path": spelled }));
+        assert_eq!(
+            written,
+            Sensitivity::Boundary,
+            "a write to the bare directory {spelled} answers routine while removing it \
+             through the shell does not — the two roads disagree"
+        );
+
+        let (_, removed) = classify(
+            "Bash",
+            &serde_json::json!({ "command": format!("rm -rf {spelled}") }),
+        );
+        assert_eq!(
+            removed,
+            Sensitivity::Boundary,
+            "removing {spelled} through the shell answers routine"
+        );
+    }
+}
+
+/// A fragment naming a directory does not gate a name that merely starts alike.
+///
+/// Both halves of this were wrong in turn, one round apart, and nothing in the
+/// suite watched the second one — every guard here asserts that something *is*
+/// `Boundary`, so over-gating was invisible to all of them.
+///
+/// With a trailing slash the entries gated `rm <dir>` and left a write to the
+/// bare directory `Routine`: `surface_of` appends a separator, so one road
+/// matched and the other did not. Dropping the slash closed that and made every
+/// entry a prefix — `.estigiaignore`, `skills/flow.md` and `.claude/agentsmith.md`
+/// all became `Boundary`, a tracker read on ordinary files for nothing. The
+/// matcher honours the slash now, so the entry can say *directory* and mean it.
+#[test]
+fn a_directory_entry_does_not_gate_a_name_that_only_starts_the_same() {
+    for ordinary in [
+        "/repo/.estigiaignore",
+        "/repo/docs/.estigia.md",
+        "/repo/skills/flow.md",
+        "/repo/docs/skills/flow-diagram.md",
+        "/home/me/.claude/agentsmith.md",
+        "/home/me/.cursor/rulesets.md",
+        "/home/me/.continue/rules-archive/a.md",
+        // A vendored copy of the agent itself, which is somebody's ordinary
+        // source tree and not a control surface. All six shapes a reviewer
+        // measured against the bare `opencode` entry that stood here for one
+        // head — they were recorded as `Routine` again with nothing holding
+        // them, which is how the entry came to be bare in the first place.
+        "/repo/node_modules/opencode/index.js",
+        "/repo/packages/opencode/src/main.ts",
+        "/repo/vendor/opencode/README.md",
+        "/repo/my-opencode/README.md",
+        "/repo/assets/opencode/logo.svg",
+        "/repo/target/debug/build/opencode/out.rs",
+        // The left side, which took two attempts. `ends_with` anchors nothing in
+        // front of it, and the fix for that left `contains` alone — so a file
+        // *under* the lookalike stayed `Boundary` while the bare directory came
+        // back `Routine`, and three documents said the case was closed. A reviewer
+        // measured both. A dot-directory is always a whole segment, so both are
+        // anchored now; the shapes that do not begin with a dot are in
+        // `docs/honesty.md`, because `cli/hosts.yml` has to match mid-segment.
+        "/home/me/my.claude/agents",
+        "/home/me/my.claude/agents/note.md",
+        "/home/me/xyz.cursor/rules",
+        "/home/me/xyz.cursor/rules/note.md",
+        "/home/me/my.cline/rules/note.md",
+        "/home/me/zz.continue/rules/note.md",
+        "/repo/x.estigia/state",
+        // The dot fragments that are **not** directories. Anchoring these was
+        // untested: a reviewer mutated the condition to anchor directory
+        // fragments only and the whole suite stayed green, so nothing held the
+        // half of the rule that keeps `my.claude/settings.json` off the gate.
+        "/home/me/my.claude/settings.json",
+        "/home/me/my.claude/settings.local.json",
+        "/home/me/xyz.claude.json",
+        "/home/me/my.claude.json",
+        "/home/me/my.codex/config.toml",
+        "/home/me/my.codex/hooks.json",
+        "/home/me/x.qwen/settings.json",
+        // The same left side for the fragments that do **not** begin with a dot.
+        // Anchoring those was the second half of the same fix and it was left
+        // undone for one head: `surface_of` gives every token a trailing `/`, so
+        // each of these answered `Routine` to `Write` and `Boundary` to `rm` —
+        // the road split this entry was written to close, alive on exactly the
+        // fragments it added. A directory fragment can be anchored because every
+        // real target has that first segment whole; the file fragments cannot,
+        // and `docs/honesty.md` measures what that leaves.
+        // Not `/repo/.opencode/agents`: a reviewer measured that it is a live
+        // definition root `roles::definition_for` searches, so calling it an
+        // ordinary path was the fixture pinning a hole. It has its own entry now
+        // and its own fixture below. `/repo/.opencode/plugins` stays here because
+        // Estigia reads nothing from it — `docs/honesty.md` carries that split.
+        "/repo/.opencode/plugins",
+        "/repo/xyzopencode/agents",
+        "/repo/notwindsurf/memories",
+        "/home/me/.claude/myskills/issue-flow",
+        // Not here, and measured: `~/.codeium/notwindsurf/memories/global_rules.md`
+        // still answers `Boundary`. The **file** fragments that do not begin with a
+        // dot stay unanchored, because `cli/hosts.yml` has to match inside the
+        // segment `github cli`, and windsurf's derived fragment is one of them.
+        // That is the declared over-gating in `docs/honesty.md`, not a gap here —
+        // asserting it away is what a first draft of this list did.
+    ] {
+        // Both roads. The bare lookalike answered `Routine` on the write road and
+        // `Boundary` through the shell, because `surface_of` appends a separator
+        // and reached the unanchored branch — the same split this entry claims to
+        // have closed, surviving in the direction nothing asserted.
+        for (road, payload) in [
+            ("Write", serde_json::json!({ "file_path": ordinary })),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("rm -rf {ordinary}") }),
+            ),
+        ] {
+            let (_, how) = classify(road, &payload);
+            assert_eq!(
+                how,
+                Sensitivity::Routine,
+                "{road} on {ordinary} answers boundary, and it is an ordinary path that \
+                 only starts like a control surface"
+            );
+        }
+    }
+}
+
+/// The over-gating `docs/honesty.md` declares, held rather than asserted.
+///
+/// A fragment naming a **file** without a leading dot is deliberately not
+/// anchored, because `cli/hosts.yml` has to match inside the segment
+/// `github cli`. The cost is that a vendored copy of somebody else's agent
+/// answers `Boundary`. That cost was written down with the wrong path —
+/// `vendor/myopencode/agents/a.md`, which two reviewers measured `Routine`,
+/// because `opencode/agents/` is a directory fragment and *is* anchored. The
+/// derived fragment that demonstrates it is `opencode/agents.md`. Nothing held
+/// any of it: this file asserted the ends-alike direction and never this one, so
+/// the document's own example had drifted from the code it describes.
+#[test]
+fn the_declared_over_gating_is_the_shape_the_document_names() {
+    for named in [
+        "/repo/vendor/myopencode/agents.md",
+        "/repo/vendor/mygemini/gemini.md",
+        "/repo/vendor/mycrush/crush.md",
+        "/home/me/.codeium/notwindsurf/memories/global_rules.md",
+    ] {
+        for (road, payload) in [
+            ("Write", serde_json::json!({ "file_path": named })),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("rm -f {named}") }),
+            ),
+        ] {
+            let (_, how) = classify(road, &payload);
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "{road} on {named} answers routine, and `docs/honesty.md` declares it over-gated"
+            );
+        }
+    }
+}
+
+/// The ladder reads the same string the matcher does.
+///
+/// The ninth loss on this road. The view is built from `normalise(&fold(token))`
+/// and the ladder's entry test read `fold(token)` alone — `normalise` folds `:`
+/// and `\` and `fold` does not. So in `${P:-.claude/settings.json}` the `-`
+/// starts a segment in the string that is matched and did not in the string the
+/// ladder inspected, no rung was offered, and thirteen real surfaces answered
+/// `Routine` where the base answered `Boundary`: the run pointer, the stand-down
+/// record, `hosts.yml` and the file the gate is registered in among them.
+///
+/// `TARGET=${1:-.claude/settings.json}` on one line and `rm -f "$TARGET"` on the
+/// next is the ordinary script idiom for a defaulted path, not a contrivance. A
+/// reviewer found it by sweeping **two**-character contexts; the sweep recorded
+/// in `docs/honesty.md` was one character wide and could not reach `:-`.
+#[test]
+fn a_defaulted_parameter_does_not_hide_a_control_surface() {
+    let d = '$';
+    let ob = '{';
+    let cb = '}';
+    for path in [
+        ".claude/settings.json",
+        ".claude.json",
+        ".estigia/run.json",
+        ".estigia/stand-down.json",
+        ".config/gh/hosts.yml",
+        ".codex/config.toml",
+        ".cursor/mcp.json",
+        ".qwen/settings.json",
+    ] {
+        for line in [
+            format!("rm -f {d}{ob}P:-{path}{cb}"),
+            format!("rm -f {d}{ob}HOME:-{path}{cb}"),
+            // The other two contexts the same fix reaches, because `normalise`
+            // folds the backslash as well as the colon.
+            format!("rm -f x{}-{path}", '\\'),
+            format!("rm -f x{}~{path}", '\\'),
+        ] {
+            let (_, how) = classify("Bash", &serde_json::json!({ "command": &line }));
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "`{line}` answers routine, and its default word names a control surface"
+            );
+        }
+    }
+}
+
+/// A patch body names a control surface the same way a command line does.
+///
+/// Two of the eleven write tools put the path in a patch body rather than a
+/// field — Codex's `apply_patch` and OpenCode's `patch` — so `classify_with`
+/// falls back to reading the whole payload. Handing that blob straight to
+/// `is_control_surface` was right while the fragments were matched by a bare
+/// `contains` and wrong the moment they were anchored: in a patch body the path
+/// sits after a space, so every **relative** spelling stopped matching on that
+/// road while `Write` still gated the same file. A reviewer measured thirteen,
+/// including the run pointer and the stand-down record, and the fixture that
+/// holds this road stayed green because it spells its surface absolutely.
+///
+/// Both roads read the text the same way now.
+#[test]
+fn a_patch_body_reaches_a_relative_control_surface() {
+    for named in [
+        ".estigia/run.json",
+        ".estigia/stand-down.json",
+        ".claude/settings.json",
+        ".claude/settings.local.json",
+        ".claude.json",
+        ".config/gh/hosts.yml",
+        ".codex/config.toml",
+        ".cursor/mcp.json",
+        "/home/me/.claude/settings.json",
+    ] {
+        let body =
+            format!("*** Begin Patch\n*** Update File: {named}\n@@\n-old\n+new\n*** End Patch");
+        for tool in ["apply_patch", "patch"] {
+            let (_, how) = classify(tool, &serde_json::json!({ "input": &body }));
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "{tool} answers routine for a patch body naming {named}"
+            );
+        }
+    }
+    // And an ordinary file in a patch body is still ordinary.
+    for named in ["src/main.rs", "README.md", "tests/guards.rs"] {
+        let body =
+            format!("*** Begin Patch\n*** Update File: {named}\n@@\n-old\n+new\n*** End Patch");
+        let (_, how) = classify("apply_patch", &serde_json::json!({ "input": &body }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "a patch body naming {named} answers boundary"
+        );
+    }
+}
+
+/// The ladder is bounded to the marker's own segment.
+///
+/// An option prefix and a shell expansion are both short and both end before the
+/// first separator — `-o`, `-Lo`, `~dp0` — so a cut past one is not reading a
+/// prefix, it is deleting path segments. Unbounded, the ladder voided the left
+/// anchoring for **every** token beginning with `~`, which is how a home path is
+/// written: the rungs of `~/my.claude/agents` include `.claude/agents`. A
+/// reviewer measured eighteen of the thirty-one rows of the anchoring fixture
+/// answering the opposite when respelled with `~`, against three paragraphs of
+/// `docs/honesty.md` that name those exact paths as `Routine` — and every row of
+/// that fixture was spelled with an absolute root, which is why it stayed green.
+#[test]
+fn a_home_prefix_does_not_void_the_anchoring() {
+    for line in [
+        "rm -rf ~/my.claude/agents",
+        "rm -rf ~/my.claude/agents/note.md",
+        "rm -rf ~/my.claude/settings.json",
+        "rm -rf ~/my.claude/settings.local.json",
+        "rm -rf ~/my.claude.json",
+        "rm -rf ~/xyz.claude.json",
+        "rm -rf ~/my.codex/config.toml",
+        "rm -rf ~/x.qwen/settings.json",
+        "rm -rf ~/xyz.cursor/rules",
+        "rm -rf ~/zz.continue/rules/note.md",
+        "rm -rf ~/x.estigia/state",
+        "rm -rf ~/notwindsurf/memories",
+        "rm -rf ~/xyzopencode/agents",
+        "rm -rf ~/dev/myrepo/.opencode/plugins",
+        "rm -rf ~/.claude/myskills/issue-flow",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "`{line}` answers boundary, and the ladder has eaten the anchoring behind a `~`"
+        );
+    }
+    // The real ones behind the same prefix are untouched.
+    for line in [
+        "rm -rf ~/.claude/settings.json",
+        "rm -rf ~/.claude/settings.local.json",
+        "rm -rf ~/.claude/agents",
+        "rm -rf ~/.config/gh/hosts.yml",
+        "rm -rf ~/.estigia/run.json",
+        "rm -rf %~dp0.estigia/run.json",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and it names a control surface"
+        );
+    }
+}
+
+/// The suffix ladder does not build a path nobody wrote.
+///
+/// The rungs offered for a `-` or `~` prefixed token used to be appended into
+/// one view, one after another, separated by the same character that separates
+/// path segments. Adjacent rungs therefore concatenated: the ladder for
+/// `~/.claude` is `.claude/claude/laude/aude/…`, and `.claude/claude` is exactly
+/// ClaudeCode's derived instruction fragment. So a recursive delete of the home
+/// config directory answered `Boundary` for a path that was never in the
+/// command, and so did any `~`- or `-`-led token merely *ending* in `.claude` or
+/// `.agents` — `~/backup.claude`, `~/notes.agents`, `-obackup.claude`.
+/// `.agents/agents` has the same `A/A[1..]` shape and did the same thing.
+///
+/// A reviewer measured it, and it had already made a paragraph of
+/// `docs/honesty.md` false about the directories that paragraph was declaring
+/// open. Each rung is asked on its own now.
+#[test]
+fn the_suffix_ladder_does_not_synthesise_a_path() {
+    for line in [
+        // The containing directories the document declares `Routine`, in the
+        // spelling the document itself writes. This is the shape that was false.
+        "rm -rf ~/.claude",
+        "rm -rf ~/.agents",
+        "rm -rf ~/.codex",
+        "mv ~/.claude /tmp/x",
+        // A name that merely ends like a fragment, behind a prefix marker.
+        "rm -rf ~/backup.claude",
+        "cp -r ~/backup.claude /tmp/",
+        "rm -rf ~/projects/legacy.claude",
+        "rm -rf ~/notes.agents",
+        "7z x a.7z -obackup.claude",
+        "curl -sS https://x -o-.claude",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "`{line}` answers boundary, and the ladder has built a path out of its own rungs"
+        );
+    }
+    // And the ladder still reaches what it is for.
+    for line in [
+        "7z x a.7z -o.estigia",
+        "wget -O.claude/settings.json https://x",
+        "rm -rf %~dp0.estigia/run.json",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and its option prefix is holding a control surface"
+        );
+    }
+}
+
+/// A later operand does not erase the surface named by an earlier one.
+///
+/// The fifth loss on this road, and the worst, because the commands are the
+/// ordinary way to move a config file aside rather than an adversarial spelling.
+/// Folding whitespace to a separator made the whole line read as one path, and
+/// the parent-segment collapse then reached **across an operand boundary**: `mv
+/// .estigia ..` became `mv/.estigia/../` and collapsed to `mv/`, deleting the
+/// surface being moved. At the base the tokens were joined with a space, so
+/// `/../` never formed there and a bare `contains` gated it. A reviewer measured
+/// 66 of these.
+///
+/// Each token is normalised on its own now and joined afterwards, so a `..` can
+/// only collapse what its own operand names.
+#[test]
+fn a_later_operand_does_not_collapse_an_earlier_surface() {
+    for line in [
+        "mv .estigia ..",
+        "mv .estigia ../backup",
+        "cp -r .estigia ../snapshot",
+        "rm .estigia ../other",
+        "mv /home/me/.claude/settings.json ..",
+        "mv /home/me/.claude/settings.json ../backup",
+        "cp /home/me/.config/gh/hosts.yml ../keep",
+        "mv /home/me/.codex/config.toml ../old",
+        "install .claude/settings.json ../out",
+        "cp .estigia/run.json ../../elsewhere",
+        // And the collapse still works within one operand, which is the whole
+        // reason it exists: this names the file the gate is registered in.
+        "rm /home/me/.claude/skills/../settings.json",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and an operand of it names a control surface"
+        );
+    }
+}
+
+/// An option prefix is read past its quotes, and past an expansion too.
+///
+/// The sixth loss, and the same family as the fourth one quote wide: the suffix
+/// rule filtered on the **raw** token beginning with `-`, so a leading quote
+/// defeated it while the fold still left the option letters between the
+/// separator and the fragment. Quoting `-o<dir>` is the documented 7-Zip habit,
+/// for exactly the reason the rule exists — the directory may hold a space.
+///
+/// `~` sits beside `-` for the same reason and was measured on the same round:
+/// `%~dp0` expands *with* a trailing separator, so `%~dp0.estigia\run.json` is
+/// the correct batch idiom and puts a digit where the anchoring wants a
+/// separator. The rule reads segments off the folded token now, so a quote, a
+/// percent or anything else in the folded set gets out of the way first.
+#[test]
+fn a_quoted_or_expanded_option_prefix_does_not_hide_a_control_surface() {
+    let dq = '"';
+    let sq = '\'';
+    let pct = '%';
+    for line in [
+        format!("wget {dq}-O.claude/settings.json{dq} https://x"),
+        format!("wget {sq}-O.claude/settings.json{sq} https://x"),
+        format!("7z x a.7z {sq}-o.estigia/run.json{sq}"),
+        format!("7z x a.7z {dq}-o.estigia/stand-down.json{dq}"),
+        format!("wget {dq}-Oskills/flow/SKILL.md{dq} https://x"),
+        format!("wget {sq}-O.config/gh/hosts.yml{sq} https://x"),
+        format!("wget {sq}-O.claude.json{sq} https://x"),
+        format!("rm -rf {pct}~dp0.estigia/run.json"),
+        format!("cp a {pct}~dp0.estigia/run.json"),
+        format!("echo x > {pct}~dp0.claude/settings.json"),
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": &line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and its option prefix is holding a control surface"
+        );
+    }
+}
+
+/// A short option carrying its value attached, and a brace expansion.
+///
+/// The fourth family of shell-road loss this branch has paid for, and the one
+/// that needed a rule rather than another folded character: the thing standing
+/// between the separator and the fragment is an ordinary letter. `-` cannot be
+/// folded, because `hooks/pre-push`, `.estigia/stand-down.json` and cursor's
+/// derived fragment all carry one and folding would cut them in half. So every
+/// split point of a token beginning with `-` is offered to the matcher instead.
+///
+/// `7z` is why this is not optional: its extract-to spelling is `-oDIR` and a
+/// space there is a syntax error, so the only correct way to write "extract into
+/// the state directory" was the way that was not gated. A reviewer measured all
+/// of these against the base, where a bare `contains` had gated every one.
+#[test]
+fn an_option_prefix_does_not_hide_a_control_surface() {
+    for (line, why) in [
+        (
+            "7z x pack.7z -o.estigia",
+            "7z, whose only spelling is attached",
+        ),
+        ("unzip pack.zip -d.estigia", "unzip -d"),
+        ("tar -xf pack.tar -C.estigia", "tar -C"),
+        (
+            "tar -xf pack.tar -C.config/opencode",
+            "tar -C into a config root",
+        ),
+        ("curl -o.estigia/run.json https://x", "curl -o"),
+        (
+            "curl -so.estigia/stand-down.json https://x",
+            "curl with clustered flags",
+        ),
+        ("curl -Lo.claude/settings.json https://x", "curl -Lo"),
+        (
+            "curl -o.config/gh/hosts.yml https://x",
+            "curl -o onto the hosts file",
+        ),
+        (
+            "curl -oskills/flow/SKILL.md https://x",
+            "a value with no dot to anchor on",
+        ),
+        ("wget -O.claude/settings.json https://x", "wget -O"),
+        (
+            "wget -q -O.config/gh/hosts.yml https://x",
+            "wget with a flag before it",
+        ),
+        ("cp -t.estigia evil.json", "cp -t"),
+        ("install -D.estigia/run.json", "install -D"),
+        (
+            "curl -o.opencode/agents/reviewer.md https://x",
+            "a definition root",
+        ),
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and it names a control surface through {why}"
+        );
+    }
+}
+
+/// Brace expansion puts a real path one character past a separator.
+///
+/// Measured by a reviewer alongside the option prefix, and closed the other way:
+/// no fragment carries a brace, so the braces simply joined the folded set.
+#[test]
+fn a_brace_expansion_does_not_hide_a_control_surface() {
+    for line in [
+        "rm -rf ~/{.estigia/run.json,foo}",
+        "rm -rf ~/{.claude/settings.json,foo}",
+        "rm ~/{.config/gh/hosts.yml,x}",
+        "cp a ~/{.claude/settings.json}",
+        "rm -rf {.estigia/,dist}",
+        "rm -rf ~/{.claude/agents,build}",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and a brace expansion is naming a control surface"
+        );
+    }
+}
+
+/// The option-prefix rule is generous, and this prices it.
+///
+/// Offering every split point of a dash token can only add matches, so the cost
+/// it could carry is a false `Boundary` on an ordinary line — a live tracker
+/// read on every invocation. Measured across the write-heavy commands a run
+/// actually issues, including the ones whose flags take attached paths.
+#[test]
+fn an_option_prefix_does_not_gate_an_ordinary_line() {
+    for line in [
+        "tar -xf pack.tar -C build",
+        "unzip pack.zip -d build",
+        "7z x pack.7z -obuild",
+        "curl -o out.json https://example.com",
+        "wget -O out.html https://example.com",
+        "cp -t dist src/a.js",
+        "install -m 755 script /usr/local/bin",
+        "dd if=/dev/zero of=out.img bs=1M",
+        "node --max-old-space-size=4096 index.js",
+        "rsync -av src/ dest/",
+        "make -j8 all",
+        "go build -o bin/app ./cmd",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "`{line}` answers boundary, and it names no control surface"
+        );
+    }
+}
+
+/// Every character in the folded set, one at a time, spelled rather than read.
+///
+/// The set was justified four characters at a time, each added because a
+/// reviewer measured a spelling that had lost its boundary — and the ones nobody
+/// had measured were justified by the sentence *"the rest terminate a word the
+/// same way"*. A reviewer mutated them and found ten of fourteen could be
+/// dropped with the whole suite green. The brace was the proof the reasoning was
+/// not enough: it was missing from the set entirely and cost a real boundary.
+///
+/// The list is **spelled here** and crossed against the constant below. A first
+/// draft iterated `NOT_IN_A_PATH_SEGMENT` instead, which reads like coverage and
+/// is none: dropping a character from the constant also drops it from the test,
+/// so eleven of the sixteen mutations still survived green. A fixture that reads
+/// the thing it is checking asserts only that the code equals itself.
+///
+/// The shape is the one every loss had in common: an ordinary letter, the
+/// character, then the fragment — unreachable by the left anchoring unless the
+/// character folds to a separator.
+const FOLDED_CHARACTERS: &[char] = &[
+    '"', '\'', '`', '<', '>', '=', '|', ';', '&', '(', ')', '$', '*', ',', '{', '}', '%', '^',
+];
+
+#[test]
+fn every_folded_character_reaches_a_control_surface_behind_it() {
+    for divider in FOLDED_CHARACTERS {
+        let line = format!("rm -rf x{divider}.estigia/stand-down.json");
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": &line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, so {divider:?} is in the folded set without being folded"
+        );
+    }
+}
+
+/// The spelled list and the constant agree.
+///
+/// So a character added to the set without a row above fails here rather than
+/// arriving untested, and one removed from the set fails rather than quietly
+/// taking its own coverage with it.
+#[test]
+fn the_spelled_folded_characters_and_the_constant_agree() {
+    let spelled: String = FOLDED_CHARACTERS.iter().collect();
+    assert_eq!(
+        spelled,
+        super::NOT_IN_A_PATH_SEGMENT,
+        "the folded set and the list the fixture walks have diverged"
+    );
+}
+
+/// The two halves of the wrap, and which of them is holding anything.
+///
+/// The trailing half **is** load-bearing, and only became so when the
+/// option-prefix rule landed: the suffixes it offers are appended after the
+/// wrap, so without the trailing separator the first suffix runs straight into
+/// the folded line and the last segment of a command stops being a whole one.
+/// Two fixtures redden without it, and it is the separator between tokens
+/// that carries it rather than a wrap at the end of the line. An earlier draft of `docs/honesty.md` said
+/// it was not load-bearing — true when written, false one commit later, and
+/// nobody re-measured it. That is the failure this crate keeps paying for.
+///
+/// The leading half is inert and structurally cannot hide anything, because
+/// `anchored` already tests `starts_with` as well as `contains`. Dropping it can
+/// only *add* matches, never remove one. Measured over every fragment the gate
+/// consults, five spellings and five write verbs — 975 command lines, zero
+/// answers changed. It stays for symmetry, and this says so rather than letting
+/// a reader infer a guard that is not there.
+#[test]
+fn the_trailing_wrap_keeps_the_last_segment_whole() {
+    for line in [
+        "rm -rf /home/me/.claude/agents",
+        "rm -rf /repo/.estigia",
+        "curl -o/home/me/.claude/settings.json https://x",
+        "7z x pack.7z -o/repo/.estigia",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and its last segment names a control surface"
+        );
+    }
+}
+
+/// A control surface is reached however the line is punctuated.
+///
+/// `surface_of` folds every character a path segment cannot contain into a
+/// separator, and this holds that direction. It exists because two narrower
+/// attempts did not: splitting on whitespace and appending a separator left the
+/// left anchoring unreachable for a relative operand, and wrapping each token
+/// fixed only the operands whose first character *is* the fragment's. A quote, a
+/// redirect written without a space, an operand joined to a long flag and a
+/// drive-relative prefix all sit between the token boundary and the fragment. A
+/// reviewer measured every family here against the base commit, where a bare
+/// `contains` had gated them; the suite was green over all of it, because every
+/// fixture in this file spelled its commands plainly.
+#[test]
+fn punctuation_does_not_hide_a_control_surface() {
+    let dq = '"';
+    let sq = '\'';
+    for (line, why) in [
+        (
+            format!("rm -rf {dq}.estigia/stand-down.json{dq}"),
+            "double quotes",
+        ),
+        (
+            format!("rm -rf {sq}.estigia/stand-down.json{sq}"),
+            "single quotes",
+        ),
+        (
+            format!("rm -rf {dq}.claude/settings.json{dq}"),
+            "double quotes, settings",
+        ),
+        (
+            format!("rm -rf {dq}.estigia/{dq}"),
+            "quoted with a trailing separator",
+        ),
+        (
+            format!("mv {dq}.claude/settings.json{dq} /tmp/x"),
+            "quoted, moved",
+        ),
+        (
+            "echo x >.claude/settings.json".to_string(),
+            "redirect, no space",
+        ),
+        (
+            "echo x>.claude/settings.json".to_string(),
+            "redirect, no spaces at all",
+        ),
+        (
+            "echo x >>.estigia/run.json".to_string(),
+            "appending redirect",
+        ),
+        (
+            ": >.claude/settings.json".to_string(),
+            "truncating redirect",
+        ),
+        (
+            "sed -i --file=.claude/settings.json -e s/a/b/".to_string(),
+            "operand joined to a long flag",
+        ),
+        (
+            "tee --output=.claude/settings.json".to_string(),
+            "another long flag",
+        ),
+        // A quoted **bare directory**, which a reviewer measured separately: the
+        // trailing separator the fragment carries has to be supplied by the fold
+        // and the leading one by the quote, so both ends are reached at once.
+        (
+            format!("rm -rf {dq}/repo/.opencode/agents{dq}"),
+            "quoted bare directory",
+        ),
+        (
+            format!("rm -rf {dq}/home/me/.claude/agents{dq}"),
+            "quoted bare home directory",
+        ),
+        (
+            format!("rm -rf {sq}/repo/.estigia{sq}"),
+            "quoted bare state directory",
+        ),
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": &line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and it names a control surface through {why}"
+        );
+    }
+}
+
+/// The drive-relative Windows spelling, on both roads.
+///
+/// `C:.estigia\stand-down.json` is the current directory *of that drive*, not
+/// its root, and it names the same file as the bare relative spelling. It is the
+/// one punctuation family that reaches the write road as well, because the drive
+/// prefix sits where the left anchoring looks for a separator.
+#[test]
+fn a_drive_relative_spelling_is_measured_like_a_relative_one() {
+    for named in [
+        r"C:.estigia\stand-down.json",
+        r"C:.estigia\runs\a.json",
+        r"C:.claude\settings.json",
+        r"c:.claude/settings.local.json",
+        r"D:.claude\agents\reviewer.md",
+    ] {
+        for (road, payload) in [
+            ("Write", serde_json::json!({ "file_path": named })),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("rm -rf {named}") }),
+            ),
+        ] {
+            let (_, how) = classify(road, &payload);
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "{road} on the drive-relative {named} answers routine, and it names a control surface"
+            );
+        }
+    }
+}
+
+/// An ordinary line stays `Routine` after the folding.
+///
+/// The other direction of the same change: reading punctuation as separators
+/// makes the view longer and more permissive, so it has to be shown not to gate
+/// the commands a run issues all day. A false `Boundary` here is a live tracker
+/// read on every build.
+#[test]
+fn folding_punctuation_does_not_gate_an_ordinary_line() {
+    for line in [
+        "cargo build --release",
+        "cargo test --all-targets",
+        "git commit -m wip",
+        "git log --oneline -20",
+        "rm -rf target/debug",
+        "npm run build",
+        "mkdir -p src/harness",
+        "echo done > /tmp/out.txt",
+        "grep -rn settings src/",
+        "sed -i s/a/b/ README.md",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "`{line}` answers boundary, and it names no control surface"
+        );
+    }
+}
+
+/// A relative operand reaches the same answer as an absolute one.
+///
+/// `surface_of` joins a command's tokens with **spaces**, so an anchored
+/// fragment finds no separator in front of a relative operand and none of them
+/// is at position 0 — the verb is. Every fixture in this file spelled its paths
+/// absolutely, so `rm -rf .estigia` and `echo x > .claude/settings.json` went
+/// `Boundary` to `Routine` with the whole suite green, while `Write` still
+/// answered `Boundary` for the same path. That is the road split the anchoring
+/// was added to close, reappearing inverted on the spelling an agent inside a
+/// repository types most.
+#[test]
+fn a_relative_operand_is_measured_like_an_absolute_one() {
+    for named in [
+        ".estigia",
+        ".estigia/state.json",
+        ".claude/settings.json",
+        ".claude/settings.local.json",
+        ".claude/agents",
+        ".claude/agents/reviewer.md",
+        ".opencode/agents/reviewer.md",
+        ".config/gh/hosts.yml",
+        ".codex/hooks.json",
+        ".cursor/rules/estigia.md",
+    ] {
+        for (road, payload) in [
+            ("Write", serde_json::json!({ "file_path": named })),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("rm -rf {named}") }),
+            ),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("echo x > {named}") }),
+            ),
+        ] {
+            let (_, how) = classify(road, &payload);
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "{road} on the relative spelling {named} answers routine, and the absolute spelling of the same path is a boundary"
+            );
+        }
+    }
+}
+
+/// Every root `roles::definition_for` searches, including the repository's own.
+///
+/// A definition carries a tool allowlist and a definition that is not found is
+/// `Ok(None)`, which `declared_policy` reads as *every tool allowed*. The
+/// repository-local OpenCode root was the one nothing reached: `.claude/agents/`
+/// covered its Claude twin, `opencode/agents/` is anchored so `.opencode` is not
+/// it, and the two roots sit in one `vec!` gated by two different fragments.
+/// Both documents claimed every root was watched while this one was `Routine`.
+#[test]
+fn every_definition_root_is_a_boundary_on_both_roads() {
+    for root in [
+        "/repo/.claude/agents",
+        "/repo/.opencode/agents",
+        "/home/me/.claude/agents",
+        "/home/me/.config/opencode/agents",
+        "/xdg/opencode/agents",
+    ] {
+        for named in [root.to_string(), format!("{root}/reviewer.md")] {
+            for (road, payload) in [
+                ("Write", serde_json::json!({ "file_path": &named })),
+                (
+                    "Bash",
+                    serde_json::json!({ "command": format!("rm -rf {named}") }),
+                ),
+            ] {
+                let (_, how) = classify(road, &payload);
+                assert_eq!(
+                    how,
+                    Sensitivity::Boundary,
+                    "{road} on {named} answers routine, and it is a root `definition_for` reads a tool allowlist from"
+                );
+            }
+        }
+    }
+}
+
+/// The directory itself, and what is under it, on both roads.
+///
+/// The other half of the same rule: a fragment naming a directory has to reach
+/// the directory. This is what the trailing slash cost before the matcher
+/// honoured it — measured on the state directory, the installed contract, the
+/// agent definitions and a rules directory.
+#[test]
+fn a_directory_entry_reaches_the_directory_itself_on_both_roads() {
+    for named in [
+        "/home/me/.claude/skills/flow",
+        "/repo/.estigia",
+        "/home/me/.claude/agents",
+        "/home/me/.cline/rules",
+        "/home/me/.config/opencode",
+    ] {
+        let (_, written) = classify("Write", &serde_json::json!({ "file_path": named }));
+        assert_eq!(
+            written,
+            Sensitivity::Boundary,
+            "a write to the bare directory {named} answers routine"
+        );
+
+        let (_, removed) = classify(
+            "Bash",
+            &serde_json::json!({ "command": format!("rm -rf {named}") }),
+        );
+        assert_eq!(
+            removed,
+            Sensitivity::Boundary,
+            "removing {named} through the shell answers routine"
+        );
+    }
+}
+
+/// An existing entry's sensitivity did not change on the way past.
+///
+/// `.config/opencode/` covered everything under it. A first attempt at the
+/// `XDG_CONFIG_HOME` fix replaced it with three tails, and a reviewer measured
+/// what that quietly gave up: what Estigia does not write under that directory
+/// went `Boundary` to `Routine` — a loosening, presented in the entry as an
+/// over-gating fix. No count, deliberately: three drafts said *nine* without
+/// anybody enumerating them, and `docs/honesty.md` retracted it while this
+/// comment kept it. One fact in two places is a fact that disagrees. The directory entry is back beside the tails, which
+/// cover the relocated case it could not.
+#[test]
+fn the_opencode_config_directory_is_still_covered_whole() {
+    for under in [
+        "/home/me/.config/opencode/mcp.json",
+        "/home/me/.config/opencode/themes/dark.json",
+    ] {
+        let (_, how) = classify("Write", &serde_json::json!({ "file_path": under }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "{under} was covered before this change and answers routine now"
+        );
+    }
+}
+
 /// The covered checkout is resolved the same way the target is.
 ///
 /// `covers` leaves a path it cannot canonicalise literal. A covered checkout

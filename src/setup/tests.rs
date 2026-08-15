@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_env::with_config_home;
 
 fn sandbox() -> (tempfile::TempDir, SetupOptions) {
     let home = tempfile::tempdir().expect("a temporary home");
@@ -2641,26 +2642,94 @@ fn every_control_file_an_adapter_has_is_one_the_gate_measures() {
     // guard:population control-surface — a plain `//` inside the body, because
     // a `///` here is parsed as a second *declaration* of the family rather
     // than as this test claiming it. Same mistake as round six.
-    let (_home, options) = sandbox();
-    for adapter in AGENTS {
-        let paths = resolve_paths(adapter, &options).expect("paths resolve");
-        let mut watched: Vec<std::path::PathBuf> = vec![paths.skill_root.join("SKILL.md")];
-        watched.extend(paths.hooks.clone());
-        watched.extend(paths.plugin.clone());
-        watched.extend(paths.mcp_config.clone());
+    //
+    // Every platform, not the host's. `sandbox()` pins `Platform::Unix`, and this
+    // is the only thing tying `paths_in` to `is_control_surface` — so it walked
+    // one branch of a function full of them. A reviewer measured what that hid:
+    // giving Cursor a Windows-only instruction path left the whole suite green
+    // with the file unmeasured, while the same drift on a plain directory rename
+    // was caught. The neighbouring `a_moved_home_moves_every_root_under_it`
+    // already loops all three; this had no reason not to.
+    let (_home, base) = sandbox();
+    // Two XDG layouts as well as three platforms. A reviewer measured that this
+    // walked one of each, and both surfaces a relocated `XDG_CONFIG_HOME` left
+    // ungated were found by a person rather than by this test — which is the work
+    // it exists to make unnecessary.
+    for platform in [Platform::Windows, Platform::MacOs, Platform::Unix] {
+        for moved in [false, true] {
+            let options = SetupOptions {
+                platform: Some(platform),
+                config_home: if moved {
+                    Some(_home.path().join("moved-xdg"))
+                } else {
+                    base.config_home.clone()
+                },
+                ..base.clone()
+            };
+            for adapter in AGENTS {
+                let paths = resolve_paths(adapter, &options).expect("paths resolve");
+                // The bare root as well as a file under it. A reviewer measured the
+                // split that a trailing slash makes: `surface_of` appends a separator,
+                // so `rm <root>` was `Boundary` while a write to the bare directory was
+                // `Routine` — and this walk only ever asked about `SKILL.md` inside it.
+                // Asking about the directory is what found the same split in four more
+                // entries.
+                //
+                // Held by no test today, and worth saying rather than leaving to be
+                // discovered: `names` matches a directory entry by the directory
+                // itself, so removing this line changes nothing measurable. What it
+                // is for is the adapter added later whose root is a directory — the
+                // fixture that covers this behaviour spells its paths by hand and
+                // would not know about it.
+                let mut watched: Vec<std::path::PathBuf> =
+                    vec![paths.skill_root.clone(), paths.skill_root.join("SKILL.md")];
+                watched.extend(paths.hooks.clone());
+                watched.extend(paths.plugin.clone());
+                watched.extend(paths.mcp_config.clone());
+                // The instruction file, which this walk did not reach for as long as it
+                // existed. It is the file `setup` writes the workflow-authority directive
+                // into — the sentence telling an agent this harness holds the authority
+                // at all — so an agent that rewrites it removes the reason it obeys, and
+                // it answered `Routine`. Eleven paths on any one platform, twelve
+                // spellings across all three — gemini-cli is the one adapter whose
+                // instruction file moves with the platform. An earlier version of this
+                // said thirteen and "the two that differ by platform": thirteen is the
+                // issue's own count, which includes two `~/.claude` paths this walk does
+                // not touch, and only one adapter has a platform branch.
+                watched.push(paths.instructions.clone());
+                // And the agent-definition root, which was the one path this change
+                // hand-spelled and the one it left uncrossed — a reviewer named that
+                // as the shape the change's own prose condemns. `definition_for`
+                // reads the tool allowlist it enforces from here.
+                watched.extend(paths.agents_root.clone());
 
-        for file in watched {
-            let target = file.display().to_string();
-            let (_, how) = crate::harness::classify(
-                "Write",
-                &serde_json::json!({ "file_path": target.clone() }),
-            );
-            assert_eq!(
-                how,
-                crate::harness::Sensitivity::Boundary,
-                "{}: a write to {target} is where its gate lives and the gate calls it routine",
-                adapter.slug
-            );
+                for file in watched {
+                    let target = file.display().to_string();
+                    // Both roads. `surface_of` splits a command on whitespace before
+                    // matching, so a path containing a space can answer `Boundary` on
+                    // the write tool and `Routine` through the shell — which is the
+                    // road an agent takes to delete something, and the reason the
+                    // `cli/hosts.yml` entry exists at all. This walk asked only about
+                    // writes, so the next entry of that shape would have arrived
+                    // unnoticed; a reviewer named it before it did.
+                    for (road, payload) in [
+                        ("Write", serde_json::json!({ "file_path": target.clone() })),
+                        (
+                            "Bash",
+                            serde_json::json!({ "command": format!("rm {target}") }),
+                        ),
+                    ] {
+                        let (_, how) = crate::harness::classify(road, &payload);
+                        assert_eq!(
+                            how,
+                            crate::harness::Sensitivity::Boundary,
+                            "{platform:?}/{}: {road} on {target} is where its gate lives and \
+                         the gate calls it routine",
+                            adapter.slug
+                        );
+                    }
+                }
+            }
         }
     }
 }
@@ -4892,4 +4961,78 @@ fn a_phase_is_not_written_in_a_dialect_its_host_cannot_read() {
         5,
         "the host this crate can spell for received no phases"
     );
+}
+
+/// Where a config home comes from, for every shape a caller can supply.
+///
+/// The whole table, because a reviewer found the interesting cell by reading
+/// rather than by running: routing this through `setup::xdg_config_home` moved
+/// one answer. `config_home: Some(<relative>)` with the variable set absolute
+/// resolved to `$HOME/.config` before and to the **variable** after, because
+/// filtering the override first let it fall through to the fallback. No caller
+/// in this tree reaches that cell — every one sets `home_dir` alongside — and
+/// the shipped binary has no `--config-home` flag at all, which is exactly why
+/// nothing was red. An override that is named badly is a caller's mistake, and
+/// inheriting the machine's config home instead is the half-move
+/// `Environment::resolve` exists to refuse.
+///
+/// The absolute paths are temporary directories rather than literals, because a
+/// POSIX-looking `/moved/config` is **not** absolute on Windows and the first
+/// draft of this test failed for that reason rather than for a real one.
+#[test]
+fn a_config_home_comes_from_the_override_or_the_variable_and_never_from_both() {
+    let isolated = tempfile::tempdir().expect("a temporary home");
+    let moved = tempfile::tempdir().expect("a temporary config home");
+    let named = tempfile::tempdir().expect("a named config home");
+
+    let resolve = |config_home: Option<&std::path::Path>, home: Option<&std::path::Path>| {
+        let options = SetupOptions {
+            home_dir: home.map(std::path::Path::to_path_buf),
+            config_home: config_home.map(std::path::Path::to_path_buf),
+            platform: Some(Platform::Unix),
+            ..SetupOptions::default()
+        };
+        Environment::resolve(&options)
+            .expect("an absolute home")
+            .xdg_config()
+    };
+
+    // What a borrowed home falls back to when the variable says nothing. Taken
+    // by measurement rather than spelled, since it is the machine's own.
+    let borrowed_fallback = with_config_home(std::path::Path::new(""), || resolve(None, None));
+
+    with_config_home(moved.path(), || {
+        assert_eq!(
+            resolve(None, None),
+            moved.path(),
+            "a borrowed home takes the variable"
+        );
+        assert_eq!(
+            resolve(None, Some(isolated.path())),
+            isolated.path().join(".config"),
+            "an isolated home does not inherit the machine's variable"
+        );
+        assert_eq!(
+            resolve(Some(named.path()), None),
+            named.path(),
+            "an absolute override wins over the variable"
+        );
+        // The cell that moved: a useless override is not a reason to inherit the
+        // variable, and both roads have to agree that it is simply absent.
+        for useless in [
+            std::path::Path::new("relative/config"),
+            std::path::Path::new(""),
+        ] {
+            assert_eq!(
+                resolve(Some(useless), None),
+                borrowed_fallback,
+                "an override of {useless:?} fell through to the variable"
+            );
+            assert_eq!(
+                resolve(Some(useless), Some(isolated.path())),
+                isolated.path().join(".config"),
+                "an override of {useless:?} beside an isolated home left the home"
+            );
+        }
+    });
 }
