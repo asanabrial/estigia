@@ -680,15 +680,26 @@ fn nothing_writes_a_file_another_program_reads_by_truncating_it() {
 ///    `cargo test --release --target <triple>` — all six release lanes would have
 ///    hard-failed. Reverting that left the whole suite green, this guard
 ///    included, so it was a fix nothing held.
-/// 3. **That no test reaching the rig can leave without asserting.** Not the
-///    spelling of a skip — the skip itself. `return;` was matched literally at
-///    first, and `return Default::default();` walked past it by two words while
-///    every gate in this repository stayed green.
+/// 3. **One spelling of a caller-side skip**: the `return` keyword written in a
+///    test that reaches the rig. Not the skip itself — an earlier version of this
+///    comment claimed that, and reviewers reproduced the whole defect through a
+///    macro, a labelled `break`, a caller-side `process::exit`, and a second test
+///    file, all with this green. `docs/honesty.md` lists them with their
+///    measurements.
 ///
 /// It reads source text rather than types because each of these compiles
-/// perfectly when it is wrong. Not a lint against `Option` in fixtures generally
-/// — `repository()` in `src/harness/guard/tests.rs` still answers one, and
-/// `docs/honesty.md` records what that costs. This holds the one measured lying.
+/// perfectly when it is wrong. **What holds the accidental path is the compiler**,
+/// not this: `let Some(rig) = tracker_rig()` does not compile against a
+/// non-`Option`, so nobody reintroduces the defect by copying a neighbour, which
+/// is how sixteen callers came to have it. This catches a signature reverting, a
+/// fixture looked for in the wrong place, and the one skip spelling somebody is
+/// likely to reach for. Deliberate circumvention is not in reach of reading text,
+/// and pretending otherwise would be the same unmeasured claim this whole issue
+/// has been about.
+///
+/// Not a lint against `Option` in fixtures generally — `repository()` in
+/// `src/harness/guard/tests.rs` still answers one, and `docs/honesty.md` records
+/// what that costs. This holds the one measured lying.
 #[test]
 fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     let source = std::fs::read_to_string(root().join("tests").join("pipe.rs"))
@@ -717,11 +728,19 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     // reviewer measured that reverting the derivation leaves the whole suite
     // green, this guard included, which by this repository's own rule made it an
     // untested fix.
-    let rig = source
-        .split_once("fn tracker_rig()")
-        .expect("the rig is defined")
+    // From the definition line the check above found, not from the first text in
+    // the file that reads like it. `split_once("fn tracker_rig()")` bound to
+    // whichever came first — a reviewer put two comment lines mentioning the
+    // rig near the top and every assertion below read those four lines instead,
+    // passing while the real rig did both of the things they refuse.
+    let from_definition = source
+        .split_once(signature)
+        .expect("the signature line was found above")
         .1;
-    let body = rig.split_once("\n}").expect("the rig has an end").0;
+    let body = from_definition
+        .split_once("\n}")
+        .expect("the rig has an end")
+        .0;
     assert!(
         body.contains("current_exe()"),
         "the fixture is no longer located from the running test binary, so it is \
@@ -732,15 +751,19 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
         "the fixture is located from the manifest again, which names `target/debug` \
          however the suite was actually built"
     );
-    // And the rig may not end the process instead of failing. A reviewer replaced
-    // the assertion with `eprintln!` plus `std::process::exit(0)`: the fixture
-    // absent, `cargo test --test pipe` printed `running 106 tests`, no result line
-    // at all, and exited 0. Worse than the defect this issue is named for, which
-    // at least claimed 106 passed.
+    // Nothing in this suite may end the process instead of failing. A reviewer
+    // replaced the rig's assertion with `eprintln!` plus `std::process::exit(0)`:
+    // the fixture absent, `cargo test --test pipe` printed `running 106 tests`, no
+    // result line at all, and exited 0 — worse than the defect this issue is named
+    // for, which at least claimed 106 passed. Scoped to the rig's body at first,
+    // which two reviewers then walked round by putting the call in a caller or in
+    // a helper below the rig. The whole file is the scope the sentence always
+    // meant. An alias (`use std::process::exit as leave`) still walks past it, and
+    // that is in `docs/honesty.md` rather than chased with a second substring.
     assert!(
-        !body.contains("process::exit"),
-        "the rig ends the process instead of failing, which cargo reports as success \
-         with no test result at all"
+        !source.contains("process::exit"),
+        "something in this suite ends the process instead of failing, which cargo \
+         reports as success with no test result at all"
     );
 
     // Per test function, not per line. Both routes a reviewer found are
@@ -767,25 +790,47 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
             .filter(|line| !line.trim_start().starts_with("//"))
             .collect::<Vec<_>>()
             .join("\n");
-        // The keyword, not a spelling of it. `return;` and `return }` were
+        // The keyword, not two spellings of it: `return;` and `return }` were
         // matched literally at first and `return Default::default();` walked past
-        // them — legal, left alone by `cargo fmt`, clean under clippy, and enough
-        // to put 106 tests back to passing on nothing with every gate green. A
-        // `return` inside a string literal or a block comment reddens this too;
-        // that is a false positive in the safe direction, and this file's own
-        // subject is prose about the pattern it refuses, so it will happen.
-        let returns = code.lines().any(|line| {
-            line.split(|c: char| !c.is_alphanumeric() && c != '_')
+        // them by two words, with every gate in this repository green.
+        //
+        // String literals are cut out first, because this repository writes long
+        // English assertion messages and two shipped ones say "did not return".
+        // Blocking an assertion because of a word in its own message is stopping
+        // correct work, which is worse than the miss it prevents.
+        //
+        // A `return` inside a **closure** still reddens this, and cannot skip the
+        // test — it is a false positive over correct code, not a safe one.
+        // Telling them apart needs to know what a closure is, which is where
+        // reading text ends; `docs/honesty.md` says so rather than this pretending
+        // otherwise.
+        let offender = code.lines().find(|line| {
+            let mut outside = String::new();
+            let mut in_string = false;
+            let mut escaped = false;
+            for character in line.chars() {
+                match character {
+                    _ if escaped => escaped = false,
+                    '\\' if in_string => escaped = true,
+                    '"' => in_string = !in_string,
+                    _ if in_string => {}
+                    _ => outside.push(character),
+                }
+            }
+            outside
+                .split(|c: char| !c.is_alphanumeric() && c != '_')
                 .any(|word| word == "return")
         });
-        if returns {
-            skipping.push(name.to_owned());
+        if let Some(line) = offender {
+            skipping.push(format!("{name}  ->  {}", line.trim()));
         }
     }
     assert!(
         skipping.is_empty(),
-        "these reach the rig and can still return before asserting, which is how \
-         sixteen tests came to report pass without running: {skipping:?}"
+        "these reach the rig and write `return`, which is how sixteen tests came to \
+         report pass without running. If the word is inside a closure it cannot skip \
+         the test and this is a false positive — see the entry in `docs/honesty.md`, \
+         and move it rather than arguing with it: {skipping:#?}"
     );
 
     // The exemption is not vacuous: the callers have to be there for their

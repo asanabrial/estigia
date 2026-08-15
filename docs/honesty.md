@@ -317,37 +317,53 @@ suite. Everything else here is prose held by review.
   failure, so the crate currently holds two opposite policies for one condition — set in the same
   change. Filed as its own issue.
 
-  The guard that holds the rig, `the_tracker_rig_cannot_answer_that_it_did_not_run`, was walked past
-  by every reviewer who tried, six times, and each attempt was measured with the fixture removed and
-  106 tests passing on nothing while the guard said `ok`:
+  **The guard that holds the rig catches an accident. It does not catch an author, and this is the
+  measurement of how far short it falls.** Four reviewers walked past
+  `the_tracker_rig_cannot_answer_that_it_did_not_run` nine times, each attempt measured with the
+  fixture removed. Where the outcome is `106 passed`, that is issue 22's defect reproduced whole with
+  every gate in this repository green.
 
-  | Route | What it defeated |
-  |---|---|
-  | `type TrackerRigMaybe = Option<TrackerRig>` in the signature | a `contains("-> TrackerRig")` prefix match |
-  | a caller split over two lines | a line-wise scan for `Some` |
-  | `if … { return; }` before the call | needed no option at all |
-  | the fixture located from `CARGO_MANIFEST_DIR` again | nothing held it; the whole suite stayed green |
-  | `return Default::default();` | a literal match on `return;` — two words past it, and `cargo fmt` leaves it alone |
-  | `std::process::exit(0)` inside the rig | everything; cargo printed no result line and exited 0 |
+  | Route | Outcome | Held now |
+  |---|---|---|
+  | `type TrackerRigMaybe = Option<TrackerRig>` in the signature | 106 passed | yes |
+  | a caller split over two lines | 106 passed | yes |
+  | `if … { return; }` before the call | 106 passed | yes |
+  | the fixture located from `CARGO_MANIFEST_DIR` again | whole suite green | yes |
+  | `return Default::default();` | 106 passed | yes |
+  | `std::process::exit(0)` in the rig | **no result line at all**, exit 0 | yes |
+  | a decoy **comment** naming the rig, moving the body split | no result line, exit 0 | yes |
+  | `process::exit` in a caller, or in a helper below the rig | no result line, exit 0 | yes |
+  | `use std::process::exit as leave;` | no result line, exit 0 | **no** |
+  | a macro expanding to `return`, defined before the first `#[test]` | 106 passed | **no** |
+  | `'rig: { … break 'rig; }` around each body | 106 passed | **no** |
+  | `#[ignore]` on all sixteen | 90 passed, 16 ignored | **no** |
+  | a second `tests/*.rs` with its own `Option` rig | its own suite green | **no** |
+  | a body skip — `if built { … } else { eprintln!(…) }`, no return | 106 passed | **no** |
 
-  The last is worth naming separately: it is **worse** than the defect this issue is about, which at
-  least claimed 106 passed. The guard now compares the whole signature, refuses `process::exit` in the
-  rig, asserts the fixture is located from `current_exe`, and scans per test function for the `return`
-  **keyword** rather than for two spellings of it. All six redden it.
+  Two of those were fixed here because the guard was not reading what it claimed to read: the body
+  extraction bound to the first text in the file matching `fn tracker_rig()`, which a two-line comment
+  could claim, and the `process::exit` refusal was scoped to the rig's body when its sentence meant
+  the suite. The rest are declared rather than chased. A seventh substring would not close them: a
+  macro puts the refused word in a region the scan never visits, a labelled `break` is a return under
+  another name, and a body skip never leaves the function at all. Telling any of them from correct
+  code needs to know which statements assert, which is a semantic question and not a textual one.
 
-  Two things it still cannot see, and only one of them is closable by reading text.
+  **What actually holds the accidental path is the compiler.** `let Some(rig) = tracker_rig()` does
+  not compile against a non-`Option`, so nobody reintroduces this by copying a neighbour — which is
+  how all sixteen callers came to have it. The guard adds three things a single careless edit could
+  do and the compiler would not see: reverting the signature, moving where the fixture is looked for,
+  and writing `return` in a test that reaches the rig. That is its honest scope. An earlier version
+  of this entry said six routes were closed and two things remained unseen; both numbers were wrong
+  when they were written, and the sentence claiming completeness is the reason they were worth
+  writing down.
 
-  A **body skip** — `if condition { …assertions… }` with no `else` — never returns and never asserts.
-  Measured by a reviewer: wrapping all sixteen callers that way, with the fixture moved aside, gives
-  `106 passed` and a green guard. That is issue 22's defect reproduced whole. It is the shape two of
-  `repository()`'s twelve call sites already use, and the shape of
-  `a_row_that_is_broken_comes_out_of_the_report_broken` above. Catching it needs knowing which
-  statements assert, which is past what reading text can do.
-
-  And the two path assertions are `contains` checks, so a decoy `current_exe()` call plus an
-  `env!("CARGO_MANIFEST_DIR")` moved into a helper outside the rig body would satisfy both. A reviewer
-  named that by reading rather than running, and it is recorded the same way — as a property of two
-  substring checks, not as a measured result.
+  The `return` scan has a cost, and it is not in the safe direction. It cuts string literals out
+  first — this repository ships assertion messages saying *"did not return"*, and blocking an
+  assertion because of a word in its own message is stopping correct work. But a `return` inside a
+  **closure** still reddens it, and a closure cannot skip the test. Measured, both: the literal is
+  green, the closure is red. The failure message names the offending line and says it may be a false
+  positive, because the person who hits it is reading a claim about early returns and looking at a
+  closure.
 
   One more control-surface path of the hosts file's shape, found by a reviewer of this change and
   not closed here:
