@@ -340,15 +340,21 @@ suite. Everything else here is prose held by review.
      `normalise(&fold(token))` and the ladder's entry test read `fold(token)` alone — `normalise`
      folds `:` and `\` and `fold` does not. So in `${P:-.claude/settings.json}` the `-` starts a
      segment in the string that is matched and did not in the string the ladder inspected: no rung,
-     and thirteen real surfaces answered `Routine` where the base answered `Boundary`.
+     and every relative surface answered `Routine` where the base answered `Boundary` — no count
+     here, because a reviewer could not reproduce the *thirteen* an earlier draft claimed and this
+     document did not state the basis it was counted on.
      `TARGET=${1:-.claude/settings.json}` then `rm -f "$TARGET"` is the ordinary script idiom for a
      defaulted path. A reviewer found it by sweeping **two**-character contexts; the 660-character
      sweep recorded above is one character wide and could not reach `:-`. The same fix reaches `:~`,
      `\-` and `\~`, which that reviewer's exhaustive two-character sweep names as the only other
      non-lookalike contexts that were open.
 
-     **What stays open, and why it is a limit rather than an oversight.** `${P-path}`, `${P:+path}`
-     and `${P:?path}` are still `Routine`. Once `$`, `{`, `}` and `:` are folded away, `P-path` is
+     **What stays open, why it is a limit rather than an oversight, and what it costs.** `${P-path}`,
+     `${P:+path}` and `${P:?path}` answer `Routine`. Not *still* — they answered `Boundary` at the base
+     commit, so this is a **loss against the base** on fifteen relative surfaces, and unlike every
+     other spelling recorded in this section those three do address the file. Named that way because a
+     reviewer pointed out that the earlier wording read like a gap that had always been there.
+     Once `$`, `{`, `}` and `:` are folded away, `P-path` is
      indistinguishable from a file named `P-path`, and `+`/`?` sit where a segment's first character
      would. Laddering from a `-` in the *middle* of a segment would reach them and would also gate
      `x-.claude/agents` and every `foo-bar` tail like it — trading a hole for over-gating on ordinary
@@ -501,9 +507,12 @@ suite. Everything else here is prose held by review.
   `text_names_a_control_surface` a command line or a patch body, which is prose with a path in it.
   Only the second folds punctuation, because only the second can have punctuation *next to* a path
   that is not part of it. A reviewer measured what that leaves and then measured whether it matters:
-  on the write road a decorated relative spelling — `".claude/CLAUDE.md"` with the quotes inside the
-  field, or with a leading space, tab, `~`, `$`, `%`, `{`, backtick or `=` — is `Routine` at this head
-  and was `Boundary` at the base. It is not a hole, and that was checked rather than assumed: writing
+  on the write road a decorated relative spelling — `".claude/settings.json"` with the quotes inside
+  the field, or with a leading space, tab, `~`, `$`, `%`, `{`, backtick or `=` — is `Routine` at this
+  head and was `Boundary` at the base. A draft of this paragraph used `.claude/CLAUDE.md` as the
+  worked example, which cannot be true of it: that file was not on the control surface at the base at
+  all — it is the file issue 26 was filed about, and the fragment that reaches it arrived in this
+  branch's first commit. A reviewer caught the example contradicting the sentence around it. It is not a hole, and that was checked rather than assumed: writing
   each of those spellings on this machine either fails outright or resolves to a different,
   non-existent directory. Only the bare spelling reaches the file, and the bare spelling is gated. The
   same reviewer confirmed it end to end — the quoted `file_path` costs zero tracker reads while the
