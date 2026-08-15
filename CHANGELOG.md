@@ -41,6 +41,19 @@ the workflow, it holds the tools.
   would be another, and `\\.\C:\Windows`, `\\?\Volume{...}\Windows` and
   `\\?\GLOBALROOT\Device\HarddiskVolume3\Windows` all resolve to `C:\Windows`, so they place normally
   and a write through one of them outside every checkout now stands aside where it used to be gated.
+- The end-to-end tests of the review protocol now run. Sixteen tests in `tests/pipe.rs` drive the real
+  binary against a stand-in `gh`, and that stand-in is a cargo example: `cargo test` does not build
+  examples, `cargo clippy --all-targets` leaves metadata and no runnable file, and the rig answered
+  `Option` so every one of them returned early **reporting pass**. Measured in a cold worktree,
+  `cargo test --test pipe` said *106 passed* in 5.53s with `target/debug/examples/` absent. That is
+  every CI run this repository has ever had, on every platform: the requester exclusion, the review
+  queue's fail-closed reads, the CI-release verdict gate, the verdict's distinctness rules, the
+  handoff's ordering and the comment escaping were all green ticks for functions that returned
+  immediately. The skip is now gone from the type rather than from the callers — the rig raises,
+  naming the command that fixes it, so there is no value it can return that means *did not run*. CI
+  builds the examples before it tests, and passes `--no-fail-fast`, without which a lib failure hides
+  every later target and this file would still not run on Linux or macOS.
+
 - A refusal can now say that it already wrote. The outcome an agent is told was derived from the exit
   code alone, so every stop reported *nothing was written* — including `publish_review` refusing a
   closing keyword after it had pushed the branch and opened the pull request, which left both

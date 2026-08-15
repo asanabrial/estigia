@@ -61,11 +61,16 @@ that will disagree.
    failure the line exists to stop is what makes the line safe to change later.
 3. **Prefer removing a copy to adding a check.** When two places hold one rule, the fix is usually
    one place, not two guards.
-4. **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Nothing here needs an interpreter. `cargo doc` is on this list because
-   it was not, and had been failing outright — four public pages linking to private items, and
-   neither the list here nor CI ever asked. A crate that keeps its reasoning in doc comments and
-   cannot build them is one nobody reads.
+4. **Run everything**: `cargo build --examples`, `cargo test`, `cargo clippy --all-targets`, `cargo
+   fmt`, `cargo doc --no-deps`. Nothing here needs an interpreter. Two of these are on the list
+   because they were not, and each was hiding a failure while everything looked green. `cargo doc`
+   had been failing outright — four public pages linking to private items, and neither the list here
+   nor CI ever asked; a crate that keeps its reasoning in doc comments and cannot build them is one
+   nobody reads. `cargo build --examples` comes **first** because sixteen tests in `tests/pipe.rs`
+   drive the binary against a stand-in `gh` that is an example: `cargo test` does not build examples,
+   `cargo clippy --all-targets` leaves metadata and no runnable file, and those sixteen used to
+   report pass having executed nothing. They fail loudly now, and this line is what stops the failure
+   being mysterious.
 
 ## What not to do
 

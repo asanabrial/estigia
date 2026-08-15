@@ -268,10 +268,17 @@ suite. Everything else here is prose held by review.
   claimed them — the first with a deliberate type error inside the arm, which failed the build on
   Windows.
 
-  And the lanes measure less than "the lanes" suggests: `cargo test` is fail-fast across targets, so
-  when the lib target failed on Linux and macOS the integration targets never ran there at all —
-  `tests/pipe.rs`, which is where this change's end-to-end evidence lives, has never executed on
-  POSIX on this branch.
+  And the lanes measured less than "the lanes" suggests, on two counts, both since closed by issue
+  22. `cargo test` is fail-fast across targets, so when the lib target failed on Linux and macOS the
+  integration targets never ran there at all — `tests/pipe.rs`, which is where this change's
+  end-to-end evidence lives, never executed on POSIX on this branch. And underneath that, the sixteen
+  tests in that file which drive the binary against a stand-in `gh` had never executed on **any**
+  runner: the stand-in is a cargo example, `cargo test` does not build examples, and
+  `cargo clippy --all-targets` leaves an `.rmeta` and no runnable file. Measured cold —
+  `cargo test --test pipe` answered *106 passed* in 5.53s with `target/debug/examples/` not existing.
+  The workflow now builds the examples before it tests and passes `--no-fail-fast`, and the rig
+  raises instead of returning a value that means *did not run*; with the helper removed the same
+  command answers *90 passed; 16 failed*.
 
   One more control-surface path of the hosts file's shape, found by a reviewer of this change and
   not closed here:
