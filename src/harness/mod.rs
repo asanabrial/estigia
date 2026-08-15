@@ -532,8 +532,16 @@ const NEUTRALISES_A_FILE: &[&str] = &["chmod ", "chattr ", "chown "];
 /// `=` through an operand joined to a long flag, and `:` through the
 /// drive-relative Windows spelling, which is the one that reaches the write road
 /// as well. The rest terminate a word the same way, and leaving them out would
-/// make this a list of the shapes somebody happened to try.
-const NOT_IN_A_PATH_SEGMENT: &str = "\"'`<>=|;&()$*,";
+/// make this a list of the shapes somebody happened to try. The braces joined
+/// them for the same reason the others did: a reviewer measured brace expansion
+/// putting a real path one character past a separator.
+///
+/// `-` is deliberately **not** here, and cannot be: three fragments carry one —
+/// `hooks/pre-push`, `.estigia/stand-down.json` and cursor's derived
+/// `.cursor/estigia-workflow-authority.md` — so folding it would cut them in
+/// half and lose them outright. The option prefix it belongs to is handled in
+/// `surface_of` as a prefix rather than as punctuation.
+const NOT_IN_A_PATH_SEGMENT: &str = "\"'`<>=|;&()$*,{}";
 
 /// How sensitive a command line is, by what it names.
 ///
@@ -565,18 +573,38 @@ const NOT_IN_A_PATH_SEGMENT: &str = "\"'`<>=|;&()$*,";
 /// characters can sit between a separator and a path segment in any spelling
 /// that names a real file. It over-gates a line that merely *mentions* a
 /// surface, which is the asymmetry this function already runs on.
+///
+/// The fourth family is a **short option carrying its value attached**, and it
+/// needs its own rule because the character in the way is an ordinary letter:
+/// `-o.estigia`, `-C.estigia`, `-d.estigia`, `-oskills/flow/SKILL.md`. Folding
+/// `-` would do it and cannot be done — three fragments carry one, and cutting
+/// them in half loses them outright. A shell gives no way to know where the
+/// option letters end and the value begins, so every split point of a token
+/// beginning with `-` is offered to the matcher. That is deliberately generous
+/// in one direction only: it can gate a token that merely ends like a surface,
+/// never miss one that is a surface. `7z` is why it is not optional — its
+/// extract-to spelling is `-oDIR` and a space there is a syntax error, so the
+/// only correct way to write it is the way that was not gated.
 fn surface_of(command: &str) -> Sensitivity {
-    let folded = command
-        .chars()
-        .map(|c| {
-            if c.is_whitespace() || NOT_IN_A_PATH_SEGMENT.contains(c) {
-                '/'
-            } else {
-                c
-            }
-        })
-        .collect::<String>();
-    let view = format!("/{folded}/");
+    let fold = |text: &str| {
+        text.chars()
+            .map(|c| {
+                if c.is_whitespace() || NOT_IN_A_PATH_SEGMENT.contains(c) {
+                    '/'
+                } else {
+                    c
+                }
+            })
+            .collect::<String>()
+    };
+    let folded = fold(command);
+    let mut view = format!("/{folded}/");
+    for token in command.split_whitespace().filter(|t| t.starts_with('-')) {
+        for (at, _) in token.char_indices().skip(1) {
+            view.push_str(&fold(&token[at..]));
+            view.push('/');
+        }
+    }
     if is_control_surface(&view) {
         Sensitivity::Boundary
     } else {

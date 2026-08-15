@@ -3545,6 +3545,121 @@ fn the_declared_over_gating_is_the_shape_the_document_names() {
     }
 }
 
+/// A short option carrying its value attached, and a brace expansion.
+///
+/// The fourth family of shell-road loss this branch has paid for, and the one
+/// that needed a rule rather than another folded character: the thing standing
+/// between the separator and the fragment is an ordinary letter. `-` cannot be
+/// folded, because `hooks/pre-push`, `.estigia/stand-down.json` and cursor's
+/// derived fragment all carry one and folding would cut them in half. So every
+/// split point of a token beginning with `-` is offered to the matcher instead.
+///
+/// `7z` is why this is not optional: its extract-to spelling is `-oDIR` and a
+/// space there is a syntax error, so the only correct way to write "extract into
+/// the state directory" was the way that was not gated. A reviewer measured all
+/// of these against the base, where a bare `contains` had gated every one.
+#[test]
+fn an_option_prefix_does_not_hide_a_control_surface() {
+    for (line, why) in [
+        (
+            "7z x pack.7z -o.estigia",
+            "7z, whose only spelling is attached",
+        ),
+        ("unzip pack.zip -d.estigia", "unzip -d"),
+        ("tar -xf pack.tar -C.estigia", "tar -C"),
+        (
+            "tar -xf pack.tar -C.config/opencode",
+            "tar -C into a config root",
+        ),
+        ("curl -o.estigia/run.json https://x", "curl -o"),
+        (
+            "curl -so.estigia/stand-down.json https://x",
+            "curl with clustered flags",
+        ),
+        ("curl -Lo.claude/settings.json https://x", "curl -Lo"),
+        (
+            "curl -o.config/gh/hosts.yml https://x",
+            "curl -o onto the hosts file",
+        ),
+        (
+            "curl -oskills/flow/SKILL.md https://x",
+            "a value with no dot to anchor on",
+        ),
+        ("wget -O.claude/settings.json https://x", "wget -O"),
+        (
+            "wget -q -O.config/gh/hosts.yml https://x",
+            "wget with a flag before it",
+        ),
+        ("cp -t.estigia evil.json", "cp -t"),
+        ("install -D.estigia/run.json", "install -D"),
+        (
+            "curl -o.opencode/agents/reviewer.md https://x",
+            "a definition root",
+        ),
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and it names a control surface through {why}"
+        );
+    }
+}
+
+/// Brace expansion puts a real path one character past a separator.
+///
+/// Measured by a reviewer alongside the option prefix, and closed the other way:
+/// no fragment carries a brace, so the braces simply joined the folded set.
+#[test]
+fn a_brace_expansion_does_not_hide_a_control_surface() {
+    for line in [
+        "rm -rf ~/{.estigia/run.json,foo}",
+        "rm -rf ~/{.claude/settings.json,foo}",
+        "rm ~/{.config/gh/hosts.yml,x}",
+        "cp a ~/{.claude/settings.json}",
+        "rm -rf {.estigia/,dist}",
+        "rm -rf ~/{.claude/agents,build}",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and a brace expansion is naming a control surface"
+        );
+    }
+}
+
+/// The option-prefix rule is generous, and this prices it.
+///
+/// Offering every split point of a dash token can only add matches, so the cost
+/// it could carry is a false `Boundary` on an ordinary line — a live tracker
+/// read on every invocation. Measured across the write-heavy commands a run
+/// actually issues, including the ones whose flags take attached paths.
+#[test]
+fn an_option_prefix_does_not_gate_an_ordinary_line() {
+    for line in [
+        "tar -xf pack.tar -C build",
+        "unzip pack.zip -d build",
+        "7z x pack.7z -obuild",
+        "curl -o out.json https://example.com",
+        "wget -O out.html https://example.com",
+        "cp -t dist src/a.js",
+        "install -m 755 script /usr/local/bin",
+        "dd if=/dev/zero of=out.img bs=1M",
+        "node --max-old-space-size=4096 index.js",
+        "rsync -av src/ dest/",
+        "make -j8 all",
+        "go build -o bin/app ./cmd",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "`{line}` answers boundary, and it names no control surface"
+        );
+    }
+}
+
 /// A control surface is reached however the line is punctuated.
 ///
 /// `surface_of` folds every character a path segment cannot contain into a

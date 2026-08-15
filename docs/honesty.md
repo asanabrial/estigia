@@ -275,22 +275,44 @@ suite. Everything else here is prose held by review.
      by the shortest line there is. The drive-relative Windows spelling `C:` did the same thing and
      reached the **write** road as well, which none of the others did.
   3. **Fold every character a path segment cannot contain into a separator**, and wrap the line. That
-     is one rule instead of a list of shell shapes, and it is what is in the code.
+     reached the quotes, the redirects and the long flags at once — and not the fourth family, because
+     the character in the way there is an ordinary **letter**: a short option carrying its value
+     attached, `-o.estigia`, `-C.estigia`, `-oskills/flow/SKILL.md`. Brace expansion was the same
+     miss one character wide.
+  4. **Fold the braces too, and offer every split point of a token beginning with `-`.** The braces
+     could join the folded set because no fragment carries one. `-` could not: `hooks/pre-push`,
+     `.estigia/stand-down.json` and cursor's derived fragment all carry one, and folding it cuts them
+     in half and loses them outright. A shell gives no way to know where the option letters end and
+     the value begins, so every split point is offered instead. That is what is in the code.
+
+  `7z` is why the fourth is not optional: its extract-to spelling is `-oDIR`, a space there is a
+  syntax error, and it is in `WRITES_A_FILE` deliberately — so the only correct way to write "extract
+  into the state directory" was the one spelling that was not gated.
 
   Each attempt was measured against the base by a reviewer classifying raw command strings through
   the built binary, and each time the whole suite was green over the loss — because every fixture in
-  this crate spelled its commands plainly and its paths absolutely. That is the same blind spot three
-  times: a narrowing nothing asserts. `punctuation_does_not_hide_a_control_surface`,
+  this crate spelled its commands the way the last fix had taught it to. That is the same blind spot
+  **four** times: a narrowing nothing asserts, found by a reader who spells the command differently
+  than the fixture does. It is recorded at this length because the count is the finding. Anchoring a
+  matcher against a shell is not one change; each spelling that reaches a path is its own claim, and
+  the suite went green over every one of them until somebody wrote it down. `punctuation_does_not_hide_a_control_surface`,
   `a_drive_relative_spelling_is_measured_like_a_relative_one` and
   `a_relative_operand_is_measured_like_an_absolute_one` hold the direction now, and
   `folding_punctuation_does_not_gate_an_ordinary_line` holds the other one, because reading
   punctuation as separators makes the view more permissive and a false `Boundary` costs a live
   tracker read on every build.
 
-  What the folding leaves is stated rather than measured away: a command that *mentions* a control
-  surface while writing somewhere else is `Boundary`, which is the asymmetry `surface_of` already ran
-  on and pays one extra tracker read. Substitutions are still invisible — a path assembled from a
-  variable or a subshell names nothing this can match, at the base commit as much as here.
+  What this leaves is stated rather than measured away. A command that *mentions* a control surface
+  while writing somewhere else is `Boundary`, which is the asymmetry `surface_of` already ran on and
+  pays one extra tracker read. Substitutions are still invisible — a path assembled from a variable or
+  a subshell names nothing any of this can match, at the base commit as much as here. So is a surface
+  split across a `cd`, and so is a glob that removes a directory's contents without naming the
+  directory; a reviewer measured all three at both commits, and they are the same at both.
+
+  The option-prefix rule is generous in one direction only — it can gate a token that merely ends like
+  a surface, never miss one that is a surface. That cost was priced rather than assumed: across 50
+  ordinary developer command lines, including the write-heavy ones whose flags take attached paths,
+  it gates **none**. `an_option_prefix_does_not_gate_an_ordinary_line` holds twelve of them.
 
   The **trailing** half of the wrap is not load-bearing at this head, and it is kept anyway. Measured:
   every fragment the gate consults — all 28 `CONTROL_SURFACE` entries and all 11 derived instruction
@@ -343,7 +365,7 @@ suite. Everything else here is prose held by review.
     `opencode/agents.md` are covered by the same over-gating fixture.
   - Four are silent, measured one at a time with the full suite: `.agents/agents` → `.agents/`,
     `.codex/agents` → `.codex/`, `.qwen/qwen.md` → `.qwen/` and `.cline/rules/estigia.md` →
-    `.cline/` each **leave all 1,149 tests green.** Nothing in this crate names a path under those
+    `.cline/` each **leave all 1,152 tests green.** Nothing in this crate names a path under those
     directories in the `Routine` direction. An earlier draft of this list said *one*, naming only
     qwen; a reviewer counted them.
 
