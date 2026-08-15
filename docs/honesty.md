@@ -181,12 +181,20 @@ suite. Everything else here is prose held by review.
 
   The hole predates this: the paths still listed were never `Boundary`, so before this change they
   were measured against the claim and allowed under a valid one. What is newly lost is the refusal
-  when the claim is *not* valid. It is **not** lost when no contract is installed: the answer is given
-  after the `control-surface-not-installed` refusal, so *an unreadable control surface permits no
-  write* keeps applying without an exception. One published head had it the other way round, both
-  reviewers of that head raised the cost, and it moved rather than staying here as a declared limit —
-  `an_unreadable_control_surface_refuses_even_a_write_outside_the_claim` is what stops it drifting
-  back. The population test that keeps the list
+  when the claim is *not* valid. It is no longer lost when no contract is installed **outside the
+  renewal window**: the answer is given after the `control-surface-not-installed` refusal, and
+  `an_unreadable_control_surface_refuses_even_a_write_outside_the_claim` is what stops that drifting
+  back. One published head had it the other way round and both reviewers of that head raised the
+  cost, so it moved rather than staying here as a declared limit.
+
+  Inside the window it is still lost, and that is issue #29 rather than this entry: the window's
+  `Allow` sits above the contract refusal, so for its duration a routine write is permitted with no
+  `SKILL.md` on disk at all — measured on both roads, and the guard above passes only because its
+  fixture is outside the window. An earlier draft of this paragraph said the rule now applies
+  *without an exception*, which was an absolute the code does not hold; a reviewer measured it by
+  adding one `mark_verified()` line to that fixture.
+
+  The population test that keeps the list
   (`every_control_file_an_adapter_has_is_one_the_gate_measures`) walks each adapter's skill root,
   hooks, plugin and MCP config, and never `paths.instructions`, which is why nothing said so. Closing
   it means extending `CONTROL_SURFACE` and that test together, which is its own change with its own
@@ -207,6 +215,23 @@ suite. Everything else here is prose held by review.
   `gh-config` directory under a Windows profile. Narrowing the entry from the directory to the file
   also left `config.yml` `Routine`, which is deliberate: it holds the default host and protocol, not
   the credential that decides which account acts.
+
+  Two limits of the stand-aside itself, both in the over-gating direction and neither closed here.
+  A landing that is not on a drive cannot be compared to a checkout that is, so `placed` declines it
+  and the caller reads that as *inside*. That is what shuts the administrative-share hole, and it
+  also means the whole feature is **off** on UNC ground: measured, a claim over `C:\...\repo` gates
+  a write to `\\192.168.1.10\pikaflix\notes\scratch.md` rather than standing aside, and a run whose
+  checkout is itself `\\192.168.1.10\pikaflix\repo` stands aside for nothing at all. An operator
+  whose profile is redirected to a share, or whose checkout lives on one, gets the field failure
+  this issue exists to end. Closing it means deciding what a share is the same *place* as, which is
+  the question that made declining the honest answer in the first place.
+
+  And the guard has no measurement on a machine that does not serve its drives as shares. Widening
+  its allow-list to accept UNC reddens both share fixtures here; on a runner without
+  `\\localhost\C$` it would redden nothing and they would report pass having asserted nothing. A
+  machine-independent companion was written, measured passing against that same widened allow-list,
+  and deleted rather than kept — the guard only fires on a landing `canonicalize` actually produced,
+  and producing one takes a real share.
 
   One more path of the same shape, found by a reviewer of this change and not closed here:
   `<checkout>/.git/config`, which answers `Routine` while `<checkout>/.git/hooks/pre-push` answers

@@ -3116,6 +3116,78 @@ fn a_drive_reached_through_its_administrative_share_is_still_inside() {
     );
 }
 
+/// The spelling handed in is not where the write lands, and it is the landing
+/// that decides.
+///
+/// The first attempt at the rule above rejected a path whose **first component**
+/// named something other than a drive. That reads the vocabulary of the input,
+/// and `canonicalize` is free to answer in a different one: a drive letter
+/// mapped onto the administrative share (`net use Y: \\localhost\C$`) is
+/// `Disk`-prefixed going in and comes back `\\localhost\C$\...`, so it passed
+/// the check and then failed the comparison exactly as the unspelled share had.
+/// A reviewer measured it on this machine with one `net use`.
+///
+/// This fixture reaches the same landing without changing anything outside the
+/// temporary directory: a **directory symlink** whose target is the share. The
+/// path through it is `C:\...\link\src\planted.rs` — a drive, by any reading of
+/// the spelling — and it resolves onto the share all the same.
+#[test]
+#[cfg(windows)]
+fn a_drive_that_resolves_onto_a_share_is_still_inside() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("a checkout");
+    let planted = repo.join("src").join("planted.rs");
+    std::fs::write(&planted, "kept\n").expect("a file inside the checkout");
+
+    let real = repo.canonicalize().expect("the checkout resolves");
+    let spelled = crate::paths::remove_windows_verbatim_prefix(real)
+        .display()
+        .to_string();
+    let Some((drive, rest)) = spelled.split_once(':') else {
+        eprintln!("skipped: the temporary directory has no drive letter");
+        return;
+    };
+    let share = format!(r"\\localhost\{drive}${rest}");
+
+    let link = root.path().join("link");
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/D"])
+        .arg(&link)
+        .arg(&share)
+        .output()
+        .is_ok_and(|out| out.status.success());
+    if !made {
+        eprintln!("skipped: this machine would not link a directory onto its own share");
+        return;
+    }
+
+    // It has to really be the same file, or this test is about a string.
+    let through = link.join("src").join("planted.rs");
+    if std::fs::write(&through, "through the link\n").is_err() {
+        eprintln!("skipped: this machine does not serve its drives as admin shares");
+        return;
+    }
+    assert_eq!(
+        std::fs::read_to_string(&planted).expect("the planted file is readable"),
+        "through the link\n",
+        "the fixture does not reproduce the share it is about"
+    );
+
+    let run = sworn(167, &repo);
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: through.display().to_string()
+            }
+        ),
+        "a write whose drive-lettered spelling resolves onto a share was taken \
+         out of the gate, and it lands inside the claimed checkout: {}",
+        through.display()
+    );
+}
+
 /// The covered checkout is resolved the same way the target is.
 ///
 /// `covers` leaves a path it cannot canonicalise literal. A covered checkout

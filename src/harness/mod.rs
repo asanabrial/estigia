@@ -1491,6 +1491,19 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
     // that moving it down costs no test, so it moved rather than being written
     // up as a limit.
     //
+    // That buys the rule here and not everywhere: the renewal window above
+    // returns before the contract is looked at, so for its duration the same
+    // files are writable with no contract on disk. Issue #29, and older than
+    // this answer — but do not read this position as the rule being whole.
+    // Moving *this* down was free; moving the window down changes the answer for
+    // every routine write on the fast path this gate exists to keep cheap.
+    //
+    // The window also now answers first for a write outside the claim, with a
+    // message crediting a claim renewal for clearing a path the claim does not
+    // govern, and it takes the `session::store` branch that an `Outside` does
+    // not. Both permit, so no gate moved; it is written down because a reviewer
+    // had to measure it to find out.
+    //
     // `Routine` only. A `Boundary` write is watched *because* of where it lands
     // — the control surface sits outside the repository by nature — so placing
     // it outside must never be what waves it through.
