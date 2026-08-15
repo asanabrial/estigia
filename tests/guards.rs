@@ -526,7 +526,12 @@ const AFFIRMED: &[(&str, u64)] = &[
     // it decides which account every tracker call acts as — and issue 2's own
     // question was whether any write outside the repository can still reach
     // tracker state. This one can. The boundary is unchanged.
-    ("control-surface", 15451046611686307497),
+    // Re-affirmed again 2026-08-15, after review: the Windows spelling carried a
+    // space, and `surface_of` splits a command on whitespace before matching, so
+    // that entry could never fire through the shell — `Write` on the path
+    // answered `Boundary` while `rm` on the same path answered `Routine`. Both
+    // spellings now name the file without one. Population and boundary unchanged.
+    ("control-surface", 1111875050449119905),
     // Reopened 2026-08-05 by measuring the enumeration instead of reading it.
     // Thirty command lines that visibly put bytes on disk were classified and
     // twenty-six came back Untouched, among them "wget -O src/main.rs URL" —

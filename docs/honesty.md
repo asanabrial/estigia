@@ -179,6 +179,13 @@ suite. Everything else here is prose held by review.
   it means extending `CONTROL_SURFACE` and that test together, which is its own change with its own
   risk, so it is filed rather than done here.
 
+  And one boundary this cannot cross at all: a **hard link** outside the checkout pointing at a
+  file inside it. Measured — `mklink /H <outside>/alias.rs <repo>/src/kept.rs`, classified
+  outside, and writing through the alias rewrote the file in the checkout; `ln` does the same on
+  POSIX. A hard link has no path to resolve to, so no amount of placing finds it.
+  `is_control_surface` declares that same limit for its own matcher; `writes_outside_the_claim`
+  inherits it, and now says so.
+
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
   bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read

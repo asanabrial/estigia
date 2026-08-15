@@ -26,7 +26,9 @@ the workflow, it holds the tools.
   `outside-the-claim`, decided before the tracker is asked so the issue's state never reaches it. It
   is deliberately narrow: only an absolute path, only a run that covers something, and only a
   `Routine` write — the control surface sits outside the repository by nature, and watching it is the
-  defence against an agent switching the gate off with the tool it uses most.
+  defence against an agent switching the gate off with the tool it uses most. `gh`'s hosts file joins
+  that surface in the same change: it decides which account every tracker call acts as, so it is a
+  boundary write in both spellings rather than something the stand-aside carries past.
 - A refusal can now say that it already wrote. The outcome an agent is told was derived from the exit
   code alone, so every stop reported *nothing was written* — including `publish_review` refusing a
   closing keyword after it had pushed the branch and opened the pull request, which left both

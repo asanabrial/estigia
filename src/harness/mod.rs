@@ -111,7 +111,7 @@ pub enum Sensitivity {
 
 /// Why the gate had no call to make.
 ///
-/// Four situations, and they want four different things done about them. Held
+/// Five situations, and they want five different things done about them. Held
 /// as a type for the reason [`crate::harness::doctor::Health::Broken`] holds
 /// its resolution as one: *a string forces the caller to invent a generic one
 /// instead*.
@@ -292,7 +292,8 @@ pub(crate) const SHELL_TOOLS: &[&str] = &["bash", "run_shell_command", "shell", 
 /// matches, which is a false positive costing one tracker read, and that is the
 /// direction this chooses on purpose.
 ///
-/// `gh`'s hosts file joined the population on 2026-08-15. It is not Estigia's
+/// `gh`'s hosts file joined the population on 2026-08-15, in both spellings and
+/// the file rather than the directory around it. It is not Estigia's
 /// file and no Estigia decision is read from it, so it sits at the edge of the
 /// legitimate population as stated — but it decides **which account** every `gh`
 /// call the transport makes acts as, which is what this list is for once a write
@@ -334,8 +335,14 @@ const CONTROL_SURFACE: &[&str] = &[
     // every `gh` call the transport makes — and standing aside outside the
     // repository is what would otherwise have let it through ungated. The wider
     // gap, the instruction file each adapter's setup writes, is its own change.
-    ".config/gh/",
-    "github cli/hosts.yml",
+    ".config/gh/hosts.yml",
+    // No space, deliberately. `surface_of` splits a command on whitespace and
+    // appends `/` to every token, so a fragment containing one can never match
+    // through the shell — measured: `Write` on the Windows spelling answered
+    // `Boundary` while `rm` on the same path answered `Routine`, which is the
+    // road an agent would actually take. `cli/hosts.yml` is a substring of
+    // `github cli/hosts.yml` on both roads.
+    "cli/hosts.yml",
     // Estigia's own state: run pointers, the stand-down record, the ledger.
     ".estigia/",
     // The tree the **previous** name installed into. The tree this build writes

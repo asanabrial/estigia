@@ -215,15 +215,30 @@ pub fn coverage_depth(covered: &Path, working_dir: &Path) -> Option<usize> {
 /// process cannot resolve loosening the gate is the declared asymmetry run
 /// backwards.*
 pub fn placed(target: &Path) -> Option<PathBuf> {
-    // Lexical, because `..` is a spelling and not a boundary. The same
-    // collapse `is_control_surface` performs on the control-surface fragments,
-    // for the same reason it gives: *it is the same path, spelled the way a
-    // shell writes it.* Never past the root — a path that climbs out of what it
-    // names cannot be placed.
+    // `..` is where the two platforms genuinely disagree, and answering for the
+    // wrong one is what puts the spelling and the landing in different places.
+    //
+    // Windows collapses it **lexically**, before touching the filesystem, so
+    // `outside/link/../x` names `outside/x` however `link` is defined. POSIX
+    // resolves the link first and applies `..` to what it resolved to, so the
+    // same spelling lands beside the link's *target* — inside a checkout, if
+    // that is where the link points. Reading it lexically on POSIX classified a
+    // repository write as outside and stood the gate aside, on four of the six
+    // platforms this crate ships.
+    //
+    // So each `..` is applied the way the platform applies it: to the resolved
+    // prefix where the filesystem is what decides, to the spelling where it is
+    // not. Never past the root — a path that climbs out of what it names cannot
+    // be placed.
     let mut lexical = PathBuf::new();
     for component in target.components() {
         match component {
             std::path::Component::ParentDir => {
+                if cfg!(unix)
+                    && let Ok(resolved) = lexical.canonicalize()
+                {
+                    lexical = resolved;
+                }
                 if !lexical.pop() {
                     return None;
                 }

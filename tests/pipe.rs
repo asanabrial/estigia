@@ -9066,4 +9066,27 @@ fn a_closed_issue_still_refuses_a_write_inside_the_checkout() {
         stdout.contains("CLOSED") || stdout.contains("issue-not-open"),
         "a write inside the claimed checkout was not refused after the issue closed: {stdout}"
     );
+
+    // And the half the issue is actually about, against the same closed tracker:
+    // a write outside every covered checkout is answered without asking it. The
+    // unit-level fixture for this never reaches the tracker at all — it stops at
+    // `control-surface-not-installed` — so "with the issue in that state" was
+    // carried only by the test's name until here.
+    let (aside, _stderr, _ok) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        &answers,
+        &["hook", "pre-tool-use"],
+        &serde_json::json!({
+            "session_id": session,
+            "tool_name": "Write",
+            "tool_input": { "file_path": home.join("scratchpad").join("note.md").display().to_string() },
+        })
+        .to_string(),
+    );
+    assert!(
+        !aside.contains("CLOSED") && !aside.contains("issue-not-open"),
+        "a scratch note was refused on the closed issue's state: {aside}"
+    );
 }

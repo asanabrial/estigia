@@ -3074,3 +3074,102 @@ fn a_checkout_reached_by_another_name_still_covers_its_own_writes() {
         "a write into a covered checkout that is not on disk yet read as outside it"
     );
 }
+
+/// `..` after a link lands where the platform says, not where the spelling does.
+///
+/// The fourth door onto one defect, and the one that showed the premise was
+/// wrong rather than the enumeration incomplete. The collapse was lexical, on
+/// the grounds that *`..` is a spelling and not a boundary* — true on Windows,
+/// whose own path resolver collapses it before touching the filesystem, and
+/// false on POSIX, which follows the link first and then applies `..` to what it
+/// resolved to.
+///
+/// So `<outside>/dlink/../planted.rs`, with `dlink` pointing at `<repo>/src`,
+/// reads lexically as `<outside>/planted.rs` and lands at `<repo>/planted.rs`.
+/// A repository write, with the gate standing aside, on the four POSIX targets
+/// this crate ships.
+///
+/// Unix only, because on Windows the lexical reading **is** the landing and the
+/// same fixture would be asserting the opposite. A skip that says so is honest;
+/// the platform difference is the subject.
+#[cfg(unix)]
+#[test]
+fn a_parent_segment_after_a_link_is_resolved_the_way_posix_resolves_it() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("a checkout");
+    let outside = root.path().join("outside");
+    std::fs::create_dir_all(&outside).expect("a directory that is not the checkout");
+
+    let link = outside.join("dlink");
+    std::os::unix::fs::symlink(repo.join("src"), &link).expect("a link into the checkout");
+
+    let run = sworn(164, &repo);
+    let spelled = link.join("..").join("planted.rs");
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: spelled.display().to_string()
+            }
+        ),
+        "a write that lands in the claimed checkout was taken out of the gate by `..` after a link"
+    );
+
+    // Measured rather than argued: this is where the platform puts it.
+    std::fs::write(&spelled, "planted\n").expect("the spelling really does write there");
+    assert!(
+        repo.join("planted.rs").is_file(),
+        "the fixture does not reproduce the resolution order it is about"
+    );
+}
+
+/// A covered checkout this process cannot place rules nothing out.
+///
+/// `placed` answers `None` for a path with a component that is there and will
+/// not resolve. Applied to the **covered** side that has to mean *cannot be
+/// ruled out* — inside — and the arm saying so was unmeasured: reversing it, so
+/// an unplaceable checkout covers nothing and every write into it stands aside,
+/// left the whole suite green.
+#[test]
+fn a_covered_checkout_that_cannot_be_placed_still_covers() {
+    let root = tempfile::tempdir().expect("a root");
+    let broken = root.path().join("dangling");
+    #[cfg(windows)]
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(&broken)
+        .arg(root.path().join("never-created"))
+        .output()
+        .is_ok_and(|out| out.status.success());
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(root.path().join("never-created"), &broken).is_ok();
+    if !made {
+        eprintln!("skipped: this platform would not create a dangling link");
+        return;
+    }
+    assert!(
+        crate::paths::placed(&broken).is_none(),
+        "the fixture does not reproduce an unplaceable path"
+    );
+
+    // The target has to be placeable, or the early return for an unplaceable
+    // *target* answers first and the covered arm is never reached — which is
+    // what an earlier version of this fixture did, leaving the mutant alive.
+    let elsewhere = root.path().join("scratch").join("note.md");
+    assert!(
+        crate::paths::placed(&elsewhere).is_some(),
+        "the fixture must ask about a target this process can place"
+    );
+
+    let run = sworn(164, &broken);
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: elsewhere.display().to_string()
+            }
+        ),
+        "a run whose covered checkout cannot be placed had a write waved through"
+    );
+}
