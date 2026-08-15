@@ -512,6 +512,18 @@ const CONTROL_SURFACE: &[&str] = &[
 /// this list is only ever consulted **together with** a control surface.
 const NEUTRALISES_A_FILE: &[&str] = &["chmod ", "chattr ", "chown "];
 
+/// Characters a shell puts next to a path that a path segment cannot contain.
+///
+/// Folded to a separator before matching, so the left anchoring reaches a
+/// fragment however the line is punctuated. Each one was measured against the
+/// base commit as a spelling that had lost its boundary: the quotes through a
+/// quoted operand, the redirects through one written with no space after `>`,
+/// `=` through an operand joined to a long flag, and `:` through the
+/// drive-relative Windows spelling, which is the one that reaches the write road
+/// as well. The rest terminate a word the same way, and leaving them out would
+/// make this a list of the shapes somebody happened to try.
+const NOT_IN_A_PATH_SEGMENT: &str = "\"'`<>=|;&()$*,";
+
 /// How sensitive a command line is, by what it names.
 ///
 /// A whole command rather than one operand, on the asymmetry this module
@@ -519,26 +531,41 @@ const NEUTRALISES_A_FILE: &[&str] = &["chmod ", "chattr ", "chown "];
 /// elsewhere costs one extra tracker read, and a line that removes one
 /// unmeasured costs the gate for everything after it.
 ///
-/// Each token is wrapped in `/` on **both** sides before matching. The trailing
-/// one because the fragments name directories with a separator and a command
-/// names them without: `rm -rf ~/.claude/skills/issue-flow` is the same
-/// directory as the path a `Write` would give as `.../skills/issue-flow/`.
+/// Every character that cannot be part of a path segment is read as a
+/// **separator**, and the whole line is wrapped in one at both ends. That is one
+/// rule rather than a list of shell shapes, and it is the third attempt at it.
 ///
-/// The leading one because the fragments are anchored on the left, and this
-/// view joins tokens with **spaces**. A relative operand therefore has a space
-/// in front of it and never a separator — and it is never at position 0 either,
-/// because the verb is. So `rm -rf .estigia` and `echo x > .claude/settings.json`
-/// answered `Routine` while `Write` answered `Boundary` for the same paths: the
-/// road split the anchoring was added to close, reappearing inverted on the
-/// spelling an agent types most often inside a repository. Wrapping the token
-/// gives the anchored branch the separator it is looking for, and it is the same
-/// one place the trailing separator is already added rather than a second rule.
+/// The fragments name directories with a trailing separator and a command names
+/// them without, so a recursive removal of an installed skill directory has to
+/// reach the path a `Write` would give with the separator on the end. The
+/// fragments are also anchored on the **left**, and that is what the first two
+/// attempts kept missing. Splitting on whitespace and appending a separator left
+/// a relative operand with a space in front of it and never a separator — and
+/// never at position 0 either, because the verb is there — so removing the state
+/// directory by its bare relative name answered `Routine` while `Write` answered
+/// `Boundary` for the same path. Wrapping each **token** fixed exactly that and
+/// no more: a quote, a redirect written with no space, or an operand joined to a
+/// long flag all sit between the token boundary and the fragment, so those
+/// spellings stayed `Routine` — reaching the run pointer and the file the gate
+/// is registered in, by the shortest line there is. A reviewer measured all
+/// three families against the base, where a bare `contains` had gated them.
+///
+/// Folding the punctuation reaches all of them at once, because none of those
+/// characters can sit between a separator and a path segment in any spelling
+/// that names a real file. It over-gates a line that merely *mentions* a
+/// surface, which is the asymmetry this function already runs on.
 fn surface_of(command: &str) -> Sensitivity {
-    let view = command
-        .split_whitespace()
-        .map(|token| format!("/{token}/"))
-        .collect::<Vec<_>>()
-        .join(" ");
+    let folded = command
+        .chars()
+        .map(|c| {
+            if c.is_whitespace() || NOT_IN_A_PATH_SEGMENT.contains(c) {
+                '/'
+            } else {
+                c
+            }
+        })
+        .collect::<String>();
+    let view = format!("/{folded}/");
     if is_control_surface(&view) {
         Sensitivity::Boundary
     } else {
@@ -551,7 +578,16 @@ fn surface_of(command: &str) -> Sensitivity {
 /// Read with both separators folded to `/`, because the tool sends whatever the
 /// platform hands it and half of these are written by this crate on Windows.
 fn is_control_surface(target: &str) -> bool {
-    let mut path = target.replace('\\', "/").to_ascii_lowercase();
+    // A drive prefix is a separator too. `C:.estigia\stand-down.json` is the
+    // drive-relative spelling — the current directory *of that drive*, not the
+    // root — and it names the same file as `.estigia/stand-down.json`. It read
+    // as `Routine` on **both** roads once the fragments were anchored, because
+    // the `c:` sits between the start of the string and the fragment where a
+    // separator would be. A reviewer measured it against the base, where a bare
+    // `contains` had gated it. Folding the colon costs nothing: no fragment
+    // holds one, and an absolute `C:/...` only gains a redundant separator that
+    // the loop below removes.
+    let mut path = target.replace(['\\', ':'], "/").to_ascii_lowercase();
     // A separator that names nothing does not make this another file.
     // `~/.claude/./settings.json` is `~/.claude/settings.json`, and it read as
     // `Routine` — which means the harness could be disarmed on an answer from

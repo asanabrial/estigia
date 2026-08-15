@@ -70,14 +70,21 @@ the workflow, it holds the tools.
   a **file** without one, and `cli/hosts.yml` is why: `%APPDATA%\GitHub CLI\hosts.yml` holds it
   mid-segment. `docs/honesty.md` measures what that leaves.
 
-  Anchoring cost one thing on the way. `surface_of` joins a command's tokens with **spaces**, so
-  an anchored fragment finds no separator in front of a relative operand, and none of them is at
-  position 0 because the verb is: `rm -rf .estigia` and `echo x > .claude/settings.json` went
-  `Boundary` to `Routine` while `Write` still answered `Boundary` for the same path — the split
-  inverted, on the spelling an agent inside a repository types most, reaching the file the gate is
-  registered in. Every fixture here spelled its paths absolutely, so the suite was green over all
-  of it. Each token is wrapped in a separator on both sides now, and a relative spelling is
-  asserted on both roads.
+  Anchoring cost coverage on the shell road three times before it was right, and each loss was a
+  spelling the base commit had gated with a bare `contains`. Splitting on whitespace and appending a
+  separator left a relative operand with a space in front of it, never a separator, and never at
+  position 0 because the verb is there. Wrapping each token reached only the operands whose first
+  character *is* the fragment's — a quoted operand, a redirect written with no space, and an operand
+  joined to a long flag each put a character in between, and the drive-relative Windows `C:` did the
+  same while also reaching the **write** road. Every one of them named the run pointer or the file the
+  gate is registered in, by the shortest line there is, and every one of them left the whole suite
+  green, because the fixtures here spelled their commands plainly and their paths absolutely.
+
+  What is in the code is one rule rather than a list of shell shapes: every character a path segment
+  cannot contain is read as a separator, and the line is wrapped in one. Four fixtures hold it — three
+  for the surfaces, one for the ordinary commands a run issues all day, since a more permissive view
+  is a live tracker read on every build if it over-matches. Reviewers measured all three attempts;
+  `docs/honesty.md` carries the sequence, and says what the folding still cannot see.
 
   `<repo>/.opencode/agents` joined the list for the same reason it was missed: `definition_for`
   searches it beside `<repo>/.claude/agents` in one `vec!`, `.claude/agents/` reached the first,

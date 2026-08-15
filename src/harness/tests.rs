@@ -3545,6 +3545,138 @@ fn the_declared_over_gating_is_the_shape_the_document_names() {
     }
 }
 
+/// A control surface is reached however the line is punctuated.
+///
+/// `surface_of` folds every character a path segment cannot contain into a
+/// separator, and this holds that direction. It exists because two narrower
+/// attempts did not: splitting on whitespace and appending a separator left the
+/// left anchoring unreachable for a relative operand, and wrapping each token
+/// fixed only the operands whose first character *is* the fragment's. A quote, a
+/// redirect written without a space, an operand joined to a long flag and a
+/// drive-relative prefix all sit between the token boundary and the fragment. A
+/// reviewer measured every family here against the base commit, where a bare
+/// `contains` had gated them; the suite was green over all of it, because every
+/// fixture in this file spelled its commands plainly.
+#[test]
+fn punctuation_does_not_hide_a_control_surface() {
+    let dq = '"';
+    let sq = '\'';
+    for (line, why) in [
+        (
+            format!("rm -rf {dq}.estigia/stand-down.json{dq}"),
+            "double quotes",
+        ),
+        (
+            format!("rm -rf {sq}.estigia/stand-down.json{sq}"),
+            "single quotes",
+        ),
+        (
+            format!("rm -rf {dq}.claude/settings.json{dq}"),
+            "double quotes, settings",
+        ),
+        (
+            format!("rm -rf {dq}.estigia/{dq}"),
+            "quoted with a trailing separator",
+        ),
+        (
+            format!("mv {dq}.claude/settings.json{dq} /tmp/x"),
+            "quoted, moved",
+        ),
+        (
+            "echo x >.claude/settings.json".to_string(),
+            "redirect, no space",
+        ),
+        (
+            "echo x>.claude/settings.json".to_string(),
+            "redirect, no spaces at all",
+        ),
+        (
+            "echo x >>.estigia/run.json".to_string(),
+            "appending redirect",
+        ),
+        (
+            ": >.claude/settings.json".to_string(),
+            "truncating redirect",
+        ),
+        (
+            "sed -i --file=.claude/settings.json -e s/a/b/".to_string(),
+            "operand joined to a long flag",
+        ),
+        (
+            "tee --output=.claude/settings.json".to_string(),
+            "another long flag",
+        ),
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": &line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and it names a control surface through {why}"
+        );
+    }
+}
+
+/// The drive-relative Windows spelling, on both roads.
+///
+/// `C:.estigia\stand-down.json` is the current directory *of that drive*, not
+/// its root, and it names the same file as the bare relative spelling. It is the
+/// one punctuation family that reaches the write road as well, because the drive
+/// prefix sits where the left anchoring looks for a separator.
+#[test]
+fn a_drive_relative_spelling_is_measured_like_a_relative_one() {
+    for named in [
+        r"C:.estigia\stand-down.json",
+        r"C:.estigia\runs\a.json",
+        r"C:.claude\settings.json",
+        r"c:.claude/settings.local.json",
+        r"D:.claude\agents\reviewer.md",
+    ] {
+        for (road, payload) in [
+            ("Write", serde_json::json!({ "file_path": named })),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("rm -rf {named}") }),
+            ),
+        ] {
+            let (_, how) = classify(road, &payload);
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "{road} on the drive-relative {named} answers routine, and it names a control surface"
+            );
+        }
+    }
+}
+
+/// An ordinary line stays `Routine` after the folding.
+///
+/// The other direction of the same change: reading punctuation as separators
+/// makes the view longer and more permissive, so it has to be shown not to gate
+/// the commands a run issues all day. A false `Boundary` here is a live tracker
+/// read on every build.
+#[test]
+fn folding_punctuation_does_not_gate_an_ordinary_line() {
+    for line in [
+        "cargo build --release",
+        "cargo test --all-targets",
+        "git commit -m wip",
+        "git log --oneline -20",
+        "rm -rf target/debug",
+        "npm run build",
+        "mkdir -p src/harness",
+        "echo done > /tmp/out.txt",
+        "grep -rn settings src/",
+        "sed -i s/a/b/ README.md",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "`{line}` answers boundary, and it names no control surface"
+        );
+    }
+}
+
 /// A relative operand reaches the same answer as an absolute one.
 ///
 /// `surface_of` joins a command's tokens with **spaces**, so an anchored

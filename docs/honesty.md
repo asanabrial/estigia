@@ -259,16 +259,38 @@ suite. Everything else here is prose held by review.
   `Boundary` to `rm`. The suite was green over all of them, because nothing asserted the `Routine`
   direction for a non-dot fragment. All four are in the fixture now, on both roads.
 
-  Anchoring cost one thing on the way, and it is the reason the fixtures now spell a **relative**
-  operand. `surface_of` builds its view by joining the command's tokens with **spaces**, so an
-  anchored fragment finds no separator in front of a relative operand — and none of them is at
-  position 0 either, because the verb is. `rm -rf .estigia` and `echo x > .claude/settings.json` went
-  `Boundary` to `Routine` while `Write` still answered `Boundary` for the same path: the road split
-  the anchoring was added to close, reappearing inverted on the spelling an agent inside a repository
-  types most, and reaching the file the gate is registered in. Every fixture in this crate spelled
-  its paths absolutely, so the suite was green over all of it and a reviewer found it by classifying
-  raw command strings through the built binary. Each token is wrapped in a separator on both sides
-  now, in the one place the trailing one was already added.
+  Anchoring cost coverage on the shell road three separate times, and the shape of that mistake is
+  worth more than the fix. `surface_of` builds a view of the command and matches the fragments against
+  it. Anchoring means a fragment now needs a separator in front of it, and each attempt supplied one
+  in a narrower place than the shell can put punctuation:
+
+  1. **Split on whitespace, append a separator.** A relative operand then has a *space* in front of
+     it and is never at position 0, because the verb is. Removing the state directory by its bare
+     relative name, or truncating the file the gate is registered in, went `Boundary` at the base to
+     `Routine`.
+  2. **Wrap each token on both sides.** That reached exactly the operands whose first character is
+     the fragment's, and no others. A quoted operand, a redirect written with no space after it, and
+     an operand joined to a long flag all put a character between the token boundary and the
+     fragment, so all three stayed `Routine` — again reaching the run pointer and the settings file,
+     by the shortest line there is. The drive-relative Windows spelling `C:` did the same thing and
+     reached the **write** road as well, which none of the others did.
+  3. **Fold every character a path segment cannot contain into a separator**, and wrap the line. That
+     is one rule instead of a list of shell shapes, and it is what is in the code.
+
+  Each attempt was measured against the base by a reviewer classifying raw command strings through
+  the built binary, and each time the whole suite was green over the loss — because every fixture in
+  this crate spelled its commands plainly and its paths absolutely. That is the same blind spot three
+  times: a narrowing nothing asserts. `punctuation_does_not_hide_a_control_surface`,
+  `a_drive_relative_spelling_is_measured_like_a_relative_one` and
+  `a_relative_operand_is_measured_like_an_absolute_one` hold the direction now, and
+  `folding_punctuation_does_not_gate_an_ordinary_line` holds the other one, because reading
+  punctuation as separators makes the view more permissive and a false `Boundary` costs a live
+  tracker read on every build.
+
+  What the folding leaves is stated rather than measured away: a command that *mentions* a control
+  surface while writing somewhere else is `Boundary`, which is the asymmetry `surface_of` already ran
+  on and pays one extra tracker read. Substitutions are still invisible — a path assembled from a
+  variable or a subshell names nothing this can match, at the base commit as much as here.
 
   A fragment naming a **file** without a leading dot still cannot be anchored, because `cli/hosts.yml`
   exists to match **mid-segment**: the Windows path is `%APPDATA%\GitHub CLI\hosts.yml`, and
@@ -310,7 +332,7 @@ suite. Everything else here is prose held by review.
     names `vendor/mycrush/crush.md`. So does `.cursor/estigia-workflow-authority.md` → `.cursor/`,
     through the `.cursor/rulesets.md` row in the ends-alike fixture. `gemini/gemini.md` and
     `opencode/agents.md` are covered by the same over-gating fixture.
-  - `.qwen/qwen.md` → `.qwen/` **leaves all 1,146 tests green.** Nothing in this crate names a path
+  - `.qwen/qwen.md` → `.qwen/` **leaves all 1,149 tests green.** Nothing in this crate names a path
     under a `.qwen` directory in the `Routine` direction, so that widening is silent — and it is
     silent for every adapter no hand-written row happens to cover.
 
