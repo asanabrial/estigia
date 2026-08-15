@@ -3606,6 +3606,21 @@ fn punctuation_does_not_hide_a_control_surface() {
             "tee --output=.claude/settings.json".to_string(),
             "another long flag",
         ),
+        // A quoted **bare directory**, which a reviewer measured separately: the
+        // trailing separator the fragment carries has to be supplied by the fold
+        // and the leading one by the quote, so both ends are reached at once.
+        (
+            format!("rm -rf {dq}/repo/.opencode/agents{dq}"),
+            "quoted bare directory",
+        ),
+        (
+            format!("rm -rf {dq}/home/me/.claude/agents{dq}"),
+            "quoted bare home directory",
+        ),
+        (
+            format!("rm -rf {sq}/repo/.estigia{sq}"),
+            "quoted bare state directory",
+        ),
     ] {
         let (_, how) = classify("Bash", &serde_json::json!({ "command": &line }));
         assert_eq!(
