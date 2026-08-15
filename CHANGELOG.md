@@ -43,16 +43,35 @@ the workflow, it holds the tools.
   and a write through one of them outside every checkout now stands aside where it used to be gated.
 - The files carrying Estigia's own authority are watched. `setup` writes a workflow-authority
   directive — the sentence telling an agent this harness holds the authority at all — into each
-  agent's instruction file, and the gate called ten of the eleven `Routine` (OpenCode's was already
-  covered by a directory entry). So did
+  agent's instruction file, and the gate called ten of the eleven `Routine`; OpenCode's was already
+  covered by the `.config/opencode/` entry. Those ten, plus gemini-cli's second spelling under
+  `%APPDATA%` — it is the one adapter whose file moves with the platform — plus
   `~/.claude/settings.local.json`, the file an operator is told to put machine-local overrides in, and
-  `~/.claude/agents/`, where an agent definition carries a tool allowlist. Thirteen paths, each
-  outside every checkout by construction, which is what made it urgent: the stand-aside added for a
-  closed issue's scratch note answers before the tracker, so they had moved from *measured against the
-  claim* to *not gated at all*. They are `Boundary` now, on both roads — the write tool and the shell.
+  `~/.claude/agents`, where a definition carries a tool allowlist: **thirteen**. Each is outside every
+  checkout by construction, which is what made it urgent — the stand-aside added for a closed issue's
+  scratch note answers before the tracker, so they had moved from *measured against the claim* to *not
+  gated at all*. They are `Boundary` now, on both roads.
+
   The instruction files are derived from the adapter table rather than spelled, because a hand-written
-  copy agrees with the installer only until somebody renames one, and the population test that crosses
-  them against `resolve_paths` walks the instruction file now, on all three platforms; it never had.
+  copy agrees with the installer only until somebody renames one. The population test that crosses
+  them against `resolve_paths` gained four dimensions on the way, each because a reviewer found a
+  surface behind one: three platforms, two `XDG_CONFIG_HOME` layouts, both roads, and the bare root as
+  well as a file inside it. What that uncovered is in the same change —
+  `%APPDATA%\gemini\settings.json`, where the Gemini gate is registered on Windows; opencode's plugin
+  and crush's settings, anchored to what the installer writes *beside* the directory entry rather than
+  replacing it; and the rules **directories**, because gating a filename inside a directory the host
+  reads whole is defeated by a neighbour. A fragment ending in `/` names a directory now, matched by
+  what is under it or by itself and never by a name that only starts alike.
+
+  `harness::roles::definition_for` also stopped spelling OpenCode's definition root by hand: it now
+  searches the default root **and** the one `XDG_CONFIG_HOME` names, through the same rule `setup`
+  uses. Searching only one meant a definition it did not find — which `declared_policy` reads as
+  *every tool allowed*.
+
+  The declared population was **restated** rather than stretched: the gate reads nothing from an
+  instruction file, so it covers what an agent is *told* as well as what the binary *enforces*. The
+  cost is recorded with it — a `Boundary` never rides the renewal window, so it is a live tracker read
+  on every write, measured at 0.61 to 1.22 seconds, and a refusal rather than a delay with no network.
 - A test can no longer report pass without running. Sixteen tests in `tests/pipe.rs` drive the real
   binary against a stand-in `gh`, and that stand-in is a cargo example; the rig answered `Option` and
   every caller opened with `let Some(rig) = … else { return; }`, so wherever the example was missing

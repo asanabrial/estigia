@@ -903,6 +903,30 @@ fn absolute_or_none(path: Option<PathBuf>) -> Option<PathBuf> {
     path.filter(|path| path.is_absolute())
 }
 
+/// `XDG_CONFIG_HOME`, resolved the one way this crate resolves it.
+///
+/// Public because the gate needs the same answer, and asking for it is the only
+/// way the two roads stay together. `harness::roles::definition_for` reads
+/// OpenCode's definition root, and it spelled `~/.config` by hand until a
+/// reviewer measured that a relocated variable put the definitions where it never
+/// looked — which is `Ok(None)`, which `declared_policy` reads as *the sub-agent
+/// may use every tool*. The first fix read the variable itself and so introduced a
+/// **third** rule: empty and relative values were taken literally there and folded
+/// away here, so the two roads still disagreed on those two inputs. A reviewer
+/// measured that too.
+///
+/// So there is one rule and it lives beside the resolution that uses it: an
+/// absolute value or nothing, which is what `Environment::resolve` has always
+/// applied through `absolute_or_none`. A relative or empty value is not a config
+/// home; it is a caller's mistake, and both roads treat it as absent.
+pub fn xdg_config_home() -> Option<PathBuf> {
+    absolute_or_none(
+        std::env::var_os("XDG_CONFIG_HOME")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from),
+    )
+}
+
 /// The adapter a slug names, or a refusal listing the ones that exist.
 pub fn find_agent(slug: &str) -> Result<&'static AgentAdapter, Refusal> {
     AGENTS

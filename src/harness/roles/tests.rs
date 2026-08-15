@@ -453,19 +453,126 @@ fn a_moved_config_home_still_finds_an_opencode_definition() {
     )
     .expect("a definition to find");
 
-    // SAFETY: the gate answers one hook invocation per process, and this test
-    // sets the variable the invocation is about before reading it back.
-    unsafe {
-        std::env::set_var("XDG_CONFIG_HOME", moved.path());
-    }
-    let found = definition_for(repo.path(), Some(home.path()), "scribe");
-    unsafe {
-        std::env::remove_var("XDG_CONFIG_HOME");
-    }
+    let found = with_config_home(moved.path(), || {
+        definition_for(repo.path(), Some(home.path()), "scribe")
+    });
 
     assert!(
         matches!(found, Ok(Some(ref text)) if text.contains("Read, Grep")),
         "a relocated XDG config home hid the definition, and a definition that is \
          not found is read as every tool allowed: {found:?}"
+    );
+}
+
+/// An unusable `XDG_CONFIG_HOME` means *the default*, on both roads.
+///
+/// The first fix for the hardcoded root read the variable directly and so
+/// introduced a third rule: `setup` folds an empty or relative value away through
+/// `absolute_or_none`, and reading it here took both literally. A reviewer
+/// measured what that cost — with `XDG_CONFIG_HOME=""` or a relative value, this
+/// found nothing while `setup` had written to `~/.config/opencode/agents`, and
+/// nothing found is `Ok(None)`, which `declared_policy` reads as *every tool
+/// allowed*. The same loosening the fix existed to close, through the two inputs
+/// the fix itself created.
+///
+/// One rule now, in `setup::xdg_config_home`, and this asks for it.
+#[test]
+fn an_unusable_config_home_falls_back_the_way_setup_does() {
+    let home = tempfile::tempdir().expect("a home");
+    let repo = tempfile::tempdir().expect("a checkout");
+
+    let agents = home.path().join(".config").join("opencode").join("agents");
+    std::fs::create_dir_all(&agents).expect("the default definition directory");
+    std::fs::write(
+        agents.join("scribe.md"),
+        "---\ntools: Read, Grep\n---\nread only\n",
+    )
+    .expect("a definition to find");
+
+    for unusable in ["", "relative/config"] {
+        let found = with_config_home(std::path::Path::new(unusable), || {
+            definition_for(repo.path(), Some(home.path()), "scribe")
+        });
+
+        assert!(
+            matches!(found, Ok(Some(ref text)) if text.contains("Read, Grep")),
+            "XDG_CONFIG_HOME={unusable:?} sent this somewhere `setup` never writes, and a \
+             definition that is not found is read as every tool allowed: {found:?}"
+        );
+    }
+}
+
+/// Run a closure with `XDG_CONFIG_HOME` set, under a lock, restoring what was
+/// there.
+///
+/// `set_var` is process-wide and this test binary is multi-threaded. The first
+/// version of these fixtures set it inline with a SAFETY note reasoning about the
+/// shipped binary — "the gate answers one hook invocation per process" — which is
+/// true of the binary and false of the process the `unsafe` actually runs in. A
+/// reviewer pointed out that the second is the only one `set_var`'s contract
+/// cares about, and that `remove_var` afterwards destroys a pre-existing value
+/// rather than restoring it.
+///
+/// One mutex, and the previous value put back.
+fn with_config_home<T>(value: &std::path::Path, body: impl FnOnce() -> T) -> T {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let guard = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+    let before = std::env::var_os("XDG_CONFIG_HOME");
+    // SAFETY: the lock above makes this the only thread touching the variable
+    // for the duration, and the previous value is restored before it is released.
+    unsafe {
+        std::env::set_var("XDG_CONFIG_HOME", value);
+    }
+    let answer = body();
+    unsafe {
+        match before {
+            Some(previous) => std::env::set_var("XDG_CONFIG_HOME", previous),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+    }
+    drop(guard);
+    answer
+}
+
+/// A moved config home does not hide a definition at the default root.
+///
+/// The mirror of the test above, and the direction nothing held: the first fix
+/// for the hardcoded root **replaced** it with the relocated one instead of
+/// adding it, so a definition sitting at `~/.config/opencode/agents` stopped
+/// being found the moment the variable pointed elsewhere. Not found is
+/// `Ok(None)`, which `declared_policy` reads as *the sub-agent may use every tool*
+/// — the same loosening that fix existed to close, one configuration over. A
+/// reviewer measured base ENFORCED against head NOT FOUND.
+///
+/// Searching both roots cannot loosen anything: a definition is enforced if any
+/// root has it.
+#[test]
+fn a_moved_config_home_does_not_hide_the_default_root() {
+    let home = tempfile::tempdir().expect("a home");
+    let moved = tempfile::tempdir().expect("a relocated config home");
+    let repo = tempfile::tempdir().expect("a checkout");
+
+    let default_root = home.path().join(".config").join("opencode").join("agents");
+    std::fs::create_dir_all(&default_root).expect("the default definition directory");
+    std::fs::write(
+        default_root.join("scribe.md"),
+        "---\ntools: Read, Grep\n---\nread only\n",
+    )
+    .expect("a definition at the default root");
+    // The relocated root exists and is empty, which is the shape that hid it.
+    std::fs::create_dir_all(moved.path().join("opencode").join("agents"))
+        .expect("an empty relocated root");
+
+    let found = with_config_home(moved.path(), || {
+        definition_for(repo.path(), Some(home.path()), "scribe")
+    });
+
+    assert!(
+        matches!(found, Ok(Some(ref text)) if text.contains("Read, Grep")),
+        "a relocated config home hid the definition at the default root, and a definition \
+         that is not found is read as every tool allowed: {found:?}"
     );
 }

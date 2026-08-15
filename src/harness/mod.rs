@@ -395,33 +395,41 @@ const CONTROL_SURFACE: &[&str] = &[
     // `.claude/settings.json` does not reach `.claude/settings.local.json` —
     // which is the file an operator is *told* to put machine-local overrides in,
     // and which Claude Code reads with the same authority. It answered `Routine`
-    // and the gate could be switched off through it. `.claude/settings` reaches
-    // both, and reaches nothing else under that directory that is not settings.
+    // and the gate could be switched off through it. No trailing slash, because
+    // this names a file and not a directory — so it is a prefix, and it reaches
+    // `.claude/settingsmap.ts` too. Measured, and kept: one tracker read on a file
+    // nobody has, against the gate switching off through one everybody is told to
+    // edit.
     ".claude/settings",
     // The agent definitions, which are instructions with a tool allowlist. An
     // agent that writes one is choosing what a delegated context may do, which
     // is the same authority as the directive itself, and `harness::roles`
     // enforces exactly that allowlist.
     //
-    // No trailing slash. It had one, matching the convention of `.estigia/` and
-    // `opencode/`, and that split the two roads: `surface_of` appends a separator
-    // so `rm ~/.claude/agents` was `Boundary` while a write to the bare directory
-    // was `Routine`. A reviewer called it unreachable in practice, and the
-    // crossing found it the moment that root was added to what it walks — which
-    // is the better argument for crossing a hand-spelled entry than any reasoning
-    // about reachability.
+    // With a trailing slash, like every directory here. It lost one for a single
+    // head, because the slash split the two roads: `surface_of` appends a
+    // separator, so `rm ~/.claude/agents` was `Boundary` while a write to the bare
+    // directory was `Routine`. Removing it closed that and opened a prefix bleed
+    // instead — `.claude/agentsmith.md`. The matcher honours the slash now, so the
+    // entry can say *directory* and mean it. The crossing found the split the
+    // moment that root was added to what it walks, which is the better argument for
+    // crossing a hand-spelled entry than any reasoning about reachability.
     ".claude/agents/",
     // The rules **directories**, not only Estigia's own filename inside them.
-    // Four adapters apply every file in one of these, and `paths_in`'s comments
-    // say so where it resolves them — Continue applies any rule that is not
-    // `invokable` and declares no globs, Cline loads the directory for every
-    // task. So gating `estigia.md` and leaving the directory open is defeated by
+    // `paths_in`'s comments say so for two of these — Continue applies any rule
+    // that is not `invokable` and declares no globs, Cline loads the directory
+    // for every task. The other two are here on the restated rule rather than on
+    // anything this crate verified: Windsurf's comment is about a character cap
+    // on one file, and `.cursor/rules` holds no Estigia file at all — Cursor's
+    // directive is `~/.cursor/estigia-workflow-authority.md`. `docs/honesty.md`
+    // carries which is which. So gating `estigia.md` and leaving the directory open is defeated by
     // a neighbour: a reviewer measured `~/.cline/rules/zz-override.md` answering
     // `Routine`, and a sibling saying *Estigia is retired* changes exactly what
     // the restated population clause is about — what an agent is told this
     // harness may enforce — without touching a `Boundary` path.
     //
-    // No trailing slashes, for the split the entry above records.
+    // With trailing slashes, which `names` reads as *directory* — see the entry
+    // above for the round these spent without them.
     ".cline/rules/",
     ".continue/rules/",
     "windsurf/memories/",
@@ -588,7 +596,14 @@ fn is_control_surface(target: &str) -> bool {
     let names = |fragment: &str| {
         fragment.strip_suffix('/').map_or_else(
             || path.contains(fragment),
-            |bare| path.contains(fragment) || path.ends_with(bare),
+            |bare| {
+                // The right side by `contains(fragment)`, which carries the
+                // trailing separator. The left side has to be asked for: a
+                // reviewer measured `~/my.claude/agents` and `~/notwindsurf/memories`
+                // answering `Boundary` because `ends_with` alone anchors nothing
+                // in front of it. Over-gating only, and cheap to refuse.
+                path.contains(fragment) || path == bare || path.ends_with(&format!("/{bare}"))
+            },
         )
     };
 

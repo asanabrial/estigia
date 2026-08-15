@@ -174,18 +174,20 @@ suite. Everything else here is prose held by review.
   is derived from `skill::DIRECTORY` — a hand-spelled copy agrees with the installer only until
   somebody renames one, which this crate has already paid for once. The crossing that keeps them
   honest is `every_control_file_an_adapter_has_is_one_the_gate_measures`: it resolves the real path
-  per adapter, on all three platforms, under two `XDG_CONFIG_HOME` layouts, and asks the gate on both
-  roads. Every one of those four dimensions was added because a reviewer found a hole the crossing
+  per adapter, on all three platforms, under two `XDG_CONFIG_HOME` layouts, on both roads, and asks
+  about the bare root as well as a file inside it. Every one of those four dimensions was added because a reviewer found a hole the crossing
   could not see, and the holes are the entry below. Only the first of them was then found by the
   crossing itself, once it had the dimension — the rest were measured by people, which is the
   honest attribution and not the flattering one.
 
-  And the crossing catches a stale fragment **only where nothing else already matches the path** —
-  four of the eleven now rather than one, because opencode, cline, continue and windsurf are each
-  covered independently by a directory entry, so staling their fragment leaves it green. All four are
-  still caught, by `the_spelled_instruction_files_and_the_adapter_table_agree`, which reads the
-  spelled list against the table. This caveat was true and got deleted along with the version of the
-  fix it described; a reviewer noticed it was gone and that it had grown.
+  And the crossing catches a stale fragment **only where nothing else already matches the path**.
+  Measured by staling each of the eleven in turn: it reddens for eight and stays green for three —
+  continue, cline and windsurf, whose paths the rules-directory entries cover independently.
+  OpenCode's *is* caught, because the crossing walks the relocated `XDG_CONFIG_HOME` layout where
+  nothing else matches `<moved>/opencode/AGENTS.md`. All eleven are caught by
+  `the_spelled_instruction_files_and_the_adapter_table_agree`, which reads the spelled list against
+  the table. Three drafts of this sentence were wrong — it was deleted with the version of the fix it
+  described, restored saying four, and inverted to read as though eight was the small number.
 
   **What the missing dimensions were hiding.**
   `%APPDATA%\gemini\settings.json` — where this harness registers Gemini's own deny hook — answered
@@ -213,16 +215,20 @@ suite. Everything else here is prose held by review.
 
   **The cost, which the population's own declaration understated.** That declaration says a false
   positive costs one tracker read "and that is the direction this chooses on purpose", illustrated by
-  a one-character typo on a path already listed. Measured, the real figure is about **1.2 seconds per
-  write** — a `Boundary` never rides the renewal window and never stands aside outside the claim, so
+  a one-character typo on a path already listed. Measured against the real tracker by two reviewers — eight samples,
+  **0.61 to 1.22 seconds, mean 0.93** — against 0.16 to 0.42 for a `Routine` write inside the renewal
+  window, so roughly **+0.7 seconds per write** to a watched path — a `Boundary` never rides the renewal window and never stands aside outside the claim, so
   it is a live `gh issue view` every time — and with no network it is a refusal rather than a delay.
   Two attempts at the `XDG_CONFIG_HOME` fix were wrong in opposite directions before this one, and
   both were found by reviewers rather than by a test. Dropping the `.config/` prefix left `opencode`
   as a bare directory name matched anywhere: `node_modules/opencode/**`, `packages/opencode/**` and a
   checkout *named* `opencode` answered `Boundary` on every file in them. Replacing the directory
-  entry with three tails then **loosened** it — nine paths under `~/.config/opencode/` that Estigia
+  entry with three tails then **loosened** it — everything under `~/.config/opencode/` that Estigia
   does not write went `Boundary` to `Routine`, which is an existing entry's sensitivity changing and
-  was recorded here as an over-gating fix. The directory entry is back *beside* the tails, which
+  was recorded here as an over-gating fix. Not a countable set: it is whatever OpenCode itself keeps
+  there, and three drafts of this sentence said *nine* without anybody being able to enumerate them.
+  A reviewer measured `auth.json`, `config.json`, `themes/`, `command/`, `instructions/`, `tui.json`
+  and `mcp.json` among them, and the bare directory. The directory entry is back *beside* the tails, which
   cover the relocated root it cannot.
 
   What that leaves, measured rather than claimed: `node_modules/opencode/index.js` and
@@ -246,8 +252,29 @@ suite. Everything else here is prose held by review.
   And a per-project cost that is new and worth naming plainly: `<repo>/.claude/agents/*`,
   `<repo>/.cursor/rules/*`, `<repo>/.cline/rules/*`, `<repo>/.continue/rules/*` and
   `<repo>/.claude/settings.local.json` are `Boundary` now. A project that keeps its own agent
-  definitions or rules — this crate ships such files — pays a live tracker read on every write to
-  them. No file tracked in this repository trips any fragment today.
+  definitions or rules pays a live tracker read on every write to them. This crate ships agent
+  definitions under `skill/agents/`, which is not one of those paths — measured, no file tracked in
+  this repository trips any fragment today.
+
+  **Two things this change leaves open, both measured by reviewers of it.**
+
+  Over-gating is held only for hand-spelled shapes. The fixture that watches the `Routine` direction
+  lists paths by name, and nothing derives an over-gating check from the adapter table — so widening a
+  *derived* fragment is silent: changing crush's to `"crush/"` gates every path under any directory of
+  that name and leaves all 1,141 tests green. The same is true of widening a spelled entry. The
+  under-gating direction is crossed against `resolve_paths`; this one is crossed against nothing.
+
+  And the **containing** directories are `Routine` on both roads while their contents are now
+  `Boundary`: `~/.claude`, `~/.claude/skills`, `~/.codex`, `~/.cursor`, `~/.qwen`, `~/.agents`,
+  `~/.gemini`, `~/.cline`, `~/.continue`, `~/.codeium`, `~/.codeium/windsurf`, `~/.config/crush`,
+  `~/.config/gh`. So a single recursive delete of `~/.claude` — taking the settings file the gate is
+  registered in, the workflow-authority directive, the agent definitions and the installed contract —
+  answers `Routine`, and being outside every checkout it is answered by `outside-the-claim` before the
+  tracker is asked. Identical at the base commit, so not a regression; recorded because *this* change
+  is what makes it matter, by moving thirteen files inside those directories to `Boundary` while the
+  directory around them stays open. It is not the declared hard-link limit — it is an ordinary path a
+  shell writes. The shape that would close it already works next door: `~/.config/opencode` and
+  `~/.estigia` are `Boundary` because those entries name the directory.
 
   Still `Routine`, and not closed here: a project's own `AGENTS.md` or `CLAUDE.md` at its root,
   `.cursorrules`, `.clinerules`, `.windsurfrules`, `.github/copilot-instructions.md` and `.mcp.json`.

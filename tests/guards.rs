@@ -571,12 +571,13 @@ const AFFIRMED: &[(&str, u64)] = &[
     //   directory name gating `node_modules/opencode/**` and any checkout named
     //   that. Both ends were wrong. Found by reviewers, not by the crossing —
     //   which walks two XDG layouts now, so it would be.
-    // - Four trailing slashes gone. Three shipped with one — `.estigia/`,
-    //   `skills/issue-flow/` and the derived skill tree — and the fourth,
-    //   `.config/opencode/`, lost its along with its prefix. `.claude/agents`
-    //   carried one for a single unshipped head. `surface_of` appends a
-    //   separator, so each gated `rm <dir>` and left a write to the bare
-    //   directory `Routine`.
+    // - The trailing slashes are all still here, and now mean something: a
+    //   fragment ending in `/` names a directory, and `names` matches it by what
+    //   is under it or by itself. They spent one head removed — `surface_of`
+    //   appends a separator, so with a slash the bare directory was `Routine` on
+    //   the write road while `rm <dir>` was `Boundary` — and removing them
+    //   traded that for `.estigiaignore` and `skills/flow.md` becoming
+    //   `Boundary`. Neither trade was necessary once the matcher read the slash.
     // - The four rules **directories**. Gating Estigia's filename inside a
     //   directory the host reads whole is defeated by a neighbour, and the
     //   restated population clause is exactly what a neighbour changes.

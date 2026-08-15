@@ -405,13 +405,20 @@ pub fn definition_for(
         // it removed the allowlist from it. Measured by a reviewer of the very
         // change that moved four `CONTROL_SURFACE` entries for this variable and
         // left the enforcement road on `.config`.
-        roots.push(
-            std::env::var_os("XDG_CONFIG_HOME")
-                .filter(|value| !value.is_empty())
-                .map_or_else(|| home.join(".config"), std::path::PathBuf::from)
-                .join("opencode")
-                .join("agents"),
-        );
+        // **Both**, not whichever the variable names. Replacing the default with
+        // the relocated root is the same loosening one configuration over: a
+        // definition sitting at `~/.config/opencode/agents` stopped being found
+        // the moment `XDG_CONFIG_HOME` pointed elsewhere, and not found is
+        // `Ok(None)`, which `declared_policy` reads as *every tool allowed*. A
+        // reviewer measured base ENFORCED / head NOT FOUND on exactly that input
+        // — the defect this root was being fixed for, introduced by the fix.
+        //
+        // Searching both costs one `NotFound` stat and cannot loosen anything: a
+        // definition is enforced if it is found in any root.
+        roots.push(home.join(".config").join("opencode").join("agents"));
+        if let Some(moved) = crate::setup::xdg_config_home() {
+            roots.push(moved.join("opencode").join("agents"));
+        }
     }
     for file in roots
         .into_iter()

@@ -2675,11 +2675,11 @@ fn every_control_file_an_adapter_has_is_one_the_gate_measures() {
                 // entries.
                 //
                 // Held by no test today, and worth saying rather than leaving to be
-                // discovered: with the trailing slashes gone, the bare directory
-                // matches whether or not this line asks, so removing it changes
-                // nothing measurable. What it is for is the adapter added later
-                // whose root is a directory — the fixture that covers this
-                // behaviour spells its paths by hand and would not know about it.
+                // discovered: `names` matches a directory entry by the directory
+                // itself, so removing this line changes nothing measurable. What it
+                // is for is the adapter added later whose root is a directory — the
+                // fixture that covers this behaviour spells its paths by hand and
+                // would not know about it.
                 let mut watched: Vec<std::path::PathBuf> =
                     vec![paths.skill_root.clone(), paths.skill_root.join("SKILL.md")];
                 watched.extend(paths.hooks.clone());

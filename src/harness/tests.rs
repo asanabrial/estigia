@@ -3337,9 +3337,10 @@ fn the_spelled_instruction_files_and_the_adapter_table_agree() {
 
 /// A neighbour in a directory the host reads whole carries the same authority.
 ///
-/// Four adapters apply *every* file in a rules directory — `paths_in`'s comments
-/// say so where it resolves them, and Continue's says a markdown file with no
-/// frontmatter is always applied. So gating Estigia's own filename and leaving
+/// `paths_in`'s comments say so for two of them — Continue applies any rule with
+/// no frontmatter, Cline loads its directory for every task. The other two are
+/// gated on the restated population rule rather than on anything verified here;
+/// `docs/honesty.md` says which. So gating Estigia's own filename and leaving
 /// the directory open is defeated by adding a sibling: a reviewer measured
 /// `~/.cline/rules/zz-override.md` answering `Routine`, and a file there saying
 /// *Estigia is retired* changes what the agent is told this harness may enforce
@@ -3437,6 +3438,11 @@ fn a_directory_entry_does_not_gate_a_name_that_only_starts_the_same() {
         "/repo/my-opencode/README.md",
         "/repo/assets/opencode/logo.svg",
         "/repo/target/debug/build/opencode/out.rs",
+        // The left side of a bare-directory match, which `ends_with` alone did
+        // not anchor: a reviewer measured all three answering `Boundary`.
+        "/home/me/my.claude/agents",
+        "/home/me/notwindsurf/memories",
+        "/home/me/xyz.cursor/rules",
     ] {
         let (_, how) = classify("Write", &serde_json::json!({ "file_path": ordinary }));
         assert_eq!(
