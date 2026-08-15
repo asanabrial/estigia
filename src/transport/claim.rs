@@ -1558,6 +1558,56 @@ pub fn publish_review(
     )?;
     let target = super::target::clean_target(context, &format!("origin/{base}"), Some(at))?;
 
+    // The closing-keyword refusal, where it can be true.
+    //
+    // It used to fire two hundred lines below, after the push and after the pull
+    // request was opened, and it is a `Stop` — whose outcome line reads *nothing
+    // was written*. It had written a branch and a PR. A run believing that
+    // message leaves both orphaned, and the next call fails for an unrelated
+    // reason with the operator debugging from a false premise this tool supplied.
+    //
+    // Every source of a keyword this run introduces is readable before the
+    // remote is touched: the commit messages this branch adds, and the body
+    // about to be written. So it is read here, above `open_prs` — **above every
+    // remote mutation**, not merely above the push. Not above every remote
+    // *call*: `verify_claim` and the base fetch precede it, and both are reads.
+    // The distinction is the whole claim, so it is stated as the narrower one
+    // that is true rather than the wider one that reads better.
+    //
+    // It sat below `open_prs` first, which was the same defect wearing a
+    // shorter distance. On the reused-PR path `ensure_draft` runs `gh pr ready
+    // --undo` and `edit_pr` replaces the live title and body, and `pr_body_text`
+    // leaves a body naming `#<n>` exactly as written — so a body carrying
+    // `Closes #<n>` was published to the pull request, and the refusal that
+    // followed still said nothing had been written. That is the field report's
+    // own shape: its PR already existed on the retry.
+    //
+    // The check below stays — it also settles a branch-derived link, and a
+    // keyword can arrive from the remote side of a PR this run did not write —
+    // but it can no longer be the first thing to notice one.
+    let mut wrote_keyword = super::closing::keywords_in_commits(at, base, branch, issue)?;
+    if let Some(file) = pr_body_file {
+        // Not `if let Ok(..)`. A body this run cannot read is not a body with no
+        // keyword in it — the same sentence `keywords_in_commits` is written
+        // against, three lines away. Swallowing it here would have refused later
+        // instead, after `ensure_draft` may already have run `gh pr ready
+        // --undo`, and reported that nothing was written.
+        let text = std::fs::read_to_string(file)
+            .map_err(|error| Failure::Read(format!("the PR body could not be read: {error}")))?;
+        wrote_keyword.extend(super::closing::keywords_naming(&text, issue));
+    }
+    if !wrote_keyword.is_empty() {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "closing-keyword-live",
+            "cause": "closing-keyword",
+            "keyword_sources": wrote_keyword,
+            "action": "the issue WOULD auto-close on merge, bypassing transition and the mirror \
+                       \u{2014} remove the keyword (use `Refs #<n>`) and re-run; nothing has been \
+                       pushed and no pull request was opened",
+        })));
+    }
+
     // Discover and, when needed, draft a reused PR before the push. A ready PR
     // would otherwise emit synchronize and expose the new head before the
     // review barrier was restored.
@@ -1771,6 +1821,9 @@ fn published(
         return Err(Failure::Stop(serde_json::json!({
             "ok": false,
             "reason": "publication-readback-disagrees",
+            // After the push and after the pull request: `nothing was written`
+            // would be false, and this is the channel that says so.
+            "world": "committed",
             "pr": number,
             "expected_head": local_head,
             "expected_base": expected_base,
@@ -1794,6 +1847,10 @@ fn published(
         let mut envelope = serde_json::json!({
             "ok": false,
             "reason": "closing-keyword-live",
+            // The local precondition above catches a keyword this run wrote.
+            // Reaching here means one arrived from the remote side, by which
+            // time the branch is pushed and the pull request is open.
+            "world": "committed",
             "pr": number,
             "action": "the issue WILL auto-close on merge, bypassing transition and the mirror \
                        \u{2014} remove the keyword (use `Refs #<n>`) and re-run",

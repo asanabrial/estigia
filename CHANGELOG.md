@@ -18,6 +18,17 @@ the workflow, it holds the tools.
   JSON-RPC rather than `rmcp`: the same binary answers a `PreToolUse` hook on
   every edit, so an async runtime per process is a cost paid thousands of times
   to move a few lines of JSON across a pipe.
+- A refusal can now say that it already wrote. The outcome an agent is told was derived from the exit
+  code alone, so every stop reported *nothing was written* — including `publish_review` refusing a
+  closing keyword after it had pushed the branch and opened the pull request, which left both
+  orphaned for a run that believed the message. `MutationOutcome::Committed` already carried the
+  right words and the transport had no way to reach it; it does now, and a refusal that does not
+  claim to have written behaves exactly as before. The same operation also scans for a closing
+  keyword *before its first remote mutation* — before listing pull requests, before a reused one is
+  drafted and its body replaced, and before the push — so that refusal leaves the remote exactly as
+  it found it. Reads precede it, the claim renewal and the base fetch, and no write does. That scan is one function now rather than two that disagreed about what a `git log`
+  which did not answer means; it refuses, on both sides, because a source nobody read is not a source
+  with no keyword in it.
 - Review handoff is now a durable, receipt-bound compound operation. It records and reads back the
   latest publication receipt and exact ownership epoch before idempotently unassigning, keeps the
   issue in `review`, and excludes the publishing/requesting run from selection and reclaim until a

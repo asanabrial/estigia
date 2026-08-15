@@ -62,6 +62,27 @@ impl Answer {
     pub fn action(&self) -> Option<&str> {
         self.body.as_ref()?.get("action")?.as_str()
     }
+
+    /// Whether the refusal arrived **after** this call had already written.
+    ///
+    /// The outcome below is otherwise derived from the exit code alone, and a
+    /// stop is code `1` whether it refused before touching anything or after
+    /// pushing a branch and opening a pull request. `publish_review` did the
+    /// second and reported *nothing was written*: a run believing it left an
+    /// orphan branch and an orphan PR, and the next call failed for a reason
+    /// unrelated to the real one.
+    ///
+    /// The taxonomy already had the word — `MutationOutcome::Committed` says
+    /// *the write landed; what failed came after it* — and no way for the
+    /// transport to reach it. This is that channel. Absent means what it always
+    /// meant, so every refusal that does not set it is unchanged.
+    pub fn already_wrote(&self) -> bool {
+        self.body
+            .as_ref()
+            .and_then(|body| body.get("world"))
+            .and_then(Value::as_str)
+            == Some("committed")
+    }
 }
 
 /// What a malformed argument should have looked like.
@@ -121,6 +142,12 @@ pub const UNAUTHENTICATED: &str =
 /// is the lie the taxonomy exists to prevent. The proof boundary: this shows
 /// an unknown code fails towards Unknown, not that the six named ones are
 /// mapped to the right outcomes.
+///
+/// `1` is read twice, and the population is unchanged by that: it is still one
+/// code, decided further by whether the transport declared it had already
+/// written. A stop that pushed a branch before refusing is the same decision
+/// about a different world, and reporting it as `nothing was written` was the
+/// same lie by a different route.
 pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
     if answer.code == 0 {
         return None;
@@ -133,6 +160,24 @@ pub fn translate(answer: &Answer, context: &str) -> Option<Refusal> {
 
     // See the `exit-code` population declaration on this function.
     let (outcome, replay, resolution) = match answer.code {
+        // A stop that already wrote. Same decision, different world: the
+        // refusal is still the tracker's answer, but reporting it as if nothing
+        // had happened is the one thing this taxonomy exists to refuse.
+        1 if answer.already_wrote() => (
+            MutationOutcome::Committed,
+            // Not `ExactReplaySafe`. `publication-readback-disagrees` reaches
+            // here saying *do not bind review or CI to anything yet: re-read the
+            // pull request*, and repeating the identical call mints a fresh
+            // epoch over a head somebody else pushed. Read first, then decide.
+            Replayability::StatusRequired,
+            match answer.action() {
+                Some(action) => Resolution::no_command(NoCommandReason::WorldAction, action),
+                None => Resolution::no_command(
+                    NoCommandReason::WorldAction,
+                    "this call wrote before it refused; re-read the repository before deciding",
+                ),
+            },
+        ),
         // The control surface was READ, and it answered stop. Authority changed
         // under this run: retrying the identical command repeats the answer.
         1 => (
@@ -244,6 +289,54 @@ mod tests {
             code,
             body: Some(body),
         }
+    }
+
+    /// A stop that already wrote does not report that nothing was written.
+    ///
+    /// The outcome was derived from the exit code alone, and a stop is `1`
+    /// whether it refused before touching anything or after pushing a branch and
+    /// opening a pull request. `publish_review` did the second and said *nothing
+    /// was written*: the run that believed it left both orphaned, and the next
+    /// call failed for a reason unrelated to the real one — the operator
+    /// debugging it starting from a false premise this tool supplied.
+    ///
+    /// `MutationOutcome::Committed` already existed and the transport had no way
+    /// to reach it. A refusal that does not claim to have written is unchanged,
+    /// which is the other half of this and the reason the default stays.
+    #[test]
+    fn a_stop_that_already_wrote_is_not_reported_as_nothing_written() {
+        let committed = translate(
+            &answer(
+                1,
+                json!({
+                    "ok": false,
+                    "reason": "publication-readback-disagrees",
+                    "world": "committed",
+                    "action": "re-read the pull request before publishing again",
+                }),
+            ),
+            "publish_review",
+        )
+        .expect("a refusal");
+        assert_eq!(
+            committed.outcome,
+            MutationOutcome::Committed,
+            "a refusal that had already pushed reported {:?}",
+            committed.outcome
+        );
+        assert_eq!(
+            committed.outcome.what_happened(),
+            "the write landed; what failed came after it"
+        );
+
+        // And the ordinary stop, which is every other refusal in the transport.
+        let untouched = translate(
+            &answer(1, json!({ "ok": false, "reason": "lost-claim-race" })),
+            "claim",
+        )
+        .expect("a refusal");
+        assert_eq!(untouched.outcome, MutationOutcome::NotStarted);
+        assert_eq!(untouched.outcome.what_happened(), "nothing was written");
     }
 
     /// A `gh` nobody has logged in is not a read worth retrying.
