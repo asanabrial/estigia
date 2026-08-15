@@ -2862,6 +2862,16 @@ fn a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled() {
     // write target that is already there canonicalises, and the defect only
     // shows on one that does not. An earlier version of this test wrote the
     // file first and passed against the broken code.
+    //
+    // `decoy` has to exist, and that is a platform difference rather than
+    // tidiness. Windows collapses `..` in the spelling before the filesystem is
+    // consulted, so the write lands whether or not the directory is there;
+    // POSIX resolves each segment, and `decoy/..` on a directory that does not
+    // exist is `ENOENT`. Without this line the fixture was green on Windows
+    // through eight review rounds and red on both POSIX lanes the first time CI
+    // saw the branch — which is the whole reason `docs/honesty.md` says the
+    // POSIX half of this change rests on those lanes and not on review.
+    std::fs::create_dir_all(root.path().join("decoy")).expect("a directory to climb out of");
     let sideways = root
         .path()
         .join("decoy")

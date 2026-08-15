@@ -237,6 +237,20 @@ suite. Everything else here is prose held by review.
   its skip line and reported pass, while the older fixture still went red, so a machine that will
   not link loses the landing-versus-spelling measurement and not the guard's existence.
 
+  None of this is measured on POSIX by anybody who reviews it. The `..` half of `placed` is the
+  place the two platforms genuinely disagree — Windows collapses the segment in the spelling,
+  POSIX resolves the link first — so half of that function is decided by a `cfg` whose other arm
+  cannot be compiled, let alone run, on the desk this crate is written at. The lanes are the only
+  measurement, and CI does not start on a topic branch: it starts when `release_ci` marks the pull
+  request ready, which is *after* every review has been obtained.
+
+  What that costs, measured on this change: `a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled`
+  wrote through `<root>/decoy/../repo/src/main.rs` without creating `decoy`. Windows does not need
+  it to exist; POSIX answers `ENOENT`. The fixture was green here through eight rounds of blind
+  review — sixteen reviewers, every one of them on Windows — and went red on both POSIX lanes the
+  first time CI saw the branch, which was after the last verdict had been recorded and the target
+  released. Nothing in the review protocol could have caught it, and nothing in it says so.
+
   The third is latent and could not be measured at all. The guard requires the landing to carry a
   drive prefix rather than rejecting the prefixes it knows, so a landing with no prefix component
   would be refused instead of compared as though it were relative. Nothing `canonicalize` produced
