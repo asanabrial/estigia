@@ -680,25 +680,77 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     let source = std::fs::read_to_string(root().join("tests").join("pipe.rs"))
         .expect("the pipe suite is readable");
 
+    // The whole signature, not a prefix of it. A reviewer walked past
+    // `contains("-> TrackerRig")` with `type TrackerRigMaybe = Option<TrackerRig>`
+    // and `fn tracker_rig() -> TrackerRigMaybe {`, which contains the needle and
+    // answers an option — then removed the fixture and watched 106 tests pass on
+    // nothing with this guard green.
     let signature = source
         .lines()
         .find(|line| line.trim_start().starts_with("fn tracker_rig("))
         .expect("tests/pipe.rs still defines tracker_rig — if it was renamed, rename it here too");
-    assert!(
-        signature.contains("-> TrackerRig"),
+    assert_eq!(
+        signature.trim(),
+        "fn tracker_rig() -> TrackerRig {",
         "`tracker_rig` no longer answers the rig itself, so a caller can be handed \
-         a value meaning *did not run*: {}",
-        signature.trim()
+         a value meaning *did not run*"
     );
 
-    let skips = source
-        .lines()
-        .filter(|line| line.contains("tracker_rig()") && line.contains("Some"))
-        .count();
-    assert_eq!(
-        skips, 0,
-        "a caller of `tracker_rig` is matching on an option again, which is how \
-         sixteen tests came to report pass without running"
+    // Where the fixture is looked for, and this is a guard the fix needed and did
+    // not have. The path was once `CARGO_MANIFEST_DIR/target/debug/examples`,
+    // which is absent under `cargo test --release --target <triple>` — so all six
+    // release lanes would have hard-failed and no tag could have been cut. A
+    // reviewer measured that reverting the derivation leaves the whole suite
+    // green, this guard included, which by this repository's own rule made it an
+    // untested fix.
+    let rig = source
+        .split_once("fn tracker_rig()")
+        .expect("the rig is defined")
+        .1;
+    let body = rig.split_once("\n}").expect("the rig has an end").0;
+    assert!(
+        body.contains("current_exe()"),
+        "the fixture is no longer located from the running test binary, so it is \
+         being looked for under one profile while cargo built it under another"
+    );
+    assert!(
+        !body.contains("CARGO_MANIFEST_DIR"),
+        "the fixture is located from the manifest again, which names `target/debug` \
+         however the suite was actually built"
+    );
+
+    // Per test function, not per line. Both routes a reviewer found are
+    // caller-side: splitting `let Some(rig) = tracker_rig() else` across two
+    // lines defeats a line-wise scan, and a bare `if !… { return; }` before the
+    // call needs no option at all. A test that reaches the rig has no business
+    // returning early for any reason, so that is what is asserted.
+    let mut skipping = Vec::new();
+    for chunk in source.split("\n#[test]") {
+        if !chunk.contains("tracker_rig()") {
+            continue;
+        }
+        let name = chunk
+            .lines()
+            .find(|line| line.trim_start().starts_with("fn "))
+            .unwrap_or("<unnamed>")
+            .trim();
+        // Comments are not code, and this file quotes the very pattern being
+        // refused — the rig's own doc comment carries `else { return; }` to say
+        // what it used to be. Scanning the raw text made that a finding against
+        // the test the rig happens to sit behind.
+        let code = chunk
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if code.contains("return;") || code.contains("return }") {
+            skipping.push(name.to_owned());
+        }
+    }
+    assert!(
+        skipping.is_empty(),
+        "these reach the rig and can still return before asserting, which is how \
+         sixteen tests came to report pass without running: {skipping:?}"
     );
 
     // The exemption is not vacuous: the callers have to be there for their
