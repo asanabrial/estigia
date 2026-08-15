@@ -3452,6 +3452,17 @@ fn a_directory_entry_does_not_gate_a_name_that_only_starts_the_same() {
         "/home/me/my.cline/rules/note.md",
         "/home/me/zz.continue/rules/note.md",
         "/repo/x.estigia/state",
+        // The dot fragments that are **not** directories. Anchoring these was
+        // untested: a reviewer mutated the condition to anchor directory
+        // fragments only and the whole suite stayed green, so nothing held the
+        // half of the rule that keeps `my.claude/settings.json` off the gate.
+        "/home/me/my.claude/settings.json",
+        "/home/me/my.claude/settings.local.json",
+        "/home/me/xyz.claude.json",
+        "/home/me/my.claude.json",
+        "/home/me/my.codex/config.toml",
+        "/home/me/my.codex/hooks.json",
+        "/home/me/x.qwen/settings.json",
         // The same left side for the fragments that do **not** begin with a dot.
         // Anchoring those was the second half of the same fix and it was left
         // undone for one head: `surface_of` gives every token a trailing `/`, so
@@ -3493,6 +3504,42 @@ fn a_directory_entry_does_not_gate_a_name_that_only_starts_the_same() {
                 Sensitivity::Routine,
                 "{road} on {ordinary} answers boundary, and it is an ordinary path that \
                  only starts like a control surface"
+            );
+        }
+    }
+}
+
+/// The over-gating `docs/honesty.md` declares, held rather than asserted.
+///
+/// A fragment naming a **file** without a leading dot is deliberately not
+/// anchored, because `cli/hosts.yml` has to match inside the segment
+/// `github cli`. The cost is that a vendored copy of somebody else's agent
+/// answers `Boundary`. That cost was written down with the wrong path —
+/// `vendor/myopencode/agents/a.md`, which two reviewers measured `Routine`,
+/// because `opencode/agents/` is a directory fragment and *is* anchored. The
+/// derived fragment that demonstrates it is `opencode/agents.md`. Nothing held
+/// any of it: this file asserted the ends-alike direction and never this one, so
+/// the document's own example had drifted from the code it describes.
+#[test]
+fn the_declared_over_gating_is_the_shape_the_document_names() {
+    for named in [
+        "/repo/vendor/myopencode/agents.md",
+        "/repo/vendor/mygemini/gemini.md",
+        "/repo/vendor/mycrush/crush.md",
+        "/home/me/.codeium/notwindsurf/memories/global_rules.md",
+    ] {
+        for (road, payload) in [
+            ("Write", serde_json::json!({ "file_path": named })),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("rm -f {named}") }),
+            ),
+        ] {
+            let (_, how) = classify(road, &payload);
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "{road} on {named} answers routine, and `docs/honesty.md` declares it over-gated"
             );
         }
     }

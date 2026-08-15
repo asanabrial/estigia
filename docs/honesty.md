@@ -272,10 +272,19 @@ suite. Everything else here is prose held by review.
 
   A fragment naming a **file** without a leading dot still cannot be anchored, because `cli/hosts.yml`
   exists to match **mid-segment**: the Windows path is `%APPDATA%\GitHub CLI\hosts.yml`, and
-  `github cli` is one segment holding a space. So `~/.codeium/notwindsurf/memories/global_rules.md`
-  and `vendor/myopencode/agents/a.md` answer `Boundary`, and will keep doing so — the first through
-  windsurf's derived fragment, which is one of these. A draft of the fixture asserted that one away
-  and went red, which is the only reason it is written down here rather than believed.
+  `github cli` is one segment holding a space. The cost is that a vendored copy of somebody else's
+  agent answers `Boundary`, and will keep doing so: `~/.codeium/notwindsurf/memories/global_rules.md`
+  through windsurf's derived fragment, and `vendor/myopencode/agents.md`, `vendor/mygemini/gemini.md`
+  and `vendor/mycrush/crush.md` through theirs. A draft of the fixture asserted the windsurf one away
+  and went red, which is why it is written here rather than believed.
+
+  The other three are here because two reviewers measured this paragraph and found it naming
+  `vendor/myopencode/agents/a.md`, which answers `Routine` — `opencode/agents/` is a **directory**
+  fragment and is therefore anchored, so a lookalike cannot reach it. The derived fragment that
+  demonstrates the limit is `opencode/agents.md`; the written path was off by a separator, and nothing
+  in the suite held it, because this file asserted the ends-alike direction and never this one. It is
+  held now, on both roads — which is the point of the paragraph: a declared limit nothing measures is
+  a limit that drifts from the code while the document keeps saying it.
 
   What still over-matches is the fragments that name a file: `.claude/settings` reaches
   `.claude/settingsmap.ts`, and `crates/crush/crush.json`, `docs/gemini/settings.json` and
@@ -291,11 +300,24 @@ suite. Everything else here is prose held by review.
 
   **Two things this change leaves open, both measured by reviewers of it.**
 
-  Over-gating is held only for hand-spelled shapes. The fixture that watches the `Routine` direction
-  lists paths by name, and nothing derives an over-gating check from the adapter table — so widening a
-  *derived* fragment is silent: changing crush's to `"crush/"` gates every path under any directory of
-  that name and leaves all 1,145 tests green. The same is true of widening a spelled entry. The
-  under-gating direction is crossed against `resolve_paths`; this one is crossed against nothing.
+  Over-gating is held only for hand-spelled shapes, and it is held **unevenly**. The fixtures that
+  watch the `Routine` direction list paths by name, and nothing derives an over-gating check from the
+  adapter table, so whether widening a *derived* fragment is caught depends on whether some hand-
+  written row happens to sit under it. Measured, one adapter at a time, each widened to its bare
+  directory and the full suite re-run:
+
+  - `crush/crush.md` → `crush/` **reddens** — `the_declared_over_gating_is_the_shape_the_document_names`
+    names `vendor/mycrush/crush.md`. So does `.cursor/estigia-workflow-authority.md` → `.cursor/`,
+    through the `.cursor/rulesets.md` row in the ends-alike fixture. `gemini/gemini.md` and
+    `opencode/agents.md` are covered by the same over-gating fixture.
+  - `.qwen/qwen.md` → `.qwen/` **leaves all 1,146 tests green.** Nothing in this crate names a path
+    under a `.qwen` directory in the `Routine` direction, so that widening is silent — and it is
+    silent for every adapter no hand-written row happens to cover.
+
+  The earlier draft of this paragraph used crush as its example of the silent case, which stopped
+  being true in the same change that added the fixture above; qwen is the measurement now. The
+  under-gating direction is crossed against `resolve_paths` for all eleven adapters. This one is
+  crossed against nothing, and the coverage it has is incidental rather than derived.
 
   And the **containing** directories are `Routine` on both roads while their contents are now
   `Boundary`: `~/.claude`, `~/.claude/skills`, `~/.codex`, `~/.cursor`, `~/.qwen`, `~/.agents`,
