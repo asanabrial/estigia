@@ -239,10 +239,32 @@ suite. Everything else here is prose held by review.
   neither figure was measured. This is the list.
 
   What over-gating remains, measured rather than argued. A fragment ending in `/` names a directory
-  and the matcher honours that, so a name that merely starts alike — `.estigiaignore`,
-  `skills/flow.md`, `.claude/agentsmith.md`, `.cursor/rulesets.md` — stays `Routine`, and a fixture
-  holds that direction, which nothing did before: every other guard here asserts something *is*
-  `Boundary`, so over-gating was invisible to all of them.
+  and the matcher honours that, so a name that merely *ends* alike — `.estigiaignore`,
+  `skills/flow.md`, `.claude/agentsmith.md`, `.cursor/rulesets.md` — stays `Routine`. A fixture holds
+  that direction, which nothing did before: every other guard here asserts something *is* `Boundary`,
+  so over-gating was invisible to all of them.
+
+  The left side is anchored for two kinds of fragment: those beginning with a **dot**, and those
+  naming a **directory**. A dot-directory is always a whole segment, so `my.claude/agents` is not
+  `.claude/agents`. Every real target of `opencode/agents/`, `opencode/plugins/`, `windsurf/memories/`
+  and `skills/issue-flow/` has that first segment whole too, so those anchor without losing anything —
+  measured, `~/.config/opencode/agents` stays `Boundary` on both roads.
+
+  It took three attempts, and each one is why the fixture lists what it lists. The first anchored
+  `ends_with` and left `contains` alone, so a bare `my.claude/agents` came back `Routine` while a file
+  under it stayed `Boundary`, and three documents said the case was closed. The second anchored the
+  dot fragments only — which left the road split alive on precisely the directory entries this change
+  added: `surface_of` gives every token a trailing `/`, so `/repo/.opencode/agents`, `/repo/.opencode/plugins`,
+  `/repo/xyzopencode/agents` and `/repo/notwindsurf/memories` each answered `Routine` to `Write` and
+  `Boundary` to `rm`. The suite was green over all of them, because nothing asserted the `Routine`
+  direction for a non-dot fragment. All four are in the fixture now, on both roads.
+
+  A fragment naming a **file** without a leading dot still cannot be anchored, because `cli/hosts.yml`
+  exists to match **mid-segment**: the Windows path is `%APPDATA%\GitHub CLI\hosts.yml`, and
+  `github cli` is one segment holding a space. So `~/.codeium/notwindsurf/memories/global_rules.md`
+  and `vendor/myopencode/agents/a.md` answer `Boundary`, and will keep doing so — the first through
+  windsurf's derived fragment, which is one of these. A draft of the fixture asserted that one away
+  and went red, which is the only reason it is written down here rather than believed.
 
   What still over-matches is the fragments that name a file: `.claude/settings` reaches
   `.claude/settingsmap.ts`, and `crates/crush/crush.json`, `docs/gemini/settings.json` and
@@ -261,7 +283,7 @@ suite. Everything else here is prose held by review.
   Over-gating is held only for hand-spelled shapes. The fixture that watches the `Routine` direction
   lists paths by name, and nothing derives an over-gating check from the adapter table — so widening a
   *derived* fragment is silent: changing crush's to `"crush/"` gates every path under any directory of
-  that name and leaves all 1,141 tests green. The same is true of widening a spelled entry. The
+  that name and leaves all 1,143 tests green. The same is true of widening a spelled entry. The
   under-gating direction is crossed against `resolve_paths`; this one is crossed against nothing.
 
   And the **containing** directories are `Routine` on both roads while their contents are now

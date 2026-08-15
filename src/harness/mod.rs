@@ -593,16 +593,40 @@ fn is_control_surface(target: &str) -> bool {
     // and `.claude/agentsmith.md` all became `Boundary`, which is a tracker read
     // on ordinary files for nothing. Neither trade was necessary: the slash says
     // what the entry means and the matcher can honour it.
+    // A fragment is anchored on the left when its first segment is a whole one in
+    // every path it has to reach. Two kinds qualify. A dot-directory always is, so
+    // `my.claude/agents` is not `.claude/agents`. A fragment naming a **directory**
+    // always is too — every real target of `opencode/agents/`, `windsurf/memories/`,
+    // `opencode/plugins/` and `skills/issue-flow/` has that first segment whole —
+    // and anchoring it is what stops the two roads disagreeing: `surface_of` gives
+    // every token a trailing `/`, so a bare `/repo/.opencode/agents` reached the
+    // unanchored branch through the shell and not through `Write`, answering
+    // `Boundary` one way and `Routine` the other. The right side was anchored from
+    // the start; leaving the left unanchored kept the split alive on exactly the
+    // fragments this entry added.
+    //
+    // A file fragment without a leading dot cannot be anchored: `cli/hosts.yml`
+    // exists to match **mid-segment**, because the Windows spelling is
+    // `GitHub CLI/hosts.yml` and `github cli` is one segment holding a space. That
+    // is the whole of what stays unanchored, and `docs/honesty.md` measures it.
+    let anchored = |needle: &str| {
+        if needle.starts_with('.') || needle.ends_with('/') {
+            path.starts_with(needle) || path.contains(&format!("/{needle}"))
+        } else {
+            path.contains(needle)
+        }
+    };
     let names = |fragment: &str| {
         fragment.strip_suffix('/').map_or_else(
-            || path.contains(fragment),
+            || anchored(fragment),
             |bare| {
-                // The right side by `contains(fragment)`, which carries the
-                // trailing separator. The left side has to be asked for: a
-                // reviewer measured `~/my.claude/agents` and `~/notwindsurf/memories`
-                // answering `Boundary` because `ends_with` alone anchors nothing
-                // in front of it. Over-gating only, and cheap to refuse.
-                path.contains(fragment) || path == bare || path.ends_with(&format!("/{bare}"))
+                // Both sides. The right by the trailing separator the fragment
+                // carries; the left because a reviewer measured `~/my.claude/agents`
+                // and `/repo/my.claude/agents/note.md` answering `Boundary` — the
+                // first through `ends_with`, which anchors nothing in front of it,
+                // and the second through `contains`, which the first attempt at
+                // this left alone while three documents said it was closed.
+                anchored(fragment) || path == bare || path.ends_with(&format!("/{bare}"))
             },
         )
     };

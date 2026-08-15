@@ -61,7 +61,14 @@ the workflow, it holds the tools.
   and crush's settings, anchored to what the installer writes *beside* the directory entry rather than
   replacing it; and the rules **directories**, because gating a filename inside a directory the host
   reads whole is defeated by a neighbour. A fragment ending in `/` names a directory now, matched by
-  what is under it or by itself and never by a name that only starts alike.
+  what is under it or by itself, and not by a name that merely ends alike — nor by one that
+  starts alike, because a fragment naming a directory is anchored on the left as a dot-fragment
+  is. Anchoring only the dot ones kept the two roads disagreeing on the four entries this change
+  added: `surface_of` gives every token a trailing separator, so a bare `.opencode/agents` was
+  `Routine` to `Write` and `Boundary` to `rm`, with nothing red because no fixture asserted the
+  `Routine` direction for a fragment without a dot. What stays unanchored is the fragments naming
+  a **file** without one, and `cli/hosts.yml` is why: `%APPDATA%\GitHub CLI\hosts.yml` holds it
+  mid-segment. `docs/honesty.md` measures what that leaves.
 
   `harness::roles::definition_for` also stopped spelling OpenCode's definition root by hand: it now
   searches the default root **and** the one `XDG_CONFIG_HOME` names, through the same rule `setup`

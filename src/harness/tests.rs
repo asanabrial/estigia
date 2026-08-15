@@ -3438,19 +3438,59 @@ fn a_directory_entry_does_not_gate_a_name_that_only_starts_the_same() {
         "/repo/my-opencode/README.md",
         "/repo/assets/opencode/logo.svg",
         "/repo/target/debug/build/opencode/out.rs",
-        // The left side of a bare-directory match, which `ends_with` alone did
-        // not anchor: a reviewer measured all three answering `Boundary`.
+        // The left side, which took two attempts. `ends_with` anchors nothing in
+        // front of it, and the fix for that left `contains` alone — so a file
+        // *under* the lookalike stayed `Boundary` while the bare directory came
+        // back `Routine`, and three documents said the case was closed. A reviewer
+        // measured both. A dot-directory is always a whole segment, so both are
+        // anchored now; the shapes that do not begin with a dot are in
+        // `docs/honesty.md`, because `cli/hosts.yml` has to match mid-segment.
         "/home/me/my.claude/agents",
-        "/home/me/notwindsurf/memories",
+        "/home/me/my.claude/agents/note.md",
         "/home/me/xyz.cursor/rules",
+        "/home/me/xyz.cursor/rules/note.md",
+        "/home/me/my.cline/rules/note.md",
+        "/home/me/zz.continue/rules/note.md",
+        "/repo/x.estigia/state",
+        // The same left side for the fragments that do **not** begin with a dot.
+        // Anchoring those was the second half of the same fix and it was left
+        // undone for one head: `surface_of` gives every token a trailing `/`, so
+        // each of these answered `Routine` to `Write` and `Boundary` to `rm` —
+        // the road split this entry was written to close, alive on exactly the
+        // fragments it added. A directory fragment can be anchored because every
+        // real target has that first segment whole; the file fragments cannot,
+        // and `docs/honesty.md` measures what that leaves.
+        "/repo/.opencode/agents",
+        "/repo/.opencode/plugins",
+        "/repo/xyzopencode/agents",
+        "/repo/notwindsurf/memories",
+        "/home/me/.claude/myskills/issue-flow",
+        // Not here, and measured: `~/.codeium/notwindsurf/memories/global_rules.md`
+        // still answers `Boundary`. The **file** fragments that do not begin with a
+        // dot stay unanchored, because `cli/hosts.yml` has to match inside the
+        // segment `github cli`, and windsurf's derived fragment is one of them.
+        // That is the declared over-gating in `docs/honesty.md`, not a gap here —
+        // asserting it away is what a first draft of this list did.
     ] {
-        let (_, how) = classify("Write", &serde_json::json!({ "file_path": ordinary }));
-        assert_eq!(
-            how,
-            Sensitivity::Routine,
-            "{ordinary} is an ordinary file and answers boundary, so every write to it \
-             pays a live tracker read for nothing"
-        );
+        // Both roads. The bare lookalike answered `Routine` on the write road and
+        // `Boundary` through the shell, because `surface_of` appends a separator
+        // and reached the unanchored branch — the same split this entry claims to
+        // have closed, surviving in the direction nothing asserted.
+        for (road, payload) in [
+            ("Write", serde_json::json!({ "file_path": ordinary })),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("rm -rf {ordinary}") }),
+            ),
+        ] {
+            let (_, how) = classify(road, &payload);
+            assert_eq!(
+                how,
+                Sensitivity::Routine,
+                "{road} on {ordinary} answers boundary, and it is an ordinary path that \
+                 only starts like a control surface"
+            );
+        }
     }
 }
 

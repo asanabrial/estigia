@@ -583,7 +583,12 @@ const AFFIRMED: &[(&str, u64)] = &[
     //   restated population clause is exactly what a neighbour changes.
     // Re-affirmed once more, and the reason is the entry's own shape rather than
     // its members: a fragment ending in `/` now names a **directory**, matched by
-    // what is under it or by itself and never by a name that only starts alike.
+    // what is under it or by itself — and not by a name that merely ends alike,
+    // nor by one that starts alike, since a directory fragment is anchored on
+    // the left exactly as a dot-fragment is. Anchoring only the dot ones left
+    // the two roads disagreeing on the entries this change added. The file
+    // fragments without a dot stay unanchored because `cli/hosts.yml` has to
+    // match mid-segment; `docs/honesty.md` records what that leaves.
     // Both earlier spellings were wrong in opposite directions — with the slash
     // the bare directory was `Routine` on the write road while `rm <dir>` was
     // `Boundary`; without it, `.estigiaignore` and `skills/flow.md` became
@@ -593,10 +598,13 @@ const AFFIRMED: &[(&str, u64)] = &[
     // not.
     //
     // `.config/opencode/` is back beside the tails that cover the relocated root.
-    // Replacing it with them alone was a **loosening** — nine paths under it that
-    // Estigia does not write lost their boundary — which is an existing entry's
+    // Replacing it with them alone was a **loosening**: what Estigia does not
+    // write under that root lost its boundary, which is an existing entry's
     // sensitivity changing, and it was recorded as an over-gating fix until a
-    // reviewer measured it.
+    // reviewer measured it. No count here on purpose — the set is whatever
+    // OpenCode itself keeps there, three drafts said *nine* without anybody
+    // enumerating them, and `docs/honesty.md` holds the shapes that were
+    // actually measured. A number in two files is a number that disagrees.
     ("control-surface", 6738328471156835869),
     // Reopened 2026-08-05 by measuring the enumeration instead of reading it.
     // Thirty command lines that visibly put bytes on disk were classified and
