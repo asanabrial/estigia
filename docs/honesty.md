@@ -496,6 +496,23 @@ suite. Everything else here is prose held by review.
   shell writes. The shape that would close it already works next door: `~/.config/opencode` and
   `~/.estigia` are `Boundary` because those entries name the directory.
 
+  **There are two readings of the same text, and the difference is deliberate.** The write road hands
+  `is_control_surface` a `file_path`, which is a path; the shell and payload roads hand
+  `text_names_a_control_surface` a command line or a patch body, which is prose with a path in it.
+  Only the second folds punctuation, because only the second can have punctuation *next to* a path
+  that is not part of it. A reviewer measured what that leaves and then measured whether it matters:
+  on the write road a decorated relative spelling — `".claude/CLAUDE.md"` with the quotes inside the
+  field, or with a leading space, tab, `~`, `$`, `%`, `{`, backtick or `=` — is `Routine` at this head
+  and was `Boundary` at the base. It is not a hole, and that was checked rather than assumed: writing
+  each of those spellings on this machine either fails outright or resolves to a different,
+  non-existent directory. Only the bare spelling reaches the file, and the bare spelling is gated. The
+  same reviewer confirmed it end to end — the quoted `file_path` costs zero tracker reads while the
+  bare one, the quoted absolute, the shell road and a patch body naming it each cost exactly one.
+
+  What is true and worth a reader's attention is that `punctuation_does_not_hide_a_control_surface`
+  drives only the shell road. The write road has no punctuation fixture, because there is no
+  punctuation behaviour there to hold — which is a fine reason and an easy one to forget.
+
   Two more `Routine` at both commits, each found by a different reviewer and neither closed here.
   `<repo>/.opencode/plugins` is not reached: `.opencode/agents/` was added for the repository-local
   definition root, and the plugin directory beside it has no entry, because `opencode/plugins/` is
