@@ -192,6 +192,153 @@ pub fn coverage_depth(covered: &Path, working_dir: &Path) -> Option<usize> {
     (inside || same_directory(covered, &working_dir)).then(|| resolved.components().count())
 }
 
+/// Where a write will actually land, as far as this process can place it.
+///
+/// [`coverage_depth`] was written for **working directories**, which exist, and
+/// its fallback resolves an unresolvable path literally. A write target usually
+/// does not exist yet — that is the ordinary case, not the edge — so handing it
+/// to that comparison answers on two different spellings of one path:
+///
+/// - `<root>/decoy/../repo/src/main.rs` compared literally is not inside
+///   `<root>/repo`, and the write lands there anyway;
+/// - a checkout reached through a junction resolves on the covered side and not
+///   on the target side, so a **new** file inside it reads as outside while an
+///   **existing** one reads as inside. The only difference is whether the file
+///   is there yet.
+///
+/// Both were measured against the gate this feeds, where a wrong `outside`
+/// removes the gate. So: collapse the spelling first, then resolve as much of
+/// the filesystem as exists.
+///
+/// `None` when the path cannot be placed at all, and the caller must read that
+/// as **inside**. `same_directory` states the rule this follows: *a path this
+/// process cannot resolve loosening the gate is the declared asymmetry run
+/// backwards.*
+pub fn placed(target: &Path) -> Option<PathBuf> {
+    // `..` is where the two platforms genuinely disagree, and answering for the
+    // wrong one is what puts the spelling and the landing in different places.
+    //
+    // Windows collapses it **lexically**, before touching the filesystem, so
+    // `outside/link/../x` names `outside/x` however `link` is defined. POSIX
+    // resolves the link first and applies `..` to what it resolved to, so the
+    // same spelling lands beside the link's *target* — inside a checkout, if
+    // that is where the link points. Reading it lexically on POSIX classified a
+    // repository write as outside and stood the gate aside, on four of the six
+    // platforms this crate ships.
+    //
+    // So each `..` is applied the way the platform applies it: to the resolved
+    // prefix where the filesystem is what decides, to the spelling where it is
+    // not. Never past the root — a path that climbs out of what it names cannot
+    // be placed.
+    let mut lexical = PathBuf::new();
+    for component in target.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                if cfg!(unix)
+                    && let Ok(resolved) = lexical.canonicalize()
+                {
+                    lexical = resolved;
+                }
+                if !lexical.pop() {
+                    return None;
+                }
+            }
+            // A leading `.` is dropped rather than pushed, and the difference is
+            // not cosmetic. `push(".")` on an empty buffer yields `"."`, which
+            // canonicalises to the working directory — so `placed(".\x")` would
+            // answer `Some(<cwd>\x)` while `placed("x")`, the same file, answers
+            // `None`. One file, two spellings, two answers is the defect this
+            // whole function exists to end, and the loose one of the two is the
+            // answer that can classify a path as outside.
+            //
+            // It was deleted once as dead, on the reasoning that `components`
+            // drops `.` anyway. It does drop an *interior* one — and not in a
+            // verbatim path, where `CurDir` survives and `push(".")` happens to
+            // be a no-op because the buffer is not empty. Neither of those is
+            // the case this arm is for. Two reviewers measured the deletion
+            // changing the answer; the gate cannot reach it today only because
+            // `writes_outside_the_claim` requires an absolute target, and this
+            // is a public function.
+            std::path::Component::CurDir => {}
+            other => lexical.push(other.as_os_str()),
+        }
+    }
+    // Then the filesystem, for as much of it as is there. A junction is not a
+    // spelling, and the deepest existing ancestor is the most this process can
+    // honestly resolve — resolving it puts both sides of the comparison in the
+    // same vocabulary.
+    let mut suffix: Vec<std::ffi::OsString> = Vec::new();
+    let mut probe = lexical.as_path();
+    loop {
+        // An entry that is **there** and will not resolve is not the same as no
+        // entry at all, and walking up past it is how a dangling symlink got
+        // placed at its own spelling: `<outside>/alias.rs` pointing at
+        // `<repo>/src/planted.rs` answered *outside*, and writing through it
+        // created the file inside the checkout. `canonicalize` fails the same
+        // way for both, so the difference has to be asked for.
+        if probe.symlink_metadata().is_ok() && probe.canonicalize().is_err() {
+            return None;
+        }
+        if let Ok(real) = probe.canonicalize() {
+            let mut placed = remove_windows_verbatim_prefix(real);
+            // A drive has more than one name, and only one of them can be
+            // compared. Windows serves every local drive as an administrative
+            // share, so `\\localhost\C$\repo\src\main.rs` is the same file as
+            // `C:\repo\src\main.rs` with no link in it anywhere — and the covered
+            // checkout places to `C:\...`, so one file was compared under two
+            // spellings, neither a prefix of the other, and the gate stood aside
+            // for a write that landed inside the claimed checkout.
+            //
+            // The check is on the **landing**, not on the spelling handed in,
+            // and that is the whole of it. Reading the input's first component
+            // catches `\\localhost\C$\...` and misses every path that arrives
+            // wearing a drive letter and resolves onto a share anyway: a mapped
+            // drive (`net use Y: \\localhost\C$`), or a directory link pointing
+            // there. Both were measured taking a repository write out of the
+            // gate while the first version of this guard was in place.
+            //
+            // Mapping a share back to the drive it serves means asking the
+            // machine what it is sharing, which cannot be answered offline and
+            // where a wrong answer removes a gate. So a landing that is not on a
+            // drive is declined, and the caller reads that as *inside*.
+            //
+            // A share is the only such landing anybody has produced here. The
+            // device namespaces read as if they would be — `\\.\C:\Windows`,
+            // `\\?\Volume{...}\Windows`, `\\?\GLOBALROOT\Device\HarddiskVolume3\Windows`
+            // — and all three resolve to `C:\Windows`, so they place normally and
+            // are compared like any other path. They were declined by the first
+            // version of this guard, which read the spelling; that they are not
+            // any more is a real change and the right one.
+            //
+            // Written as a requirement rather than a rejection, and that shape is
+            // deliberate: a landing with no prefix component at all would sail
+            // past `if let ... && !matches!` and be compared as though it were
+            // relative. Nothing this process can canonicalise produces one — two
+            // reviewers looked — so the branch is unmeasurable rather than
+            // measured, and it is written the way whose failure is a refusal.
+            if cfg!(windows)
+                && !matches!(
+                    placed.components().next(),
+                    Some(std::path::Component::Prefix(prefix))
+                        if matches!(
+                            prefix.kind(),
+                            std::path::Prefix::Disk(_) | std::path::Prefix::VerbatimDisk(_)
+                        )
+                )
+            {
+                return None;
+            }
+            for part in suffix.iter().rev() {
+                placed.push(part);
+            }
+            return Some(placed);
+        }
+        let parent = probe.parent()?;
+        suffix.push(probe.file_name()?.to_os_string());
+        probe = parent;
+    }
+}
+
 /// Rejects a path that is not absolute, naming which one it was.
 pub fn require_absolute(path: &Path, name: &str) -> Result<()> {
     if !path.is_absolute() {
@@ -342,6 +489,51 @@ pub fn powershell_quoted(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// What `placed` hands back is a spelling anything else can be compared to.
+    ///
+    /// Both reviewers of this change measured the same thing: the line that
+    /// strips the verbatim prefix could be deleted and the whole suite stayed
+    /// green, because every caller today puts *both* sides of its comparison
+    /// through here and two verbatim spellings compare as well as two literal
+    /// ones. That makes it unmeasured, not unimportant — the next caller to
+    /// compare this output against a path that came from anywhere else inherits
+    /// `\\?\C:\x` against `C:\x`, which is the exact two-vocabularies failure
+    /// this function exists to end. So the guarantee is asserted here, on the
+    /// output itself, rather than left resting on what the callers happen to do.
+    #[test]
+    fn a_placed_path_carries_no_verbatim_prefix() {
+        let root = tempfile::tempdir().expect("a root");
+        let deep = root.path().join("a").join("b");
+        std::fs::create_dir_all(&deep).expect("a directory to place");
+        // A tail that does not exist yet, which is the ordinary case for a write
+        // target and the one that takes the literal-suffix road.
+        let target = deep.join("not-yet.rs");
+
+        let placed = placed(&target).expect("a real directory places");
+        assert!(
+            !placed.display().to_string().starts_with(r"\\?\"),
+            "placed handed back a verbatim spelling: {placed:?}"
+        );
+        assert!(
+            placed.ends_with("not-yet.rs"),
+            "placed lost the part of the path that does not exist yet: {placed:?}"
+        );
+    }
+
+    /// One file does not get two answers because of how it was spelled.
+    ///
+    /// `x` and `.\x` name the same file, and `placed` answered `None` for one
+    /// and `Some(<cwd>\x)` for the other for as long as the `CurDir` arm was
+    /// missing — the looser answer being the one that can go on to classify a
+    /// path as outside a checkout. The gate cannot reach it, because it requires
+    /// an absolute target; `paths` is a public module, and the next caller is
+    /// who this is for.
+    #[test]
+    fn a_leading_current_directory_does_not_change_the_answer() {
+        assert_eq!(placed(Path::new(".")), None);
+        assert_eq!(placed(Path::new("./x")), placed(Path::new("x")));
+    }
 
     #[test]
     fn home_resolves_to_an_absolute_path() {

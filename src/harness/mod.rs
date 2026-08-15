@@ -111,7 +111,7 @@ pub enum Sensitivity {
 
 /// Why the gate had no call to make.
 ///
-/// Four situations, and they want four different things done about them. Held
+/// Five situations, and they want five different things done about them. Held
 /// as a type for the reason [`crate::harness::doctor::Health::Broken`] holds
 /// its resolution as one: *a string forces the caller to invent a generic one
 /// instead*.
@@ -134,9 +134,34 @@ pub enum Aside {
     NoTracker,
     /// Sworn, but over a different checkout than this write is in.
     AnotherCheckout,
+    /// Sworn, and this write lands where no covered checkout reaches.
+    ///
+    /// Distinct from [`Self::AnotherCheckout`], which is about *this* checkout
+    /// being somebody else's. This one is about the **path**: a scratch note or
+    /// an agent's own store is in no checkout at all, and answering
+    /// `another-checkout` for it would name a thing that does not exist.
+    OutsideTheClaim,
 }
 
 impl Aside {
+    /// Every reason, for the crossing that keeps their names honest.
+    ///
+    /// Hand-written, and **not** held by the compiler — an earlier version of
+    /// this comment said it was, on the strength of a `#[cfg(test)]` predicate
+    /// that a normal build never compiles and that a new variant could satisfy
+    /// without ever joining this list. What holds it is
+    /// `every_reason_for_standing_aside_has_a_stable_name`, which reads the arms
+    /// of `code` out of this file's own source and refuses to walk fewer than it
+    /// finds. That is the technique the code inventory in `cli::tests` uses, and
+    /// it is what caught the fifth reason arriving with no entry anywhere.
+    pub const ALL: &'static [Self] = &[
+        Self::NotWatched,
+        Self::NothingSworn,
+        Self::NoTracker,
+        Self::AnotherCheckout,
+        Self::OutsideTheClaim,
+    ];
+
     /// The stable name a program matches on.
     ///
     /// `estigia gate --json` printed this field as `format!("{aside:?}")` — the
@@ -156,6 +181,7 @@ impl Aside {
             Self::NothingSworn => "nothing-sworn",
             Self::NoTracker => "no-tracker",
             Self::AnotherCheckout => "another-checkout",
+            Self::OutsideTheClaim => "outside-the-claim",
         }
     }
 
@@ -173,6 +199,10 @@ impl Aside {
             Self::AnotherCheckout => format!(
                 "{tool} is watched, and this run's claim covers a different checkout than this one"
             ),
+            Self::OutsideTheClaim => format!(
+                "{tool} is watched, and this write lands outside every checkout this run's claim \
+                 covers \u{2014} a claim governs a repository, not the machine"
+            ),
         }
     }
 }
@@ -184,7 +214,7 @@ pub enum Decision {
     Allow(String),
     /// Stop, with everything needed to act on it.
     Deny(Box<Refusal>),
-    /// Not Estigia's call, and which of the four reasons it was.
+    /// Not Estigia's call, and which of the five reasons it was.
     Outside(Aside),
 }
 
@@ -262,6 +292,15 @@ pub(crate) const SHELL_TOOLS: &[&str] = &["bash", "run_shell_command", "shell", 
 /// matches, which is a false positive costing one tracker read, and that is the
 /// direction this chooses on purpose.
 ///
+/// `gh`'s hosts file joined the population on 2026-08-15, in both spellings and
+/// the file rather than the directory around it. It is not Estigia's
+/// file and no Estigia decision is read from it, so it sits at the edge of the
+/// legitimate population as stated — but it decides **which account** every `gh`
+/// call the transport makes acts as, which is what this list is for once a write
+/// outside the repository can stand aside without the tracker being asked. Issue
+/// 2 asked for exactly this: name the path that can reach tracker state rather
+/// than relax the class around it.
+///
 /// That boundary sentence is about `is_control_surface`, and this declaration
 /// sits on the **list**, so the fingerprint covers the rule and the population
 /// and not the code that matches against them. Changing the matcher does not
@@ -288,6 +327,22 @@ pub(crate) const SHELL_TOOLS: &[&str] = &["bash", "run_shell_command", "shell", 
 /// renew it here. An operator editing their own contract is not going through
 /// this gate at all; an agent doing it mid-oath now says so on the record.
 const CONTROL_SURFACE: &[&str] = &[
+    // `gh`'s hosts file, which is not Estigia's and decides the identity every
+    // tracker call acts as. Named here because issue 2 asked for exactly that:
+    // *"whether any write outside the repository can still affect tracker
+    // state. If one can, it is that path that needs naming rather than the
+    // whole class."* This one can — rewriting it changes which account answers
+    // every `gh` call the transport makes — and standing aside outside the
+    // repository is what would otherwise have let it through ungated. The wider
+    // gap, the instruction file each adapter's setup writes, is its own change.
+    ".config/gh/hosts.yml",
+    // No space, deliberately. `surface_of` splits a command on whitespace and
+    // appends `/` to every token, so a fragment containing one can never match
+    // through the shell — measured: `Write` on the Windows spelling answered
+    // `Boundary` while `rm` on the same path answered `Routine`, which is the
+    // road an agent would actually take. `cli/hosts.yml` is a substring of
+    // `github cli/hosts.yml` on both roads.
+    "cli/hosts.yml",
     // Estigia's own state: run pointers, the stand-down record, the ledger.
     ".estigia/",
     // The tree the **previous** name installed into. The tree this build writes
@@ -1249,6 +1304,65 @@ pub fn gate(context: &GateContext, run: &mut Run, action: &Action, how: Sensitiv
     )
 }
 
+/// Whether this write lands where no checkout the claim covers can reach.
+///
+/// A claim governs a repository. It was governing the machine: after an issue
+/// auto-closed on merge the gate refused a scratch note and the agent's own
+/// memory store, each with *issue #164 is CLOSED*, because nothing here
+/// classified the **path being written** — [`Aside::AnotherCheckout`] compares
+/// the checkout the hook was invoked in, not the file. A run that had just
+/// delivered could not write down the evidence of the delivery, which is the
+/// outcome this crate exists to prevent, and the way past it was raw tooling.
+///
+/// Narrow on purpose, because standing aside is a statement and an unknown is
+/// not one:
+///
+/// - the target must be an **absolute** path. The shell classifier answers with
+///   the verb it recognised — *"a redirect into a file"*, `rm`, `mv` — so a
+///   shell write cannot be placed, and one that cannot be placed stays gated.
+/// - a run covering nothing has no claim to be outside of.
+///
+/// And one limit no amount of placing reaches: a **hard link**, or a bind mount,
+/// has no path to resolve to, so an alias outside the checkout pointing at a
+/// file inside it classifies outside and the write lands inside. Both measured.
+/// `is_control_surface` declares the same boundary for its own matcher and this
+/// inherits it; `docs/honesty.md` carries the measurements.
+///
+/// The caller adds the last condition, which cannot be seen from here: only a
+/// `Routine` write. The control surface lives outside the repository by nature,
+/// and watching it is the whole defence against an agent switching the gate off
+/// with the tool it uses most.
+fn writes_outside_the_claim(run: &Run, action: &Action) -> bool {
+    let Action::Write { target } = action else {
+        return false;
+    };
+    let path = std::path::Path::new(target);
+    if !path.is_absolute() {
+        return false;
+    }
+    // Where it lands, not how it is spelled. Comparing the spelling answered
+    // `outside` for a `..` that climbs back into the checkout, and for a new
+    // file inside a checkout reached through a junction — both of them writes
+    // this would have taken out of the gate. A path that cannot be placed is
+    // read as inside, because a wrong answer here removes the gate.
+    let Some(landing) = crate::paths::placed(path) else {
+        return false;
+    };
+    let mut covered = run.covered().peekable();
+    if covered.peek().is_none() {
+        return false;
+    }
+    // Both sides through the same resolver. `covers` leaves an unresolvable
+    // path literal, so a covered checkout that is not on disk — or a temp root
+    // reached through a link, which is what macOS hands every test — left the
+    // two sides in different vocabularies and a write into the checkout read as
+    // outside. A checkout this process cannot place is one it cannot rule out.
+    !covered.any(|checkout| {
+        crate::paths::placed(checkout)
+            .is_none_or(|checkout| crate::paths::covers(&checkout, &landing))
+    })
+}
+
 /// What the gate decides before any stand-down is considered.
 fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivity) -> Decision {
     let verifier = match action {
@@ -1357,6 +1471,44 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
             ),
             &subject,
         )));
+    }
+
+    // After the contract, and before the tracker.
+    //
+    // Before the tracker because the tracker's answer is what refuses here: a
+    // closed issue answers `issue-not-open`, and it was answering it about a
+    // scratch note. A claim governs the repository it was made in; what a run
+    // writes outside every checkout it covers is not the claim's to decide,
+    // whatever state the issue is in.
+    //
+    // After the contract because *an unreadable control surface permits no
+    // write* is written without an exception **in the contract**, and standing
+    // aside is a permission like any other. It sat above that refusal for one published head, which
+    // meant that with no `SKILL.md` installed the agent instruction files —
+    // outside every checkout by construction, and carrying the directive that
+    // says this harness holds the authority at all — were writable with nothing
+    // consulted. Both reviewers of that head raised the ordering; one measured
+    // that moving it down costs no test, so it moved rather than being written
+    // up as a limit.
+    //
+    // That buys the rule here and not everywhere: the renewal window above
+    // returns before the contract is looked at, so for its duration the same
+    // files are writable with no contract on disk. Issue #29, and older than
+    // this answer — but do not read this position as the rule being whole.
+    // Moving *this* down was free; moving the window down changes the answer for
+    // every routine write on the fast path this gate exists to keep cheap.
+    //
+    // The window also now answers first for a write outside the claim, with a
+    // message crediting a claim renewal for clearing a path the claim does not
+    // govern, and it takes the `session::store` branch that an `Outside` does
+    // not. Both permit, so no gate moved; it is written down because a reviewer
+    // had to measure it to find out.
+    //
+    // `Routine` only. A `Boundary` write is watched *because* of where it lands
+    // — the control surface sits outside the repository by nature — so placing
+    // it outside must never be what waves it through.
+    if how == Sensitivity::Routine && writes_outside_the_claim(run, action) {
+        return Decision::Outside(Aside::OutsideTheClaim);
     }
 
     // Asked in this process. This was the last call in the crate that spawned

@@ -18,6 +18,29 @@ the workflow, it holds the tools.
   JSON-RPC rather than `rmcp`: the same binary answers a `PreToolUse` hook on
   every edit, so an async runtime per process is a cost paid thousands of times
   to move a few lines of JSON across a pipe.
+- A claim governs a repository, not the machine. The gate classified writes by the checkout the hook
+  was invoked in and never by the **path being written**, so a scratch note or an agent's own memory
+  store, written from inside a claimed repository, was a repository write — and once the issue closed
+  on merge it was refused with *issue is CLOSED*, at the exact moment a run had a delivery to write
+  down. A write whose path lies outside every checkout the claim covers now stands aside as
+  `outside-the-claim`, decided before the tracker is asked so the issue's state never reaches it. It
+  is deliberately narrow: only an absolute path, only a run that covers something, and only a
+  `Routine` write — the control surface sits outside the repository by nature, and watching it is the
+  defence against an agent switching the gate off with the tool it uses most. `gh`'s hosts file joins
+  that surface in the same change: it decides which account every tracker call acts as, so it is a
+  boundary write in both spellings rather than something the stand-aside carries past. The answer is
+  given after the contract check, not before it, so outside the renewal window *an unreadable control
+  surface permits no write* reaches it as it reaches everything else; inside the window nothing is
+  consulted, which is older than this change. A path that **lands** anywhere other than a drive is
+  declined rather than placed, and a declined path reads as inside. Windows serves every local drive
+  as an administrative share, so `\\localhost\C$\repo\src\main.rs` against `C:\repo\...` is one file
+  under two spellings, which stood the gate aside for a write that landed inside the claim. Judging
+  the landing rather than the spelling is what also covers a drive letter mapped onto that share, and
+  a directory link pointing at it: both arrive wearing a drive and resolve onto the share anyway. A
+  share is the only non-drive landing anyone has produced — the device namespaces read as though they
+  would be another, and `\\.\C:\Windows`, `\\?\Volume{...}\Windows` and
+  `\\?\GLOBALROOT\Device\HarddiskVolume3\Windows` all resolve to `C:\Windows`, so they place normally
+  and a write through one of them outside every checkout now stands aside where it used to be gated.
 - A refusal can now say that it already wrote. The outcome an agent is told was derived from the exit
   code alone, so every stop reported *nothing was written* — including `publish_review` refusing a
   closing keyword after it had pushed the branch and opened the pull request, which left both

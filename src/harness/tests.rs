@@ -175,19 +175,19 @@ fn every_gated_spelling_has_a_command_line_written_out() {
 /// also the one built out of a `Debug` rendering — which is not an interface:
 /// rename the variant and a caller reads something else with nothing said.
 ///
-/// Crossed over the four, because a code is only useful if it is stable, whole
+/// Crossed over the five, because a code is only useful if it is stable, whole
 /// and distinct: kebab-case like every refusal code, one per reason, and none
 /// of them the Rust spelling.
 #[test]
 fn every_reason_for_standing_aside_has_a_stable_name() {
-    let asides = [
-        Aside::NotWatched,
-        Aside::NothingSworn,
-        Aside::NoTracker,
-        Aside::AnotherCheckout,
-    ];
+    // Walked from the enum's own list rather than from a copy here, which is
+    // what went stale: a fifth reason was added and this test went on checking
+    // four, so two asides could have shared a code and one could have carried no
+    // sentence, with the suite green.
+    let asides = Aside::ALL;
     let mut seen = std::collections::BTreeSet::new();
-    for aside in asides {
+    let mut sentences = std::collections::BTreeSet::new();
+    for aside in asides.iter().copied() {
         let code = aside.code();
         assert!(
             !code.is_empty() && code.chars().all(|c| c.is_ascii_lowercase() || c == '-'),
@@ -199,8 +199,43 @@ fn every_reason_for_standing_aside_has_a_stable_name() {
             "the code is the Rust identifier, which changes when the variant is renamed"
         );
         assert!(seen.insert(code), "`{code}` names two reasons");
+        // And the sentence, which is the half a program does not read and a
+        // person does. An empty one tells an agent nothing about why the
+        // harness stood aside.
+        let sentence = aside.why("Write");
+        assert!(
+            sentence.contains("Write") && sentence.len() > 40,
+            "`{code}` stands aside without saying why: {sentence:?}"
+        );
+        assert!(
+            sentences.insert(sentence.clone()),
+            "`{code}` reuses another reason's sentence: {sentence:?}"
+        );
     }
     assert_eq!(seen.len(), asides.len(), "a reason lost its name");
+
+    // And the population itself, read out of the source rather than trusted.
+    // `ALL` is hand-written, so the way it goes stale is a variant that gains a
+    // code and never joins the list — measured: that leaves two asides able to
+    // share a code and one able to carry no sentence, with the suite green.
+    let source = include_str!("mod.rs");
+    let body = source
+        .split_once("pub fn code(self) -> &'static str {")
+        .expect("the code map exists")
+        .1
+        .split_once(
+            "
+    }",
+        )
+        .expect("the code map ends")
+        .0;
+    let arms = body.matches("Self::").count();
+    assert_eq!(
+        arms,
+        asides.len(),
+        "`code` answers for {arms} reasons and `ALL` lists {}; one is checked by nothing",
+        asides.len()
+    );
 }
 
 #[test]
@@ -2641,4 +2676,776 @@ fn a_claim_covers_the_work_happening_below_the_checkout_root() {
         Decision::Outside(Aside::AnotherCheckout),
         "a sibling sharing a prefix was read as living inside"
     );
+}
+
+/// A write outside every checkout the claim covers is not the claim's business.
+///
+/// Measured in the field: after an issue auto-closed on merge, the gate refused
+/// writes to a scratch directory and to the agent's own memory store, each with
+/// *issue #164 is CLOSED*. Neither can affect the tracker. What it produced is
+/// the outcome the harness exists to prevent — a delivery whose evidence could
+/// not be written down — and it teaches an operator to reach around the gate,
+/// which is worse than no gate.
+///
+/// The cause is that nothing classified the **path being written**:
+/// `AnotherCheckout` compares the checkout the hook was invoked in, not the
+/// file. So a scratch path, written from inside the claimed repository, was a
+/// repository write.
+///
+/// Deliberately narrow, because standing aside is a statement and an unknown is
+/// not one. It stands aside only when the target is an absolute path that no
+/// covered checkout contains. A shell verb — `writes_a_file` answers *"a
+/// redirect into a file"*, not a path — is not absolute, so it stays gated, and
+/// so does anything the classifier marked `Boundary`: the control surface lives
+/// outside the repository by nature, and the whole reason it is watched is that
+/// an agent could switch the gate off with it.
+#[test]
+fn a_write_outside_every_covered_checkout_is_outside_the_claim() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    let scratch = root.path().join("scratch").join("note.md");
+    let run = sworn(164, &repo);
+
+    assert!(
+        writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: scratch.display().to_string()
+            }
+        ),
+        "a scratch path no checkout contains was read as a repository write"
+    );
+    // The agent's own store, the other path the field report names.
+    assert!(writes_outside_the_claim(
+        &run,
+        &Action::Write {
+            target: root
+                .path()
+                .join("memory")
+                .join("note.md")
+                .display()
+                .to_string(),
+        }
+    ));
+
+    // Inside the claimed checkout: unchanged, and the closed-issue refusal that
+    // this is about must go on reaching it.
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: repo.join("src").join("main.rs").display().to_string()
+            }
+        ),
+        "a write inside the claimed repository was waved through"
+    );
+
+    // What the shell classifier answers is a verb, not a path. Not knowing
+    // where a write lands is not knowing it lands outside.
+    for verb in ["a redirect into a file", "rm", "mv"] {
+        assert!(
+            !writes_outside_the_claim(
+                &run,
+                &Action::Write {
+                    target: verb.to_owned()
+                }
+            ),
+            "{verb:?} is not a path and was treated as one"
+        );
+    }
+    // A relative path is not one this can place either.
+    assert!(!writes_outside_the_claim(
+        &run,
+        &Action::Write {
+            target: "src/main.rs".to_owned()
+        }
+    ));
+
+    // A run that covers nothing has no claim to be outside of.
+    let mut nowhere = Run::new("claude-abcd1234".to_owned());
+    nowhere.issue = Some(164);
+    assert!(!writes_outside_the_claim(
+        &nowhere,
+        &Action::Write {
+            target: scratch.display().to_string()
+        }
+    ));
+}
+
+/// The state of the issue does not reach a write the claim does not cover.
+///
+/// This is the ordering the field report is about: the refusal that fired was
+/// the tracker's — *issue #164 is CLOSED* — so the fix is worth nothing unless
+/// the classification happens **before** the tracker is asked.
+///
+/// The contract is installed here, and that is the half of the ordering this
+/// fixture got wrong first time round. It was passing on a sandbox with no
+/// `SKILL.md` in it, which made the answer proof of something weaker than it
+/// looked: the classification only had to outrank `control-surface-not-installed`,
+/// and it did, which is precisely the ordering that had to be given up. With a
+/// readable contract the `Outside` can only have come from a decision taken
+/// before the tracker, which is what the issue is about.
+///
+/// The run's state says `done`, which is the shape a run has after the delivery
+/// that closed its issue — the exact moment the evidence still has to be
+/// written down.
+#[test]
+fn a_closed_issue_does_not_refuse_a_scratch_note() {
+    let root = tempfile::tempdir().expect("a root");
+    let context = context(root.path());
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
+    let mut run = sworn(164, &context.repo_dir);
+    run.state = Some("done".to_owned());
+    let scratch = root.path().join("scratch").join("close-note.md");
+
+    let decision = decide(
+        &context,
+        &mut run,
+        &Action::Write {
+            target: scratch.display().to_string(),
+        },
+        Sensitivity::Routine,
+    );
+    assert!(
+        matches!(decision, Decision::Outside(Aside::OutsideTheClaim)),
+        "a scratch note was gated on the issue's state: {decision:?}"
+    );
+
+    // And the defence that must survive it: a boundary write is watched for
+    // where it lands, so landing outside cannot be what excuses it.
+    let boundary = decide(
+        &context,
+        &mut run,
+        &Action::Write {
+            target: scratch.display().to_string(),
+        },
+        Sensitivity::Boundary,
+    );
+    assert!(
+        !matches!(boundary, Decision::Outside(Aside::OutsideTheClaim)),
+        "a boundary write was waved through for being outside the repository"
+    );
+}
+
+/// A write that lands inside the claim is gated however it is spelled.
+///
+/// Two judges built this from opposite ends and it is one defect: the
+/// comparison resolved a path with `canonicalize().unwrap_or_else(literal)`,
+/// and a write target usually does not exist yet, so the two sides of the
+/// comparison were in different vocabularies.
+///
+/// - `<root>/decoy/../repo/src/main.rs` compared literally is not inside
+///   `<root>/repo` — and `std::fs::write` to that string lands there.
+/// - a checkout reached through a junction resolves on the covered side and not
+///   on the target side, so a **new** file inside it read as outside while an
+///   existing one read as inside. Whether the file is there yet decided whether
+///   the gate applied.
+///
+/// Both took a repository write out of the gate, which is what issue 2 puts out
+/// of scope, so both are measured here against a real filesystem.
+#[test]
+fn a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("a checkout");
+    let run = sworn(164, &repo);
+
+    // Through a `..` that climbs back in. Written, then read back, so the
+    // assertion is about where it lands rather than about what it says.
+    // Asked **before** the file exists, which is the whole of the attack: a
+    // write target that is already there canonicalises, and the defect only
+    // shows on one that does not. An earlier version of this test wrote the
+    // file first and passed against the broken code.
+    //
+    // `decoy` has to exist, and that is a platform difference rather than
+    // tidiness. Windows collapses `..` in the spelling before the filesystem is
+    // consulted, so the write lands whether or not the directory is there;
+    // POSIX resolves each segment, and `decoy/..` on a directory that does not
+    // exist is `ENOENT`. Without it this fixture is green here and red on both
+    // POSIX lanes, which is what it did. `docs/honesty.md` carries the history —
+    // how long that lasted and what it cost — and this comment does not repeat
+    // any of it, having twice now got the count wrong in the retelling.
+    std::fs::create_dir_all(root.path().join("decoy")).expect("a directory to climb out of");
+    let sideways = root
+        .path()
+        .join("decoy")
+        .join("..")
+        .join("repo")
+        .join("src")
+        .join("main.rs");
+    assert!(
+        !sideways.exists(),
+        "the fixture must ask about a file that is not there yet"
+    );
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: sideways.display().to_string()
+            }
+        ),
+        "a write that lands in the claimed checkout was taken out of the gate by a `..`"
+    );
+    // Then written, so the claim about where it lands is measured and not read.
+    std::fs::write(&sideways, "landed\n").expect("the spelling really does write there");
+    assert!(
+        repo.join("src").join("main.rs").is_file(),
+        "the fixture does not reproduce the spelling it is about"
+    );
+
+    // A path that climbs past the root cannot be placed, and unplaceable is
+    // read as inside.
+    let mut climbing = std::path::PathBuf::from(&repo);
+    for _ in 0..64 {
+        climbing.push("..");
+    }
+    climbing.push("escaped.md");
+    assert!(!writes_outside_the_claim(
+        &run,
+        &Action::Write {
+            target: climbing.display().to_string()
+        }
+    ));
+
+    // And a scratch path, which is the case the feature exists for: outside,
+    // even though the file does not exist yet either.
+    assert!(writes_outside_the_claim(
+        &run,
+        &Action::Write {
+            target: root
+                .path()
+                .join("scratch")
+                .join("note.md")
+                .display()
+                .to_string()
+        }
+    ));
+}
+
+/// The same defect through a junction, which is a link and not a spelling.
+///
+/// Skipped where the platform will not make one — a skip that says so is honest;
+/// a green that ran nothing is the thing this crate keeps finding.
+#[test]
+fn a_new_file_inside_a_linked_checkout_is_gated() {
+    let root = tempfile::tempdir().expect("a root");
+    let real = root.path().join("real").join("repo");
+    std::fs::create_dir_all(real.join("src")).expect("a checkout");
+    let link = root.path().join("link");
+
+    #[cfg(windows)]
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(&link)
+        .arg(&real)
+        .output()
+        .is_ok_and(|out| out.status.success());
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(&real, &link).is_ok();
+    if !made {
+        eprintln!("skipped: this platform would not create a directory link");
+        return;
+    }
+
+    // The claim covers the link spelling, which is how a worktree given to a
+    // run is usually named.
+    let run = sworn(164, &link);
+    let existing = link.join("src").join("kept.rs");
+    std::fs::write(&existing, "kept\n").expect("an existing file");
+
+    for (what, target) in [
+        ("a new file", link.join("src").join("new.rs")),
+        ("an existing file", existing),
+    ] {
+        assert!(
+            !writes_outside_the_claim(
+                &run,
+                &Action::Write {
+                    target: target.display().to_string()
+                }
+            ),
+            "{what} inside the linked checkout was taken out of the gate"
+        );
+    }
+}
+
+/// A link whose target is inside the checkout is a write inside the checkout.
+///
+/// The classification walked up past an entry that would not resolve, treating
+/// *"nothing here"* and *"something here that dangles"* as the same answer. So a
+/// symlink at `<outside>/alias.rs` pointing at `<repo>/src/planted.rs` — whose
+/// target does not exist yet, which is the ordinary shape of a write — was
+/// placed at its own spelling and read as outside. Writing through it created
+/// the file inside the claimed checkout.
+///
+/// The same defect as the junction, one level down: whether the thing is there
+/// yet decided whether the gate applied.
+#[test]
+fn a_link_pointing_into_the_checkout_is_gated() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("a checkout");
+    let outside = root.path().join("outside");
+    std::fs::create_dir_all(&outside).expect("a directory that is not the checkout");
+
+    let planted = repo.join("src").join("planted.rs");
+    let alias = outside.join("alias.rs");
+    #[cfg(windows)]
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink"])
+        .arg(&alias)
+        .arg(&planted)
+        .output()
+        .is_ok_and(|out| out.status.success());
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(&planted, &alias).is_ok();
+    if !made {
+        eprintln!("skipped: this platform would not create a file link");
+        return;
+    }
+
+    let run = sworn(164, &repo);
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: alias.display().to_string()
+            }
+        ),
+        "a link whose target is inside the claimed checkout was taken out of the gate"
+    );
+    // And the reason it matters, measured rather than argued.
+    std::fs::write(&alias, "planted\n").expect("the link really does write through");
+    assert!(
+        planted.is_file(),
+        "the fixture does not reproduce the link it is about"
+    );
+}
+
+/// An unreadable control surface permits no write, including one to stand aside.
+///
+/// The contract's rule is written without an exception, and standing aside is a
+/// permission like any other. For one published head this classification was
+/// asked first, so with no `SKILL.md` installed a routine write outside every
+/// checkout went through with nothing consulted at all — and the files that are
+/// outside every checkout by construction are the agent instruction files that
+/// carry the directive naming this harness as the authority.
+///
+/// This is the fixture the move needed: put the classification back above the
+/// contract refusal and this goes red, which is what stops the ordering
+/// drifting back the way it came.
+#[test]
+fn an_unreadable_control_surface_refuses_even_a_write_outside_the_claim() {
+    let root = tempfile::tempdir().expect("a root");
+    let mut context = context(root.path());
+    // Nothing installed: not the contract, not the directory holding it.
+    context.skill_root = root.path().join("never-installed");
+    let mut run = sworn(166, &context.repo_dir);
+    run.state = Some("done".to_owned());
+    let outside = root.path().join("elsewhere").join("note.md");
+
+    let decision = decide(
+        &context,
+        &mut run,
+        &Action::Write {
+            target: outside.display().to_string(),
+        },
+        Sensitivity::Routine,
+    );
+    let Decision::Deny(refusal) = &decision else {
+        panic!("a write was permitted while the control surface was unreadable: {decision:?}");
+    };
+    assert_eq!(
+        refusal.code, "control-surface-not-installed",
+        "the refusal was not the contract's: {decision:?}"
+    );
+}
+
+/// A second name for the same drive does not take a write out of the gate.
+///
+/// Windows serves every local drive as an administrative share, so
+/// `\\localhost\C$\Users\...` is the very same file as `C:\Users\...` with no
+/// link anywhere in it. A judge measured what that costs: the classification
+/// answered *outside* and `std::fs::write` on that spelling created the file
+/// **inside** the claimed checkout — a gate that no longer decides, reachable
+/// on the operator's own repository as `\\localhost\H$\REPO\estigia`.
+///
+/// The cause is not the share, it is the vocabulary. `canonicalize` hands back
+/// `\\?\UNC\localhost\C$\...` for the target while the covered checkout places
+/// to `C:\...`, so one file is compared under two spellings and neither is a
+/// prefix of the other. Resolving a share back to the drive it serves is not
+/// something this process can do without asking the machine what it shares, so
+/// `placed` declines the path instead — and declining reads as *inside*, which
+/// is the direction that keeps the gate on.
+#[test]
+#[cfg(windows)]
+fn a_drive_reached_through_its_administrative_share_is_still_inside() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("a checkout");
+
+    let planted = repo.join("src").join("planted.rs");
+    std::fs::write(&planted, "kept\n").expect("a file inside the checkout");
+    let full = planted.canonicalize().expect("the planted file resolves");
+    let spelled = crate::paths::remove_windows_verbatim_prefix(full)
+        .display()
+        .to_string();
+    let Some((drive, rest)) = spelled.split_once(':') else {
+        eprintln!("skipped: the temporary directory has no drive letter");
+        return;
+    };
+    let share = format!(r"\\localhost\{drive}${rest}");
+
+    // The share has to really be the same file, or this test is about nothing.
+    if std::fs::write(&share, "through the share\n").is_err() {
+        eprintln!("skipped: this machine does not serve its drives as admin shares");
+        return;
+    }
+    assert_eq!(
+        std::fs::read_to_string(&planted).expect("the planted file is readable"),
+        "through the share\n",
+        "the fixture does not reproduce the share it is about"
+    );
+
+    let run = sworn(165, &repo);
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: share.clone()
+            }
+        ),
+        "a write spelled through the administrative share was taken out of the \
+         gate, and it lands inside the claimed checkout: {share}"
+    );
+}
+
+/// The spelling handed in is not where the write lands, and it is the landing
+/// that decides.
+///
+/// The first attempt at the rule above rejected a path whose **first component**
+/// named something other than a drive. That reads the vocabulary of the input,
+/// and `canonicalize` is free to answer in a different one: a drive letter
+/// mapped onto the administrative share (`net use Y: \\localhost\C$`) is
+/// `Disk`-prefixed going in and comes back `\\localhost\C$\...`, so it passed
+/// the check and then failed the comparison exactly as the unspelled share had.
+/// A reviewer measured it on this machine with one `net use`.
+///
+/// This fixture reaches the same landing without changing anything outside the
+/// temporary directory: a **directory symlink** whose target is the share. The
+/// path through it is `C:\...\link\src\planted.rs` — a drive, by any reading of
+/// the spelling — and it resolves onto the share all the same.
+#[test]
+#[cfg(windows)]
+fn a_drive_that_resolves_onto_a_share_is_still_inside() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("a checkout");
+    let planted = repo.join("src").join("planted.rs");
+    std::fs::write(&planted, "kept\n").expect("a file inside the checkout");
+
+    let real = repo.canonicalize().expect("the checkout resolves");
+    let spelled = crate::paths::remove_windows_verbatim_prefix(real)
+        .display()
+        .to_string();
+    let Some((drive, rest)) = spelled.split_once(':') else {
+        eprintln!("skipped: the temporary directory has no drive letter");
+        return;
+    };
+    let share = format!(r"\\localhost\{drive}${rest}");
+
+    let link = root.path().join("link");
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/D"])
+        .arg(&link)
+        .arg(&share)
+        .output()
+        .is_ok_and(|out| out.status.success());
+    if !made {
+        eprintln!("skipped: this machine would not link a directory onto its own share");
+        return;
+    }
+
+    // It has to really be the same file, or this test is about a string.
+    let through = link.join("src").join("planted.rs");
+    if std::fs::write(&through, "through the link\n").is_err() {
+        eprintln!("skipped: this machine does not serve its drives as admin shares");
+        return;
+    }
+    assert_eq!(
+        std::fs::read_to_string(&planted).expect("the planted file is readable"),
+        "through the link\n",
+        "the fixture does not reproduce the share it is about"
+    );
+
+    let run = sworn(167, &repo);
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: through.display().to_string()
+            }
+        ),
+        "a write whose drive-lettered spelling resolves onto a share was taken \
+         out of the gate, and it lands inside the claimed checkout: {}",
+        through.display()
+    );
+}
+
+/// The covered checkout is resolved the same way the target is.
+///
+/// `covers` leaves a path it cannot canonicalise literal. A covered checkout
+/// that is not on disk — or one reached through a link, which is what macOS
+/// hands every temporary directory as `/var/folders` against `/private/var` —
+/// left the two sides of the comparison in different vocabularies, and a write
+/// **into** the checkout read as outside. This crate had already measured that
+/// asymmetry one module over, in `transport::branch`'s own note about 8.3 names
+/// and `/private/var`.
+#[test]
+fn a_checkout_reached_by_another_name_still_covers_its_own_writes() {
+    let root = tempfile::tempdir().expect("a root");
+    let real = root.path().join("real");
+    std::fs::create_dir_all(real.join("repo").join("src")).expect("a checkout");
+    let alias = root.path().join("alias");
+
+    #[cfg(windows)]
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(&alias)
+        .arg(&real)
+        .output()
+        .is_ok_and(|out| out.status.success());
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(&real, &alias).is_ok();
+    if !made {
+        eprintln!("skipped: this platform would not create a directory link");
+        return;
+    }
+
+    // The claim names one spelling and the write names the other, in both
+    // directions — neither is more correct than the other, and a run is handed
+    // whichever its worktree was created under.
+    for (claimed, written) in [(&alias, &real), (&real, &alias)] {
+        let run = sworn(164, &claimed.join("repo"));
+        let target = written.join("repo").join("src").join("new.rs");
+        assert!(
+            !writes_outside_the_claim(
+                &run,
+                &Action::Write {
+                    target: target.display().to_string()
+                }
+            ),
+            "a write into the claimed checkout read as outside it, claimed as {}, written as {}",
+            claimed.display(),
+            written.display()
+        );
+    }
+
+    // The case that makes the asymmetry visible on a machine whose temporary
+    // directory is already canonical — which is most Windows boxes, and is why
+    // this was green here and would have been red on the `macos-latest` lane.
+    // The covered checkout does not exist, so `covers` keeps it literal, while
+    // the target resolves through the link. Two vocabularies, one path.
+    let unborn = alias.join("never-created");
+    let absent = sworn(164, &unborn);
+    assert!(
+        !writes_outside_the_claim(
+            &absent,
+            &Action::Write {
+                target: unborn.join("x.rs").display().to_string()
+            }
+        ),
+        "a write into a covered checkout that is not on disk yet read as outside it"
+    );
+}
+
+/// `..` after a link lands where the platform says, not where the spelling does.
+///
+/// The fourth door onto one defect, and the one that showed the premise was
+/// wrong rather than the enumeration incomplete. The collapse was lexical, on
+/// the grounds that *`..` is a spelling and not a boundary* — true on Windows,
+/// whose own path resolver collapses it before touching the filesystem, and
+/// false on POSIX, which follows the link first and then applies `..` to what it
+/// resolved to.
+///
+/// So `<outside>/dlink/../planted.rs`, with `dlink` pointing at `<repo>/src`,
+/// reads lexically as `<outside>/planted.rs` and lands at `<repo>/planted.rs`.
+/// A repository write, with the gate standing aside, on the four POSIX targets
+/// this crate ships.
+///
+/// Unix only, because on Windows the lexical reading **is** the landing and the
+/// same fixture would be asserting the opposite. A skip that says so is honest;
+/// the platform difference is the subject.
+#[cfg(unix)]
+#[test]
+fn a_parent_segment_after_a_link_is_resolved_the_way_posix_resolves_it() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).expect("a checkout");
+    let outside = root.path().join("outside");
+    std::fs::create_dir_all(&outside).expect("a directory that is not the checkout");
+
+    let link = outside.join("dlink");
+    std::os::unix::fs::symlink(repo.join("src"), &link).expect("a link into the checkout");
+
+    let run = sworn(164, &repo);
+    let spelled = link.join("..").join("planted.rs");
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: spelled.display().to_string()
+            }
+        ),
+        "a write that lands in the claimed checkout was taken out of the gate by `..` after a link"
+    );
+
+    // Measured rather than argued: this is where the platform puts it.
+    std::fs::write(&spelled, "planted\n").expect("the spelling really does write there");
+    assert!(
+        repo.join("planted.rs").is_file(),
+        "the fixture does not reproduce the resolution order it is about"
+    );
+}
+
+/// A covered checkout this process cannot place rules nothing out.
+///
+/// `placed` answers `None` for a path with a component that is there and will
+/// not resolve. Applied to the **covered** side that has to mean *cannot be
+/// ruled out* — inside — and the arm saying so was unmeasured: reversing it, so
+/// an unplaceable checkout covers nothing and every write into it stands aside,
+/// left the whole suite green.
+#[test]
+fn a_covered_checkout_that_cannot_be_placed_still_covers() {
+    let root = tempfile::tempdir().expect("a root");
+    let broken = root.path().join("dangling");
+    #[cfg(windows)]
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(&broken)
+        .arg(root.path().join("never-created"))
+        .output()
+        .is_ok_and(|out| out.status.success());
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(root.path().join("never-created"), &broken).is_ok();
+    if !made {
+        eprintln!("skipped: this platform would not create a dangling link");
+        return;
+    }
+    assert!(
+        crate::paths::placed(&broken).is_none(),
+        "the fixture does not reproduce an unplaceable path"
+    );
+
+    // The target has to be placeable, or the early return for an unplaceable
+    // *target* answers first and the covered arm is never reached — which is
+    // what an earlier version of this fixture did, leaving the mutant alive.
+    let elsewhere = root.path().join("scratch").join("note.md");
+    assert!(
+        crate::paths::placed(&elsewhere).is_some(),
+        "the fixture must ask about a target this process can place"
+    );
+
+    let run = sworn(164, &broken);
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: elsewhere.display().to_string()
+            }
+        ),
+        "a run whose covered checkout cannot be placed had a write waved through"
+    );
+}
+
+/// And the same parent segment on Windows, which resolves it the other way.
+///
+/// The `cfg!(unix)` split is load-bearing on **both** sides and only one had a
+/// fixture: flipping it to `true` left the entire Windows suite green, while a
+/// junction plus `..` then placed the write outside a checkout it lands in.
+/// Windows collapses `..` before touching the filesystem, so the spelling *is*
+/// the landing here — and asserting POSIX's answer on this platform removes the
+/// gate exactly as asserting Windows' answer removed it there.
+#[cfg(windows)]
+#[test]
+fn a_parent_segment_after_a_link_is_resolved_the_way_windows_resolves_it() {
+    let root = tempfile::tempdir().expect("a root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("a checkout");
+    let outside = root.path().join("outside");
+    std::fs::create_dir_all(&outside).expect("a directory that is not the checkout");
+
+    // The link lives **inside** the checkout and points out of it. Windows pops
+    // the `..` lexically, so the write lands back inside; POSIX would follow the
+    // link first and land outside.
+    let link = repo.join("link");
+    let made = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(&link)
+        .arg(&outside)
+        .output()
+        .is_ok_and(|out| out.status.success());
+    if !made {
+        eprintln!("skipped: this platform would not create a directory link");
+        return;
+    }
+
+    let run = sworn(164, &repo);
+    let spelled = link.join("..").join("planted.rs");
+    assert!(
+        !writes_outside_the_claim(
+            &run,
+            &Action::Write {
+                target: spelled.display().to_string()
+            }
+        ),
+        "a write that lands in the claimed checkout was taken out of the gate by `..` after a link"
+    );
+
+    std::fs::write(&spelled, "planted\n").expect("the spelling really does write there");
+    assert!(
+        repo.join("planted.rs").is_file(),
+        "the fixture does not reproduce the resolution order it is about"
+    );
+}
+
+/// `gh`'s hosts file is a boundary write on both spellings and both roads.
+///
+/// It is the one path issue 2 asked to be **named** rather than left in a
+/// class, because it decides which account every tracker call acts as. Nothing
+/// held it: deleting both entries from `CONTROL_SURFACE` left every suite green,
+/// and only the population fingerprint moved — which fires on any byte in the
+/// list and measures no behaviour.
+///
+/// Both roads, because the first attempt covered only one. `surface_of` splits a
+/// command on whitespace and appends `/` to each token, so a fragment carrying a
+/// space could never fire through the shell: the Windows spelling answered
+/// `Boundary` to the write tool and `Routine` to `rm`, which is the road an
+/// agent would actually take.
+#[test]
+fn the_hosts_file_that_names_the_account_is_a_boundary_on_both_roads() {
+    for path in [
+        "/home/somebody/.config/gh/hosts.yml",
+        r"C:\Users\somebody\AppData\Roaming\GitHub CLI\hosts.yml",
+    ] {
+        let (_, write) = classify("Write", &json!({ "file_path": path }));
+        assert_eq!(
+            write,
+            Sensitivity::Boundary,
+            "{path} is not measured when written through the write tool"
+        );
+        for verb in ["rm", "mv"] {
+            let (_, shell) = classify("Bash", &json!({ "command": format!("{verb} \"{path}\"") }));
+            assert_eq!(
+                shell,
+                Sensitivity::Boundary,
+                "{path} is not measured when reached through `{verb}`"
+            );
+        }
+    }
 }

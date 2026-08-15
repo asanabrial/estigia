@@ -1202,7 +1202,7 @@ fn the_inventory_covers_every_code_the_crate_raises() {
         // translation against a real answer shape — including this one, at
         // `tracker.rs`'s own assertion on the code.
         "transport-refused",
-        // The four reasons the gate stands **aside**, which are not refusals at
+        // The five reasons the gate stands **aside**, which are not refusals at
         // all: nothing is refused, nothing is written, and the caller is told
         // Estigia has no authority over what it asked. They are spelled like
         // codes because `gate --json` publishes them and a program matches on
@@ -1213,6 +1213,7 @@ fn the_inventory_covers_every_code_the_crate_raises() {
         "nothing-sworn",
         "no-tracker",
         "another-checkout",
+        "outside-the-claim",
     ];
     // The exemption, checked rather than asserted. A carve-out that names a code
     // nothing raises, or one whose shape nobody ever looked at, is a code the
