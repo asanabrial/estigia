@@ -541,7 +541,7 @@ const NEUTRALISES_A_FILE: &[&str] = &["chmod ", "chattr ", "chown "];
 /// `.cursor/estigia-workflow-authority.md` — so folding it would cut them in
 /// half and lose them outright. The option prefix it belongs to is handled in
 /// `surface_of` as a prefix rather than as punctuation.
-const NOT_IN_A_PATH_SEGMENT: &str = "\"'`<>=|;&()$*,{}%";
+const NOT_IN_A_PATH_SEGMENT: &str = "\"'`<>=|;&()$*,{}%^";
 
 /// How sensitive a command line is, by what it names.
 ///
@@ -618,21 +618,36 @@ fn surface_of(command: &str) -> Sensitivity {
     // between the separator and the fragment exactly as they did unquoted. A
     // reviewer measured 38 of those, plus the batch idiom `%~dp0.estigia\…`,
     // which is why `~` is here beside `-`.
-    for token in command.split_whitespace() {
+    // Each rung is asked **on its own**, never appended to the view. Pushing them
+    // into one string let adjacent rungs concatenate into a path that was never
+    // in the command: the ladder for `~/.claude` is `.claude/claude/laude/…`, and
+    // `.claude/claude` is ClaudeCode's derived instruction fragment, so a
+    // recursive delete of the home config directory answered `Boundary` for a
+    // path nobody wrote — and so did `~/backup.claude` and `-obackup.claude`. A
+    // reviewer measured it, and it had already made a paragraph of
+    // `docs/honesty.md` false about the very directories it was declaring open.
+    // `.agents/agents` has the same `A/A[1..]` shape and did the same thing.
+    let ladder = |token: &str| {
         let folded = fold(token);
         let starts_a_segment = |at: usize| at == 0 || folded.as_bytes()[at - 1] == b'/';
-        for (at, byte) in folded.bytes().enumerate() {
-            if (byte == b'-' || byte == b'~') && starts_a_segment(at) {
-                for cut in at + 1..folded.len() {
-                    if folded.is_char_boundary(cut) {
-                        view.push_str(&normalise(&folded[cut..]));
-                        view.push('/');
-                    }
-                }
-            }
-        }
-    }
-    if matches_a_fragment(&view) {
+        folded
+            .bytes()
+            .enumerate()
+            .filter(|&(at, byte)| (byte == b'-' || byte == b'~') && starts_a_segment(at))
+            .flat_map(|(at, _)| {
+                (at + 1..folded.len())
+                    .filter(|cut| folded.is_char_boundary(*cut))
+                    .map(|cut| format!("/{}/", normalise(&folded[cut..])))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    };
+    if matches_a_fragment(&view)
+        || command
+            .split_whitespace()
+            .flat_map(ladder)
+            .any(|rung| matches_a_fragment(&rung))
+    {
         Sensitivity::Boundary
     } else {
         Sensitivity::Routine

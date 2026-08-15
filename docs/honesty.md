@@ -309,7 +309,20 @@ suite. Everything else here is prose held by review.
      `7z x a.7z '-o.estigia/run.json'`, 38 measured. Quoting `-o<dir>` is the documented 7-Zip habit
      for the reason the rule exists — the directory may hold a space. `%~dp0` expands *with* a
      trailing separator, so `%~dp0.estigia\run.json` is the correct batch idiom and puts a digit where
-     the anchoring wants one; `%` joined the folded set and `~` joined `-` as a prefix marker.
+     the anchoring wants one; `%` joined the folded set and `~` joined `-` as a prefix marker. The
+     caret joined the set on the same round: under `cmd.exe` `^` escapes the next character, so
+     `del ^.estigia\run.json` names the state directory. It was the one character of 660 a reviewer
+     swept where the base's answer was right for a reason rather than by accident — `!`, `#`, `@`, `[`
+     and the rest name different files, and head stopped gating those on purpose.
+  7. **Ask each rung of the ladder on its own.** The suffixes were appended into one view, separated
+     by the same character that separates path segments, so adjacent rungs concatenated into a path
+     that was never in the command. The ladder for `~/.claude` is `.claude/claude/laude/…`, and
+     `.claude/claude` is ClaudeCode's derived instruction fragment — so a recursive delete of the home
+     config directory answered `Boundary` for a path nobody wrote, and so did `~/backup.claude`,
+     `~/notes.agents` and `-obackup.claude`. `.agents/agents` has the same `A/A[1..]` shape and did the
+     same. Introduced by the sixth, found by a reviewer, and it had already made the
+     containing-directories paragraph below false about the very directories that paragraph declares
+     open.
 
   `7z` is why the fourth is not optional: its extract-to spelling is `-oDIR`, a space there is a
   syntax error, and it is in `WRITES_A_FILE` deliberately — so the only correct way to write "extract
@@ -318,11 +331,11 @@ suite. Everything else here is prose held by review.
   Each attempt was measured against the base by a reviewer classifying raw command strings through
   the built binary, and each time the whole suite was green over the loss — because every fixture in
   this crate spelled its commands the way the last fix had taught it to. That is the same blind spot
-  **six** times: a narrowing nothing asserts, found by a reader who spells the command differently
+  **seven** times: a narrowing nothing asserts, found by a reader who spells the command differently
   than the fixture does. It is recorded at this length because the count is the finding, and the count
   is the honest summary of this work: anchoring a matcher against a shell is not one change. Each
   spelling that reaches a path is its own claim, the suite went green over every loss until somebody
-  wrote the spelling down, and two of the six were introduced by the fix for the one before it.
+  wrote the spelling down, and three of the seven were introduced by the fix for the one before it.
 
   What follows from that, and is not a claim this branch can settle: a seventh is likelier than not.
   The fixtures here hold the six spellings that were found, plus the sixteen folded characters and the
@@ -362,7 +375,7 @@ suite. Everything else here is prose held by review.
   backwards one commit before it was read.** It said the trailing half was not load-bearing. That was
   true when it was written and false as soon as the option-prefix rule landed, because the suffixes
   that rule offers are appended *after* the wrap: without the trailing separator the first suffix runs
-  straight into the folded line and the last segment of a command stops being a whole one. Three
+  straight into the folded line and the last segment of a command stops being a whole one. Eight
   fixtures redden without it now. Nobody re-measured the sentence when the code under it moved, which
   is the failure this document exists to catch, committed inside this document.
 
@@ -423,7 +436,7 @@ suite. Everything else here is prose held by review.
     `opencode/agents.md` are covered by the same over-gating fixture.
   - Four are silent, measured one at a time with the full suite: `.agents/agents` → `.agents/`,
     `.codex/agents` → `.codex/`, `.qwen/qwen.md` → `.qwen/` and `.cline/rules/estigia.md` →
-    `.cline/` each **leave all 1,158 tests green.** Nothing in this crate names a path under those
+    `.cline/` each **leave all 1,159 tests green.** Nothing in this crate names a path under those
     directories in the `Routine` direction. An earlier draft of this list said *one*, naming only
     qwen; a reviewer counted them.
 
@@ -439,7 +452,10 @@ suite. Everything else here is prose held by review.
   registered in, the workflow-authority directive, the agent definitions and the installed contract —
   answers `Routine`, and being outside every checkout it is answered by `outside-the-claim` before the
   tracker is asked. Identical at the base commit, so not a regression; recorded because *this* change
-  is what makes it matter, by moving thirteen files inside those directories to `Boundary` while the
+  is what makes it matter, and re-measured because for one head it was **false** — the suffix ladder
+  concatenated `.claude/claude` out of its own rungs and answered `Boundary` for `~/.claude`, so this
+  paragraph declared open a gap that was not open, in the spelling it writes here and in no other. A
+  reviewer measured it; a fixture holds the sentence now, by moving thirteen files inside those directories to `Boundary` while the
   directory around them stays open. It is not the declared hard-link limit — it is an ordinary path a
   shell writes. The shape that would close it already works next door: `~/.config/opencode` and
   `~/.estigia` are `Boundary` because those entries name the directory.

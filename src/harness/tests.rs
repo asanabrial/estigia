@@ -3545,6 +3545,60 @@ fn the_declared_over_gating_is_the_shape_the_document_names() {
     }
 }
 
+/// The suffix ladder does not build a path nobody wrote.
+///
+/// The rungs offered for a `-` or `~` prefixed token used to be appended into
+/// one view, one after another, separated by the same character that separates
+/// path segments. Adjacent rungs therefore concatenated: the ladder for
+/// `~/.claude` is `.claude/claude/laude/aude/…`, and `.claude/claude` is exactly
+/// ClaudeCode's derived instruction fragment. So a recursive delete of the home
+/// config directory answered `Boundary` for a path that was never in the
+/// command, and so did any `~`- or `-`-led token merely *ending* in `.claude` or
+/// `.agents` — `~/backup.claude`, `~/notes.agents`, `-obackup.claude`.
+/// `.agents/agents` has the same `A/A[1..]` shape and did the same thing.
+///
+/// A reviewer measured it, and it had already made a paragraph of
+/// `docs/honesty.md` false about the directories that paragraph was declaring
+/// open. Each rung is asked on its own now.
+#[test]
+fn the_suffix_ladder_does_not_synthesise_a_path() {
+    for line in [
+        // The containing directories the document declares `Routine`, in the
+        // spelling the document itself writes. This is the shape that was false.
+        "rm -rf ~/.claude",
+        "rm -rf ~/.agents",
+        "rm -rf ~/.codex",
+        "mv ~/.claude /tmp/x",
+        // A name that merely ends like a fragment, behind a prefix marker.
+        "rm -rf ~/backup.claude",
+        "cp -r ~/backup.claude /tmp/",
+        "rm -rf ~/projects/legacy.claude",
+        "rm -rf ~/notes.agents",
+        "7z x a.7z -obackup.claude",
+        "curl -sS https://x -o-.claude",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Routine,
+            "`{line}` answers boundary, and the ladder has built a path out of its own rungs"
+        );
+    }
+    // And the ladder still reaches what it is for.
+    for line in [
+        "7z x a.7z -o.estigia",
+        "wget -O.claude/settings.json https://x",
+        "rm -rf %~dp0.estigia/run.json",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and its option prefix is holding a control surface"
+        );
+    }
+}
+
 /// A later operand does not erase the surface named by an earlier one.
 ///
 /// The fifth loss on this road, and the worst, because the commands are the
@@ -3757,7 +3811,7 @@ fn an_option_prefix_does_not_gate_an_ordinary_line() {
 /// character, then the fragment — unreachable by the left anchoring unless the
 /// character folds to a separator.
 const FOLDED_CHARACTERS: &[char] = &[
-    '"', '\'', '`', '<', '>', '=', '|', ';', '&', '(', ')', '$', '*', ',', '{', '}', '%',
+    '"', '\'', '`', '<', '>', '=', '|', ';', '&', '(', ')', '$', '*', ',', '{', '}', '%', '^',
 ];
 
 #[test]
@@ -3794,7 +3848,7 @@ fn the_spelled_folded_characters_and_the_constant_agree() {
 /// option-prefix rule landed: the suffixes it offers are appended after the
 /// wrap, so without the trailing separator the first suffix runs straight into
 /// the folded line and the last segment of a command stops being a whole one.
-/// Three fixtures redden without it. An earlier draft of `docs/honesty.md` said
+/// Eight fixtures redden without it. An earlier draft of `docs/honesty.md` said
 /// it was not load-bearing — true when written, false one commit later, and
 /// nobody re-measured it. That is the failure this crate keeps paying for.
 ///
@@ -4087,9 +4141,11 @@ fn a_directory_entry_reaches_the_directory_itself_on_both_roads() {
 ///
 /// `.config/opencode/` covered everything under it. A first attempt at the
 /// `XDG_CONFIG_HOME` fix replaced it with three tails, and a reviewer measured
-/// what that quietly gave up: nine paths under that directory that Estigia does
-/// not write went `Boundary` to `Routine` — a loosening, presented in the entry
-/// as an over-gating fix. The directory entry is back beside the tails, which
+/// what that quietly gave up: what Estigia does not write under that directory
+/// went `Boundary` to `Routine` — a loosening, presented in the entry as an
+/// over-gating fix. No count, deliberately: three drafts said *nine* without
+/// anybody enumerating them, and `docs/honesty.md` retracted it while this
+/// comment kept it. One fact in two places is a fact that disagrees. The directory entry is back beside the tails, which
 /// cover the relocated case it could not.
 #[test]
 fn the_opencode_config_directory_is_still_covered_whole() {
