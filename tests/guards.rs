@@ -670,7 +670,7 @@ fn nothing_writes_a_file_another_program_reads_by_truncating_it() {
 /// stopped it coming back, and a reviewer said so: the fix was held by no test,
 /// so the base commit *is* the fix turned off and the suite is green there.
 ///
-/// This is that guard, and it holds three separate things, because reviewers
+/// This is that guard, and it holds four separate things, because reviewers
 /// walked past each of them in turn:
 ///
 /// 1. **The whole signature.** A prefix match let `-> TrackerRigMaybe`, aliased
@@ -680,20 +680,26 @@ fn nothing_writes_a_file_another_program_reads_by_truncating_it() {
 ///    `cargo test --release --target <triple>` — all six release lanes would have
 ///    hard-failed. Reverting that left the whole suite green, this guard
 ///    included, so it was a fix nothing held.
-/// 3. **One spelling of a caller-side skip**: the `return` keyword written in a
+/// 3. **Ending the process instead of failing.** `std::process::exit(0)` made
+///    cargo print no result line at all and exit 0 — worse than the defect this
+///    guard is about, which at least claimed 106 passed. Scoped to the rig at
+///    first, so a caller or a helper below it walked round; the whole file is the
+///    scope now.
+/// 4. **One spelling of a caller-side skip**: the `return` keyword written in a
 ///    test that reaches the rig. Not the skip itself — an earlier version of this
 ///    comment claimed that, and reviewers reproduced the whole defect through a
-///    macro, a labelled `break`, a caller-side `process::exit`, and a second test
-///    file, all with this green. `docs/honesty.md` lists them with their
-///    measurements.
+///    macro, a labelled `break`, and a second test file, all with this green.
+///    `docs/honesty.md` lists every route with its measurement and whether it is
+///    held.
 ///
 /// It reads source text rather than types because each of these compiles
 /// perfectly when it is wrong. **What holds the accidental path is the compiler**,
 /// not this: `let Some(rig) = tracker_rig()` does not compile against a
 /// non-`Option`, so nobody reintroduces the defect by copying a neighbour, which
 /// is how sixteen callers came to have it. This catches a signature reverting, a
-/// fixture looked for in the wrong place, and the one skip spelling somebody is
-/// likely to reach for. Deliberate circumvention is not in reach of reading text,
+/// fixture looked for in the wrong place, a process ended instead of failed, and
+/// the one skip spelling somebody is likely to reach for. Deliberate
+/// circumvention is not in reach of reading text,
 /// and pretending otherwise would be the same unmeasured claim this whole issue
 /// has been about.
 ///

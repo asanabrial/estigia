@@ -318,8 +318,9 @@ suite. Everything else here is prose held by review.
   change. Filed as its own issue.
 
   **The guard that holds the rig catches an accident. It does not catch an author, and this is the
-  measurement of how far short it falls.** Four reviewers walked past
-  `the_tracker_rig_cannot_answer_that_it_did_not_run` nine times, each attempt measured with the
+  measurement of how far short it falls.** Reviewers walked past
+  `the_tracker_rig_cannot_answer_that_it_did_not_run` eighteen times — nine of those routes are held
+  now and nine are not, which is the last column below. Each attempt was measured with the
   fixture removed — except the two about *where* the fixture is looked for, which are measured with it
   present, since their point is that the rig looks in the wrong place rather than that it is missing.
   Where the outcome is `106 passed`, that is issue 22's defect reproduced whole with every gate in
