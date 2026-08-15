@@ -340,9 +340,15 @@ suite. Everything else here is prose held by review.
      `normalise(&fold(token))` and the ladder's entry test read `fold(token)` alone — `normalise`
      folds `:` and `\` and `fold` does not. So in `${P:-.claude/settings.json}` the `-` starts a
      segment in the string that is matched and did not in the string the ladder inspected: no rung,
-     and every relative surface answered `Routine` where the base answered `Boundary` — no count
-     here, because a reviewer could not reproduce the *thirteen* an earlier draft claimed and this
-     document did not state the basis it was counted on.
+     and **fourteen of the nineteen** relative surfaces answered `Routine` where the base answered
+     `Boundary`. The basis, because a number here is worth nothing without one: one relative spelling
+     per fragment in the **base's own** fragment set. The five that were never lost are the two file
+     fragments carrying no leading dot, `hooks/pre-push` and `cli/hosts.yml`, which the anchoring
+     never touched so the ladder was never needed to reach them, and `.config/opencode/opencode.json`,
+     `.gemini/settings.json` and `.config/crush/crush.json`, each reached by an unanchored sibling this
+     branch added. This sentence has now been wrong twice: first *thirteen*, with no basis and
+     unreproducible, then *every relative surface*, which is checkable and false — it would have told a
+     reader the push guard stopped being gated, and it never did. A reviewer measured both.
      `TARGET=${1:-.claude/settings.json}` then `rm -f "$TARGET"` is the ordinary script idiom for a
      defaulted path. A reviewer found it by sweeping **two**-character contexts; the 660-character
      sweep recorded above is one character wide and could not reach `:-`. The same fix reaches `:~`,
@@ -351,7 +357,8 @@ suite. Everything else here is prose held by review.
 
      **What stays open, why it is a limit rather than an oversight, and what it costs.** `${P-path}`,
      `${P:+path}` and `${P:?path}` answer `Routine`. Not *still* — they answered `Boundary` at the base
-     commit, so this is a **loss against the base** on fifteen relative surfaces, and unlike every
+     commit, so this is a **loss against the base** on the same fourteen of nineteen relative surfaces
+     counted on the same basis as above, and unlike every
      other spelling recorded in this section those three do address the file. Named that way because a
      reviewer pointed out that the earlier wording read like a gap that had always been there.
      Once `$`, `{`, `}` and `:` are folded away, `P-path` is
