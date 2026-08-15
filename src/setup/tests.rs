@@ -4961,3 +4961,105 @@ fn a_phase_is_not_written_in_a_dialect_its_host_cannot_read() {
         "the host this crate can spell for received no phases"
     );
 }
+
+/// Set `XDG_CONFIG_HOME` for the duration, and put back what was there.
+///
+/// A copy of the helper in `harness::roles::tests`, kept because these are two
+/// test binaries and neither can call the other's. The lock makes this the only
+/// thread touching the variable while the body runs. An empty value stands for
+/// *absent*, which is what `absolute_or_none` already made of it.
+fn with_config_home<T>(value: &std::path::Path, body: impl FnOnce() -> T) -> T {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let guard = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let before = std::env::var_os("XDG_CONFIG_HOME");
+    // SAFETY: the lock above makes this the only thread touching the variable
+    // for the duration, and the previous value is restored before it is released.
+    unsafe {
+        std::env::set_var("XDG_CONFIG_HOME", value);
+    }
+    let answer = body();
+    unsafe {
+        match before {
+            Some(previous) => std::env::set_var("XDG_CONFIG_HOME", previous),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+    }
+    drop(guard);
+    answer
+}
+
+/// Where a config home comes from, for every shape a caller can supply.
+///
+/// The whole table, because a reviewer found the interesting cell by reading
+/// rather than by running: routing this through `setup::xdg_config_home` moved
+/// one answer. `config_home: Some(<relative>)` with the variable set absolute
+/// resolved to `$HOME/.config` before and to the **variable** after, because
+/// filtering the override first let it fall through to the fallback. No caller
+/// in this tree reaches that cell — every one sets `home_dir` alongside — and
+/// the shipped binary has no `--config-home` flag at all, which is exactly why
+/// nothing was red. An override that is named badly is a caller's mistake, and
+/// inheriting the machine's config home instead is the half-move
+/// `Environment::resolve` exists to refuse.
+///
+/// The absolute paths are temporary directories rather than literals, because a
+/// POSIX-looking `/moved/config` is **not** absolute on Windows and the first
+/// draft of this test failed for that reason rather than for a real one.
+#[test]
+fn a_config_home_comes_from_the_override_or_the_variable_and_never_from_both() {
+    let isolated = tempfile::tempdir().expect("a temporary home");
+    let moved = tempfile::tempdir().expect("a temporary config home");
+    let named = tempfile::tempdir().expect("a named config home");
+
+    let resolve = |config_home: Option<&std::path::Path>, home: Option<&std::path::Path>| {
+        let options = SetupOptions {
+            home_dir: home.map(std::path::Path::to_path_buf),
+            config_home: config_home.map(std::path::Path::to_path_buf),
+            platform: Some(Platform::Unix),
+            ..SetupOptions::default()
+        };
+        Environment::resolve(&options)
+            .expect("an absolute home")
+            .xdg_config()
+    };
+
+    // What a borrowed home falls back to when the variable says nothing. Taken
+    // by measurement rather than spelled, since it is the machine's own.
+    let borrowed_fallback = with_config_home(std::path::Path::new(""), || resolve(None, None));
+
+    with_config_home(moved.path(), || {
+        assert_eq!(
+            resolve(None, None),
+            moved.path(),
+            "a borrowed home takes the variable"
+        );
+        assert_eq!(
+            resolve(None, Some(isolated.path())),
+            isolated.path().join(".config"),
+            "an isolated home does not inherit the machine's variable"
+        );
+        assert_eq!(
+            resolve(Some(named.path()), None),
+            named.path(),
+            "an absolute override wins over the variable"
+        );
+        // The cell that moved: a useless override is not a reason to inherit the
+        // variable, and both roads have to agree that it is simply absent.
+        for useless in [
+            std::path::Path::new("relative/config"),
+            std::path::Path::new(""),
+        ] {
+            assert_eq!(
+                resolve(Some(useless), None),
+                borrowed_fallback,
+                "an override of {useless:?} fell through to the variable"
+            );
+            assert_eq!(
+                resolve(Some(useless), Some(isolated.path())),
+                isolated.path().join(".config"),
+                "an override of {useless:?} beside an isolated home left the home"
+            );
+        }
+    });
+}

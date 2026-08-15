@@ -215,10 +215,21 @@ suite. Everything else here is prose held by review.
 
   **The cost, which the population's own declaration understated.** That declaration says a false
   positive costs one tracker read "and that is the direction this chooses on purpose", illustrated by
-  a one-character typo on a path already listed. Measured against the real tracker by two reviewers — eight samples,
-  **0.61 to 1.22 seconds, mean 0.93** — against 0.16 to 0.42 for a `Routine` write inside the renewal
-  window, so roughly **+0.7 seconds per write** to a watched path — a `Boundary` never rides the renewal window and never stands aside outside the claim, so
-  it is a live `gh issue view` every time — and with no network it is a refusal rather than a delay.
+  a one-character typo on a path already listed. A `Boundary` never rides the renewal window and never
+  stands aside outside the claim, so it is a live `gh issue view` every time — measured, not inferred:
+  a reviewer drove 30 invocations of each class through the real hook against a `gh` with a real
+  process boundary and counted **30 tracker calls out of 30** for a `Boundary` against **0 out of 30**
+  for a `Routine`. With no network it is a refusal rather than a delay.
+
+  **What that read costs is the number to distrust, and three independent measurements disagree.**
+  0.61–1.22 s (mean 0.93, n=8); 0.58–0.92 s (mean 0.66, n=8); and 0.85–3.20 s (mean 1.74, n=10) —
+  the last one roughly double the first two and 2.6× their ceiling, taken against the same tracker on
+  a different machine and a different network. Against 0.05–0.42 s for a `Routine` write inside the
+  renewal window, likewise machine-dependent. So the honest statement is a **round trip to GitHub per
+  write to a watched path, between half a second and three seconds**, and any tighter figure here is a
+  sample of one environment rather than a property of the change. The earlier drafts of this paragraph
+  quoted the first measurement alone as though it bounded the cost, which is what a reader would have
+  believed.
   Two attempts at the `XDG_CONFIG_HOME` fix were wrong in opposite directions before this one, and
   both were found by reviewers rather than by a test. Dropping the `.config/` prefix left `opencode`
   as a bare directory name matched anywhere: `node_modules/opencode/**`, `packages/opencode/**` and a
@@ -312,7 +323,18 @@ suite. Everything else here is prose held by review.
   The option-prefix rule is generous in one direction only — it can gate a token that merely ends like
   a surface, never miss one that is a surface. That cost was priced rather than assumed: across 50
   ordinary developer command lines, including the write-heavy ones whose flags take attached paths,
-  it gates **none**. `an_option_prefix_does_not_gate_an_ordinary_line` holds twelve of them.
+  it gates **none**. `an_option_prefix_does_not_gate_an_ordinary_line` holds twelve of them. A reviewer
+  measured 149 lines the same way, 30 of them deliberately punctuation-heavy, and found the folding
+  costing **nothing** on any of them: folding only creates separators, and a separator only helps a
+  fragment that is already in the line.
+
+  What the *list* costs on an ordinary path is separate and is real. `mkdir -p
+  test/fixtures/windsurf/memories` — a project directory that happens to be spelled exactly like a
+  fragment — is `Boundary` here and was `Routine` at the base. That is not the lookalike class named
+  above, which is about names that merely resemble one; it is an exact collision inside somebody's own
+  tree, and it costs a tracker read per write. The same holds for a project's own `.claude/agents` or
+  rules directory, which is intended. A reviewer found this one by classifying paths a developer would
+  plausibly create rather than paths this crate already talks about.
 
   The **trailing** half of the wrap is not load-bearing at this head, and it is kept anyway. Measured:
   every fragment the gate consults — all 28 `CONTROL_SURFACE` entries and all 11 derived instruction
@@ -365,7 +387,7 @@ suite. Everything else here is prose held by review.
     `opencode/agents.md` are covered by the same over-gating fixture.
   - Four are silent, measured one at a time with the full suite: `.agents/agents` → `.agents/`,
     `.codex/agents` → `.codex/`, `.qwen/qwen.md` → `.qwen/` and `.cline/rules/estigia.md` →
-    `.cline/` each **leave all 1,152 tests green.** Nothing in this crate names a path under those
+    `.cline/` each **leave all 1,153 tests green.** Nothing in this crate names a path under those
     directories in the `Routine` direction. An earlier draft of this list said *one*, naming only
     qwen; a reviewer counted them.
 

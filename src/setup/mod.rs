@@ -882,8 +882,19 @@ impl Environment {
             // did not have — two implementations that happened to agree, which is
             // the arrangement this crate has already been bitten by twice. They
             // agree by construction now.
-            config_home: absolute_or_none(options.config_home.clone())
-                .or_else(|| borrowed.then(xdg_config_home).flatten()),
+            //
+            // An explicit override is answered on its own, and never falls
+            // through to the variable. Folding the two together read the same on
+            // every path the binary can reach and diverged on one a library
+            // caller can: `config_home: Some(<relative>)` with the variable set
+            // absolute took the **variable** here and `$HOME/.config` before it.
+            // A reviewer measured it. A caller that named a config home and named
+            // it badly has made a mistake; inheriting the machine's instead is
+            // the half-move this whole block exists to refuse.
+            config_home: match options.config_home.clone() {
+                Some(explicit) => absolute_or_none(Some(explicit)),
+                None => borrowed.then(xdg_config_home).flatten(),
+            },
             app_data: absolute_or_none(options.app_data.clone().or_else(|| inherited("APPDATA"))),
         })
     }

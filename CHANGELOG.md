@@ -102,7 +102,11 @@ the workflow, it holds the tools.
   The declared population was **restated** rather than stretched: the gate reads nothing from an
   instruction file, so it covers what an agent is *told* as well as what the binary *enforces*. The
   cost is recorded with it — a `Boundary` never rides the renewal window, so it is a live tracker read
-  on every write, measured at 0.61 to 1.22 seconds, and a refusal rather than a delay with no network.
+  on every write — counted, 30 tracker calls out of 30 against 0 out of 30 for a routine one — and a
+  refusal rather than a delay with no network. Three independent measurements of what that read costs
+  disagree by a factor of two (0.61-1.22 s, 0.58-0.92 s, 0.85-3.20 s), so `docs/honesty.md` states it
+  as a round trip between half a second and three seconds rather than quoting the first sample as a
+  bound.
 - A test can no longer report pass without running. Sixteen tests in `tests/pipe.rs` drive the real
   binary against a stand-in `gh`, and that stand-in is a cargo example; the rig answered `Option` and
   every caller opened with `let Some(rig) = … else { return; }`, so wherever the example was missing
