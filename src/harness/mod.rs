@@ -282,8 +282,22 @@ pub(crate) const SHELL_TOOLS: &[&str] = &["bash", "run_shell_command", "shell", 
 ///
 /// guard:population control-surface too-tight: the files Estigia's decisions
 /// are read from — its state directory, the contract, the entries it writes
-/// into an agent's own settings, and the push hook. Legitimate population: any
-/// path a write to which changes what this harness enforces. Boundary: matched
+/// into an agent's own settings, and the push hook — **and the files that carry
+/// its authority to an agent**: the instruction file each adapter's `setup`
+/// writes the workflow-authority directive into. Legitimate population: any path
+/// a write to which changes what this harness enforces, or what an agent is told
+/// this harness may enforce.
+///
+/// That second clause is a widening, recorded rather than slipped in. Issue 26
+/// added the instruction files, and a reviewer was right that they do not fit the
+/// rule as it stood: the gate reads nothing from `~/.claude/CLAUDE.md`, so a write
+/// there changes what the agent is *told* and not what the binary *does*. The
+/// reason they belong anyway is that this crate's authority over an agent is
+/// exactly that sentence — `README.md` says the harness does not ask an agent to
+/// follow the workflow, it holds the tools, and the directive is what makes the
+/// agent reach for those tools at all. An agent that rewrites it disarms the half
+/// of the system that is not code. Enforcement inputs and compliance inputs are
+/// different things and the population now names both. Boundary: matched
 /// on path fragments — after separators are folded, and after `/./`, `//` and
 /// **`../`** are collapsed away, because a matcher a redundant segment defeats
 /// is measuring a spelling and not a path. So a hard link, a junction, or a
@@ -374,18 +388,41 @@ const CONTROL_SURFACE: &[&str] = &[
     ".claude/settings",
     // The agent definitions, which are instructions with a tool allowlist. An
     // agent that writes one is choosing what a delegated context may do, which
-    // is the same authority as the directive itself.
-    ".claude/agents/",
+    // is the same authority as the directive itself, and `harness::roles`
+    // enforces exactly that allowlist.
+    //
+    // No trailing slash. It had one, matching the convention of `.estigia/` and
+    // `opencode/`, and that split the two roads: `surface_of` appends a separator
+    // so `rm ~/.claude/agents` was `Boundary` while a write to the bare directory
+    // was `Routine`. A reviewer called it unreachable in practice, and the
+    // crossing found it the moment that root was added to what it walks — which
+    // is the better argument for crossing a hand-spelled entry than any reasoning
+    // about reachability.
+    ".claude/agents",
     ".claude.json",
     ".codex/hooks.json",
     ".codex/config.toml",
-    ".config/opencode/",
+    // Without the `.config/` prefix, for the reason the derived instruction
+    // fragments already refuse it: `XDG_CONFIG_HOME` moves that root, and
+    // `Environment::xdg_config` honours the variable. Measured with it relocated
+    // — opencode's plugin, which is that adapter's only deny mechanism, and its
+    // MCP config both answered `Routine` on all three platforms. The tail is what
+    // the installer actually writes; the prefix is what an operator can move.
+    "opencode/",
+    // Both roots, because Gemini keeps its settings under `%APPDATA%` on Windows
+    // and `~/.gemini` everywhere else, and only the POSIX spelling was here. The
+    // Windows one is where this harness's own gate is registered for that
+    // adapter, it is outside every checkout by construction, and it answered
+    // `Routine` — so the stand-aside issue 2 added waved it past without asking
+    // the tracker. Found the moment the crossing below stopped walking one
+    // platform.
     ".gemini/settings.json",
+    "gemini/settings.json",
     ".qwen/settings.json",
     ".cursor/hooks.json",
     ".cursor/mcp.json",
     ".continue/settings.json",
-    ".config/crush/crush.json",
+    "crush/crush.json",
     ".codeium/windsurf/hooks.json",
     ".cline/hooks",
 ];
@@ -494,11 +531,12 @@ fn is_control_surface(target: &str) -> bool {
     // real path for every adapter and asks this function, so a fragment that
     // stops matching fails a test instead of quietly leaving a file open.
     //
-    // They were `Routine` until now, and issue 2 is what made that matter: a
+    // Ten of the eleven were `Routine` until now — OpenCode's was already covered
+    // by the `opencode/` directory entry — and issue 2 is what made that matter: a
     // write outside every checkout the claim covers stands aside without asking
     // the tracker, and every one of these is outside every checkout by
-    // construction. So they went from *measured against the claim* to *not
-    // gated at all*.
+    // construction. So they went from *measured against the claim* to *not gated
+    // at all*.
     path.contains(&installed)
         || crate::setup::AGENTS
             .iter()

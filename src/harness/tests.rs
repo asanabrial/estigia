@@ -3249,30 +3249,41 @@ fn the_local_settings_and_the_agent_definitions_are_boundaries_on_both_roads() {
 
 /// Every adapter's instruction file is a boundary, on both roads.
 ///
-/// `every_control_file_an_adapter_has_is_one_the_gate_measures` crosses the
-/// resolved paths against the gate, and that is the guard that keeps the derived
-/// fragments honest. This is the other half: it fixes the *reason* in place, on
-/// spellings a reader recognises, and it covers the shell as well as the write
-/// tool. The directive in these files is the sentence telling an agent this
-/// harness holds the authority — an agent that rewrites one removes its own
-/// reason to obey, and until issue 26 every one of them answered `Routine`.
+/// Spelled out, not derived. The first version of this built its subject from
+/// `instruction_fragment()` and then asserted the fragment matched — which
+/// reduces to `contains(f)` on a string built as `home + f`, and cannot fail for
+/// the reason its own name gives. A reviewer proved it: setting one adapter's
+/// fragment to a filename nothing writes left this green while only the
+/// `resolve_paths` crossing reddened.
+///
+/// So these are the paths as a reader would recognise them. The crossing in
+/// `src/setup/tests.rs` is what ties them to what the installer actually
+/// resolves, on all three platforms; this fixes the *reason* in place, and it
+/// covers the shell as well as the write tool because `surface_of` splits a
+/// command on whitespace and an entry that works on one road only is one an
+/// agent walks round with `rm`.
 #[test]
 fn the_directive_that_names_the_authority_is_a_boundary_for_every_agent() {
-    let home = crate::paths::home_dir().expect("a home directory");
-    for adapter in crate::setup::AGENTS {
-        let fragment = adapter.instruction_fragment();
-        let spelled = home.join(fragment.replace('/', std::path::MAIN_SEPARATOR_STR));
-        let spelled = spelled.display().to_string();
-
-        let (_, written) = classify(
-            "Write",
-            &serde_json::json!({ "file_path": spelled.clone() }),
-        );
+    for spelled in [
+        "/home/me/.agents/AGENTS.md",
+        "/home/me/.claude/CLAUDE.md",
+        "/home/me/.codex/AGENTS.md",
+        "/home/me/.config/opencode/AGENTS.md",
+        "/home/me/.gemini/GEMINI.md",
+        r"C:\Users\me\AppData\Roaming\gemini\GEMINI.md",
+        "/home/me/.cursor/estigia-workflow-authority.md",
+        "/home/me/.qwen/QWEN.md",
+        "/home/me/.config/crush/CRUSH.md",
+        "/home/me/.continue/rules/estigia.md",
+        "/home/me/.cline/rules/estigia.md",
+        "/home/me/.codeium/windsurf/memories/global_rules.md",
+    ] {
+        let (_, written) = classify("Write", &serde_json::json!({ "file_path": spelled }));
         assert_eq!(
             written,
             Sensitivity::Boundary,
-            "{}: a write to its instruction file answers routine",
-            adapter.slug
+            "a write to {spelled} answers routine, and that file carries the directive \
+             naming this harness as the authority"
         );
 
         let (_, removed) = classify(
@@ -3282,10 +3293,32 @@ fn the_directive_that_names_the_authority_is_a_boundary_for_every_agent() {
         assert_eq!(
             removed,
             Sensitivity::Boundary,
-            "{}: removing its instruction file through the shell answers routine",
-            adapter.slug
+            "removing {spelled} through the shell answers routine, which is the road an \
+             agent would actually take"
         );
     }
+}
+
+/// The spelled list above has one entry per adapter, and stays that way.
+///
+/// A hand-written list is readable and goes stale. This is the cheap half of
+/// keeping it honest: a twelfth adapter, or one whose instruction file moves,
+/// changes the count and fails here. What the list *says* is crossed against the
+/// installer by `every_control_file_an_adapter_has_is_one_the_gate_measures`,
+/// which resolves the real path per adapter on every platform.
+#[test]
+fn the_spelled_instruction_files_cover_every_adapter() {
+    let fragments: std::collections::BTreeSet<&str> = crate::setup::AGENTS
+        .iter()
+        .map(|adapter| adapter.instruction_fragment())
+        .collect();
+    assert_eq!(
+        fragments.len(),
+        11,
+        "the adapter table answers {} distinct instruction fragments, so the list spelled \
+         out beside this is no longer one per adapter",
+        fragments.len()
+    );
 }
 
 /// The covered checkout is resolved the same way the target is.

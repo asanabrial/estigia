@@ -2641,33 +2641,57 @@ fn every_control_file_an_adapter_has_is_one_the_gate_measures() {
     // guard:population control-surface — a plain `//` inside the body, because
     // a `///` here is parsed as a second *declaration* of the family rather
     // than as this test claiming it. Same mistake as round six.
-    let (_home, options) = sandbox();
-    for adapter in AGENTS {
-        let paths = resolve_paths(adapter, &options).expect("paths resolve");
-        let mut watched: Vec<std::path::PathBuf> = vec![paths.skill_root.join("SKILL.md")];
-        watched.extend(paths.hooks.clone());
-        watched.extend(paths.plugin.clone());
-        watched.extend(paths.mcp_config.clone());
-        // The instruction file, which this walk did not reach for as long as it
-        // existed. It is the file `setup` writes the workflow-authority directive
-        // into — the sentence telling an agent this harness holds the authority
-        // at all — so an agent that rewrites it removes the reason it obeys, and
-        // it answered `Routine`. Eleven adapters, thirteen paths counting the two
-        // that differ by platform.
-        watched.push(paths.instructions.clone());
+    //
+    // Every platform, not the host's. `sandbox()` pins `Platform::Unix`, and this
+    // is the only thing tying `paths_in` to `is_control_surface` — so it walked
+    // one branch of a function full of them. A reviewer measured what that hid:
+    // giving Cursor a Windows-only instruction path left the whole suite green
+    // with the file unmeasured, while the same drift on a plain directory rename
+    // was caught. The neighbouring `a_moved_home_moves_every_root_under_it`
+    // already loops all three; this had no reason not to.
+    let (_home, base) = sandbox();
+    for platform in [Platform::Windows, Platform::MacOs, Platform::Unix] {
+        let options = SetupOptions {
+            platform: Some(platform),
+            ..base.clone()
+        };
+        for adapter in AGENTS {
+            let paths = resolve_paths(adapter, &options).expect("paths resolve");
+            let mut watched: Vec<std::path::PathBuf> = vec![paths.skill_root.join("SKILL.md")];
+            watched.extend(paths.hooks.clone());
+            watched.extend(paths.plugin.clone());
+            watched.extend(paths.mcp_config.clone());
+            // The instruction file, which this walk did not reach for as long as it
+            // existed. It is the file `setup` writes the workflow-authority directive
+            // into — the sentence telling an agent this harness holds the authority
+            // at all — so an agent that rewrites it removes the reason it obeys, and
+            // it answered `Routine`. Eleven paths on any one platform, twelve
+            // spellings across all three — gemini-cli is the one adapter whose
+            // instruction file moves with the platform. An earlier version of this
+            // said thirteen and "the two that differ by platform": thirteen is the
+            // issue's own count, which includes two `~/.claude` paths this walk does
+            // not touch, and only one adapter has a platform branch.
+            watched.push(paths.instructions.clone());
+            // And the agent-definition root, which was the one path this change
+            // hand-spelled and the one it left uncrossed — a reviewer named that
+            // as the shape the change's own prose condemns. `definition_for`
+            // reads the tool allowlist it enforces from here.
+            watched.extend(paths.agents_root.clone());
 
-        for file in watched {
-            let target = file.display().to_string();
-            let (_, how) = crate::harness::classify(
-                "Write",
-                &serde_json::json!({ "file_path": target.clone() }),
-            );
-            assert_eq!(
-                how,
-                crate::harness::Sensitivity::Boundary,
-                "{}: a write to {target} is where its gate lives and the gate calls it routine",
-                adapter.slug
-            );
+            for file in watched {
+                let target = file.display().to_string();
+                let (_, how) = crate::harness::classify(
+                    "Write",
+                    &serde_json::json!({ "file_path": target.clone() }),
+                );
+                assert_eq!(
+                    how,
+                    crate::harness::Sensitivity::Boundary,
+                    "{platform:?}/{}: a write to {target} is where its gate lives and the gate \
+                 calls it routine",
+                    adapter.slug
+                );
+            }
         }
     }
 }

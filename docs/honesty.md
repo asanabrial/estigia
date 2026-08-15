@@ -161,18 +161,25 @@ suite. Everything else here is prose held by review.
   find that out.** Closed by issue 26. A write whose path lies outside every checkout the claim covers
   is answered `outside-the-claim` without asking the tracker — right for a scratch note, right for a
   `Boundary` write because those stay gated, and wrong for a `Routine` write to a file that governs
-  the harness. Thirteen such paths were `Routine`: the instruction file each adapter's `setup` writes
-  its workflow-authority directive into, plus `~/.claude/settings.local.json` and `~/.claude/agents/`.
-  Every one is outside every checkout by construction, so issue 2's stand-aside moved them from
-  *measured against the claim* to *not gated at all*.
+  the harness. **Twelve** such paths were `Routine`, and the count is worth stating exactly because
+  three earlier drafts of this sentence said thirteen and none of them had been measured: ten of the
+  eleven adapters' instruction files, gemini-cli's second spelling under `%APPDATA%`, and
+  `~/.claude/settings.local.json` with `~/.claude/agents/`. OpenCode's was **already** `Boundary` at
+  the base commit — the pre-existing `.config/opencode/` entry covered it — which is exactly the kind
+  of thing a count taken from memory gets wrong. Every one of the twelve is outside every checkout by
+  construction, so issue 2's stand-aside had moved them from *measured against the claim* to *not
+  gated at all*.
 
   The instruction files are derived from the adapter table now rather than spelled, the way the skill
   tree is derived from `skill::DIRECTORY` — a hand-spelled copy agrees with the installer only until
   somebody renames one, which this crate has already paid for once. The crossing that keeps them
   honest is `every_control_file_an_adapter_has_is_one_the_gate_measures`, which resolves the real path
   per adapter and asks the gate; it walks `paths.instructions` now and did not before, which is why
-  the gap existed at all. Measured: changing one adapter's fragment to a stale filename reddens that
-  test alone.
+  the gap existed at all. Measured: changing **qwen's** fragment to a stale filename reddens that test
+  alone. It does not hold for every adapter, which a reviewer found and the unqualified sentence that
+  used to sit here did not say — OpenCode's fragment can go stale in silence, because the `opencode/`
+  directory entry covers that path independently. The crossing catches a fragment that stops matching
+  only where nothing else already matches it.
 
   The two settings paths were missed for a smaller reason worth keeping: the match is `contains`, so
   `.claude/settings.json` never reached `.claude/settings.local.json` — the file an operator is *told*
@@ -186,9 +193,10 @@ suite. Everything else here is prose held by review.
   "was on that list until this change", which was a claim about a previous shipped state that never
   existed — the whole entry is new. A reviewer checked it against `2477de0` and it was not there.)
 
-  The hole predates this: the paths still listed were never `Boundary`, so before this change they
-  were measured against the claim and allowed under a valid one. What is newly lost is the refusal
-  when the claim is *not* valid. It is no longer lost when no contract is installed **outside the
+  The hole predates this: those paths were never `Boundary`, so before issue 2 they were measured
+  against the claim and allowed under a valid one. What was newly lost is the refusal when the claim
+  is *not* valid — which is what issue 26 closed for them, and this paragraph is kept because the
+  ordering it goes on to describe is what makes any of it hold. It is no longer lost when no contract is installed **outside the
   renewal window**: the answer is given after the `control-surface-not-installed` refusal, and
   `an_unreadable_control_surface_refuses_even_a_write_outside_the_claim` is what stops that drifting
   back. One published head had it the other way round and both reviewers of that head raised the
@@ -201,11 +209,14 @@ suite. Everything else here is prose held by review.
   *without an exception*, which was an absolute the code does not hold; a reviewer measured it by
   adding one `mark_verified()` line to that fixture.
 
-  The population test that keeps the list
-  (`every_control_file_an_adapter_has_is_one_the_gate_measures`) walks each adapter's skill root,
-  hooks, plugin and MCP config, and never `paths.instructions`, which is why nothing said so. Closing
-  it means extending `CONTROL_SURFACE` and that test together, which is its own change with its own
-  risk, so it is filed rather than done here.
+  What is still lost, and it is narrower than the paragraph that used to sit here: two adapter
+  surfaces the crossing does not reach because it resolves one platform and one XDG layout.
+  `%APPDATA%\gemini\settings.json` was one of them and is closed — the crossing walks all three
+  platforms now, and it found that hole the moment it did. The two that remain are measured: with
+  `XDG_CONFIG_HOME` relocated, `opencode`'s plugin and MCP config and `crush`'s settings answer
+  `Routine`, because `.config/opencode/` and `.config/crush/crush.json` anchor on a prefix the
+  variable moves. The instruction fragments deliberately do not anchor there, which is why they hold
+  and these do not. `gh`'s hosts file is declared for exactly this shape below.
 
   And one boundary this cannot cross at all: a **hard link** outside the checkout pointing at a
   file inside it. Measured — `mklink /H <outside>/alias.rs <repo>/src/kept.rs`, classified

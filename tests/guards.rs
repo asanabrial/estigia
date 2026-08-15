@@ -548,7 +548,23 @@ const AFFIRMED: &[(&str, u64)] = &[
     // the literals; the derived set is crossed against `resolve_paths` per adapter
     // by `every_control_file_an_adapter_has_is_one_the_gate_measures`, which now
     // walks `paths.instructions` and did not before.
-    ("control-surface", 6747193313278382829),
+    // Re-affirmed 2026-08-15 after four blind reviews of the same head, and this
+    // time the **rule itself was restated** because the population genuinely
+    // outgrew it. A reviewer put it precisely: the gate reads nothing from
+    // `~/.claude/CLAUDE.md`, so a write there changes what the agent is *told*
+    // and not what the binary *does* — the declared rule covered enforcement
+    // inputs and the instruction files are compliance inputs. They belong, for
+    // the reason `README.md` gives about this whole crate, and the declaration
+    // now names both kinds instead of stretching one over the other.
+    //
+    // Three literal entries also moved, each found by the crossing once it walked
+    // every platform rather than the host's: `gemini/settings.json` alongside the
+    // POSIX spelling, because that is where the gate is registered on Windows;
+    // `opencode/` and `crush/crush.json` without the `.config/` prefix, because
+    // `XDG_CONFIG_HOME` moves that root and the derived fragments already refuse
+    // to anchor on it; and `.claude/agents` lost its trailing slash, which had
+    // split the two roads.
+    ("control-surface", 15301435493678792690),
     // Reopened 2026-08-05 by measuring the enumeration instead of reading it.
     // Thirty command lines that visibly put bytes on disk were classified and
     // twenty-six came back Untouched, among them "wget -O src/main.rs URL" —

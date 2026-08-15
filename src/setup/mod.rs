@@ -408,7 +408,7 @@ impl AgentAdapter {
     ///
     /// Lowercase with forward slashes, because `is_control_surface` folds both
     /// before it matches. Two components where the last is generic — `AGENTS.md`
-    /// and `estigia.md` are each used by two adapters — and one where the
+    /// is used by three adapters and `estigia.md` by two — and one where the
     /// directory alone would be too wide.
     pub fn instruction_fragment(&self) -> &'static str {
         match self.instructions {
