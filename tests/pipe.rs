@@ -9085,8 +9085,17 @@ fn a_closed_issue_still_refuses_a_write_inside_the_checkout() {
         })
         .to_string(),
     );
-    assert!(
-        !aside.contains("CLOSED") && !aside.contains("issue-not-open"),
-        "a scratch note was refused on the closed issue's state: {aside}"
+    // The empty object, not the absence of one word. A hook that stands aside
+    // says nothing at all — the aside's code never reaches this surface — so
+    // `{}` is the whole answer and anything else is some refusal. Asserting
+    // `!contains("CLOSED")` would also be satisfied by
+    // `control-surface-not-installed`, and since the stand-aside moved below
+    // that refusal, an absence assertion would pass on the wrong one. The rig
+    // installs the contract, so reaching `{}` here means the decision was taken
+    // past it and without the tracker's answer.
+    assert_eq!(
+        aside.trim(),
+        "{}",
+        "a scratch note did not stand aside on the closed issue: {aside}"
     );
 }

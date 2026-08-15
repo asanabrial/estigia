@@ -237,25 +237,41 @@ suite. Everything else here is prose held by review.
   its skip line and reported pass, while the older fixture still went red, so a machine that will
   not link loses the landing-versus-spelling measurement and not the guard's existence.
 
-  None of this is measured on POSIX by anybody who reviews it. The `..` half of `placed` is the
-  place the two platforms genuinely disagree — Windows collapses the segment in the spelling,
-  POSIX resolves the link first — so half of that function is decided by a `cfg` whose other arm
-  cannot be compiled, let alone run, on the desk this crate is written at. The lanes are the only
-  measurement, and CI does not start on a topic branch: it starts when `release_ci` marks the pull
-  request ready, which is *after* every review has been obtained.
-
-  What that costs, measured on this change: `a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled`
-  wrote through `<root>/decoy/../repo/src/main.rs` without creating `decoy`. Windows does not need
-  it to exist; POSIX answers `ENOENT`. The fixture was green here through eight rounds of blind
-  review — sixteen reviewers, every one of them on Windows — and went red on both POSIX lanes the
-  first time CI saw the branch, which was after the last verdict had been recorded and the target
-  released. Nothing in the review protocol could have caught it, and nothing in it says so.
-
   The third is latent and could not be measured at all. The guard requires the landing to carry a
   drive prefix rather than rejecting the prefixes it knows, so a landing with no prefix component
   would be refused instead of compared as though it were relative. Nothing `canonicalize` produced
   on this machine has that shape and two reviewers went looking, so the branch is written for its
   failure direction and is held by no test.
+
+  Separately from those three, and about the review rather than the change: **the POSIX half of
+  this is measured by nobody who reads it.** The `..` handling in `placed` is where the two
+  platforms genuinely disagree — Windows collapses the segment in the spelling, POSIX resolves the
+  link first — and the arm that says so is a `cfg!(unix)` *expression*, so it is compiled on this
+  desk and never runs here. The CI lanes are the only place it runs, and CI does not start on a
+  topic branch: it starts when `release_ci` marks the pull request ready, which is after every
+  review has been obtained.
+
+  What that costs, measured on this change:
+  `a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled` wrote through
+  `<root>/decoy/../repo/src/main.rs` without creating `decoy`. Windows does not need it to exist;
+  POSIX answers `ENOENT`. Seven published heads of this branch carried it, every one of them
+  reviewed and none of the reviews able to run it, and it went red on both POSIX lanes the first
+  time CI saw the branch — after the last verdict was recorded and the target released.
+
+  The protocol did not lack the means, it lacked the question. Two reviewers of the fix reached the
+  same failure from this same desk in minutes, by extracting `placed` into one file and running it
+  under the WSL `rustc` that is already installed; one reproduced the `ENOENT` byte for byte and
+  also on a symlinked root, which is the shape macOS gives every temporary directory. Nothing in
+  `skill/SKILL.md` or `skill/references/` mentions a platform at all, so nothing asks for it. An
+  earlier draft of this entry said the arm *cannot be compiled* here and that nothing in the
+  protocol *could have* caught it. Both were measured false by the reviewers of the very head that
+  claimed them — the first with a deliberate type error inside the arm, which failed the build on
+  Windows.
+
+  And the lanes measure less than "the lanes" suggests: `cargo test` is fail-fast across targets, so
+  when the lib target failed on Linux and macOS the integration targets never ran there at all —
+  `tests/pipe.rs`, which is where this change's end-to-end evidence lives, has never executed on
+  POSIX on this branch.
 
   One more path of the same shape, found by a reviewer of this change and not closed here:
   `<checkout>/.git/config`, which answers `Routine` while `<checkout>/.git/hooks/pre-push` answers

@@ -2840,8 +2840,7 @@ fn a_closed_issue_does_not_refuse_a_scratch_note() {
 /// comparison were in different vocabularies.
 ///
 /// - `<root>/decoy/../repo/src/main.rs` compared literally is not inside
-///   `<root>/repo` — and `std::fs::write` to that string lands there. `decoy`
-///   need not exist: the pop is lexical.
+///   `<root>/repo` — and `std::fs::write` to that string lands there.
 /// - a checkout reached through a junction resolves on the covered side and not
 ///   on the target side, so a **new** file inside it read as outside while an
 ///   existing one read as inside. Whether the file is there yet decided whether
