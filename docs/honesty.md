@@ -288,9 +288,13 @@ suite. Everything else here is prose held by review.
   fixtures still answer one, and neither was measured before.
 
   `repository()` in `src/harness/guard/tests.rs` is the exact twin — `-> Option<tempfile::TempDir>`,
-  followed by thirteen early returns. Measured with `git` off `PATH`: the guard module answers
-  `28 passed; 1 failed`, with seven `SKIPPED:` lines that are only visible under `--nocapture`. A
-  normal run shows seven plain `ok`. Its subject is the **push guard** — the one gate no agent can
+  with twelve call sites: ten early returns and two that skip the body instead. Measured with `git`
+  off `PATH` and a POSIX shell still present: the guard module answers `28 passed; 1 failed`, with
+  six `SKIPPED:` lines that are only visible under `--nocapture`. A normal run shows six plain `ok`.
+  (A first draft of this said thirteen and seven. Thirteen counted the definition line; the seventh
+  skip was `no POSIX shell here`, which appeared only because the stripped `PATH` used to take git
+  away had removed bash as well — and that one is a legitimate skip by the test below, not one of
+  these.) Its subject is the **push guard** — the one gate no agent can
   route around, because it sits under git rather than under an agent, and the one `estigia doctor`
   currently reports as not installed on the operator's machine.
 
@@ -306,6 +310,15 @@ suite. Everything else here is prose held by review.
   checked. Issue #22 already decided this for the tracker rig, where git absence is now a hard
   failure, so the crate currently holds two opposite policies for one condition — set in the same
   change. Filed as its own issue.
+
+  The guard that holds the rig's signature has a limit of its own, measured by a reviewer rather than
+  argued: `the_tracker_rig_cannot_answer_that_it_did_not_run` reads text, so a `type TrackerRig =
+  Option<RealRig>` alias plus callers split across two lines — `let rig = tracker_rig();` then
+  `let Some(rig) = rig else { return };` — reintroduces the whole defect with the guard green and
+  sixteen tests passing on nothing. Three deliberate coordinated edits, not a slip. What actually
+  blocks the accidental path is the compiler: `let Some(rig) = tracker_rig()` does not compile against
+  a non-`Option`. The guard is belt-and-braces against the signature reverting, which it does catch —
+  along with `Result<TrackerRig, _>`, a multi-line signature, and renaming the fixture.
 
   One more control-surface path of the hosts file's shape, found by a reviewer of this change and
   not closed here:

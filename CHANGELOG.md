@@ -44,8 +44,8 @@ the workflow, it holds the tools.
 - A test can no longer report pass without running. Sixteen tests in `tests/pipe.rs` drive the real
   binary against a stand-in `gh`, and that stand-in is a cargo example; the rig answered `Option` and
   every caller opened with `let Some(rig) = … else { return; }`, so wherever the example was missing
-  all sixteen returned early **reporting pass**. Measured at the previous commit with the fixture
-  moved aside: `cargo test --test pipe` answered *106 passed*. The skip is now gone from the type
+  all sixteen returned early **reporting pass**. Measured at the base commit with the fixture moved
+  aside: `cargo test --test pipe` answered *106 passed*. The skip is now gone from the type
   rather than from the callers — the rig raises, naming the command that fixes it, so there is no
   value it can return that means *did not run*, and no later caller can reintroduce the early return
   by copying its neighbours, which is how sixteen came to have it. The fixture is located from the

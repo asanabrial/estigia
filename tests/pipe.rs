@@ -6340,11 +6340,23 @@ fn tracker_rig() -> TrackerRig {
         } else {
             "fake_process"
         });
+    // The command has to be the one that clears *this* block, not the one that
+    // clears the usual one. `cargo build --examples` writes into `debug`, so on a
+    // filtered release run it discharges nothing and the next attempt fails
+    // identically — which this repository calls worse than naming nothing. So the
+    // profile and target are carried into the message from where the fixture was
+    // actually looked for.
+    let flags = if cfg!(debug_assertions) {
+        String::new()
+    } else {
+        " --release".to_owned()
+    };
     assert!(
         built.is_file(),
         "the process fixture is not built, so this test would have measured \
-         nothing: run `cargo build --examples` first, or drop the target filter \
-         — a bare `cargo test` builds it and `cargo test --test pipe` does not ({})",
+         nothing: run `cargo build --examples{flags}` for the same target as this \
+         run, or drop the target filter — a bare `cargo test` builds it and \
+         `cargo test --test pipe` does not ({})",
         built.display()
     );
     let bin = tempfile::tempdir().expect("a directory for the fake gh");

@@ -41,8 +41,11 @@ jobs:
         run: cargo clippy --all-targets --all-features
 
       # `--no-fail-fast` because `cargo test` stops at the first target that
-      # fails and skips every later one. Measured: with a failing lib test, the
-      # bare command prints three `test result` lines and this one prints nine.
+      # fails and skips every later one. Measured with a failing lib test: the
+      # bare command prints **one** `test result` line and this one prints nine.
+      # The lib is the first target, so a failure there hides all eight others —
+      # an earlier version of this comment said three, which is what a failing
+      # *integration* target gives, and it was written without being run.
       # That is why `tests/pipe.rs` — the end-to-end evidence for the review
       # protocol — never ran on the Linux and macOS lanes the one time they went
       # red. It does not soften a red run; the job still fails.
