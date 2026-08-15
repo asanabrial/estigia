@@ -32,9 +32,10 @@ rules:
   - Uninstalling removes everything Estigia created and nothing else.
 
 testing:
-  - cargo test          # the whole suite: unit, guards, honesty, payload, pipe, release
+  - cargo test          # the whole suite: unit, guards, honesty, lifecycle, payload, pipe, release
   - cargo clippy --all-targets
   - cargo fmt
+  - cargo doc --no-deps  # on the list because it was not, and had been failing outright
 # Nothing on that list needs an interpreter. It used to: the differential suite ran a vendored
 # Python transport as the oracle the Rust port was measured against. Both the transport and the
 # corpus recorded off it are deleted — see *what this instrument does not measure* in the README.

@@ -270,8 +270,149 @@ suite. Everything else here is prose held by review.
 
   And the lanes measure less than "the lanes" suggests: `cargo test` is fail-fast across targets, so
   when the lib target failed on Linux and macOS the integration targets never ran there at all —
-  `tests/pipe.rs`, which is where this change's end-to-end evidence lives, has never executed on
-  POSIX on this branch.
+  `tests/pipe.rs`, which is where this change's end-to-end evidence lives, never executed on POSIX on
+  this branch. That is issue #30.
+
+  What is **not** true, and was written here for one commit: that those sixteen tests had never run
+  on any runner. They had. A bare `cargo test` builds examples — cargo says so, and
+  `cargo test --all-features --no-run` in a cold tree at this base leaves a runnable
+  `fake_process.exe`. The measurement that produced the wrong claim was taken with
+  `cargo test --test pipe`, a **filtered** invocation that builds no other target and appears nowhere
+  in the workflow. A reviewer caught it before it shipped. The exposure is real and narrower: a
+  filtered run in a cold tree, which is exactly how every mutation measurement in this document is
+  taken. Issue #22 removed the skip from the rig's type; `cargo clippy --all-targets` remains no help
+  there, leaving a `.d` and a zero-byte `.rmeta`.
+
+- **A skip spelled as a pass, in the places issue #22 did not reach.** That issue took the skip out of
+  `tracker_rig`'s *type*, so no caller of it can be handed a value meaning *did not run*. Two other
+  fixtures still answer one, and neither was measured before.
+
+  `repository()` in `src/harness/guard/tests.rs` is the exact twin — `-> Option<tempfile::TempDir>`,
+  with twelve call sites: ten early returns and two that skip the body instead. Measured with `git`
+  off `PATH` and a POSIX shell still present: the guard module answers `28 passed; 1 failed`, with
+  six `SKIPPED:` lines that are only visible under `--nocapture`. A normal run shows six plain `ok`.
+  (A first draft of this said thirteen and seven. Thirteen counted the definition line; the seventh
+  skip was `no POSIX shell here`, which appeared only because the stripped `PATH` used to take git
+  away had removed bash as well — and that one is a legitimate skip by the test below, not one of
+  these.) Its subject is the **push guard** — the one gate no agent can
+  route around, because it sits under git rather than under an agent, and the one `estigia doctor`
+  currently reports as not installed on the operator's machine.
+
+  Seven more skip sites sit in `tests/pipe.rs` itself, across five test functions, at the
+  read-only-file capability and at git usability. They are the same shape and were not touched,
+  because whether they should raise or be `#[ignore]` is a decision rather than a mechanical edit:
+  `#[ignore]` is reported as *ignored* and a `return;` after an `eprintln!` is reported as *passed*.
+  One of the seven is worse than the others and is counted here for the first time:
+  `a_row_that_is_broken_comes_out_of_the_report_broken` prints its skip and **does not return** — it
+  drops two assertions and carries on to report `ok`, which is the same failure in a smaller dose and
+  invisible even to a reader looking for early returns.
+
+  The line between this and a legitimate skip is whether the machine could have run it. Symlink
+  privilege, `mklink /D`, administrative shares and drive letters cannot be conjured, and the ten
+  skip sites in `src/harness/tests.rs` that answer to those are correct. (Sites, not functions, on
+  both sides of that comparison — a reviewer found the two numbers here were counted in different
+  units, which is how a count stops being checkable.) `git` is not that: this is a git workflow harness, and a
+  machine without git cannot measure the push guard **at all**, so `ok` claims something never
+  checked. Issue #22 already decided this for the tracker rig, where git absence is now a hard
+  failure, so the crate currently holds two opposite policies for one condition — set in the same
+  change. Filed as its own issue.
+
+  **The guard that holds the rig catches an accident. It does not catch an author, and this is the
+  measurement of how far short it falls.** Reviewers walked past
+  `the_tracker_rig_cannot_answer_that_it_did_not_run` twenty-three times — eleven of those routes are
+  held now and twelve are not, which is the last column below. That split is counted from the table
+  rather than remembered: every version of this paragraph that carried a number from memory carried
+  a wrong one. Each attempt was measured with the
+  fixture removed — except those about *where* the fixture is looked for, which are measured with it
+  present, since their point is that the rig looks in the wrong place rather than that it is missing.
+  One row is unchanged applied alone and only bites paired with another, and its outcome column says
+  so; a reviewer found that reading `no result line` there and measuring something else.
+  Where the outcome is `106 passed`, that is issue 22's defect reproduced whole with every gate in
+  this repository green.
+
+  | Route | Outcome | Held now |
+  |---|---|---|
+  | `type TrackerRigMaybe = Option<TrackerRig>` in the signature | 106 passed | yes |
+  | a caller split over two lines | 106 passed | yes |
+  | `if … { return; }` before the call | 106 passed | yes |
+  | the fixture located from `CARGO_MANIFEST_DIR` again | whole suite green | yes |
+  | `return Default::default();` | 106 passed | yes |
+  | `std::process::exit(0)` in the rig | **no result line at all**, exit 0 | yes |
+  | a decoy comment *naming* the rig | unchanged alone; pairs with an exit | yes |
+  | a `//` comment carrying the **whole signature line** | whole suite green | yes |
+  | a `/* */` block putting the signature at column zero | 106 passed | yes |
+  | `process::exit` in a caller, or in a helper below the rig | no result line, exit 0 | yes |
+  | `use std::process::exit as leave;` | no result line, exit 0 | yes |
+  | `use std::process as sys;` then `sys::exit(0)` | no result line, exit 0 | **no** |
+  | `use std::process::{exit as leave};` | no result line, exit 0 | **no** |
+  | a decoy `current_exe()` call, the real lookup in a helper | whole suite green | **no** |
+  | a macro expanding to `return`, defined before the first `#[test]` | 106 passed | **no** |
+  | `'rig: { … break 'rig; }` around each body | 106 passed | **no** |
+  | `#[ignore]` on all sixteen | 90 passed, 16 ignored | **no** |
+  | `#[should_panic]` on all sixteen | 106 passed — the rig's own panic is swallowed | **no** |
+  | `#[cfg(feature = "rig-tests")]` on all sixteen | 90 passed, **0 ignored** — no trace at all | **no** |
+  | a block decoy plus the real definition written `pub fn` | whole suite green | **no** |
+  | a `}` at column zero inside a string, truncating the body | whole suite green | **no** |
+  | a second `tests/*.rs` with its own `Option` rig | its own suite green | **no** |
+  | a body skip — `if built { … } else { eprintln!(…) }`, no return | 106 passed | **no** |
+
+  Two of those were fixed because the guard was not reading what it claimed to read: the body
+  extraction bound to the first text in the file matching `fn tracker_rig()`, which a two-line comment
+  could claim, and the `process::exit` refusal was scoped to the rig's body when its sentence meant
+  the suite. Both fixes are **narrower than the first draft of this table said**, and a reviewer
+  measured the difference. The decoy took three rounds to close and each round narrowed it rather
+  than ending it: from *any text matching `fn tracker_rig()`* to *the whole signature line* to — now —
+  the definition itself. The last step is what a check should have done first: there must be exactly
+  one line the *filter* reads as a definition, and the body runs from that line rather than from the
+  first substring that matches it. A reviewer had put the signature inside a `/* */` block at column
+  zero, where a comment does not begin with `//`, and taken the signature check itself. All three
+  comment shapes are red now — **against a definition the filter recognises**, which is the load in
+  that sentence. The filter is `trim_start().starts_with("fn tracker_rig(")`, so a real definition
+  written `pub fn` is invisible to it and a decoy becomes the unique match: measured, with
+  `pub struct TrackerRig` to keep `-D warnings` quiet, the whole suite is green and so is the guard,
+  while the fixture is looked for under the manifest again. The body's end is the first line that
+  trims to `}`, which a multi-line string literal can supply from column zero — also measured, also
+  green, also `cargo fmt` clean. Both restore a route this table calls held, and both are one more
+  needle away from being caught; that is the reason neither is chased. Recognising a Rust item is
+  parsing it. And the file-wide
+  `process::exit` scan catches `use std::process::exit as leave;`, because that line contains the
+  substring, while `use std::process as sys;` and `use std::process::{exit as leave};` do not. Rows of
+  this table said the opposite of each, every time in the direction that flattered the guard, which is
+  the direction to be suspicious of. The rest are declared rather than chased. A seventh substring would not close them: a
+  macro puts the refused word in a region the scan never visits, a labelled `break` is a return under
+  another name, and a body skip never leaves the function at all. Telling any of them from correct
+  code needs to know which statements assert, which is a semantic question and not a textual one.
+
+  **What actually holds the accidental path is the compiler.** `let Some(rig) = tracker_rig()` does
+  not compile against a non-`Option` — measured, `error[E0308]: mismatched types` — so nobody
+  reintroduces this by copying a neighbour, which is how all sixteen callers came to have it. The
+  guard adds four things a single careless edit could do and the compiler would not see: reverting the
+  signature, moving where the fixture is looked for, ending the process instead of failing, and
+  writing `return` in a test that reaches the rig. It holds those against a decoy definition too —
+  which it did not until a reviewer took the signature check with a block comment — but only while the
+  real definition is spelled the way its filter reads. An earlier draft of this paragraph said three and
+  left out the `process::exit` refusal — which is the check that actually catches four of the rows
+  above, so the omission understated the guard in the paragraph somebody reads to learn what it
+  holds. That is its honest scope. An earlier version
+  of this entry said six routes were closed and two things remained unseen; both numbers were wrong
+  when they were written, and the sentence claiming completeness is the reason they were worth
+  writing down.
+
+  The `return` scan reads whole lines, string literals included, and that is a decision made twice.
+  A version of it cut strings out first, to spare an assertion message with the word in it. A reviewer
+  measured what that cost: the stripper toggled on any `"`, a char literal among them, so
+  `let _sep = '"'; if !built { return; }` hid a plain `return;` and put 106 tests back to passing on
+  nothing — a false negative on the one spelling this guard exists to catch, introduced by the change
+  meant to make it kinder. It also guarded a hazard that cannot arise where it runs: this reads
+  `tests/pipe.rs`, and the two shipped messages saying *"did not return"* are in `src/tui/models.rs`,
+  which it never opens.
+
+  So the scan is back to whole lines, and its two false positives are declared rather than engineered
+  around. A `return` in a string literal reddens it, and so does one inside a **closure**, which
+  cannot skip the test at all. Both measured. The failure message names the offending line, says both
+  cases are known, and says what to do — move the line into a helper outside the test, or rephrase the
+  message — because an earlier version sent the reader to an entry about closures while they were
+  holding a string.
 
   One more control-surface path of the hosts file's shape, found by a reviewer of this change and
   not closed here:

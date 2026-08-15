@@ -6216,11 +6216,11 @@ fn an_unreadable_install_record_stops_the_uninstall_and_says_what_it_costs() {
 /// So the test brings a `gh`.
 #[test]
 fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
-    let Some(rig) = tracker_rig() else {
-        // No git, or the stand-in was not built. Asserting here would measure
-        // the machine rather than the gate.
-        return;
-    };
+    // This one carried the reason the others did not: *asserting here would
+    // measure the machine rather than the gate*. It is a good reason and it was
+    // applied to the wrong thing — a machine without the stand-in cannot measure
+    // the gate either way, and returning green says it did.
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let head = rig.head.clone();
 
@@ -6296,20 +6296,81 @@ struct TrackerRig {
     head: String,
 }
 
-fn tracker_rig() -> Option<TrackerRig> {
-    let built = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target")
-        .join("debug")
+/// The rig, or a failure that says what to run.
+///
+/// It used to answer `Option` and every caller opened with `let Some(rig) = …
+/// else { return; }`, so where the example was missing all sixteen of these tests
+/// reported **pass** having executed nothing. Measured at the base commit with
+/// the fixture moved aside: `cargo test --test pipe` answered *106 passed*.
+///
+/// Which invocations are exposed is worth being exact about, because the first
+/// version of this comment was not. A bare `cargo test` **does** build examples
+/// — cargo documents it, *"examples — to ensure they compile"*, and
+/// `cargo test --all-features --no-run` in a cold tree leaves a runnable
+/// `fake_process.exe`. What does not build them is a **filtered** invocation:
+/// `cargo test --test pipe`, `cargo test --lib <name>`, anything that selects a
+/// target. That is not a corner — it is how every mutation measurement in this
+/// repository is taken, which is the evidence `docs/honesty.md` is made of. A
+/// cold worktree plus a filtered run is a green answer from sixteen functions
+/// that returned on their first line. (`cargo clippy --all-targets` does not
+/// help: it leaves a `.d` and a zero-byte `.rmeta`, no runnable file.)
+///
+/// So the skip is gone from the type rather than from the callers. There is no
+/// value this can return that means *did not run*, and a missing helper is a
+/// loud failure naming the command that fixes it.
+fn tracker_rig() -> TrackerRig {
+    // Found from the test binary rather than from the manifest, because the
+    // profile and the target triple are not knowable from here. `release.yml`
+    // runs `cargo test --release --target <triple>`, which puts the example under
+    // `target/<triple>/release/examples/` — a hardcoded `target/debug/examples`
+    // was absent there, so the first version of this assertion turned a silent
+    // skip on all six release targets into a hard failure on all six, and no tag
+    // could have been cut. A reviewer measured that before it shipped.
+    //
+    // `current_exe` is this test binary at `<…>/deps/pipe-<hash>`, so the example
+    // sits beside its parent directory whatever the profile and triple are.
+    let here = std::env::current_exe().expect("the test binary knows where it is");
+    let built = here
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("the test binary is under a profile directory")
         .join("examples")
         .join(if cfg!(windows) {
             "fake_process.exe"
         } else {
             "fake_process"
         });
-    if !built.is_file() {
-        return None;
-    }
-    let bin = tempfile::tempdir().ok()?;
+    // The command has to be the one that clears *this* block, not the one that
+    // clears the usual one. `cargo build --examples` writes into `debug`, so on a
+    // filtered release run it discharges nothing and the next attempt fails
+    // identically — which this repository calls worse than naming nothing.
+    //
+    // So both the profile and the target are read back out of the path the
+    // fixture was looked for in. A reviewer measured the half-done version: it
+    // carried `--release` and not `--target`, and running exactly what it printed
+    // left the triple's directory as empty as it found it. The layout is
+    // `target/[<triple>/]<profile>/deps/<binary>`, so the directory above the
+    // profile is either `target` itself or the triple.
+    let profile = built.parent().and_then(std::path::Path::parent);
+    let triple = profile
+        .and_then(std::path::Path::parent)
+        .filter(|above| above.file_name().is_some_and(|name| name != "target"))
+        .and_then(std::path::Path::file_name)
+        .map(|name| format!(" --target {}", name.to_string_lossy()))
+        .unwrap_or_default();
+    let flags = if cfg!(debug_assertions) {
+        triple
+    } else {
+        format!(" --release{triple}")
+    };
+    assert!(
+        built.is_file(),
+        "the process fixture is not built, so this test would have measured \
+         nothing: run `cargo build --examples{flags}`, or drop the target filter — \
+         a bare `cargo test` builds it and `cargo test --test pipe` does not ({})",
+        built.display()
+    );
+    let bin = tempfile::tempdir().expect("a directory for the fake gh");
     // A real executable named `gh`, not a script: on Windows a bare `gh`
     // resolves to `gh.exe` and never to `gh.cmd`, so a script fixture would let
     // the machine's own `gh` answer instead.
@@ -6317,9 +6378,9 @@ fn tracker_rig() -> Option<TrackerRig> {
         &built,
         bin.path().join(if cfg!(windows) { "gh.exe" } else { "gh" }),
     )
-    .ok()?;
+    .expect("the fake gh is copied onto the path");
 
-    let repo = tempfile::tempdir().ok()?;
+    let repo = tempfile::tempdir().expect("a directory for the checkout");
     let git = |arguments: &[&str]| {
         Command::new("git")
             .arg("-C")
@@ -6328,8 +6389,8 @@ fn tracker_rig() -> Option<TrackerRig> {
             .output()
             .is_ok_and(|output| output.status.success())
     };
-    if !git(&["init", "--quiet"])
-        || !git(&[
+    let prepared = git(&["init", "--quiet"])
+        && git(&[
             "-c",
             "user.email=nobody@example.invalid",
             "-c",
@@ -6339,32 +6400,33 @@ fn tracker_rig() -> Option<TrackerRig> {
             "--quiet",
             "-m",
             "one",
-        ])
-    {
-        return None;
-    }
+        ]);
+    assert!(prepared, "the fixture checkout could not be created");
     let head = Command::new("git")
         .arg("-C")
         .arg(repo.path())
         .args(["rev-parse", "HEAD"])
         .output()
-        .ok()?;
+        .expect("git answers for the fixture checkout");
     let head = String::from_utf8_lossy(&head.stdout).trim().to_owned();
-    if head.is_empty() {
-        return None;
-    }
+    assert!(
+        !head.is_empty(),
+        "the fixture checkout has no commit to name"
+    );
 
-    let home = tempfile::tempdir().ok()?;
-    std::fs::create_dir_all(home.path().join(".estigia").join("runs")).ok()?;
-    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).ok()?;
+    let home = tempfile::tempdir().expect("a directory for the fixture home");
+    std::fs::create_dir_all(home.path().join(".estigia").join("runs"))
+        .expect("the run pointer directory");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming"))
+        .expect("the roaming directory the adapters write under");
     // The control surface, or the gate refuses before it decides anything.
     run_in(home.path(), repo.path(), &["setup", "claude-code"], "");
-    Some(TrackerRig {
+    TrackerRig {
         home,
         repo,
         bin,
         head,
-    })
+    }
 }
 
 /// An issue the run holds, in the state its pointer says.
@@ -6463,9 +6525,7 @@ fn tracker_command(
 /// the fake tracker and watches for `pr ready` on the wire.
 #[test]
 fn ci_release_refuses_a_receipt_no_distinct_reviewer_accepted() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let count = trace.path().join("count.json");
@@ -6609,9 +6669,7 @@ fn ci_release_refuses_a_receipt_no_distinct_reviewer_accepted() {
 /// refuse — so both routes are now driven through the real server.
 #[test]
 fn no_acquisition_route_returns_an_unresolved_handoff_to_its_requester_over_the_wire() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let run_id = "claude-abcd1234";
@@ -6764,9 +6822,7 @@ fn no_acquisition_route_returns_an_unresolved_handoff_to_its_requester_over_the_
 /// an audit trail.
 #[test]
 fn a_handoff_against_a_superseded_receipt_is_refused_before_anything_is_written() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let count = trace.path().join("count.json");
@@ -6917,9 +6973,7 @@ fn a_handoff_against_a_superseded_receipt_is_refused_before_anything_is_written(
 /// The state readback only fires after that write.
 #[test]
 fn a_run_that_lost_the_claim_cannot_hand_the_review_off() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let count = trace.path().join("count.json");
@@ -7064,9 +7118,7 @@ fn a_run_that_lost_the_claim_cannot_hand_the_review_off() {
 /// each left the suite green.
 #[test]
 fn the_review_queue_hides_a_handoff_from_its_requester_and_fails_closed_on_an_unreadable_one() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let requester = "claude-abcd1234";
@@ -7252,9 +7304,7 @@ fn the_review_queue_hides_a_handoff_from_its_requester_and_fails_closed_on_an_un
 /// which is what a neutered check would give away.
 #[test]
 fn a_verdict_needs_a_live_claim_and_a_reviewer_nobody_asked_for() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let publisher = "claude-abcd1234";
@@ -7426,9 +7476,7 @@ fn a_verdict_needs_a_live_claim_and_a_reviewer_nobody_asked_for() {
 /// operation and asserts nothing was written.
 #[test]
 fn a_verdict_cannot_credit_the_run_that_published_the_receipt() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let count = trace.path().join("count.json");
@@ -7566,9 +7614,7 @@ fn a_verdict_cannot_credit_the_run_that_published_the_receipt() {
 /// named epoch, and only final convergence may clear the local pointer.
 #[test]
 fn review_handoff_orders_evidence_release_and_pointer_clear() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let count = trace.path().join("count.json");
@@ -7811,9 +7857,7 @@ fn review_handoff_orders_evidence_release_and_pointer_clear() {
 /// green, which is the shape this file exists to catch.
 #[test]
 fn the_ledger_names_the_boundary_the_gate_let_through() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let run = serde_json::json!({
         "run_id": "claude-abcd1234",
@@ -8105,9 +8149,7 @@ fn a_row_this_build_refuses_can_still_be_set_back_to_one_it_accepts() {
 /// command whose whole job is putting a claim down.
 #[test]
 fn release_does_not_report_a_release_the_transport_did_not_perform() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let pointer = home
         .join(".estigia")
@@ -8177,9 +8219,7 @@ const LISTED_PR: &str =
 /// the remote is unchanged.
 #[test]
 fn a_closing_keyword_refuses_before_the_branch_reaches_the_remote() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let origin = tempfile::tempdir().expect("a bare origin");
@@ -8419,9 +8459,7 @@ Closes #12",
 /// head comes back wrong.
 #[test]
 fn a_refusal_after_the_push_reports_that_the_write_landed() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let origin = tempfile::tempdir().expect("a bare origin");
@@ -8684,9 +8722,7 @@ fn a_refusal_after_the_push_reports_that_the_write_landed() {
 /// something to do; that write is the one the revert performs and this refuses.
 #[test]
 fn an_unreadable_pr_body_refuses_before_the_remote_is_touched() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let origin = tempfile::tempdir().expect("a bare origin");
@@ -8878,9 +8914,7 @@ fn an_unreadable_pr_body_refuses_before_the_remote_is_touched() {
 /// operator at the one cause no edit can undo.
 #[test]
 fn the_closing_keyword_check_refuses_a_range_it_cannot_read() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
     let run_id = "claude-abcd1234";
@@ -8997,9 +9031,7 @@ fn the_closing_keyword_check_refuses_a_range_it_cannot_read() {
 /// the claimed checkout.
 #[test]
 fn a_closed_issue_still_refuses_a_write_inside_the_checkout() {
-    let Some(rig) = tracker_rig() else {
-        return;
-    };
+    let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     // Derived the way the hook derives it. Stored under a guessed name the
     // pointer is one nothing loads, the gate stands aside for having sworn

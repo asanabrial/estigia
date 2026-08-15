@@ -655,3 +655,236 @@ fn nothing_writes_a_file_another_program_reads_by_truncating_it() {
         )
     );
 }
+
+/// A fixture may not answer a value that means *did not run*.
+///
+/// `tracker_rig` used to return `Option<TrackerRig>`, and all sixteen of its
+/// callers opened with `let Some(rig) = tracker_rig() else { return; }`. In a
+/// tree where the example it needs had not been built — which a **filtered**
+/// `cargo test --test pipe` never builds — every one of them reported **pass**
+/// having executed nothing. Measured at the commit before the fix, with the
+/// fixture moved aside: `106 passed`, and one rig test alone in `0.00s` against
+/// `0.42s` with it present.
+///
+/// Removing the `Option` fixed the sixteen the compiler could see. Nothing
+/// stopped it coming back, and a reviewer said so: the fix was held by no test,
+/// so the base commit *is* the fix turned off and the suite is green there.
+///
+/// Everything below is found from **the** definition of the rig, not from text
+/// that reads like it: exactly one line in the file may pass the filter, and the
+/// body runs from that line by index. Three decoy routes existed because those
+/// two things were substring matches, and one of them took the signature check
+/// itself from inside a `/* */` block. The filter is still a filter, so a real
+/// definition written `pub fn` is invisible to it — `docs/honesty.md` measures
+/// what that costs.
+///
+/// It holds four separate things, because reviewers walked past each in turn:
+///
+/// 1. **The whole signature.** A prefix match let `-> TrackerRigMaybe`, aliased
+///    to `Option<TrackerRig>`, through.
+/// 2. **Where the fixture is looked for.** The path was once
+///    `CARGO_MANIFEST_DIR/target/debug/examples`, which does not exist under
+///    `cargo test --release --target <triple>` — all six release lanes would have
+///    hard-failed. Reverting that left the whole suite green, this guard
+///    included, so it was a fix nothing held.
+/// 3. **Ending the process instead of failing.** `std::process::exit(0)` made
+///    cargo print no result line at all and exit 0 — worse than the defect this
+///    guard is about, which at least claimed 106 passed. Scoped to the rig at
+///    first, so a caller or a helper below it walked round; the whole file is the
+///    scope now.
+/// 4. **One spelling of a caller-side skip**: the `return` keyword written in a
+///    test that reaches the rig. Not the skip itself — an earlier version of this
+///    comment claimed that, and reviewers reproduced the whole defect through a
+///    macro, a labelled `break`, and a second test file, all with this green.
+///    `docs/honesty.md` lists every route with its measurement and whether it is
+///    held.
+///
+/// It reads source text rather than types because each of these compiles
+/// perfectly when it is wrong. **What holds the accidental path is the compiler**,
+/// not this: `let Some(rig) = tracker_rig()` does not compile against a
+/// non-`Option`, so nobody reintroduces the defect by copying a neighbour, which
+/// is how sixteen callers came to have it. This catches a signature reverting, a
+/// fixture looked for in the wrong place, a process ended instead of failed, and
+/// the one skip spelling somebody is likely to reach for. Deliberate
+/// circumvention is not in reach of reading text,
+/// and pretending otherwise would be the same unmeasured claim this whole issue
+/// has been about.
+///
+/// Not a lint against `Option` in fixtures generally — `repository()` in
+/// `src/harness/guard/tests.rs` still answers one, and `docs/honesty.md` records
+/// what that costs. This holds the one measured lying.
+#[test]
+fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
+    let source = std::fs::read_to_string(root().join("tests").join("pipe.rs"))
+        .expect("the pipe suite is readable");
+
+    // The whole signature, not a prefix of it. A reviewer walked past
+    // `contains("-> TrackerRig")` with `type TrackerRigMaybe = Option<TrackerRig>`
+    // and `fn tracker_rig() -> TrackerRigMaybe {`, which contains the needle and
+    // answers an option — then removed the fixture and watched 106 tests pass on
+    // nothing with this guard green.
+    // Exactly one, because "a line that looks like the definition" is not the
+    // definition. A reviewer put the signature inside a `/* */` block at column
+    // zero — a comment cannot start with `//` there, so the filter took the decoy,
+    // the real rig went back to `Option<TrackerRig>`, and 106 tests passed on
+    // nothing with this green. A second one is a decoy by construction: the
+    // callers can only bind to one.
+    let defining: Vec<&str> = source
+        .lines()
+        .filter(|line| line.trim_start().starts_with("fn tracker_rig("))
+        .collect();
+    assert_eq!(
+        defining.len(),
+        1,
+        "tests/pipe.rs holds {} lines that read as a definition of `tracker_rig`, \
+         so every check below would bind to whichever comes first: {defining:?}",
+        defining.len()
+    );
+    let signature = defining[0];
+    assert_eq!(
+        signature.trim(),
+        "fn tracker_rig() -> TrackerRig {",
+        "`tracker_rig` no longer answers the rig itself, so a caller can be handed \
+         a value meaning *did not run*"
+    );
+
+    // Where the fixture is looked for, and this is a guard the fix needed and did
+    // not have. The path was once `CARGO_MANIFEST_DIR/target/debug/examples`,
+    // which is absent under `cargo test --release --target <triple>` — so all six
+    // release lanes would have hard-failed and no tag could have been cut. A
+    // reviewer measured that reverting the derivation leaves the whole suite
+    // green, this guard included, which by this repository's own rule made it an
+    // untested fix.
+    // From the definition line the check above found, not from the first text in
+    // the file that reads like it. `split_once("fn tracker_rig()")` bound to
+    // whichever came first — a reviewer put two comment lines mentioning the
+    // rig near the top and every assertion below read those four lines instead,
+    // passing while the real rig did both of the things they refuse.
+    // From the line, not from text that reads like it. `split_once(signature)`
+    // matched the first *substring*, so a `//` comment quoting the signature took
+    // the split even though the check above rejects it as a definition. Lines
+    // carry no such ambiguity: exactly one defines the rig, and the body runs
+    // from it to the next line that is only a closing brace.
+    let lines: Vec<&str> = source.lines().collect();
+    let at = lines
+        .iter()
+        .position(|line| *line == signature)
+        .expect("the definition line came out of this file");
+    let past = lines
+        .iter()
+        .skip(at)
+        .position(|line| line.trim_end() == "}")
+        .expect("the rig has an end");
+    let body = lines[at..=at + past].join("\n");
+    let body = body.as_str();
+    assert!(
+        body.contains("current_exe()"),
+        "the fixture is no longer located from the running test binary, so it is \
+         being looked for under one profile while cargo built it under another"
+    );
+    assert!(
+        !body.contains("CARGO_MANIFEST_DIR"),
+        "the fixture is located from the manifest again, which names `target/debug` \
+         however the suite was actually built"
+    );
+    // Nothing in this suite may end the process instead of failing. A reviewer
+    // replaced the rig's assertion with `eprintln!` plus `std::process::exit(0)`:
+    // the fixture absent, `cargo test --test pipe` printed `running 106 tests`, no
+    // result line at all, and exited 0 — worse than the defect this issue is named
+    // for, which at least claimed 106 passed. Scoped to the rig's body at first,
+    // which two reviewers then walked round by putting the call in a caller or in
+    // a helper below the rig. The whole file is the scope the sentence always
+    // meant — and it catches `use std::process::exit as leave;` too, because that
+    // line contains the substring. `use std::process::{exit as leave};` does not,
+    // and that is in `docs/honesty.md` rather than chased with a second substring.
+    let exiting = source
+        .lines()
+        .find(|line| line.contains("process::exit"))
+        .map(str::trim);
+    assert!(
+        exiting.is_none(),
+        "this suite ends the process instead of failing, which cargo reports as \
+         success with no test result at all: {exiting:?}"
+    );
+
+    // Per test function, not per line. Both routes a reviewer found are
+    // caller-side: splitting `let Some(rig) = tracker_rig() else` across two
+    // lines defeats a line-wise scan, and a bare `if !… { return; }` before the
+    // call needs no option at all. A test that reaches the rig has no business
+    // returning early for any reason, so that is what is asserted.
+    let mut skipping = Vec::new();
+    for chunk in source.split("\n#[test]") {
+        if !chunk.contains("tracker_rig()") {
+            continue;
+        }
+        let name = chunk
+            .lines()
+            .find(|line| line.trim_start().starts_with("fn "))
+            .unwrap_or("<unnamed>")
+            .trim();
+        // Comments are not code, and this file quotes the very pattern being
+        // refused — the rig's own doc comment carries `else { return; }` to say
+        // what it used to be. Scanning the raw text made that a finding against
+        // the test the rig happens to sit behind.
+        let code = chunk
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        // The keyword, not two spellings of it: `return;` and `return }` were
+        // matched literally at first and `return Default::default();` walked past
+        // them by two words, with every gate in this repository green.
+        //
+        // The whole line, string literals included. A version of this cut strings
+        // out first, to spare an assertion message with the word in it — and a
+        // reviewer measured what that cost: the stripper toggled on any `"`,
+        // including a char literal, so `let _sep = '"'; if !built { return; }` hid
+        // a plain `return;` and put 106 tests back to passing on nothing. It was
+        // guarding against a hazard that cannot happen here either, since this
+        // reads `tests/pipe.rs` and the messages that say "did not return" are in
+        // `src/tui/models.rs`, which it never opens. A false positive over prose
+        // is cheap and visible; a false negative over the one spelling this exists
+        // to catch is neither.
+        //
+        // So both false positives stand and are declared: a `return` in a string
+        // literal, and one inside a **closure**, which cannot skip the test at
+        // all. Telling either from a real skip needs to know what a closure and a
+        // literal are, which is where reading text ends.
+        let offender = code.lines().find(|line| {
+            line.split(|c: char| !c.is_alphanumeric() && c != '_')
+                .any(|word| word == "return")
+        });
+        if let Some(line) = offender {
+            skipping.push(format!("{name}  ->  {}", line.trim()));
+        }
+    }
+    assert!(
+        skipping.is_empty(),
+        "these reach the rig and write `return`, which is how sixteen tests came to \
+         report pass without running. If the word is inside a closure or a string \
+         rather than in the test's own control flow, it cannot skip anything and \
+         this is a known false positive: put that line in a helper outside the test, \
+         or rephrase the message. `docs/honesty.md` records both cases and why \
+         neither is worth a semantic parser: {skipping:#?}"
+    );
+
+    // The exemption is not vacuous: the callers have to be there for their
+    // absence to mean anything. Sixteen at the time this was written — and
+    // counted as call sites in code, which is not what `matches()` over the raw
+    // file returns. That counted seventeen, because the definition line contains
+    // the needle, and it counted commented-out callers too: a reviewer commented
+    // out all sixteen and this still passed.
+    let callers = source
+        .lines()
+        .filter(|line| {
+            let line = line.trim_start();
+            !line.starts_with("//") && !line.starts_with("fn ") && line.contains("tracker_rig()")
+        })
+        .count();
+    assert!(
+        callers >= 12,
+        "only {callers} call site(s) of `tracker_rig` found in code, so this guard \
+         is reading a spelling the suite no longer uses and would pass on a file \
+         where nothing calls the rig at all"
+    );
+}
