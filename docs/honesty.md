@@ -296,6 +296,21 @@ suite. Everything else here is prose held by review.
      in half and loses them outright. A shell gives no way to know where the option letters end and
      the value begins, so every split point is offered instead. That is what is in the code.
 
+  5. **Normalise each token on its own and join afterwards.** Folding whitespace made the whole line
+     read as one path, and the parent-segment collapse then reached **across an operand boundary**:
+     `mv .estigia ..` became `mv/.estigia/../`, collapsed to `mv/`, and the surface being moved was
+     gone. At the base the tokens were joined with a space, so `/../` never formed there. 66 measured,
+     all of the shape *surface operand followed by an operand beginning `..`* — `mv .estigia ..`,
+     `cp -r .estigia ../snapshot`, `mv ~/.claude/settings.json ..`. These are the ordinary way to move
+     a config file aside, and this was the worst of the six because of that.
+  6. **Read the option prefix off the folded token, and let `~` start one too.** The suffix rule
+     filtered on the *raw* token beginning with `-`, so a leading quote defeated it while the fold
+     still left the option letters in the way: `wget "-O.claude/settings.json"` and
+     `7z x a.7z '-o.estigia/run.json'`, 38 measured. Quoting `-o<dir>` is the documented 7-Zip habit
+     for the reason the rule exists — the directory may hold a space. `%~dp0` expands *with* a
+     trailing separator, so `%~dp0.estigia\run.json` is the correct batch idiom and puts a digit where
+     the anchoring wants one; `%` joined the folded set and `~` joined `-` as a prefix marker.
+
   `7z` is why the fourth is not optional: its extract-to spelling is `-oDIR`, a space there is a
   syntax error, and it is in `WRITES_A_FILE` deliberately — so the only correct way to write "extract
   into the state directory" was the one spelling that was not gated.
@@ -303,10 +318,17 @@ suite. Everything else here is prose held by review.
   Each attempt was measured against the base by a reviewer classifying raw command strings through
   the built binary, and each time the whole suite was green over the loss — because every fixture in
   this crate spelled its commands the way the last fix had taught it to. That is the same blind spot
-  **four** times: a narrowing nothing asserts, found by a reader who spells the command differently
-  than the fixture does. It is recorded at this length because the count is the finding. Anchoring a
-  matcher against a shell is not one change; each spelling that reaches a path is its own claim, and
-  the suite went green over every one of them until somebody wrote it down. `punctuation_does_not_hide_a_control_surface`,
+  **six** times: a narrowing nothing asserts, found by a reader who spells the command differently
+  than the fixture does. It is recorded at this length because the count is the finding, and the count
+  is the honest summary of this work: anchoring a matcher against a shell is not one change. Each
+  spelling that reaches a path is its own claim, the suite went green over every loss until somebody
+  wrote the spelling down, and two of the six were introduced by the fix for the one before it.
+
+  What follows from that, and is not a claim this branch can settle: a seventh is likelier than not.
+  The fixtures here hold the six spellings that were found, plus the sixteen folded characters and the
+  ordinary-line direction. They do not hold *the space of spellings*, because nothing in this crate
+  enumerates it. A property test over generated command lines, crossed against a second reading of the
+  same path, is the shape that would — and there is none. `punctuation_does_not_hide_a_control_surface`,
   `a_drive_relative_spelling_is_measured_like_a_relative_one` and
   `a_relative_operand_is_measured_like_an_absolute_one` hold the direction now, and
   `folding_punctuation_does_not_gate_an_ordinary_line` holds the other one, because reading
@@ -401,7 +423,7 @@ suite. Everything else here is prose held by review.
     `opencode/agents.md` are covered by the same over-gating fixture.
   - Four are silent, measured one at a time with the full suite: `.agents/agents` → `.agents/`,
     `.codex/agents` → `.codex/`, `.qwen/qwen.md` → `.qwen/` and `.cline/rules/estigia.md` →
-    `.cline/` each **leave all 1,156 tests green.** Nothing in this crate names a path under those
+    `.cline/` each **leave all 1,158 tests green.** Nothing in this crate names a path under those
     directories in the `Routine` direction. An earlier draft of this list said *one*, naming only
     qwen; a reviewer counted them.
 

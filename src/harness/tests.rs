@@ -3545,6 +3545,84 @@ fn the_declared_over_gating_is_the_shape_the_document_names() {
     }
 }
 
+/// A later operand does not erase the surface named by an earlier one.
+///
+/// The fifth loss on this road, and the worst, because the commands are the
+/// ordinary way to move a config file aside rather than an adversarial spelling.
+/// Folding whitespace to a separator made the whole line read as one path, and
+/// the parent-segment collapse then reached **across an operand boundary**: `mv
+/// .estigia ..` became `mv/.estigia/../` and collapsed to `mv/`, deleting the
+/// surface being moved. At the base the tokens were joined with a space, so
+/// `/../` never formed there and a bare `contains` gated it. A reviewer measured
+/// 66 of these.
+///
+/// Each token is normalised on its own now and joined afterwards, so a `..` can
+/// only collapse what its own operand names.
+#[test]
+fn a_later_operand_does_not_collapse_an_earlier_surface() {
+    for line in [
+        "mv .estigia ..",
+        "mv .estigia ../backup",
+        "cp -r .estigia ../snapshot",
+        "rm .estigia ../other",
+        "mv /home/me/.claude/settings.json ..",
+        "mv /home/me/.claude/settings.json ../backup",
+        "cp /home/me/.config/gh/hosts.yml ../keep",
+        "mv /home/me/.codex/config.toml ../old",
+        "install .claude/settings.json ../out",
+        "cp .estigia/run.json ../../elsewhere",
+        // And the collapse still works within one operand, which is the whole
+        // reason it exists: this names the file the gate is registered in.
+        "rm /home/me/.claude/skills/../settings.json",
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and an operand of it names a control surface"
+        );
+    }
+}
+
+/// An option prefix is read past its quotes, and past an expansion too.
+///
+/// The sixth loss, and the same family as the fourth one quote wide: the suffix
+/// rule filtered on the **raw** token beginning with `-`, so a leading quote
+/// defeated it while the fold still left the option letters between the
+/// separator and the fragment. Quoting `-o<dir>` is the documented 7-Zip habit,
+/// for exactly the reason the rule exists — the directory may hold a space.
+///
+/// `~` sits beside `-` for the same reason and was measured on the same round:
+/// `%~dp0` expands *with* a trailing separator, so `%~dp0.estigia\run.json` is
+/// the correct batch idiom and puts a digit where the anchoring wants a
+/// separator. The rule reads segments off the folded token now, so a quote, a
+/// percent or anything else in the folded set gets out of the way first.
+#[test]
+fn a_quoted_or_expanded_option_prefix_does_not_hide_a_control_surface() {
+    let dq = '"';
+    let sq = '\'';
+    let pct = '%';
+    for line in [
+        format!("wget {dq}-O.claude/settings.json{dq} https://x"),
+        format!("wget {sq}-O.claude/settings.json{sq} https://x"),
+        format!("7z x a.7z {sq}-o.estigia/run.json{sq}"),
+        format!("7z x a.7z {dq}-o.estigia/stand-down.json{dq}"),
+        format!("wget {dq}-Oskills/flow/SKILL.md{dq} https://x"),
+        format!("wget {sq}-O.config/gh/hosts.yml{sq} https://x"),
+        format!("wget {sq}-O.claude.json{sq} https://x"),
+        format!("rm -rf {pct}~dp0.estigia/run.json"),
+        format!("cp a {pct}~dp0.estigia/run.json"),
+        format!("echo x > {pct}~dp0.claude/settings.json"),
+    ] {
+        let (_, how) = classify("Bash", &serde_json::json!({ "command": &line }));
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "`{line}` answers routine, and its option prefix is holding a control surface"
+        );
+    }
+}
+
 /// A short option carrying its value attached, and a brace expansion.
 ///
 /// The fourth family of shell-road loss this branch has paid for, and the one
@@ -3679,7 +3757,7 @@ fn an_option_prefix_does_not_gate_an_ordinary_line() {
 /// character, then the fragment — unreachable by the left anchoring unless the
 /// character folds to a separator.
 const FOLDED_CHARACTERS: &[char] = &[
-    '"', '\'', '`', '<', '>', '=', '|', ';', '&', '(', ')', '$', '*', ',', '{', '}',
+    '"', '\'', '`', '<', '>', '=', '|', ';', '&', '(', ')', '$', '*', ',', '{', '}', '%',
 ];
 
 #[test]

@@ -541,7 +541,7 @@ const NEUTRALISES_A_FILE: &[&str] = &["chmod ", "chattr ", "chown "];
 /// `.cursor/estigia-workflow-authority.md` — so folding it would cut them in
 /// half and lose them outright. The option prefix it belongs to is handled in
 /// `surface_of` as a prefix rather than as punctuation.
-const NOT_IN_A_PATH_SEGMENT: &str = "\"'`<>=|;&()$*,{}";
+const NOT_IN_A_PATH_SEGMENT: &str = "\"'`<>=|;&()$*,{}%";
 
 /// How sensitive a command line is, by what it names.
 ///
@@ -597,15 +597,42 @@ fn surface_of(command: &str) -> Sensitivity {
             })
             .collect::<String>()
     };
-    let folded = fold(command);
-    let mut view = format!("/{folded}/");
-    for token in command.split_whitespace().filter(|t| t.starts_with('-')) {
-        for (at, _) in token.char_indices().skip(1) {
-            view.push_str(&fold(&token[at..]));
-            view.push('/');
+    // Per token, and joined afterwards rather than normalised as one string. A
+    // command line is not one path: normalising the joined line let the
+    // parent-segment collapse reach across an operand boundary and delete the
+    // surface named by the operand before it, so `mv .estigia ..` answered
+    // `Routine` where the base answered `Boundary`.
+    let mut view = String::from("/");
+    for token in command.split_whitespace() {
+        view.push_str(&normalise(&fold(token)));
+        view.push('/');
+    }
+    // A segment beginning with `-` or `~` is an option or an expansion, and the
+    // shell gives no way to know where its prefix ends and the path begins. Every
+    // split point from there is offered to the matcher, which can gate a token
+    // that merely ends like a surface and can never miss one that is a surface.
+    //
+    // Read off the **folded** token rather than the raw one, because a leading
+    // quote is what defeated the first version of this: `wget "-O.claude/…"`
+    // does not start with `-` before folding, and the option letters then sit
+    // between the separator and the fragment exactly as they did unquoted. A
+    // reviewer measured 38 of those, plus the batch idiom `%~dp0.estigia\…`,
+    // which is why `~` is here beside `-`.
+    for token in command.split_whitespace() {
+        let folded = fold(token);
+        let starts_a_segment = |at: usize| at == 0 || folded.as_bytes()[at - 1] == b'/';
+        for (at, byte) in folded.bytes().enumerate() {
+            if (byte == b'-' || byte == b'~') && starts_a_segment(at) {
+                for cut in at + 1..folded.len() {
+                    if folded.is_char_boundary(cut) {
+                        view.push_str(&normalise(&folded[cut..]));
+                        view.push('/');
+                    }
+                }
+            }
         }
     }
-    if is_control_surface(&view) {
+    if matches_a_fragment(&view) {
         Sensitivity::Boundary
     } else {
         Sensitivity::Routine
@@ -617,6 +644,23 @@ fn surface_of(command: &str) -> Sensitivity {
 /// Read with both separators folded to `/`, because the tool sends whatever the
 /// platform hands it and half of these are written by this crate on Windows.
 fn is_control_surface(target: &str) -> bool {
+    matches_a_fragment(&normalise(target))
+}
+
+/// One path, folded and collapsed into the spelling the fragments are written
+/// in.
+///
+/// Split out from the matching so that `surface_of` can apply it **per token**.
+/// A command line is not one path, and normalising the joined line let the
+/// parent-segment collapse below reach across an operand boundary: `mv .estigia
+/// ..` became `mv/.estigia/../` and collapsed to `mv/`, deleting the very
+/// surface being moved. At the base commit the tokens were joined with a space,
+/// so `/../` never formed across the boundary and a bare `contains` gated it. A
+/// reviewer measured 66 of those, all of the shape *surface operand followed by
+/// an operand beginning `..`* — `mv .estigia ..`, `cp -r .estigia ../snapshot`,
+/// `mv ~/.claude/settings.json ..`. Ordinary ways to move a config file aside,
+/// not adversarial spellings.
+fn normalise(target: &str) -> String {
     // A drive prefix is a separator too. `C:.estigia\stand-down.json` is the
     // drive-relative spelling — the current directory *of that drive*, not the
     // root — and it names the same file as `.estigia/stand-down.json`. It read
@@ -654,6 +698,12 @@ fn is_control_surface(target: &str) -> bool {
         }
         path = format!("{}{}", &path[..cut], &path[at + 3..]);
     }
+    path
+}
+
+/// Whether an already-normalised path names something on the control surface.
+fn matches_a_fragment(path: &str) -> bool {
+    let path = path.to_string();
     // The skill tree is derived, not spelled. It used to be a literal in
     // `CONTROL_SURFACE`, and that put the installed directory's name in two
     // places: `skill::DIRECTORY`, which decides where the installer writes, and
