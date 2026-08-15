@@ -259,6 +259,17 @@ suite. Everything else here is prose held by review.
   `Boundary` to `rm`. The suite was green over all of them, because nothing asserted the `Routine`
   direction for a non-dot fragment. All four are in the fixture now, on both roads.
 
+  Anchoring cost one thing on the way, and it is the reason the fixtures now spell a **relative**
+  operand. `surface_of` builds its view by joining the command's tokens with **spaces**, so an
+  anchored fragment finds no separator in front of a relative operand — and none of them is at
+  position 0 either, because the verb is. `rm -rf .estigia` and `echo x > .claude/settings.json` went
+  `Boundary` to `Routine` while `Write` still answered `Boundary` for the same path: the road split
+  the anchoring was added to close, reappearing inverted on the spelling an agent inside a repository
+  types most, and reaching the file the gate is registered in. Every fixture in this crate spelled
+  its paths absolutely, so the suite was green over all of it and a reviewer found it by classifying
+  raw command strings through the built binary. Each token is wrapped in a separator on both sides
+  now, in the one place the trailing one was already added.
+
   A fragment naming a **file** without a leading dot still cannot be anchored, because `cli/hosts.yml`
   exists to match **mid-segment**: the Windows path is `%APPDATA%\GitHub CLI\hosts.yml`, and
   `github cli` is one segment holding a space. So `~/.codeium/notwindsurf/memories/global_rules.md`
@@ -283,7 +294,7 @@ suite. Everything else here is prose held by review.
   Over-gating is held only for hand-spelled shapes. The fixture that watches the `Routine` direction
   lists paths by name, and nothing derives an over-gating check from the adapter table — so widening a
   *derived* fragment is silent: changing crush's to `"crush/"` gates every path under any directory of
-  that name and leaves all 1,143 tests green. The same is true of widening a spelled entry. The
+  that name and leaves all 1,145 tests green. The same is true of widening a spelled entry. The
   under-gating direction is crossed against `resolve_paths`; this one is crossed against nothing.
 
   And the **containing** directories are `Routine` on both roads while their contents are now
@@ -302,10 +313,21 @@ suite. Everything else here is prose held by review.
   `.cursorrules`, `.clinerules`, `.windsurfrules`, `.github/copilot-instructions.md` and `.mcp.json`.
   They carry the same always-loaded authority, and they are **inside** a checkout, so they stay
   measured against the claim rather than standing aside — which is why they are a smaller thing than
-  what this issue closed, not the same thing. `harness::roles::definition_for` reads its four
-  definition roots from a hand-spelled list that nothing crosses against the gate; all four answer
-  `Boundary` today, and a fifth would not. One of the four, `~/.claude/agents`, is crossed now — it
-  is `paths.agents_root` and the walk reaches it; the other three are held by reading.
+  what this issue closed, not the same thing. `harness::roles::definition_for` reads its **five**
+  definition roots from a hand-spelled list that nothing crosses against the gate. All five answer
+  `Boundary` today and a sixth would not — but that sentence said *four*, and said it while one of
+  them was `Routine` on both roads. `<repo>/.opencode/agents` is searched beside `<repo>/.claude/agents`
+  in a single `vec!`, and the two were gated by different fragments: `.claude/agents/` reached the
+  first, `opencode/agents/` is anchored on the left so `.opencode` is not it, and nothing reached the
+  second. A definition that is not found is `Ok(None)`, which `declared_policy` reads as *every tool
+  allowed*, so the file that writes an agent its own allowlist was the one riding the renewal window.
+  A reviewer measured it; the fixture in this repository had gone further and asserted the hole,
+  listing that root among the ordinary paths a directory entry must not gate. `.opencode/agents/` is
+  a `CONTROL_SURFACE` entry now, `every_definition_root_is_a_boundary_on_both_roads` crosses all five,
+  and one of them — `~/.claude/agents` — is additionally `paths.agents_root`, reached by the walk.
+
+  What is still not crossed is the **list itself**: adding a sixth root to `definition_for` reddens
+  nothing. The fixture spells the five by hand, exactly as the roots are spelled by hand.
 
   `gh`'s hosts file would have belonged on that list and is not on it. It decides which account
   every tracker call acts as, so it is named in `CONTROL_SURFACE` instead — which is what the issue

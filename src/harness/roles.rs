@@ -426,7 +426,7 @@ pub fn definition_for(
     {
         match std::fs::read_to_string(&file) {
             Ok(text) => return Ok(Some(text)),
-            // Almost every candidate is absent — four roots are searched and at
+            // Almost every candidate is absent — five roots are searched and at
             // most one holds the file.
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
             Err(error) => {

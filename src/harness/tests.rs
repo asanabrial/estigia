@@ -3460,7 +3460,11 @@ fn a_directory_entry_does_not_gate_a_name_that_only_starts_the_same() {
         // fragments it added. A directory fragment can be anchored because every
         // real target has that first segment whole; the file fragments cannot,
         // and `docs/honesty.md` measures what that leaves.
-        "/repo/.opencode/agents",
+        // Not `/repo/.opencode/agents`: a reviewer measured that it is a live
+        // definition root `roles::definition_for` searches, so calling it an
+        // ordinary path was the fixture pinning a hole. It has its own entry now
+        // and its own fixture below. `/repo/.opencode/plugins` stays here because
+        // Estigia reads nothing from it — `docs/honesty.md` carries that split.
         "/repo/.opencode/plugins",
         "/repo/xyzopencode/agents",
         "/repo/notwindsurf/memories",
@@ -3490,6 +3494,87 @@ fn a_directory_entry_does_not_gate_a_name_that_only_starts_the_same() {
                 "{road} on {ordinary} answers boundary, and it is an ordinary path that \
                  only starts like a control surface"
             );
+        }
+    }
+}
+
+/// A relative operand reaches the same answer as an absolute one.
+///
+/// `surface_of` joins a command's tokens with **spaces**, so an anchored
+/// fragment finds no separator in front of a relative operand and none of them
+/// is at position 0 — the verb is. Every fixture in this file spelled its paths
+/// absolutely, so `rm -rf .estigia` and `echo x > .claude/settings.json` went
+/// `Boundary` to `Routine` with the whole suite green, while `Write` still
+/// answered `Boundary` for the same path. That is the road split the anchoring
+/// was added to close, reappearing inverted on the spelling an agent inside a
+/// repository types most.
+#[test]
+fn a_relative_operand_is_measured_like_an_absolute_one() {
+    for named in [
+        ".estigia",
+        ".estigia/state.json",
+        ".claude/settings.json",
+        ".claude/settings.local.json",
+        ".claude/agents",
+        ".claude/agents/reviewer.md",
+        ".opencode/agents/reviewer.md",
+        ".config/gh/hosts.yml",
+        ".codex/hooks.json",
+        ".cursor/rules/estigia.md",
+    ] {
+        for (road, payload) in [
+            ("Write", serde_json::json!({ "file_path": named })),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("rm -rf {named}") }),
+            ),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("echo x > {named}") }),
+            ),
+        ] {
+            let (_, how) = classify(road, &payload);
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "{road} on the relative spelling {named} answers routine, and the absolute spelling of the same path is a boundary"
+            );
+        }
+    }
+}
+
+/// Every root `roles::definition_for` searches, including the repository's own.
+///
+/// A definition carries a tool allowlist and a definition that is not found is
+/// `Ok(None)`, which `declared_policy` reads as *every tool allowed*. The
+/// repository-local OpenCode root was the one nothing reached: `.claude/agents/`
+/// covered its Claude twin, `opencode/agents/` is anchored so `.opencode` is not
+/// it, and the two roots sit in one `vec!` gated by two different fragments.
+/// Both documents claimed every root was watched while this one was `Routine`.
+#[test]
+fn every_definition_root_is_a_boundary_on_both_roads() {
+    for root in [
+        "/repo/.claude/agents",
+        "/repo/.opencode/agents",
+        "/home/me/.claude/agents",
+        "/home/me/.config/opencode/agents",
+        "/xdg/opencode/agents",
+    ] {
+        for named in [root.to_string(), format!("{root}/reviewer.md")] {
+            for (road, payload) in [
+                ("Write", serde_json::json!({ "file_path": &named })),
+                (
+                    "Bash",
+                    serde_json::json!({ "command": format!("rm -rf {named}") }),
+                ),
+            ] {
+                let (_, how) = classify(road, &payload);
+                assert_eq!(
+                    how,
+                    Sensitivity::Boundary,
+                    "{road} on {named} answers routine, and it is a root `definition_for` reads a tool allowlist from"
+                );
+            }
         }
     }
 }

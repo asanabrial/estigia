@@ -452,6 +452,19 @@ const CONTROL_SURFACE: &[&str] = &[
     "opencode/agents/",
     "opencode/plugins/",
     "opencode/opencode.json",
+    // The **repository-local** definition root, which is a different path and was
+    // reached by none of the three above: `roles::definition_for` searches
+    // `<repo>/.opencode/agents` as well as the home and XDG roots, and
+    // `opencode/agents/` is anchored on the left, so `.opencode` is not it. A
+    // reviewer measured that root answering `Routine` on both roads while
+    // `docs/honesty.md` and the pull request both claimed every definition root
+    // was watched. A definition that is not found is `Ok(None)`, which
+    // `declared_policy` reads as *every tool allowed* — so this is the file that
+    // writes an agent its own tool allowlist, and it sat inside the renewal
+    // window. `<repo>/.claude/agents` was already covered by `.claude/agents/`;
+    // this is its OpenCode twin, and the asymmetry was invisible because the two
+    // roots are spelled in one `vec!` and gated by two different fragments.
+    ".opencode/agents/",
     // Both roots, because Gemini keeps its settings under `%APPDATA%` on Windows
     // and `~/.gemini` everywhere else, and only the POSIX spelling was here. The
     // Windows one is where this harness's own gate is registered for that
@@ -506,14 +519,24 @@ const NEUTRALISES_A_FILE: &[&str] = &["chmod ", "chattr ", "chown "];
 /// elsewhere costs one extra tracker read, and a line that removes one
 /// unmeasured costs the gate for everything after it.
 ///
-/// Each token is given a trailing `/` before matching, because the fragments
-/// name directories with one and a command names them without: `rm -rf
-/// ~/.claude/skills/issue-flow` is the same directory as the path a `Write`
-/// would give as `.../skills/issue-flow/`.
+/// Each token is wrapped in `/` on **both** sides before matching. The trailing
+/// one because the fragments name directories with a separator and a command
+/// names them without: `rm -rf ~/.claude/skills/issue-flow` is the same
+/// directory as the path a `Write` would give as `.../skills/issue-flow/`.
+///
+/// The leading one because the fragments are anchored on the left, and this
+/// view joins tokens with **spaces**. A relative operand therefore has a space
+/// in front of it and never a separator — and it is never at position 0 either,
+/// because the verb is. So `rm -rf .estigia` and `echo x > .claude/settings.json`
+/// answered `Routine` while `Write` answered `Boundary` for the same paths: the
+/// road split the anchoring was added to close, reappearing inverted on the
+/// spelling an agent types most often inside a repository. Wrapping the token
+/// gives the anchored branch the separator it is looking for, and it is the same
+/// one place the trailing separator is already added rather than a second rule.
 fn surface_of(command: &str) -> Sensitivity {
     let view = command
         .split_whitespace()
-        .map(|token| format!("{token}/"))
+        .map(|token| format!("/{token}/"))
         .collect::<Vec<_>>()
         .join(" ");
     if is_control_surface(&view) {

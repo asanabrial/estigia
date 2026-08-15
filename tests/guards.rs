@@ -605,7 +605,17 @@ const AFFIRMED: &[(&str, u64)] = &[
     // OpenCode itself keeps there, three drafts said *nine* without anybody
     // enumerating them, and `docs/honesty.md` holds the shapes that were
     // actually measured. A number in two files is a number that disagrees.
-    ("control-surface", 6738328471156835869),
+    // Reopened once more, and by a member this time rather than the rule:
+    // `.opencode/agents/`. `roles::definition_for` searches the repository's own
+    // OpenCode definition root beside its Claude one, in a single `vec!`, and the
+    // two were gated by different fragments — `.claude/agents/` reached the
+    // first, and `opencode/agents/` is anchored on the left, so nothing reached
+    // the second. A reviewer measured it `Routine` on both roads while
+    // `docs/honesty.md` and the pull request both said every definition root was
+    // watched. A definition not found is `Ok(None)`, which `declared_policy`
+    // reads as *every tool allowed*, so the file that writes an agent its own
+    // allowlist was the one riding the renewal window.
+    ("control-surface", 2144014802560117266),
     // Reopened 2026-08-05 by measuring the enumeration instead of reading it.
     // Thirty command lines that visibly put bytes on disk were classified and
     // twenty-six came back Untouched, among them "wget -O src/main.rs URL" —

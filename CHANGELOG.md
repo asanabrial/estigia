@@ -70,6 +70,23 @@ the workflow, it holds the tools.
   a **file** without one, and `cli/hosts.yml` is why: `%APPDATA%\GitHub CLI\hosts.yml` holds it
   mid-segment. `docs/honesty.md` measures what that leaves.
 
+  Anchoring cost one thing on the way. `surface_of` joins a command's tokens with **spaces**, so
+  an anchored fragment finds no separator in front of a relative operand, and none of them is at
+  position 0 because the verb is: `rm -rf .estigia` and `echo x > .claude/settings.json` went
+  `Boundary` to `Routine` while `Write` still answered `Boundary` for the same path — the split
+  inverted, on the spelling an agent inside a repository types most, reaching the file the gate is
+  registered in. Every fixture here spelled its paths absolutely, so the suite was green over all
+  of it. Each token is wrapped in a separator on both sides now, and a relative spelling is
+  asserted on both roads.
+
+  `<repo>/.opencode/agents` joined the list for the same reason it was missed: `definition_for`
+  searches it beside `<repo>/.claude/agents` in one `vec!`, `.claude/agents/` reached the first,
+  and `opencode/agents/` is anchored so `.opencode` is not it. A definition that is not found is
+  `Ok(None)`, which `declared_policy` reads as *every tool allowed* — so the file that writes an
+  agent its own tool allowlist rode the renewal window, while two documents said every definition
+  root was watched and a fixture listed that root among the ordinary paths. All five roots are
+  crossed now, on both roads.
+
   `harness::roles::definition_for` also stopped spelling OpenCode's definition root by hand: it now
   searches the default root **and** the one `XDG_CONFIG_HOME` names, through the same rule `setup`
   uses. Searching only one meant a definition it did not find — which `declared_policy` reads as
