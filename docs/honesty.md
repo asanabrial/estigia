@@ -336,6 +336,23 @@ suite. Everything else here is prose held by review.
      `contains` and wrong once the fragments were anchored: thirteen relative spellings, the run
      pointer and the stand-down record among them, stopped matching on that road while `Write` still
      gated the same file. Both roads read free text the same way now.
+  9. **Read the ladder off the same string the matcher reads.** The view is built from
+     `normalise(&fold(token))` and the ladder's entry test read `fold(token)` alone — `normalise`
+     folds `:` and `\` and `fold` does not. So in `${P:-.claude/settings.json}` the `-` starts a
+     segment in the string that is matched and did not in the string the ladder inspected: no rung,
+     and thirteen real surfaces answered `Routine` where the base answered `Boundary`.
+     `TARGET=${1:-.claude/settings.json}` then `rm -f "$TARGET"` is the ordinary script idiom for a
+     defaulted path. A reviewer found it by sweeping **two**-character contexts; the 660-character
+     sweep recorded above is one character wide and could not reach `:-`. The same fix reaches `:~`,
+     `\-` and `\~`, which that reviewer's exhaustive two-character sweep names as the only other
+     non-lookalike contexts that were open.
+
+     **What stays open, and why it is a limit rather than an oversight.** `${P-path}`, `${P:+path}`
+     and `${P:?path}` are still `Routine`. Once `$`, `{`, `}` and `:` are folded away, `P-path` is
+     indistinguishable from a file named `P-path`, and `+`/`?` sit where a segment's first character
+     would. Laddering from a `-` in the *middle* of a segment would reach them and would also gate
+     `x-.claude/agents` and every `foo-bar` tail like it — trading a hole for over-gating on ordinary
+     names. Measured and left, rather than closed by widening.
 
   `7z` is why the fourth is not optional: its extract-to spelling is `-oDIR`, a space there is a
   syntax error, and it is in `WRITES_A_FILE` deliberately — so the only correct way to write "extract
@@ -344,15 +361,16 @@ suite. Everything else here is prose held by review.
   Each attempt was measured against the base by a reviewer classifying raw command strings through
   the built binary, and each time the whole suite was green over the loss — because every fixture in
   this crate spelled its commands the way the last fix had taught it to. That is the same blind spot
-  **eight** times: a narrowing nothing asserts, found by a reader who spells the command differently
+  **nine** times: a narrowing nothing asserts, found by a reader who spells the command differently
   than the fixture does. It is recorded at this length because the count is the finding, and the count
   is the honest summary of this work: anchoring a matcher against a shell is not one change. Each
   spelling that reaches a path is its own claim, the suite went green over every loss until somebody
-  wrote the spelling down, and **four of the eight were introduced by the fix for the one before it**.
+  wrote the spelling down, and **five of the nine were introduced by the fix for the one before it**.
 
-  What follows from that, and is not a claim this branch can settle: a ninth is likelier than not. The
-  fixtures here hold the eight spellings that were found, plus the eighteen folded characters and the
-  ordinary-line direction. They do not hold *the space of spellings*, because nothing in this crate
+  The eighth paragraph of this section predicted a ninth and a reviewer found one in the next round,
+  which is the closest thing here to a measurement of the process rather than the code. A tenth is
+  likelier than not. The fixtures hold the nine spellings that were found, plus the eighteen folded
+  characters and the ordinary-line direction. They do not hold *the space of spellings*, because nothing in this crate
   enumerates it. A property test over generated command lines, crossed against a second reading of the
   same path, is the shape that would — and there is none. `punctuation_does_not_hide_a_control_surface`,
   `a_drive_relative_spelling_is_measured_like_a_relative_one` and

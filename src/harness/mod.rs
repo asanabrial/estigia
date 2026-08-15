@@ -653,7 +653,20 @@ fn text_names_a_control_surface(text: &str) -> bool {
     // `docs/honesty.md` false about the very directories it was declaring open.
     // `.agents/agents` has the same `A/A[1..]` shape and did the same thing.
     let ladder = |token: &str| {
-        let folded = fold(token);
+        // The **same string the matcher sees**, which is what this got wrong: the
+        // view is built from `normalise(&fold(token))` and the entry test read
+        // `fold(token)` alone. `normalise` folds `:` and `\` and this does not, so
+        // in `${P:-.claude/settings.json}` the `-` starts a segment in the string
+        // that is matched and did not in the string the ladder inspected — no rung
+        // was offered, and a parameter expansion with a default word answered
+        // `Routine` for thirteen real surfaces the base gated, the run pointer and
+        // the stand-down record among them. `TARGET=${1:-.claude/settings.json}`
+        // over two lines is the ordinary script idiom for it, not a contrivance.
+        //
+        // A reviewer found it by sweeping **two**-character contexts; the sweep
+        // recorded in `docs/honesty.md` was one character wide and could not reach
+        // `:-`.
+        let folded = normalise(&fold(token));
         let starts_a_segment = |at: usize| at == 0 || folded.as_bytes()[at - 1] == b'/';
         folded
             .bytes()

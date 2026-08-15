@@ -3545,6 +3545,53 @@ fn the_declared_over_gating_is_the_shape_the_document_names() {
     }
 }
 
+/// The ladder reads the same string the matcher does.
+///
+/// The ninth loss on this road. The view is built from `normalise(&fold(token))`
+/// and the ladder's entry test read `fold(token)` alone — `normalise` folds `:`
+/// and `\` and `fold` does not. So in `${P:-.claude/settings.json}` the `-`
+/// starts a segment in the string that is matched and did not in the string the
+/// ladder inspected, no rung was offered, and thirteen real surfaces answered
+/// `Routine` where the base answered `Boundary`: the run pointer, the stand-down
+/// record, `hosts.yml` and the file the gate is registered in among them.
+///
+/// `TARGET=${1:-.claude/settings.json}` on one line and `rm -f "$TARGET"` on the
+/// next is the ordinary script idiom for a defaulted path, not a contrivance. A
+/// reviewer found it by sweeping **two**-character contexts; the sweep recorded
+/// in `docs/honesty.md` was one character wide and could not reach `:-`.
+#[test]
+fn a_defaulted_parameter_does_not_hide_a_control_surface() {
+    let d = '$';
+    let ob = '{';
+    let cb = '}';
+    for path in [
+        ".claude/settings.json",
+        ".claude.json",
+        ".estigia/run.json",
+        ".estigia/stand-down.json",
+        ".config/gh/hosts.yml",
+        ".codex/config.toml",
+        ".cursor/mcp.json",
+        ".qwen/settings.json",
+    ] {
+        for line in [
+            format!("rm -f {d}{ob}P:-{path}{cb}"),
+            format!("rm -f {d}{ob}HOME:-{path}{cb}"),
+            // The other two contexts the same fix reaches, because `normalise`
+            // folds the backslash as well as the colon.
+            format!("rm -f x{}-{path}", '\\'),
+            format!("rm -f x{}~{path}", '\\'),
+        ] {
+            let (_, how) = classify("Bash", &serde_json::json!({ "command": &line }));
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "`{line}` answers routine, and its default word names a control surface"
+            );
+        }
+    }
+}
+
 /// A patch body names a control surface the same way a command line does.
 ///
 /// Two of the eleven write tools put the path in a patch body rather than a
