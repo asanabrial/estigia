@@ -78,9 +78,9 @@ suite. Everything else here is prose held by review.
   are sorted by it: it was read for all four, so the comparison is paid for. **Manifest change** is
   not ordered at all — one cell holds a reading and three hold nothing, and a filled cell beside
   three empty ones ranks nothing. The row order carries no claim either: within a tie it is the
-  order the table was written with — which the commit before this one silently swapped, moving the
-  action whose superlative it was deleting to the top, so that the claim survived as layout after
-  its sentence was gone. Nothing here says which bump to make first.
+  order the table was written with, restored after one commit swapped it and the next put it back.
+  Which commit did which is in the log, and this document has now got that history wrong twice, in
+  consecutive attempts to tell it. Nothing here says which bump to make first.
 
   That distinction is what this entry kept getting wrong. It has now carried a wrong count, a wrong
   containment claim, a wrong remediability claim and two wrong superlatives — both written in one
@@ -97,10 +97,9 @@ suite. Everything else here is prose held by review.
   workflow. An enumeration in this document is a claim to have looked everywhere; inheriting one is
   not looking.
 
-  **And the guard's other half did not decide.** Seven rounds of review on this change each found one
-  defect and every one was a sentence, which made a comfortable story: the code was right and only
-  the prose was wrong. The eighth round mutated the workflow instead of reading it, and the story was
-  wrong too. `cache-on-failure: true` was checked by searching the whole file for that text, so three
+  **And the guard's other half did not decide.** Seven rounds of review on this change found defects
+  only in prose, which made a comfortable story: the code was right and only the writing was wrong.
+  The eighth round mutated the workflow instead of reading it, and the story was wrong too. `cache-on-failure: true` was checked by searching the whole file for that text, so three
   ways of turning the fix off left the suite green — commenting the option out above a `rust-cache`
   left on its defaults, parking the option on some other step, and deleting the caching step
   altogether. The checkout half had stripped comments from its first line; the cache half never did,
@@ -113,7 +112,25 @@ suite. Everything else here is prose held by review.
   caching anywhere but `ci.yml`. The issue's out-of-scope line rules out caching *anything other than
   cargo* — which is exactly what `rust-cache` caches, so it permits what the assertion forbids.
   Keeping the release lane uncached is this repository's own judgement, and the comment says so now,
-  with the reason and the condition under which the line should go.
+  with the condition under which the line should go. It used to give a mechanism — that the lane
+  builds each target once, so a cache would be written and never read — which is a claim about
+  GitHub's cache scoping that was not measured either.
+
+  **What the guard still does not catch**, found by mutating rather than reading, and left rather
+  than closed: a checkout pinned to a **commit** carries no version string, so `actions/checkout` at
+  a `v4` SHA passes a floor written in tags. And the option is required in one literal spelling, so
+  `cache-on-failure: "true"` and `cache-on-failure: yes` — both YAML true — fail a workflow that
+  would work. The first is a hole and the second is a false alarm; the second is the safer way round,
+  and neither is guessed at, which is why they are here rather than inferred from the code.
+
+  **The number this whole change is argued from was inherited, and it was wrong.** Every document
+  here said the episode cost *six* red runs, because the issue said so and named a run range. The
+  run history holds **nine** consecutive failures of `ci` on `main` — `31753883982` through
+  `31760121174`, no green between them — and the run the issue names as the first, `31752296629`,
+  returns 404, so nine is a floor rather than a count. It took until the ninth round for anyone to
+  run the one query that answers it, and the round before that had moved the figure *into* a
+  sentence beginning "Measured on this repository" while deleting a different borrowed number from
+  the same paragraph for being borrowed.
 
 - **What the OpenCode plugin knows about where a call runs, and what it does not.** The gate decides
   which run a write belongs to by the directory the write happens in, and OpenCode's plugin context

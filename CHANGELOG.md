@@ -432,8 +432,10 @@ the workflow, it holds the tools.
   persistence and `release.yml` does not, so the release lane takes `v6`'s new location — it runs no
   authenticated git command and no container job, so nothing there reads it. The lanes run on hosted
   runners, and this repository triggers on neither event `v7` blocks. `Swatinem/rust-cache` discards a failing run's cache by default, so the fix pushed after a
-  red build recompiled the dependency tree from cold on all three platforms — six red runs closing
-  one set of platform failures paid it six times. The guard names a version floor rather than the
+  red build recompiled the dependency tree from cold on all three platforms — closing one set of
+  platform failures paid it at least nine times, `ci` on `main` having failed nine consecutive times
+  before it went green. The issue that raised this said six and named a first run that no longer
+  exists; nine is what the run history still holds. The guard names a version floor rather than the
   word *deprecated*, because a file cannot be asked whether it is: `v2` to `v4` run on Node 12, 16
   and 20, `v1` is a runner plugin with no Node runtime at all, and everything from `v5` is `node24`.
   A future deprecation moves that number to somewhere a person has to look at it.

@@ -45,10 +45,12 @@ jobs:
       # A failing run saves its cache too. Without this the action's default
       # discards everything a red run compiled, so the fix pushed after it starts
       # from cold on all three platforms, exactly when somebody is iterating on a
-      # red build. Measured on this repository: closing one set of platform-shaped
-      # test failures took six red runs across three platforms, every one of them
-      # recompiling the dependency tree from scratch. What a cold build costs here
-      # in minutes has not been measured.
+      # red build. Read from this repository's run history: closing one set of
+      # platform-shaped test failures took at least nine consecutive red runs of
+      # this workflow on main, 31753883982 through 31760121174, each recompiling
+      # the dependency tree from scratch. At least, because the run the issue
+      # names as the first of them no longer exists to be counted. What a cold
+      # build costs here in minutes has not been measured.
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
