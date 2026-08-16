@@ -4280,7 +4280,7 @@ const GUARD_CAVEATS: &[&str] = &[
 
 /// Everything the gate needs, or nothing if the harness is not installed.
 fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
-    let repo_dir = if cwd.trim().is_empty() {
+    let here = || {
         std::env::current_dir().map_err(|error| {
             Refusal::not_started(
                 "working-directory-unknown",
@@ -4290,9 +4290,36 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
                     "a working directory the process can read",
                 ),
             )
-        })?
+        })
+    };
+    let repo_dir = if cwd.trim().is_empty() {
+        here()?
     } else {
-        std::path::PathBuf::from(cwd)
+        let named = std::path::PathBuf::from(cwd);
+        // A per-call working directory may be relative, and the host that sends
+        // one resolves it against the directory the call runs in — which is the
+        // directory this process was launched in. Joining it here is that same
+        // resolution.
+        //
+        // It is not redundant with the `canonicalize` inside `coverage_depth`,
+        // which is where a relative path was already being resolved by
+        // accident. That one resolves against this process's directory too, but
+        // only for a path that **exists**; it falls back to the path as written
+        // when it cannot. Left relative, such a path lies under no checkout at
+        // all, so no run covers the call and the gate answers `outside` —
+        // *"this run holds no issue"*. Measured: a `workdir` naming a directory
+        // that is not there took the write out of the gate entirely, which is
+        // strictly worse than the ambiguity being fixed. Resolved here it lands
+        // back inside the project, where the ordinary refusal reaches it.
+        //
+        // That is what makes reading a directory out of the payload safe: a
+        // value naming nothing falls back to the base checkout, which is what
+        // the gate was told in every case before this alias was read at all.
+        if named.is_absolute() {
+            named
+        } else {
+            here()?.join(named)
+        }
     };
     // Never a refusal: a missing transport is a decision `gate` makes, not a
     // reason to have no context to decide in. See `harness::control_surface`.
@@ -4545,11 +4572,41 @@ fn payload_agent(parsed: &serde_json::Value) -> Option<&str> {
         .filter(|agent| !agent.trim().is_empty())
 }
 
+/// The checkout a payload names, under whichever key its host spells it with.
+///
+/// `cwd` is the canonical spelling and wins. `workdir` is OpenCode's, and it is
+/// the **per-call** execution directory of a Bash tool call — the one piece of
+/// evidence that call carries about where the command will actually run.
+///
+/// Reading it is not a convenience. That plugin launches this process from the
+/// project directory, because its plugin context carries a project and no
+/// session identity to mint a run id from; with two runs each holding an
+/// isolated worktree inside one base checkout, the project directory *is* the
+/// base, and both cover it at equal depth. Measured on 2026-08-16 with two live
+/// holders of this repository: a `git commit` explicitly targeting one worktree
+/// came back *"2 runs on this machine hold this checkout"* and advised releasing
+/// one of them — which is the concurrent isolation both runs were using.
+/// `holders_of` was right about the directory it was given, and the directory
+/// was the wrong one.
+///
+/// One owner, here. The plugin forwards the tool's arguments verbatim and
+/// translates nothing, so this alias is interpreted in exactly one language
+/// rather than in two that can drift apart — the failure this crate has already
+/// paid for with a matcher held in two places.
+///
+/// An empty value falls through rather than winning, so a host that always
+/// sends `cwd` and sometimes leaves it blank does not shadow a `workdir` that
+/// names something.
 fn payload_cwd(parsed: &serde_json::Value) -> &str {
-    parsed
-        .get("cwd")
-        .or_else(|| parsed.get("tool_input").and_then(|inner| inner.get("cwd")))
-        .and_then(serde_json::Value::as_str)
+    ["cwd", "workdir"]
+        .into_iter()
+        .find_map(|key| {
+            parsed
+                .get(key)
+                .or_else(|| parsed.get("tool_input").and_then(|inner| inner.get(key)))
+                .and_then(serde_json::Value::as_str)
+                .filter(|named| !named.trim().is_empty())
+        })
         .unwrap_or_default()
 }
 
@@ -4568,11 +4625,16 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
     // discarded it entirely, so the same call measured against two different
     // repositories depending on which one it came through.
     //
-    // **Not** for OpenCode, whatever the note added with this said. That plugin
+    // This was said to be **not** for OpenCode, on the grounds that its plugin
     // sends `output?.args` — the tool's own arguments and nothing else — and
-    // sets the working directory on the process instead, so the fallback below
-    // was already right for it. This closes the door for a caller that names a
-    // checkout in the payload, and the one caller in this tree does not.
+    // sets the working directory on the process instead, so the fallback was
+    // already right for it. The first half is true and the conclusion was not:
+    // for a Bash call those arguments *include* `workdir`, the directory the
+    // command will run in, while the process directory is the project root. The
+    // two differ exactly when it matters — concurrent runs in isolated
+    // worktrees under one base — and that is the case the fallback got wrong.
+    // `payload_cwd` reads both spellings now, so this door is the one that
+    // serves OpenCode rather than the one that does not.
     let context = gate_context(payload_cwd(&parsed))?;
     // Before anything else, in the order the hook asks it: a sub-agent reaching
     // past the tool list its own definition declares. It is the cheapest

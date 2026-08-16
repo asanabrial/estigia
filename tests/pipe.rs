@@ -10123,3 +10123,162 @@ fn a_publication_refuses_at_entry_when_the_claim_has_moved() {
         }
     }
 }
+
+/// A per-call working directory decides which holder answers for the call.
+///
+/// OpenCode's plugin launches the gate from the **project** directory, because
+/// its plugin context carries a project and no session identity. When two runs
+/// each hold an isolated worktree inside one base checkout, that directory is
+/// the base — which both runs cover at equal depth, so `holders_of` returned
+/// both and the call was refused `several-runs-hold-this-checkout`.
+///
+/// The refusal was correct about the directory it was given. What the call
+/// actually carries is `args.workdir`, the directory the command will run in,
+/// and nothing read it. Measured on 2026-08-16 with two live holders of this
+/// repository: a `git commit` explicitly targeting one worktree was refused for
+/// ambiguity between two runs that were not ambiguous at all, and the refusal
+/// advised releasing one of them — which is the isolation both were using.
+///
+/// Driven as a process against the real binary, because the defect is in what
+/// reaches `gate_context` from the outside. A unit test on `payload_cwd` cannot
+/// see the base-checkout fallback that makes the wrong answer look right.
+#[test]
+fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    let (_, stderr, ok) = run(home.path(), &["setup", "claude-code"], "");
+    assert!(ok, "setup failed: {stderr}");
+
+    // One base checkout, two isolated worktrees inside it. Inside, because that
+    // is the arrangement `holders_of` documents as the one that goes ambiguous:
+    // work in A's worktree is covered exactly by A and from the base by B.
+    let base = tempfile::tempdir().expect("a checkout");
+    let worktree_a = base.path().join("wt-a");
+    let worktree_b = base.path().join("wt-b");
+    std::fs::create_dir_all(&worktree_a).expect("worktree a");
+    std::fs::create_dir_all(&worktree_b).expect("worktree b");
+
+    let runs = home.path().join(".estigia").join("runs");
+    std::fs::create_dir_all(&runs).expect("the runs directory");
+    for (run_id, issue, worktree) in [
+        ("claude-aaaa1111", 12u64, &worktree_a),
+        ("opencode-bbbb2222", 34u64, &worktree_b),
+    ] {
+        let pointer = serde_json::json!({
+            "run_id": run_id,
+            "issue": issue,
+            "state": "in-progress",
+            "repo_dir": base.path(),
+            "worktree": worktree,
+            "verified_at": serde_json::Value::Null,
+        });
+        std::fs::write(
+            runs.join(format!("{run_id}.json")),
+            serde_json::to_string(&pointer).expect("a pointer serialises"),
+        )
+        .expect("the pointer writes");
+    }
+
+    let ledger = home.path().join(".estigia").join("decisions.jsonl");
+    // Both commands the report reproduced it with. The second matters on its
+    // own: it is Estigia's own binary being refused, which is what showed the
+    // false ambiguity lands before any delivery or Git-head validation.
+    let ask_running = |command: &str, workdir: Option<&str>| {
+        let _ = std::fs::remove_file(&ledger);
+        let payload = match workdir {
+            Some(named) => serde_json::json!({ "command": command, "workdir": named }),
+            None => serde_json::json!({ "command": command }),
+        };
+        let payload = serde_json::to_string(&payload).expect("a payload serialises");
+        let (out, error, ok) = run_in(
+            home.path(),
+            base.path(),
+            &["gate", "bash", "--input", &payload],
+            "",
+        );
+        let wrote = std::fs::read_to_string(&ledger).unwrap_or_default();
+        (format!("{out}{error}"), ok, wrote)
+    };
+
+    for command in [
+        "git commit -m fixture",
+        "estigia config set Planning direct",
+    ] {
+        let ask = |workdir: Option<&str>| ask_running(command, workdir);
+
+        // The floor. A call whose working directory really is the shared base is
+        // genuinely ambiguous, and that refusal is not what this change touches:
+        // if it stops firing, the rows below prove nothing. It is also the
+        // project-context fallback, which a call carrying no per-call working
+        // directory has to keep.
+        let (said, ok, _) = ask(None);
+        assert!(
+            !ok && said.contains("several-runs-hold-this-checkout"),
+            "the genuine ambiguity at the base checkout stopped being refused \
+             for `{command}`, so nothing below is a measurement: {said}"
+        );
+
+        // Each worktree in turn, by absolute path.
+        for (named, mine, theirs) in [
+            (&worktree_a, "claude-aaaa1111", "opencode-bbbb2222"),
+            (&worktree_b, "opencode-bbbb2222", "claude-aaaa1111"),
+        ] {
+            let (said, _, wrote) = ask(Some(&named.display().to_string()));
+            assert!(
+                !said.contains("several-runs-hold-this-checkout"),
+                "`{command}` naming {} was refused as ambiguous between two runs \
+                 that hold different worktrees: {said}",
+                named.display()
+            );
+            // Not merely "some holder answered" — the right one. The ledger is
+            // where the attribution is durable, and an answer that named the
+            // other run would be the same defect wearing the opposite result.
+            assert!(
+                wrote.contains(mine),
+                "the decision was not attributed to the run that owns {}: {wrote}",
+                named.display()
+            );
+            assert!(
+                !wrote.contains(theirs),
+                "the decision named the run that does not own {}: {wrote}",
+                named.display()
+            );
+        }
+
+        // Relative, resolved the way OpenCode resolves it: against the directory
+        // the call runs in, which is the one the plugin launched this process
+        // in.
+        let (said, _, wrote) = ask(Some("wt-a"));
+        assert!(
+            !said.contains("several-runs-hold-this-checkout"),
+            "a relative working directory was not resolved for `{command}`, so \
+             it selected nobody: {said}"
+        );
+        assert!(
+            wrote.contains("claude-aaaa1111") && !wrote.contains("opencode-bbbb2222"),
+            "a relative working directory reached the wrong holder: {wrote}"
+        );
+
+        // And the one that decides where the resolution has to happen. A
+        // directory that does not exist cannot be canonicalised, and
+        // `coverage_depth` — which is where a relative path was already being
+        // resolved, one layer down — falls back to the path as written when it
+        // cannot. Left relative, that path lies under no checkout at all, so
+        // **nobody** holds the call: the write stops being adjudicated instead
+        // of being refused. Resolving at the door keeps it inside the project,
+        // where the ordinary ambiguity refusal reaches it.
+        //
+        // This is what makes reading `workdir` safe rather than a new way to
+        // steer the gate: a value naming nothing lands back on the base, and the
+        // base is exactly what the gate used to be told in every case.
+        let (said, ok, _) = ask(Some("no-such-worktree"));
+        assert!(
+            !ok,
+            "a working directory that names nothing was allowed through: {said}"
+        );
+        assert!(
+            said.contains("several-runs-hold-this-checkout"),
+            "a working directory that names nothing escaped the checkout it was \
+             resolved against, so no run held the call: {said}"
+        );
+    }
+}

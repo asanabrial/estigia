@@ -24,6 +24,38 @@ suite. Everything else here is prose held by review.
   OpenCode process-tree cleanup is likewise not containment proof: the controller bounds how long the
   TUI waits, while process-group and Job Object cleanup remain best-effort OS operations.
 
+- **What the OpenCode plugin knows about where a call runs, and what it does not.** The gate decides
+  which run a write belongs to by the directory the write happens in, and OpenCode's plugin context
+  offers only a project — it carries no session identity to mint a run id from. So the plugin
+  launches the gate from `worktree ?? directory ?? process.cwd()`, the project root, and forwards the
+  tool's own arguments verbatim as the payload.
+
+  For a **Bash** call those arguments carry `workdir`, the directory the command will actually run
+  in, and `payload_cwd` reads it — under that spelling and under `cwd`, with `cwd` winning and an
+  empty value falling through. A relative one is resolved against the directory this process was
+  launched in, which is the same resolution the host performs. That is the whole of the per-call
+  evidence: one key, on one tool.
+
+  Every other gated tool — `edit`, `write`, `patch`, `multiedit`, `notebookedit`, `update` — supplies
+  no per-call working directory, so those are still adjudicated against the project root. Where two
+  runs hold isolated worktrees inside one base checkout, a write arriving through them is covered by
+  both at equal depth and is refused `several-runs-hold-this-checkout` — correctly, on the evidence
+  available, and indistinguishably from the Bash case that is now resolved. Estigia does not infer
+  the directory from a file path in the payload, and it does not use OpenCode's session id: no
+  invariant binds that id to the run id the tracker claim was made under, and inferring one would be
+  ownership decided by something no timeline records.
+
+- **One test executes the generated plugin, and it needs `node`.** `the_plugin_hands_the_gate_the_
+  directory_the_call_runs_in` writes the plugin `setup` would install, drives its
+  `tool.execute.before` hook with a stand-in shell, and reads back both the payload and the directory
+  the gate would have been launched in. It is the only interpreter this repository's suite asks for,
+  and it asks because the artefact is JavaScript: the plugin is the fourth copy of the gated-tool
+  rule and the only one in another language, and every other test of it asserts on its **source
+  text**. Text is what let the working-directory defect stand — the source plainly said
+  `const cwd = worktree ?? directory ?? process.cwd()` and plainly forwarded `output?.args`, and both
+  sentences were true of a plugin handing the gate the wrong directory. The test does not skip when
+  `node` is absent; it fails and names what is missing.
+
 - **The transport is ported, and the Python is not shipped.** issue-flow's `gh` and `git` calls used
   to run as a Python script this crate installed, so every machine carried a second implementation of
   every decision the gate makes — running beside the first and able to disagree with it. It did:

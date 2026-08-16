@@ -62,7 +62,12 @@ that will disagree.
 3. **Prefer removing a copy to adding a check.** When two places hold one rule, the fix is usually
    one place, not two guards.
 4. **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Nothing here needs an interpreter. `cargo doc` is on this list because it was not, and
+   --no-deps`. One test needs `node` on the path — `the_plugin_hands_the_gate_the_directory_the_call
+   _runs_in`, which *executes* the OpenCode plugin this crate generates, because that plugin is
+   JavaScript and every other test of it reads its source text. It does not skip when `node` is
+   missing; it fails and says so, since a skip spelled as a pass is a defect this repository has
+   filed against itself. Nothing else here asks for an interpreter, and neither does `doctor`.
+   `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here
    nor CI ever asked. A crate that keeps its reasoning in doc comments and cannot build them is one
    nobody reads.

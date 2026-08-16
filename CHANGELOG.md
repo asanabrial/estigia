@@ -48,6 +48,29 @@ the workflow, it holds the tools.
   three, now crossed by a test rather than by a comment saying nothing catches it; and the guard that
   proves the ordinary publication adjudicates its claim is behavioural, because two attempts to hold
   it by counting a function body were both satisfied by a call the mutated route never made.
+- The gate now adjudicates an OpenCode call against the directory it will actually run in. That
+  plugin launches the gate from its project root, because OpenCode's plugin context carries a project
+  and no session identity to mint a run id from — so with two runs each holding an isolated worktree
+  inside one base checkout, the gate was handed the base. Both runs cover it at equal depth, and the
+  call was refused *"2 runs on this machine hold this checkout"*: correct about the directory it was
+  given, and the directory was the wrong one. Measured on 2026-08-16 with two live holders of this
+  repository, a `git commit` and an `estigia config set` explicitly targeting one worktree were both
+  refused, and the refusal advised releasing one of the runs — which is the concurrent isolation both
+  were using. For a Bash call the arguments the plugin already forwards carry `workdir`, the
+  execution directory, and nothing read it; `payload_cwd` reads it now, resolving a relative one
+  against the directory the process was launched in, which is the same resolution the host performs.
+  That resolution is what makes reading a directory out of the payload safe rather than a new way to
+  steer the gate, and it is measured: with it removed, a `workdir` naming a directory that does not
+  exist canonicalises to nothing, lies under no checkout, and the call is answered `outside` — *"this
+  run holds no issue"*. A bad value would have taken the write out of the gate altogether, which is
+  strictly worse than the ambiguity being fixed. Resolved at the door it lands back on the base
+  checkout, which is what the gate was told in every case before the alias was read at all.
+  `holders_of` is untouched: its closest-worktree selection was always right when given the real
+  directory, and the equal-depth ambiguity at a shared base is genuine and still refused. The alias
+  is interpreted in one language rather than two — the plugin forwards and translates nothing — and
+  the one test that proves the plugin forwards it **executes** the plugin under `node` rather than
+  reading its source, which is the first interpreter this suite has asked for and is recorded in
+  `docs/honesty.md` with what per-call evidence exists and for which tools it does not.
 - A claim governs a repository, not the machine. The gate classified writes by the checkout the hook
   was invoked in and never by the **path being written**, so a scratch note or an agent's own memory
   store, written from inside a claimed repository, was a repository write — and once the issue closed

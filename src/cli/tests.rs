@@ -4422,3 +4422,52 @@ fn interactive_dry_run_and_real_run_share_one_complete_unique_manifest() {
         real_receipt.summary
     );
 }
+
+/// The two spellings of *where this call runs*, and which one wins.
+///
+/// `tests/pipe.rs` drives the whole path against the real binary and proves the
+/// alias reaches the right holder. What it cannot reach is the precedence, and
+/// the precedence is a claim: `cwd` is canonical, `workdir` is OpenCode's, and
+/// an empty value falls through rather than shadowing the other. A host that
+/// always sends `cwd` and sometimes leaves it blank is the ordinary case that
+/// would otherwise silently lose the directory the call named.
+#[test]
+fn the_canonical_working_directory_wins_and_an_empty_one_stands_aside() {
+    let read = |payload: serde_json::Value| super::payload_cwd(&payload).to_owned();
+
+    assert_eq!(
+        read(serde_json::json!({})),
+        "",
+        "an empty payload named one"
+    );
+    assert_eq!(
+        read(serde_json::json!({ "cwd": "/a" })),
+        "/a",
+        "the canonical spelling stopped being read"
+    );
+    assert_eq!(
+        read(serde_json::json!({ "workdir": "/b" })),
+        "/b",
+        "the per-call working directory was dropped"
+    );
+    assert_eq!(
+        read(serde_json::json!({ "cwd": "/a", "workdir": "/b" })),
+        "/a",
+        "the alias overtook the canonical key"
+    );
+    // The one that is not obvious. A blank `cwd` is not an answer, and treating
+    // it as one would put the gate back at the project root with a `workdir`
+    // sitting unread beside it — the defect, wearing a different key.
+    assert_eq!(
+        read(serde_json::json!({ "cwd": "   ", "workdir": "/b" })),
+        "/b",
+        "a blank canonical value shadowed the directory the call named"
+    );
+    // Nested, because a hook that wraps the tool's arguments is why the nesting
+    // is read at all, and the alias has to travel the same way.
+    assert_eq!(
+        read(serde_json::json!({ "tool_input": { "workdir": "/b" } })),
+        "/b",
+        "a wrapped payload lost the working directory"
+    );
+}
