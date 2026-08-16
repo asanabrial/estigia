@@ -2136,11 +2136,16 @@ fn the_head_a_lease_is_taken_from_is_the_latest_published_marker() {
 /// The sentence an operator reads, assembled, for every combination the type
 /// can express.
 ///
-/// Every combination the *type* has, not every combination anything can drive:
-/// [`Edited::Title`] is unreachable through what ships, so the two rows naming
-/// it are a superset. Said plainly because "every reachable combination" is a
-/// claim about reachability, and this change has already been corrected twice
-/// for making one of those loosely.
+/// All six the *type* has — two `undrafted` values by three `edited` ones — and
+/// not every combination anything can drive: [`Edited::Title`] is unreachable
+/// through what ships, so the two rows naming it are a superset. The default is
+/// checked above the loop and the other five are its rows.
+///
+/// Spelled out to the count because the sentence before it said *"every
+/// reachable combination"* while covering five of six and naming an unreachable
+/// one, in the hunk rewritten to make that claim precise. A claim about coverage
+/// is a claim, and this change has been corrected for making one loosely more
+/// than once.
 ///
 /// The reason this exists at the whole-sentence level rather than as more
 /// `contains` checks: **fragment assertions are what let the broken sentence
@@ -2209,6 +2214,13 @@ fn the_refusal_reads_as_a_sentence_in_every_combination() {
                 edited: None,
             },
             "the pull request was converted back to draft",
+        ),
+        (
+            PullRequestWrites {
+                undrafted: true,
+                edited: Some(Edited::Title),
+            },
+            "the pull request was converted back to draft and had its title replaced",
         ),
         (
             PullRequestWrites {

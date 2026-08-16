@@ -9483,6 +9483,17 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         text.contains("put it back"),
         "the refusal does not say what was left behind: {text}"
     );
+    // And the renewal's **own** action survives beside it. The writes are
+    // appended, never substituted: the one `Stop` that reaches this wrapper is
+    // the renewal, and two of its five actions carry the only instruction the
+    // run has — *claim it again* for a lapsed horizon, and acknowledge-and-drop
+    // for a stand-down. The sibling wrapper destroyed its caller's action one
+    // commit ago and turned the CI-exposure warning into an invitation; this is
+    // the same shape, and it is held rather than assumed.
+    assert!(
+        text.contains("release only your own projection"),
+        "the refusal replaced the renewal's own action instead of adding to it: {text}"
+    );
 
     // Third: the refusal this operation exists to produce, driven the whole way
     // rather than at the level of `push_to_origin`. Somebody else moves the

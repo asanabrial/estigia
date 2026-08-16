@@ -143,9 +143,11 @@ suite. Everything else here is prose held by review.
   though the issue lists it under *unchanged*. `Answer::already_wrote` decides which exit-code arm
   `translate` takes and sits outside the `exit-code` population fingerprint, and that arm's
   `StatusRequired` axis is held by the fingerprint alone: a tripwire that says *go and read this*
-  rather than a test of what it does. And the pull-request body is read three times — by the scan,
-  by `edit_pr`, and by `pr create` — so a body edited between the scan and the write is published
-  unscanned. Narrow, and one place rather than three is the fix if it ever matters.
+  rather than a test of what it does. The pull-request body used to be read three times — by the scan,
+  by `edit_pr`, and by `pr create` — so a body edited between the scan and the write was published
+  unscanned, and the `Closes #<n>` it could gain auto-closes the issue on merge. It is one read now,
+  hoisted above the pull-request listing and carried down as bytes, which is the *one place rather
+  than three* this entry called the fix.
 
   Two smaller things found in the same review and left: the commit-range scan is one function now, but
   its two callers still read from different checkouts — `publish_review` from the isolated one where

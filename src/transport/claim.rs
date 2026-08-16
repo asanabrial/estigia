@@ -1815,8 +1815,12 @@ fn publish_with(
     // exists to produce. It was the one left raw: the *rarer* path — the claim
     // moving — got a sentence naming the rewritten pull request, while the
     // designed outcome came back as a bare write failure that said nothing about
-    // it. The push itself leaves the branch provably untouched here, which is
-    // exactly why the pull request is the only thing left to report.
+    // it. On the outcome this exists to produce — a lease git refuses — the
+    // branch is provably untouched, so the pull request is the only thing left to
+    // report. Not on every failure this can return: a transport error or a hook
+    // rejecting after the ref moved leaves the branch's state unknown, and the
+    // answer stays a `Write`, which the harness renders as *the write may have
+    // landed*. The narrower sentence is the true one.
     push_to_origin(at, branch, push).map_err(|failure| after_rewriting_the_pr(failure, wrote))?;
 
     let answer = published(
@@ -1964,13 +1968,35 @@ fn after_rewriting_the_pr(failure: Failure, wrote: PullRequestWrites) -> Failure
         Failure::Stop(mut envelope) => {
             if let Some(envelope) = envelope.as_object_mut() {
                 envelope.insert("world".to_owned(), serde_json::json!("committed"));
+                // **Appended, never replaced**, and the sibling helper learnt this
+                // one commit earlier: replacing the action destroys the only
+                // sentence that names a way forward.
+                //
+                // The one `Stop` that reaches here is the pre-push renewal —
+                // `edit_pr` and `push_to_origin` both fail as `Write` — and two of
+                // that renewal's five actions carry instructions this frame does
+                // not have. *"nobody holds it: claim it again before writing"* is
+                // the one a lapsed horizon gets, and twenty lines of comment above
+                // it record that the generic *stop and write nothing else* was
+                // measured as naming no way forward when there is one. The other
+                // is a stand-down, which requires an acknowledgement and dropping
+                // a label. Overwriting either strands a run that had a route out.
+                let said = envelope
+                    .get("action")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned();
+                let wrote = format!(
+                    "the pull request {done} before this refusal, so that much did happen and \
+                     somebody has to decide whether to put it back"
+                );
                 envelope.insert(
                     "action".to_owned(),
-                    serde_json::json!(format!(
-                        "stop, and write nothing else under this claim \u{2014} but the pull \
-                         request {done} before this refusal, so that much did happen and \
-                         somebody has to decide whether to put it back"
-                    )),
+                    serde_json::json!(if said.is_empty() {
+                        wrote
+                    } else {
+                        format!("{said} \u{2014} and {wrote}")
+                    }),
                 );
             }
             Failure::Stop(envelope)
@@ -2107,13 +2133,20 @@ fn ensure_draft(context: &Context, pr: &serde_json::Value) -> Result<bool, Failu
 /// `gh pr ready`, which is that exposure. A refusal that destroys its own
 /// warning is worse than one that says less.
 ///
-/// It also words the write **as an attempt**, and that is not the drift the
-/// shared wording exists to prevent — it is a different fact.
-/// [`PullRequestWrites::describe`] names writes that landed; the two exits below
-/// are reached when `--undo` returned zero and the state either could not be
-/// read or came back *still ready*. Saying "was converted back to draft" beside
-/// an `observed` that shows `isDraft: false` would be reporting a state this
-/// code read back as false, which is the rule this whole change is about.
+/// The **`Read`/`Write` exit** words the write, and as an *attempt*: `--undo`
+/// returned zero and the state could not be read afterwards.
+/// [`PullRequestWrites::describe`] names writes that landed, and saying "was
+/// converted back to draft" here would report a state this code did not confirm
+/// — or, on the stop below, one it read back as false.
+///
+/// The **`Stop` exit** words nothing and adds only the world, deliberately. It
+/// carried a `un_readied_pr` field for a while: never read, never rendered, and
+/// a second copy of the `pr` the envelope already has — but worse than inert,
+/// because a key named *un-readied* sits in `draft-readback-failed` beside an
+/// `observed` showing the pull request is **still ready**. The one refusal whose
+/// whole point is that the un-ready did not take is not the place to assert that
+/// it did. What the caller needs is there without it: the world says a write
+/// landed, and the action says do not push.
 fn un_readied(failure: Failure, wrote: bool, pr: u64) -> Failure {
     if !wrote {
         return failure;
@@ -2122,7 +2155,6 @@ fn un_readied(failure: Failure, wrote: bool, pr: u64) -> Failure {
         Failure::Stop(mut envelope) => {
             if let Some(envelope) = envelope.as_object_mut() {
                 envelope.insert("world".to_owned(), serde_json::json!("committed"));
-                envelope.insert("un_readied_pr".to_owned(), serde_json::json!(pr));
             }
             Failure::Stop(envelope)
         }

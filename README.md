@@ -16,7 +16,7 @@
   <a href="https://github.com/asanabrial/estigia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/asanabrial/estigia/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" /></a>
   <a href="https://www.rust-lang.org"><img alt="Rust 1.97+" src="https://img.shields.io/badge/rust-1.97%2B-orange.svg" /></a>
-  <a href="#the-tools"><img alt="MCP: 20 tools" src="https://img.shields.io/badge/MCP-20%20tools-purple.svg" /></a>
+  <a href="#the-tools"><img alt="MCP: 21 tools" src="https://img.shields.io/badge/MCP-21%20tools-purple.svg" /></a>
   <a href="#install"><img alt="Linux, macOS, Windows" src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg" /></a>
 </p>
 

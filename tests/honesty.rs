@@ -1722,6 +1722,32 @@ fn every_link_in_this_repositorys_documentation_resolves() {
     );
 }
 
+/// The badge at the top of the README counts the tools the crate has.
+///
+/// The first factual claim a reader meets, and nothing crossed it. Every other
+/// count in that file is read by a test — the fenced list, *"N operations,
+/// table-driven"*, *"N tools … N operations"* — so adding an operation moved all
+/// of them and left the badge saying twenty over a crate with twenty-one, with
+/// its own `href` pointing four lines down at the section that disagreed.
+///
+/// The number appears twice on the line, in the alt text and inside the shields
+/// URL, and they are asserted separately: a badge whose picture and description
+/// disagree is the same defect wearing one line.
+#[test]
+fn the_badge_counts_the_tools_the_crate_has() {
+    let readme = readme();
+    let tools = estigia::harness::mcp::tools::TOOLS.len();
+    for claim in [
+        format!("alt=\"MCP: {tools} tools\""),
+        format!("badge/MCP-{tools}%20tools-"),
+    ] {
+        assert!(
+            readme.contains(&claim),
+            "the README badge does not say {claim:?}, and the crate has {tools} tools"
+        );
+    }
+}
+
 /// The number of operations the tools expose is the number the README claims.
 ///
 /// The honesty section says this file crosses the *countable* claims, and this
