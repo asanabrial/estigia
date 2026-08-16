@@ -10266,10 +10266,6 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
         // **nobody** holds the call: the write stops being adjudicated instead
         // of being refused. Resolving at the door keeps it inside the project,
         // where the ordinary ambiguity refusal reaches it.
-        //
-        // This is what makes reading `workdir` safe rather than a new way to
-        // steer the gate: a value naming nothing lands back on the base, and the
-        // base is exactly what the gate used to be told in every case.
         let (said, ok, _) = ask(Some("no-such-worktree"));
         assert!(
             !ok,
@@ -10280,5 +10276,71 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
             "a working directory that names nothing escaped the checkout it was \
              resolved against, so no run held the call: {said}"
         );
+
+        // The rows that decide whether reading this key at all is safe.
+        //
+        // `cwd` is set by the host. `workdir` is a **tool argument**, which on
+        // every runtime here means it is written by the model, and a value that
+        // names a real directory outside the checkout is not a value that names
+        // nothing: it resolves, it is covered by no run, and the gate answers
+        // `outside` and exits zero. The command still runs wherever it was
+        // going to run. That is a payload steering a write out of the gate,
+        // which is strictly worse than the false ambiguity being fixed here and
+        // is the failure this crate exists to refuse — a widened gate that looks
+        // exactly like working correctly.
+        //
+        // Every spelling below reaches the same place by a different road, and
+        // each one was `several-runs-hold-this-checkout` before this alias was
+        // read at all. Nothing may be allowed through.
+        let parent = base
+            .path()
+            .parent()
+            .expect("the fixture has somewhere above it")
+            .display()
+            .to_string();
+        let climbed = worktree_a.join("..").join("..").display().to_string();
+        for escape in [
+            "..",
+            parent.as_str(),
+            climbed.as_str(),
+            if cfg!(windows) { "C:\\Windows" } else { "/etc" },
+        ] {
+            let (said, ok, _) = ask(Some(escape));
+            assert!(
+                !ok,
+                "`{command}` steered the gate out of the claim with \
+                 `workdir` = {escape:?}, and the write went through unjudged: {said}"
+            );
+            assert!(
+                said.contains("several-runs-hold-this-checkout"),
+                "`{command}` with `workdir` = {escape:?} was answered something \
+                 other than the refusal the same call gets without the key, so \
+                 the payload moved the decision: {said}"
+            );
+        }
     }
+
+    // The same escape, through a tool that carries no working directory of its
+    // own. `payload_cwd` is read once for every gated tool, not only for the one
+    // whose host sends the key, so a payload that simply includes it steers any
+    // of them. Kept out of the loop above because the argument shape differs.
+    let ledger = home.path().join(".estigia").join("decisions.jsonl");
+    let _ = std::fs::remove_file(&ledger);
+    let payload = serde_json::json!({
+        "file_path": worktree_a.join("f.txt"),
+        "workdir": "..",
+    });
+    let payload = serde_json::to_string(&payload).expect("a payload serialises");
+    let (out, error, ok) = run_in(
+        home.path(),
+        base.path(),
+        &["gate", "write", "--input", &payload],
+        "",
+    );
+    let said = format!("{out}{error}");
+    assert!(
+        !ok && said.contains("several-runs-hold-this-checkout"),
+        "a write naming a file inside the claim was taken out of the gate by a \
+         working directory in its payload: {said}"
+    );
 }

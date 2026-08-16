@@ -31,30 +31,66 @@ suite. Everything else here is prose held by review.
   tool's own arguments verbatim as the payload.
 
   For a **Bash** call those arguments carry `workdir`, the directory the command will actually run
-  in, and `payload_cwd` reads it — under that spelling and under `cwd`, with `cwd` winning and an
-  empty value falling through. A relative one is resolved against the directory this process was
-  launched in, which is the same resolution the host performs. That is the whole of the per-call
-  evidence: one key, on one tool.
+  in, and `narrowed_by_the_call` reads it. That is the whole of the per-call evidence: one key, on one
+  tool. Every other tool in the gated list supplies no working directory, and the key is not read for
+  them even if a payload contains it — an argument no host documents sending is not evidence, and
+  reading it there was measured to be an escape rather than an improvement.
 
-  Every other gated tool — `edit`, `write`, `patch`, `multiedit`, `notebookedit`, `update` — supplies
-  no per-call working directory, so those are still adjudicated against the project root. Where two
-  runs hold isolated worktrees inside one base checkout, a write arriving through them is covered by
-  both at equal depth and is refused `several-runs-hold-this-checkout` — correctly, on the evidence
-  available, and indistinguishably from the Bash case that is now resolved. Estigia does not infer
-  the directory from a file path in the payload, and it does not use OpenCode's session id: no
-  invariant binds that id to the run id the tracker claim was made under, and inferring one would be
-  ownership decided by something no timeline records.
+  **What that key may and may not do is the part worth stating plainly.** `cwd` is written by an
+  adapter's hook, which knows what it is gating, and is taken as given. `workdir` is a tool
+  *argument*, so whatever composed the call wrote it — a model, on every runtime here. It may
+  therefore only **narrow**: a relative value is resolved against the directory this process was
+  launched in, and any value resolving outside that directory is discarded in favour of it. Measured
+  before that clamp existed, with two live pointers and a `git commit` under a claim: `workdir` of
+  `..`, of the parent checkout, and of `C:\Windows` all resolved, were covered by no run, and were
+  answered `outside` with exit **zero** — the command still running where it was going to run, with
+  the gate no longer adjudicating it. A payload that can move the decision is a payload that can
+  leave the gate, which is worse than the false ambiguity the key was read to fix.
 
-- **One test executes the generated plugin, and it needs `node`.** `the_plugin_hands_the_gate_the_
-  directory_the_call_runs_in` writes the plugin `setup` would install, drives its
-  `tool.execute.before` hook with a stand-in shell, and reads back both the payload and the directory
-  the gate would have been launched in. It is the only interpreter this repository's suite asks for,
-  and it asks because the artefact is JavaScript: the plugin is the fourth copy of the gated-tool
-  rule and the only one in another language, and every other test of it asserts on its **source
-  text**. Text is what let the working-directory defect stand — the source plainly said
+  Where two runs hold isolated worktrees inside one base checkout, a write arriving through any tool
+  that names no directory is covered by both at equal depth and is refused
+  `several-runs-hold-this-checkout` — correctly, on the evidence available, and indistinguishably
+  from the Bash case that is now resolved. Estigia does not infer the directory from a file path in
+  the payload, and it does not use OpenCode's session id: no invariant binds that id to the run id
+  the tracker claim was made under, and inferring one would be ownership decided by something no
+  timeline records.
+
+  **The spelling is not crossed against the host, and neither is the resolution base.** `workdir` was
+  read out of OpenCode's own shell-tool schema in the installed binary during review — *"The working
+  directory to run the command in"* — so it is not guessed. But nothing in this tree holds a copy of
+  that schema, and every test supplies the key itself, so if the host renames the argument the suite
+  goes on passing while the fix is inert in production. The same staleness this file records for the
+  model catalogs, with the same absence of a crossing.
+
+  The resolution base is the sharper of the two. A relative `workdir` is resolved here against the
+  directory this process was launched in, which the plugin sets from `worktree ?? directory`.
+  OpenCode resolves it against its tool context's `directory`. Those are two fields of one instance
+  record and they coincide in the ordinary case; started in a subdirectory of the project they do
+  not, and then the shell runs in `<subdir>/x` while the gate adjudicates `<root>/x`. Both lie
+  inside the project, so the clamp still holds and nothing escapes — what is at risk is *which*
+  holder answers, which is the same class of wrong as the defect this entry exists for. Closing it
+  means the plugin forwarding its resolution base rather than only its own working directory, and
+  that is a second owner for the rule; it is recorded rather than done.
+
+- **One test executes the generated plugin, and it is the only one that *requires* `node`.**
+  `the_plugin_hands_the_gate_the_directory_the_call_runs_in` writes the plugin `setup` would install,
+  drives its `tool.execute.before` hook with a stand-in shell, and reads back both the payload and
+  the directory the gate would have been launched in. It asks for an interpreter because the artefact
+  is JavaScript: the plugin is the fourth copy of the gated-tool rule and the only one in another
+  language, and every other test of it asserts on its **source text**. Text is what let the
+  working-directory defect stand — the source plainly said
   `const cwd = worktree ?? directory ?? process.cwd()` and plainly forwarded `output?.args`, and both
-  sentences were true of a plugin handing the gate the wrong directory. The test does not skip when
-  `node` is absent; it fails and names what is missing.
+  sentences were true of a plugin handing the gate the wrong directory. It does not skip when `node`
+  is absent; it fails and names what is missing, and both workflows install `node` rather than
+  relying on the runner image having it.
+
+  **It is not the first test to reach for `node`, and the older one skips.**
+  `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer` already spawns
+  `node --input-type=module --check` to prove the generated plugin parses, and when `node` is absent
+  it prints a line and returns — a pass that measured nothing, one screen from the sentence above
+  saying a skip spelled as a pass is a defect. It is left as it is here rather than quietly changed
+  alongside an unrelated fix, and it is the same shape as the skip already filed against this
+  repository's own push-guard fixtures.
 
 - **The transport is ported, and the Python is not shipped.** issue-flow's `gh` and `git` calls used
   to run as a Python script this crate installed, so every machine carried a second implementation of
@@ -1271,8 +1307,12 @@ suite. Everything else here is prose held by review.
   intercept tool calls made by subagents spawned through the task tool. A gate with a hole is still
   a gate; a gate whose hole nobody mentions is a lie, so it is written into the plugin file itself.
 - **The OpenCode plugin costs a process per gated call.** It shells out to the binary for `edit`,
-  `write`, `patch`, `multiedit` and `bash` — named rather than `*`, because waking a process for
-  every read would be a cost paid thousands of times to answer "not mine".
+  `write`, `patch`, `multiedit`, `notebookedit`, `update` and `bash` — named rather than `*`, because
+  waking a process for every read would be a cost paid thousands of times to answer "not mine".
+  `notebookedit` and `update` were missing from this sentence for as long as it has existed, which is
+  the shape of drift this file is most exposed to: the list is crossed against the classifier by
+  `the_plugin_gates_the_tools_the_classifier_judges`, and prose naming the same list is crossed by
+  nothing.
 - **The push guard is a guard rail, not a lock.** `git push --no-verify` bypasses it, so does a push
   from another checkout of the same repository, and so does anything that writes refs without
   invoking hooks. A guard rail that claims to be a lock is worse than one that does not.

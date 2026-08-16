@@ -78,6 +78,16 @@ jobs:
       - name: Install the toolchain
         run: rustup target add ${{ matrix.target }}
 
+      # One test executes the generated OpenCode plugin, which is JavaScript.
+      # This step matters more here than in `ci.yml`: the suite below runs on a
+      # **tag**, and a missing interpreter there publishes no release at all.
+      # That is not a hypothetical — it is the exact failure this file already
+      # suffered once, with `python3`, and the reason the guard on interpreters
+      # was kept rather than deleted.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       # The suite runs on every target that can run it. A cross-built archive
       # is published having compiled and nothing more, and saying which is
       # which is the honest part.

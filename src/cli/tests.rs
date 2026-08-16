@@ -4423,51 +4423,116 @@ fn interactive_dry_run_and_real_run_share_one_complete_unique_manifest() {
     );
 }
 
-/// The two spellings of *where this call runs*, and which one wins.
+/// A directory the call named may narrow the decision, and may not move it.
 ///
-/// `tests/pipe.rs` drives the whole path against the real binary and proves the
-/// alias reaches the right holder. What it cannot reach is the precedence, and
-/// the precedence is a claim: `cwd` is canonical, `workdir` is OpenCode's, and
-/// an empty value falls through rather than shadowing the other. A host that
-/// always sends `cwd` and sometimes leaves it blank is the ordinary case that
-/// would otherwise silently lose the directory the call named.
+/// `tests/pipe.rs` drives the whole path against the real binary and proves both
+/// halves end to end. This is the same rule stated where it is written, on the
+/// inputs that are awkward to reach through a process: the tool the key is
+/// honoured for, the spellings that climb out, and the wrapped payload.
+///
+/// The distinction it rests on is not stylistic. `cwd` is written by the
+/// adapter's hook, which knows what it is gating. `workdir` is a tool
+/// **argument**, so whatever composed the call wrote it — a model, in every
+/// runtime here. Measured before the clamp existed: `..`, the parent checkout
+/// and `C:\Windows` all resolved, were covered by no run, and took the write out
+/// of the gate with exit zero while the command ran anyway.
 #[test]
-fn the_canonical_working_directory_wins_and_an_empty_one_stands_aside() {
-    let read = |payload: serde_json::Value| super::payload_cwd(&payload).to_owned();
+fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let launched = root.path();
+    let inside = launched.join("wt-a");
+    std::fs::create_dir_all(&inside).expect("a directory inside");
 
+    let narrowed = |payload: serde_json::Value, tool: &str| {
+        super::narrowed_by_the_call(&payload, tool, launched)
+    };
+    let workdir = |named: &str| serde_json::json!({ "command": "git commit", "workdir": named });
+
+    // What it is for: somewhere under the directory this process stands in.
     assert_eq!(
-        read(serde_json::json!({})),
-        "",
-        "an empty payload named one"
+        narrowed(workdir(&inside.display().to_string()), "bash").as_deref(),
+        Some(inside.as_path()),
+        "an absolute directory inside the launch directory was not honoured"
     );
     assert_eq!(
-        read(serde_json::json!({ "cwd": "/a" })),
-        "/a",
-        "the canonical spelling stopped being read"
+        narrowed(workdir("wt-a"), "bash"),
+        Some(launched.join("wt-a")),
+        "a relative directory was not resolved against the launch directory"
     );
+    // Wrapped, because a hook that nests the tool's arguments is why the nesting
+    // is read at all, and this key has to travel the same way.
     assert_eq!(
-        read(serde_json::json!({ "workdir": "/b" })),
-        "/b",
-        "the per-call working directory was dropped"
-    );
-    assert_eq!(
-        read(serde_json::json!({ "cwd": "/a", "workdir": "/b" })),
-        "/a",
-        "the alias overtook the canonical key"
-    );
-    // The one that is not obvious. A blank `cwd` is not an answer, and treating
-    // it as one would put the gate back at the project root with a `workdir`
-    // sitting unread beside it — the defect, wearing a different key.
-    assert_eq!(
-        read(serde_json::json!({ "cwd": "   ", "workdir": "/b" })),
-        "/b",
-        "a blank canonical value shadowed the directory the call named"
-    );
-    // Nested, because a hook that wraps the tool's arguments is why the nesting
-    // is read at all, and the alias has to travel the same way.
-    assert_eq!(
-        read(serde_json::json!({ "tool_input": { "workdir": "/b" } })),
-        "/b",
+        narrowed(
+            serde_json::json!({ "tool_input": { "workdir": "wt-a" } }),
+            "bash"
+        ),
+        Some(launched.join("wt-a")),
         "a wrapped payload lost the working directory"
+    );
+
+    // What it must never do. Each of these resolves to a real place the gate was
+    // not looking, and each one answered `outside` with exit zero before the
+    // clamp — the write leaving the gate while the command ran regardless.
+    for out in [
+        "..",
+        "wt-a/../..",
+        &launched.join("..").display().to_string(),
+        if cfg!(windows) { "C:\\Windows" } else { "/etc" },
+    ] {
+        assert_eq!(
+            narrowed(workdir(out), "bash"),
+            None,
+            "a call steered the gate to {out:?}, outside the directory it was launched in"
+        );
+    }
+
+    // And the tools it is not read for. Bash is the only one measured to carry
+    // the key and the only one this closes; honouring it elsewhere is inventing
+    // evidence from an argument nothing documents, and it is how the escape
+    // above reached `write` and `edit` too.
+    for tool in [
+        "write",
+        "edit",
+        "patch",
+        "multiedit",
+        "notebookedit",
+        "update",
+    ] {
+        assert_eq!(
+            narrowed(workdir(&inside.display().to_string()), tool),
+            None,
+            "`{tool}` honoured a working directory no host documents sending it"
+        );
+    }
+    // Spelled as the plugin lowercases it, and as a host might not.
+    assert!(
+        narrowed(workdir("wt-a"), "Bash").is_some(),
+        "the tool name was matched case-sensitively"
+    );
+
+    // Nothing named, nothing narrowed — the fallback the project context keeps.
+    assert_eq!(
+        narrowed(serde_json::json!({ "command": "git commit" }), "bash"),
+        None,
+        "a call naming no directory had one invented for it"
+    );
+    assert_eq!(
+        narrowed(workdir("   "), "bash"),
+        None,
+        "a blank directory was treated as one"
+    );
+
+    // The host's own key is a separate door and keeps its own contract: it is
+    // taken as given, including from outside this process's directory, because
+    // the hook that writes it may run from anywhere.
+    assert_eq!(
+        super::payload_cwd(&serde_json::json!({ "cwd": "/a", "workdir": "/b" })),
+        "/a",
+        "the call's argument overtook what the host named"
+    );
+    assert_eq!(
+        super::payload_cwd(&serde_json::json!({ "workdir": "/b" })),
+        "",
+        "the call's argument was read as though the host had named it"
     );
 }

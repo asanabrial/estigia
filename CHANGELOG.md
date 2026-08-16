@@ -57,20 +57,31 @@ the workflow, it holds the tools.
   repository, a `git commit` and an `estigia config set` explicitly targeting one worktree were both
   refused, and the refusal advised releasing one of the runs — which is the concurrent isolation both
   were using. For a Bash call the arguments the plugin already forwards carry `workdir`, the
-  execution directory, and nothing read it; `payload_cwd` reads it now, resolving a relative one
-  against the directory the process was launched in, which is the same resolution the host performs.
-  That resolution is what makes reading a directory out of the payload safe rather than a new way to
-  steer the gate, and it is measured: with it removed, a `workdir` naming a directory that does not
-  exist canonicalises to nothing, lies under no checkout, and the call is answered `outside` — *"this
-  run holds no issue"*. A bad value would have taken the write out of the gate altogether, which is
-  strictly worse than the ambiguity being fixed. Resolved at the door it lands back on the base
-  checkout, which is what the gate was told in every case before the alias was read at all.
+  execution directory, and nothing read it; `narrowed_by_the_call` reads it now, for Bash and no
+  other tool, resolving a relative one against the directory the process was launched in.
+
+  **It may only narrow, and that distinction is the change.** `cwd` is written by an adapter's hook,
+  which knows what it is gating, and is taken as given. `workdir` is a tool *argument*, so whatever
+  composed the call wrote it — a model, on every runtime here. Read as freely as `cwd` it stops being
+  evidence and becomes a lever: measured under review, with two live pointers and a `git push` under
+  a claim, a `workdir` of `..`, of the parent checkout, or of `C:\Windows` resolved, was covered by no
+  run, and was answered `outside` with exit **zero**. The command still ran where it was going to
+  run; the gate simply stopped adjudicating it, and the same spelling reached `write` and `edit` too.
+  A payload that can move the decision is a payload that can leave the gate, which is worse than the
+  false ambiguity the key was read to fix — the widened gate that looks exactly like working
+  correctly. So a value resolving outside the launch directory is discarded in favour of it, which is
+  where the decision sat before this key was read at all, and both blind reviews of the unclamped
+  version rejected it on precisely that.
+
   `holders_of` is untouched: its closest-worktree selection was always right when given the real
   directory, and the equal-depth ambiguity at a shared base is genuine and still refused. The alias
   is interpreted in one language rather than two — the plugin forwards and translates nothing — and
-  the one test that proves the plugin forwards it **executes** the plugin under `node` rather than
-  reading its source, which is the first interpreter this suite has asked for and is recorded in
-  `docs/honesty.md` with what per-call evidence exists and for which tools it does not.
+  the test that proves the plugin forwards it **executes** the plugin under `node` rather than
+  reading its source. Both workflows install `node` now rather than trusting the runner image to
+  carry it, on the reasoning the interpreter guard already stated for Python: a step needing a tool
+  the job never sets up fails on a tag, which is the worst moment there is. `docs/honesty.md` records
+  what per-call evidence exists, for which tools it does not, and the two things about it that are
+  still uncrossed — the argument's spelling, and the base a relative one is resolved against.
 - A claim governs a repository, not the machine. The gate classified writes by the checkout the hook
   was invoked in and never by the **path being written**, so a scratch note or an agent's own memory
   store, written from inside a claimed repository, was a repository write — and once the issue closed

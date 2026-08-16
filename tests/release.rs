@@ -577,7 +577,7 @@ fn an_installer_looks_for_the_archive_the_workflow_writes() {
 }
 
 #[test]
-fn no_workflow_needs_an_interpreter_this_repository_does_not_use() {
+fn no_workflow_needs_only_interpreters_it_sets_up() {
     // The reverse of what stood here. This asked both workflows to install
     // Python, because the differential suite spawned it and a runner without
     // one published **no release at all**, discovered on a tag.
@@ -585,9 +585,7 @@ fn no_workflow_needs_an_interpreter_this_repository_does_not_use() {
     // The suite does not spawn it any more and neither file may reach for it.
     // The check is kept rather than deleted because the failure it guards is
     // the same one in the other direction: a step that needs a tool the job
-    // never sets up fails on a tag, which is the worst moment there is. What
-    // changed is which tools count — and an interpreter this repository has
-    // deleted is one no workflow may quietly start depending on again.
+    // never sets up fails on a tag, which is the worst moment there is.
     for name in ["ci.yml", "release.yml"] {
         let workflow = read(&format!(".github/workflows/{name}"));
         let reaches: Vec<&str> = workflow
@@ -600,6 +598,35 @@ fn no_workflow_needs_an_interpreter_this_repository_does_not_use() {
         assert!(
             reaches.is_empty(),
             "{name} reaches for an interpreter this repository no longer uses: {reaches:?}"
+        );
+    }
+
+    // And the direction the name now carries, which the old one only implied.
+    // The suite gained an interpreter: `the_plugin_hands_the_gate_the_directory
+    // _the_call_runs_in` executes the generated OpenCode plugin, which is
+    // JavaScript, and it fails rather than skipping when `node` is absent. Both
+    // files run `cargo test`, so both must set it up.
+    //
+    // Hosted runners ship Node today, which is exactly why this is worth
+    // asserting: without the step both files pass on evidence that belongs to a
+    // runner image rather than to the workflow, and the day it changes the
+    // release lane discovers it on a tag. The guard that was kept for Python is
+    // the same guard, and it had only ever named one tool.
+    assert!(
+        read("src/setup/tests.rs").contains(r#"std::process::Command::new("node")"#),
+        "the suite no longer executes the plugin, so the steps below are asking \
+         both workflows to install a tool nothing needs"
+    );
+    for name in ["ci.yml", "release.yml"] {
+        let workflow = read(&format!(".github/workflows/{name}"));
+        assert!(
+            workflow.contains("cargo test"),
+            "{name} has no test step, so nothing above was checked against a real workflow"
+        );
+        assert!(
+            workflow.contains("actions/setup-node"),
+            "{name} runs a suite that executes JavaScript and never installs a \
+             runtime for it, so it passes only while the runner image happens to"
         );
     }
 
