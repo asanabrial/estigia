@@ -1717,15 +1717,23 @@ fn publish_with(
         })));
     }
     let reused = existing.first().cloned();
+    // Whether the pull request has been **written to** by the time the next
+    // refusal can happen. Tracked rather than assumed from `reused.is_some()`,
+    // because a reused pull request that was already draft and needed no title
+    // or body change is a path where nothing was written and saying otherwise
+    // would send a reader to look for damage that is not there.
+    let mut rewrote_pr = false;
     if let Some(pr) = &reused {
-        ensure_draft(context, pr)?;
+        rewrote_pr |= ensure_draft(context, pr)?;
         if let Some(file) = pr_body_file {
             let raw = std::fs::read_to_string(file).map_err(|error| {
                 Failure::Read(format!("the PR body could not be read: {error}"))
             })?;
             edit_pr(context, pr, title, Some(&pr_body_text(&raw, issue)))?;
+            rewrote_pr = true;
         } else if !title.is_empty() {
             edit_pr(context, pr, title, None)?;
+            rewrote_pr = true;
         }
     } else if pr_body_file.is_none() {
         return Err(Failure::Stop(serde_json::json!({
@@ -1744,7 +1752,19 @@ fn publish_with(
         // of them. For the fast-forward push that gap costs a refused push; for
         // this one it costs history, which is why only this route pays for the
         // second read.
-        verify_claim(context, issue, run_id, expect_state, now, None)?;
+        //
+        // And its refusal has to say which world it is in. `verify_claim` stops
+        // through `stop()`, whose envelope carries no `world`, so the harness
+        // read it as *nothing was written* — after `ensure_draft` had un-readied
+        // the pull request and `edit_pr` had replaced its title and body. That
+        // is the same falsehood the closing-keyword scan was hoisted above these
+        // calls to stop telling, arriving through a door this renewal opened:
+        // `publish_review` has no verification here, so nothing could refuse at
+        // this point before. Reported as measured rather than as assumed —
+        // `rewrote_pr` is false on the path where the reused pull request needed
+        // no change, and there the original refusal is the honest one.
+        verify_claim(context, issue, run_id, expect_state, now, None)
+            .map_err(|failure| after_rewriting_the_pr(failure, rewrote_pr))?;
     }
     push_to_origin(at, branch, push)?;
 
@@ -1787,6 +1807,45 @@ fn publish_with(
         }
         answer
     })
+}
+
+/// A refusal that arrives once the reused pull request has been rewritten.
+///
+/// The outcome channel, given the fact it did not have. `Stop` means *nothing
+/// was written*, and by the pre-push renewal that is false on the reused path:
+/// the pull request has been converted back to draft and its title and body
+/// replaced. A run that believes the refusal leaves somebody else's pull request
+/// re-described and is told to write nothing else, so nobody puts it back.
+///
+/// `Read` and `Write` are folded into `Write` for the same reason the readback
+/// failures below it are: a read that failed is not a call that changed nothing
+/// when a change has already gone out.
+fn after_rewriting_the_pr(failure: Failure, rewrote_pr: bool) -> Failure {
+    if !rewrote_pr {
+        return failure;
+    }
+    match failure {
+        Failure::Stop(mut envelope) => {
+            if let Some(envelope) = envelope.as_object_mut() {
+                envelope.insert("world".to_owned(), serde_json::json!("committed"));
+                envelope.insert(
+                    "action".to_owned(),
+                    serde_json::json!(
+                        "stop, and write nothing else under this claim \u{2014} but the pull \
+                         request was converted to draft and its title and body replaced before \
+                         this refusal, so that much did happen and somebody has to decide whether \
+                         to put it back"
+                    ),
+                );
+            }
+            Failure::Stop(envelope)
+        }
+        Failure::Read(detail) | Failure::Write(detail) => Failure::Write(format!(
+            "{detail} \u{2014} the pull request was already converted to draft and its title and \
+             body replaced, so this is not a call that changed nothing"
+        )),
+        other => other,
+    }
 }
 
 /// The `--force-with-lease` argument, spelled once.
@@ -1861,14 +1920,23 @@ fn view_pr(context: &Context, number: u64) -> Result<serde_json::Value, Failure>
     .ok_or_else(|| Failure::Read(format!("gh pr view {number} returned nothing")))
 }
 
-fn ensure_draft(context: &Context, pr: &serde_json::Value) -> Result<(), Failure> {
+/// Answers **whether it wrote**, which is not the same as whether it succeeded.
+///
+/// A pull request that was already draft is confirmed and left alone, and a
+/// refusal that follows can honestly say the world is untouched. One that was
+/// ready has been un-readied, and the same refusal would then be a lie. The
+/// caller cannot recover this from the arguments — `isDraft` is read from the
+/// remote — so it is returned rather than inferred.
+fn ensure_draft(context: &Context, pr: &serde_json::Value) -> Result<bool, Failure> {
     let number = pr_number(pr);
+    let mut wrote = false;
     if pr.get("isDraft").and_then(serde_json::Value::as_bool) != Some(true) {
         super::run(
             &["gh", "pr", "ready", &number.to_string(), "--undo"],
             Some(&context.repo_dir),
             super::How::write(),
         )?;
+        wrote = true;
     }
     let seen = view_pr(context, number)?;
     if seen.get("isDraft").and_then(serde_json::Value::as_bool) != Some(true) {
@@ -1878,7 +1946,7 @@ fn ensure_draft(context: &Context, pr: &serde_json::Value) -> Result<(), Failure
             "action": "do not push; the reused PR is still ready and would expose the new head to CI",
         })));
     }
-    Ok(())
+    Ok(wrote)
 }
 
 /// The half of [`publish_review`] that runs with the branch already pushed.

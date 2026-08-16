@@ -254,7 +254,19 @@ fn call(params: &Value, context: Result<&GateContext, &Refusal>) -> Result<Value
 /// Estigia adding its own on top would be deciding where somebody else's work
 /// lives.
 fn worktree_to_name(tool: &tools::Tool, flags: &[String], run: &session::Run) -> Option<String> {
-    if !matches!(tool.operation, "publish-review" | "release-ci") {
+    // `republish-review` is here because it reads the head the same way, and
+    // because it reaches it **after a force-push**. Left out, an agent calling it
+    // the way it calls `publish_review` — the argument is optional on both — got
+    // no worktree, `publish_with` fell back to the base checkout, and the target
+    // was derived from whatever that checkout had checked out. Refs are shared
+    // between git worktrees, so the branch still pushed: history was rewritten
+    // and *then* the readback disagreed, answering that somebody else must have
+    // pushed. Nobody had. That is the failure this function's own comment names,
+    // arriving on the one route where the step before it cannot be undone.
+    if !matches!(
+        tool.operation,
+        "publish-review" | "republish-review" | "release-ci"
+    ) {
         return None;
     }
     if flags.iter().any(|flag| flag == "--worktree") {

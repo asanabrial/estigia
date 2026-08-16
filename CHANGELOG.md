@@ -33,7 +33,17 @@ the workflow, it holds the tools.
   the first publication is `publish_review`'s, whose non-fast-forward refusal is the check that would
   be skipped. It is a separate operation rather than a flag because the last thing this must keep is
   that `publish_review` never force-pushes implicitly, and two entry points hold that where one
-  function with a boolean would only ask a reviewer to.
+  function with a boolean would only ask a reviewer to. Two independent reviews of the change found
+  three things it had got wrong and they are fixed in it: the renewal's refusal reached the agent
+  through the same `stop()` every claim refusal uses, whose envelope carries no `world`, so it said
+  *nothing was written* after the reused pull request had been un-readied and re-described — it now
+  carries `world: committed` and names what it left behind, and only when something was actually
+  written; the harness did not fill in the isolated checkout for this operation as it does for
+  `publish_review`, so an agent that omitted the optional argument had its target derived from the
+  base checkout and learned about it *after* the force-push, in a message blaming a push nobody had
+  made; and `estigia config`'s list of the operations this transport performs had drifted from the
+  dispatch by three, which is now crossed by a test rather than by a comment saying nothing catches
+  it.
 - A claim governs a repository, not the machine. The gate classified writes by the checkout the hook
   was invoked in and never by the **path being written**, so a scratch note or an agent's own memory
   store, written from inside a claimed repository, was a repository write — and once the issue closed

@@ -15,7 +15,14 @@ use super::{Context, Failure};
 /// reflection of the dispatch table. What it must never do is drift from it.
 /// `tests/differential.rs` is what used to stop that, and it is deleted; a name
 /// added here that the dispatch does not answer is now caught by nothing.
-const SCRIPTED: &[&str] = &[
+///
+/// The **other** direction is now crossed, by
+/// `dispatch::tests::every_operation_a_tool_offers_is_claimed_or_declared_unscripted`.
+/// It is the direction that bit: `republish-review` was dispatched, exposed as a
+/// tool and left out of this list, so `estigia config` reported eighteen
+/// scripted operations for a transport that answered nineteen — the drift this
+/// comment predicts, on the first operation added since it was written.
+pub(super) const SCRIPTED: &[&str] = &[
     "ensure-states",
     "create",
     "list-state",
@@ -27,6 +34,7 @@ const SCRIPTED: &[&str] = &[
     "heartbeat",
     "start-branch",
     "publish-review",
+    "republish-review",
     "handoff-review",
     "review-verdict",
     "release-ci",
@@ -34,6 +42,14 @@ const SCRIPTED: &[&str] = &[
     "changelog-notes",
     "check-closing-keywords",
     "audit-board",
+    // Read-only, and performed here all the same. Found by the crossing named
+    // above the moment it was written, which is the point: this list had drifted
+    // from the dispatch by three operations, not one, and `estigia config` was
+    // under-reporting two of them for longer than the operation that prompted
+    // the check. Both have rows in the GitHub binding's operations table, so the
+    // contract already claimed them and only this answer did not.
+    "expected-target",
+    "base-movement",
 ];
 
 /// What the transport deliberately does **not** do, and why.
@@ -41,7 +57,7 @@ const SCRIPTED: &[&str] = &[
 /// The irreversible remote writes and the two judgements. This is the same line
 /// the harness draws with `DELIVERS`: landing work needs a verdict, and a
 /// verdict is not something a script produces.
-const NOT_SCRIPTED: &[(&str, &str)] = &[
+pub(super) const NOT_SCRIPTED: &[(&str, &str)] = &[
     (
         "merge",
         "irreversible remote write — the agent runs it after verifying SHAs",

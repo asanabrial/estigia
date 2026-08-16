@@ -9263,26 +9263,30 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         "c".repeat(64),
         "a".repeat(32)
     );
-    let timeline = |holder: &str| {
+    // `receipted` is what the third case turns off: an issue that has never been
+    // published has no head to lease against, and the operation has to say so
+    // rather than force over whatever the remote holds.
+    let timeline = |holder: &str, receipted: bool| {
+        let mut comments = vec![serde_json::json!({
+            "id": "IC_1",
+            "createdAt": "2026-01-01T00:00Z",
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": format!("Claimed.\n\n{}\n", claimed_by(holder)),
+        })];
+        if receipted {
+            comments.push(serde_json::json!({
+                "id": "IC_2",
+                "createdAt": "2026-01-01T01:00Z",
+                "viewerDidAuthor": true,
+                "includesCreatedEdit": false,
+                "body": format!("Published draft for review.\n\n{receipt}\n"),
+            }));
+        }
         serde_json::json!({
             "state": "OPEN",
             "labels": [{"name": "status:in-progress"}],
-            "comments": [
-                {
-                    "id": "IC_1",
-                    "createdAt": "2026-01-01T00:00Z",
-                    "viewerDidAuthor": true,
-                    "includesCreatedEdit": false,
-                    "body": format!("Claimed.\n\n{}\n", claimed_by(holder)),
-                },
-                {
-                    "id": "IC_2",
-                    "createdAt": "2026-01-01T01:00Z",
-                    "viewerDidAuthor": true,
-                    "includesCreatedEdit": false,
-                    "body": format!("Published draft for review.\n\n{receipt}\n"),
-                },
-            ],
+            "comments": comments,
         })
         .to_string()
     };
@@ -9309,16 +9313,16 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
     // is gone. Measured — the deletion was green. Anchored on `pr list`, the
     // denied call is either the renewal or nothing at all, and nothing at all
     // lands the push and fails loudly.
-    let answers = |held: Option<u64>| {
+    let answers = |held: Option<u64>, receipted: bool| {
         let mut script = vec![];
         if let Some(held) = held {
             script.push(serde_json::json!({
                 "matches": "issue view", "nth": held + 1,
-                "stdout": timeline("claude-99999999"), "status": 0,
+                "stdout": timeline("claude-99999999", receipted), "status": 0,
             }));
         }
         script.extend([
-            serde_json::json!({ "matches": "issue view", "stdout": timeline(run_id), "status": 0 }),
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(run_id, receipted), "status": 0 }),
             serde_json::json!({ "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 }),
             serde_json::json!({ "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 }),
             serde_json::json!({ "matches": "json body", "stdout": serde_json::json!({"body": "names nothing"}).to_string(), "status": 0 }),
@@ -9398,7 +9402,7 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
 
     // First half: the whole route, with the claim standing throughout.
     let landing = trace.path().join("landing.log");
-    let (failed, text) = republish(&answers(None), &landing);
+    let (failed, text) = republish(&answers(None, true), &landing);
     assert!(!failed, "the republish did not land: {text}");
     assert!(
         text.contains("\"republished\": true") && text.contains(&published_head),
@@ -9448,7 +9452,7 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
     assert_eq!(remote_head(), published_head, "the remote was not restored");
 
     let denied = trace.path().join("denied.log");
-    let (failed, text) = republish(&answers(Some(held)), &denied);
+    let (failed, text) = republish(&answers(Some(held), true), &denied);
     assert!(
         failed,
         "a republish went through after the claim moved to another run: {text}"
@@ -9457,5 +9461,47 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         remote_head(),
         published_head,
         "the force-push landed although the claim had moved: {text}"
+    );
+    // And it says which world it refused in. By this point `edit_pr` has replaced
+    // the live pull request's title and body — the call log below proves it — so
+    // `nothing was written` is false, and a run believing it leaves somebody
+    // else's pull request re-described with nobody told to put it back. The
+    // refusal reached here through `stop()`, whose envelope carries no `world`,
+    // and the harness read the absence as *untouched*.
+    assert!(
+        std::fs::read_to_string(&denied)
+            .expect("the call log")
+            .lines()
+            .any(|line| line.contains("pr edit")),
+        "the fixture never rewrote the pull request, so this proves nothing about the report"
+    );
+    assert!(
+        !text.contains("nothing was written"),
+        "the refusal reported an untouched world after rewriting the pull request: {text}"
+    );
+    assert!(
+        text.contains("put it back"),
+        "the refusal does not say what was left behind: {text}"
+    );
+
+    // Third: an issue that has never been published has no head to lease
+    // against. Forcing anyway would be the plain `--force` the issue rules out,
+    // wearing a lease over whatever the remote happens to hold — so the refusal
+    // is the guard, and until this case existed deleting it left the whole suite
+    // green.
+    let unpublished = trace.path().join("unpublished.log");
+    let (failed, text) = republish(&answers(None, false), &unpublished);
+    assert!(
+        failed,
+        "a republish went through with no recorded publication to lease against: {text}"
+    );
+    assert!(
+        text.contains("published-receipt-missing"),
+        "the missing receipt was not what refused it: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the remote moved although there was no receipt to lease against: {text}"
     );
 }

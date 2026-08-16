@@ -2621,12 +2621,24 @@ fn a_publish_names_the_checkout_the_gate_will_measure_against() {
         "Estigia named a second worktree over the one the caller chose"
     );
 
-    // Release re-derives the same target from the same checkout.
-    let release = tools::find("release_ci").expect("the tool exists");
-    assert_eq!(
-        worktree_to_name(release, &[], &run),
-        run.worktree.as_ref().map(|path| path.display().to_string())
-    );
+    // Release re-derives the same target from the same checkout, and a republish
+    // derives it the same way — after a force-push, which is why it is asserted
+    // here by name rather than left to whoever adds the next operation. It was
+    // left out: refs are shared between git worktrees, so the branch pushed from
+    // the base checkout anyway and the readback then disagreed with a head this
+    // harness had chosen, answering that somebody else must have pushed.
+    for reader in ["release_ci", "republish_review"] {
+        let tool = tools::find(reader).expect("the tool exists");
+        assert_eq!(
+            worktree_to_name(tool, &[], &run),
+            run.worktree.as_ref().map(|path| path.display().to_string()),
+            "{reader} derives a review target from a checkout nobody named"
+        );
+        assert!(
+            worktree_to_name(tool, &theirs, &run).is_none(),
+            "{reader} was given a second worktree over the one the caller chose"
+        );
+    }
 
     // Other operations do not derive a review target.
     for other in ["claim", "transition", "heartbeat"] {

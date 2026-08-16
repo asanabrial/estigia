@@ -1076,15 +1076,17 @@ suite. Everything else here is prose held by review.
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
   What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still
   `verify-claim --issue --run-id --expect-state`; the head comparison is local, against the checkout.
-- **A `republish_review` the lease refuses has already edited the pull request.** The lease is taken
-  against the head the latest `published` marker recorded, and git evaluates it at the push — which
-  is after the reused pull request has been converted back to draft and its title and body replaced.
-  So a remote somebody else moved leaves the branch untouched, which is what the operation is for,
-  and leaves the pull request drafted and re-described by a call that answers *refused*. This is the
-  same shape a refused `publish_review` has, and it is written down here rather than there because it
-  is the difference between an accident and a designed outcome: the lease refusing is the case that
-  operation exists to produce, so it is the one that will actually be met. The refusal names the
-  push, so the pull request's state is the thing a reader has to check for themselves.
+- **A `republish_review` that refuses has already edited the pull request, and says so.** Both of its
+  refusals arrive after the reused pull request has been converted back to draft and its title and
+  body replaced: the lease is evaluated by git at the push, and the renewal stands immediately before
+  it. So a remote somebody else moved leaves the branch untouched, which is what the operation is for,
+  and leaves the pull request drafted and re-described. What is **not** left to a reader to infer is
+  the report: the renewal's refusal carries `world: committed` and names what was rewritten, and the
+  lease's is a write failure, which already says the world is ambiguous. That is the correction two
+  independent reviewers of the change both measured — the renewal reached the agent through the same
+  `stop()` every claim refusal uses, whose envelope carries no `world`, so it read as *nothing was
+  written* while somebody else's pull request sat re-described with nobody told to put it back. What
+  is still on the reader is the decision: Estigia reports the edit, it does not undo it.
   What the lease does **not** prove is that the rewritten history still contains the reviewed change.
   It compares one commit id to another; a rebase that dropped a hunk leases exactly as cleanly as one
   that did not. Every republish creates a new epoch and invalidates the prior review evidence for

@@ -2090,12 +2090,18 @@ fn the_ordinary_publication_has_no_way_to_force() {
     );
 }
 
+/// The head a lease is taken from is the latest `published` marker's, or none.
+///
+/// Named for what it measures. It was called
+/// `a_republish_with_nothing_recorded_to_lease_against_is_refused` and never
+/// called `republish_review` at all — so the refusal in its name was unheld, and
+/// deleting that refusal left the whole suite green. The refusal is now driven
+/// end to end in `pipe.rs`; this keeps the half that needs no remote.
 #[test]
-fn a_republish_with_nothing_recorded_to_lease_against_is_refused() {
-    // The timeline half, reachable without a remote: `latest_publication` is
-    // what supplies the expectation, and an issue with no `published` marker
-    // supplies none. Forcing anyway would be a `--force` with the lease spelled
-    // over whatever the remote happened to hold.
+fn the_head_a_lease_is_taken_from_is_the_latest_published_marker() {
+    // `latest_publication` is what supplies the expectation, and an issue with
+    // no `published` marker supplies none. Forcing anyway would be a `--force`
+    // with the lease spelled over whatever the remote happened to hold.
     assert_eq!(latest_publication(&[]), None);
 
     let published = |head: &str| ownership::Comment {
