@@ -123,16 +123,28 @@ suite. Everything else here is prose held by review.
 
   | Passes but should not | Fails but should not |
   |---|---|
-  | a checkout pinned to a **commit** — no version string to floor | `cache-on-failure: "true"` and `: yes`, both YAML true |
-  | the option written under `env:` or in any key but `with:` | a flow-style step, `- { uses: …, with: { … } }` |
-  | a caching step under `if: false`, which cannot run | |
-  | a `uses:` whose value is a folded scalar on the next line | |
+  | a checkout pinned to a **commit** — no version string to floor | `cache-on-failure: yes`, which YAML 1.1 reads as true |
+  | a caching step under `if: false`, which cannot run | a flow-style step, `- { uses: …, with: { … } }` |
+  | a `uses:` folded onto the next line, **in a third workflow** | |
+  | `lookup-only:` — not read, and its effect on saving not measured | |
 
   They are not one kind of thing, and an earlier version of this paragraph said they were. Two are
   about **meaning** a line cannot carry — a commit pin names no version, and `if: false` reads
   exactly like a step that runs. Two are about **syntax this reader does not handle**, flow style and
   folded values, and those a YAML parser would close. One is a **decision** rather than a defect:
-  which spellings of true this repository will accept.
+  whether `yes` counts as true here. And one is simply **unread**.
+
+  A sixth row left this table by being fixed rather than by being argued away: *the option written
+  under `env:` or in any key but `with:`*. Reading each line as a key and a value closed it — a
+  `NOTE:` holding the words is not the setting, and the step is now correctly refused for not having
+  one. It was found in the same run that measured everything else here, which is the only reason it
+  is not still written above as a hole.
+
+  The folded-scalar row carries *in a third workflow* because it does not reproduce where a reader
+  would first try it: written into `ci.yml` or `release.yml` the guard goes red instead, on the floor
+  that says those two lanes must check something out. The row used to be unqualified, and a review
+  ran it in the two files the entry is about and got the opposite column — a row describing a
+  behaviour nobody had reproduced in the place it names.
 
   That distinction matters because the paragraph that stood here said *"four holes and two false
   alarms"*, said the left column needed a YAML parser, and said the right one needed a decision. A
@@ -146,7 +158,22 @@ suite. Everything else here is prose held by review.
   assertion this whole entry is about** — the edge of what was measured, stated as the edge of what
   is there.
 
-  **This guard has failed correct workflows eleven times, each for the same reason.** Every one was
+  The round after that made the point again on the same function. `runs_action` was given three
+  normalisations — the key, the prefix, the case — and its comment said the six were closed by them.
+  Quoting is the fourth axis of the same normalisation and was not looked at, so `uses:
+  "actions/checkout@v7"`, ordinary YAML, stopped being a step: a correct workflow refused *and* a
+  quoted `@v4` waved through a floor in a third lane, which is the case the widening exists for.
+  This document had already recorded a guard of this repository's defeated by a leading quote,
+  twice. Values are unquoted now, and the caching option is read as a key and a value too — searching
+  the step for the literal text refused `cache-on-failure:  true` over a second space, eight lines
+  from the half that had just been taught to read keys.
+
+  And `save-if: false` is refused, because the action documents it as *"the cache is only
+  restored"*: no run saves, which subsumes the red run this whole change is about. Its neighbour
+  `lookup-only:` is in the table above rather than in the code, because what it does to saving is a
+  thing to measure and I have not.
+
+  **This guard has failed correct workflows thirteen times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -163,6 +190,8 @@ suite. Everything else here is prose held by review.
   | a `run: \|-2` body quoting a `- uses:` line | a header's indicators come in one order |
   | `myorg/tools/actions/checkout@v4` | a name found anywhere in the value is the value |
   | a step title, `if:` or `with:` quoting `uses:` beside a version | a line holding `uses:` is a step |
+  | a quoted `uses: "actions/checkout@v7"` | a value is written bare |
+  | `cache-on-failure:  true` with a second space | a setting is found by searching for its text |
 
   The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
   step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry

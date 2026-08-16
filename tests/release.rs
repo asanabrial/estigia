@@ -778,7 +778,7 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// that fails. Some of it is meaning a line cannot carry — a commit pin names no
 /// version, a step under `if: false` reads exactly like one that runs — and some
 /// is syntax this reader does not handle, which a YAML parser would close. The
-/// eleven correct workflows this guard used to refuse are tabulated beside it,
+/// thirteen correct workflows this guard used to refuse are tabulated beside it,
 /// and both tables were built the same way: by writing the file a different
 /// legal way and running it, rather than by reading this code and reasoning
 /// about what it would do.
@@ -863,11 +863,30 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
                 .cloned()
                 .collect::<Vec<_>>()
                 .join("\n");
+            // Read as keys and values, for the reason the `uses:` half is:
+            // searching the block for the text refused `cache-on-failure:  true`
+            // over a second space, and the same eight lines apart.
+            let settings: Vec<(String, String)> =
+                under_the_cache.lines().filter_map(key_and_value).collect();
+            let says = |key: &str, value: &str| {
+                settings
+                    .iter()
+                    .any(|(k, v)| k == key && v.to_lowercase() == value)
+            };
             assert!(
-                under_the_cache.contains("cache-on-failure: true"),
+                says("cache-on-failure", "true"),
                 "a red run throws away everything it compiled, so the next push \
                  starts from cold; the caching step at {name}:{} reads: \
                  {under_the_cache:?}",
+                opens + 1
+            );
+            // `save-if: false` means, in the action's own words, that the cache
+            // is only restored — no run saves one, which is the red-run case and
+            // every other case besides.
+            assert!(
+                !says("save-if", "false"),
+                "the caching step at {name}:{} saves on no run at all, so \
+                 `cache-on-failure` decides nothing",
                 opens + 1
             );
         }
@@ -968,15 +987,27 @@ fn runs_action(code: &str, action: &str) -> Option<String> {
         .map(|reference| reference.to_owned())
 }
 
-/// A line's key and value, split at the first `:`, with a step's `- ` removed.
+/// A line's key and value, split at the first `:`, with a step's `- ` removed,
+/// the key's own spacing dropped and the value unquoted.
 ///
 /// Reading the key is what tells a step from a sentence about one: `name: this
 /// uses: actions/checkout@v4` has the key `name`, and a guard that searches the
-/// whole line for `uses:` refuses it.
+/// whole line for `uses:` refuses it. Unquoting matters for the same reason
+/// case-folding did: `uses: "actions/checkout@v7"` is ordinary YAML, and a
+/// comparison against the raw value read it as no step at all — which both
+/// refused a correct workflow and let a quoted `@v4` through a floor. This
+/// document has recorded a guard defeated by a leading quote twice before.
 fn key_and_value(code: &str) -> Option<(String, String)> {
     let (key, value) = code.split_once(':')?;
     let key = key.trim().trim_start_matches("- ").trim();
-    Some((key.to_owned(), value.trim().to_owned()))
+    let value = value.trim();
+    let value = match value.chars().next() {
+        Some(quote @ ('"' | '\'')) if value.len() > 1 && value.ends_with(quote) => {
+            &value[1..value.len() - 1]
+        }
+        _ => value,
+    };
+    Some((key.to_owned(), value.to_owned()))
 }
 
 /// The `actions/checkout` major a `@ref` names, when it names one by tag.
