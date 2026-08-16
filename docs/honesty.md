@@ -194,6 +194,24 @@ suite. Everything else here is prose held by review.
   A step's keys are an unordered mapping too, and `- with:` written above the step's own `uses:` was
   refused, because the search for `with:` began one line after the step opened.
 
+  **And the flow-style row was in the wrong column outside the two lanes it had been run in.** It
+  sat under *fails but should not*, which is what happens in `ci.yml` and `release.yml`: the guard
+  reads `- { uses: … }` as no step at all, and the floors that say those two files must have a
+  checkout and a caching step turn the miss into a red. A **third** lane has no such floor, so
+  `- { uses: Swatinem/rust-cache@v2 }` discarded every red run's cache and the suite stayed green —
+  the opposite column, in the case the loop was widened for. The same row shape as the folded scalar
+  one, whose qualifier was added two rounds earlier by a review that ran it somewhere else; this one
+  was never run anywhere else. A step written in flow style is now refused outright, everywhere,
+  with a message saying the guard cannot read it rather than that it has checked it. Refusing a
+  correct flow-style step is the price, and it is what the row already said.
+
+  **Two rows of that same table, each fixed alone, were never run together.** A `cache-directories:`
+  sequence ends a step early; `- with:` above `uses:` hides the step's opening. Written at once — a
+  `- with:` step whose `with:` holds a sequence — the walk back for the opening landed on the
+  sequence item *inside* the step, and a correctly configured action was reported as discarding its
+  caches. A step's opening is now required to be shallower than everything between it and the line
+  being read.
+
   Its neighbour `lookup-only:` is in the table above rather than in the code, because what it does
   to saving is a thing to measure and I have not — which is the difference between an unread input
   and one whose behaviour was guessed at from the sentence beside it.
@@ -214,7 +232,7 @@ suite. Everything else here is prose held by review.
   left two — which is, to the action, the same harm this entry already records from the round where
   the list named three and `action-gh-release` was the one missing.
 
-  **This guard has failed correct workflows sixteen times, each for the same reason.** Every one was
+  **This guard has failed correct workflows seventeen times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -236,6 +254,7 @@ suite. Everything else here is prose held by review.
   | a quoted key, `- "uses": …` | only values are written in quotes |
   | `Cache-On-Failure: true` | an input's name is written in the case the docs use |
   | `- with:` written above the step's own `uses:` | a step's keys come in an order |
+  | `- with:` above `uses:` **and** a sequence inside that `with:` | a step opens at the nearest `- ` above it |
 
   The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
   step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry

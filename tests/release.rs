@@ -778,7 +778,7 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// that fails. Some of it is meaning a line cannot carry — a commit pin names no
 /// version, a step under `if: false` reads exactly like one that runs — and some
 /// is syntax this reader does not handle, which a YAML parser would close. The
-/// sixteen correct workflows this guard used to refuse are tabulated beside it,
+/// seventeen correct workflows this guard used to refuse are tabulated beside it,
 /// and both tables were built the same way: by writing the file a different
 /// legal way and running it, rather than by reading this code and reasoning
 /// about what it would do.
@@ -795,6 +795,22 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     );
     for name in &workflows {
         let running = what_runs(&read(&format!(".github/workflows/{name}")));
+        // A step written in flow style is one this reader cannot take apart: it
+        // holds every key on one line, so the key here reads `{ uses` and the
+        // step is skipped rather than checked. In `ci.yml` and `release.yml` the
+        // two exists-floors turn that into a red; in a lane added later there is
+        // no floor to catch it, and a bare `- { uses: Swatinem/rust-cache@v2 }`
+        // discarded every red run's cache while this test stayed green. Refusing
+        // it says so, where skipping it did not.
+        let flow: Vec<&String> = running
+            .iter()
+            .filter(|code| code.trim_start().starts_with("- {"))
+            .collect();
+        assert!(
+            flow.is_empty(),
+            "{name} writes a step in flow style, which this guard reads as no \
+             step at all rather than as one it has checked: {flow:?}"
+        );
         let stale: Vec<&String> = running
             .iter()
             .filter(|code| {
@@ -1085,13 +1101,26 @@ fn checkout_major(reference: String) -> Option<u32> {
 /// next line, and the guard above then reports a cache being discarded by a
 /// workflow that is configured correctly.
 fn step_opening(running: &[String], at: usize) -> usize {
-    (0..=at)
-        .rev()
-        .find(|&n| {
-            let opening = running[n].trim_start();
-            opening == "-" || opening.starts_with("- ")
-        })
-        .unwrap_or(at)
+    // Shallower than everything between it and the line we started from. A `- `
+    // alone is not enough: `- with:` above the step's `uses:`, holding a
+    // `cache-directories:` sequence, puts a `- ` item *inside* the step and
+    // deeper than it. Walking back to the nearest one landed there, ended the
+    // block at once, and reported a correctly configured action as discarding
+    // its caches. Both halves of that shape were already rows of the table
+    // below; the two together had never been written down and run.
+    let mut shallowest = indent_of(&running[at]);
+    for n in (0..=at).rev() {
+        let line = &running[n];
+        let opening = line.trim_start();
+        let depth = indent_of(line);
+        if (opening == "-" || opening.starts_with("- ")) && depth <= shallowest {
+            return n;
+        }
+        if !opening.is_empty() {
+            shallowest = shallowest.min(depth);
+        }
+    }
+    at
 }
 
 /// Every workflow file the directory holds, sorted, so that "both workflows"
