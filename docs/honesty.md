@@ -125,20 +125,18 @@ suite. Everything else here is prose held by review.
   `claim.rs`, so a mutation harness that rewrites line endings — Python's text mode on Windows will,
   silently — produces failures that look like a guard being caught and are not. Two of the
   measurements behind this entry had to be discarded and rerun for that reason.
-- **One refusal still says nothing was written after a write, and it is not the one this was about.**
-  A stop can now declare that it already wrote, and `publish_review`'s two post-push refusals do —
-  each held by a test that fails when its own marker is renamed. `ensure_draft` is not one of them,
-  and it has **two** doors onto the same lie: it runs `gh pr ready --undo`, a remote write, and after
-  that succeeds both its `draft-readback-failed` stop and a failed `view_pr` read report *nothing was
-  written*. Measured rather than read: driving the operation with a reused ready pull request and an
-  unreadable body, the reverted read reaches `ensure_draft`, the wire log carries
-  `pr ready 99 --undo`, and the answer is *nothing was written*. Wrapping the `draft-readback-failed`
-  condition in `if false &&` leaves the whole suite green, so neither door is held. They sit before
-  the push rather than after it, which is how both fell outside the bar the issue set and outside the
-  enumeration that answered it; it is the same lie in the same function, and naming it here is cheaper
-  than pretending the sweep was complete. It is two doors onto a **gate** and not only onto a report:
-  with `draft-readback-failed` disabled nothing stops a still-ready reused pull request exposing the
-  new head to CI, which is the barrier that refusal exists to hold.
+- **`ensure_draft`'s two doors are closed.** This entry named them and it is kept as a record of what
+  the gap was, narrowed to what is now true. It runs `gh pr ready --undo`, a remote write, and both
+  its `draft-readback-failed` stop and a failed `view_pr` read used to answer *nothing was written*
+  afterwards — the same lie the post-push refusals had already been fixed for, sitting before the push
+  rather than after it, which is how both fell outside the bar the issue set. `un_readied` carries the
+  world on both now, and both are driven end to end: the read door by a readback that fails, the stop
+  door by a pull request that comes back still ready.
+  What the second door is worth is more than a report. Wrapping the `draft-readback-failed` condition
+  in `if false &&` used to leave the whole suite green, so **nothing stopped a still-ready reused pull
+  request exposing the new head to CI** — the barrier that refusal exists to hold. That mutation is
+  red now, and so is routing its refusal through the shared wording: doing so replaced the action
+  naming the hazard with one inviting an operator to `gh pr ready`, which is the exposure itself.
 
   Three more, from the same reviews and left with their measurements. The `[world-action]` guidance
   naming `Refs #<n>` is held by no test — stripping it from either refusal leaves the suite green —

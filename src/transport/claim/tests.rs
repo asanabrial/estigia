@@ -2133,7 +2133,14 @@ fn the_head_a_lease_is_taken_from_is_the_latest_published_marker() {
     );
 }
 
-/// The sentence an operator reads, assembled, for every reachable combination.
+/// The sentence an operator reads, assembled, for every combination the type
+/// can express.
+///
+/// Every combination the *type* has, not every combination anything can drive:
+/// [`Edited::Title`] is unreachable through what ships, so the two rows naming
+/// it are a superset. Said plainly because "every reachable combination" is a
+/// claim about reachability, and this change has already been corrected twice
+/// for making one of those loosely.
 ///
 /// The reason this exists at the whole-sentence level rather than as more
 /// `contains` checks: **fragment assertions are what let the broken sentence

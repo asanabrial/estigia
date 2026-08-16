@@ -1870,8 +1870,7 @@ fn publish_with(
 /// What this run has already written to the reused pull request.
 ///
 /// The writes named apart rather than one flag, and the reason they are apart
-/// is the defect
-/// that made it so. The flag was set by `edit_pr` alone, and the sentence it
+/// is the defect that made it so. The flag was set by `edit_pr` alone, and the sentence it
 /// produced named a draft conversion as well — while `ensure_draft` only
 /// un-readies a pull request that was *ready*. At republish time the reused one
 /// is normally already draft, because `publish_review` drafts it and only
@@ -2097,35 +2096,40 @@ fn ensure_draft(context: &Context, pr: &serde_json::Value) -> Result<bool, Failu
     Ok(wrote)
 }
 
-/// A refusal from inside [`ensure_draft`], once it has un-readied the PR.
+/// A refusal from inside [`ensure_draft`], once `gh pr ready --undo` has run.
 ///
-/// It defers to [`after_rewriting_the_pr`] rather than wording the same event a
-/// second time. Two spellings of one fact were already drifting apart — this
-/// said *"was already converted to draft"* while [`PullRequestWrites::describe`]
-/// said *"was converted back to draft"* — and the assertion list that forbids
-/// the phrase on an untouched path names only one of them, which is the exact
-/// shape that killed an assertion a round earlier: the wording moved and the
-/// test that pinned it did not.
+/// **It adds the world and keeps the caller's action.** Delegating to
+/// [`after_rewriting_the_pr`] was tried and reverted: that function *replaces*
+/// the action, and the action it replaced here is the only one naming the
+/// hazard — *"do not push; the reused PR is still ready and would expose the new
+/// head to CI"*. What went in its place was *somebody has to decide whether to
+/// put it back*, whose only meaning over a still-ready pull request is
+/// `gh pr ready`, which is that exposure. A refusal that destroys its own
+/// warning is worse than one that says less.
+///
+/// It also words the write **as an attempt**, and that is not the drift the
+/// shared wording exists to prevent — it is a different fact.
+/// [`PullRequestWrites::describe`] names writes that landed; the two exits below
+/// are reached when `--undo` returned zero and the state either could not be
+/// read or came back *still ready*. Saying "was converted back to draft" beside
+/// an `observed` that shows `isDraft: false` would be reporting a state this
+/// code read back as false, which is the rule this whole change is about.
 fn un_readied(failure: Failure, wrote: bool, pr: u64) -> Failure {
     if !wrote {
         return failure;
     }
-    let failure = after_rewriting_the_pr(
-        failure,
-        PullRequestWrites {
-            undrafted: true,
-            edited: None,
-        },
-    );
-    // Which pull request, which the shared wording does not carry: `ensure_draft`
-    // knows the number and the caller's frame is about "the" pull request.
     match failure {
         Failure::Stop(mut envelope) => {
             if let Some(envelope) = envelope.as_object_mut() {
+                envelope.insert("world".to_owned(), serde_json::json!("committed"));
                 envelope.insert("un_readied_pr".to_owned(), serde_json::json!(pr));
             }
             Failure::Stop(envelope)
         }
+        Failure::Read(detail) | Failure::Write(detail) => Failure::Write(format!(
+            "{detail} \u{2014} `gh pr ready --undo` had already run against pull request #{pr}, so \
+             this is not a call that changed nothing"
+        )),
         other => other,
     }
 }

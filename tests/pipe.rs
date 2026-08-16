@@ -9624,6 +9624,62 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         "the remote moved on a refusal before the push: {text}"
     );
 
+    // Fourth-and-a-quarter: `--undo` returns zero and the pull request comes back
+    // **still ready**. That is `draft-readback-failed`, and it is two things at
+    // once — a report and a gate — neither of which anything measured.
+    //
+    // The gate: with its condition disabled the operation pushes the rewritten
+    // head at a pull request CI is watching, which is the whole reason
+    // `ensure_draft` runs before the push.
+    //
+    // The report: this refusal carries the only action that names that hazard.
+    // A round of this change routed it through the shared wording, whose insert
+    // **replaces** the action — so the warning was destroyed and what took its
+    // place said the pull request *was converted back to draft* beside an
+    // `observed` showing it was not, and invited an operator to put that back.
+    // Putting it back is `gh pr ready`. The refusal would have talked somebody
+    // into the exposure it exists to prevent.
+    let still_ready = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 },
+        { "matches": "pr list", "stdout": serde_json::json!([ready_pr]).to_string(), "status": 0 },
+        // `--undo` is unmatched, so it "succeeds"; the readback disagrees.
+        { "matches": "headRefOid", "stdout": ready_pr.to_string(), "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let stuck = trace.path().join("still-ready.log");
+    let (failed, text) = republish(&still_ready, &stuck);
+    assert!(
+        failed,
+        "a pull request that stayed ready was not refused: {text}"
+    );
+    assert!(
+        std::fs::read_to_string(&stuck)
+            .expect("the call log")
+            .lines()
+            .any(|line| line.contains("pr ready") && line.contains("--undo")),
+        "the fixture never attempted the un-ready, so this proves nothing"
+    );
+    assert!(
+        text.contains("do not push") && text.contains("still ready"),
+        "the refusal lost the action naming the CI exposure it exists to prevent: {text}"
+    );
+    for lie in ["converted back to draft", "put it back"] {
+        assert!(
+            !text.contains(lie),
+            "the refusal said {lie:?} about a pull request it read back as still ready: {text}"
+        );
+    }
+    assert!(
+        !text.contains("nothing was written"),
+        "the refusal reported an untouched world after `--undo` ran: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "a still-ready pull request did not stop the push: {text}"
+    );
+
     // Fourth-and-a-half: the same window one call later. `ensure_draft` succeeds
     // — the pull request was ready and is now draft — and then `gh pr edit`
     // fails. That `?` was bare, so a transient failure there reported an

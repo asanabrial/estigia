@@ -35,8 +35,9 @@ the workflow, it holds the tools.
   the first publication is `publish_review`'s, whose non-fast-forward refusal is the check that would
   be skipped. It is a separate operation rather than a flag because the last thing this must keep is
   that `publish_review` never force-pushes implicitly, and two entry points hold that where one
-  function with a boolean would only ask a reviewer to. **Five rounds of independent review**, two blind
-  contexts each, rejected it before this shape, and every finding is fixed in it. The ones worth
+  function with a boolean would only ask a reviewer to. **Every round of independent review it went through**, two
+  blind contexts each, rejected it before this shape, and every finding is fixed in it. The count is
+  deliberately not written: it drifted twice, and a number nothing crosses is a number that will. The ones worth
   naming: the refusals downstream of a write said *nothing was written*, because they reached the
   agent through the same `stop()` and `?` every other path uses and those envelopes carry no `world`
   — they now name **which** writes happened, one clause each, and stay silent when none did; the
