@@ -198,6 +198,22 @@ suite. Everything else here is prose held by review.
   to saving is a thing to measure and I have not — which is the difference between an unread input
   and one whose behaviour was guessed at from the sentence beside it.
 
+  **A branch cannot count its own commits in a document it commits.** The pull request body said
+  *seventeen commits, sixteen corrections, eleven touching the test*. It had been written at the
+  seventeenth and published on top of the eighteenth, so all three numbers were short by one — the
+  same defect as the round before, where the body had been left ten rounds unread and was wrong by
+  nine. The second time it was not staleness: the arithmetic was true when written and the act of
+  publishing it made it false. So the body says no number now. A count of a moving thing, written
+  into that thing, is not a measurement that can hold, and rewriting it more carefully would only
+  have moved when it broke.
+
+  **And the same body halved the exposure it was summarising.** It said *"four `node20` actions
+  remain, two of them transitive"*. This entry says four **direct** `uses:` lines and, in its own
+  words, that the transitive pair *"is not counted in the four above"*: the measurement is six.
+  Somebody scoping the follow-up from the summary rather than the entry would have raised four and
+  left two — which is, to the action, the same harm this entry already records from the round where
+  the list named three and `action-gh-release` was the one missing.
+
   **This guard has failed correct workflows sixteen times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
