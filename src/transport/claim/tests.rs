@@ -1865,7 +1865,16 @@ fn publication_establishes_the_draft_barrier_before_push() {
     let draft = body
         .find("ensure_draft(context, pr)")
         .expect("drafts reused PRs");
-    let push = body.find("\"git\", \"push\"").expect("pushes the branch");
+    // The **call site**, not the string the push is spelled with. Extracting
+    // `push_to_origin` moved that spelling into a function *defined below*
+    // `publish_with`, so `"git", "push"` stopped being the place the push
+    // happens and started being the place it is written — and the comparison
+    // was satisfied by file layout rather than by order. Measured: hoisting the
+    // call above the draft conversion, which would put a rewritten head at a
+    // pull request CI is watching, left this test green.
+    let push = body
+        .find("push_to_origin(at, branch, push)")
+        .expect("pushes the branch");
     assert!(draft < push, "a reused ready PR is drafted only after push");
 
     let create = source

@@ -1780,7 +1780,7 @@ fn publish_with(
                 .map_err(|failure| after_rewriting_the_pr(failure, wrote))?;
             wrote.edited = Some(Edited::Title);
         }
-    } else if pr_body_file.is_none() {
+    } else if body_text.is_none() {
         return Err(Failure::Stop(serde_json::json!({
             "ok": false, "reason": "missing-pr-body",
             "action": "pass --pr-body-file for a new PR",
@@ -1973,7 +1973,13 @@ fn after_rewriting_the_pr(failure: Failure, wrote: PullRequestWrites) -> Failure
                 // sentence that names a way forward.
                 //
                 // The one `Stop` that reaches here is the pre-push renewal —
-                // `edit_pr` and `push_to_origin` both fail as `Write` — and two of
+                // `edit_pr` and `push_to_origin` fail as `Read` or `Write` and
+                // never as `Stop`, which is the half that matters and the half
+                // this said too narrowly: `super::run` answers `Read` when the
+                // process cannot spawn, whatever `How` it was given. Both land in
+                // one arm below, so nothing behaves differently — and a sentence
+                // narrower than the code is still a sentence that will be
+                // believed. And two of
                 // that renewal's five actions carry instructions this frame does
                 // not have. *"nobody holds it: claim it again before writing"* is
                 // the one a lapsed horizon gets, and twenty lines of comment above
@@ -1995,7 +2001,7 @@ fn after_rewriting_the_pr(failure: Failure, wrote: PullRequestWrites) -> Failure
                     serde_json::json!(if said.is_empty() {
                         wrote
                     } else {
-                        format!("{said} \u{2014} and {wrote}")
+                        format!("{said}; {wrote}")
                     }),
                 );
             }

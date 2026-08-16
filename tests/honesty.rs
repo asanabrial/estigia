@@ -167,6 +167,14 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
         // one. Two past the current count rather than one, which is the same
         // ceiling the note above describes arriving on the day somebody adds a
         // thirteenth check.
+        //
+        // The hyphen binds both ways, and the other way is worth knowing before
+        // it bites: a compound like `one-off` or `three-way` is now one word and
+        // matches no entry, so a sentence counting something a few words after
+        // it reads as having no number rather than the wrong one. Nothing in the
+        // corpus does that today, and failing to find a number is the loud
+        // direction — every caller `expect`s one — so it surfaces as a panic
+        // naming the phrase rather than as a silently wrong count.
         ("twenty-one", 21),
         ("twenty-two", 22),
     ]
@@ -1724,11 +1732,17 @@ fn every_link_in_this_repositorys_documentation_resolves() {
 
 /// The badge at the top of the README counts the tools the crate has.
 ///
-/// The first factual claim a reader meets, and nothing crossed it. Every other
-/// count in that file is read by a test — the fenced list, *"N operations,
-/// table-driven"*, *"N tools … N operations"* — so adding an operation moved all
-/// of them and left the badge saying twenty over a crate with twenty-one, with
-/// its own `href` pointing four lines down at the section that disagreed.
+/// The first factual claim a reader meets, and nothing crossed it. Adding an
+/// operation moved every count in the file and left the badge saying twenty over
+/// a crate with twenty-one, with its own `href` pointing four lines down at the
+/// section that disagreed.
+///
+/// *"Every other count is crossed"* is what this comment said, and it was not
+/// true: the sentence four lines below the badge — *"N tools. The contract names
+/// N operations every binding must map"* — was read by nothing either, measured
+/// by rewriting both of its numbers and watching the whole suite stay green. It
+/// is crossed now, by the test below this one. Claiming coverage is a claim, and
+/// this change has been corrected for making one loosely more than once.
 ///
 /// The number appears twice on the line, in the alt text and inside the shields
 /// URL, and they are asserted separately: a badge whose picture and description
@@ -1746,6 +1760,31 @@ fn the_badge_counts_the_tools_the_crate_has() {
             "the README badge does not say {claim:?}, and the crate has {tools} tools"
         );
     }
+}
+
+/// The tools section's own sentence counts both the tools and the operations.
+///
+/// The paragraph a binding author reads to learn what they have to map, and it
+/// carried two numbers nothing checked. The scenario is not hypothetical: a
+/// twentieth operation lands, `SKILL.md`'s MUST-map line and `src/skill.rs`'s
+/// pinned count both go red and get updated, and this sentence goes on saying
+/// nineteen with the suite green — telling the one reader who needs it exactly
+/// wrong.
+#[test]
+fn the_tools_section_counts_the_tools_and_the_operations() {
+    let readme = readme();
+    let tools = estigia::harness::mcp::tools::TOOLS.len();
+    let operations = estigia::skill::required_operations().len();
+    assert_eq!(
+        number_before(&readme, "tools. The contract names"),
+        Some(tools),
+        "the tools section does not count the {tools} tools the crate has"
+    );
+    assert_eq!(
+        number_before(&readme, "operations every binding must map"),
+        Some(operations),
+        "the tools section does not count the {operations} operations the contract requires"
+    );
 }
 
 /// The number of operations the tools expose is the number the README claims.
