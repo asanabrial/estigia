@@ -125,29 +125,29 @@ suite. Everything else here is prose held by review.
   `claim.rs`, so a mutation harness that rewrites line endings — Python's text mode on Windows will,
   silently — produces failures that look like a guard being caught and are not. Two of the
   measurements behind this entry had to be discarded and rerun for that reason.
-- **One refusal still says nothing was written after a write, and it is not the one this was about.**
-  A stop can now declare that it already wrote, and `publish_review`'s two post-push refusals do —
-  each held by a test that fails when its own marker is renamed. `ensure_draft` is not one of them,
-  and it has **two** doors onto the same lie: it runs `gh pr ready --undo`, a remote write, and after
-  that succeeds both its `draft-readback-failed` stop and a failed `view_pr` read report *nothing was
-  written*. Measured rather than read: driving the operation with a reused ready pull request and an
-  unreadable body, the reverted read reaches `ensure_draft`, the wire log carries
-  `pr ready 99 --undo`, and the answer is *nothing was written*. Wrapping the `draft-readback-failed`
-  condition in `if false &&` leaves the whole suite green, so neither door is held. They sit before
-  the push rather than after it, which is how both fell outside the bar the issue set and outside the
-  enumeration that answered it; it is the same lie in the same function, and naming it here is cheaper
-  than pretending the sweep was complete. It is two doors onto a **gate** and not only onto a report:
-  with `draft-readback-failed` disabled nothing stops a still-ready reused pull request exposing the
-  new head to CI, which is the barrier that refusal exists to hold.
+- **`ensure_draft`'s two doors are closed.** This entry named them and it is kept as a record of what
+  the gap was, narrowed to what is now true. It runs `gh pr ready --undo`, a remote write, and both
+  its `draft-readback-failed` stop and a failed `view_pr` read used to answer *nothing was written*
+  afterwards — the same lie the post-push refusals had already been fixed for, sitting before the push
+  rather than after it, which is how both fell outside the bar the issue set. `un_readied` carries the
+  world on both now, and both are driven end to end: the read door by a readback that fails, the stop
+  door by a pull request that comes back still ready.
+  What the second door is worth is more than a report. Wrapping the `draft-readback-failed` condition
+  in `if false &&` used to leave the whole suite green, so **nothing stopped a still-ready reused pull
+  request exposing the new head to CI** — the barrier that refusal exists to hold. That mutation is
+  red now, and so is routing its refusal through the shared wording: doing so replaced the action
+  naming the hazard with one inviting an operator to `gh pr ready`, which is the exposure itself.
 
   Three more, from the same reviews and left with their measurements. The `[world-action]` guidance
   naming `Refs #<n>` is held by no test — stripping it from either refusal leaves the suite green —
   though the issue lists it under *unchanged*. `Answer::already_wrote` decides which exit-code arm
   `translate` takes and sits outside the `exit-code` population fingerprint, and that arm's
   `StatusRequired` axis is held by the fingerprint alone: a tripwire that says *go and read this*
-  rather than a test of what it does. And the pull-request body is read three times — by the scan,
-  by `edit_pr`, and by `pr create` — so a body edited between the scan and the write is published
-  unscanned. Narrow, and one place rather than three is the fix if it ever matters.
+  rather than a test of what it does. The pull-request body used to be read three times — by the scan,
+  by `edit_pr`, and by `pr create` — so a body edited between the scan and the write was published
+  unscanned, and the `Closes #<n>` it could gain auto-closes the issue on merge. It is one read now,
+  hoisted above the pull-request listing and carried down as bytes, which is the *one place rather
+  than three* this entry called the fix.
 
   Two smaller things found in the same review and left: the commit-range scan is one function now, but
   its two callers still read from different checkouts — `publish_review` from the isolated one where
@@ -1076,6 +1076,45 @@ suite. Everything else here is prose held by review.
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
   What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still
   `verify-claim --issue --run-id --expect-state`; the head comparison is local, against the checkout.
+- **A `republish_review` that refuses has already written to the pull request, and names which
+  writes.** Its refusals arrive after the reused pull request has been edited — the renewal stands
+  immediately before the push, and the lease is evaluated by git at the push itself — so a remote
+  somebody else moved leaves the branch untouched, which is what the operation is for, and leaves the
+  pull request altered. **Every** refusal site downstream of a write carries that fact, so none answers
+  *nothing was written* — the draft readback, the failed edit, the renewal and the push. Counted rather
+  than named, that sentence said *three* and a later change made it four without moving it; the number
+  is the part that had no reason to be there.
+  Each had reached the agent through the same `stop()` and `?` every other path uses, whose envelopes
+  carry no `world`, so *the absence of a claim about the world was read as a claim that the world was
+  untouched*.
+  **Which** writes is the part that took four rounds. The report was built from one boolean and named
+  two writes: an edit, and a conversion back to draft. `ensure_draft` un-readies only a pull request
+  that was *ready*, and at republish time the reused one is normally already draft — `publish_review`
+  drafts it and only `release_ci` makes it ready — so the common path claimed a conversion nobody
+  performed. An operator putting that back runs `gh pr ready`, which exposes the branch to CI: the
+  exact outcome `ensure_draft` exists to prevent. The report now names each write separately and only
+  when it happened, which is the same rule this document applies to everything else — say what was
+  measured, not what usually accompanies it. What is still on the reader is the decision: Estigia
+  reports the write, it does not undo it.
+- **The timeline does not record that a publication was a republish.** The answer `republish_review`
+  returns carries `republished` and the head it leased against, but the `published` marker it writes to
+  the issue is byte-identical to an ordinary publication's. So an incident review reading the timeline
+  — which is the only record that outlives the call — sees a new epoch and cannot tell whether the
+  bytes arrived by fast-forward or over a force-push. Naming it in the marker would change what every
+  consumer of that marker parses, so it is stated here rather than claimed.
+- **A republish cannot lease against a receipt published from a different GitHub account.**
+  `latest_publication` keeps only comments the authenticated identity authored, because a marker this
+  identity did not write is one anybody could have forged. The consequence is narrow and worth naming
+  rather than leaving to be discovered: a run that reclaims an abandoned issue published from another
+  account finds no receipt, is refused `published-receipt-missing`, and then has no route inside
+  Estigia at all — `publish_review` cannot fast-forward a rewritten branch either. It fails closed,
+  which is the right direction, and it leaves that reclaim with nothing to do but step outside the
+  tools, which is the thing this operation exists to stop.
+  What the lease does **not** prove is that the rewritten history still contains the reviewed change.
+  It compares one commit id to another; a rebase that dropped a hunk leases exactly as cleanly as one
+  that did not. Every republish creates a new epoch and invalidates the prior review evidence for
+  that reason, and the answer to *is this still the change that was approved* is a fresh verdict
+  against the new receipt, never the lease.
 - **This section is checked against the code.** `tests/honesty.rs` crosses the *countable* claims
   here — how many agents are gated, how many things `doctor` looks at, which mechanisms the code
   still uses — against the thing they describe, and fails when they drift. The claims about *kind*

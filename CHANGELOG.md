@@ -12,12 +12,42 @@ the workflow, it holds the tools.
 
 ### The harness
 
-- `estigia mcp` serves the workflow operations as **20 MCP tools** over stdio —
+- `estigia mcp` serves the workflow operations as **21 MCP tools** over stdio —
   claim, verify_claim, heartbeat, transition, comment, reclaim, release,
   start_branch, publish_review, and the read-only checks. Hand-written
   JSON-RPC rather than `rmcp`: the same binary answers a `PreToolUse` hook on
   every edit, so an async runtime per process is a cost paid thousands of times
   to move a few lines of JSON across a pipe.
+- The one force-push the delivery path needs is inside the harness. After a rebase onto a moved base,
+  or an amended commit, the ordinary push is refused as a non-fast-forward, and the sequence a run
+  actually performed was *leave Estigia, `git push --force-with-lease` by hand, come back and publish
+  again* — measured on a live delivery where the base moved mid-task. The claim itself was checked
+  even then: `git push --force` is a boundary, which always re-reads and has no renewal window. What
+  the hand-run push lacked is the rest — no lease against the head a receipt recorded, so it
+  overwrote whatever the remote held; no record tying the new bytes to that receipt; and no cover at
+  all when typed into a terminal the gate does not watch. `republish_review` is that step,
+  adjudicated: it reads the head the latest `published` marker
+  recorded and pushes `--force-with-lease=<branch>:<that head>`, so a remote somebody else moved
+  refuses the push instead of losing their commit. The renewal stands **immediately** before it,
+  after the fetch, target derivation, keyword scan, pull-request listing and draft conversion that
+  separate it from the first check — for the fast-forward push that gap costs a refused push, and for
+  this one it costs history. An issue with no recorded publication is refused rather than forced over:
+  the first publication is `publish_review`'s, whose non-fast-forward refusal is the check that would
+  be skipped. It is a separate operation rather than a flag because the last thing this must keep is
+  that `publish_review` never force-pushes implicitly, and two entry points hold that where one
+  function with a boolean would only ask a reviewer to. **Every round of independent review it went through**, two
+  blind contexts each, rejected it before this shape, and every finding is fixed in it. The count is
+  deliberately not written: it drifted twice, and a number nothing crosses is a number that will. The ones worth
+  naming: the refusals downstream of a write said *nothing was written*, because they reached the
+  agent through the same `stop()` and `?` every other path uses and those envelopes carry no `world`
+  — they now name **which** writes happened, one clause each, and stay silent when none did; the
+  harness did not fill in the isolated checkout for this operation as it does for `publish_review`,
+  so an agent omitting the optional argument had its target derived from the base checkout and
+  learned about it *after* the force-push, in a message blaming a push nobody had made;
+  `estigia config`'s list of the operations this transport performs had drifted from the dispatch by
+  three, now crossed by a test rather than by a comment saying nothing catches it; and the guard that
+  proves the ordinary publication adjudicates its claim is behavioural, because two attempts to hold
+  it by counting a function body were both satisfied by a call the mutated route never made.
 - A claim governs a repository, not the machine. The gate classified writes by the checkout the hook
   was invoked in and never by the **path being written**, so a scratch note or an agent's own memory
   store, written from inside a claimed repository, was a repository write — and once the issue closed

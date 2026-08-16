@@ -1865,7 +1865,16 @@ fn publication_establishes_the_draft_barrier_before_push() {
     let draft = body
         .find("ensure_draft(context, pr)")
         .expect("drafts reused PRs");
-    let push = body.find("\"git\", \"push\"").expect("pushes the branch");
+    // The **call site**, not the string the push is spelled with. Extracting
+    // `push_to_origin` moved that spelling into a function *defined below*
+    // `publish_with`, so `"git", "push"` stopped being the place the push
+    // happens and started being the place it is written — and the comparison
+    // was satisfied by file layout rather than by order. Measured: hoisting the
+    // call above the draft conversion, which would put a rewritten head at a
+    // pull request CI is watching, left this test green.
+    let push = body
+        .find("push_to_origin(at, branch, push)")
+        .expect("pushes the branch");
     assert!(draft < push, "a reused ready PR is drafted only after push");
 
     let create = source
@@ -1880,4 +1889,376 @@ fn publication_establishes_the_draft_barrier_before_push() {
         source.contains("draft-readback-failed") && source.contains("isDraft"),
         "drafting is trusted from the write path instead of confirmed"
     );
+}
+
+/// A checkout with one commit, wired to a bare remote of its own.
+///
+/// Real git, because the acceptance criterion is about what git does with a
+/// lease and not about what this crate writes into one. The returned paths are
+/// the remote and the working checkout; the directory is returned with them so
+/// it outlives the test body.
+fn repository_with_remote() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
+    let root = tempfile::tempdir().expect("a directory");
+    let remote = root.path().join("remote.git");
+    let work = root.path().join("work");
+    std::fs::create_dir_all(&remote).expect("the remote directory");
+    std::fs::create_dir_all(&work).expect("the work directory");
+    git(&remote, &["init", "--quiet", "--bare", "-b", "main"]);
+    git(&work, &["init", "--quiet", "-b", "main"]);
+    git(&work, &["config", "user.email", "estigia@example.invalid"]);
+    git(&work, &["config", "user.name", "Estigia test"]);
+    git(
+        &work,
+        &["remote", "add", "origin", &remote.to_string_lossy()],
+    );
+    std::fs::write(work.join("one.txt"), "one\n").expect("content");
+    git(&work, &["add", "one.txt"]);
+    git(&work, &["commit", "--quiet", "-m", "one"]);
+    (root, remote, work)
+}
+
+/// A git command that has to work for the test to mean anything.
+///
+/// It panics naming the arguments rather than returning: a fixture step that
+/// failed quietly would leave the assertions below measuring a repository that
+/// was never in the state they describe.
+fn git(at: &std::path::Path, arguments: &[&str]) {
+    let mut command = vec!["git"];
+    command.extend_from_slice(arguments);
+    crate::transport::run(&command, Some(at), crate::transport::How::write())
+        .unwrap_or_else(|failure| panic!("git {arguments:?} failed: {}", failure.detail()));
+}
+
+fn head_of(at: &std::path::Path) -> String {
+    crate::transport::run(
+        &["git", "rev-parse", "HEAD"],
+        Some(at),
+        crate::transport::How::read(),
+    )
+    .expect("git names the head")
+    .stdout
+    .trim()
+    .to_owned()
+}
+
+#[test]
+fn the_lease_names_the_recorded_head_and_not_the_tracking_ref() {
+    // The three-part form, and the reason it is spelled in a function of its own
+    // rather than inline: `--force-with-lease` alone, and `--force-with-lease=
+    // <branch>`, both lease against the remote-tracking ref — which the
+    // publication path refreshes itself when it fetches the base. Both are valid
+    // git, neither is a compile error, and neither protects what this operation
+    // cares about.
+    let expected = "a".repeat(40);
+    let lease = lease_for("fix/4-x", &expected);
+    assert_eq!(lease, format!("--force-with-lease=fix/4-x:{expected}"));
+    assert_eq!(
+        lease.split(':').next_back(),
+        Some(expected.as_str()),
+        "the lease does not end in the commit the remote must currently be at: {lease}"
+    );
+}
+
+#[test]
+fn a_leased_push_lands_a_rewritten_branch_the_ordinary_push_refuses() {
+    // Both halves in one test on purpose. The refusal alone would pass against a
+    // push that never works at all, and the success alone would pass against a
+    // plain `--force`; what the issue asks for is the pair.
+    let (_root, _remote, work) = repository_with_remote();
+    git(&work, &["push", "-u", "origin", "--", "main"]);
+    let published_head = head_of(&work);
+
+    // A rewritten history, in its cheapest honest form: after the amend this
+    // branch is no longer a descendant of what the remote holds, which is what a
+    // rebase onto a moved base leaves behind.
+    git(
+        &work,
+        &["commit", "--quiet", "--amend", "-m", "one, amended"],
+    );
+    assert_ne!(head_of(&work), published_head, "the amend rewrote nothing");
+
+    assert!(
+        super::push_to_origin(&work, "main", super::Push::FastForward).is_err(),
+        "the ordinary push accepted a rewritten history, so this proves nothing about the lease"
+    );
+    super::push_to_origin(
+        &work,
+        "main",
+        super::Push::Leased {
+            recorded_head: &published_head,
+        },
+    )
+    .expect("a lease against the head the remote actually holds is accepted");
+}
+
+#[test]
+fn a_leased_push_refuses_when_the_remote_moved_since_the_recorded_head() {
+    // The criterion the operation exists for. A lease is only worth having if it
+    // refuses, and it can only be shown to refuse against a remote somebody else
+    // moved.
+    let (_root, remote, work) = repository_with_remote();
+    git(&work, &["push", "-u", "origin", "--", "main"]);
+    let published_head = head_of(&work);
+
+    // Somebody else, through a second checkout of the same remote, so the moving
+    // push is a real one rather than this checkout writing to itself.
+    let beside = remote.parent().expect("the remote has a parent").to_owned();
+    let other = beside.join("other");
+    git(
+        &beside,
+        &[
+            "clone",
+            "--quiet",
+            "--",
+            &remote.to_string_lossy(),
+            &other.to_string_lossy(),
+        ],
+    );
+    git(&other, &["config", "user.email", "other@example.invalid"]);
+    git(&other, &["config", "user.name", "Somebody else"]);
+    std::fs::write(other.join("two.txt"), "two\n").expect("content");
+    git(&other, &["add", "two.txt"]);
+    git(&other, &["commit", "--quiet", "-m", "two"]);
+    git(&other, &["push", "--quiet", "origin", "--", "main"]);
+
+    // And now this run rewrites its own history and republishes. The lease names
+    // the head its receipt recorded, which is no longer what the remote holds.
+    git(
+        &work,
+        &["commit", "--quiet", "--amend", "-m", "one, amended"],
+    );
+    // The fetch matters, and it is not scenery. `publish_with` fetches the base
+    // before deriving the target, so by the time it pushes, this checkout's
+    // remote-tracking refs have already seen the other run's commit — and a bare
+    // `--force-with-lease`, whose expectation *is* the tracking ref, would be
+    // satisfied by exactly the push this must refuse. Measured: without the
+    // fetch, the bare form refuses too and this test cannot tell the two apart.
+    git(&work, &["fetch", "--quiet", "origin"]);
+    assert!(
+        super::push_to_origin(
+            &work,
+            "main",
+            super::Push::Leased {
+                recorded_head: &published_head,
+            },
+        )
+        .is_err(),
+        "the lease let a republish destroy a commit the recorded head never named"
+    );
+
+    // The other run's commit is still there. A refusal that had already written
+    // is not a refusal, and an exit code alone does not show that.
+    let remote_head = crate::transport::run(
+        &["git", "rev-parse", "refs/heads/main"],
+        Some(&remote),
+        crate::transport::How::read(),
+    )
+    .expect("the remote names its head");
+    assert_eq!(
+        remote_head.stdout.trim(),
+        head_of(&other),
+        "the refused push moved the remote anyway"
+    );
+}
+
+#[test]
+fn the_ordinary_publication_has_no_way_to_force() {
+    // The last acceptance criterion, and the one that decays silently: a boolean
+    // added to `Publication` later, or a `Push` chosen from an argument, would
+    // reintroduce exactly the implicit force the operation was split in two to
+    // avoid. `publish_review` names its variant as a literal and takes nothing
+    // that could name the other.
+    let source = include_str!("../claim.rs");
+    let entry = source
+        .split_once("pub fn publish_review(")
+        .expect("publication exists")
+        .1
+        .split_once("\n}")
+        .expect("the entry point ends")
+        .0;
+    assert!(
+        entry.contains("Push::FastForward") && !entry.contains("Push::Leased"),
+        "publish_review can reach the leased push: {entry}"
+    );
+    // And the force with no expectation to check, which the issue rules out by
+    // name. Asked of the push site rather than of the file: `claim.rs` carries a
+    // legitimate `--force` for `gh label create`, and a search that found it
+    // would have to be loosened until it found nothing at all. The push site may
+    // name no force flag of any spelling — the only one it can reach is the
+    // lease `lease_for` builds, and that function has its own test.
+    let pushes = source
+        .split_once("fn push_to_origin(")
+        .expect("the push site exists")
+        .1
+        .split_once("\n}")
+        .expect("the push site ends")
+        .0;
+    assert!(
+        !pushes.contains("--force"),
+        "the push site spells a force flag of its own instead of the checked lease: {pushes}"
+    );
+}
+
+/// The head a lease is taken from is the latest `published` marker's, or none.
+///
+/// Named for what it measures. It was called
+/// `a_republish_with_nothing_recorded_to_lease_against_is_refused` and never
+/// called `republish_review` at all — so the refusal in its name was unheld, and
+/// deleting that refusal left the whole suite green. The refusal is now driven
+/// end to end in `pipe.rs`; this keeps the half that needs no remote.
+#[test]
+fn the_head_a_lease_is_taken_from_is_the_latest_published_marker() {
+    // `latest_publication` is what supplies the expectation, and an issue with
+    // no `published` marker supplies none. Forcing anyway would be a `--force`
+    // with the lease spelled over whatever the remote happened to hold.
+    assert_eq!(latest_publication(&[]), None);
+
+    let published = |head: &str| ownership::Comment {
+        id: Some("IC_1".to_owned()),
+        created_at: "2026-01-01T00:00Z".to_owned(),
+        viewer_did_author: true,
+        includes_created_edit: false,
+        body: super::super::markers::render(
+            "published",
+            &[
+                ("run-id", "claude-abcd1234"),
+                ("pr", "7"),
+                ("head", head),
+                ("base", &"b".repeat(40)),
+                ("digest", &"c".repeat(64)),
+                ("epoch", &"a".repeat(32)),
+            ],
+        )
+        .expect("the marker renders"),
+    };
+    let head = "d".repeat(40);
+    assert_eq!(
+        latest_publication(&[published(&head)])
+            .expect("a complete marker is a receipt")
+            .receipt
+            .head,
+        head,
+        "the lease would be taken against something other than the recorded head"
+    );
+}
+
+/// The sentence an operator reads, assembled, for every combination the type
+/// can express.
+///
+/// All six the *type* has — two `undrafted` values by three `edited` ones — and
+/// not every combination anything can drive: [`Edited::Title`] is unreachable
+/// through what ships, so the two rows naming it are a superset. The default is
+/// checked above the loop and the other five are its rows.
+///
+/// Spelled out to the count because the sentence before it said *"every
+/// reachable combination"* while covering five of six and naming an unreachable
+/// one, in the hunk rewritten to make that claim precise. A claim about coverage
+/// is a claim, and this change has been corrected for making one loosely more
+/// than once.
+///
+/// The reason this exists at the whole-sentence level rather than as more
+/// `contains` checks: **fragment assertions are what let the broken sentence
+/// ship**. The clauses were a past participle and a finite verb phrase sharing a
+/// `was` supplied by the frame, so the ordinary case read *"the pull request was
+/// had its title and body replaced"* — and every test pinning that text asserted
+/// a fragment, so all of them passed. The repair then added more fragment
+/// assertions, and restoring the double-verb frame left the whole suite green.
+///
+/// A fragment cannot see a frame. This asserts the frames.
+#[test]
+fn the_refusal_reads_as_a_sentence_in_every_combination() {
+    let says = |wrote: PullRequestWrites| -> (String, String) {
+        let stop = after_rewriting_the_pr(
+            stop("some-reason", "detail".to_owned(), "do the thing"),
+            wrote,
+        );
+        let write = after_rewriting_the_pr(Failure::Write("push failed".to_owned()), wrote);
+        (
+            stop.envelope()
+                .get("action")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            write.detail(),
+        )
+    };
+
+    // Nothing written: the refusal is passed through untouched, so there is no
+    // sentence to get wrong and no `world` claiming otherwise.
+    let untouched = PullRequestWrites::default();
+    let (action, _) = says(untouched);
+    assert_eq!(
+        action, "do the thing",
+        "a refusal was reworded over a pull request nobody touched"
+    );
+    assert!(
+        after_rewriting_the_pr(
+            stop("some-reason", "detail".to_owned(), "do the thing"),
+            untouched,
+        )
+        .envelope()
+        .get("world")
+        .is_none(),
+        "an untouched world was reported as committed"
+    );
+
+    for (wrote, expected) in [
+        (
+            PullRequestWrites {
+                undrafted: false,
+                edited: Some(Edited::TitleAndBody),
+            },
+            "the pull request had its title and body replaced",
+        ),
+        (
+            PullRequestWrites {
+                undrafted: false,
+                edited: Some(Edited::Title),
+            },
+            "the pull request had its title replaced",
+        ),
+        (
+            PullRequestWrites {
+                undrafted: true,
+                edited: None,
+            },
+            "the pull request was converted back to draft",
+        ),
+        (
+            PullRequestWrites {
+                undrafted: true,
+                edited: Some(Edited::Title),
+            },
+            "the pull request was converted back to draft and had its title replaced",
+        ),
+        (
+            PullRequestWrites {
+                undrafted: true,
+                edited: Some(Edited::TitleAndBody),
+            },
+            "the pull request was converted back to draft and had its title and body replaced",
+        ),
+    ] {
+        let (action, write) = says(wrote);
+        assert!(
+            action.contains(&format!("{expected} before this refusal")),
+            "the stop frame does not read as a sentence for {wrote:?}: {action}"
+        );
+        assert!(
+            write.contains(&format!(
+                "{expected}, so this is not a call that changed nothing"
+            )),
+            "the write frame does not read as a sentence for {wrote:?}: {write}"
+        );
+        // The shapes a frame gets wrong: a doubled verb, and an adverb landing
+        // in front of one.
+        for broken in ["was was", "was had", "already was", "already had"] {
+            for text in [&action, &write] {
+                assert!(
+                    !text.contains(broken),
+                    "the refusal says {broken:?} for {wrote:?}: {text}"
+                );
+            }
+        }
+    }
 }

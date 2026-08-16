@@ -121,8 +121,16 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
     // Whole words, because "ten" sits inside "written" and "one" inside "none".
     // The old reading took the last *substring* hit, which happened to be right
     // while the words were short and would have quietly stopped being right.
+    //
+    // The hyphen is part of a word here, and that is the whole of what makes
+    // this able to count past twenty. Splitting on it turns `twenty-one` into
+    // `twenty` and `one`, and the reader takes the **last** number it sees — so
+    // a README saying twenty-one reported **1**, and the count guard failed
+    // naming a number nobody had written. A reading that is wrong by twenty is
+    // worse than one that gives up, because the message it produces sends the
+    // reader to the wrong file.
     let words: Vec<&str> = window
-        .split(|character: char| !character.is_ascii_alphabetic())
+        .split(|character: char| !(character.is_ascii_alphabetic() || character == '-'))
         .filter(|word| !word.is_empty())
         .collect();
     [
@@ -153,6 +161,22 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
         ("eighteen", 18),
         ("nineteen", 19),
         ("twenty", 20),
+        // Hyphenated, because the words are split on whitespace and `twenty-one`
+        // arrives as one of them: an entry for `twenty` does not answer for it,
+        // and the reader would report *no number there* for a sentence carrying
+        // one. Two past the current count rather than one, which is the same
+        // ceiling the note above describes arriving on the day somebody adds a
+        // thirteenth check.
+        //
+        // The hyphen binds both ways, and the other way is worth knowing before
+        // it bites: a compound like `one-off` or `three-way` is now one word and
+        // matches no entry, so a sentence counting something a few words after
+        // it reads as having no number rather than the wrong one. Nothing in the
+        // corpus does that today, and failing to find a number is the loud
+        // direction — every caller `expect`s one — so it surfaces as a panic
+        // naming the phrase rather than as a silently wrong count.
+        ("twenty-one", 21),
+        ("twenty-two", 22),
     ]
     .iter()
     .filter_map(|(name, value)| {
@@ -489,6 +513,7 @@ fn every_tool_the_readme_lists_is_one_this_server_exposes() {
                 17 => "Seventeen",
                 18 => "Eighteen",
                 20 => "Twenty",
+                21 => "Twenty-one",
                 other => panic!("{other} tools, and this test has no word for that"),
             }
         )),
@@ -808,12 +833,17 @@ fn the_documents_count_what_the_crate_actually_has() {
 }
 
 /// One function's body, from its signature to the next item at column zero.
+///
+/// Public **or** private. It read only `pub fn` while every body it was asked
+/// for was an entry point; a body shared by two entry points is not one, and
+/// panicking `publish_with is not in that file` would have read as the function
+/// having been deleted rather than as this helper not looking for it.
 fn body_of(source: &str, name: &str) -> String {
-    let signature = format!("pub fn {name}(");
-    let start = source
-        .find(&signature)
+    let start = [format!("pub fn {name}("), format!("\nfn {name}(")]
+        .iter()
+        .find_map(|signature| source.find(signature).map(|at| at + signature.len()))
         .unwrap_or_else(|| panic!("{name} is not in that file"));
-    let rest = &source[start + signature.len()..];
+    let rest = &source[start..];
     let end = rest
         .match_indices("\npub fn ")
         .chain(rest.match_indices("\nfn "))
@@ -1172,7 +1202,58 @@ const ADJUDICATED_BY_THE_BINDING: &[&str] = &[
     "heartbeat",
     "start_branch",
     "publish_review",
+    // Not measured off `github.py`, which never had it: the retired binding had
+    // no republish at all, which is the defect the operation was added to close.
+    // It is in the population because it is a boundary that adjudicates, and the
+    // sentence above says a boundary added to the port has to be added here by
+    // the review that adds one.
+    "republish_review",
     "release_ci",
+];
+
+/// Entry points whose adjudication lives in a body they share, and how many
+/// verifications that body must hold.
+///
+/// `publish_review` and `republish_review` differ in the push and in nothing
+/// else, so the verification either performs is written **once**, in the body
+/// they both call. Following one named hop is what keeps this measuring the same
+/// thing after the split — but following it *and asking only whether the word
+/// appears* is what broke it.
+///
+/// Measured, and this is the whole reason for the third column. Before the
+/// split, `publish_review`'s body held exactly one `verify_claim(` and deleting
+/// it turned this test red. After it, the shared body holds **two**: the
+/// entry-level one that both routes run, and the pre-push renewal that only the
+/// leased route reaches. `contains` is satisfied by either, so deleting the
+/// entry-level verification — taking claim adjudication off the ordinary
+/// publication path entirely — left the **whole suite green**. The guard written
+/// to catch exactly that was answered by a call the mutated route never makes.
+///
+/// So the count is pinned — and pinning it is **not** what makes the ordinary
+/// publication safe, which is the correction a third review round had to make.
+/// A count measures arity; the property is reachability, and they are not the
+/// same. Both verifications can be moved behind `if matches!(push,
+/// Push::Leased { .. })`, leaving the total at two and `publish_review`
+/// adjudicating nothing at all — measured, and the whole suite stayed green.
+/// A source-text count cannot see a conditional, and no amount of pinning will
+/// teach it to.
+///
+/// What holds that property is a **behavioural** test:
+/// `pipe::a_publication_refuses_at_entry_when_the_claim_has_moved` denies the
+/// first timeline read and proves the branch never reaches the remote. It is
+/// red for all three shapes — the call deleted, its result discarded, or the
+/// call moved behind the discriminant.
+///
+/// This stays anyway, and the division of labour is worth stating rather than
+/// leaving to be re-derived: the behavioural test proves the *ordinary* route
+/// adjudicates, and the count is what still notices a verification quietly
+/// added or removed from a body two routes share. Neither covers the other.
+/// Both rows name the same body and the same count today, so this measures one
+/// thing twice — kept as two rows because the population above is entry points,
+/// and an entry point that stops sharing the body is the case the count is for.
+const ADJUDICATED_THROUGH: &[(&str, &str, usize)] = &[
+    ("publish_review", "publish_with", 2),
+    ("republish_review", "publish_with", 2),
 ];
 
 #[test]
@@ -1222,11 +1303,26 @@ fn every_boundary_the_binding_adjudicates_is_one_the_port_adjudicates_too() {
         } else {
             &claim
         };
-        let body = body_of(source, name);
+        let through = ADJUDICATED_THROUGH.iter().find(|(entry, ..)| entry == name);
+        let body = body_of(source, through.map_or(name, |(_, shared, _)| shared));
+        let found = body.matches("verify_claim(").count();
+        // One is the floor for a body that adjudicates at all. Where the body is
+        // shared, the exact count is the floor instead, because a body reached by
+        // two routes can satisfy `at least one` with a call only one of them
+        // makes — which is how deleting the ordinary publication's verification
+        // came to leave every test in this repository green.
+        let wanted = through.map_or(1, |(.., count)| *count);
         assert!(
-            body.contains("verify_claim("),
-            "`cmd_{name}` adjudicates the claim and `{name}` does not \u{2014} and the \
-             differential oracle does not run that subcommand, so nothing else would say so"
+            found >= wanted,
+            "`cmd_{name}` adjudicates the claim and `{name}` reaches {found} verification(s) \
+             where {wanted} are required \u{2014} and the differential oracle does not run that \
+             subcommand, so nothing else would say so"
+        );
+        assert!(
+            through.is_none() || found == wanted,
+            "`{name}` now shares a body holding {found} verifications rather than {wanted}. A new \
+             adjudication point in the publication path is not a thing to absorb silently: say \
+             which route reaches it and update the count."
         );
     }
 }
@@ -1631,6 +1727,63 @@ fn every_link_in_this_repositorys_documentation_resolves() {
     assert!(
         broken.is_empty(),
         "the documentation points at files that are not there: {broken:#?}"
+    );
+}
+
+/// The badge at the top of the README counts the tools the crate has.
+///
+/// The first factual claim a reader meets, and nothing crossed it. Adding an
+/// operation moved every count in the file and left the badge saying twenty over
+/// a crate with twenty-one, with its own `href` pointing four lines down at the
+/// section that disagreed.
+///
+/// *"Every other count is crossed"* is what this comment said, and it was not
+/// true: the sentence four lines below the badge — *"N tools. The contract names
+/// N operations every binding must map"* — was read by nothing either, measured
+/// by rewriting both of its numbers and watching the whole suite stay green. It
+/// is crossed now, by the test below this one. Claiming coverage is a claim, and
+/// this change has been corrected for making one loosely more than once.
+///
+/// The number appears twice on the line, in the alt text and inside the shields
+/// URL, and they are asserted separately: a badge whose picture and description
+/// disagree is the same defect wearing one line.
+#[test]
+fn the_badge_counts_the_tools_the_crate_has() {
+    let readme = readme();
+    let tools = estigia::harness::mcp::tools::TOOLS.len();
+    for claim in [
+        format!("alt=\"MCP: {tools} tools\""),
+        format!("badge/MCP-{tools}%20tools-"),
+    ] {
+        assert!(
+            readme.contains(&claim),
+            "the README badge does not say {claim:?}, and the crate has {tools} tools"
+        );
+    }
+}
+
+/// The tools section's own sentence counts both the tools and the operations.
+///
+/// The paragraph a binding author reads to learn what they have to map, and it
+/// carried two numbers nothing checked. The scenario is not hypothetical: a
+/// twentieth operation lands, `SKILL.md`'s MUST-map line and `src/skill.rs`'s
+/// pinned count both go red and get updated, and this sentence goes on saying
+/// nineteen with the suite green — telling the one reader who needs it exactly
+/// wrong.
+#[test]
+fn the_tools_section_counts_the_tools_and_the_operations() {
+    let readme = readme();
+    let tools = estigia::harness::mcp::tools::TOOLS.len();
+    let operations = estigia::skill::required_operations().len();
+    assert_eq!(
+        number_before(&readme, "tools. The contract names"),
+        Some(tools),
+        "the tools section does not count the {tools} tools the crate has"
+    );
+    assert_eq!(
+        number_before(&readme, "operations every binding must map"),
+        Some(operations),
+        "the tools section does not count the {operations} operations the contract requires"
     );
 }
 

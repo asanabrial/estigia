@@ -332,6 +332,25 @@ pub fn dispatch(
                 now,
             },
         ),
+        // The same arguments as `publish-review`, read the same way, because the
+        // two differ in the push and in nothing else. Spelled out rather than
+        // shared with the arm above: the flag guard reads each arm's own body,
+        // so an arm that borrowed its neighbour's would be an operation whose
+        // arguments nothing checks.
+        "republish-review" => super::claim::republish_review(
+            context,
+            &super::claim::Publication {
+                issue: issue()?,
+                run_id: run_id()?,
+                expect_state: f.get("expect-state").unwrap_or("in-progress"),
+                base: f.need("base", operation)?,
+                branch: f.need("branch", operation)?,
+                title: f.need("pr-title", operation)?,
+                pr_body_file: f.path("pr-body-file"),
+                worktree: f.path("worktree"),
+                now,
+            },
+        ),
         "release-ci" => super::claim::release_ci(
             context,
             &super::claim::CiRelease {

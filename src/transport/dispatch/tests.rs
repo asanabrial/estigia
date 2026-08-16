@@ -191,6 +191,40 @@ fn every_operation_the_tools_name_is_dispatched() {
     }
 }
 
+/// What `estigia config` claims it performs is what a tool can actually reach.
+///
+/// `SCRIPTED` calls itself *a claim about the contract, not a reflection of the
+/// dispatch table*, and says the thing that used to hold it to the dispatch is
+/// deleted. That left both directions uncrossed, and one of them drifted the
+/// first time an operation was added: `republish-review` was dispatched and
+/// exposed, and `config` went on reporting the list without it. An operator
+/// reading that answer is told this transport does not perform an operation it
+/// performs — and this is the document a binding author reads to find out what
+/// they have to map.
+///
+/// Deliberately one-directional. A name in `SCRIPTED` that no tool offers is the
+/// case that comment already describes, and it is not always a defect: the list
+/// is a claim about the *contract*, which may name something the MCP surface
+/// does not expose. What cannot be true is the reverse.
+#[test]
+fn every_operation_a_tool_offers_is_claimed_or_declared_unscripted() {
+    for tool in crate::harness::mcp::tools::TOOLS {
+        let claimed = super::super::commands::SCRIPTED.contains(&tool.operation);
+        // `NOT_SCRIPTED` spells its keys the way the contract does, with
+        // underscores, and pairs two of them on one row.
+        let declared = super::super::commands::NOT_SCRIPTED
+            .iter()
+            .any(|(name, _)| name.split('/').any(|name| name == tool.contract_name));
+        assert!(
+            claimed || declared,
+            "`{}` is dispatched and offered as the `{}` tool, and `estigia config` claims neither \
+             that it performs it nor a reason it does not",
+            tool.operation,
+            tool.name
+        );
+    }
+}
+
 /// Every flag a tool sends is one this reads.
 ///
 /// The half `every_operation_the_tools_name_is_dispatched` does not cover: that

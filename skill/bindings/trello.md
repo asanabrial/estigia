@@ -8,10 +8,16 @@ Read this alongside `SKILL.md` when the operator configuration names `trello` as
 
 ## Unsupported repository publication operations
 
-`publish_review` and `release_ci` are unsupported by this tracker binding. They coordinate a GitHub
-pull request's draft/ready state and therefore require the GitHub binding; Trello may track the card
-but cannot perform or verify either repository operation through its board API. Fail closed rather
-than treating a list move as either operation.
+`publish_review`, `republish_review` and `release_ci` are unsupported by this tracker binding. They
+coordinate a GitHub pull request's draft/ready state and therefore require the GitHub binding; Trello
+may track the card but cannot perform or verify any of the three repository operations through its
+board API. Fail closed rather than treating a list move as one of them.
+
+`republish_review` is named separately rather than folded into "publication operations", because its
+unsupported case is the dangerous one: it leases against the head a previous publication recorded,
+and that receipt lives on the tracker timeline the GitHub binding writes. A board with no such
+markers has nothing to lease against, and a binding that answered anyway would be force-pushing
+against an expectation it invented.
 
 ## What Trello provides
 

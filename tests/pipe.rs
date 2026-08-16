@@ -9131,3 +9131,995 @@ fn a_closed_issue_still_refuses_a_write_inside_the_checkout() {
         "a scratch note did not stand aside on the closed issue: {aside}"
     );
 }
+
+/// A rewritten branch republishes through the tool, and stops when the claim moves.
+///
+/// The two halves the unit tests on `push_to_origin` cannot reach, because both
+/// are about what surrounds the push rather than about the push: that a run
+/// never has to leave Estigia to land an amended branch, and that the renewal
+/// standing immediately before the force-push actually refuses.
+///
+/// The second half is the one that decays quietly. Take that `verify_claim` out
+/// and every unit test still passes — the lease is unchanged, the operation
+/// still lands the rewritten branch, and the only thing lost is the answer to
+/// *is this run still the holder* at the one boundary where the wrong answer
+/// destroys history.
+#[test]
+fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-republish";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    let sha = |what: &str| -> String {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(["rev-parse", what])
+            .output()
+            .expect("git answers");
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+    let remote_head = || -> String {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(origin.path())
+            .args(["rev-parse", &format!("refs/heads/{branch}")])
+            .output()
+            .expect("the origin is readable");
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    assert!(git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string()
+    ]));
+    assert!(git(&["branch", "-M", "main"]));
+    std::fs::write(repo.join("kept.txt"), "base\n").expect("the base file");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "base content",
+    ]));
+    assert!(git(&["push", "-q", "origin", "main"]));
+
+    // The first publication, as an ordinary push: this is the head the receipt
+    // records and the head the lease will be taken against.
+    assert!(git(&["checkout", "-q", "-b", branch]));
+    std::fs::write(repo.join("kept.txt"), "changed\n").expect("the change");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "a change that names no issue",
+    ]));
+    assert!(git(&["push", "-q", "-u", "origin", branch]));
+    let published_head = sha("HEAD");
+    let base_sha = sha("origin/main");
+
+    // The rewrite. After this the branch is no longer a descendant of what the
+    // remote holds, which is exactly where the ordinary push gives up and a run
+    // used to leave Estigia.
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "--amend",
+        "-m",
+        "the same change, amended",
+    ]));
+    let rewritten_head = sha("HEAD");
+    assert_ne!(rewritten_head, published_head, "the amend rewrote nothing");
+    assert_eq!(remote_head(), published_head, "the fixture did not publish");
+
+    let body = trace.path().join("pr-body.md");
+    std::fs::write(&body, "A body that names nothing.\n").expect("the body");
+
+    let claimed_by = |who: &str| {
+        format!(
+            "<!-- issue-flow: claim run-id={who} runtime=claude \
+             horizon=2099-01-01T00:00Z op-id={} -->",
+            "a".repeat(32)
+        )
+    };
+    // The receipt the lease is taken from: a complete `published` marker naming
+    // the head the remote actually holds.
+    let receipt = format!(
+        "<!-- issue-flow: published run-id={run_id} pr=7 head={published_head} base={base_sha} \
+         digest={} epoch={} -->",
+        "c".repeat(64),
+        "a".repeat(32)
+    );
+    // `receipted` is what the third case turns off: an issue that has never been
+    // published has no head to lease against, and the operation has to say so
+    // rather than force over whatever the remote holds.
+    let timeline = |holder: &str, receipted: bool| {
+        let mut comments = vec![serde_json::json!({
+            "id": "IC_1",
+            "createdAt": "2026-01-01T00:00Z",
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": format!("Claimed.\n\n{}\n", claimed_by(holder)),
+        })];
+        if receipted {
+            comments.push(serde_json::json!({
+                "id": "IC_2",
+                "createdAt": "2026-01-01T01:00Z",
+                "viewerDidAuthor": true,
+                "includesCreatedEdit": false,
+                "body": format!("Published draft for review.\n\n{receipt}\n"),
+            }));
+        }
+        serde_json::json!({
+            "state": "OPEN",
+            "labels": [{"name": "status:in-progress"}],
+            "comments": comments,
+        })
+        .to_string()
+    };
+    let pr = serde_json::json!({
+        "number": 7,
+        "url": "https://github.com/o/r/pull/7",
+        "headRefOid": rewritten_head,
+        "baseRefOid": base_sha,
+        "state": "OPEN",
+        "isDraft": true,
+    });
+
+    // `held` is how many `gh issue view` calls still answer with this run as the
+    // holder; the one after them is denied. Which call that is comes from the
+    // landing run's own log, located **by position** — the first timeline read
+    // after the last `pr list` is the renewal standing between the draft
+    // conversion and the push.
+    //
+    // Located by position and not by total, and the difference is the whole
+    // test. The first version counted every read and denied the last, which is
+    // a measurement the code under test can move: with the renewal deleted the
+    // total drops by one, `last` names a read inside the earlier verification,
+    // that one refuses instead, and the assertion below passes over a fix that
+    // is gone. Measured — the deletion was green. Anchored on `pr list`, the
+    // denied call is either the renewal or nothing at all, and nothing at all
+    // lands the push and fails loudly.
+    let answers = |held: Option<u64>, receipted: bool| {
+        let mut script = vec![];
+        if let Some(held) = held {
+            script.push(serde_json::json!({
+                "matches": "issue view", "nth": held + 1,
+                "stdout": timeline("claude-99999999", receipted), "status": 0,
+            }));
+        }
+        script.extend([
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(run_id, receipted), "status": 0 }),
+            serde_json::json!({ "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 }),
+            serde_json::json!({ "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 }),
+            serde_json::json!({ "matches": "json body", "stdout": serde_json::json!({"body": "names nothing"}).to_string(), "status": 0 }),
+            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+            serde_json::json!({
+                "matches": "api graphql",
+                "stdout": serde_json::json!({
+                    "data": { "repository": { "issue": { "closedByPullRequestsReferences": {
+                        "nodes": [],
+                        "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                    } } } },
+                }).to_string(),
+                "status": 0,
+            }),
+            serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
+        ]);
+        serde_json::to_string(&script).expect("the fake tracker script serialises")
+    };
+
+    let republish = |answers: &str, log: &std::path::Path| -> (bool, String) {
+        let runs = home.join(".estigia").join("runs");
+        // Revision-guarded, so the second case needs a clean pointer.
+        let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
+        let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+        run.issue = Some(12);
+        run.state = Some("in-progress".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "republish_review", "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "branch": branch,
+                "base": "main",
+                "pr_title": "Something",
+                "pr_body_file": body.display().to_string(),
+                "worktree": repo.display().to_string(),
+            }}
+        })
+        .to_string();
+        let count = trace.path().join(format!(
+            "{}.json",
+            log.file_stem().unwrap_or_default().to_string_lossy()
+        ));
+        let mut child = tracker_command(home, repo, bin, answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_COUNT", &count)
+            .env("ESTIGIA_FAKE_LOG", log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        (
+            response["result"]["isError"] == true,
+            response["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+        )
+    };
+
+    // First half: the whole route, with the claim standing throughout.
+    let landing = trace.path().join("landing.log");
+    let (failed, text) = republish(&answers(None, true), &landing);
+    assert!(!failed, "the republish did not land: {text}");
+    assert!(
+        text.contains("\"republished\": true") && text.contains(&published_head),
+        "the answer does not say which route ran or what it leased against: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        rewritten_head,
+        "the rewritten branch did not reach the remote"
+    );
+
+    // The renewal, found where it has to stand: after the last pull-request
+    // listing — which is after the draft conversion and the body refresh — and
+    // therefore between them and the push. Asserted on its own, because it is
+    // the property, and because the denial below is only meaningful if there is
+    // a call there to deny.
+    let calls: Vec<String> = std::fs::read_to_string(&landing)
+        .expect("the call log")
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    let listed = calls
+        .iter()
+        .rposition(|line| line.contains("pr list"))
+        .expect("the republish listed the open pull requests");
+    assert!(
+        calls[listed + 1..]
+            .iter()
+            .any(|line| line.contains("issue view")),
+        "no timeline read stands between the draft conversion and the force-push: {calls:#?}"
+    );
+    let held = calls[..=listed]
+        .iter()
+        .filter(|line| line.contains("issue view"))
+        .count() as u64;
+
+    // Second half: everything identical, except that the renewal before the push
+    // says somebody else holds it. Put the remote back first, so what this
+    // measures is this run's push and not the one above.
+    assert!(git(&[
+        "push",
+        "-q",
+        "--force",
+        "origin",
+        &format!("{published_head}:{branch}")
+    ]));
+    assert_eq!(remote_head(), published_head, "the remote was not restored");
+
+    let denied = trace.path().join("denied.log");
+    let (failed, text) = republish(&answers(Some(held), true), &denied);
+    assert!(
+        failed,
+        "a republish went through after the claim moved to another run: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the force-push landed although the claim had moved: {text}"
+    );
+    // And it says which world it refused in. By this point `edit_pr` has replaced
+    // the live pull request's title and body — the call log below proves it — so
+    // `nothing was written` is false, and a run believing it leaves somebody
+    // else's pull request re-described with nobody told to put it back. The
+    // refusal reached here through `stop()`, whose envelope carries no `world`,
+    // and the harness read the absence as *untouched*.
+    assert!(
+        std::fs::read_to_string(&denied)
+            .expect("the call log")
+            .lines()
+            .any(|line| line.contains("pr edit")),
+        "the fixture never rewrote the pull request, so this proves nothing about the report"
+    );
+    assert!(
+        !text.contains("nothing was written"),
+        "the refusal reported an untouched world after rewriting the pull request: {text}"
+    );
+    assert!(
+        text.contains("put it back"),
+        "the refusal does not say what was left behind: {text}"
+    );
+    // And the renewal's **own** action survives beside it. The writes are
+    // appended, never substituted: the one `Stop` that reaches this wrapper is
+    // the renewal, and two of its five actions carry the only instruction the
+    // run has — *claim it again* for a lapsed horizon, and acknowledge-and-drop
+    // for a stand-down. The sibling wrapper destroyed its caller's action one
+    // commit ago and turned the CI-exposure warning into an invitation; this is
+    // the same shape, and it is held rather than assumed.
+    assert!(
+        text.contains("release only your own projection"),
+        "the refusal replaced the renewal's own action instead of adding to it: {text}"
+    );
+
+    // Third: the refusal this operation exists to produce, driven the whole way
+    // rather than at the level of `push_to_origin`. Somebody else moves the
+    // remote after the receipt was recorded, so the lease refuses — and what is
+    // asserted is what the *agent* is told, which no unit test can see. It was
+    // the rarer path (the claim moving) that got a sentence naming the rewritten
+    // pull request, while the designed outcome came back saying nothing about it.
+    let other = trace.path().join("other");
+    assert!(
+        Command::new("git")
+            .args(["clone", "--quiet", "--"])
+            .arg(origin.path())
+            .arg(&other)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    let elsewhere = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(&other)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(elsewhere(&["checkout", "-q", branch]));
+    std::fs::write(other.join("theirs.txt"), "theirs\n").expect("their change");
+    assert!(elsewhere(&["add", "theirs.txt"]));
+    assert!(elsewhere(&[
+        "-c",
+        "user.email=other@example.invalid",
+        "-c",
+        "user.name=Somebody else",
+        "commit",
+        "--quiet",
+        "-m",
+        "a commit this run never saw",
+    ]));
+    assert!(elsewhere(&["push", "-q", "origin", branch]));
+    let theirs = String::from_utf8_lossy(
+        &Command::new("git")
+            .arg("-C")
+            .arg(&other)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .expect("git answers")
+            .stdout,
+    )
+    .trim()
+    .to_owned();
+    assert_eq!(remote_head(), theirs, "the other run did not publish");
+
+    let leased = trace.path().join("leased.log");
+    let (failed, text) = republish(&answers(None, true), &leased);
+    assert!(
+        failed,
+        "the lease let a republish over a commit the receipt never named: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        theirs,
+        "the force-push destroyed a commit somebody else pushed: {text}"
+    );
+    assert!(
+        !text.contains("nothing was written"),
+        "the lease refusal reported an untouched world after rewriting the pull request: {text}"
+    );
+    // **Exactly** what happened, and nothing else. This fixture's pull request
+    // is already draft — which is the normal state of a review target, since
+    // `publish_review` drafts it and only `release_ci` makes it ready — so
+    // `ensure_draft` writes nothing and only the edit did.
+    //
+    // The assertion used to be `contains("converted to draft")`, and it passed:
+    // the refusal named a conversion nobody performed, and the test pinned the
+    // falsehood so that fixing it would have gone red. An operator putting back
+    // a draft conversion runs `gh pr ready`, which exposes the branch to CI —
+    // the exact outcome `ensure_draft` exists to prevent.
+    assert!(
+        text.contains("had its title and body replaced"),
+        "the lease refusal does not name the edit that did happen: {text}"
+    );
+    assert!(
+        !text.contains("converted back to draft"),
+        "the lease refusal claims a draft conversion over a pull request that was already draft: \
+         {text}"
+    );
+
+    // Put the remote back for the last cases.
+    assert!(git(&[
+        "push",
+        "-q",
+        "--force",
+        "origin",
+        &format!("{published_head}:{branch}")
+    ]));
+
+    // Fourth: the earliest refusal that can follow a write, and the one whose
+    // report was left behind when the renewal's was fixed. The reused pull
+    // request is READY, so `ensure_draft` un-readies it — and then its own
+    // readback fails. A `gh pr view` that hits a rate limit is enough. The
+    // refusal reached the agent as `Failure::Read`, which is exit 3 and reads
+    // *the tracker could not be read; write nothing* — after a write.
+    let ready_pr = serde_json::json!({
+        "number": 7,
+        "url": "https://github.com/o/r/pull/7",
+        "headRefOid": rewritten_head,
+        "baseRefOid": base_sha,
+        "state": "OPEN",
+        "isDraft": false,
+    });
+    let unreadable = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 },
+        { "matches": "pr list", "stdout": serde_json::json!([ready_pr]).to_string(), "status": 0 },
+        // The readback `ensure_draft` makes, and nothing after it: this is the
+        // first `pr view` of the operation, so failing it stops exactly there.
+        { "matches": "headRefOid", "stdout": "", "status": 1 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let undone = trace.path().join("undone.log");
+    let (failed, text) = republish(&unreadable, &undone);
+    assert!(
+        failed,
+        "an unreadable draft readback was not a refusal: {text}"
+    );
+    assert!(
+        std::fs::read_to_string(&undone)
+            .expect("the call log")
+            .lines()
+            .any(|line| line.contains("pr ready") && line.contains("--undo")),
+        "the fixture never un-readied the pull request, so this proves nothing about the report"
+    );
+    assert!(
+        !text.contains("nothing was written"),
+        "the draft readback reported an untouched world after un-readying the PR: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the remote moved on a refusal before the push: {text}"
+    );
+
+    // Fourth-and-a-quarter: `--undo` returns zero and the pull request comes back
+    // **still ready**. That is `draft-readback-failed`, and it is two things at
+    // once — a report and a gate — neither of which anything measured.
+    //
+    // The gate: with its condition disabled the operation pushes the rewritten
+    // head at a pull request CI is watching, which is the whole reason
+    // `ensure_draft` runs before the push.
+    //
+    // The report: this refusal carries the only action that names that hazard.
+    // A round of this change routed it through the shared wording, whose insert
+    // **replaces** the action — so the warning was destroyed and what took its
+    // place said the pull request *was converted back to draft* beside an
+    // `observed` showing it was not, and invited an operator to put that back.
+    // Putting it back is `gh pr ready`. The refusal would have talked somebody
+    // into the exposure it exists to prevent.
+    let still_ready = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 },
+        { "matches": "pr list", "stdout": serde_json::json!([ready_pr]).to_string(), "status": 0 },
+        // `--undo` is unmatched, so it "succeeds"; the readback disagrees.
+        { "matches": "headRefOid", "stdout": ready_pr.to_string(), "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let stuck = trace.path().join("still-ready.log");
+    let (failed, text) = republish(&still_ready, &stuck);
+    assert!(
+        failed,
+        "a pull request that stayed ready was not refused: {text}"
+    );
+    assert!(
+        std::fs::read_to_string(&stuck)
+            .expect("the call log")
+            .lines()
+            .any(|line| line.contains("pr ready") && line.contains("--undo")),
+        "the fixture never attempted the un-ready, so this proves nothing"
+    );
+    assert!(
+        text.contains("do not push") && text.contains("still ready"),
+        "the refusal lost the action naming the CI exposure it exists to prevent: {text}"
+    );
+    for lie in ["converted back to draft", "put it back"] {
+        assert!(
+            !text.contains(lie),
+            "the refusal said {lie:?} about a pull request it read back as still ready: {text}"
+        );
+    }
+    assert!(
+        !text.contains("nothing was written"),
+        "the refusal reported an untouched world after `--undo` ran: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "a still-ready pull request did not stop the push: {text}"
+    );
+
+    // Fourth-and-a-half: the same window one call later. `ensure_draft` succeeds
+    // — the pull request was ready and is now draft — and then `gh pr edit`
+    // fails. That `?` was bare, so a transient failure there reported an
+    // untouched world one statement after `un_readied` had been written to stop
+    // exactly that. Removing the carrier left the whole suite green; this is
+    // what measures it.
+    let edit_fails = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 },
+        { "matches": "pr list", "stdout": serde_json::json!([ready_pr]).to_string(), "status": 0 },
+        // The draft readback succeeds, so `ensure_draft` returns having written.
+        { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
+        { "matches": "pr edit", "stdout": "", "status": 1 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let edited = trace.path().join("edit-failed.log");
+    let (failed, text) = republish(&edit_fails, &edited);
+    assert!(failed, "a failing pr edit was not a refusal: {text}");
+    let calls = std::fs::read_to_string(&edited).expect("the call log");
+    assert!(
+        calls.contains("pr ready") && calls.contains("--undo") && calls.contains("pr edit"),
+        "the fixture did not un-ready and then attempt the edit: {calls}"
+    );
+    assert!(
+        !text.contains("nothing was written"),
+        "the failed edit reported an untouched world after un-readying the PR: {text}"
+    );
+    assert!(
+        text.contains("the pull request was converted back to draft"),
+        "the failed edit does not name the un-ready that did happen: {text}"
+    );
+    assert!(
+        !text.contains("had its title"),
+        "the failed edit claims an edit that did not land: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the remote moved on a refusal before the push: {text}"
+    );
+
+    // Fifth: an issue that has never been published has no head to lease
+    // against. Forcing anyway would be the plain `--force` the issue rules out,
+    // wearing a lease over whatever the remote happens to hold — so the refusal
+    // is the guard, and until this case existed deleting it left the whole suite
+    // green.
+    let unpublished = trace.path().join("unpublished.log");
+    let (failed, text) = republish(&answers(None, false), &unpublished);
+    assert!(
+        failed,
+        "a republish went through with no recorded publication to lease against: {text}"
+    );
+    assert!(
+        text.contains("published-receipt-missing"),
+        "the missing receipt was not what refused it: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the remote moved although there was no receipt to lease against: {text}"
+    );
+
+    // Sixth, and the other direction of the same honesty: a refusal must not
+    // claim a write that did not happen. There is a receipt, but **no open pull
+    // request** — a previous one was closed — so `reused` is `None` and nothing
+    // has been written to any pull request when the renewal denies the claim.
+    //
+    // Held because the flag was untested this way round. `rewrote_pr = true` as
+    // a constant, and `= reused.is_some()`, both left the whole suite green, and
+    // either would tell an operator that a pull request was converted to draft
+    // and re-described when none was touched — sending them to undo a change
+    // that does not exist. That is the mirror of the falsehood this operation
+    // was fixed to stop telling, and it deserved the same measurement.
+    let fresh_pr = |held: u64| {
+        serde_json::to_string(&serde_json::json!([
+            serde_json::json!({
+                "matches": "issue view", "nth": held + 1,
+                "stdout": timeline("claude-99999999", true), "status": 0,
+            }),
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 }),
+            // No open pull request: the reused path is never entered.
+            serde_json::json!({ "matches": "pr list", "stdout": "[]", "status": 0 }),
+            serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
+        ]))
+        .expect("the fake tracker script serialises")
+    };
+    let untouched = trace.path().join("untouched.log");
+    let (failed, text) = republish(&fresh_pr(held), &untouched);
+    assert!(
+        failed,
+        "a republish went through after the claim moved to another run: {text}"
+    );
+    assert!(
+        std::fs::read_to_string(&untouched)
+            .expect("the call log")
+            .lines()
+            .all(|line| !line.contains("pr edit") && !line.contains("pr ready")),
+        "the fixture rewrote a pull request, so this proves nothing about the untouched case"
+    );
+    // Every clause the report can emit, and the frame that carries them. Named
+    // one by one rather than by a single phrase, because a single phrase is
+    // exactly how this assertion died: the report's wording changed to
+    // *"converted **back** to draft"*, the sibling case three was updated to
+    // match and this one was not, so it forbade a substring the code could no
+    // longer produce. A dead assertion is worse than none — measured, a build
+    // that claimed both writes on every path, including this one where no pull
+    // request exists at all, passed the entire suite.
+    for lie in [
+        "converted back to draft",
+        "had its title",
+        "put it back",
+        "changed nothing",
+    ] {
+        assert!(
+            !text.contains(lie),
+            "the refusal said {lie:?} when no pull request was touched: {text}"
+        );
+    }
+    // And the channel underneath the words. `world: committed` is what makes the
+    // harness report a landed write, so a refusal that reaches here must not
+    // carry it however the sentence is phrased.
+    assert!(
+        text.contains("nothing was written"),
+        "the refusal did not report the untouched world it is actually in: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the remote moved on a refusal with no pull request in play: {text}"
+    );
+
+    // Seventh: the pull request **was** ready, so `ensure_draft` un-readies it
+    // and the edit follows. Now both writes happened, and the refusal has to
+    // name both — which is the only case where the sentence the previous round
+    // shipped was accurate. Holding the two cases together is the point: one
+    // fixture proves the draft clause appears when it should, the other proves
+    // it stays away when it should not, and a single boolean cannot satisfy
+    // both.
+    let was_ready = |held: u64| {
+        let ready = serde_json::json!({
+            "number": 7, "url": "https://github.com/o/r/pull/7",
+            "headRefOid": rewritten_head, "baseRefOid": base_sha,
+            "state": "OPEN", "isDraft": false,
+        });
+        serde_json::to_string(&serde_json::json!([
+            serde_json::json!({
+                "matches": "issue view", "nth": held + 1,
+                "stdout": timeline("claude-99999999", true), "status": 0,
+            }),
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 }),
+            serde_json::json!({ "matches": "pr list", "stdout": serde_json::json!([ready]).to_string(), "status": 0 }),
+            // The readback `ensure_draft` makes after `--undo`: now a draft.
+            serde_json::json!({ "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 }),
+            serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
+        ]))
+        .expect("the fake tracker script serialises")
+    };
+    let readied = trace.path().join("readied.log");
+    let (failed, text) = republish(&was_ready(held), &readied);
+    assert!(
+        failed,
+        "the claim moved and the republish went through: {text}"
+    );
+    let calls = std::fs::read_to_string(&readied).expect("the call log");
+    assert!(
+        calls.contains("pr ready") && calls.contains("--undo") && calls.contains("pr edit"),
+        "the fixture did not un-ready and edit, so this proves nothing about naming both: {calls}"
+    );
+    // The **joined** sentence, not two fragments of it. Two fragments are how
+    // the ungrammatical frame survived: *"the pull request was had its title and
+    // body replaced"* contains both of them. The unit test beside `describe()`
+    // covers every combination; this is the one that proves the frame the MCP
+    // server actually hands an agent is the assembled one.
+    assert!(
+        text.contains(
+            "the pull request was converted back to draft and had its title and body replaced \
+             before this refusal"
+        ),
+        "the refusal does not read as one sentence naming both writes: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the remote moved on a refusal before the push: {text}"
+    );
+}
+
+/// The ordinary publication adjudicates its claim, proved by what reaches the remote.
+///
+/// The test whose **absence** was the finding, and it is about `publish_review`
+/// rather than about anything this change added. Nothing anywhere asserted that
+/// the ordinary publication refuses when the claim has moved: the only thing
+/// holding that property was `honesty.rs` counting the string `verify_claim(` in
+/// a function body, and a count cannot see a conditional.
+///
+/// Measured, five ways, each of which left the whole suite green at some point
+/// in this change's history and is red now:
+///
+/// - the entry verification deleted;
+/// - its result discarded with `let _ = …`, which keeps the token a count reads;
+/// - the call moved behind `if matches!(push, Push::Leased { .. })`;
+/// - the call moved behind `if matches!(push, Push::FastForward)` — the *other*
+///   value of the same discriminant, which the first four of these tests missed
+///   because they drove only the route that value keeps;
+/// - the call moved below the draft conversion, so it still precedes the push.
+///
+/// The last two are why this runs both entry points and why the fixture has an
+/// open pull request. With an empty `pr list` the assertions that no `pr edit`
+/// or `pr ready` ran are **vacuous** — `ensure_draft` and `edit_pr` live behind
+/// `reused`, so they could not run whatever the mutation. A verification moved
+/// below them still stops the push, so the remote alone cannot see it.
+///
+/// The remote is the assertion that a mutated build cannot fake; the pull
+/// request is the one that catches a refusal arriving too late. The message
+/// assertion fires first of the three, and is there to prove the refusal is
+/// about the claim rather than about something incidental.
+#[test]
+fn a_publication_refuses_at_entry_when_the_claim_has_moved() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-entry";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    assert!(git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string()
+    ]));
+    assert!(git(&["branch", "-M", "main"]));
+    std::fs::write(repo.join("kept.txt"), "base\n").expect("the base file");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "base content",
+    ]));
+    assert!(git(&["push", "-q", "origin", "main"]));
+
+    // The branch is committed and **not** pushed. That is what makes the origin
+    // able to answer the question: if the entry verification is gone, the
+    // publication runs to completion and this ref appears there.
+    assert!(git(&["checkout", "-q", "-b", branch]));
+    std::fs::write(repo.join("kept.txt"), "changed\n").expect("the change");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "a change that names no issue",
+    ]));
+
+    let body = trace.path().join("pr-body.md");
+    std::fs::write(&body, "A body that names nothing.\n").expect("the body");
+
+    // Somebody else holds it, from the very first read — and the timeline also
+    // carries a complete receipt, so `republish_review` gets past its own
+    // receipt check and reaches the same entry verification. Without it that
+    // route would refuse for an unrelated reason and prove nothing.
+    let published_marker = format!(
+        "<!-- issue-flow: published run-id=claude-99999999 pr=7 head={} base={} digest={} \
+         epoch={} -->",
+        "d".repeat(40),
+        "b".repeat(40),
+        "c".repeat(64),
+        "a".repeat(32)
+    );
+    // **One open draft pull request**, not an empty list. An empty list made
+    // `reused` `None`, so `edit_pr` was structurally unreachable and the
+    // assertion below that no `pr edit` ran could not fail. With a pull request
+    // present it does, and it is what catches an entry verification moved
+    // *below* the draft conversion — the push assertion alone cannot see that,
+    // because the renewal further down still stops the push.
+    //
+    // Exactly one of the three assertions bites, and saying "they" would be the
+    // same overclaim this round is correcting. `pr create` cannot fire with
+    // `reused` set, and `pr ready` cannot fire because this pull request is
+    // already draft. That last one leaves a real gap: a verification placed
+    // *between* `ensure_draft` and `edit_pr` would, against a **ready** pull
+    // request, un-ready somebody else's before refusing, and this fixture
+    // cannot see it. Named rather than fixed, because a second fixture for a
+    // window one statement wide is more machinery than the risk earns.
+    let open_pr = serde_json::json!({
+        "number": 7, "url": "https://github.com/o/r/pull/7",
+        "headRefOid": "e".repeat(40), "baseRefOid": "b".repeat(40),
+        "state": "OPEN", "isDraft": true,
+    });
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "labels": [{"name": "status:in-progress"}],
+                "comments": [{
+                    "id": "IC_1",
+                    "createdAt": "2026-01-01T00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!(
+                        "Claimed.\n\n<!-- issue-flow: claim run-id=claude-99999999 runtime=claude \
+                         horizon=2099-01-01T00:00Z op-id={} -->\n{published_marker}\n",
+                        "a".repeat(32)
+                    ),
+                }],
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "pr list", "stdout": serde_json::json!([open_pr]).to_string(), "status": 0 },
+        { "matches": "headRefOid", "stdout": open_pr.to_string(), "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    // **Both** entry points. The first version drove `publish_review` only, and
+    // the entry verification stayed removable from `republish_review` with the
+    // whole suite green — the same defect one route further along, which is how
+    // three of these rounds have gone. They share a body today; nothing says
+    // they always will, and a test that covers one of two routes is a test that
+    // stops holding the moment somebody splits them.
+    for tool in ["publish_review", "republish_review"] {
+        let runs = home.join(".estigia").join("runs");
+        // Revision-guarded: the second pass needs a clean pointer.
+        let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
+        let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+        run.issue = Some(12);
+        run.state = Some("in-progress".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": tool, "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "branch": branch,
+                "base": "main",
+                "pr_title": "Something",
+                "pr_body_file": body.display().to_string(),
+                "worktree": repo.display().to_string(),
+            }}
+        })
+        .to_string();
+
+        let log = trace.path().join(format!("entry-{tool}.log"));
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+
+        assert_eq!(
+            response["result"]["isError"], true,
+            "{tool} went through under a claim another run holds: {response}"
+        );
+        assert!(
+            text.contains("not-current-live-holder"),
+            "something other than the claim refused {tool}, so this proves nothing about \
+             adjudication: {text}"
+        );
+
+        // The remote, which a mutated build cannot fake.
+        let refs = Command::new("git")
+            .arg("-C")
+            .arg(origin.path())
+            .args(["for-each-ref", "--format=%(refname)"])
+            .output()
+            .expect("the origin is readable");
+        let refs = String::from_utf8_lossy(&refs.stdout).into_owned();
+        assert!(
+            !refs.contains(branch),
+            "{tool} put the branch on the remote under a claim this run does not hold: {refs}"
+        );
+        // And the pull request, which the push assertion cannot see. A run whose
+        // entry verification sits *below* the draft conversion still stops before
+        // the push — and has already un-readied and re-described somebody else's
+        // pull request by then.
+        let calls = std::fs::read_to_string(&log).unwrap_or_default();
+        for wrote in ["pr create", "pr edit", "pr ready"] {
+            assert!(
+                !calls.contains(wrote),
+                "`{wrote}` ran under a claim this run does not hold, via {tool}: {calls}"
+            );
+        }
+    }
+}
