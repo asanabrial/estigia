@@ -778,7 +778,7 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// that fails. Some of it is meaning a line cannot carry — a commit pin names no
 /// version, a step under `if: false` reads exactly like one that runs — and some
 /// is syntax this reader does not handle, which a YAML parser would close. The
-/// fourteen correct workflows this guard used to refuse are tabulated beside it,
+/// sixteen correct workflows this guard used to refuse are tabulated beside it,
 /// and both tables were built the same way: by writing the file a different
 /// legal way and running it, rather than by reading this code and reasoning
 /// about what it would do.
@@ -857,10 +857,16 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
             // instead would end it at any block sequence inside its own `with:`
             // — `cache-directories:` above the option would fail a workflow that
             // is configured correctly.
-            let under_the_cache: String = running[opens + 1..]
-                .iter()
-                .take_while(|code| code.trim().is_empty() || indent_of(code) > depth)
-                .cloned()
+            // From the opening line inclusive, because a step's keys are an
+            // unordered mapping: `- with:` then `uses:` is legal, and a search
+            // that starts one line later cannot see that `with:` at all.
+            let under_the_cache: String = std::iter::once(running[opens].clone())
+                .chain(
+                    running[opens + 1..]
+                        .iter()
+                        .take_while(|code| code.trim().is_empty() || indent_of(code) > depth)
+                        .cloned(),
+                )
                 .collect::<Vec<_>>()
                 .join("\n");
             // The inputs, not the step: read as keys and values, for the reason
@@ -870,10 +876,16 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
                 .lines()
                 .filter_map(key_and_value)
                 .collect();
+            // Both sides folded. An input's name reaches the action as
+            // `INPUT_<NAME>` upper-cased, and the runner's own input map compares
+            // without case — so `Save-If: false` is `save-if: false`, and reading
+            // the key as written let it turn off every run's saving while this
+            // test stayed green. The round that folded the action's name and its
+            // value left the key beside them.
             let set_to = |key: &str| {
                 inputs
                     .iter()
-                    .find(|(k, _)| k == key)
+                    .find(|(k, _)| k.to_lowercase() == key)
                     .map(|(_, v)| v.to_lowercase())
             };
             assert!(

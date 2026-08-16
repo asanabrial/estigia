@@ -182,11 +182,23 @@ suite. Everything else here is prose held by review.
   guard now asks what the action asks, and leaves a `${{ … }}` alone, because what an expression
   evaluates to is not in this file.
 
+  **And the fold reached the action and the value, not the key beside them.** `Save-If: false`
+  turned off saving on **every** run — green ones too, which is worse than anything round eight
+  closed — and the suite stayed green, while `Cache-On-Failure: true`, a spelling that works, was
+  refused. GitHub hands an input to an action as `INPUT_<NAME>` upper-cased and its own input map
+  compares without case, so those are the same settings as the lowercase ones. Three rounds running,
+  one normalisation was applied to whatever was being looked at and not to its neighbour: the action
+  name and not the key, the value and not the key, the key's spacing and not its case. Both sides are
+  folded now.
+
+  A step's keys are an unordered mapping too, and `- with:` written above the step's own `uses:` was
+  refused, because the search for `with:` began one line after the step opened.
+
   Its neighbour `lookup-only:` is in the table above rather than in the code, because what it does
   to saving is a thing to measure and I have not — which is the difference between an unread input
   and one whose behaviour was guessed at from the sentence beside it.
 
-  **This guard has failed correct workflows fourteen times, each for the same reason.** Every one was
+  **This guard has failed correct workflows sixteen times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -206,6 +218,8 @@ suite. Everything else here is prose held by review.
   | a quoted `uses: "actions/checkout@v7"` | a value is written bare |
   | `cache-on-failure:  true` with a second space | a setting is found by searching for its text |
   | a quoted key, `- "uses": …` | only values are written in quotes |
+  | `Cache-On-Failure: true` | an input's name is written in the case the docs use |
+  | `- with:` written above the step's own `uses:` | a step's keys come in an order |
 
   The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
   step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry
