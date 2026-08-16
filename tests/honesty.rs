@@ -1240,6 +1240,9 @@ const ADJUDICATED_BY_THE_BINDING: &[&str] = &[
 /// leaving to be re-derived: the behavioural test proves the *ordinary* route
 /// adjudicates, and the count is what still notices a verification quietly
 /// added or removed from a body two routes share. Neither covers the other.
+/// Both rows name the same body and the same count today, so this measures one
+/// thing twice — kept as two rows because the population above is entry points,
+/// and an entry point that stops sharing the body is the case the count is for.
 const ADJUDICATED_THROUGH: &[(&str, &str, usize)] = &[
     ("publish_review", "publish_with", 2),
     ("republish_review", "publish_with", 2),

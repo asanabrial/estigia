@@ -1756,29 +1756,23 @@ fn publish_with(
     // `--pr-title` goes through `Flags::need`, which refuses a blank value, so
     // one of the two `edit_pr` arms always fires on this path and the flag is
     // already true whatever `ensure_draft` did. A flag whose value decides
-    // nothing is the shape this crate refuses everywhere else, so it is gone;
-    // `ensure_draft` now reports its own writes in its own refusals, where the
-    // fact is reachable.
-    //
-    // Two directions, and only one of them is a defect — worth stating because
-    // the measurement invites the wrong conclusion. Setting this to `true`
-    // outright is caught: a refusal on the fresh-PR path would then tell an
-    // operator a pull request was drafted and re-described when none was
-    // touched, which is the same dishonesty this operation was fixed to stop
-    // telling, pointing the other way. Setting it to `reused.is_some()` is
-    // **not** caught, and should not be: by the same `Flags::need` argument
-    // above, the two expressions agree on every reachable path. Chasing that
-    // one green would mean writing a test for a state no caller can produce,
-    // which is what the round before this deleted.
-    let mut rewrote_pr = false;
+    // nothing is the shape this crate refuses everywhere else. What replaced it
+    // is not a flag at all: [`PullRequestWrites`] records *which* writes
+    // happened, because the sentence a later refusal produces has to name them
+    // and one boolean cannot. `ensure_draft`'s answer is back for that reason
+    // and no other — it decides nothing here, and it is the only thing that
+    // knows whether a ready pull request was un-readied.
+    let mut wrote = PullRequestWrites::default();
     if let Some(pr) = &reused {
-        ensure_draft(context, pr)?;
+        wrote.undrafted = ensure_draft(context, pr)?;
         if let Some(raw) = &body_text {
             edit_pr(context, pr, title, Some(&pr_body_text(raw, issue)))?;
-            rewrote_pr = true;
+            wrote.edited = Some(Edited::TitleAndBody);
         } else if !title.is_empty() {
+            // Title only, and the report says so. Reachable from the CLI, where
+            // `--pr-body-file` is optional; the MCP schema requires it.
             edit_pr(context, pr, title, None)?;
-            rewrote_pr = true;
+            wrote.edited = Some(Edited::Title);
         }
     } else if pr_body_file.is_none() {
         return Err(Failure::Stop(serde_json::json!({
@@ -1809,7 +1803,7 @@ fn publish_with(
         // `rewrote_pr` is false on the path where the reused pull request needed
         // no change, and there the original refusal is the honest one.
         verify_claim(context, issue, run_id, expect_state, now, None)
-            .map_err(|failure| after_rewriting_the_pr(failure, rewrote_pr))?;
+            .map_err(|failure| after_rewriting_the_pr(failure, wrote))?;
     }
     // And the lease's own refusal, which is the answer this whole operation
     // exists to produce. It was the one left raw: the *rarer* path — the claim
@@ -1817,8 +1811,7 @@ fn publish_with(
     // designed outcome came back as a bare write failure that said nothing about
     // it. The push itself leaves the branch provably untouched here, which is
     // exactly why the pull request is the only thing left to report.
-    push_to_origin(at, branch, push)
-        .map_err(|failure| after_rewriting_the_pr(failure, rewrote_pr))?;
+    push_to_origin(at, branch, push).map_err(|failure| after_rewriting_the_pr(failure, wrote))?;
 
     let answer = published(
         context,
@@ -1827,7 +1820,7 @@ fn publish_with(
         branch,
         base,
         title,
-        pr_body_file,
+        body_text.as_deref(),
         reused,
         target,
     )
@@ -1863,38 +1856,92 @@ fn publish_with(
 
 /// A refusal that arrives once the reused pull request has been rewritten.
 ///
+/// What this run has already written to the reused pull request.
+///
+/// Three facts rather than one flag, and the reason it is three is the defect
+/// that made it so. The flag was set by `edit_pr` alone, and the sentence it
+/// produced named a draft conversion as well — while `ensure_draft` only
+/// un-readies a pull request that was *ready*. At republish time the reused one
+/// is normally already draft, because `publish_review` drafts it and only
+/// `release_ci` makes it ready, so the **common** path reported a write nobody
+/// made.
+///
+/// What that costs is not cosmetic. An operator told to put back a draft
+/// conversion runs `gh pr ready`, which exposes the branch to CI — the exact
+/// outcome `ensure_draft` exists to prevent, and the one its own refusal names.
+///
+/// It is also why `ensure_draft` answers whether it wrote again. Two earlier
+/// reviews measured that bool as inert and it was: it changed no *decision*.
+/// It changes a *sentence*, which is the thing this operation exists to get
+/// right, and a sentence is measurable.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct PullRequestWrites {
+    /// `gh pr ready --undo` ran: it was ready, and is now a draft.
+    undrafted: bool,
+    /// What `edit_pr` replaced, when it ran at all.
+    edited: Option<Edited>,
+}
+
+/// Which fields one `edit_pr` call replaced.
+///
+/// Body implies title: the one call takes both, and the arm that omits a body
+/// still sends a title. So there is no *body only*, and offering one would be a
+/// state this crate cannot produce.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Edited {
+    /// The title-only arm, reachable from the CLI where a body file is optional.
+    Title,
+    TitleAndBody,
+}
+
+impl PullRequestWrites {
+    /// The writes, named exactly, or `None` when there are none.
+    fn describe(self) -> Option<String> {
+        let mut done: Vec<&str> = Vec::new();
+        if self.undrafted {
+            done.push("converted back to draft");
+        }
+        match self.edited {
+            Some(Edited::TitleAndBody) => done.push("had its title and body replaced"),
+            Some(Edited::Title) => done.push("had its title replaced"),
+            None => {}
+        }
+        (!done.is_empty()).then(|| done.join(" and "))
+    }
+}
+
+/// A refusal that arrives once the reused pull request has been written to.
+///
 /// The outcome channel, given the fact it did not have. `Stop` means *nothing
-/// was written*, and by the pre-push renewal that is false on the reused path:
-/// the pull request has been converted back to draft and its title and body
-/// replaced. A run that believes the refusal leaves somebody else's pull request
-/// re-described and is told to write nothing else, so nobody puts it back.
+/// was written*, and after any of the writes above that is false. A run that
+/// believes the refusal leaves somebody else's pull request altered and is told
+/// to write nothing else, so nobody puts it back.
 ///
 /// `Read` and `Write` are folded into `Write` for the same reason the readback
 /// failures below it are: a read that failed is not a call that changed nothing
 /// when a change has already gone out.
-fn after_rewriting_the_pr(failure: Failure, rewrote_pr: bool) -> Failure {
-    if !rewrote_pr {
+fn after_rewriting_the_pr(failure: Failure, wrote: PullRequestWrites) -> Failure {
+    let Some(done) = wrote.describe() else {
         return failure;
-    }
+    };
     match failure {
         Failure::Stop(mut envelope) => {
             if let Some(envelope) = envelope.as_object_mut() {
                 envelope.insert("world".to_owned(), serde_json::json!("committed"));
                 envelope.insert(
                     "action".to_owned(),
-                    serde_json::json!(
+                    serde_json::json!(format!(
                         "stop, and write nothing else under this claim \u{2014} but the pull \
-                         request was converted to draft and its title and body replaced before \
-                         this refusal, so that much did happen and somebody has to decide whether \
-                         to put it back"
-                    ),
+                         request was {done} before this refusal, so that much did happen and \
+                         somebody has to decide whether to put it back"
+                    )),
                 );
             }
             Failure::Stop(envelope)
         }
         Failure::Read(detail) | Failure::Write(detail) => Failure::Write(format!(
-            "{detail} \u{2014} the pull request was already converted to draft and its title and \
-             body replaced, so this is not a call that changed nothing"
+            "{detail} \u{2014} the pull request was already {done}, so this is not a call that \
+             changed nothing"
         )),
         other => other,
     }
@@ -1985,7 +2032,7 @@ fn view_pr(context: &Context, number: u64) -> Result<serde_json::Value, Failure>
 /// Reported here rather than returned to the caller, because the caller cannot
 /// see which of these two exits was taken and `isDraft` is read from the remote,
 /// not from the arguments.
-fn ensure_draft(context: &Context, pr: &serde_json::Value) -> Result<(), Failure> {
+fn ensure_draft(context: &Context, pr: &serde_json::Value) -> Result<bool, Failure> {
     let number = pr_number(pr);
     let mut wrote = false;
     if pr.get("isDraft").and_then(serde_json::Value::as_bool) != Some(true) {
@@ -2008,7 +2055,7 @@ fn ensure_draft(context: &Context, pr: &serde_json::Value) -> Result<(), Failure
             number,
         ));
     }
-    Ok(())
+    Ok(wrote)
 }
 
 /// A refusal from inside [`ensure_draft`], once it has un-readied the PR.
@@ -2047,24 +2094,27 @@ fn published(
     branch: &str,
     base: &str,
     title: &str,
-    pr_body_file: Option<&std::path::Path>,
+    // The body's **bytes**, not its path. Reading the file again here is what
+    // made *"read once"* false: the closing-keyword scan validated one read and
+    // the pull request was created from a second, so a body that gained
+    // `Closes #<n>` in between passed the scan and was published anyway — and
+    // that keyword auto-closes the issue on merge, which is the bypass the scan
+    // exists to refuse. One read, carried down.
+    body_text: Option<&str>,
     reused: Option<serde_json::Value>,
     target: serde_json::Value,
 ) -> Result<serde_json::Value, Failure> {
     let (pr, created) = match reused {
         Some(pr) => (pr, false),
         None => {
-            let Some(file) = pr_body_file else {
+            let Some(raw) = body_text else {
                 return Err(Failure::Stop(serde_json::json!({
                     "ok": false,
                     "reason": "missing-pr-body",
                     "action": "pass --pr-body-file for a new PR",
                 })));
             };
-            let raw = std::fs::read_to_string(file).map_err(|error| {
-                Failure::Read(format!("the PR body could not be read: {error}"))
-            })?;
-            let staged = stage(&pr_body_text(&raw, issue), &format!("pr-{issue}"))?;
+            let staged = stage(&pr_body_text(raw, issue), &format!("pr-{issue}"))?;
             let answer = super::run(
                 &[
                     "gh",

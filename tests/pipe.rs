@@ -9549,9 +9549,24 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         !text.contains("nothing was written"),
         "the lease refusal reported an untouched world after rewriting the pull request: {text}"
     );
+    // **Exactly** what happened, and nothing else. This fixture's pull request
+    // is already draft — which is the normal state of a review target, since
+    // `publish_review` drafts it and only `release_ci` makes it ready — so
+    // `ensure_draft` writes nothing and only the edit did.
+    //
+    // The assertion used to be `contains("converted to draft")`, and it passed:
+    // the refusal named a conversion nobody performed, and the test pinned the
+    // falsehood so that fixing it would have gone red. An operator putting back
+    // a draft conversion runs `gh pr ready`, which exposes the branch to CI —
+    // the exact outcome `ensure_draft` exists to prevent.
     assert!(
-        text.contains("converted to draft"),
-        "the lease refusal does not say the pull request was rewritten: {text}"
+        text.contains("had its title and body replaced"),
+        "the lease refusal does not name the edit that did happen: {text}"
+    );
+    assert!(
+        !text.contains("converted back to draft"),
+        "the lease refusal claims a draft conversion over a pull request that was already draft: \
+         {text}"
     );
 
     // Put the remote back for the last cases.
@@ -9676,6 +9691,54 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         published_head,
         "the remote moved on a refusal with no pull request in play: {text}"
     );
+
+    // Seventh: the pull request **was** ready, so `ensure_draft` un-readies it
+    // and the edit follows. Now both writes happened, and the refusal has to
+    // name both — which is the only case where the sentence the previous round
+    // shipped was accurate. Holding the two cases together is the point: one
+    // fixture proves the draft clause appears when it should, the other proves
+    // it stays away when it should not, and a single boolean cannot satisfy
+    // both.
+    let was_ready = |held: u64| {
+        let ready = serde_json::json!({
+            "number": 7, "url": "https://github.com/o/r/pull/7",
+            "headRefOid": rewritten_head, "baseRefOid": base_sha,
+            "state": "OPEN", "isDraft": false,
+        });
+        serde_json::to_string(&serde_json::json!([
+            serde_json::json!({
+                "matches": "issue view", "nth": held + 1,
+                "stdout": timeline("claude-99999999", true), "status": 0,
+            }),
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 }),
+            serde_json::json!({ "matches": "pr list", "stdout": serde_json::json!([ready]).to_string(), "status": 0 }),
+            // The readback `ensure_draft` makes after `--undo`: now a draft.
+            serde_json::json!({ "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 }),
+            serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
+        ]))
+        .expect("the fake tracker script serialises")
+    };
+    let readied = trace.path().join("readied.log");
+    let (failed, text) = republish(&was_ready(held), &readied);
+    assert!(
+        failed,
+        "the claim moved and the republish went through: {text}"
+    );
+    let calls = std::fs::read_to_string(&readied).expect("the call log");
+    assert!(
+        calls.contains("pr ready") && calls.contains("--undo") && calls.contains("pr edit"),
+        "the fixture did not un-ready and edit, so this proves nothing about naming both: {calls}"
+    );
+    assert!(
+        text.contains("converted back to draft")
+            && text.contains("had its title and body replaced"),
+        "the refusal does not name both writes that happened: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the remote moved on a refusal before the push: {text}"
+    );
 }
 
 /// The ordinary publication adjudicates its claim, proved by what reaches the remote.
@@ -9686,16 +9749,27 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
 /// holding that property was `honesty.rs` counting the string `verify_claim(` in
 /// a function body, and a count cannot see a conditional.
 ///
-/// Measured, three ways, each of which left the whole suite green before this
-/// existed and is red now:
+/// Measured, five ways, each of which left the whole suite green at some point
+/// in this change's history and is red now:
 ///
 /// - the entry verification deleted;
-/// - its result discarded with `let _ = …`, which keeps the token the count reads;
-/// - the call moved behind `if matches!(push, Push::Leased { .. })`, which keeps
-///   the count at two and takes adjudication off the ordinary route entirely.
+/// - its result discarded with `let _ = …`, which keeps the token a count reads;
+/// - the call moved behind `if matches!(push, Push::Leased { .. })`;
+/// - the call moved behind `if matches!(push, Push::FastForward)` — the *other*
+///   value of the same discriminant, which the first four of these tests missed
+///   because they drove only the route that value keeps;
+/// - the call moved below the draft conversion, so it still precedes the push.
 ///
-/// The assertion is the remote, not the message. A refusal that still pushed is
-/// the failure that matters, and only the origin can answer whether it did.
+/// The last two are why this runs both entry points and why the fixture has an
+/// open pull request. With an empty `pr list` the assertions that no `pr edit`
+/// or `pr ready` ran are **vacuous** — `ensure_draft` and `edit_pr` live behind
+/// `reused`, so they could not run whatever the mutation. A verification moved
+/// below them still stops the push, so the remote alone cannot see it.
+///
+/// The remote is the assertion that a mutated build cannot fake; the pull
+/// request is the one that catches a refusal arriving too late. The message
+/// assertion fires first of the three, and is there to prove the refusal is
+/// about the claim rather than about something incidental.
 #[test]
 fn a_publication_refuses_at_entry_when_the_claim_has_moved() {
     let rig = tracker_rig();
@@ -9761,7 +9835,30 @@ fn a_publication_refuses_at_entry_when_the_claim_has_moved() {
     let body = trace.path().join("pr-body.md");
     std::fs::write(&body, "A body that names nothing.\n").expect("the body");
 
-    // Somebody else holds it, from the very first read.
+    // Somebody else holds it, from the very first read — and the timeline also
+    // carries a complete receipt, so `republish_review` gets past its own
+    // receipt check and reaches the same entry verification. Without it that
+    // route would refuse for an unrelated reason and prove nothing.
+    let published_marker = format!(
+        "<!-- issue-flow: published run-id=claude-99999999 pr=7 head={} base={} digest={} \
+         epoch={} -->",
+        "d".repeat(40),
+        "b".repeat(40),
+        "c".repeat(64),
+        "a".repeat(32)
+    );
+    // **One open draft pull request**, not an empty list. An empty list made
+    // `reused` `None`, so `ensure_draft` and `edit_pr` were structurally
+    // unreachable and the three assertions below that no `pr edit` or `pr ready`
+    // ran could not fail — they were vacuous. With a pull request present they
+    // bite, and they are what catches an entry verification moved *below* the
+    // draft conversion: the push assertion alone cannot see that, because the
+    // renewal further down still stops the push.
+    let open_pr = serde_json::json!({
+        "number": 7, "url": "https://github.com/o/r/pull/7",
+        "headRefOid": "e".repeat(40), "baseRefOid": "b".repeat(40),
+        "state": "OPEN", "isDraft": true,
+    });
     let answers = serde_json::to_string(&serde_json::json!([
         {
             "matches": "issue view",
@@ -9775,96 +9872,109 @@ fn a_publication_refuses_at_entry_when_the_claim_has_moved() {
                     "includesCreatedEdit": false,
                     "body": format!(
                         "Claimed.\n\n<!-- issue-flow: claim run-id=claude-99999999 runtime=claude \
-                         horizon=2099-01-01T00:00Z op-id={} -->\n",
+                         horizon=2099-01-01T00:00Z op-id={} -->\n{published_marker}\n",
                         "a".repeat(32)
                     ),
                 }],
             }).to_string(),
             "status": 0,
         },
-        // Deliberately permissive: an empty list means the mutated path would
-        // create a pull request and push, rather than stopping for a reason
-        // that has nothing to do with the claim.
-        { "matches": "pr list", "stdout": "[]", "status": 0 },
+        { "matches": "pr list", "stdout": serde_json::json!([open_pr]).to_string(), "status": 0 },
+        { "matches": "headRefOid", "stdout": open_pr.to_string(), "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
     .expect("the fake tracker script serialises");
 
-    let runs = home.join(".estigia").join("runs");
-    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
-    run.issue = Some(12);
-    run.state = Some("in-progress".to_owned());
-    run.repo_dir = Some(repo.to_path_buf());
-    assert!(
-        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
-        "the fixture pointer was not stored"
-    );
-
-    let request = serde_json::json!({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": { "name": "publish_review", "arguments": {
-            "issue": 12,
-            "run_id": run_id,
-            "branch": branch,
-            "base": "main",
-            "pr_title": "Something",
-            "pr_body_file": body.display().to_string(),
-            "worktree": repo.display().to_string(),
-        }}
-    })
-    .to_string();
-
-    let log = trace.path().join("entry.log");
-    let mut child = tracker_command(home, repo, bin, &answers)
-        .arg("mcp")
-        .env("ESTIGIA_FAKE_LOG", &log)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("the MCP server runs");
-    use std::io::Write;
-    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
-        .expect("the request is written");
-    let output = child.wait_with_output().expect("the MCP server exits");
-    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
-        panic!(
-            "the MCP response is not JSON: {}",
-            String::from_utf8_lossy(&output.stdout)
-        )
-    });
-    let text = response["result"]["content"][0]["text"]
-        .as_str()
-        .unwrap_or_default()
-        .to_owned();
-
-    assert_eq!(
-        response["result"]["isError"], true,
-        "the ordinary publication went through under a claim another run holds: {response}"
-    );
-    assert!(
-        text.contains("not-current-live-holder"),
-        "something other than the claim refused it, so this proves nothing about adjudication: {text}"
-    );
-
-    // The acceptance criterion, and the only one a mutated build cannot fake:
-    // the branch is not on the remote.
-    let refs = Command::new("git")
-        .arg("-C")
-        .arg(origin.path())
-        .args(["for-each-ref", "--format=%(refname)"])
-        .output()
-        .expect("the origin is readable");
-    let refs = String::from_utf8_lossy(&refs.stdout).into_owned();
-    assert!(
-        !refs.contains(branch),
-        "the branch reached the remote under a claim this run does not hold: {refs}"
-    );
-    let calls = std::fs::read_to_string(&log).unwrap_or_default();
-    for wrote in ["pr create", "pr edit", "pr ready"] {
+    // **Both** entry points. The first version drove `publish_review` only, and
+    // the entry verification stayed removable from `republish_review` with the
+    // whole suite green — the same defect one route further along, which is how
+    // three of these rounds have gone. They share a body today; nothing says
+    // they always will, and a test that covers one of two routes is a test that
+    // stops holding the moment somebody splits them.
+    for tool in ["publish_review", "republish_review"] {
+        let runs = home.join(".estigia").join("runs");
+        // Revision-guarded: the second pass needs a clean pointer.
+        let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
+        let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+        run.issue = Some(12);
+        run.state = Some("in-progress".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
         assert!(
-            !calls.contains(wrote),
-            "`{wrote}` ran under a claim this run does not hold: {calls}"
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
         );
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": tool, "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "branch": branch,
+                "base": "main",
+                "pr_title": "Something",
+                "pr_body_file": body.display().to_string(),
+                "worktree": repo.display().to_string(),
+            }}
+        })
+        .to_string();
+
+        let log = trace.path().join(format!("entry-{tool}.log"));
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+
+        assert_eq!(
+            response["result"]["isError"], true,
+            "{tool} went through under a claim another run holds: {response}"
+        );
+        assert!(
+            text.contains("not-current-live-holder"),
+            "something other than the claim refused {tool}, so this proves nothing about \
+             adjudication: {text}"
+        );
+
+        // The remote, which a mutated build cannot fake.
+        let refs = Command::new("git")
+            .arg("-C")
+            .arg(origin.path())
+            .args(["for-each-ref", "--format=%(refname)"])
+            .output()
+            .expect("the origin is readable");
+        let refs = String::from_utf8_lossy(&refs.stdout).into_owned();
+        assert!(
+            !refs.contains(branch),
+            "{tool} put the branch on the remote under a claim this run does not hold: {refs}"
+        );
+        // And the pull request, which the push assertion cannot see. A run whose
+        // entry verification sits *below* the draft conversion still stops before
+        // the push — and has already un-readied and re-described somebody else's
+        // pull request by then.
+        let calls = std::fs::read_to_string(&log).unwrap_or_default();
+        for wrote in ["pr create", "pr edit", "pr ready"] {
+            assert!(
+                !calls.contains(wrote),
+                "`{wrote}` ran under a claim this run does not hold, via {tool}: {calls}"
+            );
+        }
     }
 }

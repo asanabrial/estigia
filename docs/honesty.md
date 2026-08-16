@@ -1076,18 +1076,23 @@ suite. Everything else here is prose held by review.
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
   What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still
   `verify-claim --issue --run-id --expect-state`; the head comparison is local, against the checkout.
-- **A `republish_review` that refuses has already edited the pull request, and says so.** Its refusals
-  arrive after the reused pull request has been converted back to draft and its title and body
-  replaced: `ensure_draft` writes first, the renewal stands immediately before the push, and the lease
-  is evaluated by git at the push itself. So a remote somebody else moved leaves the branch untouched,
-  which is what the operation is for, and leaves the pull request drafted and re-described. What is
-  **not** left to a reader to infer is the report: all three of those refusal sites carry the fact, so
-  none of them answers *nothing was written*. That took two rounds of independent review to get right,
-  and the shape of the mistake is worth keeping — each refusal reached the agent through the same
-  `stop()` and `?` every other path uses, whose envelopes carry no `world`, so *the absence of a claim
-  about the world was read as a claim that the world was untouched*. Fixing the renewal first and
-  leaving the other two is how a second round found the same defect twice. What is still on the
-  reader is the decision: Estigia reports the edit, it does not undo it.
+- **A `republish_review` that refuses has already written to the pull request, and names which
+  writes.** Its refusals arrive after the reused pull request has been edited — the renewal stands
+  immediately before the push, and the lease is evaluated by git at the push itself — so a remote
+  somebody else moved leaves the branch untouched, which is what the operation is for, and leaves the
+  pull request altered. All three refusal sites carry that fact, so none answers *nothing was written*.
+  Each had reached the agent through the same `stop()` and `?` every other path uses, whose envelopes
+  carry no `world`, so *the absence of a claim about the world was read as a claim that the world was
+  untouched*.
+  **Which** writes is the part that took four rounds. The report was built from one boolean and named
+  two writes: an edit, and a conversion back to draft. `ensure_draft` un-readies only a pull request
+  that was *ready*, and at republish time the reused one is normally already draft — `publish_review`
+  drafts it and only `release_ci` makes it ready — so the common path claimed a conversion nobody
+  performed. An operator putting that back runs `gh pr ready`, which exposes the branch to CI: the
+  exact outcome `ensure_draft` exists to prevent. The report now names each write separately and only
+  when it happened, which is the same rule this document applies to everything else — say what was
+  measured, not what usually accompanies it. What is still on the reader is the decision: Estigia
+  reports the write, it does not undo it.
 - **A republish cannot lease against a receipt published from a different GitHub account.**
   `latest_publication` keeps only comments the authenticated identity authored, because a marker this
   identity did not write is one anybody could have forged. The consequence is narrow and worth naming
