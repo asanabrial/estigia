@@ -54,17 +54,30 @@ suite. Everything else here is prose held by review.
   **And it is the cheapest thing on this list to clear, not the hardest.**
   `attest-build-provenance@v3` is composite too and pins
   `actions/attest@daf44fb9…` and `.../predicate@864457a5…`, **both `node24`** — read at those
-  commits. So the transitive pair goes away with a one-line `@v2` → `@v3` at `release.yml:178`, with
-  no input surface of this repository's to review, while each of the four direct ones has one.
+  commits. So the transitive pair goes away with a one-line `@v2` → `@v3` at `release.yml:178`. The
+  input surface is not *absent* — `release.yml:180` passes `subject-path` — it is **unchanged**:
+  between v2's and v3's `action.yml` the only differences are the two pin lines and an added
+  `NODE_OPTIONS`, with inputs and outputs identical. Nothing here to read before making it.
 
   The guard is named for the checkout and checks only the checkout; it is not weaker than it says,
   but it is narrower than the problem.
 
   Left rather than folded in because the issue that raised the checkout asked about the checkout, and
-  each remaining bump has an input surface to read first. `upload-artifact` is the worst of them:
-  `v5` is still `node20` and only `v6` is `node24`, so clearing it crosses **two** majors, over a
-  change that already altered naming and overwrite semantics once. `setup-node@v5` and
-  `action-gh-release@v3` are each `node24` and each one major away. Filed as its own item.
+  each remaining bump has behaviour to read before it is made. The distance to a `node24` major, each
+  read from that major's own `action.yml`:
+
+  | Action | Majors to cross |
+  |---|---|
+  | `actions/setup-node@v4` → `v5` | one |
+  | `softprops/action-gh-release@v2` → `v3` | one |
+  | `actions/upload-artifact@v4` → `v6` | two — `v5` is still `node20` |
+  | `actions/download-artifact@v4` → `v7` | three — `v4`, `v5` and `v6` are all `node20` |
+
+  No ranking is offered beyond that table, and the reason is this entry's own history: it has
+  carried a wrong count, a wrong containment claim, a wrong remediability claim and a wrong
+  superlative, each written about the thing being looked at while the neighbours went unread. A
+  comparative is a claim about everything, so it costs a measurement of everything, and every one
+  made here so far has been made without it. Filed as its own item.
 
   **This list was wrong once already, and how it was wrong is the point.** It first named three,
   taken from a review's findings and re-presented as a measurement without the files being swept.
