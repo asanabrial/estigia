@@ -777,8 +777,10 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// pinned to a `v4` commit rather than a tag reads as no version at all, and the
 /// option is required in the one literal spelling `true`, so YAML's other trues
 /// fail a workflow that would work. Both were found by mutating this file's
-/// inputs rather than by reading them, which is also how the two false alarms it
-/// has already produced were found.
+/// inputs rather than by reading them, which is also how the five correct
+/// workflows it used to refuse were found — those are tabulated there too,
+/// because every one of them came of assuming the one step form in front of the
+/// author was the only legal one.
 #[test]
 fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     // The version floor applies to every workflow in the directory, not to the
@@ -823,58 +825,92 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
         );
     }
 
-    let ci = read(".github/workflows/ci.yml");
-    let lines: Vec<&str> = ci.lines().collect();
-    let caching: Vec<usize> = lines
-        .iter()
-        .enumerate()
-        .filter(|(_, line)| code_of(line).contains("Swatinem/rust-cache@"))
-        .map(|(at, _)| at)
-        .collect();
     assert!(
-        !caching.is_empty(),
+        code_of(&read(".github/workflows/ci.yml")).contains("Swatinem/rust-cache@"),
         "ci.yml has no caching step, so the option check below reads nothing"
     );
     // The option only does anything on the step it is written under. Read as a
     // whole file, a `cache-on-failure: true` parked on some other step — or
     // commented out beside a `rust-cache` left on its defaults — answers yes
-    // while every red run still discards what it compiled. Every caching step is
-    // read rather than the first, because which of several decides the saving
-    // behaviour is a question about the action rather than about this file.
-    for at in caching {
-        // A step ends where the next one starts, and the next one starts at the
-        // same indentation. Stopping at the first `- ` instead would end the step
-        // at any block sequence inside its own `with:` — `cache-directories:`
-        // above the option would fail a workflow that is configured correctly.
-        let depth = lines[at].len() - lines[at].trim_start().len();
-        let under_the_cache: String = lines[at + 1..]
-            .iter()
-            .take_while(|line| {
-                let code = code_of(line);
-                code.trim().is_empty() || code.len() - code.trim_start().len() > depth
-            })
-            .copied()
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(
-            code_of(&under_the_cache).contains("cache-on-failure: true"),
-            "a red CI run throws away everything it compiled, so the next push \
-             starts from cold on all three platforms; the caching step at line \
-             {} reads: {under_the_cache:?}",
-            at + 1
-        );
+    // while every red run still discards what it compiled. Every caching step in
+    // every workflow is read: every one, because which of several decides the
+    // saving behaviour is a question about the action rather than about this
+    // file; every workflow, for the same reason the version floor reads them
+    // all, since a lane added later can copy a bare `rust-cache` as easily as
+    // this one carried it.
+    for name in &workflows {
+        let workflow = read(&format!(".github/workflows/{name}"));
+        let lines: Vec<&str> = workflow.lines().collect();
+        for at in 0..lines.len() {
+            if !code_of(lines[at]).contains("Swatinem/rust-cache@") {
+                continue;
+            }
+            // From the line the step opens on, which is not always its `uses:`:
+            // a step that names itself first puts `uses:` and `with:` at the
+            // same depth, and measuring from there ends the block immediately.
+            let opens = step_opening(&lines, at);
+            let depth = lines[opens].len() - lines[opens].trim_start().len();
+            // A step ends where the next one starts. Stopping at the first `- `
+            // instead would end it at any block sequence inside its own `with:`
+            // — `cache-directories:` above the option would fail a workflow that
+            // is configured correctly.
+            let under_the_cache: String = lines[opens + 1..]
+                .iter()
+                .take_while(|line| {
+                    let code = code_of(line);
+                    code.trim().is_empty() || code.len() - code.trim_start().len() > depth
+                })
+                .copied()
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(
+                code_of(&under_the_cache).contains("cache-on-failure: true"),
+                "a red run throws away everything it compiled, so the next push \
+                 starts from cold; the caching step at {name}:{} reads: \
+                 {under_the_cache:?}",
+                opens + 1
+            );
+        }
     }
     // Only `ci.yml` caches, and that is this repository's judgement rather than
     // the issue's: the issue ruled out caching anything but cargo, which is what
     // `rust-cache` caches, and said nothing about the release lane. This line
     // holds that lane where it is so a cache appears there deliberately rather
     // than by copying — whether one would pay off has not been measured, and
-    // measuring it is what should delete this line, not the copying.
+    // measuring it is what should delete this line, not the copying. A `uses:`
+    // line, for the reason the version floor reads only those: naming the action
+    // in a `run:` or a step title is talking about it.
     let release = read(".github/workflows/release.yml");
+    let cached: Vec<&str> = release
+        .lines()
+        .filter(|line| {
+            let code = code_of(line);
+            code.contains("uses:") && code.contains("rust-cache")
+        })
+        .collect();
     assert!(
-        !code_of(&release).contains("rust-cache"),
-        "the release lane gained a cache this guard does not check"
+        cached.is_empty(),
+        "the release lane gained a cache this guard does not check: {cached:?}"
     );
+}
+
+/// The line a step opens on, walking back from any line inside it.
+///
+/// A step's first line is the one carrying the `- `, which is not always the
+/// `uses:`: `- name: …` then `uses:` then `with:` is the form this repository
+/// writes every step it names, and there the `uses:` and the `with:` sit at the
+/// same depth. Reading a step's extent from the `uses:` line ends it at the very
+/// next line, and the guard above then reports a cache being discarded by a
+/// workflow that is configured correctly.
+fn step_opening(lines: &[&str], at: usize) -> usize {
+    (0..=at)
+        .rev()
+        .find(|&n| {
+            let code = code_of(lines[n]);
+            let opening = code.trim_start();
+            opening == "-" || opening.starts_with("- ")
+        })
+        .unwrap_or(at)
 }
 
 /// Every workflow the directory holds, sorted, so that "both workflows" keeps

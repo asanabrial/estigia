@@ -123,14 +123,29 @@ suite. Everything else here is prose held by review.
   would work. The first is a hole and the second is a false alarm; the second is the safer way round,
   and neither is guessed at, which is why they are here rather than inferred from the code.
 
-  **Widening that guard to the whole directory broke a workflow class that does not exist here yet.**
-  The loop used to name `ci.yml` and `release.yml`; when it was widened so a lane added later could
-  not slip a `@v4` past the floor, the per-file assertion *"this workflow has a checkout step"* was
-  carried along with it. A scheduled labeller or stale sweep checks nothing out and would have failed
-  the suite on arrival — the second false alarm this one guard has produced by asserting about
-  neighbours it had not looked at, one round after the first. The version floor now applies to every
-  file and the checkout-exists floor only to the two lanes measured to have one. The comment that
-  justified the widening claimed a third lane *would* check out; that was the unmeasured half.
+  **This guard has failed correct workflows five times, each for the same reason.** Every one was
+  found by writing the workflow a different legal way and running it, and every one was a rule
+  asserted from the single form sitting in front of the author:
+
+  | It refused | Because it assumed |
+  |---|---|
+  | a `cache-directories:` sequence above the option | a step ends at the first `- ` |
+  | a scheduled labeller or stale sweep | every workflow checks something out |
+  | `actions/checkout@v4` named in a `run:` line | any line naming a version runs it |
+  | a caching step written `- name:` then `uses:` | a step opens on its `uses:` line |
+  | `rust-cache` named in a `run:` line or a step title | any mention of the action is a cache |
+
+  The fourth is the sharpest: `- name:` then `uses:` is the form this repository writes every step it
+  names, including the `attest-build-provenance` step this same entry points at two paragraphs above.
+  Adding a name to the caching step — an ordinary edit — reported that a red run's cache was being
+  discarded when it was not. All five are red-to-green measured, not reasoned about.
+
+  **And widening the loop was done to one half of the guard.** The version floor was taken from two
+  named files to the whole directory so a lane added later could not slip a `@v4` past it; the cache
+  floor was left reading `ci.yml`. A third workflow copying a bare `rust-cache` discarded its red
+  runs and the suite stayed green — which is exactly the copying the release-lane assertion beside it
+  says it exists to prevent. Both halves read every file now, and the checkout-exists floor is the
+  one thing scoped to the two lanes measured to have a checkout.
 
   **The number this whole change is argued from was inherited, and it was wrong.** Every document
   here said the episode cost *six* red runs, because the issue said so and named a run range. The
