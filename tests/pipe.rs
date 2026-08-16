@@ -9624,6 +9624,47 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         "the remote moved on a refusal before the push: {text}"
     );
 
+    // Fourth-and-a-half: the same window one call later. `ensure_draft` succeeds
+    // — the pull request was ready and is now draft — and then `gh pr edit`
+    // fails. That `?` was bare, so a transient failure there reported an
+    // untouched world one statement after `un_readied` had been written to stop
+    // exactly that. Removing the carrier left the whole suite green; this is
+    // what measures it.
+    let edit_fails = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 },
+        { "matches": "pr list", "stdout": serde_json::json!([ready_pr]).to_string(), "status": 0 },
+        // The draft readback succeeds, so `ensure_draft` returns having written.
+        { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
+        { "matches": "pr edit", "stdout": "", "status": 1 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let edited = trace.path().join("edit-failed.log");
+    let (failed, text) = republish(&edit_fails, &edited);
+    assert!(failed, "a failing pr edit was not a refusal: {text}");
+    let calls = std::fs::read_to_string(&edited).expect("the call log");
+    assert!(
+        calls.contains("pr ready") && calls.contains("--undo") && calls.contains("pr edit"),
+        "the fixture did not un-ready and then attempt the edit: {calls}"
+    );
+    assert!(
+        !text.contains("nothing was written"),
+        "the failed edit reported an untouched world after un-readying the PR: {text}"
+    );
+    assert!(
+        text.contains("the pull request was converted back to draft"),
+        "the failed edit does not name the un-ready that did happen: {text}"
+    );
+    assert!(
+        !text.contains("had its title"),
+        "the failed edit claims an edit that did not land: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the remote moved on a refusal before the push: {text}"
+    );
+
     // Fifth: an issue that has never been published has no head to lease
     // against. Forcing anyway would be the plain `--force` the issue rules out,
     // wearing a lease over whatever the remote happens to hold — so the refusal
@@ -9751,10 +9792,17 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         calls.contains("pr ready") && calls.contains("--undo") && calls.contains("pr edit"),
         "the fixture did not un-ready and edit, so this proves nothing about naming both: {calls}"
     );
+    // The **joined** sentence, not two fragments of it. Two fragments are how
+    // the ungrammatical frame survived: *"the pull request was had its title and
+    // body replaced"* contains both of them. The unit test beside `describe()`
+    // covers every combination; this is the one that proves the frame the MCP
+    // server actually hands an agent is the assembled one.
     assert!(
-        text.contains("converted back to draft")
-            && text.contains("had its title and body replaced"),
-        "the refusal does not name both writes that happened: {text}"
+        text.contains(
+            "the pull request was converted back to draft and had its title and body replaced \
+             before this refusal"
+        ),
+        "the refusal does not read as one sentence naming both writes: {text}"
     );
     assert_eq!(
         remote_head(),

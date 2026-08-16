@@ -1080,7 +1080,10 @@ suite. Everything else here is prose held by review.
   writes.** Its refusals arrive after the reused pull request has been edited — the renewal stands
   immediately before the push, and the lease is evaluated by git at the push itself — so a remote
   somebody else moved leaves the branch untouched, which is what the operation is for, and leaves the
-  pull request altered. All three refusal sites carry that fact, so none answers *nothing was written*.
+  pull request altered. **Every** refusal site downstream of a write carries that fact, so none answers
+  *nothing was written* — the draft readback, the failed edit, the renewal and the push. Counted rather
+  than named, that sentence said *three* and a later change made it four without moving it; the number
+  is the part that had no reason to be there.
   Each had reached the agent through the same `stop()` and `?` every other path uses, whose envelopes
   carry no `world`, so *the absence of a claim about the world was read as a claim that the world was
   untouched*.

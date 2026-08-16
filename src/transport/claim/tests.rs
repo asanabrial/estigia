@@ -2132,3 +2132,105 @@ fn the_head_a_lease_is_taken_from_is_the_latest_published_marker() {
         "the lease would be taken against something other than the recorded head"
     );
 }
+
+/// The sentence an operator reads, assembled, for every reachable combination.
+///
+/// The reason this exists at the whole-sentence level rather than as more
+/// `contains` checks: **fragment assertions are what let the broken sentence
+/// ship**. The clauses were a past participle and a finite verb phrase sharing a
+/// `was` supplied by the frame, so the ordinary case read *"the pull request was
+/// had its title and body replaced"* — and every test pinning that text asserted
+/// a fragment, so all of them passed. The repair then added more fragment
+/// assertions, and restoring the double-verb frame left the whole suite green.
+///
+/// A fragment cannot see a frame. This asserts the frames.
+#[test]
+fn the_refusal_reads_as_a_sentence_in_every_combination() {
+    let says = |wrote: PullRequestWrites| -> (String, String) {
+        let stop = after_rewriting_the_pr(
+            stop("some-reason", "detail".to_owned(), "do the thing"),
+            wrote,
+        );
+        let write = after_rewriting_the_pr(Failure::Write("push failed".to_owned()), wrote);
+        (
+            stop.envelope()
+                .get("action")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            write.detail(),
+        )
+    };
+
+    // Nothing written: the refusal is passed through untouched, so there is no
+    // sentence to get wrong and no `world` claiming otherwise.
+    let untouched = PullRequestWrites::default();
+    let (action, _) = says(untouched);
+    assert_eq!(
+        action, "do the thing",
+        "a refusal was reworded over a pull request nobody touched"
+    );
+    assert!(
+        after_rewriting_the_pr(
+            stop("some-reason", "detail".to_owned(), "do the thing"),
+            untouched,
+        )
+        .envelope()
+        .get("world")
+        .is_none(),
+        "an untouched world was reported as committed"
+    );
+
+    for (wrote, expected) in [
+        (
+            PullRequestWrites {
+                undrafted: false,
+                edited: Some(Edited::TitleAndBody),
+            },
+            "the pull request had its title and body replaced",
+        ),
+        (
+            PullRequestWrites {
+                undrafted: false,
+                edited: Some(Edited::Title),
+            },
+            "the pull request had its title replaced",
+        ),
+        (
+            PullRequestWrites {
+                undrafted: true,
+                edited: None,
+            },
+            "the pull request was converted back to draft",
+        ),
+        (
+            PullRequestWrites {
+                undrafted: true,
+                edited: Some(Edited::TitleAndBody),
+            },
+            "the pull request was converted back to draft and had its title and body replaced",
+        ),
+    ] {
+        let (action, write) = says(wrote);
+        assert!(
+            action.contains(&format!("{expected} before this refusal")),
+            "the stop frame does not read as a sentence for {wrote:?}: {action}"
+        );
+        assert!(
+            write.contains(&format!(
+                "{expected}, so this is not a call that changed nothing"
+            )),
+            "the write frame does not read as a sentence for {wrote:?}: {write}"
+        );
+        // The shapes a frame gets wrong: a doubled verb, and an adverb landing
+        // in front of one.
+        for broken in ["was was", "was had", "already was", "already had"] {
+            for text in [&action, &write] {
+                assert!(
+                    !text.contains(broken),
+                    "the refusal says {broken:?} for {wrote:?}: {text}"
+                );
+            }
+        }
+    }
+}

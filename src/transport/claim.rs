@@ -1770,8 +1770,12 @@ fn publish_with(
                 .map_err(|failure| after_rewriting_the_pr(failure, wrote))?;
             wrote.edited = Some(Edited::TitleAndBody);
         } else if !title.is_empty() {
-            // Title only, and the report says so. Reachable from the CLI, where
-            // `--pr-body-file` is optional; the MCP schema requires it.
+            // Title only, and the report says so. Whether anything can reach
+            // this arm is [`Edited::Title`]'s to answer, and it is answered
+            // there: restating it here is how this file came to assert both
+            // *reachable from the CLI* and *the claim that a CLI route reaches
+            // it was wrong*, 127 lines apart, in the commit that corrected the
+            // fact.
             edit_pr(context, pr, title, None)
                 .map_err(|failure| after_rewriting_the_pr(failure, wrote))?;
             wrote.edited = Some(Edited::Title);
@@ -1972,9 +1976,11 @@ fn after_rewriting_the_pr(failure: Failure, wrote: PullRequestWrites) -> Failure
             }
             Failure::Stop(envelope)
         }
+        // No `already` before the clause: the fragments carry their own verb, so
+        // *"the pull request already was converted back to draft"* is what that
+        // word produces once the un-ready can reach this arm on its own.
         Failure::Read(detail) | Failure::Write(detail) => Failure::Write(format!(
-            "{detail} \u{2014} the pull request already {done}, so this is not a call that \
-             changed nothing"
+            "{detail} \u{2014} the pull request {done}, so this is not a call that changed nothing"
         )),
         other => other,
     }
@@ -2092,22 +2098,34 @@ fn ensure_draft(context: &Context, pr: &serde_json::Value) -> Result<bool, Failu
 }
 
 /// A refusal from inside [`ensure_draft`], once it has un-readied the PR.
+///
+/// It defers to [`after_rewriting_the_pr`] rather than wording the same event a
+/// second time. Two spellings of one fact were already drifting apart — this
+/// said *"was already converted to draft"* while [`PullRequestWrites::describe`]
+/// said *"was converted back to draft"* — and the assertion list that forbids
+/// the phrase on an untouched path names only one of them, which is the exact
+/// shape that killed an assertion a round earlier: the wording moved and the
+/// test that pinned it did not.
 fn un_readied(failure: Failure, wrote: bool, pr: u64) -> Failure {
     if !wrote {
         return failure;
     }
+    let failure = after_rewriting_the_pr(
+        failure,
+        PullRequestWrites {
+            undrafted: true,
+            edited: None,
+        },
+    );
+    // Which pull request, which the shared wording does not carry: `ensure_draft`
+    // knows the number and the caller's frame is about "the" pull request.
     match failure {
         Failure::Stop(mut envelope) => {
             if let Some(envelope) = envelope.as_object_mut() {
-                envelope.insert("world".to_owned(), serde_json::json!("committed"));
                 envelope.insert("un_readied_pr".to_owned(), serde_json::json!(pr));
             }
             Failure::Stop(envelope)
         }
-        Failure::Read(detail) | Failure::Write(detail) => Failure::Write(format!(
-            "{detail} \u{2014} pull request #{pr} was already converted to draft, so this is not a \
-             call that changed nothing"
-        )),
         other => other,
     }
 }
