@@ -777,9 +777,9 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// pinned to a `v4` commit rather than a tag reads as no version at all, and the
 /// option is required in the one literal spelling `true`, so YAML's other trues
 /// fail a workflow that would work. Both were found by mutating this file's
-/// inputs rather than by reading them, which is also how the five correct
+/// inputs rather than by reading them, which is also how the eight correct
 /// workflows it used to refuse were found — those are tabulated there too,
-/// because every one of them came of assuming the one step form in front of the
+/// because every one of them came of assuming the one form in front of the
 /// author was the only legal one.
 #[test]
 fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
@@ -793,17 +793,13 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
          this repository is known to have, so the loop below reads almost nothing"
     );
     for name in &workflows {
-        let workflow = read(&format!(".github/workflows/{name}"));
-        // A `uses:` line, not any line: a version named in a `run:` command or
-        // inside a string is being talked about rather than run.
-        let stale: Vec<&str> = workflow
-            .lines()
-            .filter(|line| {
-                let code = code_of(line);
-                code.contains("uses:")
-                    && ["@v1", "@v2", "@v3", "@v4"]
-                        .iter()
-                        .any(|old| code.contains(&format!("actions/checkout{old}")))
+        let running = what_runs(&read(&format!(".github/workflows/{name}")));
+        // A `uses:` line, and one the workflow runs: a version named in a
+        // command, a step title or the body of a `run: |` is being quoted.
+        let stale: Vec<&String> = running
+            .iter()
+            .filter(|code| {
+                code.contains("uses:") && checkout_major(code).is_some_and(|major| major < 5)
             })
             .collect();
         assert!(
@@ -818,15 +814,19 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     // workflow that is written correctly — which is what widening this loop to
     // the directory did until a review ran that file past it.
     for name in ["ci.yml", "release.yml"] {
-        let workflow = read(&format!(".github/workflows/{name}"));
+        let running = what_runs(&read(&format!(".github/workflows/{name}")));
         assert!(
-            code_of(&workflow).contains("actions/checkout@"),
+            running
+                .iter()
+                .any(|code| code.contains("uses:") && code.contains("actions/checkout@")),
             "{name} has no checkout step, so the version check above read nothing"
         );
     }
 
     assert!(
-        code_of(&read(".github/workflows/ci.yml")).contains("Swatinem/rust-cache@"),
+        what_runs(&read(".github/workflows/ci.yml"))
+            .iter()
+            .any(|code| code.contains("uses:") && code.contains("Swatinem/rust-cache@")),
         "ci.yml has no caching step, so the option check below reads nothing"
     );
     // The option only does anything on the step it is written under. Read as a
@@ -839,32 +839,31 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     // all, since a lane added later can copy a bare `rust-cache` as easily as
     // this one carried it.
     for name in &workflows {
-        let workflow = read(&format!(".github/workflows/{name}"));
-        let lines: Vec<&str> = workflow.lines().collect();
-        for at in 0..lines.len() {
-            if !code_of(lines[at]).contains("Swatinem/rust-cache@") {
+        let running = what_runs(&read(&format!(".github/workflows/{name}")));
+        for at in 0..running.len() {
+            // The same `uses:` rule the two floors above use. Without it a step
+            // titled after the action, or a command echoing its name, is read as
+            // a caching step and the step around it is asked for the option.
+            if !(running[at].contains("uses:") && running[at].contains("Swatinem/rust-cache@")) {
                 continue;
             }
             // From the line the step opens on, which is not always its `uses:`:
             // a step that names itself first puts `uses:` and `with:` at the
             // same depth, and measuring from there ends the block immediately.
-            let opens = step_opening(&lines, at);
-            let depth = lines[opens].len() - lines[opens].trim_start().len();
+            let opens = step_opening(&running, at);
+            let depth = indent_of(&running[opens]);
             // A step ends where the next one starts. Stopping at the first `- `
             // instead would end it at any block sequence inside its own `with:`
             // — `cache-directories:` above the option would fail a workflow that
             // is configured correctly.
-            let under_the_cache: String = lines[opens + 1..]
+            let under_the_cache: String = running[opens + 1..]
                 .iter()
-                .take_while(|line| {
-                    let code = code_of(line);
-                    code.trim().is_empty() || code.len() - code.trim_start().len() > depth
-                })
-                .copied()
+                .take_while(|code| code.trim().is_empty() || indent_of(code) > depth)
+                .cloned()
                 .collect::<Vec<_>>()
                 .join("\n");
             assert!(
-                code_of(&under_the_cache).contains("cache-on-failure: true"),
+                under_the_cache.contains("cache-on-failure: true"),
                 "a red run throws away everything it compiled, so the next push \
                  starts from cold; the caching step at {name}:{} reads: \
                  {under_the_cache:?}",
@@ -880,18 +879,70 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     // measuring it is what should delete this line, not the copying. A `uses:`
     // line, for the reason the version floor reads only those: naming the action
     // in a `run:` or a step title is talking about it.
-    let release = read(".github/workflows/release.yml");
-    let cached: Vec<&str> = release
-        .lines()
-        .filter(|line| {
-            let code = code_of(line);
-            code.contains("uses:") && code.contains("rust-cache")
-        })
+    let cached: Vec<String> = what_runs(&read(".github/workflows/release.yml"))
+        .into_iter()
+        .filter(|code| code.contains("uses:") && code.contains("rust-cache"))
         .collect();
     assert!(
         cached.is_empty(),
         "the release lane gained a cache this guard does not check: {cached:?}"
     );
+}
+
+/// What a workflow runs, line for line: comments stripped, and the body of every
+/// block scalar blanked.
+///
+/// The indices match the file's, so a line number in a message still points at
+/// the line. A `run: |` body is shell or text — a workflow that prints a YAML
+/// recipe, or documents the step it replaced, has `- uses: actions/checkout@v4`
+/// inside a string, and reading that as a step refuses a correct file. `ci.yml`
+/// already writes bodies that shape.
+fn what_runs(workflow: &str) -> Vec<String> {
+    let mut running: Vec<String> = Vec::new();
+    let mut body_under: Option<usize> = None;
+    for line in workflow.lines() {
+        let code = code_of(line);
+        let blank = code.trim().is_empty();
+        if let Some(depth) = body_under {
+            if blank || indent_of(&code) > depth {
+                running.push(String::new());
+                continue;
+            }
+            body_under = None;
+        }
+        // `|`, `>`, and their `-`/`+`/indent-digit variants all open one.
+        let opener = code
+            .trim_end()
+            .trim_end_matches(['-', '+'])
+            .trim_end_matches(|c: char| c.is_ascii_digit());
+        if !blank && (opener.ends_with('|') || opener.ends_with('>')) {
+            body_under = Some(indent_of(&code));
+        }
+        running.push(code);
+    }
+    running
+}
+
+/// How far a line is indented, in spaces.
+fn indent_of(code: &str) -> usize {
+    code.len() - code.trim_start().len()
+}
+
+/// The `actions/checkout` major a line names, when it names one by tag.
+///
+/// Parsed rather than matched against a list of old spellings: `@v1` is a prefix
+/// of `@v10`, so a list would start refusing the first two-digit major — and
+/// surviving to the next deprecation is the whole point of a floor. A commit pin
+/// carries no major and answers `None`, which is the hole `docs/honesty.md`
+/// records.
+fn checkout_major(code: &str) -> Option<u32> {
+    let after = code.find("actions/checkout@v")? + "actions/checkout@v".len();
+    code[after..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>()
+        .parse()
+        .ok()
 }
 
 /// The line a step opens on, walking back from any line inside it.
@@ -902,29 +953,26 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
 /// same depth. Reading a step's extent from the `uses:` line ends it at the very
 /// next line, and the guard above then reports a cache being discarded by a
 /// workflow that is configured correctly.
-fn step_opening(lines: &[&str], at: usize) -> usize {
+fn step_opening(running: &[String], at: usize) -> usize {
     (0..=at)
         .rev()
         .find(|&n| {
-            let code = code_of(lines[n]);
-            let opening = code.trim_start();
+            let opening = running[n].trim_start();
             opening == "-" || opening.starts_with("- ")
         })
         .unwrap_or(at)
 }
 
-/// Every workflow the directory holds, sorted, so that "both workflows" keeps
-/// meaning all of them rather than the two that existed when it was written.
+/// Every workflow file the directory holds, sorted, so that "both workflows"
+/// keeps meaning all of them rather than the two that existed when it was
+/// written. A directory named `x.yml` is listed by name and is not a workflow.
 fn every_workflow() -> Vec<String> {
     let dir = root().join(".github/workflows");
     let mut names: Vec<String> = std::fs::read_dir(&dir)
         .unwrap_or_else(|why| panic!("{} holds the workflows: {why}", dir.display()))
-        .map(|entry| {
-            entry
-                .unwrap_or_else(|why| panic!("the directory listed it: {why}"))
-                .file_name()
-        })
-        .map(|name| name.to_string_lossy().into_owned())
+        .map(|entry| entry.unwrap_or_else(|why| panic!("the directory listed it: {why}")))
+        .filter(|entry| entry.path().is_file())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .filter(|name| name.ends_with(".yml") || name.ends_with(".yaml"))
         .collect();
     names.sort();

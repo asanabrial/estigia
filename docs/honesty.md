@@ -123,7 +123,7 @@ suite. Everything else here is prose held by review.
   would work. The first is a hole and the second is a false alarm; the second is the safer way round,
   and neither is guessed at, which is why they are here rather than inferred from the code.
 
-  **This guard has failed correct workflows five times, each for the same reason.** Every one was
+  **This guard has failed correct workflows eight times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -134,11 +134,22 @@ suite. Everything else here is prose held by review.
   | `actions/checkout@v4` named in a `run:` line | any line naming a version runs it |
   | a caching step written `- name:` then `uses:` | a step opens on its `uses:` line |
   | `rust-cache` named in a `run:` line or a step title | any mention of the action is a cache |
+  | a `run: \|` body quoting a `- uses:` line | a block scalar's body is YAML |
+  | `actions/checkout@v10` | `@v1` names one major |
+  | a directory named `shared.yml` | a name ending `.yml` is a file |
 
-  The fourth is the sharpest: `- name:` then `uses:` is the form this repository writes every step it
-  names, including the `attest-build-provenance` step this same entry points at two paragraphs above.
-  Adding a name to the caching step — an ordinary edit — reported that a red run's cache was being
-  discarded when it was not. All five are red-to-green measured, not reasoned about.
+  The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
+  step it names, including the `attest-build-provenance` step this same entry points at two
+  paragraphs above. Adding a name to the caching step — an ordinary edit — reported that a red run's
+  cache was being discarded when it was not.
+
+  **The fifth is the sharpest to have written**, because this table already carried it, under a
+  sentence claiming every row was red-to-green measured. It was not: the fix that closed it for one
+  assertion was written up as covering the loop twenty lines above, and the loop was never run past
+  the workflow that proves it. A correct file passed one half of the function and failed the other
+  half of it. What the sentence was doing is what the whole entry is about — asserting the edge of
+  what was measured — so the sentence is gone and the rows above stand on the runs in the commit
+  that closed each one.
 
   **And widening the loop was done to one half of the guard.** The version floor was taken from two
   named files to the whole directory so a lane added later could not slip a `@v4` past it; the cache
