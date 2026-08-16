@@ -62,7 +62,15 @@ that will disagree.
 3. **Prefer removing a copy to adding a check.** When two places hold one rule, the fix is usually
    one place, not two guards.
 4. **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Nothing here needs an interpreter. `cargo doc` is on this list because it was not, and
+   --no-deps`. One test **requires** `node` on the path:
+   `the_plugin_hands_the_gate_the_directory_the_call_runs_in`, which drives the OpenCode plugin this
+   crate generates, because that plugin is JavaScript and asserting on its source text is what let a
+   gate defect stand. It does not skip when `node` is missing; it fails and says so, since a skip
+   spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
+   interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
+   spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
+   that one test requires one. `doctor` asks for none.
+   `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here
    nor CI ever asked. A crate that keeps its reasoning in doc comments and cannot build them is one
    nobody reads.

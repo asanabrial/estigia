@@ -32,6 +32,16 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      # One test executes the OpenCode plugin this crate generates, which is
+      # JavaScript. Every hosted runner ships Node today, so leaving this out
+      # would pass — until the day an image drops it, or the job moves to a
+      # container that never had it. A step that needs a tool the job never sets
+      # up is the failure `no_workflow_needs_only_interpreters_it_sets_up`
+      # exists to refuse, and this is the second tool it has had to name.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - uses: Swatinem/rust-cache@v2
 
       - name: formatting

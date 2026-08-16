@@ -48,6 +48,50 @@ the workflow, it holds the tools.
   three, now crossed by a test rather than by a comment saying nothing catches it; and the guard that
   proves the ordinary publication adjudicates its claim is behavioural, because two attempts to hold
   it by counting a function body were both satisfied by a call the mutated route never made.
+- The gate now adjudicates an OpenCode call against the directory it will actually run in. That
+  plugin launches the gate from its project root, because OpenCode's plugin context carries a project
+  and no session identity to mint a run id from — so with two runs each holding an isolated worktree
+  inside one base checkout, the gate was handed the base. Both runs cover it at equal depth, and the
+  call was refused *"2 runs on this machine hold this checkout"*: correct about the directory it was
+  given, and the directory was the wrong one. Measured on 2026-08-16 with two live holders of this
+  repository, a `git commit` and an `estigia config set` explicitly targeting one worktree were both
+  refused, and the refusal advised releasing one of the runs — which is the concurrent isolation both
+  were using. For a Bash call the arguments the plugin already forwards carry `workdir`, the
+  execution directory, and nothing read it; `narrowed_by_the_call` reads it now, for Bash and no
+  other tool, resolving a relative one against the directory the process was launched in.
+
+  **It may only narrow, and that distinction is the change.** `cwd` is written by an adapter's hook,
+  which knows what it is gating, and is taken as given. `workdir` is a tool *argument*, so whatever
+  composed the call wrote it — a model, on every runtime here. Read as freely as `cwd` it stops being
+  evidence and becomes a lever: measured under review, with two live pointers and a `git push` under
+  a claim, a `workdir` of `..`, of the parent checkout, or of `C:\Windows` resolved, was covered by no
+  run, and was answered `outside` with exit **zero**. The command still ran where it was going to
+  run; the gate simply stopped adjudicating it, and the same spelling reached `write` and `edit` too.
+  A payload that can move the decision is a payload that can leave the gate, which is worse than the
+  false ambiguity the key was read to fix — the widened gate that looks exactly like working
+  correctly. So the resolved value is **placed** — its spelling collapsed the way the platform
+  collapses it, then resolved as far as the filesystem exists — and one landing outside the launch
+  directory is discarded in favour of it, which is where the decision sat before this key was read at
+  all. Both blind reviews of the unclamped version rejected it on precisely that.
+
+  Placing it is the clamp rather than a refinement of it, and the second round of review is why. A
+  first attempt compared with `covers`, which is written for working directories *that exist* and
+  falls back to the path as written when resolution fails; `..` was then never cancelled, so
+  `wt-a/../../nope` still started with the launch directory and was attributed to the holder of the
+  component it climbed **through** — measured as `allow`, exit zero, under a claim the call had
+  nothing to do with. Strictly worse than the escape it replaced, which at least reached `outside`.
+  `placed` already existed for exactly this, and its own doc names the failure; what it needed was to
+  be the thing the gate asked.
+
+  `holders_of` is untouched: its closest-worktree selection was always right when given the real
+  directory, and the equal-depth ambiguity at a shared base is genuine and still refused. The alias
+  is interpreted in one language rather than two — the plugin forwards and translates nothing — and
+  the test that proves the plugin forwards it **executes** the plugin under `node` rather than
+  reading its source. Both workflows install `node` now rather than trusting the runner image to
+  carry it, on the reasoning the interpreter guard already stated for Python: a step needing a tool
+  the job never sets up fails on a tag, which is the worst moment there is. `docs/honesty.md` records
+  what per-call evidence exists, for which tools it does not, and the two things about it that are
+  still uncrossed — the argument's spelling, and the base a relative one is resolved against.
 - A claim governs a repository, not the machine. The gate classified writes by the checkout the hook
   was invoked in and never by the **path being written**, so a scratch note or an agent's own memory
   store, written from inside a claimed repository, was a repository write — and once the issue closed

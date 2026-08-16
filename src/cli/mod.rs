@@ -4281,16 +4281,7 @@ const GUARD_CAVEATS: &[&str] = &[
 /// Everything the gate needs, or nothing if the harness is not installed.
 fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
     let repo_dir = if cwd.trim().is_empty() {
-        std::env::current_dir().map_err(|error| {
-            Refusal::not_started(
-                "working-directory-unknown",
-                format!("{error}"),
-                Resolution::no_command(
-                    crate::outcome::NoCommandReason::WorldAction,
-                    "a working directory the process can read",
-                ),
-            )
-        })?
+        launch_directory()?
     } else {
         std::path::PathBuf::from(cwd)
     };
@@ -4545,12 +4536,128 @@ fn payload_agent(parsed: &serde_json::Value) -> Option<&str> {
         .filter(|agent| !agent.trim().is_empty())
 }
 
+/// The directory this process was launched in.
+///
+/// Two callers, and the difference between them is the whole of the trust
+/// model below: it is the fallback when nothing names a checkout, and it is the
+/// ceiling a directory named by a *tool call* may not escape.
+fn launch_directory() -> Result<std::path::PathBuf, Refusal> {
+    std::env::current_dir().map_err(|error| {
+        Refusal::not_started(
+            "working-directory-unknown",
+            format!("{error}"),
+            Resolution::no_command(
+                crate::outcome::NoCommandReason::WorldAction,
+                "a working directory the process can read",
+            ),
+        )
+    })
+}
+
+/// The checkout the **host** named, or nothing.
+///
+/// The adapter's own hook writes this: it lifts `cwd` out of a payload that
+/// nests it, and it is authoritative, because the adapter knows which checkout
+/// it is gating and the model does not compose it. It is taken as given, and a
+/// path outside this process's own directory is the ordinary case rather than a
+/// suspicious one — the hook may run from anywhere.
+///
+/// Deliberately **not** where OpenCode's `workdir` is read. See
+/// [`narrowed_by_the_call`] for why that one cannot be treated as this one is.
 fn payload_cwd(parsed: &serde_json::Value) -> &str {
     parsed
         .get("cwd")
         .or_else(|| parsed.get("tool_input").and_then(|inner| inner.get("cwd")))
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default()
+}
+
+/// The directory the **call itself** named, clamped to somewhere the gate was
+/// already going to look.
+///
+/// OpenCode's plugin launches this process from the project directory, because
+/// its plugin context carries a project and no session identity to mint a run id
+/// from. With two runs each holding an isolated worktree inside one base
+/// checkout, that directory *is* the base, and both cover it at equal depth.
+/// Measured on 2026-08-16 with two live holders of this repository: a
+/// `git commit` explicitly targeting one worktree came back *"2 runs on this
+/// machine hold this checkout"* and advised releasing one of them — which is the
+/// concurrent isolation both runs were using. `holders_of` was right about the
+/// directory it was given; the directory was the wrong one. The Bash call's own
+/// `workdir` argument is the only evidence it carries about where the command
+/// will actually run.
+///
+/// **It may only narrow, and that is the whole difference from `cwd`.** This is
+/// a tool *argument*: whatever composed the call wrote it, which on every
+/// runtime here means a model wrote it. Read as freely as a host's `cwd`, it
+/// stops being evidence and becomes a lever — measured, before the clamp
+/// existed, with two live pointers and a `git commit` under a claim:
+/// `workdir` of `..`, of the parent checkout, of `C:\Windows`, all resolved,
+/// were covered by no run, and were answered `outside` with exit **zero**. The
+/// command still ran where it was going to run; the gate simply stopped
+/// adjudicating it. That is a payload steering a write out of the claim, and it
+/// is strictly worse than the false ambiguity being fixed — a widened gate that
+/// looks exactly like working correctly.
+///
+/// So the answer is `None` unless the resolved directory lies **inside** the one
+/// this process was launched in, and `None` puts the decision back where it was
+/// before this key was read at all.
+///
+/// A relative value is resolved against that same launch directory first. That
+/// is *close to* the host's own resolution and not provably identical to it:
+/// OpenCode resolves `workdir` against its tool context's `directory`, while the
+/// plugin launches this process in `worktree ?? directory`. Those are two fields
+/// of one record and they coincide in the ordinary case, so the narrowing is
+/// right whenever it matters and the clamp above holds either way — both
+/// candidates lie inside the project. `docs/honesty.md` carries the case where
+/// they diverge, which is a wrong holder rather than an escaped one.
+///
+/// Bash only, because Bash is the only tool measured to carry the key and the
+/// only one the issue this closes scopes. Every other gated tool sends no
+/// working directory, so honouring the key on them would be inventing evidence
+/// out of an argument nothing documents — and it is exactly how the escape above
+/// reached `write` and `edit` as well.
+fn narrowed_by_the_call(
+    parsed: &serde_json::Value,
+    tool: &str,
+    launched: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    if !tool.eq_ignore_ascii_case("bash") {
+        return None;
+    }
+    let named = parsed
+        .get("workdir")
+        .or_else(|| {
+            parsed
+                .get("tool_input")
+                .and_then(|inner| inner.get("workdir"))
+        })
+        .and_then(serde_json::Value::as_str)
+        .filter(|named| !named.trim().is_empty())?;
+    let named = std::path::PathBuf::from(named);
+    let resolved = if named.is_absolute() {
+        named
+    } else {
+        launched.join(named)
+    };
+    // Placed before compared, and the difference is the whole clamp.
+    //
+    // `covers` was written for **working directories, which exist**, and resolves
+    // an unresolvable path literally — so `wt-a/../../nope` still *starts with*
+    // the launch directory, `..` never cancelled, and the comparison answers
+    // *inside* for a path that is not. Measured: that spelling was not merely
+    // let past, it was attributed to whichever worktree the lexical prefix
+    // happened to name and **allowed**, so a run holding one worktree could
+    // borrow the other's claim by writing one `..`. Strictly worse than the
+    // escape it replaced, which at least reached `outside`.
+    //
+    // `placed` is the primitive for a path a caller wrote rather than one the
+    // filesystem already has: it collapses the spelling the way this platform
+    // collapses it, then resolves as much as exists. Its own doc names this
+    // failure. `None` from it means the path cannot be placed at all, and its
+    // contract says read that as inside — which here is the launch directory,
+    // the answer the caller falls back to.
+    crate::paths::placed(&resolved).filter(|placed| crate::paths::covers(launched, placed))
 }
 
 fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Result<(), Refusal> {
@@ -4568,12 +4675,28 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
     // discarded it entirely, so the same call measured against two different
     // repositories depending on which one it came through.
     //
-    // **Not** for OpenCode, whatever the note added with this said. That plugin
+    // This was said to be **not** for OpenCode, on the grounds that its plugin
     // sends `output?.args` — the tool's own arguments and nothing else — and
-    // sets the working directory on the process instead, so the fallback below
-    // was already right for it. This closes the door for a caller that names a
-    // checkout in the payload, and the one caller in this tree does not.
-    let context = gate_context(payload_cwd(&parsed))?;
+    // sets the working directory on the process instead, so the fallback was
+    // already right for it. The first half is true and the conclusion was not:
+    // for a Bash call those arguments *include* `workdir`, the directory the
+    // command will run in, while the process directory is the project root. The
+    // two differ exactly when it matters — concurrent runs in isolated
+    // worktrees under one base — and that is the case the fallback got wrong.
+    //
+    // Two keys, two levels of trust, and the order says which is which. What the
+    // host named is taken as given. Only when it named nothing does the call's
+    // own `workdir` get a say, and then only to point somewhere inside the
+    // directory this process was already standing in — never to move the
+    // decision elsewhere. `narrowed_by_the_call` carries the measurement.
+    let stated = payload_cwd(&parsed);
+    let context = if stated.trim().is_empty() {
+        let launched = launch_directory()?;
+        let looking_at = narrowed_by_the_call(&parsed, tool, &launched).unwrap_or(launched);
+        gate_context(&looking_at.to_string_lossy())?
+    } else {
+        gate_context(stated)?
+    };
     // Before anything else, in the order the hook asks it: a sub-agent reaching
     // past the tool list its own definition declares. It is the cheapest
     // question and the least conditional — no claim, no state, no window.

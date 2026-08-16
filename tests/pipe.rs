@@ -10123,3 +10123,279 @@ fn a_publication_refuses_at_entry_when_the_claim_has_moved() {
         }
     }
 }
+
+/// A per-call working directory decides which holder answers for the call.
+///
+/// OpenCode's plugin launches the gate from the **project** directory, because
+/// its plugin context carries a project and no session identity. When two runs
+/// each hold an isolated worktree inside one base checkout, that directory is
+/// the base — which both runs cover at equal depth, so `holders_of` returned
+/// both and the call was refused `several-runs-hold-this-checkout`.
+///
+/// The refusal was correct about the directory it was given. What the call
+/// actually carries is `args.workdir`, the directory the command will run in,
+/// and nothing read it. Measured on 2026-08-16 with two live holders of this
+/// repository: a `git commit` explicitly targeting one worktree was refused for
+/// ambiguity between two runs that were not ambiguous at all, and the refusal
+/// advised releasing one of them — which is the isolation both were using.
+///
+/// Driven as a process against the real binary, because the defect is in what
+/// reaches `gate_context` from the outside. A unit test on `payload_cwd` cannot
+/// see the base-checkout fallback that makes the wrong answer look right.
+#[test]
+fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    let (_, stderr, ok) = run(home.path(), &["setup", "claude-code"], "");
+    assert!(ok, "setup failed: {stderr}");
+
+    // One base checkout, two isolated worktrees inside it. Inside, because that
+    // is the arrangement `holders_of` documents as the one that goes ambiguous:
+    // work in A's worktree is covered exactly by A and from the base by B.
+    let base = tempfile::tempdir().expect("a checkout");
+    let worktree_a = base.path().join("wt-a");
+    let worktree_b = base.path().join("wt-b");
+    std::fs::create_dir_all(&worktree_a).expect("worktree a");
+    std::fs::create_dir_all(&worktree_b).expect("worktree b");
+
+    let runs = home.path().join(".estigia").join("runs");
+    std::fs::create_dir_all(&runs).expect("the runs directory");
+    for (run_id, issue, worktree) in [
+        ("claude-aaaa1111", 12u64, &worktree_a),
+        ("opencode-bbbb2222", 34u64, &worktree_b),
+    ] {
+        let pointer = serde_json::json!({
+            "run_id": run_id,
+            "issue": issue,
+            "state": "in-progress",
+            "repo_dir": base.path(),
+            "worktree": worktree,
+            "verified_at": serde_json::Value::Null,
+        });
+        std::fs::write(
+            runs.join(format!("{run_id}.json")),
+            serde_json::to_string(&pointer).expect("a pointer serialises"),
+        )
+        .expect("the pointer writes");
+    }
+
+    let ledger = home.path().join(".estigia").join("decisions.jsonl");
+    // Both commands the report reproduced it with. The second matters on its
+    // own: it is Estigia's own binary being refused, which is what showed the
+    // false ambiguity lands before any delivery or Git-head validation.
+    let ask_running = |command: &str, workdir: Option<&str>| {
+        let _ = std::fs::remove_file(&ledger);
+        let payload = match workdir {
+            Some(named) => serde_json::json!({ "command": command, "workdir": named }),
+            None => serde_json::json!({ "command": command }),
+        };
+        let payload = serde_json::to_string(&payload).expect("a payload serialises");
+        let (out, error, ok) = run_in(
+            home.path(),
+            base.path(),
+            &["gate", "bash", "--input", &payload],
+            "",
+        );
+        let wrote = std::fs::read_to_string(&ledger).unwrap_or_default();
+        (format!("{out}{error}"), ok, wrote)
+    };
+
+    for command in [
+        "git commit -m fixture",
+        "estigia config set Planning direct",
+    ] {
+        let ask = |workdir: Option<&str>| ask_running(command, workdir);
+
+        // The floor. A call whose working directory really is the shared base is
+        // genuinely ambiguous, and that refusal is not what this change touches:
+        // if it stops firing, the rows below prove nothing. It is also the
+        // project-context fallback, which a call carrying no per-call working
+        // directory has to keep.
+        let (said, ok, _) = ask(None);
+        assert!(
+            !ok && said.contains("several-runs-hold-this-checkout"),
+            "the genuine ambiguity at the base checkout stopped being refused \
+             for `{command}`, so nothing below is a measurement: {said}"
+        );
+
+        // Each worktree in turn, by absolute path.
+        for (named, mine, theirs) in [
+            (&worktree_a, "claude-aaaa1111", "opencode-bbbb2222"),
+            (&worktree_b, "opencode-bbbb2222", "claude-aaaa1111"),
+        ] {
+            let (said, _, wrote) = ask(Some(&named.display().to_string()));
+            assert!(
+                !said.contains("several-runs-hold-this-checkout"),
+                "`{command}` naming {} was refused as ambiguous between two runs \
+                 that hold different worktrees: {said}",
+                named.display()
+            );
+            // Not merely "some holder answered" — the right one. The ledger is
+            // where the attribution is durable, and an answer that named the
+            // other run would be the same defect wearing the opposite result.
+            assert!(
+                wrote.contains(mine),
+                "the decision was not attributed to the run that owns {}: {wrote}",
+                named.display()
+            );
+            assert!(
+                !wrote.contains(theirs),
+                "the decision named the run that does not own {}: {wrote}",
+                named.display()
+            );
+        }
+
+        // Relative, resolved the way OpenCode resolves it: against the directory
+        // the call runs in, which is the one the plugin launched this process
+        // in.
+        let (said, _, wrote) = ask(Some("wt-a"));
+        assert!(
+            !said.contains("several-runs-hold-this-checkout"),
+            "a relative working directory was not resolved for `{command}`, so \
+             it selected nobody: {said}"
+        );
+        assert!(
+            wrote.contains("claude-aaaa1111") && !wrote.contains("opencode-bbbb2222"),
+            "a relative working directory reached the wrong holder: {wrote}"
+        );
+
+        // A directory that is not there. It resolves under the launch directory
+        // like any other relative value, so the ordinary ambiguity refusal is
+        // what it gets — the answer the same call gets carrying no key at all.
+        //
+        // The clamp is what holds this now, not the resolution: an unresolvable
+        // value is placed before it is compared, and one that lands outside is
+        // dropped in favour of the launch directory. Both belts are kept, and
+        // the resolution is measured by the unit test rather than by this row.
+        let (said, ok, _) = ask(Some("no-such-worktree"));
+        assert!(
+            !ok,
+            "a working directory that names nothing was allowed through: {said}"
+        );
+        assert!(
+            said.contains("several-runs-hold-this-checkout"),
+            "a working directory that names nothing escaped the checkout it was \
+             resolved against, so no run held the call: {said}"
+        );
+
+        // The rows that decide whether reading this key at all is safe.
+        //
+        // `cwd` is set by the host. `workdir` is a **tool argument**, which on
+        // every runtime here means it is written by the model, and a value that
+        // names a real directory outside the checkout is not a value that names
+        // nothing: it resolves, it is covered by no run, and the gate answers
+        // `outside` and exits zero. The command still runs wherever it was
+        // going to run. That is a payload steering a write out of the gate,
+        // which is strictly worse than the false ambiguity being fixed here and
+        // is the failure this crate exists to refuse — a widened gate that looks
+        // exactly like working correctly.
+        //
+        // Every spelling below reaches the same place by a different road, and
+        // each one was `several-runs-hold-this-checkout` before this alias was
+        // read at all. Nothing may be allowed through.
+        let parent = base
+            .path()
+            .parent()
+            .expect("the fixture has somewhere above it")
+            .display()
+            .to_string();
+        let climbed = worktree_a.join("..").join("..").display().to_string();
+        // And the road that only opens when the path cannot be **opened**.
+        // Comparison resolves both sides and falls back to the spelling when
+        // resolution fails, so `..` past an existing component was never
+        // cancelled: `wt-a/../../nope` still started with the launch directory,
+        // was called inside, and was attributed to the holder of the component
+        // it climbed *through*. Measured: not merely let past — allowed, exit
+        // zero, under a claim the call had nothing to do with. A run holding one
+        // worktree could borrow the other's authority by writing one `..`.
+        let through_a = worktree_a.join("..").join("..").join("nope");
+        let through_a = through_a.display().to_string();
+        let deeper = worktree_a
+            .join("..")
+            .join("..")
+            .join("..")
+            .join("nope")
+            .display()
+            .to_string();
+        for escape in [
+            "..",
+            parent.as_str(),
+            climbed.as_str(),
+            if cfg!(windows) { "C:\\Windows" } else { "/etc" },
+            "wt-a/../../nope",
+            through_a.as_str(),
+            deeper.as_str(),
+        ] {
+            let (said, ok, _) = ask(Some(escape));
+            assert!(
+                !ok,
+                "`{command}` steered the gate out of the claim with \
+                 `workdir` = {escape:?}, and the write went through unjudged: {said}"
+            );
+            assert!(
+                said.contains("several-runs-hold-this-checkout"),
+                "`{command}` with `workdir` = {escape:?} was answered something \
+                 other than the refusal the same call gets without the key, so \
+                 the payload moved the decision: {said}"
+            );
+        }
+    }
+
+    // The same road, through a tool that carries no working directory of its
+    // own. The key was once read for every gated tool rather than only for the
+    // one whose host sends it, so a payload that merely included it steered any
+    // of them — measured, on `write` and `edit`, before the read was narrowed to
+    // Bash. Two things hold it shut now and this row is the floor under both:
+    // the tool restriction, and the clamp behind it. Kept out of the loop above
+    // because the argument shape differs.
+    let ledger = home.path().join(".estigia").join("decisions.jsonl");
+    let _ = std::fs::remove_file(&ledger);
+    let payload = serde_json::json!({
+        "file_path": worktree_a.join("f.txt"),
+        "workdir": "..",
+    });
+    let payload = serde_json::to_string(&payload).expect("a payload serialises");
+    let (out, error, ok) = run_in(
+        home.path(),
+        base.path(),
+        &["gate", "write", "--input", &payload],
+        "",
+    );
+    let said = format!("{out}{error}");
+    assert!(
+        !ok && said.contains("several-runs-hold-this-checkout"),
+        "a write naming a file inside the claim was taken out of the gate by a \
+         working directory in its payload: {said}"
+    );
+
+    // And the other door of the same branch, which nothing crossed before this
+    // change restructured the line it lives on. A host's `cwd` is authoritative
+    // and has to keep reaching the decision: discarding it entirely — always
+    // adjudicating the process directory — left the whole suite green, while the
+    // comment above that line cites a measured defect where the same call was
+    // judged against two different repositories depending on which door it came
+    // through. Sent as the hook nests it, because that nesting is why the door
+    // exists at all.
+    let _ = std::fs::remove_file(&ledger);
+    let payload = serde_json::json!({
+        "tool_input": { "cwd": worktree_b, "file_path": worktree_b.join("f.txt") },
+    });
+    let payload = serde_json::to_string(&payload).expect("a payload serialises");
+    let (out, error, _) = run_in(
+        home.path(),
+        base.path(),
+        &["gate", "write", "--input", &payload],
+        "",
+    );
+    let said = format!("{out}{error}");
+    let wrote = std::fs::read_to_string(&ledger).unwrap_or_default();
+    assert!(
+        !said.contains("several-runs-hold-this-checkout"),
+        "a checkout the host named was discarded, so the call fell back to the \
+         shared base and was refused as ambiguous: {said}"
+    );
+    assert!(
+        wrote.contains("opencode-bbbb2222") && !wrote.contains("claude-aaaa1111"),
+        "the decision was not attributed to the run that owns the checkout the \
+         host named: {wrote}"
+    );
+}

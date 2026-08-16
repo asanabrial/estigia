@@ -5036,3 +5036,135 @@ fn a_config_home_comes_from_the_override_or_the_variable_and_never_from_both() {
         }
     });
 }
+
+/// The plugin hands the gate the per-call working directory, and it is not the
+/// project root.
+///
+/// Every other test of this file reads the plugin as **text**, and text is what
+/// let the defect stand: the source plainly says `const cwd = worktree ??
+/// directory ?? process.cwd()` and plainly passes `output?.args`, and both are
+/// correct sentences about a plugin that was handing the gate the wrong
+/// directory. What no substring could show is the pair — that for a Bash call
+/// those arguments carry a `workdir` naming somewhere else entirely, and that
+/// the two differ exactly when two runs hold isolated worktrees under one base.
+///
+/// So this one runs it. A stand-in `$` records what the hook interpolates and
+/// what directory it would launch in, the hook is driven with a project root
+/// that is deliberately **not** the call's `workdir`, and both are read back.
+///
+/// This is the only test in the crate that needs an interpreter, and it needs
+/// one because the artefact under test is JavaScript. It does not skip when
+/// `node` is absent — a skip spelled as a pass is a defect this repository has
+/// already filed against itself — it fails and says what is missing.
+#[test]
+fn the_plugin_hands_the_gate_the_directory_the_call_runs_in() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let module = root.path().join("estigia-workflow-authority.mjs");
+    std::fs::write(
+        &module,
+        crate::setup::plugin::source(std::path::Path::new("/opt/estigia")),
+    )
+    .expect("the plugin writes");
+
+    // Two directories that are not each other. The project root is what the
+    // plugin's own context offers; the worktree is what the call names.
+    let project = "/tmp/base-checkout";
+    let worktree = "/tmp/base-checkout/wt-a";
+
+    let driver = root.path().join("drive.mjs");
+    std::fs::write(
+        &driver,
+        format!(
+            r#"import {{ EstigiaWorkflowAuthority }} from "./estigia-workflow-authority.mjs";
+
+// A stand-in for Bun's shell. It records rather than runs: the interpolated
+// values in order, and the directory `.cwd()` was given.
+const seen = [];
+const $ = (_strings, ...values) => {{
+  const call = {{ values: values.map(String), cwd: null }};
+  const chain = {{
+    cwd(directory) {{ call.cwd = String(directory); return chain; }},
+    quiet() {{ return chain; }},
+    nothrow() {{ seen.push(call); return Promise.resolve({{ exitCode: 0 }}); }},
+  }};
+  return chain;
+}};
+
+const hooks = await EstigiaWorkflowAuthority({{
+  $,
+  directory: {project:?},
+  worktree: undefined,
+}});
+await hooks["tool.execute.before"](
+  {{ tool: "bash" }},
+  {{ args: {{ command: "git commit -m fixture", workdir: {worktree:?} }} }},
+);
+console.log(JSON.stringify(seen));
+"#
+        ),
+    )
+    .expect("the driver writes");
+
+    let ran = std::process::Command::new("node")
+        .arg(&driver)
+        .current_dir(root.path())
+        .output();
+    let ran = match ran {
+        Ok(ran) => ran,
+        Err(error) => panic!(
+            "this test drives the generated plugin, which is JavaScript, and \
+             `node` could not be run ({error}). Install Node and re-run; it is \
+             not skipped, because a plugin nothing executes is a gate nothing \
+             measures."
+        ),
+    };
+    assert!(
+        ran.status.success(),
+        "the plugin would not load: {}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+
+    let calls: serde_json::Value =
+        serde_json::from_slice(&ran.stdout).expect("the driver prints JSON");
+    let calls = calls.as_array().expect("a list of calls");
+    assert_eq!(
+        calls.len(),
+        1,
+        "the hook asked the gate {} times",
+        calls.len()
+    );
+    let call = &calls[0];
+
+    // The payload, which is where the key travels. `narrowed_by_the_call` reads
+    // `workdir` out of exactly this — `payload_cwd` deliberately does not — so a
+    // plugin that filtered the arguments down to the ones it recognised would
+    // break the fix without touching it.
+    let values: Vec<&str> = call["values"]
+        .as_array()
+        .expect("the interpolated values")
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .collect();
+    let payload = values
+        .iter()
+        .find(|value| value.starts_with('{'))
+        .unwrap_or_else(|| panic!("no payload was interpolated: {values:?}"));
+    let payload: serde_json::Value = serde_json::from_str(payload).expect("the payload is JSON");
+    assert_eq!(
+        payload["workdir"], worktree,
+        "the plugin dropped the working directory the call named: {payload}"
+    );
+
+    // And the directory it would have launched in, which is the project root —
+    // the one the gate used to be told to adjudicate. Asserted rather than
+    // ignored: it is what makes the payload the *only* evidence of where the
+    // command runs, and therefore why reading it is not optional.
+    assert_eq!(
+        call["cwd"], project,
+        "the gate was launched somewhere other than the project root: {call}"
+    );
+    assert_ne!(
+        call["cwd"], payload["workdir"],
+        "the fixture stopped distinguishing the two directories, so it proves nothing"
+    );
+}

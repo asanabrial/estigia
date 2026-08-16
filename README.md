@@ -379,8 +379,14 @@ using our own convention on ourselves is the cheapest way to find out when it is
 shipped inside the payload because `bindings/github.md` routed every reversible operation through
 it — a payload without it was a binding whose first command did not exist. The binding now names
 Estigia's own tools, the operations are answered in this process, and the script is deleted: no
-`.py` file in the tree, no interpreter on any path, nothing in CI that installs one. What the
+`.py` file in the tree, no Python on any path, nothing in CI that installs one. What the
 crossings against it are worth now is in the honesty contract above, under its own heading.
+
+*No interpreter at all* is what this sentence used to say, and it stopped being true when one test
+began **executing** the OpenCode plugin this crate generates rather than reading its source. That
+plugin is JavaScript; a gate written in a second language and never run is a copy of a rule nothing
+crosses. So `node` is on the verification list in [`AGENTS.md`](AGENTS.md), both workflows install it
+rather than trusting the runner image to, and `docs/honesty.md` records what that test measures.
 
 One crate. Five on day one would split boundaries before any of them had earned the split; a
 boundary gets split out when it has earned the seat.

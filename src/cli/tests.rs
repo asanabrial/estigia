@@ -4422,3 +4422,230 @@ fn interactive_dry_run_and_real_run_share_one_complete_unique_manifest() {
         real_receipt.summary
     );
 }
+
+/// A directory the call named may narrow the decision, and may not move it.
+///
+/// `tests/pipe.rs` drives the whole path against the real binary and proves both
+/// halves end to end. This is the same rule stated where it is written, on the
+/// inputs that are awkward to reach through a process: the tool the key is
+/// honoured for, the spellings that climb out, and the wrapped payload.
+///
+/// The distinction it rests on is not stylistic. `cwd` is written by the
+/// adapter's hook, which knows what it is gating. `workdir` is a tool
+/// **argument**, so whatever composed the call wrote it — a model, in every
+/// runtime here. Measured before the clamp existed: `..`, the parent checkout
+/// and `C:\Windows` all resolved, were covered by no run, and took the write out
+/// of the gate with exit zero while the command ran anyway.
+#[test]
+fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let launched = root.path();
+    let inside = launched.join("wt-a");
+    std::fs::create_dir_all(&inside).expect("a directory inside");
+
+    let narrowed = |payload: serde_json::Value, tool: &str| {
+        super::narrowed_by_the_call(&payload, tool, launched)
+    };
+    // Every expectation is spelled the way the answer is spelled, because the
+    // answer is a **placed** path and a directory has more than one name.
+    //
+    // Comparing against the raw fixture path failed on **both** CI platforms
+    // that are not Linux, by two different mechanisms, and that pair is the
+    // reason this is a normalisation rather than a spelling:
+    //
+    // - macOS: the temporary directory is `/var/…`, and `/var` is a symlink to
+    //   `/private/var`. Answer `/private/var/…/wt-a`, expectation `/var/…/wt-a`.
+    // - Windows: the runner's temporary directory sits under `C:\Users\RUNNER~1`,
+    //   the **8.3 short name**. Answer `…\runneradmin\…`, expectation `…\RUNNER~1\…`.
+    //   Nothing to do with links. What decides it is how `TEMP` is *spelled*,
+    //   which is not the same question as whether a short name exists: this
+    //   developer's profile has one (`dir /x C:\Users` → `ASANAB~1  asanabrial`)
+    //   and the assertions passed here anyway, because the local variable carries
+    //   the long spelling and the runner's carries the short one.
+    //
+    // Canonicalising the fixture instead only moves the break: on Windows that
+    // returns the `\\?\` verbatim form, which `placed` strips. No one spelling is
+    // right everywhere, so the expectation goes through the same normalisation as
+    // the answer and the assertion compares places rather than names.
+    //
+    // What that costs, narrowly: a `placed` that normalises wrongly is caught
+    // here only when the wrongness moves the answer — because the clamp compares
+    // `placed(resolved)` against the raw `launched`, and `wt-a/../nope` differs
+    // from its expectation in shape rather than in spelling. What survives
+    // unseen is a normalisation that is wrong, applied identically to both sides,
+    // and still landing under `launched`. The instance that matters is a leaked
+    // verbatim prefix, owned by
+    // `a_placed_path_carries_no_verbatim_prefix` in `src/paths.rs`. Not the
+    // *only* one constructible: appending or popping a component survives these
+    // rows too, and both are caught elsewhere in the suite.
+    //
+    // **Not** every part of `placed` is owned next door: gutting its `..` collapse
+    // leaves all of `paths`' own tests green, and what catches it is
+    // `a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled`, in
+    // `src/harness/tests.rs`. Spelled on one line because a name split across two
+    // is a name nobody can grep, which this change has already had to fix once.
+    //
+    // Found in CI after two contexts had accepted the change, which is the
+    // ordering this repository has filed against itself: the first
+    // cross-platform signal arrives once the reviewing is over, so a one-line
+    // platform defect spends every verdict the change had earned.
+    let placed = |path: &std::path::Path| {
+        crate::paths::placed(path).expect("the fixture path can be placed")
+    };
+    let workdir = |named: &str| serde_json::json!({ "command": "git commit", "workdir": named });
+
+    // What it is for: somewhere under the directory this process stands in.
+    assert_eq!(
+        narrowed(workdir(&inside.display().to_string()), "bash"),
+        Some(placed(&inside)),
+        "an absolute directory inside the launch directory was not honoured"
+    );
+    assert_eq!(
+        narrowed(workdir("wt-a"), "bash"),
+        Some(placed(&launched.join("wt-a"))),
+        "a relative directory was not resolved against the launch directory"
+    );
+    // Wrapped, because a hook that nests the tool's arguments is why the nesting
+    // is read at all, and this key has to travel the same way.
+    assert_eq!(
+        narrowed(
+            serde_json::json!({ "tool_input": { "workdir": "wt-a" } }),
+            "bash"
+        ),
+        Some(placed(&launched.join("wt-a"))),
+        "a wrapped payload lost the working directory"
+    );
+
+    // What it must never do. Each of these resolves to a real place the gate was
+    // not looking, and each one answered `outside` with exit zero before the
+    // clamp — the write leaving the gate while the command ran regardless.
+    for out in [
+        "..",
+        "wt-a/../..",
+        &launched.join("..").display().to_string(),
+        if cfg!(windows) { "C:\\Windows" } else { "/etc" },
+    ] {
+        assert_eq!(
+            narrowed(workdir(out), "bash"),
+            None,
+            "a call steered the gate to {out:?}, outside the directory it was launched in"
+        );
+    }
+
+    // And the road the first clamp did not cover, which is the one worth having
+    // a name for: a `..` that climbs out **past a component that exists**, onto
+    // somewhere this process cannot open.
+    //
+    // Comparison is by resolved path, and resolution of a path that cannot be
+    // opened falls back to the spelling as written. `..` is then never cancelled,
+    // so `wt-a\..\..\nope` still *starts with* the launch directory and the clamp
+    // called it inside — for a path that is not. Worse than the escape it
+    // replaced: the first one reached `outside`, and this one reached **allow**,
+    // under the claim of whichever worktree the lexical prefix happened to name.
+    // A run holding B could borrow A's authority by writing one `..`.
+    //
+    // The fix is not a second comparison, it is the right primitive: `placed`
+    // collapses the spelling before resolving what exists, and its own doc names
+    // this failure. Every spelling here canonicalises to nothing, which is
+    // exactly why the rows above stayed green while the gate was open.
+    let from_absolute = if cfg!(windows) {
+        format!("{}\\..\\..\\nope", inside.display())
+    } else {
+        format!("{}/../../nope", inside.display())
+    };
+    let unopenable: Vec<&str> = if cfg!(windows) {
+        vec![
+            "wt-a\\..\\..\\nope",
+            "wt-a/../../../nope",
+            "wt-a\\..\\..\\..\\..\\Windows-that-is-not-there",
+            &from_absolute,
+        ]
+    } else {
+        vec![
+            "wt-a/../../nope",
+            "wt-a/../../../nope",
+            "wt-a/../../../../etc-that-is-not-there",
+            &from_absolute,
+        ]
+    };
+    for out in unopenable {
+        assert_eq!(
+            narrowed(workdir(out), "bash"),
+            None,
+            "{out:?} climbed out of the launch directory through a path that \
+             cannot be opened, and the clamp compared the spelling instead of \
+             where it lands"
+        );
+    }
+
+    // The other half of the same road, and the one that says the repair is a
+    // resolution rather than a rejection. This climbs *back* to somewhere that
+    // is genuinely inside, so it is honoured — and it is honoured as
+    // `<launched>/nope`, not as something under `wt-a`. That distinction is the
+    // finding: attributed to its spelling it reached the holder of `wt-a` and
+    // was **allowed**, where the directory it names is the shared base that two
+    // runs cover at equal depth and the ambiguity refusal is what it should get.
+    assert_eq!(
+        narrowed(
+            workdir(if cfg!(windows) {
+                "wt-a\\..\\nope"
+            } else {
+                "wt-a/../nope"
+            }),
+            "bash"
+        ),
+        Some(placed(&launched.join("nope"))),
+        "a path that climbs back inside was attributed to the component it \
+         climbed through rather than to where it lands"
+    );
+
+    // And the tools it is not read for. Bash is the only one measured to carry
+    // the key and the only one this closes; honouring it elsewhere is inventing
+    // evidence from an argument nothing documents, and it is how the escape
+    // above reached `write` and `edit` too.
+    for tool in [
+        "write",
+        "edit",
+        "patch",
+        "multiedit",
+        "notebookedit",
+        "update",
+    ] {
+        assert_eq!(
+            narrowed(workdir(&inside.display().to_string()), tool),
+            None,
+            "`{tool}` honoured a working directory no host documents sending it"
+        );
+    }
+    // Spelled as the plugin lowercases it, and as a host might not.
+    assert!(
+        narrowed(workdir("wt-a"), "Bash").is_some(),
+        "the tool name was matched case-sensitively"
+    );
+
+    // Nothing named, nothing narrowed — the fallback the project context keeps.
+    assert_eq!(
+        narrowed(serde_json::json!({ "command": "git commit" }), "bash"),
+        None,
+        "a call naming no directory had one invented for it"
+    );
+    assert_eq!(
+        narrowed(workdir("   "), "bash"),
+        None,
+        "a blank directory was treated as one"
+    );
+
+    // The host's own key is a separate door and keeps its own contract: it is
+    // taken as given, including from outside this process's directory, because
+    // the hook that writes it may run from anywhere.
+    assert_eq!(
+        super::payload_cwd(&serde_json::json!({ "cwd": "/a", "workdir": "/b" })),
+        "/a",
+        "the call's argument overtook what the host named"
+    );
+    assert_eq!(
+        super::payload_cwd(&serde_json::json!({ "workdir": "/b" })),
+        "",
+        "the call's argument was read as though the host had named it"
+    );
+}
