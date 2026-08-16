@@ -233,6 +233,14 @@ suite. Everything else here is prose held by review.
   deeper nor an item at the key's own column, and this paragraph is what is left of the word
   *everywhere*.
 
+  **And the refusal that replaced it matched two literal bytes.** A block sequence item is a dash and
+  any run of spaces, so `-  { uses: … }` counted as an item and was not refused — neither read nor
+  rejected. Measured: `ci.yml` itself checking out with `@v4`, `ci.yml` carrying a bare
+  `rust-cache`, `release.yml` gaining one past the assertion written to stop exactly that, and a
+  third lane with both halves off — all green, at two, three and five spaces, while one space went
+  red. Round twenty-one closed one indentation; this was the same defect at one spacing. An item is
+  read by what it holds now, not by how far the dash is from it.
+
   The same round's other new rule read a flow mapping only when it closed on the line that opened
   it. `with: {` with the pairs beneath and the brace on its own line is legal, correct, and was
   refused — with a message saying a red run's cache was being discarded, which is a diagnosis about
@@ -265,7 +273,7 @@ suite. Everything else here is prose held by review.
   left two — which is, to the action, the same harm this entry already records from the round where
   the list named three and `action-gh-release` was the one missing.
 
-  **This guard has failed correct workflows twenty-one times, each for the same reason.** Every one was
+  **This guard has failed correct workflows twenty-two times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -292,6 +300,7 @@ suite. Everything else here is prose held by review.
   | a flow mapping as an item of an input's value | the same |
   | a block step whose `with:` is one flow mapping | an input block always has an empty value |
   | a `with: {` whose brace closes on a later line | a flow mapping closes where it opens |
+  | `with:` with its flow mapping opening on the next line | a mapping opens beside its key |
 
   The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
   step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry

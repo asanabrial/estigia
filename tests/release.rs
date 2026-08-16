@@ -778,7 +778,7 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// that fails. Some of it is meaning a line cannot carry — a commit pin names no
 /// version, a step under `if: false` reads exactly like one that runs — and some
 /// is syntax this reader does not handle, which a YAML parser would close. The
-/// twenty-one correct workflows this guard used to refuse are tabulated beside it,
+/// twenty-two correct workflows this guard used to refuse are tabulated beside it,
 /// and both tables were built the same way: by writing the file a different
 /// legal way and running it, rather than by reading this code and reasoning
 /// about what it would do.
@@ -1050,6 +1050,21 @@ fn unquoted(scalar: &str) -> &str {
     }
 }
 
+/// What a block-sequence item holds, when the line opens one.
+///
+/// The dash and the spaces after it are separation, and YAML allows any run of
+/// them. Reading the item by matching the two bytes `- ` made `-  { … }` a
+/// different thing from `- { … }` to this guard and the same thing to GitHub.
+fn opens_an_item(code: &str) -> Option<&str> {
+    let opening = code.trim_start();
+    let rest = opening.strip_prefix('-')?;
+    if rest.is_empty() || rest.starts_with(' ') {
+        Some(rest.trim_start())
+    } else {
+        None
+    }
+}
+
 /// Every step a workflow writes in flow style, and nothing else.
 ///
 /// A step is an item of a job's `steps:`, so this walks each `steps:` block and
@@ -1095,23 +1110,40 @@ fn flow_style_steps(running: &[String]) -> Vec<String> {
                     || (indent_of(code) == depth && (opening == "-" || opening.starts_with("- ")))
             })
             .collect();
-        // The steps themselves sit at the shallowest `- ` in the block; an input
+        // The steps themselves sit at the shallowest item in the block; an input
         // value's own list items sit deeper.
         let item = block
             .iter()
-            .filter(|code| code.trim_start().starts_with("- "))
+            .filter(|code| opens_an_item(code).is_some())
             .map(|code| indent_of(code))
             .min();
-        refused.extend(
-            block
-                .iter()
-                .filter(|code| {
-                    let opening = code.trim_start();
-                    (Some(indent_of(code)) == item && opening.starts_with("- {"))
-                        || opening.starts_with('{')
-                })
-                .map(|code| (*code).clone()),
-        );
+        for (n, code) in block.iter().enumerate() {
+            if Some(indent_of(code)) != item {
+                continue;
+            }
+            let Some(rest) = opens_an_item(code) else {
+                continue;
+            };
+            // What the item holds, not two literal bytes. Matching `- {` meant
+            // one space: `-  { uses: … }` counted as an item, so it was neither
+            // read nor refused, and `ci.yml` itself could check out with `@v4`
+            // or carry a bare cache with this test green.
+            if rest.starts_with('{') {
+                refused.push((*code).clone());
+                continue;
+            }
+            // A dash alone puts the mapping on the next line. Only there —
+            // reading any `{` in the block as a step refused a `with:` whose
+            // mapping opens beneath it, which is an input value, not a step.
+            if rest.is_empty()
+                && block[n + 1..]
+                    .iter()
+                    .find(|next| !next.trim().is_empty())
+                    .is_some_and(|next| next.trim_start().starts_with('{'))
+            {
+                refused.push((*code).clone());
+            }
+        }
         at += 1 + block.len();
     }
     refused
@@ -1136,7 +1168,21 @@ fn under_the_key(block: &str, key: &str) -> String {
     // `with: { cache-on-failure: true }` is a block step whose inputs are one
     // flow mapping. It was read as no `with:` at all, so a correctly configured
     // step was reported as discarding its caches.
-    let value = key_and_value(lines[at]).map(|(_, v)| v).unwrap_or_default();
+    let mut at = at;
+    let mut value = key_and_value(lines[at]).map(|(_, v)| v).unwrap_or_default();
+    // A mapping may also open on the line *after* its key. Reading only the
+    // form that opens beside it refused that, and said the cache was being
+    // discarded rather than that the reader had stopped.
+    if value.is_empty()
+        && let Some((n, opens)) = lines[at + 1..]
+            .iter()
+            .enumerate()
+            .find(|(_, line)| !line.trim().is_empty())
+        && opens.trim_start().starts_with('{')
+    {
+        at += 1 + n;
+        value = opens.trim().to_owned();
+    }
     if value.starts_with('{') {
         // A flow mapping need not close on the line that opens it. Reading only
         // the one-line form refused a correct step and told it its caches were
