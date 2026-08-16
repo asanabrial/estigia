@@ -116,23 +116,37 @@ suite. Everything else here is prose held by review.
   builds each target once, so a cache would be written and never read — which is a claim about
   GitHub's cache scoping that was not measured either.
 
-  **What the guard still does not catch**, every one found by mutating rather than reading, and left
-  rather than closed. It reads text, so what it cannot see is meaning:
+  **What the guard has been found not to catch.** Every row below was produced by writing the
+  workflow a different legal way and running it. This is a list of what has been run, not a census:
+  nobody has enumerated the blind spots of a matcher that reads lines, and the count is left off
+  because a count is a claim to have finished looking.
 
   | Passes but should not | Fails but should not |
   |---|---|
   | a checkout pinned to a **commit** — no version string to floor | `cache-on-failure: "true"` and `: yes`, both YAML true |
-  | the option written under `env:` or in any key but `with:` | a `run:` command that quotes the word `uses:` beside a version |
+  | the option written under `env:` or in any key but `with:` | a flow-style step, `- { uses: …, with: { … } }` |
   | a caching step under `if: false`, which cannot run | |
   | a `uses:` whose value is a folded scalar on the next line | |
 
-  Four holes and two false alarms. Closing the left column properly means parsing YAML rather than
-  reading lines, which is a bigger thing than this issue asked for; closing the right one means
-  deciding which spellings this repository will accept, which is a decision rather than a
-  measurement. What is written here is what was run, not what was reasoned about — the row above it
-  used to say two things and claim to be the list.
+  They are not one kind of thing, and an earlier version of this paragraph said they were. Two are
+  about **meaning** a line cannot carry — a commit pin names no version, and `if: false` reads
+  exactly like a step that runs. Two are about **syntax this reader does not handle**, flow style and
+  folded values, and those a YAML parser would close. One is a **decision** rather than a defect:
+  which spellings of true this repository will accept.
 
-  **This guard has failed correct workflows nine times, each for the same reason.** Every one was
+  That distinction matters because the paragraph that stood here said *"four holes and two false
+  alarms"*, said the left column needed a YAML parser, and said the right one needed a decision. A
+  review then found six more by the method this paragraph prescribes, and none of the three sentences
+  survived them: two of the six were case — `Actions/Checkout@v4` names the action a floor exists to
+  refuse and slipped both floors — one was a different action whose path ends in this one's name, and
+  three were a step title, an `if:` and a `with:` value quoting the word `uses:` beside a version. Not
+  one is a meaning problem, and a parser would have closed none of them; they were comparisons of raw
+  text that never normalised case or found where the key ended. All six are closed, by reading each
+  line's key and value instead of searching it. **A number after a list of limits is the same
+  assertion this whole entry is about** — the edge of what was measured, stated as the edge of what
+  is there.
+
+  **This guard has failed correct workflows eleven times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -147,6 +161,8 @@ suite. Everything else here is prose held by review.
   | `actions/checkout@v10` | `@v1` names one major |
   | a directory named `shared.yml` | a name ending `.yml` is a file |
   | a `run: \|-2` body quoting a `- uses:` line | a header's indicators come in one order |
+  | `myorg/tools/actions/checkout@v4` | a name found anywhere in the value is the value |
+  | a step title, `if:` or `with:` quoting `uses:` beside a version | a line holding `uses:` is a step |
 
   The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
   step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry

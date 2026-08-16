@@ -773,14 +773,15 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// `- `, so a `cache-directories:` sequence written above the option does not
 /// end the step early and fail a workflow that is configured correctly.
 ///
-/// What it still does not catch is tabulated in `docs/honesty.md` — four holes
-/// and two false alarms, every one of them measured — because this reads a
-/// workflow as text and what text cannot show is meaning: a commit pin carries
-/// no version to floor, and a step under `if: false` reads exactly like one that
-/// runs. That table was found the same way as the nine correct workflows this
-/// guard used to refuse, which are tabulated beside it: by writing the file a
-/// different legal way and running it, rather than by reading the code and
-/// reasoning about what it would do.
+/// What it has been found not to catch is tabulated in `docs/honesty.md`, with
+/// no count: this reads a workflow as lines, and nobody has enumerated where
+/// that fails. Some of it is meaning a line cannot carry — a commit pin names no
+/// version, a step under `if: false` reads exactly like one that runs — and some
+/// is syntax this reader does not handle, which a YAML parser would close. The
+/// eleven correct workflows this guard used to refuse are tabulated beside it,
+/// and both tables were built the same way: by writing the file a different
+/// legal way and running it, rather than by reading this code and reasoning
+/// about what it would do.
 #[test]
 fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     // The version floor applies to every workflow in the directory, not to the
@@ -794,12 +795,12 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     );
     for name in &workflows {
         let running = what_runs(&read(&format!(".github/workflows/{name}")));
-        // A `uses:` line, and one the workflow runs: a version named in a
-        // command, a step title or the body of a `run: |` is being quoted.
         let stale: Vec<&String> = running
             .iter()
             .filter(|code| {
-                code.contains("uses:") && checkout_major(code).is_some_and(|major| major < 5)
+                runs_action(code, "actions/checkout")
+                    .and_then(checkout_major)
+                    .is_some_and(|major| major < 5)
             })
             .collect();
         assert!(
@@ -818,7 +819,7 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
         assert!(
             running
                 .iter()
-                .any(|code| code.contains("uses:") && code.contains("actions/checkout@")),
+                .any(|code| runs_action(code, "actions/checkout").is_some()),
             "{name} has no checkout step, so the version check above read nothing"
         );
     }
@@ -826,7 +827,7 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     assert!(
         what_runs(&read(".github/workflows/ci.yml"))
             .iter()
-            .any(|code| code.contains("uses:") && code.contains("Swatinem/rust-cache@")),
+            .any(|code| runs_action(code, "swatinem/rust-cache").is_some()),
         "ci.yml has no caching step, so the option check below reads nothing"
     );
     // The option only does anything on the step it is written under. Read as a
@@ -841,10 +842,10 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     for name in &workflows {
         let running = what_runs(&read(&format!(".github/workflows/{name}")));
         for at in 0..running.len() {
-            // The same `uses:` rule the two floors above use. Without it a step
-            // titled after the action, or a command echoing its name, is read as
-            // a caching step and the step around it is asked for the option.
-            if !(running[at].contains("uses:") && running[at].contains("Swatinem/rust-cache@")) {
+            // The same rule the two floors above use, so a step titled after the
+            // action, or a command echoing its name, is not read as a caching
+            // step and the step around it is not asked for the option.
+            if runs_action(&running[at], "swatinem/rust-cache").is_none() {
                 continue;
             }
             // From the line the step opens on, which is not always its `uses:`:
@@ -876,12 +877,12 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     // `rust-cache` caches, and said nothing about the release lane. This line
     // holds that lane where it is so a cache appears there deliberately rather
     // than by copying — whether one would pay off has not been measured, and
-    // measuring it is what should delete this line, not the copying. A `uses:`
-    // line, for the reason the version floor reads only those: naming the action
-    // in a `run:` or a step title is talking about it.
+    // measuring it is what should delete this line, not the copying. A step that
+    // runs the action, for the reason the version floor reads only those: naming
+    // it in a command or a title is talking about it.
     let cached: Vec<String> = what_runs(&read(".github/workflows/release.yml"))
         .into_iter()
-        .filter(|code| code.contains("uses:") && code.contains("rust-cache"))
+        .filter(|code| runs_action(code, "swatinem/rust-cache").is_some())
         .collect();
     assert!(
         cached.is_empty(),
@@ -945,16 +946,49 @@ fn opens_a_block(code: &str) -> bool {
         .all(|c| c.is_ascii_digit() || c == '-' || c == '+')
 }
 
-/// The `actions/checkout` major a line names, when it names one by tag.
+/// The `@ref` of a step that runs `action`, lowercased — `None` for any line
+/// that is not one.
+///
+/// Three things a plain substring search got wrong, each found by writing a
+/// legal workflow and running it. The **key** must be `uses:`, so a step title,
+/// an `if:` expression or a `with:` value that quotes the word beside a version
+/// is not a step. The value must **start** with the action, so
+/// `myorg/tools/actions/checkout@v4` — a different action whose path ends in
+/// this one's name — is not this one. And the comparison is case-folded,
+/// because `Actions/Checkout@v4` slipped both floors while naming the same
+/// action a floor exists to refuse.
+fn runs_action(code: &str, action: &str) -> Option<String> {
+    let (key, value) = key_and_value(code)?;
+    if key != "uses" {
+        return None;
+    }
+    let value = value.to_lowercase();
+    value
+        .strip_prefix(&format!("{action}@"))
+        .map(|reference| reference.to_owned())
+}
+
+/// A line's key and value, split at the first `:`, with a step's `- ` removed.
+///
+/// Reading the key is what tells a step from a sentence about one: `name: this
+/// uses: actions/checkout@v4` has the key `name`, and a guard that searches the
+/// whole line for `uses:` refuses it.
+fn key_and_value(code: &str) -> Option<(String, String)> {
+    let (key, value) = code.split_once(':')?;
+    let key = key.trim().trim_start_matches("- ").trim();
+    Some((key.to_owned(), value.trim().to_owned()))
+}
+
+/// The `actions/checkout` major a `@ref` names, when it names one by tag.
 ///
 /// Parsed rather than matched against a list of old spellings: `@v1` is a prefix
 /// of `@v10`, so a list would start refusing the first two-digit major — and
 /// surviving to the next deprecation is the whole point of a floor. A commit pin
 /// carries no major and answers `None`, which is the hole `docs/honesty.md`
 /// records.
-fn checkout_major(code: &str) -> Option<u32> {
-    let after = code.find("actions/checkout@v")? + "actions/checkout@v".len();
-    code[after..]
+fn checkout_major(reference: String) -> Option<u32> {
+    reference
+        .strip_prefix('v')?
         .chars()
         .take_while(|c| c.is_ascii_digit())
         .collect::<String>()
