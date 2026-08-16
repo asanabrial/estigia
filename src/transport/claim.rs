@@ -1766,12 +1766,14 @@ fn publish_with(
     if let Some(pr) = &reused {
         wrote.undrafted = ensure_draft(context, pr)?;
         if let Some(raw) = &body_text {
-            edit_pr(context, pr, title, Some(&pr_body_text(raw, issue)))?;
+            edit_pr(context, pr, title, Some(&pr_body_text(raw, issue)))
+                .map_err(|failure| after_rewriting_the_pr(failure, wrote))?;
             wrote.edited = Some(Edited::TitleAndBody);
         } else if !title.is_empty() {
             // Title only, and the report says so. Reachable from the CLI, where
             // `--pr-body-file` is optional; the MCP schema requires it.
-            edit_pr(context, pr, title, None)?;
+            edit_pr(context, pr, title, None)
+                .map_err(|failure| after_rewriting_the_pr(failure, wrote))?;
             wrote.edited = Some(Edited::Title);
         }
     } else if pr_body_file.is_none() {
@@ -1799,9 +1801,9 @@ fn publish_with(
         // is the same falsehood the closing-keyword scan was hoisted above these
         // calls to stop telling, arriving through a door this renewal opened:
         // `publish_review` has no verification here, so nothing could refuse at
-        // this point before. Reported as measured rather than as assumed —
-        // `rewrote_pr` is false on the path where the reused pull request needed
-        // no change, and there the original refusal is the honest one.
+        // this point before. Reported as measured rather than as assumed:
+        // `wrote` carries which writes happened, so a fresh pull request — where
+        // none did — keeps the original refusal, which is the honest one there.
         verify_claim(context, issue, run_id, expect_state, now, None)
             .map_err(|failure| after_rewriting_the_pr(failure, wrote))?;
     }
@@ -1835,10 +1837,17 @@ fn publish_with(
             other => other,
         }
     });
-    // Which route ran, in the answer, because the two are not interchangeable to
-    // whoever reads it back: a leased push moved bytes the remote already had,
-    // and an incident review that cannot tell the two apart from the record has
-    // to reconstruct it from the shell history nobody kept.
+    // Which route ran, in **the answer this call returns**, because the two are
+    // not interchangeable to the run reading it back: a leased push moved bytes
+    // the remote already had.
+    //
+    // Not in the record, and the difference is worth stating rather than
+    // implying. The `published` marker this writes to the issue is byte-identical
+    // to an ordinary publication's, so a later incident review reading the
+    // timeline still cannot tell a republish from a publish. Putting the fact
+    // there would change what every consumer of that marker parses, which is a
+    // wider change than this issue asked for; it is named here and in
+    // `docs/honesty.md` instead of being quietly claimed.
     let Push::Leased { recorded_head } = push else {
         return answer;
     };
@@ -1854,11 +1863,10 @@ fn publish_with(
     })
 }
 
-/// A refusal that arrives once the reused pull request has been rewritten.
-///
 /// What this run has already written to the reused pull request.
 ///
-/// Three facts rather than one flag, and the reason it is three is the defect
+/// The writes named apart rather than one flag, and the reason they are apart
+/// is the defect
 /// that made it so. The flag was set by `edit_pr` alone, and the sentence it
 /// produced named a draft conversion as well — while `ensure_draft` only
 /// un-readies a pull request that was *ready*. At republish time the reused one
@@ -1889,17 +1897,42 @@ struct PullRequestWrites {
 /// state this crate cannot produce.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Edited {
-    /// The title-only arm, reachable from the CLI where a body file is optional.
+    /// The title-only arm — **not reachable through anything that ships**, and
+    /// kept anyway.
+    ///
+    /// The claim that a CLI route reaches it was wrong, and being wrong about
+    /// that in the commit whose subject is *name the writes that happened* is
+    /// why the correction is spelled out rather than deleted. There is no
+    /// `publish-review` subcommand: `dispatch` has two non-test callers, the
+    /// tool server and the gate's hard-coded `verify-claim`, and both tools
+    /// declare `pr_body_file` required, so `body_text` is never `None` beside a
+    /// reused pull request.
+    ///
+    /// It stays because [`Publication`] takes an `Option` body and the branch
+    /// below is real: an arm that cannot be reached still decides what a
+    /// refusal *says* if anything ever reaches it, and collapsing it into
+    /// [`Edited::TitleAndBody`] would name a body replacement that did not
+    /// happen — the exact defect this type was introduced to remove. Nothing
+    /// measures the difference, because nothing can drive the arm.
     Title,
     TitleAndBody,
 }
 
 impl PullRequestWrites {
     /// The writes, named exactly, or `None` when there are none.
+    ///
+    /// Each fragment completes *"the pull request …"*, and they have to do so in
+    /// the **same grammatical shape** or the joined sentence is broken. The
+    /// draft clause was a bare past participle and the edit clause a finite verb
+    /// phrase, sharing a `was` supplied by the caller — so the ordinary case, a
+    /// pull request that was already draft and only edited, produced *"the pull
+    /// request was had its title and body replaced"*. That is the sentence an
+    /// operator reads at the one moment they most need to understand what
+    /// happened, and two tests pinned it with `contains`.
     fn describe(self) -> Option<String> {
         let mut done: Vec<&str> = Vec::new();
         if self.undrafted {
-            done.push("converted back to draft");
+            done.push("was converted back to draft");
         }
         match self.edited {
             Some(Edited::TitleAndBody) => done.push("had its title and body replaced"),
@@ -1932,7 +1965,7 @@ fn after_rewriting_the_pr(failure: Failure, wrote: PullRequestWrites) -> Failure
                     "action".to_owned(),
                     serde_json::json!(format!(
                         "stop, and write nothing else under this claim \u{2014} but the pull \
-                         request was {done} before this refusal, so that much did happen and \
+                         request {done} before this refusal, so that much did happen and \
                          somebody has to decide whether to put it back"
                     )),
                 );
@@ -1940,7 +1973,7 @@ fn after_rewriting_the_pr(failure: Failure, wrote: PullRequestWrites) -> Failure
             Failure::Stop(envelope)
         }
         Failure::Read(detail) | Failure::Write(detail) => Failure::Write(format!(
-            "{detail} \u{2014} the pull request was already {done}, so this is not a call that \
+            "{detail} \u{2014} the pull request already {done}, so this is not a call that \
              changed nothing"
         )),
         other => other,

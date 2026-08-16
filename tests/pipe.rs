@@ -9682,9 +9682,31 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
             .all(|line| !line.contains("pr edit") && !line.contains("pr ready")),
         "the fixture rewrote a pull request, so this proves nothing about the untouched case"
     );
+    // Every clause the report can emit, and the frame that carries them. Named
+    // one by one rather than by a single phrase, because a single phrase is
+    // exactly how this assertion died: the report's wording changed to
+    // *"converted **back** to draft"*, the sibling case three was updated to
+    // match and this one was not, so it forbade a substring the code could no
+    // longer produce. A dead assertion is worse than none — measured, a build
+    // that claimed both writes on every path, including this one where no pull
+    // request exists at all, passed the entire suite.
+    for lie in [
+        "converted back to draft",
+        "had its title",
+        "put it back",
+        "changed nothing",
+    ] {
+        assert!(
+            !text.contains(lie),
+            "the refusal said {lie:?} when no pull request was touched: {text}"
+        );
+    }
+    // And the channel underneath the words. `world: committed` is what makes the
+    // harness report a landed write, so a refusal that reaches here must not
+    // carry it however the sentence is phrased.
     assert!(
-        !text.contains("converted to draft"),
-        "the refusal claimed a pull request was rewritten when none was touched: {text}"
+        text.contains("nothing was written"),
+        "the refusal did not report the untouched world it is actually in: {text}"
     );
     assert_eq!(
         remote_head(),
@@ -9848,12 +9870,20 @@ fn a_publication_refuses_at_entry_when_the_claim_has_moved() {
         "a".repeat(32)
     );
     // **One open draft pull request**, not an empty list. An empty list made
-    // `reused` `None`, so `ensure_draft` and `edit_pr` were structurally
-    // unreachable and the three assertions below that no `pr edit` or `pr ready`
-    // ran could not fail — they were vacuous. With a pull request present they
-    // bite, and they are what catches an entry verification moved *below* the
-    // draft conversion: the push assertion alone cannot see that, because the
-    // renewal further down still stops the push.
+    // `reused` `None`, so `edit_pr` was structurally unreachable and the
+    // assertion below that no `pr edit` ran could not fail. With a pull request
+    // present it does, and it is what catches an entry verification moved
+    // *below* the draft conversion — the push assertion alone cannot see that,
+    // because the renewal further down still stops the push.
+    //
+    // Exactly one of the three assertions bites, and saying "they" would be the
+    // same overclaim this round is correcting. `pr create` cannot fire with
+    // `reused` set, and `pr ready` cannot fire because this pull request is
+    // already draft. That last one leaves a real gap: a verification placed
+    // *between* `ensure_draft` and `edit_pr` would, against a **ready** pull
+    // request, un-ready somebody else's before refusing, and this fixture
+    // cannot see it. Named rather than fixed, because a second fixture for a
+    // window one statement wide is more machinery than the risk earns.
     let open_pr = serde_json::json!({
         "number": 7, "url": "https://github.com/o/r/pull/7",
         "headRefOid": "e".repeat(40), "baseRefOid": "b".repeat(40),

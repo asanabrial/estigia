@@ -1093,6 +1093,12 @@ suite. Everything else here is prose held by review.
   when it happened, which is the same rule this document applies to everything else — say what was
   measured, not what usually accompanies it. What is still on the reader is the decision: Estigia
   reports the write, it does not undo it.
+- **The timeline does not record that a publication was a republish.** The answer `republish_review`
+  returns carries `republished` and the head it leased against, but the `published` marker it writes to
+  the issue is byte-identical to an ordinary publication's. So an incident review reading the timeline
+  — which is the only record that outlives the call — sees a new epoch and cannot tell whether the
+  bytes arrived by fast-forward or over a force-push. Naming it in the marker would change what every
+  consumer of that marker parses, so it is stated here rather than claimed.
 - **A republish cannot lease against a receipt published from a different GitHub account.**
   `latest_publication` keeps only comments the authenticated identity authored, because a marker this
   identity did not write is one anybody could have forged. The consequence is narrow and worth naming
