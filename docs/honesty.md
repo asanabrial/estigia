@@ -123,6 +123,15 @@ suite. Everything else here is prose held by review.
   would work. The first is a hole and the second is a false alarm; the second is the safer way round,
   and neither is guessed at, which is why they are here rather than inferred from the code.
 
+  **Widening that guard to the whole directory broke a workflow class that does not exist here yet.**
+  The loop used to name `ci.yml` and `release.yml`; when it was widened so a lane added later could
+  not slip a `@v4` past the floor, the per-file assertion *"this workflow has a checkout step"* was
+  carried along with it. A scheduled labeller or stale sweep checks nothing out and would have failed
+  the suite on arrival — the second false alarm this one guard has produced by asserting about
+  neighbours it had not looked at, one round after the first. The version floor now applies to every
+  file and the checkout-exists floor only to the two lanes measured to have one. The comment that
+  justified the widening claimed a third lane *would* check out; that was the unmeasured half.
+
   **The number this whole change is argued from was inherited, and it was wrong.** Every document
   here said the episode cost *six* red runs, because the issue said so and named a run range. The
   run history holds **nine** consecutive failures of `ci` on `main` — `31753883982` through

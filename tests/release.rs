@@ -749,10 +749,11 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// `Swatinem/rust-cache` discards the cache of a failing run by default, so the
 /// fix pushed after a red build recompiles the dependency tree from cold on
 /// every platform. Closing one set of platform failures paid that at least nine
-/// times, three platforms each: `ci` on `main` failed nine consecutive times on
-/// 2026-08-13, runs `31753883982` through `31760121174`, before `31760887100`
-/// went green. Nine is a floor rather than the count — the run the issue names
-/// as the first of the episode, `31752296629`, is no longer retrievable.
+/// times, three platforms each: `ci` on `main` failed nine consecutive times,
+/// runs `31753883982` through `31760121174`, from late on 2026-08-13 into the
+/// early hours of 2026-08-14, before `31760887100` went green. Nine is a floor
+/// rather than the count — the run the issue names as the first of the episode,
+/// `31752296629`, is no longer retrievable.
 ///
 /// The floor is a version rather than a word, because "deprecated" is not
 /// something a file can be asked. Read from each major's own `action.yml`: `v2`,
@@ -775,12 +776,14 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// What it still does not catch is written down in `docs/honesty.md`: a checkout
 /// pinned to a `v4` commit rather than a tag reads as no version at all, and the
 /// option is required in the one literal spelling `true`, so YAML's other trues
-/// fail a workflow that would work.
+/// fail a workflow that would work. Both were found by mutating this file's
+/// inputs rather than by reading them, which is also how the two false alarms it
+/// has already produced were found.
 #[test]
 fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
-    // Every workflow in the directory, not the two this repository happens to
-    // have: a third lane added later checks out too, and a floor nobody applies
-    // to it is a floor with a door beside it.
+    // The version floor applies to every workflow in the directory, not to the
+    // two this repository happens to have today: a lane added later that checks
+    // out is a lane this floor has to reach.
     let workflows = every_workflow();
     assert!(
         workflows.len() >= 2,
@@ -789,13 +792,16 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     );
     for name in &workflows {
         let workflow = read(&format!(".github/workflows/{name}"));
+        // A `uses:` line, not any line: a version named in a `run:` command or
+        // inside a string is being talked about rather than run.
         let stale: Vec<&str> = workflow
             .lines()
             .filter(|line| {
                 let code = code_of(line);
-                ["@v1", "@v2", "@v3", "@v4"]
-                    .iter()
-                    .any(|old| code.contains(&format!("actions/checkout{old}")))
+                code.contains("uses:")
+                    && ["@v1", "@v2", "@v3", "@v4"]
+                        .iter()
+                        .any(|old| code.contains(&format!("actions/checkout{old}")))
             })
             .collect();
         assert!(
@@ -803,7 +809,14 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
             "{name} checks out with an action GitHub already forces onto a newer \
              runtime: {stale:?}"
         );
-        // The floor is only a floor if the step is still there to have a version.
+    }
+    // The floor is only a floor where a step is there to have a version, and
+    // only these two lanes are known to check out. A scheduled labeller or stale
+    // sweep needs no checkout, so requiring one of every file would fail a
+    // workflow that is written correctly — which is what widening this loop to
+    // the directory did until a review ran that file past it.
+    for name in ["ci.yml", "release.yml"] {
+        let workflow = read(&format!(".github/workflows/{name}"));
         assert!(
             code_of(&workflow).contains("actions/checkout@"),
             "{name} has no checkout step, so the version check above read nothing"
@@ -811,39 +824,46 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     }
 
     let ci = read(".github/workflows/ci.yml");
+    let lines: Vec<&str> = ci.lines().collect();
+    let caching: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| code_of(line).contains("Swatinem/rust-cache@"))
+        .map(|(at, _)| at)
+        .collect();
     assert!(
-        code_of(&ci).contains("Swatinem/rust-cache@"),
+        !caching.is_empty(),
         "ci.yml has no caching step, so the option check below reads nothing"
     );
     // The option only does anything on the step it is written under. Read as a
     // whole file, a `cache-on-failure: true` parked on some other step — or
     // commented out beside a `rust-cache` left on its defaults — answers yes
-    // while every red run still discards what it compiled.
-    let step = ci
-        .lines()
-        .find(|line| code_of(line).contains("Swatinem/rust-cache@"))
-        .unwrap_or_else(|| panic!("the assertion above just found this line"));
-    // A step ends where the next one starts, and the next one starts at the same
-    // indentation. Stopping at the first `- ` instead would end the step at any
-    // block sequence inside its own `with:` — `cache-directories:` above the
-    // option would fail a workflow that is configured correctly.
-    let depth = step.len() - step.trim_start().len();
-    let under_the_cache: String = ci
-        .lines()
-        .skip_while(|line| !code_of(line).contains("Swatinem/rust-cache@"))
-        .skip(1)
-        .take_while(|line| {
-            let code = code_of(line);
-            code.trim().is_empty() || code.len() - code.trim_start().len() > depth
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(
-        code_of(&under_the_cache).contains("cache-on-failure: true"),
-        "a red CI run throws away everything it compiled, so the next push starts \
-         from cold on all three platforms; the caching step reads: \
-         {under_the_cache:?}"
-    );
+    // while every red run still discards what it compiled. Every caching step is
+    // read rather than the first, because which of several decides the saving
+    // behaviour is a question about the action rather than about this file.
+    for at in caching {
+        // A step ends where the next one starts, and the next one starts at the
+        // same indentation. Stopping at the first `- ` instead would end the step
+        // at any block sequence inside its own `with:` — `cache-directories:`
+        // above the option would fail a workflow that is configured correctly.
+        let depth = lines[at].len() - lines[at].trim_start().len();
+        let under_the_cache: String = lines[at + 1..]
+            .iter()
+            .take_while(|line| {
+                let code = code_of(line);
+                code.trim().is_empty() || code.len() - code.trim_start().len() > depth
+            })
+            .copied()
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            code_of(&under_the_cache).contains("cache-on-failure: true"),
+            "a red CI run throws away everything it compiled, so the next push \
+             starts from cold on all three platforms; the caching step at line \
+             {} reads: {under_the_cache:?}",
+            at + 1
+        );
+    }
     // Only `ci.yml` caches, and that is this repository's judgement rather than
     // the issue's: the issue ruled out caching anything but cargo, which is what
     // `rust-cache` caches, and said nothing about the release lane. This line
