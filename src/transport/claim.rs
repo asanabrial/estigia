@@ -1759,6 +1759,17 @@ fn publish_with(
     // nothing is the shape this crate refuses everywhere else, so it is gone;
     // `ensure_draft` now reports its own writes in its own refusals, where the
     // fact is reachable.
+    //
+    // Two directions, and only one of them is a defect — worth stating because
+    // the measurement invites the wrong conclusion. Setting this to `true`
+    // outright is caught: a refusal on the fresh-PR path would then tell an
+    // operator a pull request was drafted and re-described when none was
+    // touched, which is the same dishonesty this operation was fixed to stop
+    // telling, pointing the other way. Setting it to `reused.is_some()` is
+    // **not** caught, and should not be: by the same `Flags::need` argument
+    // above, the two expressions agree on every reachable path. Chasing that
+    // one green would mean writing a test for a state no caller can produce,
+    // which is what the round before this deleted.
     let mut rewrote_pr = false;
     if let Some(pr) = &reused {
         ensure_draft(context, pr)?;

@@ -9629,4 +9629,242 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         published_head,
         "the remote moved although there was no receipt to lease against: {text}"
     );
+
+    // Sixth, and the other direction of the same honesty: a refusal must not
+    // claim a write that did not happen. There is a receipt, but **no open pull
+    // request** — a previous one was closed — so `reused` is `None` and nothing
+    // has been written to any pull request when the renewal denies the claim.
+    //
+    // Held because the flag was untested this way round. `rewrote_pr = true` as
+    // a constant, and `= reused.is_some()`, both left the whole suite green, and
+    // either would tell an operator that a pull request was converted to draft
+    // and re-described when none was touched — sending them to undo a change
+    // that does not exist. That is the mirror of the falsehood this operation
+    // was fixed to stop telling, and it deserved the same measurement.
+    let fresh_pr = |held: u64| {
+        serde_json::to_string(&serde_json::json!([
+            serde_json::json!({
+                "matches": "issue view", "nth": held + 1,
+                "stdout": timeline("claude-99999999", true), "status": 0,
+            }),
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 }),
+            // No open pull request: the reused path is never entered.
+            serde_json::json!({ "matches": "pr list", "stdout": "[]", "status": 0 }),
+            serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
+        ]))
+        .expect("the fake tracker script serialises")
+    };
+    let untouched = trace.path().join("untouched.log");
+    let (failed, text) = republish(&fresh_pr(held), &untouched);
+    assert!(
+        failed,
+        "a republish went through after the claim moved to another run: {text}"
+    );
+    assert!(
+        std::fs::read_to_string(&untouched)
+            .expect("the call log")
+            .lines()
+            .all(|line| !line.contains("pr edit") && !line.contains("pr ready")),
+        "the fixture rewrote a pull request, so this proves nothing about the untouched case"
+    );
+    assert!(
+        !text.contains("converted to draft"),
+        "the refusal claimed a pull request was rewritten when none was touched: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the remote moved on a refusal with no pull request in play: {text}"
+    );
+}
+
+/// The ordinary publication adjudicates its claim, proved by what reaches the remote.
+///
+/// The test whose **absence** was the finding, and it is about `publish_review`
+/// rather than about anything this change added. Nothing anywhere asserted that
+/// the ordinary publication refuses when the claim has moved: the only thing
+/// holding that property was `honesty.rs` counting the string `verify_claim(` in
+/// a function body, and a count cannot see a conditional.
+///
+/// Measured, three ways, each of which left the whole suite green before this
+/// existed and is red now:
+///
+/// - the entry verification deleted;
+/// - its result discarded with `let _ = …`, which keeps the token the count reads;
+/// - the call moved behind `if matches!(push, Push::Leased { .. })`, which keeps
+///   the count at two and takes adjudication off the ordinary route entirely.
+///
+/// The assertion is the remote, not the message. A refusal that still pushed is
+/// the failure that matters, and only the origin can answer whether it did.
+#[test]
+fn a_publication_refuses_at_entry_when_the_claim_has_moved() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-entry";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    assert!(git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string()
+    ]));
+    assert!(git(&["branch", "-M", "main"]));
+    std::fs::write(repo.join("kept.txt"), "base\n").expect("the base file");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "base content",
+    ]));
+    assert!(git(&["push", "-q", "origin", "main"]));
+
+    // The branch is committed and **not** pushed. That is what makes the origin
+    // able to answer the question: if the entry verification is gone, the
+    // publication runs to completion and this ref appears there.
+    assert!(git(&["checkout", "-q", "-b", branch]));
+    std::fs::write(repo.join("kept.txt"), "changed\n").expect("the change");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "a change that names no issue",
+    ]));
+
+    let body = trace.path().join("pr-body.md");
+    std::fs::write(&body, "A body that names nothing.\n").expect("the body");
+
+    // Somebody else holds it, from the very first read.
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "labels": [{"name": "status:in-progress"}],
+                "comments": [{
+                    "id": "IC_1",
+                    "createdAt": "2026-01-01T00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!(
+                        "Claimed.\n\n<!-- issue-flow: claim run-id=claude-99999999 runtime=claude \
+                         horizon=2099-01-01T00:00Z op-id={} -->\n",
+                        "a".repeat(32)
+                    ),
+                }],
+            }).to_string(),
+            "status": 0,
+        },
+        // Deliberately permissive: an empty list means the mutated path would
+        // create a pull request and push, rather than stopping for a reason
+        // that has nothing to do with the claim.
+        { "matches": "pr list", "stdout": "[]", "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.issue = Some(12);
+    run.state = Some("in-progress".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": { "name": "publish_review", "arguments": {
+            "issue": 12,
+            "run_id": run_id,
+            "branch": branch,
+            "base": "main",
+            "pr_title": "Something",
+            "pr_body_file": body.display().to_string(),
+            "worktree": repo.display().to_string(),
+        }}
+    })
+    .to_string();
+
+    let log = trace.path().join("entry.log");
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    assert_eq!(
+        response["result"]["isError"], true,
+        "the ordinary publication went through under a claim another run holds: {response}"
+    );
+    assert!(
+        text.contains("not-current-live-holder"),
+        "something other than the claim refused it, so this proves nothing about adjudication: {text}"
+    );
+
+    // The acceptance criterion, and the only one a mutated build cannot fake:
+    // the branch is not on the remote.
+    let refs = Command::new("git")
+        .arg("-C")
+        .arg(origin.path())
+        .args(["for-each-ref", "--format=%(refname)"])
+        .output()
+        .expect("the origin is readable");
+    let refs = String::from_utf8_lossy(&refs.stdout).into_owned();
+    assert!(
+        !refs.contains(branch),
+        "the branch reached the remote under a claim this run does not hold: {refs}"
+    );
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    for wrote in ["pr create", "pr edit", "pr ready"] {
+        assert!(
+            !calls.contains(wrote),
+            "`{wrote}` ran under a claim this run does not hold: {calls}"
+        );
+    }
 }

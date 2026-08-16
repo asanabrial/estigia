@@ -1221,9 +1221,25 @@ const ADJUDICATED_BY_THE_BINDING: &[&str] = &[
 /// publication path entirely — left the **whole suite green**. The guard written
 /// to catch exactly that was answered by a call the mutated route never makes.
 ///
-/// So the count is pinned. Removing either verification is red, and adding a
-/// third is red too, which is the right answer: a new adjudication point in the
-/// publication path is a thing a reviewer should be made to look at.
+/// So the count is pinned — and pinning it is **not** what makes the ordinary
+/// publication safe, which is the correction a third review round had to make.
+/// A count measures arity; the property is reachability, and they are not the
+/// same. Both verifications can be moved behind `if matches!(push,
+/// Push::Leased { .. })`, leaving the total at two and `publish_review`
+/// adjudicating nothing at all — measured, and the whole suite stayed green.
+/// A source-text count cannot see a conditional, and no amount of pinning will
+/// teach it to.
+///
+/// What holds that property is a **behavioural** test:
+/// `pipe::a_publication_refuses_at_entry_when_the_claim_has_moved` denies the
+/// first timeline read and proves the branch never reaches the remote. It is
+/// red for all three shapes — the call deleted, its result discarded, or the
+/// call moved behind the discriminant.
+///
+/// This stays anyway, and the division of labour is worth stating rather than
+/// leaving to be re-derived: the behavioural test proves the *ordinary* route
+/// adjudicates, and the count is what still notices a verification quietly
+/// added or removed from a body two routes share. Neither covers the other.
 const ADJUDICATED_THROUGH: &[(&str, &str, usize)] = &[
     ("publish_review", "publish_with", 2),
     ("republish_review", "publish_with", 2),
