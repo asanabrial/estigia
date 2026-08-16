@@ -778,7 +778,7 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// that fails. Some of it is meaning a line cannot carry — a commit pin names no
 /// version, a step under `if: false` reads exactly like one that runs — and some
 /// is syntax this reader does not handle, which a YAML parser would close. The
-/// thirteen correct workflows this guard used to refuse are tabulated beside it,
+/// fourteen correct workflows this guard used to refuse are tabulated beside it,
 /// and both tables were built the same way: by writing the file a different
 /// legal way and running it, rather than by reading this code and reasoning
 /// about what it would do.
@@ -863,30 +863,35 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
                 .cloned()
                 .collect::<Vec<_>>()
                 .join("\n");
-            // Read as keys and values, for the reason the `uses:` half is:
-            // searching the block for the text refused `cache-on-failure:  true`
-            // over a second space, and the same eight lines apart.
-            let settings: Vec<(String, String)> =
-                under_the_cache.lines().filter_map(key_and_value).collect();
-            let says = |key: &str, value: &str| {
-                settings
+            // The inputs, not the step: read as keys and values, for the reason
+            // the `uses:` half is, and taken from under `with:`, because that is
+            // the only key that sets one.
+            let inputs: Vec<(String, String)> = under_the_key(&under_the_cache, "with")
+                .lines()
+                .filter_map(key_and_value)
+                .collect();
+            let set_to = |key: &str| {
+                inputs
                     .iter()
-                    .any(|(k, v)| k == key && v.to_lowercase() == value)
+                    .find(|(k, _)| k == key)
+                    .map(|(_, v)| v.to_lowercase())
             };
             assert!(
-                says("cache-on-failure", "true"),
+                set_to("cache-on-failure").as_deref() == Some("true"),
                 "a red run throws away everything it compiled, so the next push \
                  starts from cold; the caching step at {name}:{} reads: \
                  {under_the_cache:?}",
                 opens + 1
             );
-            // `save-if: false` means, in the action's own words, that the cache
-            // is only restored — no run saves one, which is the red-run case and
-            // every other case besides.
+            // The action saves only when `save-if` reads exactly `true`, so any
+            // other literal — `no`, `off`, `0` — stops every run saving, which
+            // is the red run and all the rest besides. An expression is left
+            // alone: what it evaluates to is not in this file.
+            let saving = set_to("save-if").unwrap_or_else(|| "true".to_owned());
             assert!(
-                !says("save-if", "false"),
-                "the caching step at {name}:{} saves on no run at all, so \
-                 `cache-on-failure` decides nothing",
+                saving == "true" || saving.starts_with("${{"),
+                "the caching step at {name}:{} sets `save-if: {saving}`, so no \
+                 run saves a cache at all and `cache-on-failure` decides nothing",
                 opens + 1
             );
         }
@@ -1000,14 +1005,46 @@ fn runs_action(code: &str, action: &str) -> Option<String> {
 fn key_and_value(code: &str) -> Option<(String, String)> {
     let (key, value) = code.split_once(':')?;
     let key = key.trim().trim_start_matches("- ").trim();
-    let value = value.trim();
-    let value = match value.chars().next() {
-        Some(quote @ ('"' | '\'')) if value.len() > 1 && value.ends_with(quote) => {
-            &value[1..value.len() - 1]
+    Some((unquoted(key).to_owned(), unquoted(value.trim()).to_owned()))
+}
+
+/// A scalar with its surrounding quotes removed, if it has a matching pair.
+///
+/// Used on the key as well as the value, because the round that added it to one
+/// side left the other: `- "uses": Swatinem/rust-cache@v2` refused a correct
+/// workflow and `- "uses": actions/checkout@v4` walked past a floor.
+fn unquoted(scalar: &str) -> &str {
+    match scalar.chars().next() {
+        Some(quote @ ('"' | '\'')) if scalar.len() > 1 && scalar.ends_with(quote) => {
+            &scalar[1..scalar.len() - 1]
         }
-        _ => value,
+        _ => scalar,
+    }
+}
+
+/// The lines under one of a step's keys — `with:`, holding an action's inputs.
+///
+/// A step's `env:` and its `with:` sit at the same depth, so searching the whole
+/// step for `cache-on-failure` found it under either. Under `env:` it sets a
+/// variable named `cache-on-failure`; the action reads the input
+/// `INPUT_CACHE-ON-FAILURE`, which only `with:` writes, and its `post-if` looks
+/// for `CACHE_ON_FAILURE`. So the workflow reads as configured and every red run
+/// still discards its cache.
+fn under_the_key(block: &str, key: &str) -> String {
+    let lines: Vec<&str> = block.lines().collect();
+    let Some(at) = lines
+        .iter()
+        .position(|line| key_and_value(line).is_some_and(|(k, v)| k == key && v.is_empty()))
+    else {
+        return String::new();
     };
-    Some((key.to_owned(), value.to_owned()))
+    let depth = indent_of(lines[at]);
+    lines[at + 1..]
+        .iter()
+        .take_while(|line| line.trim().is_empty() || indent_of(line) > depth)
+        .copied()
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// The `actions/checkout` major a `@ref` names, when it names one by tag.

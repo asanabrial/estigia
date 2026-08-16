@@ -121,24 +121,29 @@ suite. Everything else here is prose held by review.
   nobody has enumerated the blind spots of a matcher that reads lines, and the count is left off
   because a count is a claim to have finished looking.
 
-  | Passes but should not | Fails but should not |
-  |---|---|
-  | a checkout pinned to a **commit** — no version string to floor | `cache-on-failure: yes`, which YAML 1.1 reads as true |
-  | a caching step under `if: false`, which cannot run | a flow-style step, `- { uses: …, with: { … } }` |
-  | a `uses:` folded onto the next line, **in a third workflow** | |
-  | `lookup-only:` — not read, and its effect on saving not measured | |
+  | Passes but should not | Fails but should not | Not measured |
+  |---|---|---|
+  | a checkout pinned to a **commit** — no version string to floor | a flow-style step, `- { uses: …, with: { … } }` | `cache-on-failure: yes` — refused, and whether GitHub hands the action `yes` or `true` was never read |
+  | a caching step under `if: false`, which cannot run | | `lookup-only:` — not read, and its effect on saving not measured |
+  | a `uses:` folded onto the next line, **in a third workflow** | | |
 
   They are not one kind of thing, and an earlier version of this paragraph said they were. Two are
   about **meaning** a line cannot carry — a commit pin names no version, and `if: false` reads
   exactly like a step that runs. Two are about **syntax this reader does not handle**, flow style and
-  folded values, and those a YAML parser would close. One is a **decision** rather than a defect:
-  whether `yes` counts as true here. And one is simply **unread**.
+  folded values, and those a YAML parser would close. And two are simply **unread**, which is a third
+  column rather than a hedge inside one of the other two: `yes` sat under *fails but should not*, and
+  whether it should is a question about GitHub's parser that nobody here has asked. The action
+  compares its input against the literal string `true`, so refusing `yes` may well be right.
 
-  A sixth row left this table by being fixed rather than by being argued away: *the option written
-  under `env:` or in any key but `with:`*. Reading each line as a key and a value closed it — a
-  `NOTE:` holding the words is not the setting, and the step is now correctly refused for not having
-  one. It was found in the same run that measured everything else here, which is the only reason it
-  is not still written above as a hole.
+  **A sixth row was taken off this table as fixed and was not.** It read *the option written under
+  `env:` or in any key but `with:`*. What got measured was a `with:` holding a `NOTE:` that quotes
+  the words — a different thing — and the row was deleted on it. Written as the row says, `env:` then
+  `cache-on-failure: true` under the caching step, the suite stayed green while the option was inert:
+  the action reads the input `INPUT_CACHE-ON-FAILURE`, which only `with:` writes, and its `post-if`
+  looks for `CACHE_ON_FAILURE`. Deleting a row for a run of something adjacent to it is the failure
+  this entry is a record of, committed inside the paragraph describing it. It is closed now, by
+  reading the inputs from under `with:` rather than from the step, and this paragraph is what is left
+  of the row.
 
   The folded-scalar row carries *in a third workflow* because it does not reproduce where a reader
   would first try it: written into `ci.yml` or `release.yml` the guard goes red instead, on the floor
@@ -168,12 +173,20 @@ suite. Everything else here is prose held by review.
   the step for the literal text refused `cache-on-failure:  true` over a second space, eight lines
   from the half that had just been taught to read keys.
 
-  And `save-if: false` is refused, because the action documents it as *"the cache is only
-  restored"*: no run saves, which subsumes the red run this whole change is about. Its neighbour
-  `lookup-only:` is in the table above rather than in the code, because what it does to saving is a
-  thing to measure and I have not.
+  **`save-if` was read from its description and not from its code.** The description says *"if
+  `false`, the cache is only restored"*, so the guard refused the literal `false` — and `no`, `off`,
+  `0`, `n`, `nope` and a quoted `"no"` each stopped every run saving while the suite stayed green.
+  The action's `save.ts` does not test for `false`; it saves only when the lowercased input reads
+  exactly `true`. That one line is the whole rule, and reading the prose beside it instead was the
+  same act as inheriting a count: taking the nearest available sentence for the measurement. The
+  guard now asks what the action asks, and leaves a `${{ … }}` alone, because what an expression
+  evaluates to is not in this file.
 
-  **This guard has failed correct workflows thirteen times, each for the same reason.** Every one was
+  Its neighbour `lookup-only:` is in the table above rather than in the code, because what it does
+  to saving is a thing to measure and I have not — which is the difference between an unread input
+  and one whose behaviour was guessed at from the sentence beside it.
+
+  **This guard has failed correct workflows fourteen times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -192,6 +205,7 @@ suite. Everything else here is prose held by review.
   | a step title, `if:` or `with:` quoting `uses:` beside a version | a line holding `uses:` is a step |
   | a quoted `uses: "actions/checkout@v7"` | a value is written bare |
   | `cache-on-failure:  true` with a second space | a setting is found by searching for its text |
+  | a quoted key, `- "uses": …` | only values are written in quotes |
 
   The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
   step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry
