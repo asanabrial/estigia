@@ -430,8 +430,9 @@ the workflow, it holds the tools.
   neither. `Swatinem/rust-cache` discards a failing run's cache by default, so the fix pushed after a
   red build recompiled the dependency tree from cold on all three platforms — six red runs closing
   one set of platform failures paid it six times. The guard names a version floor rather than the
-  word *deprecated*, because a file cannot be asked whether it is: `v1` to `v4` are the majors on
-  Node 20 or older, and a future deprecation moves that number where somebody has to look at it.
+  word *deprecated*, because a file cannot be asked whether it is: `v2` to `v4` run on Node 12, 16
+  and 20, `v1` is a runner plugin with no Node runtime at all, and everything from `v5` is `node24`.
+  A future deprecation moves that number to somewhere a person has to look at it.
 - The shipped payload passes **upstream's own 328 checks**.
 - Population declarations are bound to their syntax node and fingerprinted:
   changing the rule or the code beneath it reopens the claim.

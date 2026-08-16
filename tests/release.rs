@@ -752,10 +752,12 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// six times, three platforms each.
 ///
 /// The floor is a version rather than a word, because "deprecated" is not
-/// something a file can be asked. `v1` through `v4` are the majors that run on
-/// Node 20 or older; anything at or above `v5` is on `node24`. A future
-/// deprecation moves this number, and moving it is the point — the number is
-/// where somebody has to look.
+/// something a file can be asked. Read from each major's own `action.yml`: `v2`,
+/// `v3` and `v4` declare `node12`, `node16` and `node20`; `v1` declares
+/// `runs.plugin` and no Node runtime at all; `v5`, `v6` and `v7` are `node24`,
+/// and there is no `v8`. So the four rejected are rejected on what they say
+/// rather than on a guess, and a future deprecation moves this number — moving
+/// it is the point, because the number is where somebody has to look.
 #[test]
 fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     for name in ["ci.yml", "release.yml"] {
