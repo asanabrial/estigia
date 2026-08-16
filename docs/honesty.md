@@ -117,14 +117,16 @@ suite. Everything else here is prose held by review.
   GitHub's cache scoping that was not measured either.
 
   **What the guard has been found not to catch.** Every row below was produced by writing the
-  workflow a different legal way and running it. This is a list of what has been run, not a census:
-  nobody has enumerated the blind spots of a matcher that reads lines, and the count is left off
-  because a count is a claim to have finished looking.
+  workflow a different legal way and running the guard against it. This is a list of what has been
+  run, not a census: nobody has enumerated the blind spots of a matcher that reads lines, and the
+  count is left off because a count is a claim to have finished looking. The third column is what
+  was *not* run — `lookup-only:`'s effect on the action's saving, not the guard's answer, which is
+  measured and is that it does not read it.
 
   | Passes but should not | Fails but should not | Not measured |
   |---|---|---|
   | a checkout pinned to a **commit** — no version string to floor | a flow-style step, `- { uses: …, with: { … } }` | `cache-on-failure: yes` — refused, and whether GitHub hands the action `yes` or `true` was never read |
-  | a caching step under `if: false`, which cannot run | | `lookup-only:` — not read, and its effect on saving not measured |
+  | a caching step under `if: false`, **wherever a cache is allowed** | | `lookup-only:` — not read, and its effect on saving not measured |
   | a `uses:` folded onto the next line, **in a third workflow** | | |
 
   They are not one kind of thing, and an earlier version of this paragraph said they were. Two are
@@ -204,13 +206,30 @@ suite. Everything else here is prose held by review.
   flow mapping was refused, and the option written a level *below* `with:` passed, which is the row
   this entry says it closed surviving one level in.
 
-  **Twenty rounds of this is the measurement.** Each one found another legal spelling; each fix was
-  right and the next spelling was not covered. That is not a run of bad luck, it is what reading YAML
-  a line at a time costs, and the entry has said since the twelfth round that closing the left-hand
-  column properly means parsing rather than reading. Nothing here adds a parser — that is a
-  dependency this issue did not ask for — so what is written instead is the ceiling: this guard reads
-  the block style these two workflows are written in, refuses what it cannot take apart, and the
-  table below is the record of every legal thing it got wrong on the way.
+  **The run of rounds this took is itself the measurement, and the table below is where it is
+  counted.** Each one found another legal spelling; each fix was right and the next spelling was not
+  covered. That is not bad luck, it is what reading YAML a line at a time costs, and the entry has
+  said since the twelfth round that closing the left-hand column properly means parsing rather than
+  reading. Nothing here adds a parser — that is a dependency this issue did not ask for — so what is
+  written instead is the ceiling: this guard reads the block style these two workflows are written
+  in, refuses what it cannot take apart, and the table below records every legal thing it got wrong
+  on the way. This paragraph gave the count as a number for three rounds after the number stopped
+  being right, which is the smaller cousin of the branch that could not count its own commits: the
+  row count is a fact about the table and stays current; a round count is a fact about the future.
+
+  **Four rounds of closing one spelling each, and a newline walked past all four.** `- {`, items in
+  the key's own column, `-  {` with two spaces, `steps: [` — each was measured, each fix was right,
+  and putting the `[` on the line *after* `steps:` was read by none of them: no `- ` items, so
+  nothing to inspect, so nothing refused. A lane checking out with `@v4` and carrying a bare
+  `rust-cache` inside one measured green. A `jobs:` written as a single flow mapping did the same,
+  with no `steps:` line to find at all.
+
+  What is written now is not the fifth spelling. **A `steps:` that yields no step is refused,
+  whatever the reason**, and so is a `jobs:` whose value is a mapping. That is the invariant the
+  four were each an instance of, and it inverts the failure mode: a spelling this reader does not
+  handle is a red with a message rather than a file nobody read. It is the shape the entry should
+  have reached for at the twelfth round, when it first wrote that this needs parsing — refusing what
+  cannot be read is the honest half of that sentence, and it costs no dependency.
 
   **And the flow-style row was in the wrong column outside the two lanes it had been run in.** It
   sat under *fails but should not*, which is what happens in `ci.yml` and `release.yml`: the guard
@@ -273,7 +292,7 @@ suite. Everything else here is prose held by review.
   left two — which is, to the action, the same harm this entry already records from the round where
   the list named three and `action-gh-release` was the one missing.
 
-  **This guard has failed correct workflows twenty-two times, each for the same reason.** Every one was
+  **This guard has failed correct workflows twenty-three times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -301,6 +320,7 @@ suite. Everything else here is prose held by review.
   | a block step whose `with:` is one flow mapping | an input block always has an empty value |
   | a `with: {` whose brace closes on a later line | a flow mapping closes where it opens |
   | `with:` with its flow mapping opening on the next line | a mapping opens beside its key |
+  | a `#` inside a quoted value, in a flow `with:` | a `#` anywhere on a line opens a comment |
 
   The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
   step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry

@@ -778,7 +778,7 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// that fails. Some of it is meaning a line cannot carry — a commit pin names no
 /// version, a step under `if: false` reads exactly like one that runs — and some
 /// is syntax this reader does not handle, which a YAML parser would close. The
-/// twenty-two correct workflows this guard used to refuse are tabulated beside it,
+/// twenty-three correct workflows this guard used to refuse are tabulated beside it,
 /// and both tables were built the same way: by writing the file a different
 /// legal way and running it, rather than by reading this code and reasoning
 /// about what it would do.
@@ -1085,6 +1085,13 @@ fn flow_style_steps(running: &[String]) -> Vec<String> {
             at += 1;
             continue;
         };
+        // A `jobs:` written as one flow mapping holds every job and every step
+        // on it, and nothing below finds a `steps:` key at all.
+        if key == "jobs" && !value.is_empty() {
+            refused.push(running[at].clone());
+            at += 1;
+            continue;
+        }
         if key != "steps" {
             at += 1;
             continue;
@@ -1117,6 +1124,17 @@ fn flow_style_steps(running: &[String]) -> Vec<String> {
             .filter(|code| opens_an_item(code).is_some())
             .map(|code| indent_of(code))
             .min();
+        // **A `steps:` that yielded no step is refused**, whatever the reason.
+        // Four rounds running closed one spelling each — `- {`, items in the
+        // key's own column, `-  {` with two spaces, `steps: [` — and the fifth
+        // walked past all of them by putting the `[` on the next line, silently.
+        // This is the invariant those four were each an instance of: an
+        // unhandled spelling is now a red rather than a file nobody read.
+        if item.is_none() {
+            refused.push(running[at].clone());
+            at += 1 + block.len();
+            continue;
+        }
         for (n, code) in block.iter().enumerate() {
             if Some(indent_of(code)) != item {
                 continue;
@@ -1304,12 +1322,32 @@ fn every_workflow() -> Vec<String> {
     names
 }
 
-/// Everything on a line before its first `#`, so a guard reads what a workflow
+/// Everything on a line before its comment, so a guard reads what a workflow
 /// runs rather than what it says about itself. Commenting a setting out is how
 /// one gets turned off without looking turned off.
 fn code_of(text: &str) -> String {
-    text.lines()
-        .map(|line| line.split('#').next().unwrap_or_default())
-        .collect::<Vec<_>>()
-        .join("\n")
+    text.lines().map(uncommented).collect::<Vec<_>>().join("\n")
+}
+
+/// A line up to the `#` that opens a comment, and no earlier.
+///
+/// YAML starts a comment at a `#` that is outside quotes and follows whitespace
+/// or nothing. Cutting at the first `#` on the line cut inside a quoted value:
+/// `prefix-key: 'v1 # bump'` left an unterminated flow mapping, and a correctly
+/// configured caching step was reported as discarding its caches — a diagnosis
+/// about the workflow when the fault was the reader.
+fn uncommented(line: &str) -> &str {
+    let mut quote: Option<char> = None;
+    let mut previous = ' ';
+    for (at, character) in line.char_indices() {
+        match quote {
+            Some(open) if character == open => quote = None,
+            Some(_) => {}
+            None if character == '"' || character == '\'' => quote = Some(character),
+            None if character == '#' && previous.is_whitespace() => return &line[..at],
+            None => {}
+        }
+        previous = character;
+    }
+    line
 }
