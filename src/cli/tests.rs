@@ -4457,8 +4457,11 @@ fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
     //   `/private/var`. Answer `/private/var/…/wt-a`, expectation `/var/…/wt-a`.
     // - Windows: the runner's temporary directory sits under `C:\Users\RUNNER~1`,
     //   the **8.3 short name**. Answer `…\runneradmin\…`, expectation `…\RUNNER~1\…`.
-    //   Nothing to do with links; a local profile short enough to need no alias
-    //   answers the long name both ways, which is why this platform looked safe.
+    //   Nothing to do with links. What decides it is how `TEMP` is *spelled*,
+    //   which is not the same question as whether a short name exists: this
+    //   developer's profile has one (`dir /x C:\Users` → `ASANAB~1  asanabrial`)
+    //   and the assertions passed here anyway, because the local variable carries
+    //   the long spelling and the runner's carries the short one.
     //
     // Canonicalising the fixture instead only moves the break: on Windows that
     // returns the `\\?\` verbatim form, which `placed` strips. No one spelling is
@@ -4470,12 +4473,17 @@ fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
     // `placed(resolved)` against the raw `launched`, and `wt-a/../nope` differs
     // from its expectation in shape rather than in spelling. What survives
     // unseen is a normalisation that is wrong, applied identically to both sides,
-    // and still landing under `launched` — the leaked verbatim prefix is the one
-    // instance, and `paths::tests::a_placed_path_carries_no_verbatim_prefix` owns
-    // it. **Not** every part of `placed` is owned next door: gutting its `..`
-    // collapse leaves all of `paths`' own tests green, and the test that catches
-    // that is `harness::tests::a_write_that_lands_inside_the_claim_is_gated_
-    // however_it_is_spelled`.
+    // and still landing under `launched`. The instance that matters is a leaked
+    // verbatim prefix, owned by
+    // `a_placed_path_carries_no_verbatim_prefix` in `src/paths.rs`. Not the
+    // *only* one constructible: appending or popping a component survives these
+    // rows too, and both are caught elsewhere in the suite.
+    //
+    // **Not** every part of `placed` is owned next door: gutting its `..` collapse
+    // leaves all of `paths`' own tests green, and what catches it is
+    // `a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled`, in
+    // `src/harness/tests.rs`. Spelled on one line because a name split across two
+    // is a name nobody can grep, which this change has already had to fix once.
     //
     // Found in CI after two contexts had accepted the change, which is the
     // ordering this repository has filed against itself: the first
