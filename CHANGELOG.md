@@ -415,6 +415,17 @@ the workflow, it holds the tools.
 
 ### Guards
 
+- Neither workflow may check out with a deprecated action or throw away a red run's cache, and both
+  halves are crossed rather than trusted. `actions/checkout@v4` targets Node 20, so every run this
+  repository has produced printed *"being forced to run on Node.js 24"* — a warning that becomes a
+  workflow which will not start, on GitHub's schedule rather than on ours. Both files move to `v7`,
+  which runs on `node24` and keeps `ref` and `persist-credentials` unchanged; its one breaking change
+  refuses fork checkouts under `pull_request_target` and `workflow_run`, and this repository uses
+  neither. `Swatinem/rust-cache` discards a failing run's cache by default, so the fix pushed after a
+  red build recompiled the dependency tree from cold on all three platforms — six red runs closing
+  one set of platform failures paid it six times. The guard names a version floor rather than the
+  word *deprecated*, because a file cannot be asked whether it is: `v1` to `v4` are the majors on
+  Node 20 or older, and a future deprecation moves that number where somebody has to look at it.
 - The shipped payload passes **upstream's own 328 checks**.
 - Population declarations are bound to their syntax node and fingerprinted:
   changing the rule or the code beneath it reopens the claim.

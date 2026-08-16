@@ -738,3 +738,59 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
     assert!(workflow.contains("contents: read"));
     assert!(workflow.contains("persist-credentials: false"));
 }
+
+/// Neither workflow checks out with an action GitHub is already forcing onto a
+/// newer runtime, and a red run keeps what it compiled.
+///
+/// Both halves were unguarded, which is how both got old. `actions/checkout@v4`
+/// targets Node 20 and every run of this repository printed *"Node.js 20 is
+/// deprecated … being forced to run on Node.js 24"* — a warning that becomes a
+/// workflow that will not start, on GitHub's schedule rather than on ours. And
+/// `Swatinem/rust-cache` discards the cache of a failing run by default, so the
+/// fix pushed after a red build recompiles the dependency tree from cold on
+/// every platform. Six red runs closing one set of platform failures paid that
+/// six times, three platforms each.
+///
+/// The floor is a version rather than a word, because "deprecated" is not
+/// something a file can be asked. `v1` through `v4` are the majors that run on
+/// Node 20 or older; anything at or above `v5` is on `node24`. A future
+/// deprecation moves this number, and moving it is the point — the number is
+/// where somebody has to look.
+#[test]
+fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
+    for name in ["ci.yml", "release.yml"] {
+        let workflow = read(&format!(".github/workflows/{name}"));
+        let stale: Vec<&str> = workflow
+            .lines()
+            .filter(|line| {
+                let code = line.split('#').next().unwrap_or_default();
+                ["@v1", "@v2", "@v3", "@v4"]
+                    .iter()
+                    .any(|old| code.contains(&format!("actions/checkout{old}")))
+            })
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "{name} checks out with an action GitHub already forces onto a newer \
+             runtime: {stale:?}"
+        );
+        // The floor is only a floor if the step is still there to have a version.
+        assert!(
+            workflow.contains("actions/checkout@"),
+            "{name} has no checkout step, so the version check above read nothing"
+        );
+    }
+
+    // Only `ci.yml` caches — the release lane builds each target once, and the
+    // issue that asked for this said not to add caching anywhere else.
+    let ci = read(".github/workflows/ci.yml");
+    assert!(
+        ci.contains("cache-on-failure: true"),
+        "a red CI run throws away everything it compiled, so the next push starts \
+         from cold on all three platforms"
+    );
+    assert!(
+        !read(".github/workflows/release.yml").contains("rust-cache"),
+        "the release lane gained a cache this guard does not check"
+    );
+}

@@ -23,7 +23,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
@@ -42,7 +42,16 @@ jobs:
         with:
           node-version: '22'
 
+      # A failing run saves its cache too. Without this the action's default
+      # discards everything a red run compiled, so the fix pushed after it starts
+      # from cold on all three platforms — three to eight minutes each, paid
+      # exactly when somebody is iterating on a red build. Measured on this
+      # repository: closing one set of platform-shaped test failures took six red
+      # runs across three platforms, every one of them recompiling the dependency
+      # tree from scratch.
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: formatting
         run: cargo fmt --all --check

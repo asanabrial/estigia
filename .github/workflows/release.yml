@@ -47,7 +47,14 @@ jobs:
             os: windows-11-arm
 
     steps:
-      - uses: actions/checkout@v4
+      # Raised with `ci.yml`'s rather than left behind. The issue this closes
+      # named only that file, and the reason it gives — a warning that becomes a
+      # broken workflow on GitHub's schedule rather than on ours — lands harder
+      # here: this lane runs on a **tag**, where a workflow that will not start
+      # publishes nothing and cannot be retried by pushing a fix. Leaving one
+      # file on the deprecated action would also have made the guard below a
+      # half-truth, since it reads both.
+      - uses: actions/checkout@v7
 
       # Estigia does not choose the version — `publish_version` is declared
       # `(agent, not scripted)` — but the number in the tag and the number in
