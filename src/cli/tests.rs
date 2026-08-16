@@ -4446,17 +4446,37 @@ fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
     let narrowed = |payload: serde_json::Value, tool: &str| {
         super::narrowed_by_the_call(&payload, tool, launched)
     };
+    // Every expectation is spelled the way the answer is spelled, because the
+    // answer is a **placed** path and a directory has more than one name.
+    //
+    // Comparing against the raw fixture path passed on Windows and Linux and
+    // failed on macOS, where the temporary directory is `/var/…` and `/var` is a
+    // symlink to `/private/var`. Canonicalising the fixture instead swaps which
+    // platform breaks: on Windows that returns the `\\?\` verbatim form, which
+    // `placed` strips. There is no one spelling that is right everywhere, so the
+    // expectation goes through the same normalisation as the answer and the
+    // assertion is left comparing places rather than names.
+    //
+    // What that costs is worth stating: this cannot catch a `placed` that
+    // normalises wrongly, only one that lands somewhere else. The landing is the
+    // property here — `paths`' own tests own the normalising.
+    //
+    // Found in CI, on the third platform, after two contexts had accepted the
+    // change. That ordering is a defect this repository has filed against itself.
+    let placed = |path: &std::path::Path| {
+        crate::paths::placed(path).expect("the fixture path can be placed")
+    };
     let workdir = |named: &str| serde_json::json!({ "command": "git commit", "workdir": named });
 
     // What it is for: somewhere under the directory this process stands in.
     assert_eq!(
-        narrowed(workdir(&inside.display().to_string()), "bash").as_deref(),
-        Some(inside.as_path()),
+        narrowed(workdir(&inside.display().to_string()), "bash"),
+        Some(placed(&inside)),
         "an absolute directory inside the launch directory was not honoured"
     );
     assert_eq!(
         narrowed(workdir("wt-a"), "bash"),
-        Some(launched.join("wt-a")),
+        Some(placed(&launched.join("wt-a"))),
         "a relative directory was not resolved against the launch directory"
     );
     // Wrapped, because a hook that nests the tool's arguments is why the nesting
@@ -4466,7 +4486,7 @@ fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
             serde_json::json!({ "tool_input": { "workdir": "wt-a" } }),
             "bash"
         ),
-        Some(launched.join("wt-a")),
+        Some(placed(&launched.join("wt-a"))),
         "a wrapped payload lost the working directory"
     );
 
@@ -4548,7 +4568,7 @@ fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
             }),
             "bash"
         ),
-        Some(launched.join("nope")),
+        Some(placed(&launched.join("nope"))),
         "a path that climbs back inside was attributed to the component it \
          climbed through rather than to where it lands"
     );
