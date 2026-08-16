@@ -10258,14 +10258,14 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
             "a relative working directory reached the wrong holder: {wrote}"
         );
 
-        // And the one that decides where the resolution has to happen. A
-        // directory that does not exist cannot be canonicalised, and
-        // `coverage_depth` — which is where a relative path was already being
-        // resolved, one layer down — falls back to the path as written when it
-        // cannot. Left relative, that path lies under no checkout at all, so
-        // **nobody** holds the call: the write stops being adjudicated instead
-        // of being refused. Resolving at the door keeps it inside the project,
-        // where the ordinary ambiguity refusal reaches it.
+        // A directory that is not there. It resolves under the launch directory
+        // like any other relative value, so the ordinary ambiguity refusal is
+        // what it gets — the answer the same call gets carrying no key at all.
+        //
+        // The clamp is what holds this now, not the resolution: an unresolvable
+        // value is placed before it is compared, and one that lands outside is
+        // dropped in favour of the launch directory. Both belts are kept, and
+        // the resolution is measured by the unit test rather than by this row.
         let (said, ok, _) = ask(Some("no-such-worktree"));
         assert!(
             !ok,
@@ -10299,11 +10299,31 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
             .display()
             .to_string();
         let climbed = worktree_a.join("..").join("..").display().to_string();
+        // And the road that only opens when the path cannot be **opened**.
+        // Comparison resolves both sides and falls back to the spelling when
+        // resolution fails, so `..` past an existing component was never
+        // cancelled: `wt-a/../../nope` still started with the launch directory,
+        // was called inside, and was attributed to the holder of the component
+        // it climbed *through*. Measured: not merely let past — allowed, exit
+        // zero, under a claim the call had nothing to do with. A run holding one
+        // worktree could borrow the other's authority by writing one `..`.
+        let through_a = worktree_a.join("..").join("..").join("nope");
+        let through_a = through_a.display().to_string();
+        let deeper = worktree_a
+            .join("..")
+            .join("..")
+            .join("..")
+            .join("nope")
+            .display()
+            .to_string();
         for escape in [
             "..",
             parent.as_str(),
             climbed.as_str(),
             if cfg!(windows) { "C:\\Windows" } else { "/etc" },
+            "wt-a/../../nope",
+            through_a.as_str(),
+            deeper.as_str(),
         ] {
             let (said, ok, _) = ask(Some(escape));
             assert!(
@@ -10320,10 +10340,13 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
         }
     }
 
-    // The same escape, through a tool that carries no working directory of its
-    // own. `payload_cwd` is read once for every gated tool, not only for the one
-    // whose host sends the key, so a payload that simply includes it steers any
-    // of them. Kept out of the loop above because the argument shape differs.
+    // The same road, through a tool that carries no working directory of its
+    // own. The key was once read for every gated tool rather than only for the
+    // one whose host sends it, so a payload that merely included it steered any
+    // of them — measured, on `write` and `edit`, before the read was narrowed to
+    // Bash. Two things hold it shut now and this row is the floor under both:
+    // the tool restriction, and the clamp behind it. Kept out of the loop above
+    // because the argument shape differs.
     let ledger = home.path().join(".estigia").join("decisions.jsonl");
     let _ = std::fs::remove_file(&ledger);
     let payload = serde_json::json!({
@@ -10342,5 +10365,37 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
         !ok && said.contains("several-runs-hold-this-checkout"),
         "a write naming a file inside the claim was taken out of the gate by a \
          working directory in its payload: {said}"
+    );
+
+    // And the other door of the same branch, which nothing crossed before this
+    // change restructured the line it lives on. A host's `cwd` is authoritative
+    // and has to keep reaching the decision: discarding it entirely — always
+    // adjudicating the process directory — left the whole suite green, while the
+    // comment above that line cites a measured defect where the same call was
+    // judged against two different repositories depending on which door it came
+    // through. Sent as the hook nests it, because that nesting is why the door
+    // exists at all.
+    let _ = std::fs::remove_file(&ledger);
+    let payload = serde_json::json!({
+        "tool_input": { "cwd": worktree_b, "file_path": worktree_b.join("f.txt") },
+    });
+    let payload = serde_json::to_string(&payload).expect("a payload serialises");
+    let (out, error, _) = run_in(
+        home.path(),
+        base.path(),
+        &["gate", "write", "--input", &payload],
+        "",
+    );
+    let said = format!("{out}{error}");
+    let wrote = std::fs::read_to_string(&ledger).unwrap_or_default();
+    assert!(
+        !said.contains("several-runs-hold-this-checkout"),
+        "a checkout the host named was discarded, so the call fell back to the \
+         shared base and was refused as ambiguous: {said}"
+    );
+    assert!(
+        wrote.contains("opencode-bbbb2222") && !wrote.contains("claude-aaaa1111"),
+        "the decision was not attributed to the run that owns the checkout the \
+         host named: {wrote}"
     );
 }

@@ -612,10 +612,18 @@ fn no_workflow_needs_only_interpreters_it_sets_up() {
     // runner image rather than to the workflow, and the day it changes the
     // release lane discovers it on a tag. The guard that was kept for Python is
     // the same guard, and it had only ever named one tool.
+    // Named for the test, not for the spawn. `Command::new("node")` was the
+    // first spelling of this line and it held nothing: the same string already
+    // stood in `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`,
+    // which spawns `node` and **skips** when it is absent. Measured — deleting
+    // the behavioural test outright left this guard green, so both workflows
+    // would go on installing a runtime for a test that no longer needs one, and
+    // the guard would be satisfied by the one test that never did.
     assert!(
-        read("src/setup/tests.rs").contains(r#"std::process::Command::new("node")"#),
-        "the suite no longer executes the plugin, so the steps below are asking \
-         both workflows to install a tool nothing needs"
+        read("src/setup/tests.rs")
+            .contains("fn the_plugin_hands_the_gate_the_directory_the_call_runs_in"),
+        "the test that requires an interpreter is gone, so the steps below are \
+         asking both workflows to install a tool nothing needs"
     );
     for name in ["ci.yml", "release.yml"] {
         let workflow = read(&format!(".github/workflows/{name}"));

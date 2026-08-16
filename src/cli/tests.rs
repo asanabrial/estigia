@@ -4486,6 +4486,73 @@ fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
         );
     }
 
+    // And the road the first clamp did not cover, which is the one worth having
+    // a name for: a `..` that climbs out **past a component that exists**, onto
+    // somewhere this process cannot open.
+    //
+    // Comparison is by resolved path, and resolution of a path that cannot be
+    // opened falls back to the spelling as written. `..` is then never cancelled,
+    // so `wt-a\..\..\nope` still *starts with* the launch directory and the clamp
+    // called it inside — for a path that is not. Worse than the escape it
+    // replaced: the first one reached `outside`, and this one reached **allow**,
+    // under the claim of whichever worktree the lexical prefix happened to name.
+    // A run holding B could borrow A's authority by writing one `..`.
+    //
+    // The fix is not a second comparison, it is the right primitive: `placed`
+    // collapses the spelling before resolving what exists, and its own doc names
+    // this failure. Every spelling here canonicalises to nothing, which is
+    // exactly why the rows above stayed green while the gate was open.
+    let from_absolute = if cfg!(windows) {
+        format!("{}\\..\\..\\nope", inside.display())
+    } else {
+        format!("{}/../../nope", inside.display())
+    };
+    let unopenable: Vec<&str> = if cfg!(windows) {
+        vec![
+            "wt-a\\..\\..\\nope",
+            "wt-a/../../../nope",
+            "wt-a\\..\\..\\..\\..\\Windows-that-is-not-there",
+            &from_absolute,
+        ]
+    } else {
+        vec![
+            "wt-a/../../nope",
+            "wt-a/../../../nope",
+            "wt-a/../../../../etc-that-is-not-there",
+            &from_absolute,
+        ]
+    };
+    for out in unopenable {
+        assert_eq!(
+            narrowed(workdir(out), "bash"),
+            None,
+            "{out:?} climbed out of the launch directory through a path that \
+             cannot be opened, and the clamp compared the spelling instead of \
+             where it lands"
+        );
+    }
+
+    // The other half of the same road, and the one that says the repair is a
+    // resolution rather than a rejection. This climbs *back* to somewhere that
+    // is genuinely inside, so it is honoured — and it is honoured as
+    // `<launched>/nope`, not as something under `wt-a`. That distinction is the
+    // finding: attributed to its spelling it reached the holder of `wt-a` and
+    // was **allowed**, where the directory it names is the shared base that two
+    // runs cover at equal depth and the ambiguity refusal is what it should get.
+    assert_eq!(
+        narrowed(
+            workdir(if cfg!(windows) {
+                "wt-a\\..\\nope"
+            } else {
+                "wt-a/../nope"
+            }),
+            "bash"
+        ),
+        Some(launched.join("nope")),
+        "a path that climbs back inside was attributed to the component it \
+         climbed through rather than to where it lands"
+    );
+
     // And the tools it is not read for. Bash is the only one measured to carry
     // the key and the only one this closes; honouring it elsewhere is inventing
     // evidence from an argument nothing documents, and it is how the escape

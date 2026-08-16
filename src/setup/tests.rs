@@ -5135,9 +5135,10 @@ console.log(JSON.stringify(seen));
     );
     let call = &calls[0];
 
-    // The payload, which is where the alias travels. `payload_cwd` reads
-    // `workdir` out of exactly this, so a plugin that filtered the arguments
-    // down to the ones it recognised would break the fix without touching it.
+    // The payload, which is where the key travels. `narrowed_by_the_call` reads
+    // `workdir` out of exactly this — `payload_cwd` deliberately does not — so a
+    // plugin that filtered the arguments down to the ones it recognised would
+    // break the fix without touching it.
     let values: Vec<&str> = call["values"]
         .as_array()
         .expect("the interpolated values")

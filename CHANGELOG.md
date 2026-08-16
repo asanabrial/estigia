@@ -69,9 +69,19 @@ the workflow, it holds the tools.
   run; the gate simply stopped adjudicating it, and the same spelling reached `write` and `edit` too.
   A payload that can move the decision is a payload that can leave the gate, which is worse than the
   false ambiguity the key was read to fix — the widened gate that looks exactly like working
-  correctly. So a value resolving outside the launch directory is discarded in favour of it, which is
-  where the decision sat before this key was read at all, and both blind reviews of the unclamped
-  version rejected it on precisely that.
+  correctly. So the resolved value is **placed** — its spelling collapsed the way the platform
+  collapses it, then resolved as far as the filesystem exists — and one landing outside the launch
+  directory is discarded in favour of it, which is where the decision sat before this key was read at
+  all. Both blind reviews of the unclamped version rejected it on precisely that.
+
+  Placing it is the clamp rather than a refinement of it, and the second round of review is why. A
+  first attempt compared with `covers`, which is written for working directories *that exist* and
+  falls back to the path as written when resolution fails; `..` was then never cancelled, so
+  `wt-a/../../nope` still started with the launch directory and was attributed to the holder of the
+  component it climbed **through** — measured as `allow`, exit zero, under a claim the call had
+  nothing to do with. Strictly worse than the escape it replaced, which at least reached `outside`.
+  `placed` already existed for exactly this, and its own doc names the failure; what it needed was to
+  be the thing the gate asked.
 
   `holders_of` is untouched: its closest-worktree selection was always right when given the real
   directory, and the equal-depth ambiguity at a shared base is genuine and still refused. The alias

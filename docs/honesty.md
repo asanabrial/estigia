@@ -40,12 +40,22 @@ suite. Everything else here is prose held by review.
   adapter's hook, which knows what it is gating, and is taken as given. `workdir` is a tool
   *argument*, so whatever composed the call wrote it — a model, on every runtime here. It may
   therefore only **narrow**: a relative value is resolved against the directory this process was
-  launched in, and any value resolving outside that directory is discarded in favour of it. Measured
-  before that clamp existed, with two live pointers and a `git commit` under a claim: `workdir` of
-  `..`, of the parent checkout, and of `C:\Windows` all resolved, were covered by no run, and were
-  answered `outside` with exit **zero** — the command still running where it was going to run, with
-  the gate no longer adjudicating it. A payload that can move the decision is a payload that can
-  leave the gate, which is worse than the false ambiguity the key was read to fix.
+  launched in, the result is **placed** — the spelling collapsed the way this platform collapses it,
+  then resolved as far as the filesystem exists — and a value landing outside the launch directory is
+  discarded in favour of it. Measured before that clamp existed, with two live pointers and a
+  `git commit` under a claim: `workdir` of `..`, of the parent checkout, and of `C:\Windows` all
+  resolved, were covered by no run, and were answered `outside` with exit **zero** — the command
+  still running where it was going to run, with the gate no longer adjudicating it.
+
+  Placing it is not decoration on the comparison, it is the comparison. The first clamp compared with
+  `covers`, which is written for working directories *that exist* and falls back to the path as
+  written when resolution fails. `..` was then never cancelled, so `wt-a/../../nope` still started
+  with the launch directory, was called inside, and was attributed to the holder of the component it
+  climbed **through** — measured as `allow`, exit zero, under a claim the call had nothing to do
+  with. A run holding one worktree could borrow another's authority by writing one `..`, and that is
+  worse than the escape it replaced: the first reached `outside`, this reached permission. Both were
+  found by review rather than by a test, on the road neither list of spellings covered, because every
+  spelling either list held happened to canonicalise.
 
   Where two runs hold isolated worktrees inside one base checkout, a write arriving through any tool
   that names no directory is covered by both at equal depth and is refused

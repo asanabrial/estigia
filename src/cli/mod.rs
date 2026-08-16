@@ -4625,20 +4625,39 @@ fn narrowed_by_the_call(
     if !tool.eq_ignore_ascii_case("bash") {
         return None;
     }
-    let named = ["workdir"].into_iter().find_map(|key| {
-        parsed
-            .get(key)
-            .or_else(|| parsed.get("tool_input").and_then(|inner| inner.get(key)))
-            .and_then(serde_json::Value::as_str)
-            .filter(|named| !named.trim().is_empty())
-    })?;
+    let named = parsed
+        .get("workdir")
+        .or_else(|| {
+            parsed
+                .get("tool_input")
+                .and_then(|inner| inner.get("workdir"))
+        })
+        .and_then(serde_json::Value::as_str)
+        .filter(|named| !named.trim().is_empty())?;
     let named = std::path::PathBuf::from(named);
     let resolved = if named.is_absolute() {
         named
     } else {
         launched.join(named)
     };
-    crate::paths::covers(launched, &resolved).then_some(resolved)
+    // Placed before compared, and the difference is the whole clamp.
+    //
+    // `covers` was written for **working directories, which exist**, and resolves
+    // an unresolvable path literally — so `wt-a/../../nope` still *starts with*
+    // the launch directory, `..` never cancelled, and the comparison answers
+    // *inside* for a path that is not. Measured: that spelling was not merely
+    // let past, it was attributed to whichever worktree the lexical prefix
+    // happened to name and **allowed**, so a run holding one worktree could
+    // borrow the other's claim by writing one `..`. Strictly worse than the
+    // escape it replaced, which at least reached `outside`.
+    //
+    // `placed` is the primitive for a path a caller wrote rather than one the
+    // filesystem already has: it collapses the spelling the way this platform
+    // collapses it, then resolves as much as exists. Its own doc names this
+    // failure. `None` from it means the path cannot be placed at all, and its
+    // contract says read that as inside — which here is the launch directory,
+    // the answer the caller falls back to.
+    crate::paths::placed(&resolved).filter(|placed| crate::paths::covers(launched, placed))
 }
 
 fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Result<(), Refusal> {
