@@ -124,6 +124,14 @@ review, CI, signatures, or deployments, and a published rebase can require a for
 another actor fetched. Follow an explicit repository rebase policy only while no evidence or shared
 consumer depends on the old identities.
 
+When a rebase or an amend has already happened, that force-push is `republish_review` and never a
+hand-run one: it leases against the head the last publication recorded, so a remote another actor
+moved refuses the push instead of losing their commit, and it records a new epoch like any republish.
+A non-fast-forward refusal from `publish_review` is the signal to use it, not the signal to leave.
+This paragraph exists because the one above names the hazard and used to stop there, which left the
+reader to solve it themselves — outside the tools, on the operation whose mistake is least
+recoverable.
+
 ## Publish, review, and verify
 
 Publish the configured review target as a draft before moving work to review. Reuse its existing

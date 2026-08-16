@@ -1076,17 +1076,26 @@ suite. Everything else here is prose held by review.
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
   What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still
   `verify-claim --issue --run-id --expect-state`; the head comparison is local, against the checkout.
-- **A `republish_review` that refuses has already edited the pull request, and says so.** Both of its
-  refusals arrive after the reused pull request has been converted back to draft and its title and
-  body replaced: the lease is evaluated by git at the push, and the renewal stands immediately before
-  it. So a remote somebody else moved leaves the branch untouched, which is what the operation is for,
-  and leaves the pull request drafted and re-described. What is **not** left to a reader to infer is
-  the report: the renewal's refusal carries `world: committed` and names what was rewritten, and the
-  lease's is a write failure, which already says the world is ambiguous. That is the correction two
-  independent reviewers of the change both measured — the renewal reached the agent through the same
-  `stop()` every claim refusal uses, whose envelope carries no `world`, so it read as *nothing was
-  written* while somebody else's pull request sat re-described with nobody told to put it back. What
-  is still on the reader is the decision: Estigia reports the edit, it does not undo it.
+- **A `republish_review` that refuses has already edited the pull request, and says so.** Its refusals
+  arrive after the reused pull request has been converted back to draft and its title and body
+  replaced: `ensure_draft` writes first, the renewal stands immediately before the push, and the lease
+  is evaluated by git at the push itself. So a remote somebody else moved leaves the branch untouched,
+  which is what the operation is for, and leaves the pull request drafted and re-described. What is
+  **not** left to a reader to infer is the report: all three of those refusal sites carry the fact, so
+  none of them answers *nothing was written*. That took two rounds of independent review to get right,
+  and the shape of the mistake is worth keeping — each refusal reached the agent through the same
+  `stop()` and `?` every other path uses, whose envelopes carry no `world`, so *the absence of a claim
+  about the world was read as a claim that the world was untouched*. Fixing the renewal first and
+  leaving the other two is how a second round found the same defect twice. What is still on the
+  reader is the decision: Estigia reports the edit, it does not undo it.
+- **A republish cannot lease against a receipt published from a different GitHub account.**
+  `latest_publication` keeps only comments the authenticated identity authored, because a marker this
+  identity did not write is one anybody could have forged. The consequence is narrow and worth naming
+  rather than leaving to be discovered: a run that reclaims an abandoned issue published from another
+  account finds no receipt, is refused `published-receipt-missing`, and then has no route inside
+  Estigia at all — `publish_review` cannot fast-forward a rewritten branch either. It fails closed,
+  which is the right direction, and it leaves that reclaim with nothing to do but step outside the
+  tools, which is the thing this operation exists to stop.
   What the lease does **not** prove is that the rewritten history still contains the reviewed change.
   It compares one commit id to another; a rebase that dropped a hunk leases exactly as cleanly as one
   that did not. Every republish creates a new epoch and invalidates the prior review evidence for

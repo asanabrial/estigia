@@ -1810,6 +1810,7 @@ const CONSTRAINED_TO_THE_STATES: &[(&str, &str)] = &[
     ("heartbeat", "expect-state"),
     ("start-branch", "expect-state"),
     ("publish-review", "expect-state"),
+    ("republish-review", "expect-state"),
 ];
 
 fn transport_constrained(operation: &str) -> Vec<String> {

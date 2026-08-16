@@ -9484,7 +9484,132 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
         "the refusal does not say what was left behind: {text}"
     );
 
-    // Third: an issue that has never been published has no head to lease
+    // Third: the refusal this operation exists to produce, driven the whole way
+    // rather than at the level of `push_to_origin`. Somebody else moves the
+    // remote after the receipt was recorded, so the lease refuses — and what is
+    // asserted is what the *agent* is told, which no unit test can see. It was
+    // the rarer path (the claim moving) that got a sentence naming the rewritten
+    // pull request, while the designed outcome came back saying nothing about it.
+    let other = trace.path().join("other");
+    assert!(
+        Command::new("git")
+            .args(["clone", "--quiet", "--"])
+            .arg(origin.path())
+            .arg(&other)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    let elsewhere = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(&other)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(elsewhere(&["checkout", "-q", branch]));
+    std::fs::write(other.join("theirs.txt"), "theirs\n").expect("their change");
+    assert!(elsewhere(&["add", "theirs.txt"]));
+    assert!(elsewhere(&[
+        "-c",
+        "user.email=other@example.invalid",
+        "-c",
+        "user.name=Somebody else",
+        "commit",
+        "--quiet",
+        "-m",
+        "a commit this run never saw",
+    ]));
+    assert!(elsewhere(&["push", "-q", "origin", branch]));
+    let theirs = String::from_utf8_lossy(
+        &Command::new("git")
+            .arg("-C")
+            .arg(&other)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .expect("git answers")
+            .stdout,
+    )
+    .trim()
+    .to_owned();
+    assert_eq!(remote_head(), theirs, "the other run did not publish");
+
+    let leased = trace.path().join("leased.log");
+    let (failed, text) = republish(&answers(None, true), &leased);
+    assert!(
+        failed,
+        "the lease let a republish over a commit the receipt never named: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        theirs,
+        "the force-push destroyed a commit somebody else pushed: {text}"
+    );
+    assert!(
+        !text.contains("nothing was written"),
+        "the lease refusal reported an untouched world after rewriting the pull request: {text}"
+    );
+    assert!(
+        text.contains("converted to draft"),
+        "the lease refusal does not say the pull request was rewritten: {text}"
+    );
+
+    // Put the remote back for the last cases.
+    assert!(git(&[
+        "push",
+        "-q",
+        "--force",
+        "origin",
+        &format!("{published_head}:{branch}")
+    ]));
+
+    // Fourth: the earliest refusal that can follow a write, and the one whose
+    // report was left behind when the renewal's was fixed. The reused pull
+    // request is READY, so `ensure_draft` un-readies it — and then its own
+    // readback fails. A `gh pr view` that hits a rate limit is enough. The
+    // refusal reached the agent as `Failure::Read`, which is exit 3 and reads
+    // *the tracker could not be read; write nothing* — after a write.
+    let ready_pr = serde_json::json!({
+        "number": 7,
+        "url": "https://github.com/o/r/pull/7",
+        "headRefOid": rewritten_head,
+        "baseRefOid": base_sha,
+        "state": "OPEN",
+        "isDraft": false,
+    });
+    let unreadable = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "stdout": timeline(run_id, true), "status": 0 },
+        { "matches": "pr list", "stdout": serde_json::json!([ready_pr]).to_string(), "status": 0 },
+        // The readback `ensure_draft` makes, and nothing after it: this is the
+        // first `pr view` of the operation, so failing it stops exactly there.
+        { "matches": "headRefOid", "stdout": "", "status": 1 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let undone = trace.path().join("undone.log");
+    let (failed, text) = republish(&unreadable, &undone);
+    assert!(
+        failed,
+        "an unreadable draft readback was not a refusal: {text}"
+    );
+    assert!(
+        std::fs::read_to_string(&undone)
+            .expect("the call log")
+            .lines()
+            .any(|line| line.contains("pr ready") && line.contains("--undo")),
+        "the fixture never un-readied the pull request, so this proves nothing about the report"
+    );
+    assert!(
+        !text.contains("nothing was written"),
+        "the draft readback reported an untouched world after un-readying the PR: {text}"
+    );
+    assert_eq!(
+        remote_head(),
+        published_head,
+        "the remote moved on a refusal before the push: {text}"
+    );
+
+    // Fifth: an issue that has never been published has no head to lease
     // against. Forcing anyway would be the plain `--force` the issue rules out,
     // wearing a lease over whatever the remote happens to hold — so the refusal
     // is the guard, and until this case existed deleting it left the whole suite

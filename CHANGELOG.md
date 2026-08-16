@@ -21,10 +21,12 @@ the workflow, it holds the tools.
 - The one force-push the delivery path needs is inside the harness. After a rebase onto a moved base,
   or an amended commit, the ordinary push is refused as a non-fast-forward, and the sequence a run
   actually performed was *leave Estigia, `git push --force-with-lease` by hand, come back and publish
-  again* — measured on a live delivery where the base moved mid-task. The single most destructive git
-  operation was the one step of the path with no claim verification, no timeline re-read and no
-  record, so a run that had lost its claim in the meantime could still force-push, because nothing
-  asked. `republish_review` is that step, adjudicated: it reads the head the latest `published` marker
+  again* — measured on a live delivery where the base moved mid-task. The claim itself was checked
+  even then: `git push --force` is a boundary, which always re-reads and has no renewal window. What
+  the hand-run push lacked is the rest — no lease against the head a receipt recorded, so it
+  overwrote whatever the remote held; no record tying the new bytes to that receipt; and no cover at
+  all when typed into a terminal the gate does not watch. `republish_review` is that step,
+  adjudicated: it reads the head the latest `published` marker
   recorded and pushes `--force-with-lease=<branch>:<that head>`, so a remote somebody else moved
   refuses the push instead of losing their commit. The renewal stands **immediately** before it,
   after the fetch, target derivation, keyword scan, pull-request listing and draft conversion that

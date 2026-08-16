@@ -1203,20 +1203,30 @@ const ADJUDICATED_BY_THE_BINDING: &[&str] = &[
     "release_ci",
 ];
 
-/// Entry points whose adjudication lives in a body they share.
+/// Entry points whose adjudication lives in a body they share, and how many
+/// verifications that body must hold.
 ///
 /// `publish_review` and `republish_review` differ in the push and in nothing
 /// else, so the verification either performs is written **once**, in the body
-/// they both call. Following one named hop keeps the check measuring what it
-/// measured before the split: take `verify_claim` out of `publish_with` and both
-/// entries go red together.
+/// they both call. Following one named hop is what keeps this measuring the same
+/// thing after the split — but following it *and asking only whether the word
+/// appears* is what broke it.
 ///
-/// A pair of names rather than a delegation-follower. Parsing which function a
-/// body forwards to is a second parser to keep honest, for a table that is two
-/// lines long and whose growth is a review's problem either way.
-const ADJUDICATED_THROUGH: &[(&str, &str)] = &[
-    ("publish_review", "publish_with"),
-    ("republish_review", "publish_with"),
+/// Measured, and this is the whole reason for the third column. Before the
+/// split, `publish_review`'s body held exactly one `verify_claim(` and deleting
+/// it turned this test red. After it, the shared body holds **two**: the
+/// entry-level one that both routes run, and the pre-push renewal that only the
+/// leased route reaches. `contains` is satisfied by either, so deleting the
+/// entry-level verification — taking claim adjudication off the ordinary
+/// publication path entirely — left the **whole suite green**. The guard written
+/// to catch exactly that was answered by a call the mutated route never makes.
+///
+/// So the count is pinned. Removing either verification is red, and adding a
+/// third is red too, which is the right answer: a new adjudication point in the
+/// publication path is a thing a reviewer should be made to look at.
+const ADJUDICATED_THROUGH: &[(&str, &str, usize)] = &[
+    ("publish_review", "publish_with", 2),
+    ("republish_review", "publish_with", 2),
 ];
 
 #[test]
@@ -1266,18 +1276,26 @@ fn every_boundary_the_binding_adjudicates_is_one_the_port_adjudicates_too() {
         } else {
             &claim
         };
-        let adjudicates = ADJUDICATED_THROUGH
-            .iter()
-            .find(|(entry, _)| entry == name)
-            .map_or_else(
-                || body_of(source, name),
-                |(_, shared)| body_of(source, shared),
-            )
-            .contains("verify_claim(");
+        let through = ADJUDICATED_THROUGH.iter().find(|(entry, ..)| entry == name);
+        let body = body_of(source, through.map_or(name, |(_, shared, _)| shared));
+        let found = body.matches("verify_claim(").count();
+        // One is the floor for a body that adjudicates at all. Where the body is
+        // shared, the exact count is the floor instead, because a body reached by
+        // two routes can satisfy `at least one` with a call only one of them
+        // makes — which is how deleting the ordinary publication's verification
+        // came to leave every test in this repository green.
+        let wanted = through.map_or(1, |(.., count)| *count);
         assert!(
-            adjudicates,
-            "`cmd_{name}` adjudicates the claim and `{name}` does not \u{2014} and the \
-             differential oracle does not run that subcommand, so nothing else would say so"
+            found >= wanted,
+            "`cmd_{name}` adjudicates the claim and `{name}` reaches {found} verification(s) \
+             where {wanted} are required \u{2014} and the differential oracle does not run that \
+             subcommand, so nothing else would say so"
+        );
+        assert!(
+            through.is_none() || found == wanted,
+            "`{name}` now shares a body holding {found} verifications rather than {wanted}. A new \
+             adjudication point in the publication path is not a thing to absorb silently: say \
+             which route reaches it and update the count."
         );
     }
 }
