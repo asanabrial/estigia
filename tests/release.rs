@@ -778,7 +778,7 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// that fails. Some of it is meaning a line cannot carry — a commit pin names no
 /// version, a step under `if: false` reads exactly like one that runs — and some
 /// is syntax this reader does not handle, which a YAML parser would close. The
-/// twenty correct workflows this guard used to refuse are tabulated beside it,
+/// twenty-one correct workflows this guard used to refuse are tabulated beside it,
 /// and both tables were built the same way: by writing the file a different
 /// legal way and running it, rather than by reading this code and reasoning
 /// about what it would do.
@@ -1080,9 +1080,20 @@ fn flow_style_steps(running: &[String]) -> Vec<String> {
             continue;
         }
         let depth = indent_of(&running[at]);
+        // A block sequence may start in its key's own column — `steps:` then
+        // `- uses:` at the same indentation is ordinary GitHub Actions style.
+        // Requiring the items to be deeper made the whole block invisible
+        // there, so a third lane could check out with `@v4` and carry a bare
+        // `rust-cache` with this test green: both halves of the fix off, in the
+        // case the loops were widened for.
         let block: Vec<&String> = running[at + 1..]
             .iter()
-            .take_while(|code| code.trim().is_empty() || indent_of(code) > depth)
+            .take_while(|code| {
+                let opening = code.trim_start();
+                code.trim().is_empty()
+                    || indent_of(code) > depth
+                    || (indent_of(code) == depth && (opening == "-" || opening.starts_with("- ")))
+            })
             .collect();
         // The steps themselves sit at the shallowest `- ` in the block; an input
         // value's own list items sit deeper.
@@ -1126,7 +1137,25 @@ fn under_the_key(block: &str, key: &str) -> String {
     // flow mapping. It was read as no `with:` at all, so a correctly configured
     // step was reported as discarding its caches.
     let value = key_and_value(lines[at]).map(|(_, v)| v).unwrap_or_default();
-    if let Some(pairs) = value.strip_prefix('{').and_then(|v| v.strip_suffix('}')) {
+    if value.starts_with('{') {
+        // A flow mapping need not close on the line that opens it. Reading only
+        // the one-line form refused a correct step and told it its caches were
+        // being discarded, which is a diagnosis about the workflow rather than
+        // about the reader.
+        let mut whole = value;
+        let mut next = at + 1;
+        while !whole.trim_end().ends_with('}') && next < lines.len() {
+            whole.push(' ');
+            whole.push_str(lines[next].trim());
+            next += 1;
+        }
+        let Some(pairs) = whole
+            .trim()
+            .strip_prefix('{')
+            .and_then(|v| v.trim_end().strip_suffix('}'))
+        else {
+            return String::new();
+        };
         return pairs
             .split(',')
             .map(|pair| pair.trim().to_owned())

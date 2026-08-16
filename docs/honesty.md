@@ -219,9 +219,24 @@ suite. Everything else here is prose held by review.
   `- { uses: Swatinem/rust-cache@v2 }` discarded every red run's cache and the suite stayed green —
   the opposite column, in the case the loop was widened for. The same row shape as the folded scalar
   one, whose qualifier was added two rounds earlier by a review that ran it somewhere else; this one
-  was never run anywhere else. A step written in flow style is now refused outright, everywhere,
-  with a message saying the guard cannot read it rather than that it has checked it. Refusing a
-  correct flow-style step is the price, and it is what the row already said.
+  was never run anywhere else. A step written in flow style is refused rather than skipped, with a
+  message saying the guard cannot read it rather than that it has checked it. Refusing a correct
+  flow-style step is the price, and it is what the row already said.
+
+  **That refusal said *everywhere* and meant one indentation.** A block sequence may begin in its
+  key's own column — `steps:` and then `- uses:` at the same indent is ordinary GitHub Actions
+  style — and the walk that collected a `steps:` block required its items to be *deeper*. At that
+  indentation the block came back empty, so nothing was read and nothing was refused: a third lane
+  could check out with `@v4` **and** carry a bare `rust-cache`, both halves of this change off, with
+  the suite green and no message. The one-column-deeper form was refused correctly, which is why the
+  round that wrote it saw what it expected. The block now ends at the first line that is neither
+  deeper nor an item at the key's own column, and this paragraph is what is left of the word
+  *everywhere*.
+
+  The same round's other new rule read a flow mapping only when it closed on the line that opened
+  it. `with: {` with the pairs beneath and the brace on its own line is legal, correct, and was
+  refused — with a message saying a red run's cache was being discarded, which is a diagnosis about
+  the workflow rather than about the reader that stopped.
 
   **Two rows of that same table, each fixed alone, were never run together.** A `cache-directories:`
   sequence ends a step early; `- with:` above `uses:` hides the step's opening. Written at once — a
@@ -250,7 +265,7 @@ suite. Everything else here is prose held by review.
   left two — which is, to the action, the same harm this entry already records from the round where
   the list named three and `action-gh-release` was the one missing.
 
-  **This guard has failed correct workflows twenty times, each for the same reason.** Every one was
+  **This guard has failed correct workflows twenty-one times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -276,6 +291,7 @@ suite. Everything else here is prose held by review.
   | a `matrix: include:` entry written `- { … }` | any `- {` in the file is a step |
   | a flow mapping as an item of an input's value | the same |
   | a block step whose `with:` is one flow mapping | an input block always has an empty value |
+  | a `with: {` whose brace closes on a later line | a flow mapping closes where it opens |
 
   The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
   step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry
