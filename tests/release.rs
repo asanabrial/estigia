@@ -778,7 +778,7 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// that fails. Some of it is meaning a line cannot carry — a commit pin names no
 /// version, a step under `if: false` reads exactly like one that runs — and some
 /// is syntax this reader does not handle, which a YAML parser would close. The
-/// seventeen correct workflows this guard used to refuse are tabulated beside it,
+/// twenty correct workflows this guard used to refuse are tabulated beside it,
 /// and both tables were built the same way: by writing the file a different
 /// legal way and running it, rather than by reading this code and reasoning
 /// about what it would do.
@@ -796,16 +796,16 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     for name in &workflows {
         let running = what_runs(&read(&format!(".github/workflows/{name}")));
         // A step written in flow style is one this reader cannot take apart: it
-        // holds every key on one line, so the key here reads `{ uses` and the
-        // step is skipped rather than checked. In `ci.yml` and `release.yml` the
-        // two exists-floors turn that into a red; in a lane added later there is
-        // no floor to catch it, and a bare `- { uses: Swatinem/rust-cache@v2 }`
-        // discarded every red run's cache while this test stayed green. Refusing
-        // it says so, where skipping it did not.
-        let flow: Vec<&String> = running
-            .iter()
-            .filter(|code| code.trim_start().starts_with("- {"))
-            .collect();
+        // holds every key on one line, so the key reads `{ uses` and the step is
+        // skipped rather than checked. In a lane added later there is no floor
+        // to catch the miss, and a bare `- { uses: Swatinem/rust-cache@v2 }`
+        // discarded every red run's cache while this test stayed green.
+        //
+        // Only inside a job's `steps:`, and only a step of it. The first version
+        // of this refused any `- {` in the file, which is what a `matrix:
+        // include:` entry and a flow mapping in an input value both look like —
+        // correct workflows, told they had written a step they had not.
+        let flow = flow_style_steps(&running);
         assert!(
             flow.is_empty(),
             "{name} writes a step in flow style, which this guard reads as no \
@@ -1050,6 +1050,62 @@ fn unquoted(scalar: &str) -> &str {
     }
 }
 
+/// Every step a workflow writes in flow style, and nothing else.
+///
+/// A step is an item of a job's `steps:`, so this walks each `steps:` block and
+/// looks only at items of it — the `- ` lines at the shallowest such depth
+/// inside the block. A `matrix: include:` entry, and a flow mapping used as an
+/// item of an input's value, are both `- { … }` and neither is a step; refusing
+/// every `- {` in the file called them one.
+///
+/// A whole `steps:` written as a flow sequence — `steps: [{ uses: … }]`, or the
+/// same spread over lines — is the other half: there are no `- ` items at all,
+/// so nothing was read and nothing was refused, and a bare caching step inside
+/// one turned the fix off with this test green.
+fn flow_style_steps(running: &[String]) -> Vec<String> {
+    let mut refused = Vec::new();
+    let mut at = 0;
+    while at < running.len() {
+        let Some((key, value)) = key_and_value(&running[at]) else {
+            at += 1;
+            continue;
+        };
+        if key != "steps" {
+            at += 1;
+            continue;
+        }
+        if value.starts_with('[') {
+            refused.push(running[at].clone());
+            at += 1;
+            continue;
+        }
+        let depth = indent_of(&running[at]);
+        let block: Vec<&String> = running[at + 1..]
+            .iter()
+            .take_while(|code| code.trim().is_empty() || indent_of(code) > depth)
+            .collect();
+        // The steps themselves sit at the shallowest `- ` in the block; an input
+        // value's own list items sit deeper.
+        let item = block
+            .iter()
+            .filter(|code| code.trim_start().starts_with("- "))
+            .map(|code| indent_of(code))
+            .min();
+        refused.extend(
+            block
+                .iter()
+                .filter(|code| {
+                    let opening = code.trim_start();
+                    (Some(indent_of(code)) == item && opening.starts_with("- {"))
+                        || opening.starts_with('{')
+                })
+                .map(|code| (*code).clone()),
+        );
+        at += 1 + block.len();
+    }
+    refused
+}
+
 /// The lines under one of a step's keys — `with:`, holding an action's inputs.
 ///
 /// A step's `env:` and its `with:` sit at the same depth, so searching the whole
@@ -1062,15 +1118,49 @@ fn under_the_key(block: &str, key: &str) -> String {
     let lines: Vec<&str> = block.lines().collect();
     let Some(at) = lines
         .iter()
-        .position(|line| key_and_value(line).is_some_and(|(k, v)| k == key && v.is_empty()))
+        .position(|line| key_and_value(line).is_some_and(|(k, _)| k == key))
     else {
         return String::new();
     };
-    let depth = indent_of(lines[at]);
-    lines[at + 1..]
+    // `with: { cache-on-failure: true }` is a block step whose inputs are one
+    // flow mapping. It was read as no `with:` at all, so a correctly configured
+    // step was reported as discarding its caches.
+    let value = key_and_value(lines[at]).map(|(_, v)| v).unwrap_or_default();
+    if let Some(pairs) = value.strip_prefix('{').and_then(|v| v.strip_suffix('}')) {
+        return pairs
+            .split(',')
+            .map(|pair| pair.trim().to_owned())
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    if !value.is_empty() {
+        return String::new();
+    }
+    // From the key, not from the dash. `- with:` opening a step carries the
+    // step's own indentation, so measuring from there made the step's other
+    // keys look like the input's children and the shallowest of them — `uses:`
+    // — look like the only one.
+    let opening = lines[at].trim_start();
+    let depth = indent_of(lines[at]) + if opening.starts_with("- ") { 2 } else { 0 };
+    let body: Vec<&str> = lines[at + 1..]
         .iter()
         .take_while(|line| line.trim().is_empty() || indent_of(line) > depth)
         .copied()
+        .collect();
+    // Its own keys, not its grandchildren. `with:` → `env:` → the option is a
+    // variable named after the input rather than the input, and taking the whole
+    // subtree read it as one — the row this document says it closed, surviving
+    // one level in.
+    let Some(child) = body
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| indent_of(line))
+        .min()
+    else {
+        return String::new();
+    };
+    body.into_iter()
+        .filter(|line| indent_of(line) == child)
         .collect::<Vec<_>>()
         .join("\n")
 }

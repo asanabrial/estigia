@@ -194,6 +194,24 @@ suite. Everything else here is prose held by review.
   A step's keys are an unordered mapping too, and `- with:` written above the step's own `uses:` was
   refused, because the search for `with:` began one line after the step opened.
 
+  **The refusal written for that was wrong in both directions at once.** Refusing every `- {` in a
+  workflow refused a `matrix: include:` entry and a flow mapping used as an item of an input's
+  value — correct files, told they had written a step they had not — while a whole `steps:` written
+  as a flow *sequence*, `steps: [{ uses: Swatinem/rust-cache@v2 }]`, still passed green with the fix
+  off, because it has no `- ` items to refuse. A step is an item of a job's `steps:`, so that is
+  what is read now: items at the shallowest `- ` depth inside a `steps:` block, plus the block
+  written as a sequence. Two more of the same shape went with it — a block step whose `with:` is one
+  flow mapping was refused, and the option written a level *below* `with:` passed, which is the row
+  this entry says it closed surviving one level in.
+
+  **Twenty rounds of this is the measurement.** Each one found another legal spelling; each fix was
+  right and the next spelling was not covered. That is not a run of bad luck, it is what reading YAML
+  a line at a time costs, and the entry has said since the twelfth round that closing the left-hand
+  column properly means parsing rather than reading. Nothing here adds a parser — that is a
+  dependency this issue did not ask for — so what is written instead is the ceiling: this guard reads
+  the block style these two workflows are written in, refuses what it cannot take apart, and the
+  table below is the record of every legal thing it got wrong on the way.
+
   **And the flow-style row was in the wrong column outside the two lanes it had been run in.** It
   sat under *fails but should not*, which is what happens in `ci.yml` and `release.yml`: the guard
   reads `- { uses: … }` as no step at all, and the floors that say those two files must have a
@@ -232,7 +250,7 @@ suite. Everything else here is prose held by review.
   left two — which is, to the action, the same harm this entry already records from the round where
   the list named three and `action-gh-release` was the one missing.
 
-  **This guard has failed correct workflows seventeen times, each for the same reason.** Every one was
+  **This guard has failed correct workflows twenty times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -255,6 +273,9 @@ suite. Everything else here is prose held by review.
   | `Cache-On-Failure: true` | an input's name is written in the case the docs use |
   | `- with:` written above the step's own `uses:` | a step's keys come in an order |
   | `- with:` above `uses:` **and** a sequence inside that `with:` | a step opens at the nearest `- ` above it |
+  | a `matrix: include:` entry written `- { … }` | any `- {` in the file is a step |
+  | a flow mapping as an item of an input's value | the same |
+  | a block step whose `with:` is one flow mapping | an input block always has an empty value |
 
   The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
   step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry
