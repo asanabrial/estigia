@@ -26,23 +26,42 @@ suite. Everything else here is prose held by review.
 
 - **Raising the checkout action did not close this repository's Node 20 exposure.** `actions/checkout`
   moved from `v4` to `v7` because `v4` declares `runs.using: node20` and every run printed *"being
-  forced to run on Node.js 24"*. Three actions in the same two files still declare `node20`, read
-  from their own `action.yml` at the tags in use:
+  forced to run on Node.js 24"*. It was one of **five**. Every `uses:` line in both workflows, with
+  `runs.using` read from that action's own `action.yml` at the ref the workflow names:
 
-  | Action | Where |
-  |---|---|
-  | `actions/setup-node@v4` | `ci.yml` and `release.yml` |
-  | `actions/upload-artifact@v4` | `release.yml` |
-  | `actions/download-artifact@v4` | `release.yml` |
+  | Action | Where | `runs.using` |
+  |---|---|---|
+  | `actions/checkout@v7` | `ci.yml`, `release.yml` | `node24` — raised here |
+  | `dtolnay/rust-toolchain@stable` | `ci.yml` | `composite`, shell steps only |
+  | `Swatinem/rust-cache@v2` | `ci.yml` | `node24` |
+  | `actions/setup-node@v4` | `ci.yml`, `release.yml` | **`node20`** |
+  | `actions/upload-artifact@v4` | `release.yml` | **`node20`** |
+  | `actions/download-artifact@v4` | `release.yml` | **`node20`** |
+  | `softprops/action-gh-release@v2` | `release.yml` | **`node20`** |
+  | `actions/attest-build-provenance@v2` | `release.yml` | `composite` — see below |
 
   So the warning still appears, and the argument used to raise the checkout in `release.yml` — that a
   tag-triggered workflow which will not start publishes nothing and cannot be retried by pushing a
-  fix — still applies to that lane three times over. The guard is named for the checkout and checks
-  only the checkout; it is not weaker than it says, but it is narrower than the problem.
+  fix — still applies to that lane **four times over**. Three of the four are in that lane alone.
+
+  `attest-build-provenance@v2` is composite and pins two actions of its own,
+  `actions/attest-build-provenance/predicate` and `actions/attest`. `actions/attest@v2` declares
+  `node20`; the composite pins a specific commit rather than the tag, and that commit's own
+  `action.yml` was not read, so the transitive exposure is stated as probable rather than measured.
+
+  The guard is named for the checkout and checks only the checkout; it is not weaker than it says,
+  but it is narrower than the problem.
 
   Left rather than folded in because the issue that raised the checkout asked about the checkout, and
-  each of the three is a version bump whose input compatibility has to be read before it is made.
-  Filed as its own item.
+  each remaining bump has an input surface to read first — `upload-artifact` changed naming and
+  overwrite semantics at `v4`, and `action-gh-release` would cross a major. Filed as its own item.
+
+  **This list was wrong once already, and how it was wrong is the point.** It first named three,
+  taken from a review's findings and re-presented as a measurement without the files being swept.
+  `softprops/action-gh-release@v2` was missing, in the very lane the paragraph argues about, so
+  anyone scoping the follow-up from it would have raised three actions and still had a `node20`
+  workflow. An enumeration in this document is a claim to have looked everywhere; inheriting one is
+  not looking.
 
 - **What the OpenCode plugin knows about where a call runs, and what it does not.** The gate decides
   which run a write belongs to by the directory the write happens in, and OpenCode's plugin context
