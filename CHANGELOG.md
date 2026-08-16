@@ -424,10 +424,14 @@ the workflow, it holds the tools.
   three of them only there — still would not start. Every `uses:` line in both files is enumerated
   with its runtime in `docs/honesty.md`, along with two more `node20` actions reached transitively
   through `attest-build-provenance`, rather than the gap being closed under an issue that asked about
-  the checkout. Both files move to `v7`, which runs on `node24` and keeps `ref` and
-  `persist-credentials` unchanged; its one breaking change
-  refuses fork checkouts under `pull_request_target` and `workflow_run`, and this repository uses
-  neither. `Swatinem/rust-cache` discards a failing run's cache by default, so the fix pushed after a
+  the checkout. Both files move to `v7`, which runs on `node24`. That crosses three majors and each
+  carries something: `v5` requires a runner of at least `v2.327.1`, `v6` moves persisted credentials
+  out of `.git/config` into a file under `$RUNNER_TEMP`, and `v7` refuses fork checkouts under
+  `pull_request_target` and `workflow_run`. The `ref` and `persist-credentials` **inputs** are
+  unchanged, which is not the same as their behaviour being unchanged: `ci.yml` opts out of
+  persistence and `release.yml` does not, so the release lane takes `v6`'s new location — it runs no
+  authenticated git command and no container job, so nothing there reads it. The lanes run on hosted
+  runners, and this repository triggers on neither event `v7` blocks. `Swatinem/rust-cache` discards a failing run's cache by default, so the fix pushed after a
   red build recompiled the dependency tree from cold on all three platforms — six red runs closing
   one set of platform failures paid it six times. The guard names a version floor rather than the
   word *deprecated*, because a file cannot be asked whether it is: `v2` to `v4` run on Node 12, 16

@@ -78,7 +78,9 @@ suite. Everything else here is prose held by review.
   are sorted by it: it was read for all four, so the comparison is paid for. **Manifest change** is
   not ordered at all — one cell holds a reading and three hold nothing, and a filled cell beside
   three empty ones ranks nothing. The row order carries no claim either: within a tie it is the
-  order this table has had since it was written. Nothing here says which bump to make first.
+  order the table was written with — which the commit before this one silently swapped, moving the
+  action whose superlative it was deleting to the top, so that the claim survived as layout after
+  its sentence was gone. Nothing here says which bump to make first.
 
   That distinction is what this entry kept getting wrong. It has now carried a wrong count, a wrong
   containment claim, a wrong remediability claim and two wrong superlatives — both written in one
@@ -94,6 +96,24 @@ suite. Everything else here is prose held by review.
   anyone scoping the follow-up from it would have raised three actions and still had a `node20`
   workflow. An enumeration in this document is a claim to have looked everywhere; inheriting one is
   not looking.
+
+  **And the guard's other half did not decide.** Seven rounds of review on this change each found one
+  defect and every one was a sentence, which made a comfortable story: the code was right and only
+  the prose was wrong. The eighth round mutated the workflow instead of reading it, and the story was
+  wrong too. `cache-on-failure: true` was checked by searching the whole file for that text, so three
+  ways of turning the fix off left the suite green — commenting the option out above a `rust-cache`
+  left on its defaults, parking the option on some other step, and deleting the caching step
+  altogether. The checkout half had stripped comments from its first line; the cache half never did,
+  and the two sat eight lines apart in one function. It now reads the block under
+  `Swatinem/rust-cache@` with comments stripped, and all three are red. **A setting is only on if it
+  is under the step that reads it; a guard that searches the file instead checks that somebody typed
+  the words.**
+
+  That same half also carried a borrowed justification. Its comment said the issue had ruled out
+  caching anywhere but `ci.yml`. The issue's out-of-scope line rules out caching *anything other than
+  cargo* — which is exactly what `rust-cache` caches, so it permits what the assertion forbids.
+  Keeping the release lane uncached is this repository's own judgement, and the comment says so now,
+  with the reason and the condition under which the line should go.
 
 - **What the OpenCode plugin knows about where a call runs, and what it does not.** The gate decides
   which run a write belongs to by the directory the write happens in, and OpenCode's plugin context

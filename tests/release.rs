@@ -758,6 +758,13 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// and there is no `v8`. So the four rejected are rejected on what they say
 /// rather than on a guess, and a future deprecation moves this number — moving
 /// it is the point, because the number is where somebody has to look.
+///
+/// The cache half is read from the block under `Swatinem/rust-cache@` rather
+/// than from the file, because the first version of it searched the whole file
+/// and three ways of turning the fix off left it green: the option commented out
+/// above a `rust-cache` on its defaults, the option parked on another step, and
+/// the caching step deleted. Each of those is now red, and so is a workflow with
+/// no caching step at all — a floor only holds up something that is there.
 #[test]
 fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     for name in ["ci.yml", "release.yml"] {
@@ -765,7 +772,7 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
         let stale: Vec<&str> = workflow
             .lines()
             .filter(|line| {
-                let code = line.split('#').next().unwrap_or_default();
+                let code = code_of(line);
                 ["@v1", "@v2", "@v3", "@v4"]
                     .iter()
                     .any(|old| code.contains(&format!("actions/checkout{old}")))
@@ -778,21 +785,51 @@ fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
         );
         // The floor is only a floor if the step is still there to have a version.
         assert!(
-            workflow.contains("actions/checkout@"),
+            code_of(&workflow).contains("actions/checkout@"),
             "{name} has no checkout step, so the version check above read nothing"
         );
     }
 
-    // Only `ci.yml` caches — the release lane builds each target once, and the
-    // issue that asked for this said not to add caching anywhere else.
     let ci = read(".github/workflows/ci.yml");
     assert!(
-        ci.contains("cache-on-failure: true"),
-        "a red CI run throws away everything it compiled, so the next push starts \
-         from cold on all three platforms"
+        code_of(&ci).contains("Swatinem/rust-cache@"),
+        "ci.yml has no caching step, so the option check below reads nothing"
     );
+    // The option only does anything on the step it is written under. Read as a
+    // whole file, a `cache-on-failure: true` parked on some other step — or
+    // commented out beside a `rust-cache` left on its defaults — answers yes
+    // while every red run still discards what it compiled.
+    let under_the_cache: String = ci
+        .lines()
+        .skip_while(|line| !code_of(line).contains("Swatinem/rust-cache@"))
+        .skip(1)
+        .take_while(|line| !code_of(line).trim_start().starts_with("- "))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
-        !read(".github/workflows/release.yml").contains("rust-cache"),
+        code_of(&under_the_cache).contains("cache-on-failure: true"),
+        "a red CI run throws away everything it compiled, so the next push starts \
+         from cold on all three platforms; the caching step reads: \
+         {under_the_cache:?}"
+    );
+    // Only `ci.yml` caches, and that is this repository's judgement rather than
+    // the issue's: the issue ruled out caching anything but cargo, which is what
+    // `rust-cache` caches, and said nothing about the release lane. The lane
+    // builds each target once, so a cache there would be written and never read
+    // — and if that stops being true, this line is the one to delete.
+    let release = read(".github/workflows/release.yml");
+    assert!(
+        !code_of(&release).contains("rust-cache"),
         "the release lane gained a cache this guard does not check"
     );
+}
+
+/// Everything on a line before its first `#`, so a guard reads what a workflow
+/// runs rather than what it says about itself. Commenting a setting out is how
+/// one gets turned off without looking turned off.
+fn code_of(text: &str) -> String {
+    text.lines()
+        .map(|line| line.split('#').next().unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
