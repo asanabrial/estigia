@@ -4449,20 +4449,38 @@ fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
     // Every expectation is spelled the way the answer is spelled, because the
     // answer is a **placed** path and a directory has more than one name.
     //
-    // Comparing against the raw fixture path passed on Windows and Linux and
-    // failed on macOS, where the temporary directory is `/var/…` and `/var` is a
-    // symlink to `/private/var`. Canonicalising the fixture instead swaps which
-    // platform breaks: on Windows that returns the `\\?\` verbatim form, which
-    // `placed` strips. There is no one spelling that is right everywhere, so the
-    // expectation goes through the same normalisation as the answer and the
-    // assertion is left comparing places rather than names.
+    // Comparing against the raw fixture path failed on **both** CI platforms
+    // that are not Linux, by two different mechanisms, and that pair is the
+    // reason this is a normalisation rather than a spelling:
     //
-    // What that costs is worth stating: this cannot catch a `placed` that
-    // normalises wrongly, only one that lands somewhere else. The landing is the
-    // property here — `paths`' own tests own the normalising.
+    // - macOS: the temporary directory is `/var/…`, and `/var` is a symlink to
+    //   `/private/var`. Answer `/private/var/…/wt-a`, expectation `/var/…/wt-a`.
+    // - Windows: the runner's temporary directory sits under `C:\Users\RUNNER~1`,
+    //   the **8.3 short name**. Answer `…\runneradmin\…`, expectation `…\RUNNER~1\…`.
+    //   Nothing to do with links; a local profile short enough to need no alias
+    //   answers the long name both ways, which is why this platform looked safe.
     //
-    // Found in CI, on the third platform, after two contexts had accepted the
-    // change. That ordering is a defect this repository has filed against itself.
+    // Canonicalising the fixture instead only moves the break: on Windows that
+    // returns the `\\?\` verbatim form, which `placed` strips. No one spelling is
+    // right everywhere, so the expectation goes through the same normalisation as
+    // the answer and the assertion compares places rather than names.
+    //
+    // What that costs, narrowly: a `placed` that normalises wrongly is caught
+    // here only when the wrongness moves the answer — because the clamp compares
+    // `placed(resolved)` against the raw `launched`, and `wt-a/../nope` differs
+    // from its expectation in shape rather than in spelling. What survives
+    // unseen is a normalisation that is wrong, applied identically to both sides,
+    // and still landing under `launched` — the leaked verbatim prefix is the one
+    // instance, and `paths::tests::a_placed_path_carries_no_verbatim_prefix` owns
+    // it. **Not** every part of `placed` is owned next door: gutting its `..`
+    // collapse leaves all of `paths`' own tests green, and the test that catches
+    // that is `harness::tests::a_write_that_lands_inside_the_claim_is_gated_
+    // however_it_is_spelled`.
+    //
+    // Found in CI after two contexts had accepted the change, which is the
+    // ordering this repository has filed against itself: the first
+    // cross-platform signal arrives once the reviewing is over, so a one-line
+    // platform defect spends every verdict the change had earned.
     let placed = |path: &std::path::Path| {
         crate::paths::placed(path).expect("the fixture path can be placed")
     };
