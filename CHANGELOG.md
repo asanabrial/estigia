@@ -420,11 +420,12 @@ the workflow, it holds the tools.
   five actions that did — a warning that becomes a workflow which will not start, on GitHub's
   schedule rather than on ours. **Only the checkout is raised here**; `setup-node@v4`,
   `upload-artifact@v4`, `download-artifact@v4` and `softprops/action-gh-release@v2` are still on
-  Node 20, so the runs still print the warning and the release lane — which carries three of the four
-  — still would not start. Every `uses:` line in both files is enumerated with its runtime in
-  `docs/honesty.md`, rather than the gap being closed under an issue that asked about the checkout.
-  Both files move to `v7`, which runs on `node24` and keeps `ref` and `persist-credentials`
-  unchanged; its one breaking change
+  Node 20, so the runs still print the warning and the release lane — which carries **all four**,
+  three of them only there — still would not start. Every `uses:` line in both files is enumerated
+  with its runtime in `docs/honesty.md`, along with two more `node20` actions reached transitively
+  through `attest-build-provenance`, rather than the gap being closed under an issue that asked about
+  the checkout. Both files move to `v7`, which runs on `node24` and keeps `ref` and
+  `persist-credentials` unchanged; its one breaking change
   refuses fork checkouts under `pull_request_target` and `workflow_run`, and this repository uses
   neither. `Swatinem/rust-cache` discards a failing run's cache by default, so the fix pushed after a
   red build recompiled the dependency tree from cold on all three platforms — six red runs closing

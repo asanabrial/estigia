@@ -44,10 +44,12 @@ suite. Everything else here is prose held by review.
   tag-triggered workflow which will not start publishes nothing and cannot be retried by pushing a
   fix — still applies to that lane **four times over**. Three of the four are in that lane alone.
 
-  `attest-build-provenance@v2` is composite and pins two actions of its own,
-  `actions/attest-build-provenance/predicate` and `actions/attest`. `actions/attest@v2` declares
-  `node20`; the composite pins a specific commit rather than the tag, and that commit's own
-  `action.yml` was not read, so the transitive exposure is stated as probable rather than measured.
+  `attest-build-provenance@v2` is composite and pins two actions of its own, both at commits rather
+  than tags, and **both declare `node20`** — read from those exact commits, not inferred from a tag:
+  `actions/attest@ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc` and
+  `actions/attest-build-provenance/predicate@1176ef556905f349f669722abf30bce1a6e16e01`. So the
+  transitive exposure is two more, measured. It is not counted in the four above, which are direct
+  `uses:` lines — and it is not this repository's to move except by leaving the composite.
 
   The guard is named for the checkout and checks only the checkout; it is not weaker than it says,
   but it is narrower than the problem.
