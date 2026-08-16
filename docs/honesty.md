@@ -116,14 +116,23 @@ suite. Everything else here is prose held by review.
   builds each target once, so a cache would be written and never read — which is a claim about
   GitHub's cache scoping that was not measured either.
 
-  **What the guard still does not catch**, found by mutating rather than reading, and left rather
-  than closed: a checkout pinned to a **commit** carries no version string, so `actions/checkout` at
-  a `v4` SHA passes a floor written in tags. And the option is required in one literal spelling, so
-  `cache-on-failure: "true"` and `cache-on-failure: yes` — both YAML true — fail a workflow that
-  would work. The first is a hole and the second is a false alarm; the second is the safer way round,
-  and neither is guessed at, which is why they are here rather than inferred from the code.
+  **What the guard still does not catch**, every one found by mutating rather than reading, and left
+  rather than closed. It reads text, so what it cannot see is meaning:
 
-  **This guard has failed correct workflows eight times, each for the same reason.** Every one was
+  | Passes but should not | Fails but should not |
+  |---|---|
+  | a checkout pinned to a **commit** — no version string to floor | `cache-on-failure: "true"` and `: yes`, both YAML true |
+  | the option written under `env:` or in any key but `with:` | a `run:` command that quotes the word `uses:` beside a version |
+  | a caching step under `if: false`, which cannot run | |
+  | a `uses:` whose value is a folded scalar on the next line | |
+
+  Four holes and two false alarms. Closing the left column properly means parsing YAML rather than
+  reading lines, which is a bigger thing than this issue asked for; closing the right one means
+  deciding which spellings this repository will accept, which is a decision rather than a
+  measurement. What is written here is what was run, not what was reasoned about — the row above it
+  used to say two things and claim to be the list.
+
+  **This guard has failed correct workflows nine times, each for the same reason.** Every one was
   found by writing the workflow a different legal way and running it, and every one was a rule
   asserted from the single form sitting in front of the author:
 
@@ -137,11 +146,14 @@ suite. Everything else here is prose held by review.
   | a `run: \|` body quoting a `- uses:` line | a block scalar's body is YAML |
   | `actions/checkout@v10` | `@v1` names one major |
   | a directory named `shared.yml` | a name ending `.yml` is a file |
+  | a `run: \|-2` body quoting a `- uses:` line | a header's indicators come in one order |
 
   The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
-  step it names, including the `attest-build-provenance` step this same entry points at two
-  paragraphs above. Adding a name to the caching step — an ordinary edit — reported that a red run's
-  cache was being discarded when it was not.
+  step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry
+  argues about further up. Adding a name to the caching step — an ordinary edit — reported that a red
+  run's cache was being discarded when it was not. That sentence used to say *two paragraphs above*,
+  which was nine paragraphs out: a claim about where something sits in this document, made without
+  scrolling to it.
 
   **The fifth is the sharpest to have written**, because this table already carried it, under a
   sentence claiming every row was red-to-green measured. It was not: the fix that closed it for one

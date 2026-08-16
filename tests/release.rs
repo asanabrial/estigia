@@ -773,14 +773,14 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
 /// `- `, so a `cache-directories:` sequence written above the option does not
 /// end the step early and fail a workflow that is configured correctly.
 ///
-/// What it still does not catch is written down in `docs/honesty.md`: a checkout
-/// pinned to a `v4` commit rather than a tag reads as no version at all, and the
-/// option is required in the one literal spelling `true`, so YAML's other trues
-/// fail a workflow that would work. Both were found by mutating this file's
-/// inputs rather than by reading them, which is also how the eight correct
-/// workflows it used to refuse were found — those are tabulated there too,
-/// because every one of them came of assuming the one form in front of the
-/// author was the only legal one.
+/// What it still does not catch is tabulated in `docs/honesty.md` — four holes
+/// and two false alarms, every one of them measured — because this reads a
+/// workflow as text and what text cannot show is meaning: a commit pin carries
+/// no version to floor, and a step under `if: false` reads exactly like one that
+/// runs. That table was found the same way as the nine correct workflows this
+/// guard used to refuse, which are tabulated beside it: by writing the file a
+/// different legal way and running it, rather than by reading the code and
+/// reasoning about what it would do.
 #[test]
 fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
     // The version floor applies to every workflow in the directory, not to the
@@ -910,12 +910,7 @@ fn what_runs(workflow: &str) -> Vec<String> {
             }
             body_under = None;
         }
-        // `|`, `>`, and their `-`/`+`/indent-digit variants all open one.
-        let opener = code
-            .trim_end()
-            .trim_end_matches(['-', '+'])
-            .trim_end_matches(|c: char| c.is_ascii_digit());
-        if !blank && (opener.ends_with('|') || opener.ends_with('>')) {
+        if !blank && opens_a_block(&code) {
             body_under = Some(indent_of(&code));
         }
         running.push(code);
@@ -926,6 +921,28 @@ fn what_runs(workflow: &str) -> Vec<String> {
 /// How far a line is indented, in spaces.
 fn indent_of(code: &str) -> usize {
     code.len() - code.trim_start().len()
+}
+
+/// Whether a line's value is a block scalar header — the whole value, not its
+/// last character.
+///
+/// Read forwards from the `:` rather than by trimming the tail. Trimming took
+/// the chomping indicator off before the indentation one, so `|2-` was a header
+/// and `|-2` was not, though YAML accepts either order: half the header space
+/// was asserted from the half that had been written down. And a value that
+/// merely *ends* in a pipe — `run: cargo test | tee log` — is a command, not a
+/// header, which trimming could not tell apart at all.
+fn opens_a_block(code: &str) -> bool {
+    let Some((_, value)) = code.split_once(':') else {
+        return false;
+    };
+    let value = value.trim();
+    let Some(indicators) = value.strip_prefix('|').or_else(|| value.strip_prefix('>')) else {
+        return false;
+    };
+    indicators
+        .chars()
+        .all(|c| c.is_ascii_digit() || c == '-' || c == '+')
 }
 
 /// The `actions/checkout` major a line names, when it names one by tag.
