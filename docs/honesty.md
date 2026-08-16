@@ -69,18 +69,24 @@ suite. Everything else here is prose held by review.
 
   | Action | Majors to cross | Manifest change |
   |---|---|---|
-  | `softprops/action-gh-release@v2` → `v3` | one | one line: `using: node20` → `node24`; inputs, outputs and every description byte-identical |
   | `actions/setup-node@v4` → `v5` | one | not measured |
+  | `softprops/action-gh-release@v2` → `v3` | one | one line: `using: node20` → `node24`; inputs, outputs and every description byte-identical |
   | `actions/upload-artifact@v4` → `v6` | two — `v5` is still `node20` | not measured |
   | `actions/download-artifact@v4` → `v7` | three — `v4`, `v5` and `v6` are all `node20` | not measured |
 
-  Three of those cells say *not measured* because they were not, and the blank is the point. This
-  entry has now carried a wrong count, a wrong containment claim, a wrong remediability claim and two
-  wrong superlatives — including one written in the same commit as a sentence declaring that no
-  ranking remained. Every one was written about the thing being looked at while its neighbours went
-  unread. **A comparative is a claim about everything, so it costs a measurement of everything**, and
-  none made in this entry ever paid it. So there is no ordering here, only cells: filled where
-  something was read, empty where nothing was. Filed as its own item.
+  The two columns are not the same kind of thing. **Majors to cross** is an ordering, and the rows
+  are sorted by it: it was read for all four, so the comparison is paid for. **Manifest change** is
+  not ordered at all — one cell holds a reading and three hold nothing, and a filled cell beside
+  three empty ones ranks nothing. The row order carries no claim either: within a tie it is the
+  order this table has had since it was written. Nothing here says which bump to make first.
+
+  That distinction is what this entry kept getting wrong. It has now carried a wrong count, a wrong
+  containment claim, a wrong remediability claim and two wrong superlatives — both written in one
+  commit, one of them still standing after the next one, whose message was *"stop ranking things I
+  have not measured"*. Every one was written about the thing being looked at while its neighbours
+  went unread, and so was the sentence that used to stand here: it named the wrong commit for the
+  surviving superlative, and one `git log -S` would have said so. **A comparative is a claim about
+  everything, so it costs a measurement of everything.** Filed as its own item.
 
   **This list was wrong once already, and how it was wrong is the point.** It first named three,
   taken from a review's findings and re-presented as a measurement without the files being swept.
