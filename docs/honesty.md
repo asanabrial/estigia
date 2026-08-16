@@ -24,6 +24,26 @@ suite. Everything else here is prose held by review.
   OpenCode process-tree cleanup is likewise not containment proof: the controller bounds how long the
   TUI waits, while process-group and Job Object cleanup remain best-effort OS operations.
 
+- **Raising the checkout action did not close this repository's Node 20 exposure.** `actions/checkout`
+  moved from `v4` to `v7` because `v4` declares `runs.using: node20` and every run printed *"being
+  forced to run on Node.js 24"*. Three actions in the same two files still declare `node20`, read
+  from their own `action.yml` at the tags in use:
+
+  | Action | Where |
+  |---|---|
+  | `actions/setup-node@v4` | `ci.yml` and `release.yml` |
+  | `actions/upload-artifact@v4` | `release.yml` |
+  | `actions/download-artifact@v4` | `release.yml` |
+
+  So the warning still appears, and the argument used to raise the checkout in `release.yml` — that a
+  tag-triggered workflow which will not start publishes nothing and cannot be retried by pushing a
+  fix — still applies to that lane three times over. The guard is named for the checkout and checks
+  only the checkout; it is not weaker than it says, but it is narrower than the problem.
+
+  Left rather than folded in because the issue that raised the checkout asked about the checkout, and
+  each of the three is a version bump whose input compatibility has to be read before it is made.
+  Filed as its own item.
+
 - **What the OpenCode plugin knows about where a call runs, and what it does not.** The gate decides
   which run a write belongs to by the directory the write happens in, and OpenCode's plugin context
   offers only a project — it carries no session identity to mint a run id from. So the plugin

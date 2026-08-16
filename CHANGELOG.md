@@ -416,9 +416,13 @@ the workflow, it holds the tools.
 ### Guards
 
 - Neither workflow may check out with a deprecated action or throw away a red run's cache, and both
-  halves are crossed rather than trusted. `actions/checkout@v4` targets Node 20, so every run this
-  repository has produced printed *"being forced to run on Node.js 24"* — a warning that becomes a
-  workflow which will not start, on GitHub's schedule rather than on ours. Both files move to `v7`,
+  halves are crossed rather than trusted. `actions/checkout@v4` targets Node 20, and this is one of
+  four actions that did — a warning that becomes a workflow which will not start, on GitHub's
+  schedule rather than on ours. **Only the checkout is raised here**; `setup-node@v4`,
+  `upload-artifact@v4` and `download-artifact@v4` are still on Node 20, so the runs still print the
+  warning and the release lane still would not start. That gap is measured and recorded in
+  `docs/honesty.md` rather than closed under an issue that asked about the checkout. Both files move
+  to `v7`,
   which runs on `node24` and keeps `ref` and `persist-credentials` unchanged; its one breaking change
   refuses fork checkouts under `pull_request_target` and `workflow_run`, and this repository uses
   neither. `Swatinem/rust-cache` discards a failing run's cache by default, so the fix pushed after a
