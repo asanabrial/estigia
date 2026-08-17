@@ -26,12 +26,14 @@ Five invariants, and the tests are named after them:
    ownership record. Setup recursively parses the user agent tree before writing any setup artifact: a
    second file carrying the reserved YAML identity, an unprovable candidate, an unowned canonical file,
    or an owned canonical file whose bytes differ from the embedded definition is preserved and refused.
-   A fresh path is recorded as owned before its bytes are written, so an interrupted create remains
-   exactly retryable. Comparison follows established setup text normalization: CRLF versus LF and a
-   missing final newline do not count as an edit; every other textual difference does. There is no
-   generic outside-content digest or definition reconciler. Fresh and upgrade plans report the resulting
-   `installed.json` ownership mutation exactly once as a skill create or update, matching the real action
-   manifest.
+   Setup repeats that decision immediately before the reviewer step. A fresh path is recorded as owned
+   before its bytes are written, then a complete staged body is linked into place without replacement;
+   a file another actor created after either read is preserved, and ownership added by the losing create
+   is removed. An interrupted create remains exactly retryable. Comparison follows established setup
+   text normalization: CRLF versus LF and a missing final newline do not count as an edit; every other
+   textual difference does. There is no generic outside-content digest or definition reconciler. Fresh
+   and upgrade plans report the resulting `installed.json` ownership mutation exactly once as a skill
+   create or update, matching the real action manifest.
 
    Uninstall deletes a textually unchanged owned reviewer before forgetting it or removing the skill ledger. A
    failed deletion therefore retains the evidence needed by an exact retry. Changed bytes are kept and

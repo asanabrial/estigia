@@ -68,10 +68,12 @@ matcher wakes for `Agent` and legacy `Task` launches and, before repository clas
 exact `review-blind` target for recursive project collisions from the launch cwd through the first
 `.git` repository root, using parsed YAML frontmatter, then proves the canonical user text is the only
 user-scoped definition carrying that identity. Setup performs that same recursive user-tree uniqueness
-preflight before writing. Unreadable or duplicate candidates and a missing, unreadable or changed
-canonical copy fail closed. This exception does not change project-first precedence for ordinary agents
-and does not add OpenCode launch enforcement. A refused launch contributes no judge; use a separate
-session or durable handoff rather than reducing or serializing the configured panel.
+preflight before writing, repeats it at the external reviewer boundary, and creates a fresh canonical
+file without replacing a path another actor created meanwhile. Unreadable or duplicate candidates and
+a missing, unreadable or changed canonical copy fail closed. This exception does not change project-
+first precedence for ordinary agents and does not add OpenCode launch enforcement. A refused launch
+contributes no judge; use a separate session or durable handoff rather than reducing or serializing the
+configured panel.
 
 ### Model routing suggestions are agent-specific
 

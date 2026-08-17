@@ -4987,6 +4987,24 @@ fn reviewer_is_owned_before_its_bytes_are_written_and_the_retry_is_safe() {
 }
 
 #[test]
+fn a_reviewer_created_after_preflight_is_preserved_and_not_owned() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let paths = resolve_paths(adapter, &options).expect("paths resolve");
+    let reviewer = home.path().join(".claude/agents/review-blind.md");
+
+    inject_reviewer_definition_create_collision();
+    setup(adapter, &Config::default(), &options)
+        .expect_err("setup overwrote a reviewer created after preflight");
+
+    assert_eq!(
+        fs::read_to_string(&reviewer).expect("the operator reviewer survives"),
+        INJECTED_REVIEWER_COLLISION
+    );
+    assert!(!owns_reviewer(&paths, &reviewer));
+}
+
+#[test]
 fn normalized_reviewer_line_endings_and_final_newline_remain_deletable() {
     let (home, options) = sandbox();
     let adapter = agent("claude-code");

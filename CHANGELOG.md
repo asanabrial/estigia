@@ -32,8 +32,10 @@ the workflow, it holds the tools.
   repository root, parse candidate frontmatter as YAML, recursively reject project shadows or
   unprovable candidates, require the canonical user text to be the unique user-scoped reserved
   definition, and enforce the embedded policy once running. Setup performs the same user-tree
-  uniqueness preflight before writing. Refused launches never count or degrade the panel; ordinary
-  agents remain project-first and OpenCode is out of scope.
+  uniqueness preflight before writing, revalidates at the reviewer boundary, and publishes a fresh
+  reviewer with a no-replace atomic create so a concurrent file is preserved rather than overwritten.
+  Refused launches never count or degrade the panel; ordinary agents remain project-first and OpenCode
+  is out of scope.
 - `estigia mcp` serves the workflow operations as **21 MCP tools** over stdio —
   claim, verify_claim, heartbeat, transition, comment, reclaim, release,
   start_branch, publish_review, and the read-only checks. Hand-written

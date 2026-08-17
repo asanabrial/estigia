@@ -781,7 +781,11 @@ std::thread_local! {
     static SETUP_PREVALIDATION_FAILURE: std::cell::Cell<Option<(&'static str, SetupFailureBoundary)>> = const { std::cell::Cell::new(None) };
     static REVIEWER_DEFINITION_REMOVAL_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static REVIEWER_DEFINITION_WRITE_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static REVIEWER_DEFINITION_CREATE_COLLISION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
+
+#[cfg(test)]
+pub(crate) const INJECTED_REVIEWER_COLLISION: &str = "operator-created reviewer\n";
 
 #[cfg(test)]
 pub(crate) fn inject_setup_failure(slug: &'static str, boundary: SetupFailureBoundary) {
@@ -804,6 +808,30 @@ pub(crate) fn inject_reviewer_definition_removal_failure() {
 #[cfg(test)]
 pub(crate) fn inject_reviewer_definition_write_failure() {
     REVIEWER_DEFINITION_WRITE_FAILURE.with(|injected| injected.set(true));
+}
+
+#[cfg(test)]
+pub(crate) fn inject_reviewer_definition_create_collision() {
+    REVIEWER_DEFINITION_CREATE_COLLISION.with(|injected| injected.set(true));
+}
+
+#[cfg(test)]
+fn injected_reviewer_definition_create_collision(path: &Path) -> Result<()> {
+    if REVIEWER_DEFINITION_CREATE_COLLISION.with(|injected| injected.replace(false)) {
+        let parent = path
+            .parent()
+            .with_context(|| format!("{} has no parent directory", path.display()))?;
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create directory {}", parent.display()))?;
+        fs::write(path, INJECTED_REVIEWER_COLLISION)
+            .with_context(|| format!("inject collision at {}", path.display()))?;
+    }
+    Ok(())
+}
+
+#[cfg(not(test))]
+fn injected_reviewer_definition_create_collision(_: &Path) -> Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1724,10 +1752,17 @@ fn setup_into_with_skill(
     boundary!(SetupFailureBoundary::AfterDirective);
 
     if let Some(target) = reviewer_target(&paths) {
+        step!(injected_reviewer_definition_create_collision(&target));
         let existing = step!(read_pending(&target, pending));
+        // The first preflight protects every earlier setup artifact. This one
+        // protects the external definition from appearing while those writes
+        // happen; the no-replace create below closes the remaining read/write
+        // window rather than trusting this second observation as a lock.
+        step!(validate_reviewer_definition(&paths));
         // Ownership lands before the first byte at the external path. A failed
         // create therefore leaves an owned absent target that exact replay can
         // finish, rather than an unowned file setup must refuse next time.
+        let mut ownership_added = false;
         if existing.is_none() && !skill::record::created_outside(&paths.skill_root, &target) {
             let record_path = skill::record::path(&paths.skill_root);
             let record_change = if skill::record::exists(&paths.skill_root) {
@@ -1740,6 +1775,7 @@ fn setup_into_with_skill(
                     &paths.skill_root,
                     &target
                 ));
+                ownership_added = true;
             }
             // Fresh skill installation already names this path. Keep its
             // `Create`; an upgrade gains one `Update`, never a duplicate.
@@ -1756,12 +1792,12 @@ fn setup_into_with_skill(
                 });
             }
         }
-        actions.push(write_step!(write_file(
+        actions.push(write_step!(write_reviewer_definition(
+            &paths.skill_root,
             &target,
             existing.as_deref(),
-            skill::REVIEW_AGENT.contents,
-            ActionKind::AgentDefinition,
             options.dry_run,
+            ownership_added,
         )));
         pending.insert(
             target,
@@ -2446,6 +2482,57 @@ fn write_file(
         path: path.to_owned(),
         change,
     })
+}
+
+fn write_reviewer_definition(
+    skill_root: &Path,
+    path: &Path,
+    existing: Option<&str>,
+    dry_run: bool,
+    ownership_added: bool,
+) -> Result<SetupAction> {
+    if existing.is_some() || dry_run {
+        return write_file(
+            path,
+            existing,
+            skill::REVIEW_AGENT.contents,
+            ActionKind::AgentDefinition,
+            dry_run,
+        );
+    }
+
+    #[cfg(test)]
+    if REVIEWER_DEFINITION_WRITE_FAILURE.with(|injected| injected.replace(false)) {
+        anyhow::bail!("injected reviewer-definition write failure");
+    }
+    let parent = path
+        .parent()
+        .with_context(|| format!("{} has no parent directory", path.display()))?;
+    fs::create_dir_all(parent).with_context(|| format!("create directory {}", parent.display()))?;
+    match paths::create_atomically(path, skill::REVIEW_AGENT.contents) {
+        Ok(()) => Ok(SetupAction {
+            kind: ActionKind::AgentDefinition,
+            path: path.to_owned(),
+            change: Change::Create,
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            if ownership_added {
+                skill::record::forget_outside(skill_root, path).with_context(|| {
+                    format!(
+                        "forget ownership after {} appeared during reviewer creation",
+                        path.display()
+                    )
+                })?;
+            }
+            Err(reviewer_definition_refusal(
+                ReviewerDefinitionCode::Unowned,
+                path,
+                "appeared after preflight and was preserved rather than replaced",
+            )
+            .into())
+        }
+        Err(error) => Err(error).with_context(|| format!("create {}", path.display())),
+    }
 }
 
 /// Characters no quoting makes safe in every shell a hook command may meet.
