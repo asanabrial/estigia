@@ -439,6 +439,30 @@ the workflow, it holds the tools.
 
 ### Guards
 
+- Neither workflow may check out with a deprecated action or throw away a red run's cache, and both
+  halves are crossed rather than trusted. `actions/checkout@v4` targets Node 20, and it was one of
+  five actions that did — a warning that becomes a workflow which will not start, on GitHub's
+  schedule rather than on ours. **Only the checkout is raised here**; `setup-node@v4`,
+  `upload-artifact@v4`, `download-artifact@v4` and `softprops/action-gh-release@v2` are still on
+  Node 20, so the runs still print the warning and the release lane — which carries **all four**,
+  three of them only there — still would not start. Every `uses:` line in both files is enumerated
+  with its runtime in `docs/honesty.md`, along with two more `node20` actions reached transitively
+  through `attest-build-provenance`, rather than the gap being closed under an issue that asked about
+  the checkout. Both files move to `v7`, which runs on `node24`. That crosses three majors and each
+  carries something: `v5` requires a runner of at least `v2.327.1`, `v6` moves persisted credentials
+  out of `.git/config` into a file under `$RUNNER_TEMP`, and `v7` refuses fork checkouts under
+  `pull_request_target` and `workflow_run`. The `ref` and `persist-credentials` **inputs** are
+  unchanged, which is not the same as their behaviour being unchanged: `ci.yml` opts out of
+  persistence and `release.yml` does not, so the release lane takes `v6`'s new location — it runs no
+  authenticated git command and no container job, so nothing there reads it. The lanes run on hosted
+  runners, and this repository triggers on neither event `v7` blocks. `Swatinem/rust-cache` discards a failing run's cache by default, so the fix pushed after a
+  red build recompiled the dependency tree from cold on all three platforms — closing one set of
+  platform failures paid it at least nine times, `ci` on `main` having failed nine consecutive times
+  before it went green. The issue that raised this said six and named a first run that no longer
+  exists; nine is what the run history still holds. The guard names a version floor rather than the
+  word *deprecated*, because a file cannot be asked whether it is: `v2` to `v4` run on Node 12, 16
+  and 20, `v1` is a runner plugin with no Node runtime at all, and everything from `v5` is `node24`.
+  A future deprecation moves that number to somewhere a person has to look at it.
 - The shipped payload passes **upstream's own 328 checks**.
 - Population declarations are bound to their syntax node and fingerprinted:
   changing the rule or the code beneath it reopens the claim.
