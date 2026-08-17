@@ -1169,6 +1169,11 @@ fn stale_verdict(command: &str, run: &Run, checkout: &std::path::Path) -> Option
     ))
 }
 
+/// Whether this action spends delivery evidence rather than producing it.
+pub(crate) fn is_delivery(action: &Action) -> bool {
+    matches!(action, Action::Boundary { command } if DELIVERS.contains(&command.as_str()))
+}
+
 /// Whether two checkouts belong to one clone and share its worktree registry.
 fn same_git_repository(left: &std::path::Path, right: &std::path::Path) -> bool {
     let common = |directory: &std::path::Path| {
@@ -1820,11 +1825,18 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
     let path_covered = run
         .covered()
         .any(|covered| crate::paths::covers(covered, &context.repo_dir));
-    let reviewed_sibling = matches!(action, Action::Boundary { .. })
+    let reviewed_sibling = is_delivery(action)
         && run
             .covered()
             .any(|covered| same_git_repository(covered, &context.repo_dir));
     if run.covered().count() > 0 && !path_covered && !reviewed_sibling {
+        if is_delivery(action)
+            && run.reviewed_head.is_some()
+            && let Action::Boundary { command } = action
+            && let Some(refusal) = stale_verdict(command, run, &context.repo_dir)
+        {
+            return Decision::Deny(Box::new(prefixed(refusal, command)));
+        }
         return Decision::Outside(Aside::AnotherCheckout);
     }
 

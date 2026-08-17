@@ -2305,6 +2305,47 @@ fn a_call_that_wrote_nothing_leaves_the_run_pointer_alone() {
 }
 
 #[test]
+fn a_reviewer_pointer_recovers_the_exact_receipt_head() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = GateContext {
+        integration: crate::config::Integration::Branch,
+        flag: None,
+        stand_down: None,
+        skill_root: root.path().join("skill"),
+        repo_dir: root.path().join("repo"),
+        state_root: root.path().join("state"),
+        window: super::super::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        boundaries: Vec::new(),
+    };
+    let reviewed = "a".repeat(40);
+
+    for name in ["record_review_verdict", "release_ci"] {
+        let tool = super::tools::TOOLS
+            .iter()
+            .find(|tool| tool.name == name)
+            .expect("the tool is listed");
+        let mut run = crate::harness::session::Run::new(format!("claude-{name}"));
+        super::apply_effect(
+            tool,
+            &serde_json::json!({
+                "issue": 7,
+                "run_id": run.run_id,
+                "head": reviewed,
+            }),
+            Some(&serde_json::json!({"ok": true})),
+            &mut run,
+            &context,
+        );
+        assert_eq!(
+            run.reviewed_head.as_deref(),
+            Some(reviewed.as_str()),
+            "{name} did not restore the receipt the reviewer must deliver"
+        );
+    }
+}
+
+#[test]
 fn every_two_step_operation_has_a_tool_that_can_take_the_second_step() {
     // `every_tool_maps_to_a_transport_operation_the_binding_documents` already
     // crosses the flags — but only the ones argparse calls **required**, and the

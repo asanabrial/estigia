@@ -4788,7 +4788,7 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
     // when no run was named — the same identity the decision itself used.
     let recorded = match run_id {
         Some(run_id) => run_id.to_owned(),
-        None => harness::guard::holders_of(&context.state_root, &context.repo_dir)
+        None => harness::guard::holders_for_action(&context.state_root, &context.repo_dir, &action)
             .into_iter()
             .next()
             .map_or_else(String::new, |run| run.run_id),

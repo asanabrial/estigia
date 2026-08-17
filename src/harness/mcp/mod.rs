@@ -948,6 +948,10 @@ fn apply_effect(
         .and_then(|body| body.get("head"))
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
+    let receipt_head = arguments
+        .get("head")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
     let worktree = body
         .and_then(|body| body.get("worktree"))
         .and_then(Value::as_str)
@@ -973,7 +977,18 @@ fn apply_effect(
                 }
                 run.mark_verified();
             }
-            PointerEffect::Renew => run.mark_verified(),
+            PointerEffect::Renew => {
+                // A reviewer claiming after a handoff receives the receipt in
+                // the verdict and CI-release calls. Preserve that exact head so
+                // its recreated pointer can gate delivery from the inherited
+                // worktree after the publisher's pointer was removed.
+                if matches!(tool.name, "record_review_verdict" | "release_ci")
+                    && let Some(head) = &receipt_head
+                {
+                    run.reviewed_head = Some(head.clone());
+                }
+                run.mark_verified();
+            }
             PointerEffect::Published => {
                 // Kept only when the answer names one. A publish that came back
                 // without a head is not a reason to forget the head this run had.

@@ -655,6 +655,35 @@ pub fn holders_of(state_root: &Path, repo_dir: &Path) -> Vec<session::Run> {
         .collect()
 }
 
+/// The holders relevant to this action, including a reviewed sibling only when
+/// the action would spend delivery evidence.
+pub fn holders_for_action(
+    state_root: &Path,
+    repo_dir: &Path,
+    action: &Action,
+) -> Vec<session::Run> {
+    let covered = holders_of(state_root, repo_dir);
+    if !covered.is_empty() || !super::is_delivery(action) {
+        return covered;
+    }
+    let candidates: Vec<session::Run> = session::holdings(state_root)
+        .into_iter()
+        .filter(|run| {
+            run.reviewed_head.is_some()
+                && run
+                    .covered()
+                    .any(|covered| super::same_git_repository(covered, repo_dir))
+        })
+        .collect();
+    let head = super::head_of(repo_dir);
+    let exact: Vec<session::Run> = candidates
+        .iter()
+        .filter(|run| run.reviewed_head.as_ref() == head.as_ref())
+        .cloned()
+        .collect();
+    if exact.is_empty() { candidates } else { exact }
+}
+
 /// Decides one action, finding the run by the checkout it happens in.
 pub fn decide_action(
     context: &GateContext,
@@ -677,20 +706,13 @@ pub fn decide_action(
     if matches!(action, Action::Untouched) {
         return Decision::Outside(super::Aside::NotWatched);
     }
-    let mut holders = holders_of(&context.state_root, repo_dir);
-    if holders.is_empty() && matches!(action, Action::Boundary { .. }) {
-        // A review handoff may leave the new holder with no recorded worktree.
-        // Admit a sibling only for a delivery boundary; `gate` still verifies
-        // the claim and refuses unless this checkout has the reviewed head.
-        holders = session::holdings(&context.state_root)
-            .into_iter()
-            .filter(|run| {
-                run.reviewed_head.is_some()
-                    && run
-                        .covered()
-                        .any(|covered| super::same_git_repository(covered, repo_dir))
-            })
-            .collect();
+    let ordinary_holders = holders_of(&context.state_root, repo_dir);
+    let used_sibling = ordinary_holders.is_empty() && super::is_delivery(action);
+    let mut holders = holders_for_action(&context.state_root, repo_dir, action);
+    if used_sibling && !session::unreadable_holdings(&context.state_root).is_empty() {
+        // A sibling is not path-owned by the readable pointer, so an unreadable
+        // pointer could be its actual holder. Fall into the fail-closed arm.
+        holders.clear();
     }
 
     // Through the stand-down, like every other decision. `gate` states the rule

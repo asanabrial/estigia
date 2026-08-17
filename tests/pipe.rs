@@ -6372,6 +6372,14 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
             fresh.contains("allow"),
             "the inherited checkout at the reviewed head was refused: {fresh}"
         );
+        if !named {
+            let ledger = std::fs::read_to_string(home.join(".estigia").join("decisions.jsonl"))
+                .expect("the sessionless decision reaches the ledger");
+            assert!(
+                ledger.contains("claude-abcd1234") && ledger.contains("allow"),
+                "the sibling holder's decision was not attributed: {ledger}"
+            );
+        }
 
         let stale = merge(&rig.head, named);
         assert!(
@@ -6384,6 +6392,49 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
             "the refusal does not name the checkout and head it inspected: {stale}"
         );
     }
+
+    let unrelated_root = tempfile::tempdir().expect("a parent for an unrelated clone");
+    let unrelated = unrelated_root.path().join("unrelated");
+    let cloned = Command::new("git")
+        .args(["clone", "--quiet"])
+        .arg(repo)
+        .arg(&unrelated)
+        .output()
+        .expect("git creates an unrelated clone");
+    assert!(
+        cloned.status.success(),
+        "the unrelated clone was not created"
+    );
+    let checked_out = Command::new("git")
+        .arg("-C")
+        .arg(&unrelated)
+        .args(["checkout", "--quiet", &reviewed])
+        .output()
+        .expect("git checks out the reviewed head in the unrelated clone");
+    assert!(
+        checked_out.status.success(),
+        "the unrelated clone did not reach the reviewed head"
+    );
+    let (out, err, _) = run_with_tracker(
+        home,
+        &unrelated,
+        bin,
+        &issue_answer("review"),
+        &[
+            "gate",
+            "Bash",
+            "--run-id",
+            "claude-abcd1234",
+            "--input",
+            r#"{"command":"gh pr merge 12"}"#,
+        ],
+        "",
+    );
+    let unrelated = format!("{out}{err}");
+    assert!(
+        unrelated.contains("verdict-bound-to-other-bytes"),
+        "a named run delivered its verdict from an unrelated clone: {unrelated}"
+    );
 }
 
 /// Everything the two post-agreement checks need: a home, a checkout with a
