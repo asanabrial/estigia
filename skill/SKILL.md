@@ -100,6 +100,9 @@ into this file. Each owns its subject once, so a rule that changes is changed in
 | [safety incidents](references/safety-incidents.md) | Claim, reclaim, handoff, board-projection, or failure rationale is needed; a claimed issue turns out to have no acceptance criteria; or an incident's evidence must be cited. It is the ledger of *why*; the rules it justifies are already above. |
 | [runtime notes](references/runtime-notes.md) | Invocation sigils, delegation, independent-context acquisition, agent-team lifetime, or a runtime's honest limits are in question. |
 | [analyst issue template](assets/analyst-issue-template.md) | Filling a new finding's body. It owns the heading order, the fixed first heading, alert syntax, attribution, and the machine marker. |
+| [blind judges](policies/blind-judges.md) | Independent review is obtained, for both `Blind judges: single` and `Blind judges: two blind`. |
+| [receipt-driven development](protocols/rdd.md) | `Review protocol` is `receipt-driven`. |
+| [spec-driven development](protocols/sdd.md) | `Planning` names an `sdd` form. Its five phase definitions are the host-routed executors `sdd-explore`, `sdd-propose`, `sdd-spec`, `sdd-design`, and `sdd-tasks`; their canonical identities are names, not skill-relative links. |
 
 The selected tracker binding under `bindings/` owns exact commands, capability differences,
 unsupported behaviour, and tracker-specific readbacks. Its executable owns mechanical operations and

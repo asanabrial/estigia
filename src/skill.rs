@@ -120,18 +120,9 @@ pub const FILES: &[SkillFile] = &[
         path: "references/domain-composition.md",
         contents: include_str!("../skill/references/domain-composition.md"),
     },
-    // Ships, and nothing in the payload names it. Upstream's own test suite
-    // draws the same conclusion and makes the same exception, verbatim:
-    //
-    //     check("every companion on disk is reachable from the contract",
-    //           sorted(on_disk - linked - {"references/migration-inventory.md"}), [])
-    //
-    // Dropping it was a divergence dressed as a cleanup. Upstream's payload is
-    // upstream's payload, and upstream's own suite runs
-    // those 328 checks against exactly what Estigia installs — which it cannot
-    // do if what Estigia installs is a subset. The test is
-    // `the_payload_passes_the_suite_its_authors_wrote_for_it`, in
-    // `tests/payload.rs`.
+    // The reachability guard in `tests/payload.rs` checks every shipped runtime
+    // companion and holds this historical migration ledger as its sole
+    // inline-reasoned exception.
     SkillFile {
         path: "references/migration-inventory.md",
         contents: include_str!("../skill/references/migration-inventory.md"),
@@ -168,9 +159,8 @@ pub const FILES: &[SkillFile] = &[
 
 /// The directories whose files a setting chooses rather than a link.
 ///
-/// A binding is chosen by `Tracker`, a protocol by `Planning` or by
-/// `Review protocol`, a policy by its own setting. None of them is linked from the contract, and none should
-/// be: linking all of them would tell the agent to read every alternative.
+/// Bindings are selected by `Tracker`; protocol and policy documents are
+/// conditionally routed from the contract rather than loaded as alternatives.
 ///
 /// Declared once, because it began as one `starts_with` and became two, and two
 /// scattered special cases are how a third gets added somewhere else. Each
@@ -2179,21 +2169,6 @@ mod tests {
         );
     }
 
-    /// Files that ship and that nothing in the payload names.
-    ///
-    /// A frozen baseline, and it may only ever **shrink** — the guard below
-    /// fails on a new entry *and* on a stale one, so it cannot be padded and it
-    /// cannot be left behind.
-    ///
-    /// - `references/migration-inventory.md` — it records where every section of
-    ///   issue-flow's original single file went, and nothing an agent reads
-    ///   links to it. Upstream reached the same conclusion and wrote the same
-    ///   exception into its own suite, so this baseline matches theirs rather
-    ///   than diverging from it. `examples/domain-test-coverage.md` stays out
-    ///   entirely: a worked rule book a person copies into their own repository
-    ///   is documentation, and upstream does not ship it in the payload either.
-    const UNREFERENCED_BASELINE: &[&str] = &["references/migration-inventory.md"];
-
     /// Operations the contract requires that a binding does not map.
     ///
     /// Frozen, and it may only shrink. `SKILL.md` says every binding **MUST**
@@ -2305,47 +2280,6 @@ mod tests {
             }
         }
         segments.join("/")
-    }
-
-    #[test]
-    fn nothing_new_ships_that_the_payload_never_names() {
-        // The other direction, ratcheted, minus the files a setting selects.
-        // Those are not linked and must not be: a contract that linked every
-        // methodology would be telling the agent to read three, and the seam
-        // that matters for them is *the setting names a file that ships*, which
-        // has a test each. See `SELECTED_BY_SETTING`.
-        let unreferenced = FILES
-            .iter()
-            .filter(|file| {
-                file.path != CONTRACT
-                    && !SELECTED_BY_SETTING
-                        .iter()
-                        .any(|prefix| file.path.starts_with(prefix))
-            })
-            .filter(|file| {
-                !FILES.iter().any(|other| {
-                    other.path != file.path
-                        && (links_from(other).contains(&file.path.to_owned())
-                            || executables_named(other.contents).contains(&file.path.to_owned()))
-                })
-            })
-            .map(|file| file.path)
-            .collect::<Vec<_>>();
-
-        for path in &unreferenced {
-            assert!(
-                UNREFERENCED_BASELINE.contains(path),
-                "{path} ships and nothing names it. Either link it from the contract or drop \
-                 it — the baseline may only shrink."
-            );
-        }
-        for known in UNREFERENCED_BASELINE {
-            assert!(
-                unreferenced.contains(known),
-                "{known} is in the baseline and is now referenced; take it out of the baseline \
-                 so the guard keeps its grip"
-            );
-        }
     }
 
     #[test]
