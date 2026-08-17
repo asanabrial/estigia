@@ -1083,10 +1083,15 @@ suite. Everything else here is prose held by review.
   ancestry runs from `HEAD` through the target to the upstream. An object ID must resolve to itself
   as a commit; an annotated tag's ID does not qualify merely because it peels to one. Every proof Git
   process removes every inherited `GIT_*` variable, and the exception is denied when any such
-  variable was present at entry. The proof therefore cannot inspect one repository and let the later
-  shell command change another through `GIT_DIR`, alternate object stores, indexes, shallow files or
-  configuration injection. It remains a `Boundary`, so it still pays the live tracker read and is
-  recorded in the decision ledger. The
+  variable was present at entry. It is also denied when `BASH_ENV`, `ENV`, or Bash's exported `git`
+  function name (`BASH_FUNC_git%%`) is present, compared without case so Windows environment names
+  cannot evade the check. Those variables can make the shell execute a different `git` from the
+  direct process the proof resolved; `PATH` remains eligible because both resolve through the same
+  inherited path when no shell-only steering is present. The `GIT_*` check prevents the named
+  repository, object-store, index, shallow-file and configuration steering, while the three shell
+  checks prevent those specific initialization and inherited-function paths from substituting a
+  different command. It remains a `Boundary`, so it still pays the live tracker read and is recorded
+  in the decision ledger. The
   verdict-to-bytes check runs first; a stale verdict is refused before this exception can skip only
   the `out-of-phase` check, and only when the tracker answered exactly `in-progress`. `analysis`,
   `ready` and `blocked` keep the ordinary refusal. Wrappers, compound commands, duplicate command
@@ -1100,11 +1105,12 @@ suite. Everything else here is prose held by review.
   local update into another remote boundary, and this limitation is recorded rather than hidden.
 
   **The proof and the merge are not one atomic operation.** Attachment, upstream, cleanliness,
-  object resolution and ancestry are separate local Git processes, and the shell runs the merge only
-  after the gate returns. Another process can move a ref or change the worktree between any two of
-  those reads, or between the final read and execution. `--ff-only` still prevents a merge commit,
-  but Estigia takes no repository lock and cannot claim the executed command saw the exact state it
-  proved. The decision ledger has the same pre-existing resolution limit: its allow line names the
+  object resolution and ancestry are separate local Git processes, and the shell resolves and runs
+  the merge only after the gate returns. Another process can move a ref, change the worktree, or
+  replace what `PATH` resolves between any two of those reads, or between the final read and
+  execution. `--ff-only` still prevents a merge commit, but Estigia takes no repository or process
+  resolution lock and cannot claim the executed command saw the exact state or executable it proved.
+  The decision ledger has the same pre-existing resolution limit: its allow line names the
   subject as `git merge` and the live claim, not whether this local proof or an ordinary reviewed
   delivery admitted it. Changing that shared allow vocabulary would reach every gate consumer, so
   this narrow exception records the residual ambiguity here instead.

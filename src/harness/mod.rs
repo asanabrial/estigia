@@ -1712,7 +1712,7 @@ fn is_safe_local_fast_forward(repo_dir: &std::path::Path, target: &str) -> bool 
     // The shell command runs after this process exits. Proving with a scrubbed
     // environment and then allowing a merge that inherits `GIT_DIR` would prove
     // one repository and change another, so steering present at entry is unsafe.
-    if std::env::vars_os().any(|(name, _)| is_git_environment(&name)) {
+    if !fast_forward_environment_is_unsteered(std::env::vars_os().map(|(name, _)| name)) {
         return false;
     }
     let git = |arguments: &[&str]| {
@@ -1804,6 +1804,23 @@ fn is_git_environment(name: &std::ffi::OsStr) -> bool {
     name.to_string_lossy()
         .get(..4)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("GIT_"))
+}
+
+fn fast_forward_environment_is_unsteered(
+    environment: impl IntoIterator<Item = std::ffi::OsString>,
+) -> bool {
+    !environment
+        .into_iter()
+        .any(|name| is_fast_forward_steering_environment(&name))
+}
+
+fn is_fast_forward_steering_environment(name: &std::ffi::OsStr) -> bool {
+    is_git_environment(name)
+        || name.to_str().is_some_and(|name| {
+            ["BASH_ENV", "ENV", "BASH_FUNC_git%%"]
+                .iter()
+                .any(|steering| name.eq_ignore_ascii_case(steering))
+        })
 }
 
 /// Everything the gate needs that it cannot work out for itself.

@@ -532,6 +532,30 @@ fn every_proof_git_process_removes_repository_steering_environment() {
 }
 
 #[test]
+fn shell_steering_environment_cannot_earn_the_fast_forward_exception() {
+    for name in [
+        "BASH_ENV",
+        "bash_env",
+        "ENV",
+        "env",
+        "BASH_FUNC_git%%",
+        "bash_func_GIT%%",
+        "GIT_DIR",
+    ] {
+        assert!(
+            !fast_forward_environment_is_unsteered([std::ffi::OsString::from(name)]),
+            "{name} could make the shell execute a different git"
+        );
+    }
+    for name in ["PATH", "PATHEXT", "SHELL"] {
+        assert!(
+            fast_forward_environment_is_unsteered([std::ffi::OsString::from(name)]),
+            "{name} does not introduce shell-only git resolution"
+        );
+    }
+}
+
+#[test]
 fn reading_the_repository_is_not_the_harness_s_business() {
     for command in ["ls -la", "cat README.md", "git status", "git log --oneline"] {
         let (action, _) = classify("Bash", &json!({ "command": command }));
