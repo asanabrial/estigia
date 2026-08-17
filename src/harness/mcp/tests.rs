@@ -753,6 +753,24 @@ fn a_run_id_that_holds_another_checkout_is_not_one_to_act_under() {
         );
     }
 
+    // A worktree on its own is still not this server's checkout. The rule that
+    // keeps `start_branch` from *producing* this shape lives one file over, in
+    // the pointer effect; it does not make the shape acceptable when something
+    // else writes it, and a fix that widened the guard here instead would have
+    // been a gate deciding less. Reachable by hand-writing a pointer, so it is
+    // measured rather than assumed unreachable.
+    pointer("claude-worktree-only", None, Some(&elsewhere));
+    let failure = run_tool(
+        "release",
+        &json!({"issue": 12, "run_id": "claude-worktree-only"}),
+        Ok(&context),
+    )
+    .expect_err("a run covering only somebody else's worktree is not in this checkout");
+    let ToolFailure::Refused(refusal) = failure else {
+        panic!("refused as malformed rather than by the rule");
+    };
+    assert_eq!(refusal.code, "run-id-names-another-checkout");
+
     // And a run that has claimed nothing has no checkout to be outside of,
     // which is every first `claim` there has ever been.
     if let Err(ToolFailure::Refused(refusal)) = run_tool(
@@ -2301,6 +2319,112 @@ fn a_call_that_wrote_nothing_leaves_the_run_pointer_alone() {
         crate::harness::session::load(&context.state_root, "claude-abcd1234").issue,
         None,
         "the release that happened left the run still holding the issue"
+    );
+}
+
+/// Isolating a run must not *narrow* what its claim covers.
+///
+/// `docs/honesty.md` states the invariant: *"The gate covers two directories:
+/// the checkout the claim was made in, and the isolated one `start_branch`
+/// created."* `Isolated` wrote only the second, which is right whenever the
+/// first is already there and wrong in the one shape that is reachable without
+/// anybody doing anything strange: a `claim` whose tracker write **landed** and
+/// whose readback failed returns `Err` before `apply_effect` ever runs, so the
+/// pointer records no `repo_dir` at all.
+///
+/// From there the dispatch guard's own precondition — `covered().count() > 0` —
+/// stands aside, `start_branch` succeeds, and the run goes from covering
+/// *everywhere* to covering exactly one directory that is not the one the server
+/// is standing in. Every later call is refused `run-id-names-another-checkout`,
+/// and there is no way back that does not restart the agent from a path the
+/// workflow just created. Measured on this repository during the GitHub outage
+/// of 2026-08-17, and twice more by the run that filed the issue.
+///
+/// So the isolation step records the checkout it was adjudicated from.
+/// `start_branch` verifies the claim against the tracker from `context.repo_dir`
+/// before it creates anything, which is the same warrant `Swear` records that
+/// directory on — this is not coverage manufactured from a client's path.
+#[test]
+fn isolating_a_run_records_the_checkout_it_was_adjudicated_from() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = GateContext {
+        integration: crate::config::Integration::Branch,
+        flag: None,
+        stand_down: None,
+        skill_root: root.path().join("skill"),
+        repo_dir: root.path().join("repo"),
+        state_root: root.path().join("state"),
+        window: super::super::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        boundaries: Vec::new(),
+    };
+    let start = super::tools::TOOLS
+        .iter()
+        .find(|tool| tool.name == "start_branch")
+        .expect("the tool is listed");
+    assert_eq!(
+        start.effect,
+        super::PointerEffect::Isolated,
+        "this test is measuring the wrong tool"
+    );
+    let worktree = root.path().join("trees").join("issue-56");
+
+    // The shape a claim whose readback failed leaves behind: the tracker holds
+    // the claim, the pointer holds no checkout.
+    let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
+    run.issue = Some(56);
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+
+    super::apply_effect(
+        start,
+        &serde_json::json!({"issue": 56, "run_id": "claude-abcd1234"}),
+        Some(&serde_json::json!({
+            "ok": true,
+            "worktree": worktree.display().to_string(),
+        })),
+        &mut run,
+        &context,
+    );
+
+    let after = crate::harness::session::load(&context.state_root, "claude-abcd1234");
+    assert_eq!(
+        after.worktree.as_ref(),
+        Some(&worktree),
+        "the isolated checkout was not recorded at all"
+    );
+    assert!(
+        after
+            .covered()
+            .any(|covered| crate::paths::covers(covered, &context.repo_dir)),
+        "isolation left the run covering {:?} and not the checkout it was adjudicated from ({}), \
+         which is the refusal this test exists to prevent",
+        after.covered().collect::<Vec<_>>(),
+        context.repo_dir.display()
+    );
+
+    // The floor, because a rule that overwrites would pass the assertion above
+    // and take the guarantee with it. A run whose claim recorded checkout A must
+    // not have that replaced by a server standing in B — the dispatch guard
+    // refuses B for that run, and this is the line that keeps it able to.
+    let elsewhere = root.path().join("somebody-elses-checkout");
+    let mut theirs = crate::harness::session::Run::new("claude-elsewhere".to_owned());
+    theirs.issue = Some(56);
+    theirs.repo_dir = Some(elsewhere.clone());
+    crate::harness::session::store(&context.state_root, &theirs).expect("the pointer writes");
+    super::apply_effect(
+        start,
+        &serde_json::json!({"issue": 56, "run_id": "claude-elsewhere"}),
+        Some(&serde_json::json!({
+            "ok": true,
+            "worktree": worktree.display().to_string(),
+        })),
+        &mut theirs,
+        &context,
+    );
+    assert_eq!(
+        crate::harness::session::load(&context.state_root, "claude-elsewhere").repo_dir,
+        Some(elsewhere),
+        "isolation overwrote the checkout the claim was made in with the server's own"
     );
 }
 

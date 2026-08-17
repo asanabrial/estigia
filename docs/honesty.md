@@ -892,6 +892,12 @@ suite. Everything else here is prose held by review.
   `<project>/.git/config` both stand aside. Whether the fix is naming the file or widening what a
   worktree run covers is the question, and it is not this issue's.
 
+  Narrower since `start_branch` began recording the claim's checkout beside the worktree, which is
+  the entry further down about the gate covering two directories: Estigia's own tools no longer
+  *produce* a pointer carrying only a worktree. The residual is unchanged for a pointer that carries
+  one anyway — a run whose `repo_dir` genuinely is a worktree, or a hand-written record — so the
+  entry is narrowed rather than removed, and the question it ends on is still open.
+
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
   bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read
@@ -1377,6 +1383,27 @@ suite. Everything else here is prose held by review.
 - **The gate covers two directories: the checkout the claim was made in, and the isolated one
   `start_branch` created.** A run that makes its own worktree by hand gets that write gated but the
   directory is never recorded, so subsequent writes there read as `Outside`. Use the tool.
+
+  *Two* is now what the isolation step writes, rather than what it assumes it will find. It used to
+  record only the worktree, which is correct whenever the claim already recorded a checkout and
+  wrong in the one shape nobody has to do anything strange to reach: a `claim` whose tracker write
+  lands and whose readback fails returns before the pointer effect runs, so no checkout is recorded
+  at all. From there the dispatch guard's own precondition — *a run that has claimed nothing has
+  nothing to be outside of* — lets `start_branch` through, and the worktree it writes becomes the
+  run's **only** covered directory. The server that made the call is then outside its own run, every
+  later call is refused `run-id-names-another-checkout`, and repeating it cannot help: an MCP
+  server's directory does not change when a child command uses another one. The only way out
+  observed in the field was restarting the agent from a path the workflow had just created, which
+  loses the live context and can mint a different runtime identity — the thing claim attribution
+  exists to prevent.
+
+  So `start_branch` fills the claim's checkout in as well as the worktree, and fills rather than
+  overwrites: a run whose claim named checkout A keeps A when a server standing in B calls under its
+  id, because refusing B for that run is exactly what the guard is for. It is not coverage
+  manufactured from a client's path — `start_branch` verifies the claim against the tracker from
+  that same directory before it creates anything. Measured by
+  `one_server_survives_the_isolation_it_created`, which drives one real server through both calls
+  down one pipe, because no per-call `GateContext` can pose *the same server asking twice*.
 - **Two checkouts are told apart by resolving them, and by case when they will not resolve.**
   `canonicalize` answers with the real spelling on disk, so a live directory spelled two ways is one
   directory whatever the operator typed. A path this process cannot resolve has only its spelling

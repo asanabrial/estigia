@@ -987,6 +987,27 @@ fn apply_effect(
                 // checkout the claim was made in, which is the one directory the run
                 // does not edit — and the whole delivery goes through ungated.
                 run.worktree = worktree.clone();
+                // And the checkout this was adjudicated from, when the pointer does
+                // not already name one. Isolating a run must not *narrow* what its
+                // claim covers, and writing only the line above could: a `claim`
+                // whose tracker write landed and whose readback failed returns `Err`
+                // before `apply_effect` runs, so the pointer carries no `repo_dir`.
+                // From there the dispatch guard's own precondition — a run with no
+                // coverage has nothing to be outside of — lets `start_branch`
+                // through, and the moment the worktree lands the run covers exactly
+                // one directory that is not the server's. Every later call is
+                // refused `run-id-names-another-checkout`, with no way back that
+                // does not restart the agent from a path the workflow just created.
+                //
+                // `get_or_insert_with`, never assignment: a run whose claim recorded
+                // checkout A must not have it replaced by a server standing in B.
+                // The guard refuses B for that run, and this is what keeps it able
+                // to.
+                //
+                // Not manufactured coverage: `start_branch` verifies the claim
+                // against the tracker from this same directory before it creates
+                // anything, which is the warrant `Swear` records it on one arm up.
+                run.repo_dir.get_or_insert_with(|| repo_dir.clone());
                 run.mark_verified();
             }
         });
