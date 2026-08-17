@@ -31,6 +31,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 # `"command","type"`, which is a diff nobody asked for in a file Estigia was
 # only supposed to add one entry to.
 serde_json = { version = "1.0.149", features = ["preserve_order"] }
+serde_yaml_ng = "0.10.0"
 semver = { version = "1.0.27", features = ["serde"] }
 sha2 = "0.11.0"
 thiserror = "2.0.17"

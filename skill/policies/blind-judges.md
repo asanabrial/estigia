@@ -1,8 +1,8 @@
-# Two blind judges
+# Blind judges
 
-Read this for both `Blind judges` modes. `single` requires one independent review context. `two blind`
-requires the two contexts and agreement rules below. Neither mode changes the mandatory frozen
-publication receipt.
+`single` requires one independent review context. `two blind` uses the two-context rules below;
+`five blind` uses the additional quorum section. Neither changes the mandatory frozen publication
+receipt or the one aggregate verdict Estigia requires before CI release.
 
 The setting is orthogonal to `Planning` and to `Review protocol`. Under `standard` review the judges
 read the published review target; under `receipt-driven` they read the frozen digest; when `Planning`
@@ -11,15 +11,26 @@ in every combination.
 
 ## The mechanism
 
-**One immutable target, two judges, in parallel, blind.**
+**One immutable target, independent judges in parallel, blind.**
 
-Build and publish the complete clean target as a draft first. Both judges receive the same epoch, PR,
-head, base, digest, bytes, scope and
-the same criteria, and each is blind to the other's verdict and to the other's reasoning. Neither is
-told what the other found, and neither runs after the other with the first result in hand — a second
-opinion that has read the first is not a second opinion.
+Build and publish the complete clean target as a draft first. Every judge receives the same epoch, PR,
+head, base, digest, bytes, scope and criteria, and is blind to every sibling's verdict and reasoning.
+A later opinion that has read an earlier one is not independent. Claude's orchestrator launches the
+same static `review-blind` definition for every judge; there are no numbered definitions.
 
-Both judges are **read-only** against that target. A judge that edits is no longer judging.
+All judges are **read-only** against that target. A judge that edits is no longer judging.
+
+### Reserved reviewer role
+
+`review-blind` is operator-owned. For Claude's current `Agent` and legacy `Task` launch surfaces, any
+project definition under recursive `.claude/agents`, from the launch cwd through the first `.git`
+repository root, with that filename or YAML-parsed frontmatter name invalidates the panel. Unreadable or
+duplicate candidates also invalidate it, and the canonical user file must be the only user-scoped
+definition with that identity and match Estigia's normalized embedded reviewer. Setup performs the same
+user-tree uniqueness preflight before writing. A running reviewer is gated by the embedded policy, not
+project-local bytes. A refused or unprovable launch contributes no judge. If the collision or canonical
+file cannot be restored, use a separate session or durable handoff; never silently reduce or serialize
+the panel. Ordinary agent names remain project-first, and this prelaunch check is Claude-only.
 
 ## What agreement buys
 
@@ -30,15 +41,18 @@ Both judges are **read-only** against that target. A judge that edits is no long
 | The judges contradict each other | **stop, and put it to a person** |
 
 There is no tie-break and no majority. A majority of two is a coin toss wearing a process, and the
-case where two careful readers disagree about the same bytes is exactly the case worth a human
-minute.
+case where two careful readers disagree about the same bytes is exactly the case worth a human minute.
 
-A finding only one judge saw is not discarded — it goes on the record as a suspicion, with which
-judge saw it. Deleting it would make the second judge's work invisible whenever it disagreed, which
-is the opposite of why there are two.
+A finding only one judge saw is not discarded; it remains a suspicion with which judge saw it.
+Warnings and suggestions are recorded and not acted on automatically.
 
-Warnings and suggestions are recorded and not acted on. They are information, and an automated fix
-for a suggestion is a change nobody asked for.
+### Five blind
+
+Launch five independent reviewer contexts concurrently over the identical immutable target and criteria.
+A 3-of-5 quorum independently confirming the same severe finding blocks acceptance and
+authorizes automatic repair. One or two confirmations remain suspicions. Ambiguous finding identities
+do not aggregate. Preserve dissent, warnings, suggestions and which judges confirmed each finding.
+After either blind mode, record one aggregate exact-receipt verdict, not one marker per judge.
 
 ## The fix is bounded
 
@@ -52,13 +66,13 @@ narrowing, or when editing exceeds measuring.
 
 ## What Estigia enforces here, and what it does not
 
-**Enforced, mechanically:** the draft barrier and exact publication receipt around the judges, but
-nothing about whether the judges actually ran or were blind.
+**Enforced, mechanically:** the draft barrier, one aggregate exact-receipt verdict, the exact
+publication receipt, and Claude's reserved-role prelaunch checks. Nothing proves panel execution.
 
 That is worth stating first and plainly. Estigia gates repository writes against an adjudicated
-claim. It cannot see how many contexts read a change, whether they were blind, whether one waited for
-the other, or whether a verdict was honest. There is no hook that fires when a reviewer forms an
-opinion.
+claim. It cannot prove panel size, concurrency, independence, blindness, same-finding identity or
+quorum. It cannot see whether a context read the target or whether a verdict was honest. There is no
+hook that fires when a reviewer forms an opinion.
 
 `publish_review` keeps ordinary compatible CI behind a draft PR and records epoch/PR/head/base/digest.
 `release_ci` replays the globally latest receipt, current draft PR and coherent clean target before
@@ -67,9 +81,11 @@ the cooperative order to exact bytes; they do not prove who reviewed them. GitHu
 conditional-ready operation, and out-of-band collaborators or workflows can bypass the order or forge
 evidence. There is no malicious-collaborator authenticity claim.
 
-What the setting does is put this contract in front of the agent and record the choice where an
-operator and a reviewer can both read it. That is a real thing — a rule nobody states is a rule
-nobody keeps — and it is the whole of it.
+For Claude Code, setup always installs one stable inert reviewer definition where the host finds it;
+the setting does not create or rewrite that file. The orchestrator remains responsible for passing the
+effective judge model, activating the right number of contexts concurrently, withholding sibling
+output, applying finding identity and quorum, and preserving dissent. That is a real contract, not
+mechanical proof that it happened.
 
 **What is still enforced around this:** the claim, the renewal before repository writes and at every
 irreversible boundary, and a push no live claim authorises refused under git. Those hold whatever the

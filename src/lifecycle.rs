@@ -315,7 +315,7 @@ pub struct Executable {
     pub observed_path_sha256: Option<String>,
     /// Version compiled into the running process.
     pub compiled_version: &'static str,
-    /// Digest of the embedded skill and phase-agent assets in this process.
+    /// Digest of the embedded skill and agent-definition assets in this process.
     pub asset_set_sha256: String,
 }
 
@@ -429,11 +429,15 @@ fn compiled_version() -> Result<Version, StateError> {
 fn compiled_asset_set_sha256() -> String {
     let mut hasher = sha2::Sha256::new();
     hash_typed(&mut hasher, b"estigia-embedded-asset-set-v1", b"");
-    hasher.update(2_u64.to_be_bytes());
-    for (set, files) in [
+    let collections = [
         (b"skill".as_slice(), crate::skill::FILES),
-        (b"phase-agents".as_slice(), crate::skill::PHASE_AGENTS),
-    ] {
+        (
+            b"agent-definitions".as_slice(),
+            crate::skill::AGENT_DEFINITIONS,
+        ),
+    ];
+    hasher.update((collections.len() as u64).to_be_bytes());
+    for (set, files) in collections {
         hash_typed(&mut hasher, b"collection", set);
         hasher.update((files.len() as u64).to_be_bytes());
         for file in files {

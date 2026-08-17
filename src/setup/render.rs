@@ -217,7 +217,11 @@ impl AgentAdapter {
                 // below drops `NotebookEdit` on *positive* knowledge that the
                 // tool is absent; there is no such knowledge here, and absent
                 // that, the answer that cannot open a hole wins.
-                matcher: Some("Edit|Write|MultiEdit|NotebookEdit|Update|Bash"),
+                // `Agent` and legacy `Task` are not repository writes. They wake
+                // the dedicated Claude prelaunch check for the reserved reviewer
+                // before the ordinary classifier, and the setup crossing holds
+                // that exception rather than teaching the classifier a false kind.
+                matcher: Some("Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task"),
                 dialect: Dialect::ClaudeCode,
                 envelope: Envelope::Settings,
                 event_is_the_tool_name: false,

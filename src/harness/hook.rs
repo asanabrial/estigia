@@ -176,7 +176,7 @@ pub struct Input {
     /// request. Other harnesses write `tools:` into a sub-agent definition and
     /// rely on the host to honour it; a harness that knows which sub-agent is
     /// calling can refuse instead.
-    #[serde(default, alias = "agent_name", alias = "subagent_type")]
+    #[serde(default, alias = "agent_name")]
     pub agent_type: Option<String>,
     /// The tool about to run, on `PreToolUse`.
     ///
@@ -227,6 +227,24 @@ pub struct Input {
     /// on one machine were Windows paths inside JSON strings.
     #[serde(skip)]
     pub why: Option<String>,
+}
+
+impl Input {
+    /// The role an `Agent` or legacy `Task` call asks Claude to launch.
+    pub fn launch_target(&self) -> Option<&str> {
+        self.tool_input
+            .get("subagent_type")
+            .and_then(Value::as_str)
+            .filter(|target| !target.is_empty())
+    }
+}
+
+/// Whether this tool is Claude's current or legacy sub-agent launch surface.
+pub fn is_prelaunch_tool(agent: Option<&str>, tool: &str) -> bool {
+    agent == Some("claude-code")
+        && ["Agent", "Task"]
+            .iter()
+            .any(|surface| surface.eq_ignore_ascii_case(tool.trim()))
 }
 
 /// Why a payload would not parse, in terms an operator can act on.
@@ -903,57 +921,79 @@ pub fn run_as(
             json!({})
         }
         Event::PreToolUse => {
+            // A reserved reviewer is proved before either role or repository
+            // classification. `agent_type` names the caller; only the nested
+            // `tool_input.subagent_type` names what this call would launch.
+            if is_prelaunch_tool(agent, &input.tool_name)
+                && input.launch_target() == Some("review-blind")
+                && let Err(refusal) = super::roles::authorize_review_blind_launch(
+                    &context.repo_dir,
+                    crate::paths::home_dir().ok().as_deref(),
+                )
+            {
+                return dialect.deny(&refusal);
+            }
             // Before anything else: a sub-agent reaching past the tool list its
             // own definition declares. Checked first because it is the cheapest
             // question and the least conditional — it does not depend on a
             // claim, a state, or a window, only on what the author wrote.
             if let Some(agent) = input.agent_type.as_deref() {
-                match super::roles::definition_for(
-                    &context.repo_dir,
-                    crate::paths::home_dir().ok().as_deref(),
-                    agent,
-                ) {
-                    // A definition that is there and will not open is denied
-                    // rather than stepped over. Stepping over it is how the
-                    // search used to behave, and what it produced was *no
-                    // policy*, which this gate reads as every tool allowed —
-                    // an unknown result becoming clearance at the one boundary
-                    // whose subject is what a sub-agent may not do.
-                    // Through the stand-down, unlike the role refusal below.
-                    //
-                    // The two are not the same kind of no. `tool-outside-
-                    // declared-role` enforces a list the sub-agent's *author*
-                    // wrote, and an operator standing Estigia's gate down does
-                    // not thereby grant permissions somebody else withheld — so
-                    // that one is deliberately not wrapped, and this comment is
-                    // where that is said.
-                    //
-                    // This one is Estigia's own *an unknown result is not
-                    // clearance*, and it has the shape `decide_action`'s two
-                    // refusals had until a round ago: a definition file that
-                    // will not open denies every call this sub-agent makes, and
-                    // the one command for getting past a gate that is wrong at a
-                    // bad moment did not reach it. A file on a read-only mount,
-                    // or one somebody else owns, left an operator with nothing
-                    // to do but stop.
-                    Err(refusal) => {
-                        return response_in(
-                            dialect,
-                            &super::standdown::over(
-                                Decision::Deny(Box::new(refusal)),
-                                context.stand_down.as_ref(),
-                                session::now_seconds(),
-                            ),
-                        );
+                if agent == "review-blind" {
+                    if let Some(refusal) = super::roles::gate(
+                        Some(agent),
+                        &input.tool_name,
+                        Some(crate::skill::REVIEW_AGENT.contents),
+                    ) {
+                        return dialect.deny(&refusal);
                     }
-                    Ok(Some(definition)) => {
-                        if let Some(refusal) =
-                            super::roles::gate(Some(agent), &input.tool_name, Some(&definition))
-                        {
-                            return dialect.deny(&refusal);
+                } else {
+                    match super::roles::definition_for(
+                        &context.repo_dir,
+                        crate::paths::home_dir().ok().as_deref(),
+                        agent,
+                    ) {
+                        // A definition that is there and will not open is denied
+                        // rather than stepped over. Stepping over it is how the
+                        // search used to behave, and what it produced was *no
+                        // policy*, which this gate reads as every tool allowed —
+                        // an unknown result becoming clearance at the one boundary
+                        // whose subject is what a sub-agent may not do.
+                        // Through the stand-down, unlike the role refusal below.
+                        //
+                        // The two are not the same kind of no. `tool-outside-
+                        // declared-role` enforces a list the sub-agent's *author*
+                        // wrote, and an operator standing Estigia's gate down does
+                        // not thereby grant permissions somebody else withheld — so
+                        // that one is deliberately not wrapped, and this comment is
+                        // where that is said.
+                        //
+                        // This one is Estigia's own *an unknown result is not
+                        // clearance*, and it has the shape `decide_action`'s two
+                        // refusals had until a round ago: a definition file that
+                        // will not open denies every call this sub-agent makes, and
+                        // the one command for getting past a gate that is wrong at a
+                        // bad moment did not reach it. A file on a read-only mount,
+                        // or one somebody else owns, left an operator with nothing
+                        // to do but stop.
+                        Err(refusal) => {
+                            return response_in(
+                                dialect,
+                                &super::standdown::over(
+                                    Decision::Deny(Box::new(refusal)),
+                                    context.stand_down.as_ref(),
+                                    session::now_seconds(),
+                                ),
+                            );
                         }
+                        Ok(Some(definition)) => {
+                            if let Some(refusal) =
+                                super::roles::gate(Some(agent), &input.tool_name, Some(&definition))
+                            {
+                                return dialect.deny(&refusal);
+                            }
+                        }
+                        Ok(None) => {}
                     }
-                    Ok(None) => {}
                 }
             }
 
@@ -1455,17 +1495,25 @@ mod tests {
             assert_eq!(read(body).session_id, "s-1", "{body}");
         }
 
-        // Which sub-agent is calling, under all three. Absent stays absent:
+        // Which sub-agent is calling, under its top-level spellings. Absent stays absent:
         // "the main conversation" and "an unnamed sub-agent" are different
         // facts and the role gate reads them differently.
         for body in [
             r#"{"agent_type": "Explore"}"#,
             r#"{"agent_name": "Explore"}"#,
-            r#"{"subagent_type": "Explore"}"#,
         ] {
             assert_eq!(read(body).agent_type.as_deref(), Some("Explore"), "{body}");
         }
         assert_eq!(read(r#"{"session_id": "s"}"#).agent_type, None);
+        let launch = read(r#"{"tool_name":"Agent","tool_input":{"subagent_type":"review-blind"}}"#);
+        assert_eq!(launch.agent_type, None);
+        assert_eq!(launch.launch_target(), Some("review-blind"));
+        let nested = read(
+            r#"{"agent_type":"builder","tool_name":"Task","tool_input":{"subagent_type":"review-blind"}}"#,
+        );
+        assert_eq!(nested.agent_type.as_deref(), Some("builder"));
+        assert_eq!(nested.launch_target(), Some("review-blind"));
+        assert_eq!(read(r#"{"subagent_type":"review-blind"}"#).agent_type, None);
 
         // The tool, under both names, and reaching the classifier as a write.
         for body in [
@@ -1565,6 +1613,55 @@ mod tests {
             ..Input::default()
         };
         assert_eq!(run(Event::PreToolUse, &input, None), json!({}));
+    }
+
+    #[test]
+    fn a_running_review_blind_uses_embedded_policy_over_hostile_project_bytes() {
+        let root = tempfile::tempdir().expect("a root");
+        let repo = root.path().join("repo");
+        let definition = repo.join(".claude/agents/review-blind.md");
+        std::fs::create_dir_all(definition.parent().expect("a parent")).expect("agents directory");
+        std::fs::write(
+            definition,
+            "---\nname: review-blind\ntools: Read, Write, Edit, Bash, Agent, Task\n---\n",
+        )
+        .expect("hostile project bytes");
+        let context = GateContext {
+            stand_down: None,
+            integration: crate::config::Integration::Branch,
+            flag: None,
+            skill_root: root.path().join("skill"),
+            repo_dir: repo,
+            state_root: root.path().join("state"),
+            window: super::super::RENEWAL_WINDOW,
+            tracker: crate::config::Tracker::Github { repo: None },
+            boundaries: Vec::new(),
+        };
+        for tool in ["Write", "Edit", "Bash", "Agent", "Task"] {
+            let input = Input {
+                agent_type: Some("review-blind".to_owned()),
+                tool_name: tool.to_owned(),
+                // A different target isolates the running reviewer's policy
+                // from the reserved-target prelaunch check.
+                tool_input: json!({"subagent_type": "other"}),
+                ..Input::default()
+            };
+
+            let answer = run_as(
+                Dialect::ClaudeCode,
+                Some("claude-code"),
+                Event::PreToolUse,
+                &input,
+                Some(&context),
+            );
+            let reason = answer["hookSpecificOutput"]["permissionDecisionReason"]
+                .as_str()
+                .unwrap_or_default();
+            assert!(
+                reason.contains("tool-outside-declared-role"),
+                "{tool}: {answer}"
+            );
+        }
     }
 
     /// The event a response declares is the event it answers.

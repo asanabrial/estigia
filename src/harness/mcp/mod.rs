@@ -637,9 +637,27 @@ pub fn run_tool(
     // rule was stated there and not carried here, so a tool call was measured
     // against a claim a write in the same directory would not have been.
     //
-    // Only when the pointer names a checkout: a run that has claimed nothing yet
-    // has nothing to be outside of, which is the `claim` call itself.
-    if run.covered().count() > 0
+    // Only when the pointer names the checkout the claim was made in: a run that
+    // has claimed nothing yet has nothing to be outside of, which is the `claim`
+    // call itself.
+    //
+    // `repo_dir` and not `covered().count()`, which is the same question asked of
+    // the wrong field. The worktree is the *additional* directory a claim covers,
+    // never the one that says where it was sworn — `docs/honesty.md` has said so
+    // in as many words for as long as there have been two. Asking the count let a
+    // record holding only a worktree ground a refusal, and an incomplete record
+    // is not a narrower claim, it is an unknown one. That shape is reachable: a
+    // `claim` whose tracker write lands and whose readback fails records nothing,
+    // and the isolation that follows writes the worktree alone. The run was then
+    // refused everywhere including the recovery, which is a gate with no door in
+    // it — measured on this repository on 2026-08-17, twice by the run that filed
+    // the issue and once more by the run that fixed it.
+    //
+    // Nothing is widened for a record that *does* name its checkout: a foreign
+    // run id, an unrecorded worktree and a directory outside the coverage are all
+    // refused exactly as before. And standing aside here is not clearance — the
+    // call still goes to the tracker, which is the only thing that adjudicates.
+    if run.repo_dir.is_some()
         && !run
             .covered()
             .any(|covered| crate::paths::covers(covered, &context.repo_dir))
@@ -957,11 +975,32 @@ fn apply_effect(
         return true;
     }
     let issue = arguments.get("issue").and_then(Value::as_u64);
-    let state = arguments
+    // `state` is what a claim swears to and `expect_state` is what a renewal was
+    // measured against. Either one names a state the tracker has just agreed to,
+    // so either one answers here; the swearing tools send the first and never the
+    // second, so their behaviour is unchanged by reading it.
+    //
+    // Kept as an `Option` beside the defaulted value, because **two of the four
+    // renewing tools carry neither**: `release_ci` and `record_review_verdict`
+    // take a receipt and no state at all. Writing the default down for them would
+    // stamp a pointer with a state nobody named — and `hook::state_clause` then
+    // announces it as fact, `estigia status` prints it where it printed
+    // `unknown`, and the fill below never overwrites, so the one call the docs
+    // nominate as the way back cannot correct it. That is the third rule this
+    // crate is built on, and it is already fixed one layer downstream; defaulting
+    // here would move the fabrication to the writing end, where that fix cannot
+    // see it.
+    //
+    // The default itself stays for the swearing tools, whose schema documents it:
+    // `claim` takes `state` as optional and means `in-progress` by it.
+    let named_state = arguments
         .get("state")
+        .or_else(|| arguments.get("expect_state"))
         .and_then(Value::as_str)
-        .unwrap_or("in-progress")
-        .to_owned();
+        .map(ToOwned::to_owned);
+    let state = named_state
+        .clone()
+        .unwrap_or_else(|| "in-progress".to_owned());
     let to = arguments
         .get("to")
         .and_then(Value::as_str)
@@ -1014,6 +1053,39 @@ fn apply_effect(
                     run.review_receipt = Some(receipt.clone());
                     run.reviewed_head = None;
                 }
+                // A renewal that came back `ok` is the tracker saying, just now,
+                // that this run is the live holder of this issue in this state.
+                // That is the same fact `Swear` writes down, learned the same way
+                // and from the same authority — so a record missing it is
+                // completed here rather than left broken until something writes to
+                // the tracker again.
+                //
+                // This is the way back for a run that has already been stranded.
+                // The pointer is a note and the timeline is the authority, so a
+                // note that lost what the timeline still says is repaired from the
+                // timeline; it takes no tracker *write*, which is what makes it
+                // reachable during exactly the outage that causes the damage.
+                // Every field is filled and none is overwritten: a pointer that
+                // already names an issue, a state or a checkout is describing
+                // something this call has no business replacing, and `verify_claim`
+                // refuses outright when the tracker disagrees with it.
+                //
+                // It cannot invent authority. A renewal only reaches here having
+                // been answered `ok`, and a run that holds nothing is refused by
+                // the tracker before the pointer is touched at all.
+                if run.issue.is_none() {
+                    run.issue = issue;
+                }
+                // Only a state somebody named. `release_ci` and
+                // `record_review_verdict` renew without carrying one, and the
+                // defaulted value beside this is not something the tracker said
+                // on their call — see where `named_state` is read.
+                if run.state.is_none()
+                    && let Some(named) = &named_state
+                {
+                    run.state = Some(named.clone());
+                }
+                run.repo_dir.get_or_insert_with(|| repo_dir.clone());
                 run.mark_verified();
             }
             PointerEffect::Published => {
@@ -1031,6 +1103,27 @@ fn apply_effect(
                 // checkout the claim was made in, which is the one directory the run
                 // does not edit — and the whole delivery goes through ungated.
                 run.worktree = worktree.clone();
+                // And the checkout this was adjudicated from, when the pointer does
+                // not already name one. Isolating a run must not *narrow* what its
+                // claim covers, and writing only the line above could: a `claim`
+                // whose tracker write landed and whose readback failed returns `Err`
+                // before `apply_effect` runs, so the pointer carries no `repo_dir`.
+                // From there the dispatch guard's own precondition — a run with no
+                // coverage has nothing to be outside of — lets `start_branch`
+                // through, and the moment the worktree lands the run covers exactly
+                // one directory that is not the server's. Every later call is
+                // refused `run-id-names-another-checkout`, with no way back that
+                // does not restart the agent from a path the workflow just created.
+                //
+                // `get_or_insert_with`, never assignment: a run whose claim recorded
+                // checkout A must not have it replaced by a server standing in B.
+                // The guard refuses B for that run, and this is what keeps it able
+                // to.
+                //
+                // Not manufactured coverage: `start_branch` verifies the claim
+                // against the tracker from this same directory before it creates
+                // anything, which is the warrant `Swear` records it on one arm up.
+                run.repo_dir.get_or_insert_with(|| repo_dir.clone());
                 run.mark_verified();
             }
         });

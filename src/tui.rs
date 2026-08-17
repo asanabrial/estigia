@@ -1301,9 +1301,10 @@ primary row. The model targets beneath it open their advisory catalog
 directly; Enter or Space chooses, custom IDs are always available, and
 inherit removes only that target. Shared answers borrow no one agent's
 catalog. The CLI still edits the complete persisted key=model route.
-Only Claude Code currently receives planned phase definitions. OpenCode
-and every other host keep these values as routing declarations;
-orchestrate, apply, and a visible route are not execution proof either.
+Only Claude Code currently receives host-routable definitions: selected
+planning phases and one static, inert blind reviewer in every mode.
+OpenCode and every other host keep these values as routing declarations;
+orchestrate, apply, judge, and a visible route are not execution proof.
 
 Some rows are worth less for some agents. Estigia can gate the tool calls
 of an agent whose host lets it and no others; the rest get the contract,

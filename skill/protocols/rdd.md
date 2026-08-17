@@ -19,7 +19,7 @@ Receipt-driven review makes the subject explicit and freezes it first:
 |---|---|---|
 | freeze | `review` | `expected-target` emits the complete intended target — the recorded base through `HEAD`, plus the uncommitted worktree — as a path/mode/blob manifest with **one digest** over it |
 | classify | `review` | name the risk this change carries and which lenses the review must apply; a lens nobody named is a lens nobody applied |
-| capture | `review` | the reviewer's verdict, recorded per lens against **that digest** |
+| capture | `review` | one aggregate exact-receipt verdict over epoch, PR, head, base and **that digest** |
 | validate | every gate | re-derive the digest and compare; a difference stops the gate |
 
 The digest is the receipt. It is not a file Estigia writes — it is what `expected-target` returns,
@@ -77,11 +77,10 @@ surface that cannot be read permits no write, and an unknown result is not clear
 ## What Estigia enforces here, and what it does not
 
 **Enforced, mechanically:** the claim; the renewal before repository writes and at every irreversible
-boundary; one run holding one task; the state the tracker reports; and a push that no live claim
-authorises, refused under git where no agent can route around it.
+boundary; one run holding one task; the state the tracker reports; a push that no live claim
+authorises, refused under git; and one aggregate exact-receipt verdict bound to the latest publication.
 
-**Not enforced:** that a receipt was taken, that the lenses named were the right ones, or that the
-verdict recorded against a digest was honest. Estigia can see a write and can ask the tracker who
-holds the issue. It cannot see whether the bytes a reviewer read are the bytes being delivered — only
-`expected-target` can answer that, and only when somebody runs it. A tool claiming otherwise would be
-the false comfort this contract is written against.
+**Not enforced:** per-lens or per-judge verdicts, whether the lenses named were the right ones, or
+whether the aggregate verdict was honest. Structured lens and judge evidence remains future design;
+the current marker is not a panel transcript. Estigia cannot see whether a reviewer actually read the
+receipt. A tool claiming otherwise would be the false comfort this contract is written against.

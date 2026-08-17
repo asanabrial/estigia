@@ -8,7 +8,7 @@ narrower than the machinery suggests.
 
 `estigia update` is read-only. Text and global `--json` output report the pathname returned by
 `current_exe`, a SHA-256 inventory of bytes reopened through that pathname, whether a local installer
-record uses that lookup key, the package version and embedded skill/phase-agent digest compiled into
+record uses that lookup key, the package version and embedded skill/agent-definition digest compiled into
 this process, their relation to this machine's recorded release high-water, and the latest
 public-release status. Portable Rust does not expose mapped-image identity here: pathname bytes are
 raceable and the digest is not a claim about the exact machine code currently executing. This slice makes
@@ -18,7 +18,9 @@ verifiable**. It never turns absence or an unavailable remote into `current`.
 Lifecycle evidence lives under `~/.estigia/lifecycle`, separately from each skill's
 `.estigia/installed.json`, and survives adapter uninstall. Provenance records are create-once and
 keyed by the observed pathname-bytes SHA-256; the publisher derives canonical SemVer and a
-deterministically typed/count-framed digest of `skill::FILES` and `PHASE_AGENTS` from its own build. A
+deterministically typed/count-framed digest of the two top-level asset collections,
+`skill::FILES` and `AGENT_DEFINITIONS`, from its own build. The latter contains exactly five SDD
+planning phases and the one stable blind-review definition; it is not part of `skill::FILES`. A
 record is accepted only when both equal the currently compiled values. Release records are create-once and keyed by canonical SemVer;
 build metadata is rejected, and the greatest readable key is the high-water, so an older cooperating
 writer has no mutable value it can lower. Records reject unknown fields. Existing semantically equal

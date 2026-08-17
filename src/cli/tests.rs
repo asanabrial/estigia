@@ -18,6 +18,7 @@
 //! only moment a ratchet can start.
 
 use clap::Parser;
+use std::fs;
 
 use super::*;
 use crate::config::Config;
@@ -56,6 +57,30 @@ fn inventory() -> Vec<Refusal> {
             "builder",
             "WebFetch",
             &crate::harness::roles::Policy::Allowlist(vec!["Read".to_owned(), "Write".to_owned()]),
+        ),
+        Refusal::not_started(
+            "reviewer-project-shadow",
+            "a project definition shadows the operator-owned reviewer",
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "remove or rename the project reviewer, or use separate-session review",
+            ),
+        ),
+        Refusal::not_started(
+            "reviewer-project-unprovable",
+            "project reviewer candidates cannot be proved unique and readable",
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "repair the project agent tree, or use durable handoff review",
+            ),
+        ),
+        Refusal::not_started(
+            "reviewer-canonical-unavailable",
+            "the canonical user reviewer cannot be proved current",
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "restore it with Claude setup, or use separate-session review",
+            ),
         ),
         nothing_configured(),
         // Knowable from the command line: a value the table cannot carry.
@@ -931,6 +956,22 @@ fn after_writing() -> Vec<Refusal> {
                 "estigia config set \"Planning\" \"direct\" --agent claude-code",
             ),
         },
+        Refusal::not_started(
+            "reviewer-definition-unowned",
+            "the stable reviewer path belongs to another tool",
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "move that definition aside before setup",
+            ),
+        ),
+        Refusal::not_started(
+            "reviewer-definition-changed",
+            "the setup-owned reviewer contains different bytes",
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "move the changed definition aside before setup",
+            ),
+        ),
     ]
 }
 
@@ -3081,6 +3122,40 @@ fn a_row_an_agents_own_file_answers_is_not_reported_as_in_force() {
     super::config_set("Planning", "sdd", None, false, &fresh, false)
         .expect("a shared write nothing shadows was refused");
     let _ = home;
+}
+
+#[test]
+fn config_writes_never_mutate_the_static_reviewer() {
+    let (home, options) = sandbox();
+    let adapter = crate::setup::find_agent("claude-code").expect("Claude Code is an adapter");
+    crate::setup::setup(adapter, &Config::default(), &options).expect("setup runs");
+    let reviewer = home.path().join(".claude/agents/review-blind.md");
+    let before = fs::read(&reviewer).expect("the static reviewer reads");
+
+    super::config_set(
+        "Model routing",
+        "judge=opus",
+        Some(adapter.slug),
+        false,
+        &options,
+        false,
+    )
+    .expect("model routing is written");
+    assert_eq!(fs::read(&reviewer).expect("the reviewer remains"), before);
+
+    let writable = super::writable_config(Some(adapter.slug), &options)
+        .expect("the installed configuration is writable");
+    let mut edited = writable.config.clone();
+    Setting::Judges
+        .apply(&mut edited, "five blind")
+        .expect("five blind parses");
+    let agent_write = writable
+        .agent_snapshot
+        .as_ref()
+        .map(|snapshot| (adapter.slug, snapshot));
+    super::write_edited_table(&writable.target, agent_write, &edited)
+        .expect("the edited table is written");
+    assert_eq!(fs::read(&reviewer).expect("the reviewer remains"), before);
 }
 
 #[test]
