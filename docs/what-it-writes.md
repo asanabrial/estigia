@@ -22,6 +22,21 @@ Five invariants, and the tests are named after them:
    an overwritten file and a created one both hold Estigia's text. Delete that record and uninstall
    removes nothing, which is the honest reading of no evidence.
 
+   Claude Code's static `review-blind.md` lives outside the skill tree and uses that same path-only
+   ownership record. Setup preflights this one reserved name before writing any setup artifact: an
+   unowned existing file or an owned file whose bytes differ from the embedded definition is preserved
+   and refused. A fresh path is recorded as owned before its bytes are written, so an interrupted create
+   remains exactly retryable. Comparison follows established setup text normalization: CRLF versus LF
+   and a missing final newline do not count as an edit; every other textual difference does. There is
+   no generic outside-content digest or definition reconciler. Fresh and upgrade plans report the
+   resulting `installed.json` ownership mutation exactly once as a skill create or update, matching
+   the real action manifest.
+
+   Uninstall deletes a textually unchanged owned reviewer before forgetting it or removing the skill ledger. A
+   failed deletion therefore retains the evidence needed by an exact retry. Changed bytes are kept and
+   their path is relinquished. This rule is deliberately specific to the reviewer; it does not broaden
+   or repair the older SDD-definition ownership behavior. Configuration writes never touch the file.
+
    **By name, and by content on the way in — not yet on the way out.** The record used to store the
    paths an install created and nothing about what it wrote there, so *did you change this, or did an
    older build write it* had no answer: a file Estigia created and you later edited was rewritten by

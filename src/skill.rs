@@ -40,7 +40,16 @@ std::thread_local! {
 /// into a silent mismatch.
 pub const DIRECTORY: &str = "flow";
 
-/// The SDD planning phases, as sub-agent definitions the host can route to.
+/// One embedded file, and where it lands relative to the skill directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SkillFile {
+    /// Forward-slashed, relative to the skill directory.
+    pub path: &'static str,
+    /// The file's bytes, embedded at build time.
+    pub contents: &'static str,
+}
+
+/// Every sub-agent definition a supported host can route to.
 ///
 /// # Why these are not in [`FILES`]
 ///
@@ -60,40 +69,48 @@ pub const DIRECTORY: &str = "flow";
 /// event fired inside a sub-agent — so the same declaration becomes a refusal
 /// rather than a request. Same names, same host routing, and the list is true.
 ///
-/// `{{MODEL}}` and `{{TOOLS}}` are substituted at install: the model from
-/// `Model routing`'s phase key, and the tool list from whether the operator's
-/// `Planning` row keeps artifacts on the issue or under `openspec/`.
-pub const PHASE_AGENTS: &[SkillFile] = &[
-    SkillFile {
-        path: "agents/sdd-explore.md",
-        contents: include_str!("../skill/agents/sdd-explore.md"),
-    },
-    SkillFile {
-        path: "agents/sdd-propose.md",
-        contents: include_str!("../skill/agents/sdd-propose.md"),
-    },
-    SkillFile {
-        path: "agents/sdd-spec.md",
-        contents: include_str!("../skill/agents/sdd-spec.md"),
-    },
-    SkillFile {
-        path: "agents/sdd-design.md",
-        contents: include_str!("../skill/agents/sdd-design.md"),
-    },
-    SkillFile {
-        path: "agents/sdd-tasks.md",
-        contents: include_str!("../skill/agents/sdd-tasks.md"),
-    },
-];
+/// The five SDD definitions substitute `{{MODEL}}` and `{{TOOLS}}` from planning
+/// configuration. The reviewer is a separate static asset; model selection is
+/// supplied by the orchestrator when it launches a panel instance.
+const SDD_EXPLORE: SkillFile = SkillFile {
+    path: "agents/sdd-explore.md",
+    contents: include_str!("../skill/agents/sdd-explore.md"),
+};
+const SDD_PROPOSE: SkillFile = SkillFile {
+    path: "agents/sdd-propose.md",
+    contents: include_str!("../skill/agents/sdd-propose.md"),
+};
+const SDD_SPEC: SkillFile = SkillFile {
+    path: "agents/sdd-spec.md",
+    contents: include_str!("../skill/agents/sdd-spec.md"),
+};
+const SDD_DESIGN: SkillFile = SkillFile {
+    path: "agents/sdd-design.md",
+    contents: include_str!("../skill/agents/sdd-design.md"),
+};
+const SDD_TASKS: SkillFile = SkillFile {
+    path: "agents/sdd-tasks.md",
+    contents: include_str!("../skill/agents/sdd-tasks.md"),
+};
 
-/// One embedded file, and where it lands relative to the skill directory.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SkillFile {
-    /// Forward-slashed, relative to the skill directory.
-    pub path: &'static str,
-    /// The file's bytes, embedded at build time.
-    pub contents: &'static str,
-}
+/// The one static blind-review definition installed for Claude Code.
+pub const REVIEW_AGENT: SkillFile = SkillFile {
+    path: "agents/review-blind.md",
+    contents: include_str!("../skill/agents/review-blind.md"),
+};
+
+/// Exactly the five dynamic SDD planning definitions.
+pub const PHASE_AGENTS: &[SkillFile] = &[SDD_EXPLORE, SDD_PROPOSE, SDD_SPEC, SDD_DESIGN, SDD_TASKS];
+
+/// All host definitions, as one lifecycle-hashed asset collection.
+pub const AGENT_DEFINITIONS: &[SkillFile] = &[
+    SDD_EXPLORE,
+    SDD_PROPOSE,
+    SDD_SPEC,
+    SDD_DESIGN,
+    SDD_TASKS,
+    REVIEW_AGENT,
+];
 
 /// Every file the skill is made of.
 ///
@@ -605,8 +622,8 @@ pub enum Change {
     Overwrite,
     /// The file was there and already correct.
     Unchanged,
-    /// The file was there and Estigia took it away. Only ever a file in
-    /// [`FILES`] — the inverse removes what it installed and nothing else.
+    /// The file was there and Estigia took it away. Used only for a whole-file
+    /// asset the ownership ledger says Estigia created.
     Remove,
     /// The file is the skill, and another configured agent still reads it.
     ///

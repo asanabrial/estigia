@@ -509,7 +509,7 @@ pub struct AgentPaths {
     /// them back.
     ///
     /// `None` is the interesting value. Cursor, Kiro and the rest keep agent
-    /// definitions too, and writing the planning phases there would install a
+    /// definitions too, and writing Claude-format definitions there would install a
     /// `tools:` line nothing enforces — a declaration dressed as a boundary,
     /// which is the arrangement this crate criticises wherever it finds it.
     /// So the destination is exactly the set
@@ -668,6 +668,8 @@ pub enum ActionKind {
     Plugin,
     /// One SDD planning phase, as a sub-agent definition the host routes to.
     PhaseAgent,
+    /// The one static blind-review definition Claude Code routes to.
+    AgentDefinition,
     /// One adapter's configuration inside a shared skill root.
     AgentConfiguration,
     /// The rows stored with one repository.
@@ -777,6 +779,8 @@ pub(crate) enum SetupFailureBoundary {
 std::thread_local! {
     static SETUP_FAILURE: std::cell::Cell<Option<(&'static str, SetupFailureBoundary)>> = const { std::cell::Cell::new(None) };
     static SETUP_PREVALIDATION_FAILURE: std::cell::Cell<Option<(&'static str, SetupFailureBoundary)>> = const { std::cell::Cell::new(None) };
+    static REVIEWER_DEFINITION_REMOVAL_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static REVIEWER_DEFINITION_WRITE_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 #[cfg(test)]
@@ -790,6 +794,16 @@ pub(crate) fn inject_setup_prevalidation_failure(
     boundary: SetupFailureBoundary,
 ) {
     SETUP_PREVALIDATION_FAILURE.with(|injected| injected.set(Some((slug, boundary))));
+}
+
+#[cfg(test)]
+pub(crate) fn inject_reviewer_definition_removal_failure() {
+    REVIEWER_DEFINITION_REMOVAL_FAILURE.with(|injected| injected.set(true));
+}
+
+#[cfg(test)]
+pub(crate) fn inject_reviewer_definition_write_failure() {
+    REVIEWER_DEFINITION_WRITE_FAILURE.with(|injected| injected.set(true));
 }
 
 #[cfg(test)]
@@ -1184,6 +1198,67 @@ fn render_phase_agent(template: &str, phase: &str, config: &Config) -> String {
         .replace("{{TOOLS}}", tools)
 }
 
+#[derive(Clone, Copy)]
+enum ReviewerDefinitionCode {
+    Unowned,
+    Changed,
+}
+
+impl ReviewerDefinitionCode {
+    fn code(self) -> &'static str {
+        match self {
+            Self::Unowned => "reviewer-definition-unowned",
+            Self::Changed => "reviewer-definition-changed",
+        }
+    }
+}
+
+fn reviewer_definition_refusal(code: ReviewerDefinitionCode, path: &Path, reason: &str) -> Refusal {
+    Refusal::not_started(
+        code.code(),
+        format!("{} {reason}", path.display()),
+        Resolution::no_command(
+            NoCommandReason::WorldAction,
+            format!("move {} aside before setup", path.display()),
+        ),
+    )
+}
+
+fn reviewer_target(paths: &AgentPaths) -> Option<PathBuf> {
+    let name = skill::REVIEW_AGENT.path.strip_prefix("agents/")?;
+    Some(paths.agents_root.as_ref()?.join(name))
+}
+
+fn reviewer_is_static(existing: &str) -> bool {
+    existing == as_the_file_was(Some(existing), skill::REVIEW_AGENT.contents)
+}
+
+fn validate_reviewer_definition(paths: &AgentPaths) -> Result<()> {
+    let Some(target) = reviewer_target(paths) else {
+        return Ok(());
+    };
+    let Some(existing) = read_optional(&target)? else {
+        return Ok(());
+    };
+    if !skill::record::created_outside(&paths.skill_root, &target) {
+        return Err(reviewer_definition_refusal(
+            ReviewerDefinitionCode::Unowned,
+            &target,
+            "already exists and Estigia has no record of creating it",
+        )
+        .into());
+    }
+    if !reviewer_is_static(&existing) {
+        return Err(reviewer_definition_refusal(
+            ReviewerDefinitionCode::Changed,
+            &target,
+            "was created by Estigia but no longer matches its static definition",
+        )
+        .into());
+    }
+    Ok(())
+}
+
 /// The directive text for one adapter, naming the path where its skill lands
 /// and the file that holds this adapter's own answers.
 ///
@@ -1568,6 +1643,10 @@ fn setup_into_with_skill(
     }
 
     let paths = step!(resolve_paths(adapter, options));
+    // This is the one external definition whose name Estigia reserves. Decide
+    // ownership and drift before the skill, directive, hooks, or any other
+    // setup artifact can move.
+    step!(validate_reviewer_definition(&paths));
     boundary!(SetupFailureBoundary::BeforeSkill);
     let mut actions = if install_skill {
         write_step!(skill::install_into(
@@ -1622,6 +1701,55 @@ fn setup_into_with_skill(
         );
     }
     boundary!(SetupFailureBoundary::AfterDirective);
+
+    if let Some(target) = reviewer_target(&paths) {
+        let existing = step!(read_pending(&target, pending));
+        // Ownership lands before the first byte at the external path. A failed
+        // create therefore leaves an owned absent target that exact replay can
+        // finish, rather than an unowned file setup must refuse next time.
+        if existing.is_none() && !skill::record::created_outside(&paths.skill_root, &target) {
+            let record_path = skill::record::path(&paths.skill_root);
+            let record_change = if skill::record::exists(&paths.skill_root) {
+                Change::Update
+            } else {
+                Change::Create
+            };
+            if !options.dry_run {
+                step!(skill::record::note_created_outside(
+                    &paths.skill_root,
+                    &target
+                ));
+            }
+            // Fresh skill installation already names this path. Keep its
+            // `Create`; an upgrade gains one `Update`, never a duplicate.
+            if let Some(action) = actions.iter_mut().find(|action| action.path == record_path) {
+                debug_assert_eq!(action.kind, ActionKind::Skill);
+                if action.change != Change::Create {
+                    action.change = record_change;
+                }
+            } else {
+                actions.push(SetupAction {
+                    kind: ActionKind::Skill,
+                    path: record_path,
+                    change: record_change,
+                });
+            }
+        }
+        actions.push(write_step!(write_file(
+            &target,
+            existing.as_deref(),
+            skill::REVIEW_AGENT.contents,
+            ActionKind::AgentDefinition,
+            options.dry_run,
+        )));
+        pending.insert(
+            target,
+            Some(as_the_file_was(
+                existing.as_deref(),
+                skill::REVIEW_AGENT.contents,
+            )),
+        );
+    }
 
     // The planning phases, as sub-agent definitions the host routes to.
     //
@@ -1856,20 +1984,57 @@ pub fn uninstall_from(
     // it lives *in* that directory: asked afterwards, whether this instruction
     // file was Estigia's is a question put to a file that is no longer there,
     // and the answer would be "the operator's" for every file every time. The
-    // entry is dropped here too, so the last agent out finds the record empty
-    // and takes it with the skill rather than leaving it standing for nobody.
+    // ownership is released only after its deletion succeeds below. Deferring
+    // that release keeps a failed reviewer deletion exactly retryable too.
     let directive = match read_pending(&paths.instructions, pending)? {
         Some(existing) => {
             let desired = DIRECTIVE_FENCE.remove(&existing);
             let ours = skill::record::created_outside(&paths.skill_root, &paths.instructions);
             let emptied = is_now_empty(&desired, ActionKind::Directive, &[], ours);
-            if emptied && !options.dry_run {
-                skill::record::forget_outside(&paths.skill_root, &paths.instructions)?;
-            }
             Some((existing, desired, emptied))
         }
         None => None,
     };
+
+    // The static reviewer is decided and removed before the skill ledger that
+    // proves ownership. Changed text is the operator's work: keep it and
+    // relinquish the path. Line-ending and final-newline shape are normalized;
+    // only a completed deletion permits ownership to be forgotten.
+    let mut reviewer_actions = Vec::new();
+    if let Some(target) = reviewer_target(&paths)
+        && skill::record::created_outside(&paths.skill_root, &target)
+    {
+        match read_pending(&target, pending)? {
+            None => {
+                if !options.dry_run {
+                    skill::record::forget_outside(&paths.skill_root, &target)?;
+                }
+            }
+            Some(existing) if reviewer_is_static(&existing) => {
+                reviewer_actions.push(discard(
+                    &target,
+                    ActionKind::AgentDefinition,
+                    options.dry_run,
+                )?);
+                pending.insert(target.clone(), None);
+                if !options.dry_run {
+                    skill::record::forget_outside(&paths.skill_root, &target)?;
+                }
+            }
+            Some(existing) => {
+                reviewer_actions.push(SetupAction {
+                    kind: ActionKind::AgentDefinition,
+                    path: target.clone(),
+                    change: Change::Kept,
+                });
+                pending.insert(target.clone(), Some(existing));
+                if !options.dry_run {
+                    skill::record::forget_outside(&paths.skill_root, &target)?;
+                }
+            }
+        }
+    }
+
     // The planning phases, taken back before the skill directory goes, for the
     // reason the directive is: the record that says whether this run created
     // them lives *inside* that directory, and asked afterwards it answers "the
@@ -1910,15 +2075,12 @@ pub fn uninstall_from(
     } else {
         skill::uninstall_from(&paths.skill_root, options.dry_run, pending)?
     };
-    let mut actions = removed
-        .actions
-        .into_iter()
-        .map(|action| SetupAction {
-            kind: ActionKind::Skill,
-            path: action.path,
-            change: action.change,
-        })
-        .collect::<Vec<_>>();
+    let mut actions = reviewer_actions;
+    actions.extend(removed.actions.into_iter().map(|action| SetupAction {
+        kind: ActionKind::Skill,
+        path: action.path,
+        change: action.change,
+    }));
 
     // This adapter's own answers, if `config set --agent` ever wrote them.
     // Not one of `FILES` — it is written by a different command, and so it
@@ -1938,7 +2100,11 @@ pub fn uninstall_from(
 
     if let Some((existing, desired, emptied)) = directive {
         actions.push(if emptied {
-            discard(&paths.instructions, ActionKind::Directive, options.dry_run)?
+            let action = discard(&paths.instructions, ActionKind::Directive, options.dry_run)?;
+            if !options.dry_run {
+                skill::record::forget_outside(&paths.skill_root, &paths.instructions)?;
+            }
+            action
         } else {
             write_file(
                 &paths.instructions,
@@ -1948,14 +2114,14 @@ pub fn uninstall_from(
                 options.dry_run,
             )?
         });
-        // Remembered whether or not it was written. Under `--dry-run` nothing
-        // reaches the disk, and without this the next adapter of an `--all` run
-        // reads a directive this run has already taken out — and concludes the
-        // skill is still wanted by an agent that is on its way out.
         pending.insert(
             paths.instructions.clone(),
             if emptied { None } else { Some(desired) },
         );
+        // Remembered whether or not it was written. Under `--dry-run` nothing
+        // reaches the disk, and without this the next adapter of an `--all` run
+        // reads a directive this run has already taken out — and concludes the
+        // skill is still wanted by an agent that is on its way out.
     }
 
     if let Some(hooks) = paths.hooks.as_ref()
@@ -2149,6 +2315,12 @@ fn is_now_empty(desired: &str, kind: ActionKind, scaffolding: &[&str], ours: boo
 /// anybody else's file survives.
 fn discard(path: &Path, kind: ActionKind, dry_run: bool) -> Result<SetupAction> {
     if !dry_run {
+        #[cfg(test)]
+        if kind == ActionKind::AgentDefinition
+            && REVIEWER_DEFINITION_REMOVAL_FAILURE.with(|injected| injected.replace(false))
+        {
+            anyhow::bail!("injected reviewer-definition removal failure");
+        }
         fs::remove_file(path).with_context(|| format!("remove {}", path.display()))?;
         if let Some(parent) = path.parent() {
             let _ = fs::remove_dir(parent);
@@ -2233,6 +2405,12 @@ fn write_file(
         _ => Change::Update,
     };
     if !dry_run && change != Change::Unchanged {
+        #[cfg(test)]
+        if kind == ActionKind::AgentDefinition
+            && REVIEWER_DEFINITION_WRITE_FAILURE.with(|injected| injected.replace(false))
+        {
+            anyhow::bail!("injected reviewer-definition write failure");
+        }
         let parent = path
             .parent()
             .with_context(|| format!("{} has no parent directory", path.display()))?;

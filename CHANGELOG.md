@@ -12,6 +12,21 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- `Blind judges` now has canonical `five blind` beside `single` and `two blind`, with `single` still
+  the default. Five independent reviewer contexts run concurrently over the identical immutable
+  target and criteria; a severe finding blocks or authorizes automatic repair only when 3-of-5
+  independently confirm the same finding. One or two confirmations remain suspicions, ambiguous
+  identities do not aggregate, and dissent, warnings and suggestions survive. Every Claude Code setup
+  installs one static read-only `review-blind` definition with `model: inherit`; it remains inert unless
+  a launch names the active blind mode, exact receipt and criteria. The orchestrator supplies the
+  effective `judge` model when it launches that definition twice or five times. Config writes never
+  mutate it. Setup refuses an unowned or changed copy before writing other artifacts, and uninstall
+  deletes only a textually unchanged owned copy after normalizing line endings and the final newline,
+  preserving other changes and deletion retry evidence. Fresh and upgrade action manifests name the
+  ownership-record mutation exactly once. The lifecycle
+  digest now inventories exactly five SDD definitions and that reviewer in one of its two top-level
+  asset collections. Transport still enforces one aggregate exact-receipt verdict only: Estigia cannot
+  prove panel size, concurrency, independence, blindness, same-finding identity or quorum.
 - `estigia mcp` serves the workflow operations as **21 MCP tools** over stdio —
   claim, verify_claim, heartbeat, transition, comment, reclaim, release,
   start_branch, publish_review, and the read-only checks. Hand-written

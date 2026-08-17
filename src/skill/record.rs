@@ -22,16 +22,14 @@
 //!
 //! # What is written, and what is not
 //!
-//! Only paths, and only created ones. Not the contents: a record carrying the
-//! previous text would be a backup, and a backup nobody asked for is a second
-//! copy of the operator's files somewhere they did not choose.
+//! Only paths, and only created ones outside the skill tree. The static reviewer
+//! is compared directly with its embedded bytes, so its ownership needs no
+//! second generic digest map.
 //!
 //! Two sets of them. The relative names under `root` are the skill's own files.
-//! The absolute ones are what an install created *outside* it — today that is
-//! each agent's instruction file, which is the one place where "was this ours"
-//! cannot be read back off the disk: a `CLAUDE.md` holding nothing but the
-//! directive block is either one Estigia made or one the operator kept empty,
-//! and until this was written down the uninstall deleted both.
+//! The absolute ones are what an install created *outside* it: instruction files
+//! and host-routable agent definitions. Both need provenance because a file at
+//! the expected path does not say who created it.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};

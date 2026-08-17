@@ -18,9 +18,10 @@ suite. Everything else here is prose held by review.
   the configured host reports through `opencode models` at that moment, without a refresh, and a
   successful line is still not proof that a later run accepts or uses the ID. Estigia does not
   validate catalog membership, execute models, or inspect or filter their tool-call capability.
-  Only Claude Code currently receives planned phase definitions; OpenCode and every other host keep
-  these values as routing declarations. `orchestrate`, `apply`, and a visible route are likewise not
-  proof that a host executes them.
+  Only Claude Code currently receives host-routable definitions: the planning phases selected by
+  `Planning`, and one static `review-blind` definition installed in every mode. OpenCode and every
+  other host keep these values as routing declarations. `orchestrate`, `apply`, `judge`, and a visible
+  route or installed definition are likewise not proof that a host executes them.
   OpenCode process-tree cleanup is likewise not containment proof: the controller bounds how long the
   TUI waits, while process-group and Job Object cleanup remain best-effort OS operations.
 
@@ -143,7 +144,7 @@ suite. Everything else here is prose held by review.
 
   **Nothing here has been tested against a live tracker**: no check in this suite reaches the
   network.
-- **Estigia cannot prove reviewers or blind judges ran.** `publish_review` mechanically freezes a
+- **Estigia cannot prove reviewers or blind judge panels ran.** `publish_review` mechanically freezes a
   coherent clean draft receipt over epoch, PR, head, base and manifest digest. `handoff_review`
   records that exact receipt before releasing one ownership epoch, and `review_verdict` records an
   immutable outcome crediting a reviewer that is not the publishing run. Either outcome resolves the
@@ -160,10 +161,13 @@ suite. Everything else here is prose held by review.
   Estigia asks for the declaration because an unstated review is one nobody can audit, not because
   it can check it.
 
-  None of it proves an independent context existed, that one or two judges read those bytes, that
-  two judges were blind to each other, or that their verdicts were honest. A marker can still be
-  forged by a collaborator acting outside Estigia. `single` and `two blind` remain operator-selected
-  review contracts, not observations the harness can make.
+  None of it proves an independent context existed or establishes panel size, concurrency,
+  independence, blindness, same-finding identity or quorum. It cannot prove one, two or five judges
+  read those bytes or that their verdicts were honest. A marker can still be forged by a collaborator
+  acting outside Estigia. `single`, `two blind` and `five blind` remain operator-selected review
+  contracts, not observations the harness can make. The enforced floor remains
+  one aggregate exact-receipt verdict: the transport has no per-judge marker and does not implement structured
+  multi-verdict adjudication.
 - **One review-protocol readback is held by no test, and one is held only by a string search.** The
   review protocol's guards were mutated one at a time — each disabled, the whole suite run, the tree
   restored from a byte copy. Held by a test that goes red: all three enforcement points of the
@@ -1143,8 +1147,9 @@ suite. Everything else here is prose held by review.
   epoch over PR/head/base/digest while the PR is confirmed draft. `release_ci` re-verifies the live
   `review` claim, globally latest receipt across runs, latest distinct accepted verdict marker,
   current draft PR and coherent clean target, then marks ready and reads back every outcome. The
-  gate asks for one accepted verdict; it does not enforce the two-blind policy's two-context
-  agreement, and it cannot tell one context from two. An identical-byte republish still invalidates old evidence because it creates a new
+  gate asks for one accepted aggregate verdict; it does not enforce the blind policies' panel size,
+  concurrency, independence, blindness, same-finding identity or quorum, and it cannot tell one
+  context from two or five. An identical-byte republish still invalidates old evidence because it creates a new
   epoch. GitHub has no atomic conditional-ready operation, so an out-of-band ready or push can bypass
   this cooperative order.
   The local delivery gate still checks the published head at the

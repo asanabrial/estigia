@@ -39,12 +39,26 @@ The runtime decides how to obtain the second context: subagent, teammate, or sep
 qualify. If the runtime or operator forbids delegation, use a separate session. Inability to spawn a
 helper changes the mechanism, never the review requirement.
 
+For Claude Code, every setup installs one stable `review-blind` definition with `model: inherit`, even
+in `single` mode. It is inert unless its launch prompt names an active blind mode, the exact publication
+receipt and the review criteria. The orchestrator passes `Model routing`'s effective `judge` model on
+each launch, and starts that same definition twice for `two blind` or five times for `five blind`,
+concurrently, with the identical target and criteria. Each context is denied repository-writing tools
+and must not delegate or inspect sibling output. Config writes do not mutate this definition. A
+definition is a host constraint and a contract, not evidence that the panel was actually instantiated.
+
 `Review delegation: auto` is permission, not capability. It lets a run acquire a reviewer when its
 runtime can provide one; it does not make Estigia spawn a model, open a session, or prove a context is
 independent. When the capability is absent, use the binding's durable review handoff so another run
 can discover the exact receipt. An `ask` timeout records one server-visible deadline in that handoff.
 Estigia does not sleep, schedule a wake-up, reset the deadline on retry, keep ownership until it
 expires, or treat expiry as a verdict.
+
+The orchestrator applies the agreement policy before recording the one aggregate exact-receipt
+verdict. Five blind requires 3-of-5 independently to confirm the same severe finding; one or two
+confirmations remain suspicions, and ambiguous identities do not aggregate. Preserve dissent,
+warnings and suggestions. Estigia cannot prove panel size, concurrency, independence, blindness,
+same-finding identity or quorum, and its transport has no per-judge verdict mechanics.
 
 ## Analyst enforcement and delegation
 

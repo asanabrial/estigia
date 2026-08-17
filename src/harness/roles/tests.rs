@@ -428,6 +428,21 @@ fn a_shipped_planning_phase_cannot_write_to_the_repository() {
     );
 }
 
+#[test]
+fn the_shipped_blind_reviewer_is_read_only_and_cannot_delegate() {
+    let definition = crate::skill::REVIEW_AGENT.contents;
+    let declared = declared_policy(definition).expect("the reviewer declares a gate policy");
+    for tool in ["Read", "Grep", "Glob"] {
+        assert_eq!(declared.verdict(tool), Verdict::Allow);
+        assert!(gate(Some("review-blind"), tool, Some(definition)).is_none());
+    }
+    for tool in ["Write", "Edit", "Bash", "Task"] {
+        assert_eq!(declared.verdict(tool), Verdict::Deny);
+        assert!(gate(Some("review-blind"), tool, Some(definition)).is_some());
+    }
+    assert!(definition.contains("Do NOT delegate"));
+}
+
 /// A moved config home does not remove a sub-agent's allowlist.
 ///
 /// The OpenCode root was spelled `~/.config/opencode/agents` by hand while
