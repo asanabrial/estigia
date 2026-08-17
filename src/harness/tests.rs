@@ -2314,14 +2314,14 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
 
     // Nothing has moved: the delivery is not this check's business.
     assert!(
-        stale_verdict("gh pr merge", &run).is_none(),
+        stale_verdict("gh pr merge", &run, repo.path()).is_none(),
         "a delivery on the head that was reviewed was refused"
     );
 
     // A run with nothing published is left exactly as it was.
     let mut unpublished = run.clone();
     unpublished.reviewed_head = None;
-    assert!(stale_verdict("gh pr merge", &unpublished).is_none());
+    assert!(stale_verdict("gh pr merge", &unpublished, repo.path()).is_none());
 
     // The push that moves it.
     std::fs::write(repo.path().join("a.txt"), "two").expect("a change");
@@ -2335,14 +2335,14 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
     // The repair loop stays open: none of these is a delivery.
     for allowed in ["git push", "gh pr create"] {
         assert!(
-            stale_verdict(allowed, &run).is_none(),
+            stale_verdict(allowed, &run, repo.path()).is_none(),
             "`{allowed}` was refused, which is how a run fixes what a review found"
         );
     }
 
     // And the delivery that would spend the stale verdict.
     for delivery in ["gh pr merge", "git merge"] {
-        let refusal = stale_verdict(delivery, &run)
+        let refusal = stale_verdict(delivery, &run, repo.path())
             .unwrap_or_else(|| panic!("`{delivery}` delivered on a verdict bound to other bytes"));
         assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
         assert!(

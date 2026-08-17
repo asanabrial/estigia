@@ -1153,11 +1153,15 @@ suite. Everything else here is prose held by review.
   this cooperative order.
   The local delivery gate still checks the published head at the
   boundary that spends it: a `git merge`, `gh pr merge`, `git tag` or `gh release` from a run whose
-  recorded review head is not this checkout's head is refused as `verdict-bound-to-other-bytes`.
+  recorded review head is not the invoking checkout's head is refused as
+  `verdict-bound-to-other-bytes`, naming the path inspected and the head found there. The invoking
+  checkout is the covered directory the gate already selected and verified for this call; it is not
+  inferred again from the run pointer, whose worktree can be absent after a handoff.
   `git push` and `gh pr create` are deliberately not gated on it, because pushing after a review is
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
   What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still
-  `verify-claim --issue --run-id --expect-state`; the head comparison is local, against the checkout.
+  `verify-claim --issue --run-id --expect-state`; the head comparison is local, against that invoking
+  checkout.
 - **A `republish_review` that refuses has already written to the pull request, and names which
   writes.** Its refusals arrive after the reused pull request has been edited — the renewal stands
   immediately before the push, and the lease is evaluated by git at the push itself — so a remote

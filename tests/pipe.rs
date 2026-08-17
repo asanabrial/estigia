@@ -6287,6 +6287,106 @@ fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
     );
 }
 
+#[test]
+fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    // Keep the inherited checkout beneath the pointer's repository coverage.
+    // The defect is which covered checkout supplies HEAD, not whether an
+    // unrelated directory can enlarge a claim.
+    let reviewed_checkout = repo.join("reviewed-worktree");
+    let added = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["worktree", "add", "--quiet", "-b", "reviewed"])
+        .arg(&reviewed_checkout)
+        .output()
+        .expect("git creates the reviewed worktree");
+    assert!(
+        added.status.success(),
+        "the reviewed worktree was not created"
+    );
+    let committed = Command::new("git")
+        .arg("-C")
+        .arg(&reviewed_checkout)
+        .args([
+            "-c",
+            "user.email=nobody@example.invalid",
+            "-c",
+            "user.name=nobody",
+            "commit",
+            "--allow-empty",
+            "--quiet",
+            "-m",
+            "reviewed",
+        ])
+        .output()
+        .expect("git advances the reviewed worktree");
+    assert!(
+        committed.status.success(),
+        "the reviewed head was not created"
+    );
+    let reviewed = Command::new("git")
+        .arg("-C")
+        .arg(&reviewed_checkout)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("git names the reviewed head");
+    let reviewed = String::from_utf8_lossy(&reviewed.stdout).trim().to_owned();
+    assert_ne!(reviewed, rig.head, "the two checkouts have the same head");
+
+    let merge = |reviewed_head: &str| {
+        let pointer = serde_json::json!({
+            "run_id": "claude-abcd1234",
+            "issue": 12,
+            "revision": 1,
+            "state": "review",
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+            "reviewed_head": reviewed_head,
+        });
+        std::fs::write(
+            home.join(".estigia")
+                .join("runs")
+                .join("claude-abcd1234.json"),
+            serde_json::to_string(&pointer).expect("the pointer serialises"),
+        )
+        .expect("the pointer is written");
+        let (out, err, _) = run_with_tracker(
+            home,
+            &reviewed_checkout,
+            bin,
+            &issue_answer("review"),
+            &[
+                "gate",
+                "Bash",
+                "--run-id",
+                "claude-abcd1234",
+                "--input",
+                r#"{"command":"gh pr merge 12"}"#,
+            ],
+            "",
+        );
+        format!("{out}{err}")
+    };
+
+    let fresh = merge(&reviewed);
+    assert!(
+        fresh.contains("allow"),
+        "the inherited checkout at the reviewed head was refused: {fresh}"
+    );
+
+    let stale = merge(&rig.head);
+    assert!(
+        stale.contains("verdict-bound-to-other-bytes"),
+        "delivery from a checkout not at the reviewed head was allowed: {stale}"
+    );
+    assert!(
+        stale.contains(&reviewed_checkout.display().to_string()) && stale.contains(&reviewed[..7]),
+        "the refusal does not name the checkout and head it inspected: {stale}"
+    );
+}
+
 /// Everything the two post-agreement checks need: a home, a checkout with a
 /// commit in it, and a `gh` that answers.
 struct TrackerRig {

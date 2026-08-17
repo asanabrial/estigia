@@ -1129,7 +1129,7 @@ fn contains_whole_command(text: &str, fragment: &str) -> bool {
 /// It sees what this run published **through Estigia's own tools**. A run that
 /// shells out to the transport publishes without telling the pointer, and the
 /// honesty contract states that reach rather than implying there is none.
-fn stale_verdict(command: &str, run: &Run) -> Option<Refusal> {
+fn stale_verdict(command: &str, run: &Run, checkout: &std::path::Path) -> Option<Refusal> {
     // The list already declared for exactly this population, rather than a
     // sixth copy of it: `git push` and `gh pr create` are absent from it for
     // the reason this check needs them absent — publishing a review target is
@@ -1140,19 +1140,20 @@ fn stale_verdict(command: &str, run: &Run) -> Option<Refusal> {
         return None;
     }
     let reviewed = run.reviewed_head.as_deref()?;
-    // The head the reviewer was shown is the one in the checkout the work
-    // happens in — the same directory `publish-review` read it from.
-    let here = run.worktree.as_ref().or(run.repo_dir.as_ref())?;
-    let now = head_of(here)?;
+    // Coverage and claim verification already accepted the directory this call
+    // runs in. Reading the pointer instead would inspect a different checkout
+    // after a handoff whose new holder did not create the inherited worktree.
+    let now = head_of(checkout)?;
     if now == reviewed {
         return None;
     }
     Some(Refusal::not_started(
         "verdict-bound-to-other-bytes",
         format!(
-            "the review was published against {} and this checkout is at {} \u{2014} every push \
+            "the review was published against {} and checkout {} is at {} \u{2014} every push \
              invalidates the verdict and the CI run that went with it",
             short(reviewed),
+            checkout.display(),
             short(&now)
         ),
         Resolution::no_command(
@@ -1957,7 +1958,7 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
                 // run's belief — which is what makes it safe to decide on.
                 run.mark_verified();
                 if let Action::Boundary { command } = action
-                    && let Some(refusal) = stale_verdict(command, run)
+                    && let Some(refusal) = stale_verdict(command, run, &context.repo_dir)
                 {
                     return Decision::Deny(Box::new(prefixed(refusal, &subject)));
                 }
