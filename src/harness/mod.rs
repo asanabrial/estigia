@@ -1183,15 +1183,19 @@ pub(crate) fn complete_review_receipt_not_selected() -> Refusal {
 fn pr_merge_target(command: &str) -> Option<u64> {
     if command
         .chars()
-        .any(|character| matches!(character, '\n' | '\r' | ';' | '&' | '|'))
+        .any(|character| matches!(character, '\n' | '\r' | ';' | '&' | '|' | '$' | '`'))
+        || command.contains("<(")
+        || command.contains(">(")
     {
+        // Retaining a PR here spends review authority. Reject expansion markers
+        // broadly instead of pretending this literal check can parse a shell.
         return None;
     }
     let words: Vec<&str> = command.split_ascii_whitespace().collect();
     if words.get(..3) != Some(&["gh", "pr", "merge"][..])
         || words
             .iter()
-            .any(|word| *word == "--repo" || word.starts_with("--repo="))
+            .any(|word| *word == "--repo" || word.starts_with("--repo=") || word.starts_with("-R"))
     {
         return None;
     }

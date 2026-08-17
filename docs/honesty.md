@@ -1159,8 +1159,9 @@ suite. Everything else here is prose held by review.
   inferred again from the run pointer, whose worktree can be absent after a handoff. For a delivery
   `gh pr merge` boundary only, a linked sibling sharing the pointer checkout's Git common directory
   can reach that verification. The classifier first retains one positive numeric PR only from one
-  literal `gh pr merge <number> ...`; malformed, omitted, URL, branch, foreign-`--repo`, duplicate
-  and compound targets remain irreversible boundaries but cannot select sibling evidence. Candidate
+  literal `gh pr merge <number> ...`; malformed, omitted, URL, branch, either foreign-repository
+  option, duplicate, compound and shell-evaluated targets remain irreversible boundaries but cannot
+  select sibling evidence. Candidate
   pointers are then filtered by complete `receipt.pr == command PR`, exactly one holder must remain,
   and only then is the invoking HEAD compared with that holder's receipt and its live tracker claim
   verified. Equal HEADs never select between PR lineages. A legacy `reviewed_head` pointer remains
@@ -1170,8 +1171,10 @@ suite. Everything else here is prose held by review.
   than a later directory scan. An
   unrelated or unreadable checkout named with that run still refuses
   `verdict-bound-to-other-bytes`; a sessionless call in an unrelated clone has no local holder to
-  adjudicate and remains outside. Publish, republish, verdict and CI-release effects restore all five
-  receipt fields atomically into a reviewer's pointer after a handoff removed the publisher's pointer.
+  adjudicate and remains outside. Publish and republish effects first invalidate prior complete and
+  legacy local authority, then retain output only when all five receipt fields are complete; verdict
+  and CI-release effects restore a supplied complete receipt atomically into a reviewer's pointer
+  after a handoff removed the publisher's pointer.
   `git push` and `gh pr create` are deliberately not gated on it, because pushing after a review is
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
   What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still

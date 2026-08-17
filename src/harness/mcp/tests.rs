@@ -2365,6 +2365,57 @@ fn every_receipt_effect_recovers_the_complete_receipt_atomically() {
 }
 
 #[test]
+fn a_partial_publication_receipt_invalidates_old_local_authority() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = GateContext {
+        integration: crate::config::Integration::Branch,
+        flag: None,
+        stand_down: None,
+        skill_root: root.path().join("skill"),
+        repo_dir: root.path().join("repo"),
+        state_root: root.path().join("state"),
+        window: super::super::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        boundaries: Vec::new(),
+    };
+    let old_receipt = crate::transport::claim::ReviewReceipt {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head: "b".repeat(40),
+        base: "c".repeat(40),
+        digest: "d".repeat(64),
+    };
+
+    for name in ["publish_review", "republish_review"] {
+        let tool = super::tools::TOOLS
+            .iter()
+            .find(|tool| tool.name == name)
+            .expect("the tool is listed");
+        let mut run = crate::harness::session::Run::new(format!("claude-partial-{name}"));
+        run.review_receipt = Some(old_receipt.clone());
+        run.reviewed_head = Some("e".repeat(40));
+        crate::harness::session::store(&context.state_root, &run)
+            .expect("the old authority writes");
+
+        super::apply_effect(
+            tool,
+            &serde_json::json!({}),
+            Some(&serde_json::json!({
+                "epoch": "f".repeat(32),
+                "pr": 55,
+                "head": "1".repeat(40),
+                "base": "2".repeat(40)
+            })),
+            &mut run,
+            &context,
+        );
+
+        assert_eq!(run.review_receipt, None, "{name} retained an old receipt");
+        assert_eq!(run.reviewed_head, None, "{name} retained a legacy head");
+    }
+}
+
+#[test]
 fn every_two_step_operation_has_a_tool_that_can_take_the_second_step() {
     // `every_tool_maps_to_a_transport_operation_the_binding_documents` already
     // crosses the flags — but only the ones argparse calls **required**, and the

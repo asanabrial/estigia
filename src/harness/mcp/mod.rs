@@ -995,10 +995,12 @@ fn apply_effect(
                 run.mark_verified();
             }
             PointerEffect::Published => {
-                // Partial publication output cannot manufacture a local receipt.
+                // A successful publication supersedes old authority even when
+                // its output is too incomplete to manufacture a new receipt.
+                run.review_receipt = None;
+                run.reviewed_head = None;
                 if let Some(receipt) = &published_receipt {
                     run.review_receipt = Some(receipt.clone());
-                    run.reviewed_head = None;
                 }
                 run.mark_verified();
             }

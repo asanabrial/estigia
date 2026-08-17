@@ -60,8 +60,16 @@ fn a_pr_merge_keeps_the_pull_request_identity_it_will_deliver() {
         "gh pr merge feature/ready",
         "gh pr merge https://github.com/o/r/pull/54",
         "gh pr merge 54 --repo foreign/repo",
+        "gh pr merge 54 --repo=foreign/repo",
+        "gh pr merge 54 -R foreign/repo",
+        "gh pr merge 54 -Rforeign/repo",
         "gh pr merge 54 55",
         "gh pr merge 54 && gh pr merge 55",
+        "gh pr merge 54 $(gh pr merge 55)",
+        "gh pr merge 54 `gh pr merge 55`",
+        "gh pr merge 54 <(gh pr merge 55)",
+        "gh pr merge 54 >(gh pr merge 55)",
+        "gh pr merge 54 $TARGET",
     ] {
         let (action, sensitivity) = classify("Bash", &json!({"command": command}));
         assert_eq!(sensitivity, Sensitivity::Boundary, "{command}");
