@@ -989,13 +989,18 @@ pub const CHECKS: &[&str] = &[
     "silence",
 ];
 
-/// One row two roots answer differently: its label, what the agent reads, and
+/// One row two roots answer differently: the setting, what the agent reads, and
 /// what the gate decides.
+///
+/// The **setting** rather than its label, so the scope can be asked of it where
+/// the row is judged. Carrying the label meant matching that string back
+/// against a list of settings to recover what the type already knew, which is
+/// the copy this repository's rules say to remove rather than to guard.
 ///
 /// Both values are carried rather than a bare "these differ", because an
 /// operator cannot act on the second: which of the two is the one they meant is
 /// the whole question, and it is answered by seeing them side by side.
-pub type DivergentRow = (&'static str, String, String);
+pub type DivergentRow = (crate::config::Setting, String, String);
 
 /// One configured agent reading a row the gate does not decide by.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1018,25 +1023,43 @@ pub struct Divergence {
 /// the one root [`super::discover_skill_root`] picks, and this row is about
 /// that pick rather than about any one agent's contract.
 ///
-/// **Which half is broken is decided by [`crate::config::AGENT_SETTINGS`], not
-/// here.** That list is the crate's own answer to *may this row differ by
-/// agent*, and its doc says what qualifies: every row in it is an instruction
-/// the agent reads and follows, and "a row the gate enforces cannot live here".
-/// So a per-agent row differing between two roots is the feature working —
-/// `config set --agent opencode "Planning" "sdd lite"` is a documented command,
-/// and reporting the machine BROKEN for having run it would call a supported
-/// configuration a fault and name no way out of it. Both halves of a first
-/// review measured exactly that, one on `Model routing` and one on `Planning`.
+/// **Which half is a fault is decided by [`crate::config::Setting::scope`], not
+/// here** — the crate's own answer to *who does this row belong to*, and it has
+/// three values rather than two:
 ///
-/// A row from the other list is a different sentence. Those are the ones whose
-/// answer is the same whichever agent asks, so two roots answering differently
-/// means two agents get different answers to one machine-wide question — and
-/// one of them is the root the gate decides in. That is the divergence #41 is
-/// about, and it is `Broken`.
+/// - `Agent` — the answer depends on which agent holds the tools. Differing
+///   between two roots is the feature working: `config set --agent opencode
+///   "Planning" "sdd lite"` is a documented command, and calling the machine
+///   BROKEN for having run it reports a supported configuration as a fault.
+///   Named, and `ok`.
+/// - `Everywhere` — a fact about the repository, the same whichever agent asks.
+///   Two roots answering differently means one agent is being decided for by a
+///   file it does not read, and one of the two is the root the gate decides in.
+///   `Broken`.
+/// - `Machine` — a fact about this machine, the same whichever repository is
+///   open. Also `Broken`, and it needs its own resolution, which is the second
+///   thing a review caught here.
 ///
-/// Both are **named** either way, which is what the report was missing. The
-/// resolution names no command because either file may be the one that is
-/// right, and only the operator knows which.
+/// The first cut of this asked `AGENT_SETTINGS` instead, which is one of two
+/// lists rather than the three-valued question, so the two `Machine` rows were
+/// classified by falling off the end of it.
+///
+/// **The resolution is chosen by that scope, because the two are cleared by
+/// different commands.** A repository row set with no `--agent` is written into
+/// every installed contract, so one command clears it. A machine row is not:
+/// `config set` writes it into the canonical contract alone, because `elsewhere`
+/// is asked only for `Everywhere`. So the row survived running the very command
+/// this row had named as the way out — measured by both judges of a second
+/// review, one on `Summary language` and one on `Issue body language`, each
+/// running that command verbatim and watching the row stay red. Naming a dead
+/// end is worse than naming nothing, and this crate's rules say so in as many
+/// words.
+///
+/// **Both halves are named in both branches.** They were not: the broken branch
+/// built its sentence from the faulty rows alone, so a deliberately-set
+/// per-agent row vanished from the report the moment anything else disagreed —
+/// the same *shown without a word* failure the count of other agents below
+/// exists to prevent.
 pub fn canonical(root: Option<&Path>, divergent: Option<&[Divergence]>) -> Check {
     let about = "whether the root the gate decides in carries what the agents read";
     let Some(root) = root else {
@@ -1064,70 +1087,61 @@ pub fn canonical(root: Option<&Path>, divergent: Option<&[Divergence]>) -> Check
             },
         };
     };
-    // Split before anything is said, because the two halves are different
-    // sentences and only one of them is a fault.
-    let machine_wide = |rows: &[DivergentRow]| {
-        rows.iter()
-            .filter(|(label, _, _)| {
-                !crate::config::AGENT_SETTINGS
-                    .iter()
-                    .any(|setting| setting.label() == *label)
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-    };
+    use crate::config::Scope;
+
+    // Split before anything is said, because the halves are different sentences
+    // and only one of them is a fault.
     let at_odds: Vec<(&'static str, Vec<DivergentRow>)> = divergent
         .iter()
         .filter_map(|entry| {
-            let rows = machine_wide(&entry.rows);
+            let rows: Vec<DivergentRow> = entry
+                .rows
+                .iter()
+                .filter(|(setting, _, _)| setting.scope() != Scope::Agent)
+                .cloned()
+                .collect();
             (!rows.is_empty()).then_some((entry.agent, rows))
         })
         .collect();
 
-    // What differs by design, said in the row that agrees rather than dropped:
+    // What differs by design, said in both branches rather than dropped in one:
     // an operator who set one deliberately should see it named where they went
     // looking for divergence, and an operator who did not should learn that
     // somebody or something did.
-    let by_design = |divergent: &[Divergence]| {
-        let named: Vec<String> = divergent
-            .iter()
-            .map(|entry| {
-                let rows: Vec<&str> = entry
-                    .rows
-                    .iter()
-                    .map(|(label, _, _)| *label)
-                    .filter(|label| {
-                        crate::config::AGENT_SETTINGS
-                            .iter()
-                            .any(|setting| setting.label() == *label)
-                    })
-                    .collect();
-                (entry.agent, rows)
-            })
-            .filter(|(_, rows)| !rows.is_empty())
-            .map(|(agent, rows)| format!("{agent} ({})", rows.join(", ")))
-            .collect();
-        named
+    let by_design: Vec<String> = divergent
+        .iter()
+        .filter_map(|entry| {
+            let rows: Vec<&str> = entry
+                .rows
+                .iter()
+                .filter(|(setting, _, _)| setting.scope() == Scope::Agent)
+                .map(|(setting, _, _)| setting.label())
+                .collect();
+            (!rows.is_empty()).then(|| format!("{} ({})", entry.agent, rows.join(", ")))
+        })
+        .collect();
+    let deliberate = match by_design.is_empty() {
+        true => String::new(),
+        false => format!(
+            "; what differs by design is per-agent: {}",
+            by_design.join(", ")
+        ),
     };
 
     let Some((agent, rows)) = at_odds.first() else {
-        let per_agent = by_design(divergent);
         return Check {
             name: "canonical",
             about,
             health: Health::Fine {
-                detail: if per_agent.is_empty() {
-                    format!(
+                detail: match by_design.is_empty() {
+                    true => format!(
                         "{} \u{2014} and every configured agent reads the rows it decides by",
                         root.display()
-                    )
-                } else {
-                    format!(
-                        "{} \u{2014} every machine-wide row agrees; what differs is per-agent by \
-                         design: {}",
-                        root.display(),
-                        per_agent.join(", ")
-                    )
+                    ),
+                    false => format!(
+                        "{} \u{2014} every shared row agrees{deliberate}",
+                        root.display()
+                    ),
                 },
             },
         };
@@ -1138,7 +1152,7 @@ pub fn canonical(root: Option<&Path>, divergent: Option<&[Divergence]>) -> Check
     // without a word reads as two.
     let listed: Vec<String> = rows
         .iter()
-        .map(|(label, theirs, ours)| format!("`{label}` {theirs} against {ours}"))
+        .map(|(setting, theirs, ours)| format!("`{}` {theirs} against {ours}", setting.label()))
         .collect();
     let others = at_odds.len() - 1;
     let rest = match others {
@@ -1146,24 +1160,36 @@ pub fn canonical(root: Option<&Path>, divergent: Option<&[Divergence]>) -> Check
         1 => " (one other agent diverges too)".to_owned(),
         many => format!(" ({many} other agents diverge too)"),
     };
+    // Which command clears this depends on the scope at odds, and a row about
+    // the machine is not written across roots by the plain form. Where both
+    // kinds are at odds, the narrower sentence is the one that holds for all of
+    // them, so it is the one printed.
+    let any_machine = at_odds
+        .iter()
+        .flat_map(|(_, rows)| rows.iter())
+        .any(|(setting, _, _)| setting.scope() == Scope::Machine);
+    let way_out = if any_machine {
+        "those rows made to agree \u{2014} a row about this machine is written into one root at a \
+         time, so it takes `estigia config set --agent <slug> \"<row>\" \"<value>\"` once per \
+         skill root the `contract` rows above name"
+    } else {
+        "those rows made to agree \u{2014} `estigia config set \"<row>\" \"<value>\"` with no \
+         `--agent` writes a row about the repository into every installed contract"
+    };
     Check {
         name: "canonical",
         about,
         health: Health::broken(
             format!(
-                "{agent} reads {} where the gate decides in {}{rest}",
+                "{agent} reads {} where the gate decides in {}{rest}{deliberate}",
                 listed.join(", "),
                 root.display()
             ),
-            // No command, because which of the two values is the right one is
-            // the one thing only the operator knows. The shape is named
-            // anyway: a machine-wide row set with no `--agent` is written into
-            // every installed contract, so once they have chosen, one command
-            // does clear this.
+            // Which of the two values is the right one stays the operator's:
+            // this names the shape of the write, never the answer.
             crate::outcome::Resolution::no_command(
                 crate::outcome::NoCommandReason::OperatorKnowledge,
-                "those rows made to agree \u{2014} `estigia config set \"<row>\" \"<value>\"` with \
-                 no `--agent` writes a machine-wide row into every installed contract",
+                way_out,
             ),
         ),
     }
@@ -1324,7 +1350,7 @@ pub fn full(
                     .filter_map(|setting| {
                         let read = setting.value_of(&theirs);
                         let decided = setting.value_of(&ours);
-                        (read != decided).then(|| (setting.label(), read, decided))
+                        (read != decided).then_some((*setting, read, decided))
                     })
                     .collect();
                 (!rows.is_empty()).then_some(Divergence {
@@ -3909,28 +3935,32 @@ mod tests {
             other => panic!("agreement was reported as {other:?}"),
         }
 
-        // A machine-wide row differing is the fault: those are the rows whose
-        // answer is the same whichever agent asks, so two answers means one
-        // agent is being decided for by the other's file.
+        // A row about the repository differing is the fault: those answer the
+        // same whichever agent asks, so two answers means one agent is being
+        // decided for by the other's file.
         let diverged = canonical(
             Some(&root),
             Some(&[
                 Divergence {
                     agent: "claude-code",
                     rows: vec![(
-                        "Project board",
+                        crate::config::Setting::Board,
                         "asanabrial/12".to_owned(),
                         "none".to_owned(),
                     )],
                 },
                 Divergence {
                     agent: "codex",
-                    rows: vec![("Change size", "120".to_owned(), "800".to_owned())],
+                    rows: vec![(
+                        crate::config::Setting::ChangeSize,
+                        "120".to_owned(),
+                        "800".to_owned(),
+                    )],
                 },
             ]),
         );
         match diverged.health {
-            super::Health::Broken { detail, .. } => {
+            super::Health::Broken { detail, resolution } => {
                 for expected in ["claude-code", "Project board", "asanabrial/12", "none"] {
                     assert!(
                         detail.contains(expected),
@@ -3941,8 +3971,43 @@ mod tests {
                     detail.contains("one other agent diverges too"),
                     "a second diverging agent was dropped without a word: {detail}"
                 );
+                // The plain form propagates a repository row, so it is the one
+                // named here — and it is named because running it clears this.
+                let way_out = format!("{resolution}");
+                assert!(
+                    way_out.contains("with no `--agent`"),
+                    "a repository row was not offered the command that clears it: {way_out}"
+                );
             }
             other => panic!("a gate deciding by rows nobody reads was reported as {other:?}"),
+        }
+
+        // A row about the machine is the fault too, and it is NOT cleared by
+        // that command: `config set` writes it into the canonical contract
+        // alone. Both judges of a second review ran the plain form verbatim on
+        // exactly these two rows and watched the row stay red, which is naming
+        // a dead end — the one thing this crate's rules forbid a message doing.
+        let machine = canonical(
+            Some(&root),
+            Some(&[Divergence {
+                agent: "claude-code",
+                rows: vec![(
+                    crate::config::Setting::Summary,
+                    "Spanish".to_owned(),
+                    "English".to_owned(),
+                )],
+            }]),
+        );
+        match machine.health {
+            super::Health::Broken { detail, resolution } => {
+                assert!(detail.contains("Summary language"), "{detail}");
+                let way_out = format!("{resolution}");
+                assert!(
+                    way_out.contains("--agent <slug>"),
+                    "a machine row was offered a command that does not clear it: {way_out}"
+                );
+            }
+            other => panic!("a row about the machine differing was reported as {other:?}"),
         }
 
         // And a per-agent row differing is the feature. `config set --agent
@@ -3955,8 +4020,16 @@ mod tests {
             Some(&[Divergence {
                 agent: "opencode",
                 rows: vec![
-                    ("Planning", "sdd lite".to_owned(), "direct".to_owned()),
-                    ("Blind judges", "two blind".to_owned(), "single".to_owned()),
+                    (
+                        crate::config::Setting::Planning,
+                        "sdd lite".to_owned(),
+                        "direct".to_owned(),
+                    ),
+                    (
+                        crate::config::Setting::Judges,
+                        "two blind".to_owned(),
+                        "single".to_owned(),
+                    ),
                 ],
             }]),
         );
@@ -3970,6 +4043,39 @@ mod tests {
                 }
             }
             other => panic!("a supported per-agent configuration was reported as {other:?}"),
+        }
+
+        // And it is still named when something else is broken. It was not: the
+        // broken branch built its sentence from the faulty rows alone, so a row
+        // somebody had set on purpose disappeared from the report exactly when
+        // the report grew a second subject.
+        let both = canonical(
+            Some(&root),
+            Some(&[Divergence {
+                agent: "claude-code",
+                rows: vec![
+                    (
+                        crate::config::Setting::ChangeSize,
+                        "120".to_owned(),
+                        "800".to_owned(),
+                    ),
+                    (
+                        crate::config::Setting::Planning,
+                        "sdd lite".to_owned(),
+                        "direct".to_owned(),
+                    ),
+                ],
+            }]),
+        );
+        match both.health {
+            super::Health::Broken { detail, .. } => {
+                assert!(detail.contains("Change size"), "{detail}");
+                assert!(
+                    detail.contains("Planning") && detail.contains("by design"),
+                    "the deliberate per-agent row vanished as soon as a fault appeared: {detail}"
+                );
+            }
+            other => panic!("a repository row at odds was reported as {other:?}"),
         }
     }
 

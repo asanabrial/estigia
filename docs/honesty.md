@@ -1542,6 +1542,17 @@ suite. Everything else here is prose held by review.
   now, whether every run pointer on the machine can still say what it holds, and whether any call
   has reached that gate and gone undecided. It does not check the tracker's labels, the board, or
   whether the repository it found is the one the issues live in.
+- **A row about this machine can be made to differ per agent, and nothing refuses it.**
+  `config set --agent <slug>` refuses a `Scope::Everywhere` row and does not refuse a
+  `Scope::Machine` one, so `estigia config set --agent claude-code "Summary language" Spanish`
+  is accepted and reports success — on an adapter with a skill root of its own, where no read-back
+  catches it. The `canonical` check then reports the divergence it produced, correctly, and the way
+  out is one `config set --agent` per root rather than the plain form, because `config set` writes a
+  machine row into the canonical contract alone. Measured on 2026-08-17, on `Summary language` and
+  `Issue body language`, by two independent reviews of the check itself. What is *not* settled is
+  which half is wrong — whether a machine row should be refused per agent the way a repository row
+  is, or whether the plain form should propagate it — so nothing here guesses; the divergence is
+  reported rather than prevented.
 - **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it

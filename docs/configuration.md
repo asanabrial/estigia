@@ -72,15 +72,23 @@ Two roots can still legitimately hold different tables; `setup` preserves each r
 them. What must not stay silent is the gate deciding by rows an agent never reads, so `estigia doctor`
 carries a `canonical` row naming the agent, the setting and both values.
 
-Which divergence is a **fault** is decided by the scope the row already has, not by that row:
+Which divergence is a **fault** is decided by the scope each row already has — the same three-valued
+question the rest of the crate asks, not a fourth list:
 
-- A row from the per-agent set — `Delivery authorisation`, `Review delegation`,
-  `Transition authorisation`, `Planning`, `Model routing`, `Blind judges` — is *meant* to differ by
-  agent; `config set --agent <slug> …` is how you set one. It is named on the row and the row stays
-  `ok`, because calling a machine broken for a supported configuration names a fault with no way out
-  of it.
-- Every other row answers the same whichever agent asks. Two roots answering differently means one
-  agent is being decided for by a file it does not read, and that is `BROKEN`.
+- **Agent** — `Delivery authorisation`, `Review delegation`, `Transition authorisation`, `Planning`,
+  `Model routing`, `Blind judges`. These are *meant* to differ by agent; `config set --agent <slug> …`
+  is how you set one. Named on the row, and the row stays `ok`: calling a machine broken for a
+  supported configuration names a fault with no way out of it.
+- **Everywhere** — a fact about the repository, the same whichever agent asks. Two roots answering
+  differently means one agent is being decided for by a file it does not read: `BROKEN`, and the
+  resolution names `estigia config set "<row>" "<value>"` with no `--agent`, which writes it into
+  every installed contract.
+- **Machine** — `Summary language` and `Issue body language`, facts about this machine. Also
+  `BROKEN`, but the plain `config set` does **not** propagate these: it writes the canonical contract
+  and nothing else. So their resolution names the form that does clear it — `config set --agent
+  <slug>` once per adapter holding a contract of its own.
+
+Rows that differ by design are named in both branches, not only in the quiet one.
 
 The row is `skipped`, never `ok`, when the canonical configuration cannot be read: a comparison that
 was not made is not agreement.

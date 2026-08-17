@@ -1979,7 +1979,10 @@ fn every_list_the_audit_answers_with_is_one_the_binding_names() {
 /// **What this does not do** is check either number against the code, and the
 /// reason is worth writing down rather than leaving as an omission: how many
 /// checks `doctor::full` produces depends on the machine it is asked about. It
-/// answers eight kinds with no skill root and thirteen with one, and the rows
+/// answers six kinds on a machine with nothing installed and twelve with one
+/// adapter configured — measured, because the two numbers that stood here
+/// before were each carried forward by hand and neither was ever true — and the
+/// rows
 /// themselves are more again — the contract, gate and tools checks are emitted
 /// once per configured agent, so counting rows answers *how many agents does
 /// this machine have*. Holding the two spellings to each other is what can be
