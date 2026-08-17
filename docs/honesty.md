@@ -1078,19 +1078,36 @@ suite. Everything else here is prose held by review.
   One `git merge` is preparation rather than delivery: an exact literal `git merge --ff-only
   <target>` (also accepting `--` before the target) may run from `in-progress` after the tracker
   agrees when local Git proves all of it. The checkout is on a branch, its upstream is a canonical
-  `refs/remotes/*` ref, the worktree is clean, the target is either that upstream's exact short name
-  or a full object ID, and ancestry runs from `HEAD` through the target to the upstream. It remains a
-  `Boundary`, so it still pays the live tracker read and is recorded in the decision ledger. The
+  `refs/remotes/*` ref, the worktree is clean, the target is that upstream's exact short or full
+  canonical name, or a full object ID of the length this repository's object format requires, and
+  ancestry runs from `HEAD` through the target to the upstream. An object ID must resolve to itself
+  as a commit; an annotated tag's ID does not qualify merely because it peels to one. Every proof Git
+  process removes every inherited `GIT_*` variable, and the exception is denied when any such
+  variable was present at entry. The proof therefore cannot inspect one repository and let the later
+  shell command change another through `GIT_DIR`, alternate object stores, indexes, shallow files or
+  configuration injection. It remains a `Boundary`, so it still pays the live tracker read and is
+  recorded in the decision ledger. The
   verdict-to-bytes check runs first; a stale verdict is refused before this exception can skip only
-  the `out-of-phase` check. Wrappers, compound commands, quoting, expansion, alternate git
-  directories, extra flags or targets, detached branches, dirty trees and any unreadable Git answer
-  retain the existing refusal.
+  the `out-of-phase` check, and only when the tracker answered exactly `in-progress`. `analysis`,
+  `ready` and `blocked` keep the ordinary refusal. Wrappers, compound commands, duplicate command
+  aliases, quoting, expansion, alternate git directories, extra flags or targets, detached branches,
+  dirty trees and any unreadable Git answer retain the existing refusal.
 
   **The proof is local and can therefore be stale.** It never fetches and cannot establish that the
   remote-tracking ref still matches the server. It proves only that the merge is safe relative to
   the tracking ref already present in this checkout; a later fetch may reveal commits it did not
   know about. Avoiding network access keeps the gate from changing repository state or turning every
   local update into another remote boundary, and this limitation is recorded rather than hidden.
+
+  **The proof and the merge are not one atomic operation.** Attachment, upstream, cleanliness,
+  object resolution and ancestry are separate local Git processes, and the shell runs the merge only
+  after the gate returns. Another process can move a ref or change the worktree between any two of
+  those reads, or between the final read and execution. `--ff-only` still prevents a merge commit,
+  but Estigia takes no repository lock and cannot claim the executed command saw the exact state it
+  proved. The decision ledger has the same pre-existing resolution limit: its allow line names the
+  subject as `git merge` and the live claim, not whether this local proof or an ordinary reviewed
+  delivery admitted it. Changing that shared allow vocabulary would reach every gate consumer, so
+  this narrow exception records the residual ambiguity here instead.
 - **That narrowing is not configurable, and the asymmetry is the reason.** Every other axis here can
   be switched; this one only tightens, and a setting that could loosen a guard rail turns it into a
   preference. It is the same rule as the operator's boundary list, which adds and never removes.

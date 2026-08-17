@@ -366,6 +366,50 @@ fn only_one_literal_fast_forward_command_preserves_a_target_for_proof() {
             ..
         }
     ));
+
+    // Each of these carries more than one key that normalises to a command
+    // argument. Classification must still see every boundary named anywhere in
+    // the ambiguous payload, while no one value may donate proof metadata for
+    // another value's classification.
+    for input in [
+        json!({
+            "command": "git merge --ff-only origin/main",
+            "commandLine": "git status",
+        }),
+        json!({
+            "command": "git status",
+            "command_line": "git merge --ff-only origin/main",
+        }),
+        json!({
+            "commandLine": "git merge --ff-only origin/main",
+            "command_line": "git merge --ff-only origin/main",
+        }),
+        json!({
+            "command": ["git", "merge", "--ff-only", "origin/main"],
+            "commandLine": "git status",
+        }),
+        json!({
+            "command": ["git", "status"],
+            "commandLine": ["git", "merge", "--ff-only", "origin/main"],
+        }),
+    ] {
+        let (action, how) = classify("Bash", &input);
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "ambiguous payload escaped: {input}"
+        );
+        assert!(
+            matches!(
+                action,
+                Action::Boundary {
+                    ref command,
+                    local_fast_forward_target: None,
+                } if command == "git merge"
+            ),
+            "ambiguous payload retained proof metadata: {input} -> {action:?}"
+        );
+    }
 }
 
 #[test]
@@ -393,6 +437,8 @@ fn local_fast_forward_proof_fails_closed_on_repository_state() {
     let base = git(&["rev-parse", "HEAD"]);
     git(&["commit", "--allow-empty", "--quiet", "-m", "upstream"]);
     let upstream = git(&["rev-parse", "HEAD"]);
+    git(&["tag", "-a", "upstream-tag", "-m", "tag object"]);
+    let tag_object = git(&["rev-parse", "upstream-tag"]);
     git(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
     git(&["reset", "--hard", "--quiet", &base]);
     git(&["remote", "add", "origin", "https://example.invalid/o/r.git"]);
@@ -404,7 +450,15 @@ fn local_fast_forward_proof_fails_closed_on_repository_state() {
     ]);
 
     assert!(is_safe_local_fast_forward(repo.path(), "origin/main"));
+    assert!(is_safe_local_fast_forward(
+        repo.path(),
+        "refs/remotes/origin/main"
+    ));
     assert!(is_safe_local_fast_forward(repo.path(), &upstream));
+    assert!(
+        !is_safe_local_fast_forward(repo.path(), &tag_object),
+        "an object ID that peeled to a different commit ID was accepted"
+    );
     assert!(!is_safe_local_fast_forward(repo.path(), "origin/other"));
 
     std::fs::write(repo.path().join("untracked"), "dirty").expect("a dirty worktree");
@@ -422,6 +476,59 @@ fn local_fast_forward_proof_fails_closed_on_repository_state() {
         !is_safe_local_fast_forward(repo.path(), &side),
         "a commit outside the upstream ancestry was accepted"
     );
+}
+
+#[test]
+fn every_proof_git_process_removes_repository_steering_environment() {
+    let command = proof_git_command_with_environment(
+        Path::new("repo"),
+        &["status"],
+        [
+            "GIT_DIR",
+            "git_work_tree",
+            "GIT_COMMON_DIR",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_CONFIG_COUNT",
+            "GIT_SHALLOW_FILE",
+            "PATH",
+        ]
+        .map(std::ffi::OsString::from),
+    );
+    let changes: std::collections::BTreeMap<String, Option<std::ffi::OsString>> = command
+        .get_envs()
+        .map(|(name, value)| {
+            (
+                name.to_string_lossy().into_owned(),
+                value.map(std::ffi::OsStr::to_os_string),
+            )
+        })
+        .collect();
+    for name in [
+        "GIT_DIR",
+        "git_work_tree",
+        "GIT_COMMON_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CONFIG_COUNT",
+        "GIT_SHALLOW_FILE",
+    ] {
+        assert_eq!(
+            changes.get(name),
+            Some(&None),
+            "{name} would steer a proof subprocess: {changes:?}"
+        );
+    }
+    assert_eq!(
+        changes.get("PATH"),
+        None,
+        "unrelated environment was changed"
+    );
+    assert!(is_git_environment(std::ffi::OsStr::new("GIT_DIR")));
+    assert!(is_git_environment(std::ffi::OsStr::new("git_work_tree")));
+    assert!(!is_git_environment(std::ffi::OsStr::new("PATH")));
 }
 
 #[test]

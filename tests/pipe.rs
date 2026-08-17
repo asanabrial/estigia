@@ -6343,28 +6343,31 @@ fn an_exact_local_fast_forward_is_allowed_without_widening_other_merges() {
         "refs/heads/main",
     ]);
 
-    let pointer = serde_json::json!({
-        "run_id": "claude-abcd1234",
-        "issue": 12,
-        "revision": 1,
-        "state": "in-progress",
-        "repo_dir": repo,
-        "worktree": serde_json::Value::Null,
-    });
-    std::fs::write(
-        home.join(".estigia")
-            .join("runs")
-            .join("claude-abcd1234.json"),
-        serde_json::to_string(&pointer).expect("the pointer serialises"),
-    )
-    .expect("the pointer is written");
-    let gate = |command: &str| {
+    let pointer = |state: &str, reviewed_head: Option<&str>| {
+        let pointer = serde_json::json!({
+            "run_id": "claude-abcd1234",
+            "issue": 12,
+            "revision": 1,
+            "state": state,
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+            "reviewed_head": reviewed_head,
+        });
+        std::fs::write(
+            home.join(".estigia")
+                .join("runs")
+                .join("claude-abcd1234.json"),
+            serde_json::to_string(&pointer).expect("the pointer serialises"),
+        )
+        .expect("the pointer is written");
+    };
+    let gate = |state: &str, command: &str| {
         let input = serde_json::json!({"command": command}).to_string();
         run_with_tracker(
             home,
             repo,
             bin,
-            &issue_answer("in-progress"),
+            &issue_answer(state),
             &[
                 "gate",
                 "Bash",
@@ -6377,7 +6380,8 @@ fn an_exact_local_fast_forward_is_allowed_without_widening_other_merges() {
         )
     };
 
-    let (allowed, refused, ok) = gate("git merge --ff-only origin/main");
+    pointer("in-progress", None);
+    let (allowed, refused, ok) = gate("in-progress", "git merge --ff-only origin/main");
     assert!(
         ok,
         "the safe local fast-forward was refused: {allowed}{refused}"
@@ -6387,30 +6391,16 @@ fn an_exact_local_fast_forward_is_allowed_without_widening_other_merges() {
         "the gate did not allow it: {allowed}"
     );
 
-    let mut stale_pointer = pointer.clone();
-    stale_pointer["reviewed_head"] = serde_json::Value::String("0".repeat(40));
-    std::fs::write(
-        home.join(".estigia")
-            .join("runs")
-            .join("claude-abcd1234.json"),
-        serde_json::to_string(&stale_pointer).expect("the stale pointer serialises"),
-    )
-    .expect("the stale pointer is written");
-    let (_, stale, ok) = gate("git merge --ff-only origin/main");
+    pointer("in-progress", Some(&"0".repeat(40)));
+    let (_, stale, ok) = gate("in-progress", "git merge --ff-only origin/main");
     assert!(!ok, "the local exception bypassed a stale verdict");
     assert!(
         stale.contains("verdict-bound-to-other-bytes"),
         "stale_verdict did not run first: {stale}"
     );
-    std::fs::write(
-        home.join(".estigia")
-            .join("runs")
-            .join("claude-abcd1234.json"),
-        serde_json::to_string(&pointer).expect("the pointer serialises"),
-    )
-    .expect("the fresh pointer is restored");
+    pointer("in-progress", None);
 
-    let (_, refused, ok) = gate("git merge --ff-only origin/other");
+    let (_, refused, ok) = gate("in-progress", "git merge --ff-only origin/other");
     assert!(!ok, "an untracked target was allowed");
     assert!(refused.contains("out-of-phase"), "wrong refusal: {refused}");
     assert!(
@@ -6425,6 +6415,19 @@ fn an_exact_local_fast_forward_is_allowed_without_widening_other_merges() {
         ),
         "the existing out-of-phase guidance changed: {refused}"
     );
+
+    for state in ["analysis", "ready", "blocked"] {
+        pointer(state, None);
+        let (_, refused, ok) = gate(state, "git merge --ff-only origin/main");
+        assert!(!ok, "the local exception widened into {state}");
+        assert!(
+            refused.contains("out-of-phase")
+                && refused.contains(&format!(
+                    "git merge: this step lands the work and issue #12 is in {state}, where no verdict exists"
+                )),
+            "{state} did not retain the existing refusal: {refused}"
+        );
+    }
 
     let ledger = std::fs::read_to_string(home.join(".estigia").join("decisions.jsonl"))
         .expect("the gate recorded its decisions");

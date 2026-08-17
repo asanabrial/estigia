@@ -1444,13 +1444,13 @@ pub fn classify_with(
         // shell call the gate cannot see at all, and a payload naming `git
         // push` is a `git push`. The cost is a read on a payload that merely
         // mentions one, which is one tracker read.
-        let command = command_argument(input).unwrap_or_else(|| input.to_string());
+        let command = shell_command_argument(input);
         // Two readings of the same line. The fragment lists want whitespace
         // collapsed, so `git   push` matches `git push`. `shell::writes_a_file`
         // wants it kept: it splits commands on newlines, and collapsing them
         // into spaces hides the `rm` on the second line of a two-line script
         // behind the `cd` on the first.
-        let lowercased = command.to_ascii_lowercase();
+        let lowercased = command.text.to_ascii_lowercase();
         let normalized = without_leading_options(&lowercased);
         // Before the delivery boundaries, because this is the one that decides
         // whether any of them are still checked afterwards.
@@ -1491,7 +1491,12 @@ pub fn classify_with(
                 Action::Boundary {
                     command: matched.to_owned(),
                     local_fast_forward_target: (matched == "git merge")
-                        .then(|| exact_local_fast_forward_target(input))
+                        .then(|| {
+                            command
+                                .literal
+                                .as_deref()
+                                .and_then(exact_local_fast_forward_target)
+                        })
                         .flatten(),
                 },
                 Sensitivity::Boundary,
@@ -1587,14 +1592,8 @@ pub fn classify_with(
 /// every shell call from that agent classified `Untouched`, from an agent this
 /// build installs a gate into and reports as `gate on`.
 fn argument_named(input: &serde_json::Value, names: &[&str]) -> Option<String> {
-    let letters = |key: &str| -> String {
-        key.chars()
-            .filter(char::is_ascii_alphanumeric)
-            .map(|character| character.to_ascii_lowercase())
-            .collect()
-    };
     input.as_object()?.iter().find_map(|(key, value)| {
-        if !names.contains(&letters(key).as_str()) {
+        if !names.contains(&argument_name(key).as_str()) {
             return None;
         }
         match value {
@@ -1610,33 +1609,73 @@ fn argument_named(input: &serde_json::Value, names: &[&str]) -> Option<String> {
     })
 }
 
+fn argument_name(key: &str) -> String {
+    key.chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|character| character.to_ascii_lowercase())
+        .collect()
+}
+
 /// The path a write tool names.
 fn path_argument(input: &serde_json::Value) -> Option<String> {
     argument_named(input, &["filepath", "path", "notebookpath"])
 }
 
-/// The command line a shell tool was handed.
-fn command_argument(input: &serde_json::Value) -> Option<String> {
-    argument_named(input, &["command", "commandline"])
+/// One reading shared by boundary classification and proof metadata.
+///
+/// More than one key that normalises to a command is ambiguous even when the
+/// values agree. Every renderable value remains visible to the conservative
+/// classifier, but no one of them may donate literal metadata to a boundary
+/// found in another.
+struct ShellCommandArgument {
+    text: String,
+    literal: Option<String>,
+}
+
+fn shell_command_argument(input: &serde_json::Value) -> ShellCommandArgument {
+    let values: Vec<&serde_json::Value> = input
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(key, value)| {
+            matches!(argument_name(key).as_str(), "command" | "commandline").then_some(value)
+        })
+        .collect();
+    let rendered = |value: &serde_json::Value| match value {
+        serde_json::Value::String(text) => Some(text.clone()),
+        serde_json::Value::Array(words) => {
+            let words: Vec<&str> = words.iter().filter_map(serde_json::Value::as_str).collect();
+            (!words.is_empty()).then(|| words.join(" "))
+        }
+        _ => None,
+    };
+    if let [value] = values.as_slice()
+        && let Some(text) = rendered(value)
+    {
+        return ShellCommandArgument {
+            literal: value.as_str().map(str::to_owned),
+            text,
+        };
+    }
+    let commands: Vec<String> = values.iter().filter_map(|value| rendered(value)).collect();
+    ShellCommandArgument {
+        text: if commands.is_empty() {
+            input.to_string()
+        } else {
+            commands.join("\n")
+        },
+        literal: None,
+    }
 }
 
 /// The target of one literal local fast-forward command, without shell parsing.
 ///
-/// This is deliberately narrower than [`command_argument`]. Joining an argv
-/// array loses whether it was a direct git invocation or `bash -lc`, and shell
-/// syntax broad enough to understand quoting is also broad enough to get wrong.
-/// Only a string made of four words, or five with `--`, can earn the exception.
-fn exact_local_fast_forward_target(input: &serde_json::Value) -> Option<String> {
-    let command = input.as_object()?.iter().find_map(|(key, value)| {
-        let key: String = key
-            .chars()
-            .filter(char::is_ascii_alphanumeric)
-            .map(|character| character.to_ascii_lowercase())
-            .collect();
-        matches!(key.as_str(), "command" | "commandline")
-            .then(|| value.as_str())
-            .flatten()
-    })?;
+/// This is deliberately narrower than [`shell_command_argument`]. Joining an
+/// argv array loses whether it was a direct git invocation or `bash -lc`, and
+/// shell syntax broad enough to understand quoting is also broad enough to get
+/// wrong. Only a string made of four words, or five with `--`, can earn the
+/// exception.
+fn exact_local_fast_forward_target(command: &str) -> Option<String> {
     // Newlines separate commands, while all other shell punctuation is kept
     // out by the target alphabet below. Spaces and tabs carry no interpretation.
     if command
@@ -1670,11 +1709,14 @@ fn exact_local_fast_forward_target(input: &serde_json::Value) -> Option<String> 
 /// be clearance. It performs no fetch and consults only refs already present in
 /// the checkout.
 fn is_safe_local_fast_forward(repo_dir: &std::path::Path, target: &str) -> bool {
+    // The shell command runs after this process exits. Proving with a scrubbed
+    // environment and then allowing a merge that inherits `GIT_DIR` would prove
+    // one repository and change another, so steering present at entry is unsafe.
+    if std::env::vars_os().any(|(name, _)| is_git_environment(&name)) {
+        return false;
+    }
     let git = |arguments: &[&str]| {
-        std::process::Command::new("git")
-            .arg("-C")
-            .arg(repo_dir)
-            .args(arguments)
+        proof_git_command(repo_dir, arguments)
             .output()
             .ok()
             .filter(|answer| answer.status.success())
@@ -1702,10 +1744,14 @@ fn is_safe_local_fast_forward(repo_dir: &std::path::Path, target: &str) -> bool 
         Some(upstream) => upstream,
         None => return false,
     };
-    let full_oid = target.len() == 40 || target.len() == 64;
-    if target != short_upstream
-        && !(full_oid && target.bytes().all(|byte| byte.is_ascii_hexdigit()))
-    {
+    let oid_length = match text(&["rev-parse", "--show-object-format"]).as_deref() {
+        Some("sha1") => 40,
+        Some("sha256") => 64,
+        _ => return false,
+    };
+    let full_oid =
+        target.len() == oid_length && target.bytes().all(|byte| byte.is_ascii_hexdigit());
+    if target != short_upstream && target != upstream && !full_oid {
         return false;
     }
     if git(&["status", "--porcelain=v1", "--untracked-files=normal"])
@@ -1719,12 +1765,45 @@ fn is_safe_local_fast_forward(repo_dir: &std::path::Path, target: &str) -> bool 
         ((oid.len() == 40 || oid.len() == 64) && oid.bytes().all(|byte| byte.is_ascii_hexdigit()))
             .then_some(oid)
     };
-    let (head, target, upstream) = match (commit("HEAD"), commit(target), commit(&upstream)) {
+    let (head, target_oid, upstream) = match (commit("HEAD"), commit(target), commit(&upstream)) {
         (Some(head), Some(target), Some(upstream)) => (head, target, upstream),
         _ => return false,
     };
-    git(&["merge-base", "--is-ancestor", &head, &target]).is_some()
-        && git(&["merge-base", "--is-ancestor", &target, &upstream]).is_some()
+    if full_oid && target != target_oid {
+        return false;
+    }
+    git(&["merge-base", "--is-ancestor", &head, &target_oid]).is_some()
+        && git(&["merge-base", "--is-ancestor", &target_oid, &upstream]).is_some()
+}
+
+/// A proof subprocess with every inherited Git control variable removed.
+fn proof_git_command(repo_dir: &std::path::Path, arguments: &[&str]) -> std::process::Command {
+    proof_git_command_with_environment(
+        repo_dir,
+        arguments,
+        std::env::vars_os().map(|(name, _)| name),
+    )
+}
+
+fn proof_git_command_with_environment(
+    repo_dir: &std::path::Path,
+    arguments: &[&str],
+    environment: impl IntoIterator<Item = std::ffi::OsString>,
+) -> std::process::Command {
+    let mut command = std::process::Command::new("git");
+    command.arg("-C").arg(repo_dir).args(arguments);
+    for name in environment {
+        if is_git_environment(&name) {
+            command.env_remove(name);
+        }
+    }
+    command
+}
+
+fn is_git_environment(name: &std::ffi::OsStr) -> bool {
+    name.to_string_lossy()
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("GIT_"))
 }
 
 /// Everything the gate needs that it cannot work out for itself.
@@ -2080,9 +2159,10 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
                     command,
                     local_fast_forward_target,
                 } = action
-                    && !local_fast_forward_target
-                        .as_deref()
-                        .is_some_and(|target| is_safe_local_fast_forward(&context.repo_dir, target))
+                    && !(state == "in-progress"
+                        && local_fast_forward_target.as_deref().is_some_and(|target| {
+                            is_safe_local_fast_forward(&context.repo_dir, target)
+                        }))
                     && let Some(refusal) = out_of_phase(
                         command,
                         &state,
