@@ -6232,7 +6232,14 @@ fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
             "state": state,
             "repo_dir": repo,
             "worktree": serde_json::Value::Null,
-            "reviewed_head": reviewed,
+            "review_receipt": {
+                "epoch": "a".repeat(32),
+                "pr": 12,
+                "head": reviewed,
+                "base": "b".repeat(40),
+                "digest": "c".repeat(64),
+            },
+            "reviewed_head": serde_json::Value::Null,
         });
         std::fs::write(
             home.join(".estigia")
@@ -6333,7 +6340,7 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
     let reviewed = String::from_utf8_lossy(&reviewed.stdout).trim().to_owned();
     assert_ne!(reviewed, rig.head, "the two checkouts have the same head");
 
-    let merge = |reviewed_head: &str, named: bool| {
+    let merge = |reviewed_head: &str, receipt_pr: Option<u64>, command_pr: u64, named: bool| {
         let pointer = serde_json::json!({
             "run_id": "claude-abcd1234",
             "issue": 12,
@@ -6341,7 +6348,14 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
             "state": "review",
             "repo_dir": repo,
             "worktree": serde_json::Value::Null,
-            "reviewed_head": reviewed_head,
+            "review_receipt": receipt_pr.map(|pr| serde_json::json!({
+                "epoch": "a".repeat(32),
+                "pr": pr,
+                "head": reviewed_head,
+                "base": "b".repeat(40),
+                "digest": "c".repeat(64),
+            })),
+            "reviewed_head": receipt_pr.is_none().then_some(reviewed_head),
         });
         std::fs::write(
             home.join(".estigia")
@@ -6354,7 +6368,8 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
         if named {
             arguments.extend(["--run-id", "claude-abcd1234"]);
         }
-        arguments.extend(["--input", r#"{"command":"gh pr merge 12"}"#]);
+        let input = format!(r#"{{"command":"gh pr merge {command_pr}"}}"#);
+        arguments.extend(["--input", &input]);
         let (out, err, _) = run_with_tracker(
             home,
             &reviewed_checkout,
@@ -6367,7 +6382,7 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
     };
 
     for named in [false, true] {
-        let fresh = merge(&reviewed, named);
+        let fresh = merge(&reviewed, Some(12), 12, named);
         assert!(
             fresh.contains("allow"),
             "the inherited checkout at the reviewed head was refused: {fresh}"
@@ -6381,7 +6396,7 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
             );
         }
 
-        let stale = merge(&rig.head, named);
+        let stale = merge(&rig.head, Some(12), 12, named);
         assert!(
             stale.contains("verdict-bound-to-other-bytes"),
             "delivery from a checkout not at the reviewed head was allowed: {stale}"
@@ -6391,7 +6406,27 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
                 && stale.contains(&reviewed[..7]),
             "the refusal does not name the checkout and head it inspected: {stale}"
         );
+
+        let wrong_pr = merge(&reviewed, Some(54), 12, named);
+        assert!(
+            wrong_pr.contains("delivery-pr-mismatch")
+                || wrong_pr.contains("complete-review-receipt-not-selected"),
+            "an exact HEAD selected another PR's receipt: {wrong_pr}"
+        );
+
+        let legacy = merge(&reviewed, None, 12, named);
+        assert!(
+            legacy.contains("complete-review-receipt"),
+            "a legacy reviewed head qualified PR-targeted delivery: {legacy}"
+        );
     }
+
+    // The last negative above deliberately left a legacy pointer on disk.
+    // Restore the complete receipt before exercising the unrelated-clone case.
+    assert!(
+        merge(&reviewed, Some(12), 12, true).contains("allow"),
+        "the complete receipt was not restored for the unrelated-clone floor"
+    );
 
     let unrelated_root = tempfile::tempdir().expect("a parent for an unrelated clone");
     let unrelated = unrelated_root.path().join("unrelated");
@@ -10515,6 +10550,12 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
         !ok && said.contains("several-runs-hold-this-checkout"),
         "a write naming a file inside the claim was taken out of the gate by a \
          working directory in its payload: {said}"
+    );
+    let ambiguous_ledger = std::fs::read_to_string(&ledger).unwrap_or_default();
+    assert!(
+        !ambiguous_ledger.contains("claude-aaaa1111")
+            && !ambiguous_ledger.contains("opencode-bbbb2222"),
+        "an ambiguous decision attributed the first recomputed holder: {ambiguous_ledger}"
     );
 
     // And the other door of the same branch, which nothing crossed before this

@@ -67,6 +67,8 @@ pub enum Action {
     Boundary {
         /// The command, for the message.
         command: String,
+        /// The exact pull request named by a narrowly recognised merge command.
+        pr: Option<u64>,
     },
     /// Nothing Estigia claims authority over.
     Untouched,
@@ -91,11 +93,23 @@ impl Action {
     ///
     /// A method rather than a third `match` on the same three variants: `decide`
     /// had one to build the prefix and the record needed the same answer.
-    pub fn subject(&self) -> Option<&str> {
+    pub fn subject(&self) -> Option<String> {
         match self {
-            Self::Write { target } => Some(target),
-            Self::Boundary { command } => Some(command),
+            Self::Write { target } => Some(target.clone()),
+            Self::Boundary {
+                command,
+                pr: Some(pr),
+            } if command == "gh pr merge" => Some(format!("{command} {pr}")),
+            Self::Boundary { command, .. } => Some(command.clone()),
             Self::Untouched => None,
+        }
+    }
+
+    /// The pull request lineage explicitly proven by this action.
+    pub fn pr(&self) -> Option<u64> {
+        match self {
+            Self::Boundary { pr, .. } => *pr,
+            _ => None,
         }
     }
 }
@@ -1111,6 +1125,103 @@ fn contains_whole_command(text: &str, fragment: &str) -> bool {
     false
 }
 
+pub(crate) fn delivery_pr_unidentified() -> Refusal {
+    Refusal::not_started(
+        "delivery-pr-unidentified",
+        "the merge command does not name one positive numeric pull request, so no publication \
+         receipt can be selected"
+            .to_owned(),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "one literal `gh pr merge <number> ...` command",
+        ),
+    )
+}
+
+pub(crate) fn complete_review_receipt_missing(pr: u64) -> Refusal {
+    Refusal::not_started(
+        "complete-review-receipt-missing",
+        format!(
+            "PR #{pr} has no complete local publication receipt; a legacy reviewed head cannot \
+             select a PR lineage"
+        ),
+        Resolution::no_command(
+            NoCommandReason::HumanAuthority,
+            "the immutable epoch, PR, head, base and digest restored for this exact PR",
+        ),
+    )
+}
+
+pub(crate) fn delivery_pr_mismatch(command_pr: u64, receipt_pr: u64) -> Refusal {
+    Refusal::not_started(
+        "delivery-pr-mismatch",
+        format!(
+            "the merge targets PR #{command_pr}, but this run's publication receipt is for PR \
+             #{receipt_pr}"
+        ),
+        Resolution::no_command(
+            NoCommandReason::HumanAuthority,
+            "the complete publication receipt for the pull request being merged",
+        ),
+    )
+}
+
+pub(crate) fn complete_review_receipt_not_selected() -> Refusal {
+    Refusal::not_started(
+        "complete-review-receipt-not-selected",
+        "this linked checkout has no unique complete publication receipt for the pull request \
+         named by the merge command"
+            .to_owned(),
+        Resolution::no_command(
+            NoCommandReason::HumanAuthority,
+            "one selected holder whose complete receipt names this exact pull request",
+        ),
+    )
+}
+
+/// The one PR target that can be retained without becoming a shell parser.
+fn pr_merge_target(command: &str) -> Option<u64> {
+    if !command.bytes().all(|byte| {
+        byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b' ' | b'\t' | b'-' | b'_' | b'.' | b'/' | b':' | b'=' | b'+'
+            )
+    }) {
+        // Quoting, escaping and expansion can turn raw words into different
+        // arguments. Retaining a PR here spends review authority, so only a
+        // command needing no shell interpretation can select a receipt.
+        return None;
+    }
+    let words: Vec<&str> = command.split_ascii_whitespace().collect();
+    if words.get(..3) != Some(&["gh", "pr", "merge"][..])
+        || words.iter().any(|word| {
+            *word == "--repo"
+                || word.starts_with("--repo=")
+                || word
+                    .strip_prefix('-')
+                    .is_some_and(|short| !short.starts_with('-') && short.contains('R'))
+        })
+    {
+        return None;
+    }
+    let target = *words.get(3)?;
+    let pr = target
+        .bytes()
+        .all(|byte| byte.is_ascii_digit())
+        .then(|| target.parse::<u64>().ok())??;
+    if pr == 0
+        || words
+            .get(4..)
+            .unwrap_or_default()
+            .iter()
+            .any(|word| word.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return None;
+    }
+    Some(pr)
+}
+
 /// A delivery about to spend a verdict bound to bytes that have moved.
 ///
 /// The rule this product is named for — *a verdict is bound to exact bytes;
@@ -1127,17 +1238,44 @@ fn contains_whole_command(text: &str, fragment: &str) -> bool {
 /// It sees what this run published **through Estigia's own tools**. A run that
 /// shells out to the transport publishes without telling the pointer, and the
 /// honesty contract states that reach rather than implying there is none.
-fn stale_verdict(command: &str, run: &Run, checkout: &std::path::Path) -> Option<Refusal> {
+fn stale_verdict(action: &Action, run: &Run, checkout: &std::path::Path) -> Option<Refusal> {
+    let Action::Boundary { command, pr } = action else {
+        return None;
+    };
     // The list already declared for exactly this population, rather than a
     // sixth copy of it: `git push` and `gh pr create` are absent from it for
     // the reason this check needs them absent — publishing a review target is
     // how a run *reaches* review, and pushing after one is how it fixes what
     // the review found. Refusing those would refuse the repair. What must not
     // happen is the delivery **after** them, where the stale verdict is spent.
-    if !DELIVERS.contains(&command) {
+    if !DELIVERS.contains(&command.as_str()) {
         return None;
     }
-    let reviewed = run.reviewed_head.as_deref()?;
+    let reviewed = if command == "gh pr merge" {
+        let command_pr = match pr {
+            Some(pr) => *pr,
+            None => {
+                return Some(delivery_pr_unidentified());
+            }
+        };
+        let Some(receipt) = run
+            .review_receipt
+            .as_ref()
+            .filter(|receipt| receipt.is_complete())
+        else {
+            return Some(complete_review_receipt_missing(command_pr));
+        };
+        if receipt.pr != command_pr {
+            return Some(delivery_pr_mismatch(command_pr, receipt.pr));
+        }
+        receipt.head.as_str()
+    } else {
+        run.review_receipt
+            .as_ref()
+            .filter(|receipt| receipt.is_complete())
+            .map(|receipt| receipt.head.as_str())
+            .or(run.reviewed_head.as_deref())?
+    };
     // Coverage and claim verification already accepted the directory this call
     // runs in. Reading the pointer instead would inspect a different checkout
     // after a handoff whose new holder did not create the inherited worktree.
@@ -1171,7 +1309,7 @@ fn stale_verdict(command: &str, run: &Run, checkout: &std::path::Path) -> Option
 
 /// Whether this action spends delivery evidence rather than producing it.
 pub(crate) fn is_delivery(action: &Action) -> bool {
-    matches!(action, Action::Boundary { command } if DELIVERS.contains(&command.as_str()))
+    matches!(action, Action::Boundary { command, .. } if DELIVERS.contains(&command.as_str()))
 }
 
 /// Whether two checkouts belong to one clone and share its worktree registry.
@@ -1495,6 +1633,7 @@ pub fn classify_with(
             return (
                 Action::Boundary {
                     command: (*matched).to_owned(),
+                    pr: None,
                 },
                 Sensitivity::Boundary,
             );
@@ -1503,6 +1642,7 @@ pub fn classify_with(
             return (
                 Action::Boundary {
                     command: "gh api".to_owned(),
+                    pr: None,
                 },
                 Sensitivity::Boundary,
             );
@@ -1514,9 +1654,15 @@ pub fn classify_with(
             .chain(declared)
             .find(|fragment| contains_whole_command(&normalized, fragment))
         {
+            let pr = if matched == "gh pr merge" {
+                literal_command_argument(input).and_then(pr_merge_target)
+            } else {
+                None
+            };
             return (
                 Action::Boundary {
                     command: matched.to_owned(),
+                    pr,
                 },
                 Sensitivity::Boundary,
             );
@@ -1632,6 +1778,27 @@ fn argument_named(input: &serde_json::Value, names: &[&str]) -> Option<String> {
             _ => None,
         }
     })
+}
+
+/// One unambiguous literal command field, used only for typed delivery identity.
+fn literal_command_argument(input: &serde_json::Value) -> Option<&str> {
+    let letters = |key: &str| -> String {
+        key.chars()
+            .filter(char::is_ascii_alphanumeric)
+            .map(|character| character.to_ascii_lowercase())
+            .collect()
+    };
+    let values: Vec<&serde_json::Value> = input
+        .as_object()?
+        .iter()
+        .filter_map(|(key, value)| {
+            matches!(letters(key).as_str(), "command" | "commandline").then_some(value)
+        })
+        .collect();
+    match values.as_slice() {
+        [serde_json::Value::String(command)] => Some(command),
+        _ => None,
+    }
 }
 
 /// The path a write tool names.
@@ -1770,7 +1937,7 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
         Action::Write { .. } => "write",
         Action::Boundary { .. } => "boundary",
     };
-    let subject = action.subject().unwrap_or_default().to_owned();
+    let subject = action.subject().unwrap_or_default();
 
     // A pointer that is on disk and cannot be read says a run under this name
     // existed; it does not say what it swore. The directive tells every agent
@@ -1825,17 +1992,30 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
     let path_covered = run
         .covered()
         .any(|covered| crate::paths::covers(covered, &context.repo_dir));
-    let reviewed_sibling = is_delivery(action)
-        && run
-            .covered()
-            .any(|covered| same_git_repository(covered, &context.repo_dir));
+    let same_repository = run
+        .covered()
+        .any(|covered| same_git_repository(covered, &context.repo_dir));
+    let reviewed_sibling = matches!(
+        (
+            action,
+            run.review_receipt
+                .as_ref()
+                .filter(|receipt| receipt.is_complete())
+        ),
+        (
+            Action::Boundary {
+                command,
+                pr: Some(command_pr)
+            },
+            Some(receipt)
+        ) if command == "gh pr merge" && *command_pr == receipt.pr && same_repository
+    );
     if run.covered().count() > 0 && !path_covered && !reviewed_sibling {
         if is_delivery(action)
-            && run.reviewed_head.is_some()
-            && let Action::Boundary { command } = action
-            && let Some(refusal) = stale_verdict(command, run, &context.repo_dir)
+            && (same_repository || run.review_receipt.is_some() || run.reviewed_head.is_some())
+            && let Some(refusal) = stale_verdict(action, run, &context.repo_dir)
         {
-            return Decision::Deny(Box::new(prefixed(refusal, command)));
+            return Decision::Deny(Box::new(prefixed(refusal, &subject)));
         }
         return Decision::Outside(Aside::AnotherCheckout);
     }
@@ -1998,12 +2178,10 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
                 // from here `state` is the tracker's answer rather than the
                 // run's belief — which is what makes it safe to decide on.
                 run.mark_verified();
-                if let Action::Boundary { command } = action
-                    && let Some(refusal) = stale_verdict(command, run, &context.repo_dir)
-                {
+                if let Some(refusal) = stale_verdict(action, run, &context.repo_dir) {
                     return Decision::Deny(Box::new(prefixed(refusal, &subject)));
                 }
-                if let Action::Boundary { command } = action
+                if let Action::Boundary { command, .. } = action
                     && let Some(refusal) = out_of_phase(
                         command,
                         &state,

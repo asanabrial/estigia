@@ -905,7 +905,8 @@ fn a_shell_call_is_read_whatever_shape_its_command_arrives_in() {
         assert_eq!(
             action,
             crate::harness::Action::Boundary {
-                command: "git push".to_owned()
+                command: "git push".to_owned(),
+                pr: None,
             },
             "`{tool}` was handed a push in {input} and the gate saw nothing"
         );

@@ -124,6 +124,10 @@ fn inventory() -> Vec<Refusal> {
                 "what that run holds, read from the tracker",
             ),
         ),
+        crate::harness::delivery_pr_unidentified(),
+        crate::harness::complete_review_receipt_missing(54),
+        crate::harness::delivery_pr_mismatch(54, 55),
+        crate::harness::complete_review_receipt_not_selected(),
         // Raised before anything on disk is read, so it is built the way the
         // command builds it: a repository-wide row asked for one agent.
         super::config_set(
@@ -2639,7 +2643,8 @@ fn both_doors_to_the_gate_read_one_payload_the_same_way() {
         assert_eq!(
             crate::harness::classify_with("bash", &payload, &[]).0,
             crate::harness::Action::Boundary {
-                command: "git push".to_owned()
+                command: "git push".to_owned(),
+                pr: None,
             },
             "`{spelling}` is a push and this door does not see it"
         );

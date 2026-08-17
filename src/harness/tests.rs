@@ -41,6 +41,75 @@ fn an_edit_is_a_routine_write() {
     assert_eq!(how, Sensitivity::Routine);
 }
 
+#[test]
+fn a_pr_merge_keeps_the_pull_request_identity_it_will_deliver() {
+    let (first, _) = classify("Bash", &json!({"command": "gh pr merge 54 --merge"}));
+    let (second, _) = classify("Bash", &json!({"command": "gh pr merge 55 --merge"}));
+
+    assert_eq!(first.subject(), Some("gh pr merge 54".to_owned()));
+    assert_eq!(second.subject(), Some("gh pr merge 55".to_owned()));
+    assert_ne!(
+        first.subject(),
+        second.subject(),
+        "different PR lineages collapsed to the same delivery identity"
+    );
+
+    for command in [
+        "gh pr merge",
+        "gh pr merge 0",
+        "gh pr merge feature/ready",
+        "gh pr merge https://github.com/o/r/pull/54",
+        "gh pr merge 54 --repo foreign/repo",
+        "gh pr merge 54 --repo=foreign/repo",
+        "gh pr merge 54 -R foreign/repo",
+        "gh pr merge 54 -Rforeign/repo",
+        "gh pr merge 54 -dRforeign-owner/foreign-repo",
+        "gh pr merge 54 -mRforeign-owner/foreign-repo",
+        "gh pr merge 54 -rRforeign-owner/foreign-repo",
+        "gh pr merge 54 -sRforeign-owner/foreign-repo",
+        "gh pr merge 54 \"--repo\" foreign/repo",
+        "gh pr merge 54 '-Rforeign/repo'",
+        "gh pr merge 54 --re\\po foreign/repo",
+        "gh pr merge 54 --re\"\"po foreign/repo",
+        "gh pr merge 54 --re^po foreign/repo",
+        "gh pr merge 54 --re{po,view} foreign/repo",
+        "gh pr merge 54 --re* foreign/repo",
+        "gh pr merge 54 --re?? foreign/repo",
+        "gh pr merge 54 --re[p]o foreign/repo",
+        "gh pr merge 54 %REPO_OPTION% foreign/repo",
+        "gh pr merge 54 !REPO_OPTION! foreign/repo",
+        "gh pr merge 54 @repo_options",
+        "gh pr merge 54 --repo,foreign/repo",
+        "gh pr merge 54 55",
+        "gh pr merge 54 && gh pr merge 55",
+        "gh pr merge 54 $(gh pr merge 55)",
+        "gh pr merge 54 `gh pr merge 55`",
+        "gh pr merge 54 <(gh pr merge 55)",
+        "gh pr merge 54 >(gh pr merge 55)",
+        "gh pr merge 54 $TARGET",
+    ] {
+        let (action, sensitivity) = classify("Bash", &json!({"command": command}));
+        assert_eq!(sensitivity, Sensitivity::Boundary, "{command}");
+        assert!(
+            matches!(
+                action,
+                Action::Boundary {
+                    ref command,
+                    pr: None
+                } if command == "gh pr merge"
+            ),
+            "an ambiguous merge retained a PR identity: {command} -> {action:?}"
+        );
+    }
+
+    let (array, sensitivity) = classify(
+        "Bash",
+        &json!({"command": ["gh", "pr", "merge", "54", "--merge"]}),
+    );
+    assert_eq!(sensitivity, Sensitivity::Boundary);
+    assert!(matches!(array, Action::Boundary { pr: None, .. }));
+}
+
 /// Every boundary and every repository write has a command line somebody wrote.
 ///
 /// The three tests below this one walk `IRREVERSIBLE`, `REPOSITORY_SHELL` and
@@ -380,6 +449,7 @@ fn a_boundary_never_rides_on_the_window() {
 
     let action = Action::Boundary {
         command: "git push".to_owned(),
+        pr: None,
     };
     let decision = gate(&context, &mut run, &action, Sensitivity::Boundary);
     assert!(
@@ -1183,6 +1253,7 @@ fn the_gate_honours_a_stand_down_and_stops_when_it_expires() {
         run.mark_verified();
         let action = Action::Boundary {
             command: "git push".to_owned(),
+            pr: None,
         };
         gate(&context, &mut run, &action, Sensitivity::Boundary)
     };
@@ -2217,8 +2288,12 @@ fn declaring_a_boundary_only_ever_tightens_what_the_gate_says() {
         // A built-in boundary keeps its own name, or the delivery list — which
         // compares the recorded fragment by exact equality — stops recognising
         // it.
-        if let (Action::Boundary { command: was }, Action::Boundary { command: now_named }) =
-            (&bare_action, &declared_action)
+        if let (
+            Action::Boundary { command: was, .. },
+            Action::Boundary {
+                command: now_named, ..
+            },
+        ) = (&bare_action, &declared_action)
             && was != now_named
         {
             looser.push(format!(
@@ -2310,18 +2385,41 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
 
     let mut run = Run::new("claude-abcd1234".to_owned());
     run.repo_dir = Some(repo.path().to_path_buf());
-    run.reviewed_head = Some(reviewed.clone());
+    run.review_receipt = Some(crate::transport::claim::ReviewReceipt {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head: reviewed.clone(),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    });
 
     // Nothing has moved: the delivery is not this check's business.
     assert!(
-        stale_verdict("gh pr merge", &run, repo.path()).is_none(),
+        stale_verdict(
+            &Action::Boundary {
+                command: "gh pr merge".to_owned(),
+                pr: Some(54),
+            },
+            &run,
+            repo.path(),
+        )
+        .is_none(),
         "a delivery on the head that was reviewed was refused"
     );
 
     // A run with nothing published is left exactly as it was.
     let mut unpublished = run.clone();
-    unpublished.reviewed_head = None;
-    assert!(stale_verdict("gh pr merge", &unpublished, repo.path()).is_none());
+    unpublished.review_receipt = None;
+    let missing = stale_verdict(
+        &Action::Boundary {
+            command: "gh pr merge".to_owned(),
+            pr: Some(54),
+        },
+        &unpublished,
+        repo.path(),
+    )
+    .expect("a PR merge spent no complete receipt");
+    assert_eq!(missing.code, "complete-review-receipt-missing");
 
     // The push that moves it.
     std::fs::write(repo.path().join("a.txt"), "two").expect("a change");
@@ -2335,15 +2433,30 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
     // The repair loop stays open: none of these is a delivery.
     for allowed in ["git push", "gh pr create"] {
         assert!(
-            stale_verdict(allowed, &run, repo.path()).is_none(),
+            stale_verdict(
+                &Action::Boundary {
+                    command: allowed.to_owned(),
+                    pr: None,
+                },
+                &run,
+                repo.path(),
+            )
+            .is_none(),
             "`{allowed}` was refused, which is how a run fixes what a review found"
         );
     }
 
     // And the delivery that would spend the stale verdict.
     for delivery in ["gh pr merge", "git merge"] {
-        let refusal = stale_verdict(delivery, &run, repo.path())
-            .unwrap_or_else(|| panic!("`{delivery}` delivered on a verdict bound to other bytes"));
+        let refusal = stale_verdict(
+            &Action::Boundary {
+                command: delivery.to_owned(),
+                pr: (delivery == "gh pr merge").then_some(54),
+            },
+            &run,
+            repo.path(),
+        )
+        .unwrap_or_else(|| panic!("`{delivery}` delivered on a verdict bound to other bytes"));
         assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
         assert!(
             refusal.message.contains(&reviewed[..7]) && refusal.message.contains(&now[..7]),
@@ -2375,8 +2488,15 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
         checked_out.status.success(),
         "the unrelated clone did not reach the reviewed SHA"
     );
-    let refusal = stale_verdict("gh pr merge", &run, &unrelated)
-        .expect("an unrelated clone spent this run's verdict");
+    let refusal = stale_verdict(
+        &Action::Boundary {
+            command: "gh pr merge".to_owned(),
+            pr: Some(54),
+        },
+        &run,
+        &unrelated,
+    )
+    .expect("an unrelated clone spent this run's verdict");
     assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
     assert!(refusal.message.contains(&unrelated.display().to_string()));
 
@@ -2386,8 +2506,15 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
     std::fs::create_dir(&unreadable).expect("an ordinary directory");
     std::fs::write(unreadable.join(".git"), "not a gitdir pointer")
         .expect("an unreadable nested checkout marker");
-    let refusal = stale_verdict("gh pr merge", &run, &unreadable)
-        .expect("an unreadable head spent this run's verdict");
+    let refusal = stale_verdict(
+        &Action::Boundary {
+            command: "gh pr merge".to_owned(),
+            pr: Some(54),
+        },
+        &run,
+        &unreadable,
+    )
+    .expect("an unreadable head spent this run's verdict");
     assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
     assert!(
         refusal.message.contains("an unreadable head")
@@ -2457,8 +2584,10 @@ fn what_a_push_is_aimed_at_is_recorded_and_not_adjudicated() {
     let arm = &handler[at..];
     let arm = &arm[..arm.find("\n        _ =>").unwrap_or(arm.len())];
     assert!(
-        arm.contains("harness::guard::decide(&context, &repo_dir)"),
-        "the pre-push arm no longer decides the way this measures"
+        arm.contains("harness::guard::adjudicate_action(")
+            && arm.contains("command: \"git push\".to_owned()")
+            && arm.contains("pr: None"),
+        "the pre-push arm no longer decides one un-targeted git-push action"
     );
     assert!(
         arm.contains("refs_being_pushed()"),
@@ -2690,6 +2819,7 @@ fn a_claim_covers_the_work_happening_below_the_checkout_root() {
     // subdirectory went through unadjudicated.
     let push = Action::Boundary {
         command: "git push".to_owned(),
+        pr: None,
     };
     assert_ne!(
         gate(&context, &mut run, &push, Sensitivity::Boundary),
