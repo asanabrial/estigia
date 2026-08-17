@@ -307,10 +307,10 @@ impl ReviewProtocol {
 ///
 /// An axis of its own rather than part of a methodology: adversarial review is
 /// required by the state contract under every one of them, and this only says
-/// how many judges look and what unanimity buys.
+/// how many judges look and what their agreement buys.
 ///
 /// [`Authority`] on `Review delegation` answers a different question — *who
-/// obtains* the second context, this run or a separately started one. This
+/// obtains* the other contexts, this run or separately started ones. This
 /// answers *how many* there are.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Judges {
@@ -323,6 +323,11 @@ pub enum Judges {
     /// person, with no tie-break — a majority of two is a coin toss wearing a
     /// process.
     TwoBlind,
+    /// Five judges in parallel, blind to each other, over one frozen target.
+    ///
+    /// Three independent confirmations of the same severe finding form quorum.
+    /// One or two remain suspicions; ambiguous finding identities never combine.
+    FiveBlind,
 }
 
 impl Judges {
@@ -331,7 +336,7 @@ impl Judges {
     pub fn document(self) -> Option<&'static str> {
         match self {
             Self::Single => None,
-            Self::TwoBlind => Some("policies/blind-judges.md"),
+            Self::TwoBlind | Self::FiveBlind => Some("policies/blind-judges.md"),
         }
     }
 
@@ -340,6 +345,7 @@ impl Judges {
         match self {
             Self::Single => "single",
             Self::TwoBlind => "two blind",
+            Self::FiveBlind => "five blind",
         }
     }
 
@@ -347,10 +353,10 @@ impl Judges {
     /// variant stops this compiling until it is listed here. The two protocols
     /// above point at this one because they are built the same way.
     pub fn all() -> Vec<Self> {
-        let every = vec![Self::Single, Self::TwoBlind];
+        let every = vec![Self::Single, Self::TwoBlind, Self::FiveBlind];
         for judges in &every {
             match judges {
-                Self::Single | Self::TwoBlind => {}
+                Self::Single | Self::TwoBlind | Self::FiveBlind => {}
             }
         }
         every
