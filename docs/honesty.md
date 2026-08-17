@@ -1156,7 +1156,10 @@ suite. Everything else here is prose held by review.
   recorded review head is not the invoking checkout's head is refused as
   `verdict-bound-to-other-bytes`, naming the path inspected and the head found there. The invoking
   checkout is the covered directory the gate already selected and verified for this call; it is not
-  inferred again from the run pointer, whose worktree can be absent after a handoff.
+  inferred again from the run pointer, whose worktree can be absent after a handoff. For a delivery
+  boundary only, a linked sibling sharing the pointer checkout's Git common directory can reach that
+  verification; it is allowed only when its readable head is the recorded reviewed head. An
+  unrelated or unreadable checkout still refuses `verdict-bound-to-other-bytes`.
   `git push` and `gh pr create` are deliberately not gated on it, because pushing after a review is
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
   What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still

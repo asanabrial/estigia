@@ -677,7 +677,21 @@ pub fn decide_action(
     if matches!(action, Action::Untouched) {
         return Decision::Outside(super::Aside::NotWatched);
     }
-    let holders = holders_of(&context.state_root, repo_dir);
+    let mut holders = holders_of(&context.state_root, repo_dir);
+    if holders.is_empty() && matches!(action, Action::Boundary { .. }) {
+        // A review handoff may leave the new holder with no recorded worktree.
+        // Admit a sibling only for a delivery boundary; `gate` still verifies
+        // the claim and refuses unless this checkout has the reviewed head.
+        holders = session::holdings(&context.state_root)
+            .into_iter()
+            .filter(|run| {
+                run.reviewed_head.is_some()
+                    && run
+                        .covered()
+                        .any(|covered| super::same_git_repository(covered, repo_dir))
+            })
+            .collect();
+    }
 
     // Through the stand-down, like every other decision. `gate` states the rule
     // where it wraps its own: *a stand-down honoured on some paths and not

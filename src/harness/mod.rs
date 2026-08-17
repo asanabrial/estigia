@@ -1119,12 +1119,10 @@ fn contains_whole_command(text: &str, fragment: &str) -> bool {
 /// and the boundary that delivers on it asked only whether the claim was still
 /// live. A claim stays live across a push. The bytes do not.
 ///
-/// **Additive, and only on positive evidence.** No recorded head, a command
-/// that is not a delivery, a head this cannot read — every one of them leaves
-/// the decision exactly as it was before this existed. That is not "an unknown
-/// is clearance": the unknown falls back to the adjudication that already ran
-/// and already denied what it denies, and the only thing this can do is add a
-/// refusal when it has both SHAs in hand and they differ.
+/// **Additive, and only after a review exists.** No recorded head or a command
+/// that is not a delivery leaves the decision exactly as it was before this
+/// existed. Once a reviewed head is recorded, an unreadable or unrelated
+/// invoking checkout is not evidence that those bytes are present and refuses.
 ///
 /// It sees what this run published **through Estigia's own tools**. A run that
 /// shells out to the transport publishes without telling the pointer, and the
@@ -1143,10 +1141,17 @@ fn stale_verdict(command: &str, run: &Run, checkout: &std::path::Path) -> Option
     // Coverage and claim verification already accepted the directory this call
     // runs in. Reading the pointer instead would inspect a different checkout
     // after a handoff whose new holder did not create the inherited worktree.
-    let now = head_of(checkout)?;
-    if now == reviewed {
+    let same_repository = run
+        .covered()
+        .any(|covered| same_git_repository(covered, checkout));
+    let now = head_of(checkout);
+    if same_repository && now.as_deref() == Some(reviewed) {
         return None;
     }
+    let found = now
+        .as_deref()
+        .map(short)
+        .unwrap_or_else(|| "an unreadable head".to_owned());
     Some(Refusal::not_started(
         "verdict-bound-to-other-bytes",
         format!(
@@ -1154,7 +1159,7 @@ fn stale_verdict(command: &str, run: &Run, checkout: &std::path::Path) -> Option
              invalidates the verdict and the CI run that went with it",
             short(reviewed),
             checkout.display(),
-            short(&now)
+            found
         ),
         Resolution::no_command(
             NoCommandReason::HumanAuthority,
@@ -1162,6 +1167,27 @@ fn stale_verdict(command: &str, run: &Run, checkout: &std::path::Path) -> Option
              verdict on the new head, or reset this checkout to the head that was reviewed",
         ),
     ))
+}
+
+/// Whether two checkouts belong to one clone and share its worktree registry.
+fn same_git_repository(left: &std::path::Path, right: &std::path::Path) -> bool {
+    let common = |directory: &std::path::Path| {
+        let answer = std::process::Command::new("git")
+            .arg("-C")
+            .arg(directory)
+            .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+            .output()
+            .ok()?;
+        if !answer.status.success() {
+            return None;
+        }
+        let path = String::from_utf8(answer.stdout).ok()?;
+        let path = path.trim();
+        (!path.is_empty()).then(|| std::path::PathBuf::from(path))
+    };
+    common(left)
+        .zip(common(right))
+        .is_some_and(|(left, right)| crate::paths::same_directory(&left, &right))
 }
 
 /// The first seven of a SHA, which is what a person reads.
@@ -1791,11 +1817,14 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
     // was given. A write anywhere else is not covered by it, and pretending
     // otherwise would gate the operator's unrelated work with somebody else's
     // issue.
-    if run.covered().count() > 0
-        && !run
+    let path_covered = run
+        .covered()
+        .any(|covered| crate::paths::covers(covered, &context.repo_dir));
+    let reviewed_sibling = matches!(action, Action::Boundary { .. })
+        && run
             .covered()
-            .any(|covered| crate::paths::covers(covered, &context.repo_dir))
-    {
+            .any(|covered| same_git_repository(covered, &context.repo_dir));
+    if run.covered().count() > 0 && !path_covered && !reviewed_sibling {
         return Decision::Outside(Aside::AnotherCheckout);
     }
 

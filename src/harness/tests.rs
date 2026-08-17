@@ -2351,6 +2351,48 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
             refusal.message
         );
     }
+
+    // A matching SHA in another clone is not this run's reviewed checkout.
+    let elsewhere = tempfile::tempdir().expect("a parent for an unrelated clone");
+    let unrelated = elsewhere.path().join("unrelated");
+    let cloned = std::process::Command::new("git")
+        .args(["clone", "-q"])
+        .arg(repo.path())
+        .arg(&unrelated)
+        .output()
+        .expect("git clones the fixture");
+    assert!(
+        cloned.status.success(),
+        "the unrelated clone was not created"
+    );
+    let checked_out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&unrelated)
+        .args(["checkout", "-q", &reviewed])
+        .output()
+        .expect("git checks out the reviewed SHA elsewhere");
+    assert!(
+        checked_out.status.success(),
+        "the unrelated clone did not reach the reviewed SHA"
+    );
+    let refusal = stale_verdict("gh pr merge", &run, &unrelated)
+        .expect("an unrelated clone spent this run's verdict");
+    assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
+    assert!(refusal.message.contains(&unrelated.display().to_string()));
+
+    // Nor does an unreadable HEAD become evidence that the reviewed bytes are
+    // present merely because the path itself is covered.
+    let unreadable = repo.path().join("not-a-checkout");
+    std::fs::create_dir(&unreadable).expect("an ordinary directory");
+    std::fs::write(unreadable.join(".git"), "not a gitdir pointer")
+        .expect("an unreadable nested checkout marker");
+    let refusal = stale_verdict("gh pr merge", &run, &unreadable)
+        .expect("an unreadable head spent this run's verdict");
+    assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
+    assert!(
+        refusal.message.contains("an unreadable head")
+            && refusal.message.contains(&unreadable.display().to_string())
+    );
 }
 
 #[test]
