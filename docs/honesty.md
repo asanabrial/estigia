@@ -1092,6 +1092,46 @@ suite. Everything else here is prose held by review.
   publishing is how a run reaches review, and gating it on review is a deadlock. Boundaries the
   operator declared are never read as deliveries: Estigia cannot know whether a `make deploy`
   delivers or rehearses, and guessing would refuse a step it never understood.
+
+  One `git merge` is preparation rather than delivery: an exact literal `git merge --ff-only
+  <target>` (also accepting `--` before the target) may run from `in-progress` after the tracker
+  agrees when local Git proves all of it. The checkout is on a branch, its upstream is a canonical
+  `refs/remotes/*` ref, the worktree is clean, the target is that upstream's exact short or full
+  canonical name, or a full object ID of the length this repository's object format requires, and
+  ancestry runs from `HEAD` through the target to the upstream. An object ID must resolve to itself
+  as a commit; an annotated tag's ID does not qualify merely because it peels to one. Every proof Git
+  process removes every inherited `GIT_*` variable, and the exception is denied when any such
+  variable was present at entry. It is also denied when `BASH_ENV`, `ENV`, or Bash's exported `git`
+  function name (`BASH_FUNC_git%%`) is present, compared without case so Windows environment names
+  cannot evade the check. Those variables can make the shell execute a different `git` from the
+  direct process the proof resolved; `PATH` remains eligible because both resolve through the same
+  inherited path when no shell-only steering is present. The `GIT_*` check prevents the named
+  repository, object-store, index, shallow-file and configuration steering, while the three shell
+  checks prevent those specific initialization and inherited-function paths from substituting a
+  different command. It remains a `Boundary`, so it still pays the live tracker read and is recorded
+  in the decision ledger. The
+  verdict-to-bytes check runs first; a stale verdict is refused before this exception can skip only
+  the `out-of-phase` check, and only when the tracker answered exactly `in-progress`. `analysis`,
+  `ready` and `blocked` keep the ordinary refusal. Wrappers, compound commands, duplicate command
+  aliases, quoting, expansion, alternate git directories, extra flags or targets, detached branches,
+  dirty trees and any unreadable Git answer retain the existing refusal.
+
+  **The proof is local and can therefore be stale.** It never fetches and cannot establish that the
+  remote-tracking ref still matches the server. It proves only that the merge is safe relative to
+  the tracking ref already present in this checkout; a later fetch may reveal commits it did not
+  know about. Avoiding network access keeps the gate from changing repository state or turning every
+  local update into another remote boundary, and this limitation is recorded rather than hidden.
+
+  **The proof and the merge are not one atomic operation.** Attachment, upstream, cleanliness,
+  object resolution and ancestry are separate local Git processes, and the shell resolves and runs
+  the merge only after the gate returns. Another process can move a ref, change the worktree, or
+  replace what `PATH` resolves between any two of those reads, or between the final read and
+  execution. `--ff-only` still prevents a merge commit, but Estigia takes no repository or process
+  resolution lock and cannot claim the executed command saw the exact state or executable it proved.
+  The decision ledger has the same pre-existing resolution limit: its allow line names the
+  subject as `git merge` and the live claim, not whether this local proof or an ordinary reviewed
+  delivery admitted it. Changing that shared allow vocabulary would reach every gate consumer, so
+  this narrow exception records the residual ambiguity here instead.
 - **That narrowing is not configurable, and the asymmetry is the reason.** Every other axis here can
   be switched; this one only tightens, and a setting that could loosen a guard rail turns it into a
   preference. It is the same rule as the operator's boundary list, which adds and never removes.

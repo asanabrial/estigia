@@ -2680,7 +2680,8 @@ fn both_doors_to_the_gate_read_one_payload_the_same_way() {
         assert_eq!(
             crate::harness::classify_with("bash", &payload, &[]).0,
             crate::harness::Action::Boundary {
-                command: "git push".to_owned()
+                command: "git push".to_owned(),
+                local_fast_forward_target: None,
             },
             "`{spelling}` is a push and this door does not see it"
         );
