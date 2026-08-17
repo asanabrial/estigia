@@ -3702,7 +3702,27 @@ fn contract_of(
 ) -> Result<(std::path::PathBuf, Config), Refusal> {
     let targets = match agent {
         Some(slug) => vec![find_agent(slug)?],
-        None => configured(options),
+        // With no agent named the question is *what governs here*, and what
+        // governs is the root the gate decides in. This walked `AGENTS` order
+        // and answered from the first configured adapter, which is the shared
+        // neutral root on almost every machine — so `config list` reported one
+        // table while the gate adjudicated another, and `config set` wrote into
+        // the one nothing decides by. Both halves were reading a real file;
+        // neither was reading the same one.
+        //
+        // A stable sort, so this only moves the canonical root's owner to the
+        // front and leaves the declared order intact behind it — including as
+        // the fallback for a machine where no root can be resolved at all.
+        None => {
+            let mut targets = configured(options);
+            if let Ok(canonical) = harness::discover_skill_root_in(options) {
+                targets.sort_by_key(|adapter| {
+                    setup::resolve_paths(adapter, options)
+                        .map_or(true, |paths| paths.skill_root != canonical)
+                });
+            }
+            targets
+        }
     };
     // A contract that is *there* and does not parse is a different answer from
     // one that is not there, and only the second is "nothing is installed". One
@@ -4521,18 +4541,14 @@ fn tool(name: &str, arguments: &serde_json::Value) -> Result<String, Refusal> {
 /// lifts the second for the door it serves; this is the other door.
 /// Which sub-agent a gate payload names, if it names one.
 ///
-/// The three spellings `hook::Input` already accepts as aliases, read here
+/// The caller spellings `hook::Input` already accepts, read here
 /// because this door parses the payload itself rather than through that type.
-/// Both shapes again: beside `tool_input`, and among a tool's own arguments.
+/// Only top-level: nested `tool_input.subagent_type` is a launch target, not the
+/// role making this call.
 fn payload_agent(parsed: &serde_json::Value) -> Option<&str> {
-    ["agent_type", "agent_name", "subagent_type"]
+    ["agent_type", "agent_name"]
         .into_iter()
-        .find_map(|key| {
-            parsed
-                .get(key)
-                .or_else(|| parsed.get("tool_input").and_then(|inner| inner.get(key)))
-                .and_then(serde_json::Value::as_str)
-        })
+        .find_map(|key| parsed.get(key).and_then(serde_json::Value::as_str))
         .filter(|agent| !agent.trim().is_empty())
 }
 
@@ -4711,33 +4727,28 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
     // made by a subagent at all — so there is no name to send. What this closes
     // is the door for a caller that names one; nothing in this tree does yet.
     if let Some(agent) = payload_agent(&parsed) {
-        match harness::roles::definition_for(
-            &context.repo_dir,
-            crate::paths::home_dir().ok().as_deref(),
-            agent,
-        ) {
-            // Denied rather than stepped over, as the hook does it: a
-            // definition that is there and will not open is an unknown, and an
-            // unknown is not clearance.
-            //
-            // Through the stand-down, both of them, because the hook puts its
-            // own role denial through it. Returning the refusal straight made
-            // this the one refusal an operator's stand-down did not reach —
-            // through the agent gated by a plugin, and in the change that added
-            // the question here in the first place.
-            Err(refusal) => {
-                return report_gate(
-                    tool,
-                    json,
-                    harness::standdown::over(
-                        harness::Decision::Deny(Box::new(refusal)),
-                        context.stand_down.as_ref(),
-                        harness::session::now_seconds(),
-                    ),
-                );
+        if agent == "review-blind" {
+            if let Some(refusal) =
+                harness::roles::gate(Some(agent), tool, Some(crate::skill::REVIEW_AGENT.contents))
+            {
+                return report_gate(tool, json, harness::Decision::Deny(Box::new(refusal)));
             }
-            Ok(Some(definition)) => {
-                if let Some(refusal) = harness::roles::gate(Some(agent), tool, Some(&definition)) {
+        } else {
+            match harness::roles::definition_for(
+                &context.repo_dir,
+                crate::paths::home_dir().ok().as_deref(),
+                agent,
+            ) {
+                // Denied rather than stepped over, as the hook does it: a
+                // definition that is there and will not open is an unknown, and an
+                // unknown is not clearance.
+                //
+                // Through the stand-down, both of them, because the hook puts its
+                // own role denial through it. Returning the refusal straight made
+                // this the one refusal an operator's stand-down did not reach —
+                // through the agent gated by a plugin, and in the change that added
+                // the question here in the first place.
+                Err(refusal) => {
                     return report_gate(
                         tool,
                         json,
@@ -4748,8 +4759,23 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
                         ),
                     );
                 }
+                Ok(Some(definition)) => {
+                    if let Some(refusal) =
+                        harness::roles::gate(Some(agent), tool, Some(&definition))
+                    {
+                        return report_gate(
+                            tool,
+                            json,
+                            harness::standdown::over(
+                                harness::Decision::Deny(Box::new(refusal)),
+                                context.stand_down.as_ref(),
+                                harness::session::now_seconds(),
+                            ),
+                        );
+                    }
+                }
+                Ok(None) => {}
             }
-            Ok(None) => {}
         }
     }
     let (action, how) = harness::classify_with(tool, &parsed, &context.boundaries);

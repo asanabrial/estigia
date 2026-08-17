@@ -31,7 +31,7 @@ estigia config set "Merge strategy" squash
 | Integration | `branch`, or `trunk` |
 | Renewal window | `default`, or a shorter duration such as `30s` or `1m` |
 | Review protocol | `standard`, or `receipt-driven` (also accepted as `rdd`) |
-| Blind judges | `single`, or `two blind` |
+| Blind judges | `single`, `two blind`, or `five blind` |
 | Change size | a number of lines, such as `800` |
 | Irreversible commands | `none`, or commands separated by commas |
 | Project board | `none`, or a board as `<owner>/<number>` |
@@ -50,6 +50,75 @@ set what this table named got exactly that.
 distinct reviewer but does not make Estigia spawn one. If none is available, the run records a durable
 exact-receipt handoff and releases ownership. `ask <duration>` records one request deadline in that
 handoff; no scheduler, sleep, deadline reset, retained claim, or expiry-as-verdict behavior is implied.
+
+`single` remains the default. Every Claude Code setup installs one static read-only definition at
+`~/.claude/agents/review-blind.md`, including in single mode. Its file says `model: inherit` and is
+inert unless the launch prompt names an active blind mode, exact publication receipt and criteria.
+The orchestrator supplies `Model routing`'s effective `judge` assignment when it instantiates that
+definition twice or five times concurrently over the identical target and criteria; there are no
+numbered definitions. In five-blind mode, three independent confirmations of the same severe finding
+are required to block or authorize automatic repair. One or two remain suspicions; dissent, warnings
+and suggestions survive, and ambiguous finding identities never aggregate. Estigia records only one
+aggregate exact-receipt verdict and cannot prove panel size, concurrency, independence, blindness,
+same-finding identity or quorum. `config set` and `config edit` write configuration only; changing
+these rows never rewrites that external definition.
+
+The `review-blind` role is reserved to that operator-owned user file. Claude's generated `PreToolUse`
+matcher wakes for `Agent` and legacy `Task` launches and, before repository classification, checks an
+exact `review-blind` target for recursive project collisions from the launch cwd through the first
+`.git` repository root, using parsed YAML frontmatter, then proves the canonical user text is the only
+user-scoped definition carrying that identity. Setup performs that same recursive user-tree uniqueness
+preflight before writing, repeats it at the external reviewer boundary, and creates a fresh canonical
+file without replacing a path another actor created meanwhile. Unreadable or duplicate candidates and
+a missing, unreadable or changed canonical copy fail closed. This exception does not change project-
+first precedence for ordinary agents and does not add OpenCode launch enforcement. A refused launch
+contributes no judge; use a separate session or durable handoff rather than reducing or serializing the
+configured panel.
+
+### Which root the gate decides in
+
+An agent reads the contract in **its own** skill root. The gate reads **one** root for the whole
+machine — the canonical one — and `estigia config list` without `--agent` reports that same root, so
+the two answers only agree while the roots do.
+
+That root is chosen by what each candidate carries, not by which agent is running: a contract with a
+configuration block is preferred over one without, and among those, a root holding the operator's own
+`estigia.local.md` is preferred over one that does not. Where nothing distinguishes them the declared
+adapter order decides, which puts the shared neutral root first.
+
+The second half of that rule exists because `setup --all` writes the configuration block into every
+root, so the first half cannot tell two installed roots apart; the selection then fell to the order
+and took a root that held none of the operator's values, and the gate adjudicated at defaults while
+the agent read the operator's table. Preferring "a configuration that differs from the defaults"
+does not separate them either — setup writes real values into the neutral root's block as well.
+
+Two roots can still legitimately hold different tables; `setup` preserves each rather than flattening
+them. What must not stay silent is the gate deciding by rows an agent never reads, so `estigia doctor`
+carries a `canonical` row naming the agent, the setting and both values.
+
+Which divergence is a **fault** is decided by the scope each row already has — the same three-valued
+question the rest of the crate asks, not a fourth list:
+
+- **Agent** — `Delivery authorisation`, `Review delegation`, `Transition authorisation`, `Planning`,
+  `Model routing`, `Blind judges`. These are *meant* to differ by agent; `config set --agent <slug> …`
+  is how you set one. Named on the row, and the row stays `ok`: calling a machine broken for a
+  supported configuration names a fault with no way out of it.
+- **Everywhere** — a fact about the repository, the same whichever agent asks. Two roots answering
+  differently means one agent is being decided for by a file it does not read: `BROKEN`, and the
+  resolution names `estigia config set "<row>" "<value>"` with no `--agent`, which writes it into
+  every installed contract.
+- **Machine** — `Summary language` and `Issue body language`, facts about this machine. Also
+  `BROKEN`, and their resolution names **no** command, because there is not one: the plain
+  `config set` writes a machine row into the canonical contract and nowhere else, and
+  `config set --agent <slug>` cannot hold one in a shared root at all — the per-agent file is
+  rendered and read through the agent scope, so the row is dropped and the command exits on its own
+  read-back. That asymmetry is [issue #62](https://github.com/asanabrial/estigia/issues/62); until
+  it is settled the row reports the divergence and says plainly that nothing clears it yet.
+
+Rows that differ by design are named in both branches, not only in the quiet one.
+
+The row is `skipped`, never `ok`, when the canonical configuration cannot be read: a comparison that
+was not made is not agreement.
 
 ### Model routing suggestions are agent-specific
 
@@ -99,8 +168,10 @@ skill-root setup action; `SKILL.md` is
 rendered once from contract-only portable config, while a selected shared-root agent's Planning/model
 changes land only in its own override. Local, repository, and another agent's values are never promoted
 into the shared contract, and a private-root agent keeps its answer in its contract without a duplicate
-override. Host artifacts such as Claude phase definitions use the effective view, so local and per-agent
-Planning/model rows materialize them and retract them when those rows stop selecting the phase. A
+override. Dynamic host artifacts such as Claude SDD definitions use the effective view, so local and
+per-agent Planning/model rows materialize them and retract them when those rows stop selecting the
+phase. The static reviewer is not configuration output: setup installs it unchanged and launch-time
+routing selects its model. A
 repository save preserves the rows that document already owns and unions only repository-scoped rows
 changed in that session; one explicit row never widens into every repository setting. Direct agent
 writes read the override once and use that same snapshot for ownership and writing; only `NotFound`

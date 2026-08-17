@@ -12,6 +12,30 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- `Blind judges` now has canonical `five blind` beside `single` and `two blind`, with `single` still
+  the default. Five independent reviewer contexts run concurrently over the identical immutable
+  target and criteria; a severe finding blocks or authorizes automatic repair only when 3-of-5
+  independently confirm the same finding. One or two confirmations remain suspicions, ambiguous
+  identities do not aggregate, and dissent, warnings and suggestions survive. Every Claude Code setup
+  installs one static read-only `review-blind` definition with `model: inherit`; it remains inert unless
+  a launch names the active blind mode, exact receipt and criteria. The orchestrator supplies the
+  effective `judge` model when it launches that definition twice or five times. Config writes never
+  mutate it. Setup refuses an unowned or changed copy before writing other artifacts, and uninstall
+  deletes only a textually unchanged owned copy after normalizing line endings and the final newline,
+  preserving other changes and deletion retry evidence. Fresh and upgrade action manifests name the
+  ownership-record mutation exactly once. The lifecycle
+  digest now inventories exactly five SDD definitions and that reviewer in one of its two top-level
+  asset collections. Transport still enforces one aggregate exact-receipt verdict only: Estigia cannot
+  prove panel size, concurrency, independence, blindness, same-finding identity or quorum.
+  `review-blind` is now reserved to the operator-owned Claude definition. Generated Claude hooks wake
+  for current `Agent` and legacy `Task` launches, walk from the launch cwd through the first `.git`
+  repository root, parse candidate frontmatter as YAML, recursively reject project shadows or
+  unprovable candidates, require the canonical user text to be the unique user-scoped reserved
+  definition, and enforce the embedded policy once running. Setup performs the same user-tree
+  uniqueness preflight before writing, revalidates at the reviewer boundary, and publishes a fresh
+  reviewer with a no-replace atomic create so a concurrent file is preserved rather than overwritten.
+  Refused launches never count or degrade the panel; ordinary agents remain project-first and OpenCode
+  is out of scope.
 - `estigia mcp` serves the workflow operations as **21 MCP tools** over stdio —
   claim, verify_claim, heartbeat, transition, comment, reclaim, release,
   start_branch, publish_review, and the read-only checks. Hand-written
@@ -415,6 +439,30 @@ the workflow, it holds the tools.
 
 ### Guards
 
+- Neither workflow may check out with a deprecated action or throw away a red run's cache, and both
+  halves are crossed rather than trusted. `actions/checkout@v4` targets Node 20, and it was one of
+  five actions that did — a warning that becomes a workflow which will not start, on GitHub's
+  schedule rather than on ours. **Only the checkout is raised here**; `setup-node@v4`,
+  `upload-artifact@v4`, `download-artifact@v4` and `softprops/action-gh-release@v2` are still on
+  Node 20, so the runs still print the warning and the release lane — which carries **all four**,
+  three of them only there — still would not start. Every `uses:` line in both files is enumerated
+  with its runtime in `docs/honesty.md`, along with two more `node20` actions reached transitively
+  through `attest-build-provenance`, rather than the gap being closed under an issue that asked about
+  the checkout. Both files move to `v7`, which runs on `node24`. That crosses three majors and each
+  carries something: `v5` requires a runner of at least `v2.327.1`, `v6` moves persisted credentials
+  out of `.git/config` into a file under `$RUNNER_TEMP`, and `v7` refuses fork checkouts under
+  `pull_request_target` and `workflow_run`. The `ref` and `persist-credentials` **inputs** are
+  unchanged, which is not the same as their behaviour being unchanged: `ci.yml` opts out of
+  persistence and `release.yml` does not, so the release lane takes `v6`'s new location — it runs no
+  authenticated git command and no container job, so nothing there reads it. The lanes run on hosted
+  runners, and this repository triggers on neither event `v7` blocks. `Swatinem/rust-cache` discards a failing run's cache by default, so the fix pushed after a
+  red build recompiled the dependency tree from cold on all three platforms — closing one set of
+  platform failures paid it at least nine times, `ci` on `main` having failed nine consecutive times
+  before it went green. The issue that raised this said six and named a first run that no longer
+  exists; nine is what the run history still holds. The guard names a version floor rather than the
+  word *deprecated*, because a file cannot be asked whether it is: `v2` to `v4` run on Node 12, 16
+  and 20, `v1` is a runner plugin with no Node runtime at all, and everything from `v5` is `node24`.
+  A future deprecation moves that number to somewhere a person has to look at it.
 - The shipped payload passes **upstream's own 328 checks**.
 - Population declarations are bound to their syntax node and fingerprinted:
   changing the rule or the code beneath it reopens the claim.

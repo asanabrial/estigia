@@ -18,11 +18,349 @@ suite. Everything else here is prose held by review.
   the configured host reports through `opencode models` at that moment, without a refresh, and a
   successful line is still not proof that a later run accepts or uses the ID. Estigia does not
   validate catalog membership, execute models, or inspect or filter their tool-call capability.
-  Only Claude Code currently receives planned phase definitions; OpenCode and every other host keep
-  these values as routing declarations. `orchestrate`, `apply`, and a visible route are likewise not
-  proof that a host executes them.
+  Only Claude Code currently receives host-routable definitions: the planning phases selected by
+  `Planning`, and one static `review-blind` definition installed in every mode. OpenCode and every
+  other host keep these values as routing declarations. `orchestrate`, `apply`, `judge`, and a visible
+  route or installed definition are likewise not proof that a host executes them.
+  Claude's generated matcher now wakes for current `Agent` and legacy `Task` launches of the exact
+  `review-blind` target. Estigia walks from the launch cwd through the first `.git` repository root,
+  parses candidate YAML, recursively refuses project-scoped shadows, and requires the normalized
+  canonical user definition to be the only user-scoped definition with that identity; setup performs
+  the same user-tree preflight. A running reviewer uses the embedded policy. This is Claude-only and
+  proves what Estigia read before launch, not that Claude launched the context, kept judges concurrent
+  or blind, withheld sibling output, or received an honest verdict. A refused launch is no evidence and
+  never reduces or serializes the configured panel; the fallback is separate-session or durable handoff.
   OpenCode process-tree cleanup is likewise not containment proof: the controller bounds how long the
   TUI waits, while process-group and Job Object cleanup remain best-effort OS operations.
+
+- **Raising the checkout action did not close this repository's Node 20 exposure.** `actions/checkout`
+  moved from `v4` to `v7` because `v4` declares `runs.using: node20` and every run printed *"being
+  forced to run on Node.js 24"*. It was one of **five**. Every `uses:` line in both workflows, with
+  `runs.using` read from that action's own `action.yml` at the ref the workflow names:
+
+  | Action | Where | `runs.using` |
+  |---|---|---|
+  | `actions/checkout@v7` | `ci.yml`, `release.yml` | `node24` — raised here |
+  | `dtolnay/rust-toolchain@stable` | `ci.yml` | `composite`, shell steps only |
+  | `Swatinem/rust-cache@v2` | `ci.yml` | `node24` |
+  | `actions/setup-node@v4` | `ci.yml`, `release.yml` | **`node20`** |
+  | `actions/upload-artifact@v4` | `release.yml` | **`node20`** |
+  | `actions/download-artifact@v4` | `release.yml` | **`node20`** |
+  | `softprops/action-gh-release@v2` | `release.yml` | **`node20`** |
+  | `actions/attest-build-provenance@v2` | `release.yml` | `composite` — see below |
+
+  So the warning still appears, and the argument used to raise the checkout in `release.yml` — that a
+  tag-triggered workflow which will not start publishes nothing and cannot be retried by pushing a
+  fix — still applies to that lane **four times over**. Three of the four are in that lane alone.
+
+  `attest-build-provenance@v2` is composite and pins two actions of its own, both at commits rather
+  than tags, and **both declare `node20`** — read from those exact commits, not inferred from a tag:
+  `actions/attest@ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc` and
+  `actions/attest-build-provenance/predicate@1176ef556905f349f669722abf30bce1a6e16e01`. So the
+  transitive exposure is two more, measured. It is not counted in the four above, which are direct
+  `uses:` lines.
+
+  `attest-build-provenance@v3` is composite too and pins `actions/attest@daf44fb9…` and
+  `.../predicate@864457a5…`, **both `node24`** — read at those commits. So the transitive pair goes
+  away with a one-line `@v2` → `@v3` at `release.yml:178`. The input surface is not *absent* —
+  `release.yml:180` passes `subject-path` — it is **unchanged**: between v2's and v3's `action.yml`
+  the only differences are the two pin lines and an added `NODE_OPTIONS`, with inputs and outputs
+  identical. What a manifest diff cannot tell you is behaviour: v3 repins `actions/attest` to a
+  release whose notes name a checksum-parsing change and a minimum runner version. Neither reaches
+  this repository — the step passes `subject-path`, and the lane runs on hosted runners — but that is
+  a thing read, not a thing the diff established.
+
+  The guard is named for the checkout and checks only the checkout; it is not weaker than it says,
+  but it is narrower than the problem.
+
+  Left rather than folded in because the issue that raised the checkout asked about the checkout.
+  What each remaining bump costs, read from each major's own `action.yml`:
+
+  | Action | Majors to cross | Manifest change |
+  |---|---|---|
+  | `actions/setup-node@v4` → `v5` | one | not measured |
+  | `softprops/action-gh-release@v2` → `v3` | one | one line: `using: node20` → `node24`; inputs, outputs and every description byte-identical |
+  | `actions/upload-artifact@v4` → `v6` | two — `v5` is still `node20` | not measured |
+  | `actions/download-artifact@v4` → `v7` | three — `v4`, `v5` and `v6` are all `node20` | not measured |
+
+  The two columns are not the same kind of thing. **Majors to cross** is an ordering, and the rows
+  are sorted by it: it was read for all four, so the comparison is paid for. **Manifest change** is
+  not ordered at all — one cell holds a reading and three hold nothing, and a filled cell beside
+  three empty ones ranks nothing. The row order carries no claim either: within a tie it is the
+  order the table was written with, restored after one commit swapped it and the next put it back.
+  Which commit did which is in the log, and this document has now got that history wrong twice, in
+  consecutive attempts to tell it. Nothing here says which bump to make first.
+
+  That distinction is what this entry kept getting wrong. It has now carried a wrong count, a wrong
+  containment claim, a wrong remediability claim and two wrong superlatives — both written in one
+  commit, one of them still standing after the next one, whose message was *"stop ranking things I
+  have not measured"*. Every one was written about the thing being looked at while its neighbours
+  went unread, and so was the sentence that used to stand here: it named the wrong commit for the
+  surviving superlative, and one `git log -S` would have said so. **A comparative is a claim about
+  everything, so it costs a measurement of everything.** Filed as its own item.
+
+  **This list was wrong once already, and how it was wrong is the point.** It first named three,
+  taken from a review's findings and re-presented as a measurement without the files being swept.
+  `softprops/action-gh-release@v2` was missing, in the very lane the paragraph argues about, so
+  anyone scoping the follow-up from it would have raised three actions and still had a `node20`
+  workflow. An enumeration in this document is a claim to have looked everywhere; inheriting one is
+  not looking.
+
+  **And the guard's other half did not decide.** Seven rounds of review on this change found defects
+  only in prose, which made a comfortable story: the code was right and only the writing was wrong.
+  The eighth round mutated the workflow instead of reading it, and the story was wrong too. `cache-on-failure: true` was checked by searching the whole file for that text, so three
+  ways of turning the fix off left the suite green — commenting the option out above a `rust-cache`
+  left on its defaults, parking the option on some other step, and deleting the caching step
+  altogether. The checkout half had stripped comments from its first line; the cache half never did,
+  and the two sat eight lines apart in one function. It now reads the block under
+  `Swatinem/rust-cache@` with comments stripped, and all three are red. **A setting is only on if it
+  is under the step that reads it; a guard that searches the file instead checks that somebody typed
+  the words.**
+
+  That same half also carried a borrowed justification. Its comment said the issue had ruled out
+  caching anywhere but `ci.yml`. The issue's out-of-scope line rules out caching *anything other than
+  cargo* — which is exactly what `rust-cache` caches, so it permits what the assertion forbids.
+  Keeping the release lane uncached is this repository's own judgement, and the comment says so now,
+  with the condition under which the line should go. It used to give a mechanism — that the lane
+  builds each target once, so a cache would be written and never read — which is a claim about
+  GitHub's cache scoping that was not measured either.
+
+  **What the guard has been found not to catch.** Every row below was produced by writing the
+  workflow a different legal way and running the guard against it. This is a list of what has been
+  run, not a census: nobody has enumerated the blind spots of a matcher that reads lines, and the
+  count is left off because a count is a claim to have finished looking. The third column is what
+  was *not* run — `lookup-only:`'s effect on the action's saving, not the guard's answer, which is
+  measured and is that it does not read it.
+
+  | Passes but should not | Fails but should not | Not measured |
+  |---|---|---|
+  | a checkout pinned to a **commit** — no version string to floor | a flow-style step, `- { uses: …, with: { … } }` | `cache-on-failure: yes` — refused, and whether GitHub hands the action `yes` or `true` was never read |
+  | a caching step under `if: false`, **wherever a cache is allowed** | | `lookup-only:` — not read, and its effect on saving not measured |
+  | a `uses:` folded onto the next line, **in a third workflow** | | |
+
+  They are not one kind of thing, and an earlier version of this paragraph said they were. Two are
+  about **meaning** a line cannot carry — a commit pin names no version, and `if: false` reads
+  exactly like a step that runs. Two are about **syntax this reader does not handle**, flow style and
+  folded values, and those a YAML parser would close. And two are simply **unread**, which is a third
+  column rather than a hedge inside one of the other two: `yes` sat under *fails but should not*, and
+  whether it should is a question about GitHub's parser that nobody here has asked. The action
+  compares its input against the literal string `true`, so refusing `yes` may well be right.
+
+  **A sixth row was taken off this table as fixed and was not.** It read *the option written under
+  `env:` or in any key but `with:`*. What got measured was a `with:` holding a `NOTE:` that quotes
+  the words — a different thing — and the row was deleted on it. Written as the row says, `env:` then
+  `cache-on-failure: true` under the caching step, the suite stayed green while the option was inert:
+  the action reads the input `INPUT_CACHE-ON-FAILURE`, which only `with:` writes, and its `post-if`
+  looks for `CACHE_ON_FAILURE`. Deleting a row for a run of something adjacent to it is the failure
+  this entry is a record of, committed inside the paragraph describing it. It is closed now, by
+  reading the inputs from under `with:` rather than from the step, and this paragraph is what is left
+  of the row.
+
+  The folded-scalar row carries *in a third workflow* because it does not reproduce where a reader
+  would first try it: written into `ci.yml` or `release.yml` the guard goes red instead, on the floor
+  that says those two lanes must check something out. The row used to be unqualified, and a review
+  ran it in the two files the entry is about and got the opposite column — a row describing a
+  behaviour nobody had reproduced in the place it names.
+
+  That distinction matters because the paragraph that stood here said *"four holes and two false
+  alarms"*, said the left column needed a YAML parser, and said the right one needed a decision. A
+  review then found six more by the method this paragraph prescribes, and none of the three sentences
+  survived them: two of the six were case — `Actions/Checkout@v4` names the action a floor exists to
+  refuse and slipped both floors — one was a different action whose path ends in this one's name, and
+  three were a step title, an `if:` and a `with:` value quoting the word `uses:` beside a version. Not
+  one is a meaning problem, and a parser would have closed none of them; they were comparisons of raw
+  text that never normalised case or found where the key ended. All six are closed, by reading each
+  line's key and value instead of searching it. **A number after a list of limits is the same
+  assertion this whole entry is about** — the edge of what was measured, stated as the edge of what
+  is there.
+
+  The round after that made the point again on the same function. `runs_action` was given three
+  normalisations — the key, the prefix, the case — and its comment said the six were closed by them.
+  Quoting is the fourth axis of the same normalisation and was not looked at, so `uses:
+  "actions/checkout@v7"`, ordinary YAML, stopped being a step: a correct workflow refused *and* a
+  quoted `@v4` waved through a floor in a third lane, which is the case the widening exists for.
+  This document had already recorded a guard of this repository's defeated by a leading quote,
+  twice. Values are unquoted now, and the caching option is read as a key and a value too — searching
+  the step for the literal text refused `cache-on-failure:  true` over a second space, eight lines
+  from the half that had just been taught to read keys.
+
+  **`save-if` was read from its description and not from its code.** The description says *"if
+  `false`, the cache is only restored"*, so the guard refused the literal `false` — and `no`, `off`,
+  `0`, `n`, `nope` and a quoted `"no"` each stopped every run saving while the suite stayed green.
+  The action's `save.ts` does not test for `false`; it saves only when the lowercased input reads
+  exactly `true`. That one line is the whole rule, and reading the prose beside it instead was the
+  same act as inheriting a count: taking the nearest available sentence for the measurement. The
+  guard now asks what the action asks, and leaves a `${{ … }}` alone, because what an expression
+  evaluates to is not in this file.
+
+  **And the fold reached the action and the value, not the key beside them.** `Save-If: false`
+  turned off saving on **every** run — green ones too, which is worse than anything round eight
+  closed — and the suite stayed green, while `Cache-On-Failure: true`, a spelling that works, was
+  refused. GitHub hands an input to an action as `INPUT_<NAME>` upper-cased and its own input map
+  compares without case, so those are the same settings as the lowercase ones. Three rounds running,
+  one normalisation was applied to whatever was being looked at and not to its neighbour: the action
+  name and not the key, the value and not the key, the key's spacing and not its case. Both sides are
+  folded now.
+
+  A step's keys are an unordered mapping too, and `- with:` written above the step's own `uses:` was
+  refused, because the search for `with:` began one line after the step opened.
+
+  **The refusal written for that was wrong in both directions at once.** Refusing every `- {` in a
+  workflow refused a `matrix: include:` entry and a flow mapping used as an item of an input's
+  value — correct files, told they had written a step they had not — while a whole `steps:` written
+  as a flow *sequence*, `steps: [{ uses: Swatinem/rust-cache@v2 }]`, still passed green with the fix
+  off, because it has no `- ` items to refuse. A step is an item of a job's `steps:`, so that is
+  what is read now: items at the shallowest `- ` depth inside a `steps:` block, plus the block
+  written as a sequence. Two more of the same shape went with it — a block step whose `with:` is one
+  flow mapping was refused, and the option written a level *below* `with:` passed, which is the row
+  this entry says it closed surviving one level in.
+
+  **The run of rounds this took is itself the measurement, and the table below is where it is
+  counted.** Each one found another legal spelling; each fix was right and the next spelling was not
+  covered. That is not bad luck, it is what reading YAML a line at a time costs, and the entry has
+  said since the twelfth round that closing the left-hand column properly means parsing rather than
+  reading. Nothing here adds a parser — that is a dependency this issue did not ask for — so what is
+  written instead is the ceiling: this guard reads the block style these two workflows are written
+  in, refuses what it cannot take apart, and the table below records every legal thing it got wrong
+  on the way. This paragraph gave the count as a number for three rounds after the number stopped
+  being right, which is the smaller cousin of the branch that could not count its own commits: the
+  row count is a fact about the table and stays current; a round count is a fact about the future.
+
+  **Four rounds of closing one spelling each, and a newline walked past all four.** `- {`, items in
+  the key's own column, `-  {` with two spaces, `steps: [` — each was measured, each fix was right,
+  and putting the `[` on the line *after* `steps:` was read by none of them: no `- ` items, so
+  nothing to inspect, so nothing refused. A lane checking out with `@v4` and carrying a bare
+  `rust-cache` inside one measured green. A `jobs:` written as a single flow mapping did the same,
+  with no `steps:` line to find at all.
+
+  What is written now is not the fifth spelling. **A `steps:` that yields no step is refused,
+  whatever the reason**, and so is a `jobs:` whose value is a mapping. That is the invariant the
+  four were each an instance of, and it inverts the failure mode: a spelling this reader does not
+  handle is a red with a message rather than a file nobody read. It is the shape the entry should
+  have reached for at the twelfth round, when it first wrote that this needs parsing — refusing what
+  cannot be read is the honest half of that sentence, and it costs no dependency.
+
+  **And the flow-style row was in the wrong column outside the two lanes it had been run in.** It
+  sat under *fails but should not*, which is what happens in `ci.yml` and `release.yml`: the guard
+  reads `- { uses: … }` as no step at all, and the floors that say those two files must have a
+  checkout and a caching step turn the miss into a red. A **third** lane has no such floor, so
+  `- { uses: Swatinem/rust-cache@v2 }` discarded every red run's cache and the suite stayed green —
+  the opposite column, in the case the loop was widened for. The same row shape as the folded scalar
+  one, whose qualifier was added two rounds earlier by a review that ran it somewhere else; this one
+  was never run anywhere else. A step written in flow style is refused rather than skipped, with a
+  message saying the guard cannot read it rather than that it has checked it. Refusing a correct
+  flow-style step is the price, and it is what the row already said.
+
+  **That refusal said *everywhere* and meant one indentation.** A block sequence may begin in its
+  key's own column — `steps:` and then `- uses:` at the same indent is ordinary GitHub Actions
+  style — and the walk that collected a `steps:` block required its items to be *deeper*. At that
+  indentation the block came back empty, so nothing was read and nothing was refused: a third lane
+  could check out with `@v4` **and** carry a bare `rust-cache`, both halves of this change off, with
+  the suite green and no message. The one-column-deeper form was refused correctly, which is why the
+  round that wrote it saw what it expected. The block now ends at the first line that is neither
+  deeper nor an item at the key's own column, and this paragraph is what is left of the word
+  *everywhere*.
+
+  **And the refusal that replaced it matched two literal bytes.** A block sequence item is a dash and
+  any run of spaces, so `-  { uses: … }` counted as an item and was not refused — neither read nor
+  rejected. Measured: `ci.yml` itself checking out with `@v4`, `ci.yml` carrying a bare
+  `rust-cache`, `release.yml` gaining one past the assertion written to stop exactly that, and a
+  third lane with both halves off — all green, at two, three and five spaces, while one space went
+  red. Round twenty-one closed one indentation; this was the same defect at one spacing. An item is
+  read by what it holds now, not by how far the dash is from it.
+
+  The same round's other new rule read a flow mapping only when it closed on the line that opened
+  it. `with: {` with the pairs beneath and the brace on its own line is legal, correct, and was
+  refused — with a message saying a red run's cache was being discarded, which is a diagnosis about
+  the workflow rather than about the reader that stopped.
+
+  **Two rows of that same table, each fixed alone, were never run together.** A `cache-directories:`
+  sequence ends a step early; `- with:` above `uses:` hides the step's opening. Written at once — a
+  `- with:` step whose `with:` holds a sequence — the walk back for the opening landed on the
+  sequence item *inside* the step, and a correctly configured action was reported as discarding its
+  caches. A step's opening is now required to be shallower than everything between it and the line
+  being read.
+
+  Its neighbour `lookup-only:` is in the table above rather than in the code, because what it does
+  to saving is a thing to measure and I have not — which is the difference between an unread input
+  and one whose behaviour was guessed at from the sentence beside it.
+
+  **A branch cannot count its own commits in a document it commits.** The pull request body said
+  *seventeen commits, sixteen corrections, eleven touching the test*. It had been written at the
+  seventeenth and published on top of the eighteenth, so all three numbers were short by one — the
+  same defect as the round before, where the body had been left ten rounds unread and was wrong by
+  nine. The second time it was not staleness: the arithmetic was true when written and the act of
+  publishing it made it false. So the body says no number now. A count of a moving thing, written
+  into that thing, is not a measurement that can hold, and rewriting it more carefully would only
+  have moved when it broke.
+
+  **And the same body halved the exposure it was summarising.** It said *"four `node20` actions
+  remain, two of them transitive"*. This entry says four **direct** `uses:` lines and, in its own
+  words, that the transitive pair *"is not counted in the four above"*: the measurement is six.
+  Somebody scoping the follow-up from the summary rather than the entry would have raised four and
+  left two — which is, to the action, the same harm this entry already records from the round where
+  the list named three and `action-gh-release` was the one missing.
+
+  **This guard has failed correct workflows twenty-three times, each for the same reason.** Every one was
+  found by writing the workflow a different legal way and running it, and every one was a rule
+  asserted from the single form sitting in front of the author:
+
+  | It refused | Because it assumed |
+  |---|---|
+  | a `cache-directories:` sequence above the option | a step ends at the first `- ` |
+  | a scheduled labeller or stale sweep | every workflow checks something out |
+  | `actions/checkout@v4` named in a `run:` line | any line naming a version runs it |
+  | a caching step written `- name:` then `uses:` | a step opens on its `uses:` line |
+  | `rust-cache` named in a `run:` line or a step title | any mention of the action is a cache |
+  | a `run: \|` body quoting a `- uses:` line | a block scalar's body is YAML |
+  | `actions/checkout@v10` | `@v1` names one major |
+  | a directory named `shared.yml` | a name ending `.yml` is a file |
+  | a `run: \|-2` body quoting a `- uses:` line | a header's indicators come in one order |
+  | `myorg/tools/actions/checkout@v4` | a name found anywhere in the value is the value |
+  | a step title, `if:` or `with:` quoting `uses:` beside a version | a line holding `uses:` is a step |
+  | a quoted `uses: "actions/checkout@v7"` | a value is written bare |
+  | `cache-on-failure:  true` with a second space | a setting is found by searching for its text |
+  | a quoted key, `- "uses": …` | only values are written in quotes |
+  | `Cache-On-Failure: true` | an input's name is written in the case the docs use |
+  | `- with:` written above the step's own `uses:` | a step's keys come in an order |
+  | `- with:` above `uses:` **and** a sequence inside that `with:` | a step opens at the nearest `- ` above it |
+  | a `matrix: include:` entry written `- { … }` | any `- {` in the file is a step |
+  | a flow mapping as an item of an input's value | the same |
+  | a block step whose `with:` is one flow mapping | an input block always has an empty value |
+  | a `with: {` whose brace closes on a later line | a flow mapping closes where it opens |
+  | `with:` with its flow mapping opening on the next line | a mapping opens beside its key |
+  | a `#` inside a quoted value, in a flow `with:` | a `#` anywhere on a line opens a comment |
+
+  The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
+  step it names, including the `attest-build-provenance` step at `release.yml:177` that this entry
+  argues about further up. Adding a name to the caching step — an ordinary edit — reported that a red
+  run's cache was being discarded when it was not. That sentence used to say *two paragraphs above*,
+  which was nine paragraphs out: a claim about where something sits in this document, made without
+  scrolling to it.
+
+  **The fifth is the sharpest to have written**, because this table already carried it, under a
+  sentence claiming every row was red-to-green measured. It was not: the fix that closed it for one
+  assertion was written up as covering the loop twenty lines above, and the loop was never run past
+  the workflow that proves it. A correct file passed one half of the function and failed the other
+  half of it. What the sentence was doing is what the whole entry is about — asserting the edge of
+  what was measured — so the sentence is gone and the rows above stand on the runs in the commit
+  that closed each one.
+
+  **And widening the loop was done to one half of the guard.** The version floor was taken from two
+  named files to the whole directory so a lane added later could not slip a `@v4` past it; the cache
+  floor was left reading `ci.yml`. A third workflow copying a bare `rust-cache` discarded its red
+  runs and the suite stayed green — which is exactly the copying the release-lane assertion beside it
+  says it exists to prevent. Both halves read every file now, and the checkout-exists floor is the
+  one thing scoped to the two lanes measured to have a checkout.
+
+  **The number this whole change is argued from was inherited, and it was wrong.** Every document
+  here said the episode cost *six* red runs, because the issue said so and named a run range. The
+  run history holds **nine** consecutive failures of `ci` on `main` — `31753883982` through
+  `31760121174`, no green between them — and the run the issue names as the first, `31752296629`,
+  returns 404, so nine is a floor rather than a count. It took until the ninth round for anyone to
+  run the one query that answers it, and the round before that had moved the figure *into* a
+  sentence beginning "Measured on this repository" while deleting a different borrowed number from
+  the same paragraph for being borrowed.
 
 - **What the OpenCode plugin knows about where a call runs, and what it does not.** The gate decides
   which run a write belongs to by the directory the write happens in, and OpenCode's plugin context
@@ -143,7 +481,7 @@ suite. Everything else here is prose held by review.
 
   **Nothing here has been tested against a live tracker**: no check in this suite reaches the
   network.
-- **Estigia cannot prove reviewers or blind judges ran.** `publish_review` mechanically freezes a
+- **Estigia cannot prove reviewers or blind judge panels ran.** `publish_review` mechanically freezes a
   coherent clean draft receipt over epoch, PR, head, base and manifest digest. `handoff_review`
   records that exact receipt before releasing one ownership epoch, and `review_verdict` records an
   immutable outcome crediting a reviewer that is not the publishing run. Either outcome resolves the
@@ -160,10 +498,13 @@ suite. Everything else here is prose held by review.
   Estigia asks for the declaration because an unstated review is one nobody can audit, not because
   it can check it.
 
-  None of it proves an independent context existed, that one or two judges read those bytes, that
-  two judges were blind to each other, or that their verdicts were honest. A marker can still be
-  forged by a collaborator acting outside Estigia. `single` and `two blind` remain operator-selected
-  review contracts, not observations the harness can make.
+  None of it proves an independent context existed or establishes panel size, concurrency,
+  independence, blindness, same-finding identity or quorum. It cannot prove one, two or five judges
+  read those bytes or that their verdicts were honest. A marker can still be forged by a collaborator
+  acting outside Estigia. `single`, `two blind` and `five blind` remain operator-selected review
+  contracts, not observations the harness can make. The enforced floor remains
+  one aggregate exact-receipt verdict: the transport has no per-judge marker and does not implement structured
+  multi-verdict adjudication.
 - **Estigia cannot make a person decide or start a turn.** For a named human-decision wait it can
   preserve the built branch, PR, receipt, checks, and evidence, and record `blocked` with the exact
   decision or exit condition and discharger before ownership is released. That durable record is not
@@ -896,6 +1237,12 @@ suite. Everything else here is prose held by review.
   `<project>/.git/config` both stand aside. Whether the fix is naming the file or widening what a
   worktree run covers is the question, and it is not this issue's.
 
+  Narrower since `start_branch` began recording the claim's checkout beside the worktree, which is
+  the entry further down about the gate covering two directories: Estigia's own tools no longer
+  *produce* a pointer carrying only a worktree. The residual is unchanged for a pointer that carries
+  one anyway — a run whose `repo_dir` genuinely is a worktree, or a hand-written record — so the
+  entry is narrowed rather than removed, and the question it ends on is still open.
+
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
   bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read
@@ -1078,6 +1425,46 @@ suite. Everything else here is prose held by review.
   publishing is how a run reaches review, and gating it on review is a deadlock. Boundaries the
   operator declared are never read as deliveries: Estigia cannot know whether a `make deploy`
   delivers or rehearses, and guessing would refuse a step it never understood.
+
+  One `git merge` is preparation rather than delivery: an exact literal `git merge --ff-only
+  <target>` (also accepting `--` before the target) may run from `in-progress` after the tracker
+  agrees when local Git proves all of it. The checkout is on a branch, its upstream is a canonical
+  `refs/remotes/*` ref, the worktree is clean, the target is that upstream's exact short or full
+  canonical name, or a full object ID of the length this repository's object format requires, and
+  ancestry runs from `HEAD` through the target to the upstream. An object ID must resolve to itself
+  as a commit; an annotated tag's ID does not qualify merely because it peels to one. Every proof Git
+  process removes every inherited `GIT_*` variable, and the exception is denied when any such
+  variable was present at entry. It is also denied when `BASH_ENV`, `ENV`, or Bash's exported `git`
+  function name (`BASH_FUNC_git%%`) is present, compared without case so Windows environment names
+  cannot evade the check. Those variables can make the shell execute a different `git` from the
+  direct process the proof resolved; `PATH` remains eligible because both resolve through the same
+  inherited path when no shell-only steering is present. The `GIT_*` check prevents the named
+  repository, object-store, index, shallow-file and configuration steering, while the three shell
+  checks prevent those specific initialization and inherited-function paths from substituting a
+  different command. It remains a `Boundary`, so it still pays the live tracker read and is recorded
+  in the decision ledger. The
+  verdict-to-bytes check runs first; a stale verdict is refused before this exception can skip only
+  the `out-of-phase` check, and only when the tracker answered exactly `in-progress`. `analysis`,
+  `ready` and `blocked` keep the ordinary refusal. Wrappers, compound commands, duplicate command
+  aliases, quoting, expansion, alternate git directories, extra flags or targets, detached branches,
+  dirty trees and any unreadable Git answer retain the existing refusal.
+
+  **The proof is local and can therefore be stale.** It never fetches and cannot establish that the
+  remote-tracking ref still matches the server. It proves only that the merge is safe relative to
+  the tracking ref already present in this checkout; a later fetch may reveal commits it did not
+  know about. Avoiding network access keeps the gate from changing repository state or turning every
+  local update into another remote boundary, and this limitation is recorded rather than hidden.
+
+  **The proof and the merge are not one atomic operation.** Attachment, upstream, cleanliness,
+  object resolution and ancestry are separate local Git processes, and the shell resolves and runs
+  the merge only after the gate returns. Another process can move a ref, change the worktree, or
+  replace what `PATH` resolves between any two of those reads, or between the final read and
+  execution. `--ff-only` still prevents a merge commit, but Estigia takes no repository or process
+  resolution lock and cannot claim the executed command saw the exact state or executable it proved.
+  The decision ledger has the same pre-existing resolution limit: its allow line names the
+  subject as `git merge` and the live claim, not whether this local proof or an ordinary reviewed
+  delivery admitted it. Changing that shared allow vocabulary would reach every gate consumer, so
+  this narrow exception records the residual ambiguity here instead.
 - **That narrowing is not configurable, and the asymmetry is the reason.** Every other axis here can
   be switched; this one only tightens, and a setting that could loosen a guard rail turns it into a
   preference. It is the same rule as the operator's boundary list, which adds and never removes.
@@ -1136,12 +1523,13 @@ suite. Everything else here is prose held by review.
   `tool.execute.before` never sees a call made by a subagent at all. So the second door closes
   nothing today: it is open for a caller that names a sub-agent, and there is not one yet. Where the
   question *is* asked, it sees exactly what the matcher wakes the hook for —
-  `Edit|Write|MultiEdit|NotebookEdit|Update|Bash` for Claude Code — and a tool outside that set is
+  `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task` for Claude Code. `Agent` and `Task` first
+  take the dedicated reserved-reviewer prelaunch path rather than repository classification. A tool outside that set is
   never offered to it. Measured against the list this crate itself cites as the case it exists for,
   a published `builder` sub-agent declaring `Read, Write, Edit, Glob, Grep, Bash`: three of the six are tools the
   gate can judge, and `Read`, `Glob` and `Grep` are never seen. What it can therefore refuse is a
   tool **in the matcher and not in the list** — `MultiEdit`, `NotebookEdit`, `Update` for that
-  builder — and not `WebFetch`, `WebSearch` or `Task`, which are the ones an operator narrowing a
+  builder — and not `WebFetch` or `WebSearch`, which are among those an operator narrowing a
   sub-agent usually means. The module says it *makes the author's policy true*; it makes the part
   of it that overlaps the gate true. Widening the matcher would close it and is the one thing the
   matcher exists to avoid — waking this process for every `Read` and every `Grep` is a cost paid
@@ -1151,8 +1539,9 @@ suite. Everything else here is prose held by review.
   epoch over PR/head/base/digest while the PR is confirmed draft. `release_ci` re-verifies the live
   `review` claim, globally latest receipt across runs, latest distinct accepted verdict marker,
   current draft PR and coherent clean target, then marks ready and reads back every outcome. The
-  gate asks for one accepted verdict; it does not enforce the two-blind policy's two-context
-  agreement, and it cannot tell one context from two. An identical-byte republish still invalidates old evidence because it creates a new
+  gate asks for one accepted aggregate verdict; it does not enforce the blind policies' panel size,
+  concurrency, independence, blindness, same-finding identity or quorum, and it cannot tell one
+  context from two or five. An identical-byte republish still invalidates old evidence because it creates a new
   epoch. GitHub has no atomic conditional-ready operation, so an out-of-band ready or push can bypass
   this cooperative order.
   The local delivery gate still checks the published head at the
@@ -1381,6 +1770,82 @@ suite. Everything else here is prose held by review.
 - **The gate covers two directories: the checkout the claim was made in, and the isolated one
   `start_branch` created.** A run that makes its own worktree by hand gets that write gated but the
   directory is never recorded, so subsequent writes there read as `Outside`. Use the tool.
+
+  *Two* is now what the isolation step writes, rather than what it assumes it will find. It used to
+  record only the worktree, which is correct whenever the claim already recorded a checkout and
+  wrong in the one shape nobody has to do anything strange to reach: a `claim` whose tracker write
+  lands and whose readback fails returns before the pointer effect runs, so no checkout is recorded
+  at all. From there the dispatch guard's own precondition — *a run that has claimed nothing has
+  nothing to be outside of* — lets `start_branch` through, and the worktree it writes becomes the
+  run's **only** covered directory. The server that made the call is then outside its own run, every
+  later call is refused `run-id-names-another-checkout`, and repeating it cannot help: an MCP
+  server's directory does not change when a child command uses another one. The only way out
+  observed in the field was restarting the agent from a path the workflow had just created, which
+  loses the live context and can mint a different runtime identity — the thing claim attribution
+  exists to prevent.
+
+  So `start_branch` fills the claim's checkout in as well as the worktree, and fills rather than
+  overwrites: a run whose claim named checkout A keeps A when a server standing in B calls under its
+  id, because refusing B for that run is exactly what the guard is for. It is not coverage
+  manufactured from a client's path — `start_branch` verifies the claim against the tracker from
+  that same directory before it creates anything. Measured by
+  `one_server_survives_the_isolation_it_created`, which drives one real server through both calls
+  down one pipe, because no per-call `GateContext` can pose *the same server asking twice* — and
+  which reads the pointer **between** the two, because the renewal below fills the same field by its
+  own route. Asserting only at the end measured the pair and not the halves: with the check at the
+  end, removing the isolation's line left that test green while the unit test beside it reddened.
+  Two independent reviewers of this change found that, separately, by deleting the line and running
+  the suite.
+
+  **And a run already in that state gets itself back**, which prevention does not do for the runs
+  that are in it. Two things were needed. The refusal above measured `covered().count()`, which is
+  the right question asked of the wrong field: the worktree is the *additional* directory a claim
+  covers, never the one that says where it was sworn. So a record holding only a worktree could
+  ground a refusal — and an incomplete record is not a narrower claim, it is an unknown one. It
+  measures `repo_dir` now, so a record that never named its checkout stands aside exactly as a run
+  that has claimed nothing does. Nothing is widened for a record that *does* name one: a foreign run
+  id, an unrecorded worktree and a directory outside the coverage are refused as before, and
+  standing aside is not clearance — the call still goes to the tracker, which is the only thing that
+  adjudicates.
+
+  Then the way back is a call the contract already requires. A renewal answered `ok` is the tracker
+  saying, at that moment, that this run is the live holder of this issue in this state — the same
+  fact `Swear` writes, from the same authority — so the pointer is completed from it rather than
+  left broken until something writes to the tracker again. It takes no tracker **write**, which is
+  what makes it reachable during exactly the outage that causes the damage: the state is produced by
+  a `claim` whose write lands and whose readback fails, and during that outage there is no write to
+  be had. Filled and never overwritten, and unable to invent authority, because a run that does not
+  hold the issue is refused before the pointer is touched. Measured by
+  `a_renewal_completes_a_record_the_tracker_has_just_agreed_with` and, as a process,
+  `a_stranded_run_recovers_from_the_checkout_it_is_running_in` — which asserts both halves, since a
+  run readmitted on an empty record is a run whose writes are still measured against nothing.
+
+  **What the renewal's fill accepts on no directory evidence.** `start_branch` at least performs its
+  tracker read from the directory it then records; `verify_claim` performs the same read and neither
+  read binds a directory at all, so the renewal takes the caller's working directory as coverage
+  because it is the only one on offer. Run ids are public — every claim comment carries one — so a
+  call under run A's id arriving from directory B, while `A.repo_dir` is unset, writes B into A's
+  record permanently, and A's own server is then refused in its real checkout. That is this defect
+  in mirror image, and it is not closed: what bounds it is that the shape it needs is the one the
+  isolation fix stops producing, and that the alternative — not filling on renewal — is the stranding
+  itself. Deleting the pointer is the only correction. Both reviewers raised it and neither blocked
+  on it.
+
+  **And the same rule is now spelled two ways.** The dispatch guard asks `repo_dir.is_some()`; the
+  write gate in `src/harness/mod.rs` still asks `covered().count() > 0` about the same question. The
+  semantic argued for above — *an incomplete record is unknown rather than narrow* — applies verbatim
+  to the second, where the direction of failure is the opposite: a worktree-only record makes writes
+  in the base checkout read as `Outside` and go ungated rather than refused. Not a regression, and
+  not made worse here, but this repository's own rule is that a fact written twice is a fact that
+  will disagree with itself, and these two now do. Unifying them is a change to the write gate and
+  belongs to its own issue.
+
+  What this does **not** do is repair the claim itself. The `claim` that failed this way cannot be
+  retried: its operation id is reused only when the pointer already names the issue, which is the
+  field the failed call did not write, so every retry mints a fresh key and the transport answers
+  `already-owned-by-different-operation` for as long as the claim is live. `release` with the exact
+  epoch and a fresh `claim` is still the only way to re-swear, and both are tracker writes. That is
+  a different defect with a different fix and it is filed separately.
 - **Two checkouts are told apart by resolving them, and by case when they will not resolve.**
   `canonicalize` answers with the real spelling on disk, so a live directory spelled two ways is one
   directory whatever the operator typed. A path this process cannot resolve has only its spelling
@@ -1419,12 +1884,13 @@ suite. Everything else here is prose held by review.
   once failed to pass the home directory to `state_root`, and the push-guard row vanished entirely
   under a tracker with no transport.
 
-  All ten rows that **can** break are now forced through the binary, on states any machine can be put
-  into: no skill; a contract taken from under a registered agent; a gate and a tool server whose
+  All eleven rows that **can** break are now forced through the binary, on states any machine can be
+  put into: no skill; a contract taken from under a registered agent; two installed roots whose
+  machine-wide rows disagree; a gate and a tool server whose
   settings name a binary that is not there; a checkout with no remote; a `pre-push` hook that is not
   text; an unreadable stand-down; an unreadable run pointer; a ledger line saying a call went through
   ungated; and, for the one row that is about the machine rather than the installation, a search path
-  with no `gh` on it. The eleventh, `transport`, has no broken state: it answers `ok`, or `skipped`
+  with no `gh` on it. The twelfth, `transport`, has no broken state: it answers `ok`, or `skipped`
   for a tracker with no executable.
 
   A row added later fails the same test until somebody forces it or says why they cannot.
@@ -1455,14 +1921,27 @@ suite. Everything else here is prose held by review.
 - **The harness holds tools for GitHub only.** `linear` and `trello` ship a binding the agent reads
   and no executable, so the tools refuse (`tracker-has-no-transport`) and the gate stands aside.
   Estigia can install and configure those trackers; it cannot enforce anything for them.
-- **`doctor` checks eleven things, not everything.** Skill, transport, `gh`
+- **`doctor` checks twelve things, not everything.** Skill, transport, `gh`
   authentication, a git remote, this repository's push guard, the contract each configured agent
-  reads, whether the gate each of them registers would actually run, whether the tool server each
+  reads, whether the root the gate decides in carries the rows those agents read, whether the gate
+  each of them registers would actually run, whether the tool server each
   of them registers would actually start, whether the operator has the gate standing down right
   now, whether every run pointer on the machine can still say what it holds, and whether any call
   has reached that gate and gone undecided. It does not check the tracker's labels, the board, or
   whether the repository it found is the one the issues live in.
-- **One of the eleven is about the past.** A call the gate cannot decide on — a payload it cannot
+- **A row about this machine can be made to differ per agent, and nothing refuses it.**
+  `config set --agent <slug>` refuses a `Scope::Everywhere` row and does not refuse a
+  `Scope::Machine` one, so `estigia config set --agent claude-code "Summary language" Spanish`
+  is accepted and reports success — on an adapter with a skill root of its own, where no read-back
+  catches it. **And once two roots disagree about one, no command makes them agree**: the plain
+  `config set` writes a machine row into the canonical contract alone, and the per-agent form cannot
+  hold one in a shared root, where `render_some_agent_rows` drops it and the command exits on its own
+  read-back. So `doctor`'s `canonical` row reports that divergence and names no way out, which is the
+  honest shape rather than a satisfying one. Measured on 2026-08-17 and 2026-08-18, on
+  `Summary language` and `Issue body language`, by four independent reviews of the check itself, each
+  running the named command verbatim. Filed as issue #62; which half is wrong — refuse the per-agent
+  write, or propagate the plain one — is not decided here, and nothing guesses at it.
+- **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it
   quietly. Both leave a ledger line, and `doctor` is what reads those lines back, because an

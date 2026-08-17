@@ -138,7 +138,8 @@ Publish the configured review target as a draft before moving work to review. Re
 review request when resuming; duplicate review targets split evidence. A reused ready PR must become
 draft and be read back before push. A new PR is created draft after a topic push that does not trigger
 CI. Capture epoch, PR, head, base and target digest, and require every independent verdict to identify
-that full receipt. After the configured single or two-blind review mode completes, `release_ci`
+that full receipt. After the configured single, two-blind or five-blind review mode completes,
+the orchestrator records one aggregate exact-receipt verdict and `release_ci`
 replays the globally latest recorded receipt, current draft PR and a clean target bounded by equal
 HEAD/status observations before marking the PR ready and reading the outcome back. A republish creates
 a new epoch and invalidates old evidence even for identical bytes; base movement also makes evidence
@@ -148,7 +149,8 @@ The repository compatibility requirement is explicit: PR CI starts on `ready_for
 push/open/synchronize/reopen. Estigia does not weakly parse arbitrary consumer YAML to claim this is
 true. GitHub cannot make the ready write conditional atomically, and out-of-band collaborators or
 repository workflows can bypass the order, start other CI, push new bytes, or forge comments. This is
-cooperative workflow ordering, not proof that judges ran and not malicious-collaborator authenticity.
+cooperative workflow ordering, not proof of panel size, concurrency, independence, blindness,
+same-finding identity or quorum, and not malicious-collaborator authenticity.
 
 The required CI set is the union of host-required checks and every applicable repository lane. Each
 expected lane must exist once and succeed; absent, skipped, queued, cancelled, or failed work is not

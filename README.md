@@ -119,10 +119,26 @@ estigia status                        # what is installed, where, and what runs 
 estigia doctor                        # skill, transport, gh, remote, guard — read-only
 ```
 
-`setup` installs three things: the skill an agent reads, a short directive in that agent's
+`setup` installs three core things: the skill an agent reads, a short directive in that agent's
 always-loaded instruction file, and the lifecycle hooks that make the authority mechanical rather than
 advisory. `--skill-only` stops before the directive. Estigia knows eleven agents; the hooks go into
-every one with an event able to refuse — ten of them, in five dialects.
+every one with an event able to refuse — ten of them, in five dialects. Every Claude Code setup also
+installs one static read-only `review-blind.md` definition with `model: inherit`, including when `Blind
+judges` is `single`. It is inert unless a launch supplies an active blind mode, exact publication
+receipt and criteria. The orchestrator passes the effective `judge` model and launches that same
+definition twice or five times; setup never creates numbered judge files. Direct `config set` and
+`config edit` writes do not mutate external definitions.
+
+`review-blind` is operator-owned and reserved. Before Claude Code's current `Agent` or legacy `Task`
+launches that exact role, Estigia walks from the launch cwd through the first `.git` repository root and
+recursively rejects any project `.claude/agents` definition that uses its filename or declares the same
+name in valid YAML. It then proves the canonical user definition is the only user-scoped definition with
+that identity and still matches the embedded text. Setup performs the same recursive user-tree
+uniqueness preflight before writing, revalidates at the reviewer boundary, and creates a fresh reviewer
+without replacing a path another actor won meanwhile. Missing, unreadable, changed, duplicated or
+ambiguous evidence refuses. Ordinary agents retain project-first resolution. A refused or unprovable
+judge does not count, and the fallback is a separate session or durable review handoff, never a smaller
+or serialized panel.
 
 The setup screen is the one path here that needs a person, and it ends by printing the commands that
 reproduce the same result without it:
@@ -130,8 +146,13 @@ reproduce the same result without it:
 ```
 the same result without the questions:
   estigia setup claude-code
-  estigia config set "Blind judges" "two blind"
+  estigia config set "Blind judges" "two blind" --agent claude-code
 ```
+
+`five blind` is the other panel choice. It requires five concurrent independent contexts over one
+immutable target and criteria, with 3-of-5 independently confirming the same severe finding before it
+blocks acceptance or authorizes automatic repair. The transport still records one aggregate exact-
+receipt verdict; it does not prove the panel ran.
 
 Whoever does this again — on another machine, in a script, in a container image — needs the spelling
 that does not ask questions, and the run that just worked is the only honest place to learn it. Those

@@ -3,7 +3,7 @@
 ## State shape
 
 `~/.estigia/lifecycle/provenance/<sha256>.json` records a digest of bytes observed through an executable
-pathname, compiled canonical SemVer, and a SHA-256 over `skill::FILES` plus `PHASE_AGENTS`. Its publisher
+pathname, compiled canonical SemVer, and a SHA-256 over `skill::FILES` plus `AGENT_DEFINITIONS`. Its publisher
 derives version/assets internally. The asset hash has a versioned domain, collection count, typed
 collection/path/content tags, per-collection counts, and eight-byte lengths.
 `~/.estigia/lifecycle/releases/<canonical-semver>.json` records one release observation; build metadata

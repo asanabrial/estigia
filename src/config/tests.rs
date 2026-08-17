@@ -975,6 +975,17 @@ fn the_judge_policy_survives_a_round_trip() {
             "`{wrong}` was accepted"
         );
     }
+    let setting = Setting::Judges;
+    assert!(setting.answers().choices.contains(&"five blind"));
+    assert_eq!(Config::default().judges, Judges::Single);
+    let mut alias = Config::default();
+    setting.apply(&mut alias, "five").expect("the alias parses");
+    assert_eq!(alias.judges, Judges::FiveBlind);
+    assert!(
+        setting
+            .means("five blind")
+            .is_some_and(|meaning| meaning.contains("3-of-5"))
+    );
 }
 
 #[test]

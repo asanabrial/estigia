@@ -24,7 +24,7 @@
 
 use std::path::{Path, PathBuf};
 
-use estigia::skill::{CONTRACT, FILES, PHASE_AGENTS, SkillFile};
+use estigia::skill::{AGENT_DEFINITIONS, CONTRACT, FILES, SkillFile};
 
 // This is a historical migration ledger, not a runtime document. Upstream's
 // payload suite made the same sole exception.
@@ -60,7 +60,7 @@ fn no_test_material_is_installed_beside_the_contract() {
 
 #[test]
 fn every_shipped_companion_is_reachable_from_another_shipped_file() {
-    let shipped = FILES.iter().chain(PHASE_AGENTS);
+    let shipped = FILES.iter().chain(AGENT_DEFINITIONS);
     let mut unreachable = shipped
         .clone()
         .filter(|target| target.path != CONTRACT)
@@ -69,7 +69,7 @@ fn every_shipped_companion_is_reachable_from_another_shipped_file() {
                 source.path != target.path
                     && (links_from(source).iter().any(|link| link == target.path)
                         || selected_binding_is_named(source, target)
-                        || phase_agent_is_named(source, target))
+                        || agent_definition_is_named(source, target))
             })
         })
         .map(|file| file.path)
@@ -136,7 +136,7 @@ fn selected_binding_is_named(source: &SkillFile, target: &SkillFile) -> bool {
             .is_some_and(|name| source.contents.contains(&format!("`{name}`")))
 }
 
-fn phase_agent_is_named(source: &SkillFile, target: &SkillFile) -> bool {
+fn agent_definition_is_named(source: &SkillFile, target: &SkillFile) -> bool {
     target.path.starts_with("agents/")
         && target
             .path
@@ -183,4 +183,93 @@ fn the_changelog_is_readable_by_the_tool_estigia_ships() {
         Some(true),
         "the entry for {version} is missing or empty: {answer}"
     );
+}
+
+#[test]
+fn the_blind_panel_policy_requires_same_finding_quorum_without_erasing_dissent() {
+    let policy = std::fs::read_to_string(repository_root().join("skill/policies/blind-judges.md"))
+        .expect("the blind-judge policy ships");
+    let policy = policy
+        .lines()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase();
+
+    for required in [
+        "five independent reviewer contexts",
+        "contexts concurrently",
+        "identical immutable target and criteria",
+        "3-of-5",
+        "same severe finding",
+        "one or two confirmations",
+        "suspicions",
+        "preserve dissent",
+        "ambiguous finding identities do not aggregate",
+        "review-blind` is operator-owned",
+        "invalidates the panel",
+        "a refused or unprovable launch contributes no judge",
+        "never silently reduce or serialize the panel",
+    ] {
+        assert!(policy.contains(required), "missing {required:?}");
+    }
+}
+
+#[test]
+fn one_stable_blind_reviewer_definition_is_in_the_agent_manifest_not_the_skill() {
+    let root = repository_root();
+    assert_eq!(estigia::skill::REVIEW_AGENT.path, "agents/review-blind.md");
+    assert!(
+        !estigia::skill::FILES
+            .iter()
+            .any(|file| file.path == estigia::skill::REVIEW_AGENT.path)
+    );
+    let reviewer = estigia::skill::REVIEW_AGENT.contents;
+    for clause in ["model: inherit", "inert unless", "exact publication"] {
+        assert!(reviewer.contains(clause));
+    }
+    assert!(!reviewer.contains("{{"));
+
+    let mut definitions: Vec<String> = std::fs::read_dir(root.join("skill").join("agents"))
+        .expect("skill/agents reads")
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    definitions.sort();
+    let expected = [
+        "review-blind.md",
+        "sdd-design.md",
+        "sdd-explore.md",
+        "sdd-propose.md",
+        "sdd-spec.md",
+        "sdd-tasks.md",
+    ];
+    assert_eq!(definitions, expected);
+    let mut manifest: Vec<_> = estigia::skill::AGENT_DEFINITIONS
+        .iter()
+        .map(|file| file.path.strip_prefix("agents/").expect("an agent path"))
+        .collect();
+    manifest.sort();
+    assert_eq!(manifest, expected);
+    let mut phases: Vec<_> = estigia::skill::PHASE_AGENTS
+        .iter()
+        .map(|file| file.path.strip_prefix("agents/").expect("an agent path"))
+        .collect();
+    phases.sort();
+    let expected_phases: Vec<_> = expected
+        .iter()
+        .copied()
+        .filter(|name| name.starts_with("sdd-"))
+        .collect();
+    assert_eq!(phases, expected_phases);
+    for file in estigia::skill::AGENT_DEFINITIONS {
+        assert_eq!(
+            std::fs::read_to_string(root.join("skill").join(file.path)).expect("an agent reads"),
+            file.contents,
+            "{} differs from its embedded bytes",
+            file.path
+        );
+    }
+    let contract = std::fs::read_to_string(root.join("skill/SKILL.md")).expect("the skill ships");
+    assert!(contract.contains("passes the effective `judge` model"));
+    assert!(contract.contains("identical exact receipt and criteria"));
 }

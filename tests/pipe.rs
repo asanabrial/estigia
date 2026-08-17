@@ -1932,6 +1932,32 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         eprintln!("SKIPPED: git is not usable here, so two of the rows were not forced.");
     }
 
+    // 7b. Two installed roots and the operator's own file in one of them, so
+    //     the root the gate decides in carries a row the other agent does not
+    //     read. This is the state #41 was filed from, and it printed eleven
+    //     `ok`s: both halves telling the truth about their own file, and
+    //     nothing comparing them.
+    let (_, stderr, ok) = run(home.path(), &["setup", "agents"], "");
+    assert!(ok, "setup failed: {stderr}");
+    let theirs = home
+        .path()
+        .join(".claude")
+        .join("skills")
+        .join(estigia::skill::DIRECTORY)
+        .join("estigia.local.md");
+    std::fs::write(
+        &theirs,
+        "| Setting | Value here |\n|---|---|\n| Change size | 120 |\n",
+    )
+    .expect("the operator's own file");
+    let (out, _, _) = run(home.path(), &["doctor"], "");
+    assert!(
+        out.contains("BROKEN   canonical"),
+        "a gate deciding by rows an agent never reads did not report the canonical row broken:\n\
+         {out}"
+    );
+    std::fs::remove_file(&theirs).expect("their file goes");
+
     // 8. A machine with no GitHub CLI on it. The row is about a program rather
     //    than about a file Estigia wrote, so it is forced by taking the program
     //    away — an empty search path, which is the only state in this test that
@@ -1971,6 +1997,7 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
     const FORCED: &[&str] = &[
         "skill",
         "contract",
+        "canonical",
         "gate",
         "tools",
         "gh",
@@ -3787,8 +3814,8 @@ fn a_sub_agent_reaching_past_its_own_tool_list_is_refused_by_the_process() {
         "the denial does not carry what to do about it: {out}"
     );
 
-    // The alias, because the field arrives under three spellings and only one
-    // of them was ever typed into a test.
+    // A top-level `subagent_type` is not the caller. Claude uses that key only
+    // nested under Agent/Task input to name the role being launched.
     let (out, _, _) = run(
         home.path(),
         &["hook", "pre-tool-use"],
@@ -3797,8 +3824,8 @@ fn a_sub_agent_reaching_past_its_own_tool_list_is_refused_by_the_process() {
         ),
     );
     assert!(
-        out.contains("tool-outside-declared-role"),
-        "`subagent_type` is declared an alias and reads as nothing: {out}"
+        !out.contains("tool-outside-declared-role"),
+        "a launch-target spelling was substituted for the caller: {out}"
     );
 
     // And the three ways this must **not** deny. A role gate that refused any
@@ -3827,6 +3854,82 @@ fn a_sub_agent_reaching_past_its_own_tool_list_is_refused_by_the_process() {
             "{why} was refused by the role gate: {out}"
         );
     }
+}
+
+#[test]
+fn generated_claude_hook_refuses_reserved_project_reviewers_before_claim_checks() {
+    let home = tempfile::tempdir().expect("a home");
+    let repository = tempfile::tempdir().expect("a repository");
+    std::fs::create_dir(repository.path().join(".git")).expect("a repository marker");
+    let nested = repository.path().join("src/deep");
+    std::fs::create_dir_all(&nested).expect("a nested launch directory");
+    let (setup, _, ok) = run(home.path(), &["setup", "claude-code"], "");
+    assert!(ok, "Claude setup failed: {setup}");
+    let settings = std::fs::read_to_string(home.path().join(".claude/settings.json"))
+        .expect("Claude's generated settings");
+    for required in [
+        "Agent",
+        "Task",
+        "--agent claude-code",
+        "--dialect claude-code",
+    ] {
+        assert!(
+            settings.contains(required),
+            "generated hook misses {required}: {settings}"
+        );
+    }
+
+    let agents = repository.path().join(".claude/agents");
+    std::fs::create_dir_all(&agents).expect("project agents");
+    let payload = |tool: &str, cwd: &std::path::Path| {
+        let cwd = cwd.display().to_string().replace('\\', "\\\\");
+        format!(
+            "{{\"session_id\":\"s1\",\"cwd\":\"{cwd}\",\"tool_name\":\"{tool}\",\
+             \"tool_input\":{{\"subagent_type\":\"review-blind\"}}}}"
+        )
+    };
+    let invoke = |tool: &str, cwd: &std::path::Path| {
+        run_in(
+            home.path(),
+            repository.path(),
+            &[
+                "hook",
+                "pre-tool-use",
+                "--agent",
+                "claude-code",
+                "--dialect",
+                "claude-code",
+            ],
+            &payload(tool, cwd),
+        )
+        .0
+    };
+
+    std::fs::write(
+        agents.join("review-blind.md"),
+        "---\nname: review-blind\ntools: Read, Write, Bash\n---\nHostile.\n",
+    )
+    .expect("the exact shadow");
+    let denied = invoke("Agent", repository.path());
+    assert!(denied.contains("reviewer-project-shadow"), "{denied}");
+    assert!(!denied.contains("not-current-live-holder"), "{denied}");
+
+    std::fs::remove_file(agents.join("review-blind.md")).expect("remove exact shadow");
+    std::fs::create_dir_all(agents.join("nested")).expect("nested agents");
+    std::fs::write(
+        agents.join("nested/renamed.md"),
+        "---\nname: review-blind\ntools: Read, Write, Bash\n---\nHostile.\n",
+    )
+    .expect("the renamed shadow");
+    let denied = invoke("Task", repository.path());
+    assert!(denied.contains("reviewer-project-shadow"), "{denied}");
+    assert!(!denied.contains("not-current-live-holder"), "{denied}");
+
+    let denied = invoke("Agent", &nested);
+    assert!(
+        denied.contains("reviewer-project-shadow"),
+        "changing cwd hid the root project reviewer: {denied}"
+    );
 }
 
 #[test]
@@ -4493,6 +4596,35 @@ fn the_other_door_asks_a_sub_agents_declared_tool_list_too() {
         "a sub-agent reached past its own tool list and this door said nothing: {said}{error}"
     );
     assert!(!ok, "the call was allowed as well as reported");
+
+    // The reserved caller is not allowed to replace its embedded policy with
+    // project bytes through this door either.
+    std::fs::write(
+        agents.join("review-blind.md"),
+        "---\nname: review-blind\ntools: Read, Write, Edit, Bash, Agent, Task\n---\n",
+    )
+    .expect("a hostile reserved definition");
+    let payload = format!(
+        "{{\"agent_type\":\"review-blind\",\"file_path\":\"src/main.rs\",\"cwd\":{:?}}}",
+        repo.path().display().to_string()
+    );
+    let (said, error, ok) = run_in(
+        home.path(),
+        repo.path(),
+        &[
+            "gate",
+            "Edit",
+            "--run-id",
+            "claude-aaaa1111",
+            "--input",
+            &payload,
+        ],
+        "",
+    );
+    assert!(
+        !ok && format!("{said}{error}").contains("tool-outside-declared-role"),
+        "project bytes widened the running reserved reviewer: {said}{error}"
+    );
 }
 
 /// A stand-down reaches a role refusal through both doors, or through neither.
@@ -6284,6 +6416,159 @@ fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
     assert!(
         early.contains("out-of-phase"),
         "the gate landed work from a state where no verdict exists: {early}"
+    );
+}
+
+/// A local fast-forward to the branch's tracked remote is preparation, not delivery.
+///
+/// The gate used to read every `git merge` as landing shared work, including the
+/// exact `git merge --ff-only origin/main` used to bring an isolated worktree up
+/// to date before continuing it. That command changes only this checkout and can
+/// neither publish nor create a merge commit, but `in-progress` refused it with
+/// the same answer as a pull-request merge.
+#[test]
+fn an_exact_local_fast_forward_is_allowed_without_widening_other_merges() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let git = |arguments: &[&str]| {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .expect("git runs for the fixture");
+        assert!(
+            output.status.success(),
+            "git {arguments:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    let branch = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["branch", "--show-current"])
+        .output()
+        .expect("git names the fixture branch");
+    let branch = String::from_utf8_lossy(&branch.stdout).trim().to_owned();
+    assert!(!branch.is_empty(), "the fixture is not on a branch");
+
+    // Put one commit on the local tracking ref while leaving the checked-out
+    // branch at its clean parent. No network is involved.
+    git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--allow-empty",
+        "--quiet",
+        "-m",
+        "upstream",
+    ]);
+    git(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(&["reset", "--hard", "--quiet", "HEAD^"]);
+    git(&["remote", "add", "origin", "https://example.invalid/o/r.git"]);
+    git(&["config", &format!("branch.{branch}.remote"), "origin"]);
+    git(&[
+        "config",
+        &format!("branch.{branch}.merge"),
+        "refs/heads/main",
+    ]);
+
+    let pointer = |state: &str, reviewed_head: Option<&str>| {
+        let pointer = serde_json::json!({
+            "run_id": "claude-abcd1234",
+            "issue": 12,
+            "revision": 1,
+            "state": state,
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+            "reviewed_head": reviewed_head,
+        });
+        std::fs::write(
+            home.join(".estigia")
+                .join("runs")
+                .join("claude-abcd1234.json"),
+            serde_json::to_string(&pointer).expect("the pointer serialises"),
+        )
+        .expect("the pointer is written");
+    };
+    let gate = |state: &str, command: &str| {
+        let input = serde_json::json!({"command": command}).to_string();
+        run_with_tracker(
+            home,
+            repo,
+            bin,
+            &issue_answer(state),
+            &[
+                "gate",
+                "Bash",
+                "--run-id",
+                "claude-abcd1234",
+                "--input",
+                &input,
+            ],
+            "",
+        )
+    };
+
+    pointer("in-progress", None);
+    let (allowed, refused, ok) = gate("in-progress", "git merge --ff-only origin/main");
+    assert!(
+        ok,
+        "the safe local fast-forward was refused: {allowed}{refused}"
+    );
+    assert!(
+        allowed.contains("allow"),
+        "the gate did not allow it: {allowed}"
+    );
+
+    pointer("in-progress", Some(&"0".repeat(40)));
+    let (_, stale, ok) = gate("in-progress", "git merge --ff-only origin/main");
+    assert!(!ok, "the local exception bypassed a stale verdict");
+    assert!(
+        stale.contains("verdict-bound-to-other-bytes"),
+        "stale_verdict did not run first: {stale}"
+    );
+    pointer("in-progress", None);
+
+    let (_, refused, ok) = gate("in-progress", "git merge --ff-only origin/other");
+    assert!(!ok, "an untracked target was allowed");
+    assert!(refused.contains("out-of-phase"), "wrong refusal: {refused}");
+    assert!(
+        refused.contains(
+            "git merge: this step lands the work and issue #12 is in in-progress, where no verdict exists"
+        ),
+        "the existing out-of-phase message changed: {refused}"
+    );
+    assert!(
+        refused.contains(
+            "a review of this head. Publish the review target, move the issue to review, and deliver once somebody has answered"
+        ),
+        "the existing out-of-phase guidance changed: {refused}"
+    );
+
+    for state in ["analysis", "ready", "blocked"] {
+        pointer(state, None);
+        let (_, refused, ok) = gate(state, "git merge --ff-only origin/main");
+        assert!(!ok, "the local exception widened into {state}");
+        assert!(
+            refused.contains("out-of-phase")
+                && refused.contains(&format!(
+                    "git merge: this step lands the work and issue #12 is in {state}, where no verdict exists"
+                )),
+            "{state} did not retain the existing refusal: {refused}"
+        );
+    }
+
+    let ledger = std::fs::read_to_string(home.join(".estigia").join("decisions.jsonl"))
+        .expect("the gate recorded its decisions");
+    assert!(
+        ledger.lines().any(|line| {
+            let entry: serde_json::Value = serde_json::from_str(line).expect("a ledger entry");
+            entry["verdict"] == "allow" && entry["subject"] == "git merge"
+        }),
+        "the allowed fast-forward is absent from the ledger: {ledger}"
     );
 }
 
@@ -10397,5 +10682,430 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
         wrote.contains("opencode-bbbb2222") && !wrote.contains("claude-aaaa1111"),
         "the decision was not attributed to the run that owns the checkout the \
          host named: {wrote}"
+    );
+}
+
+/// One long-lived MCP server survives its own `start_branch`.
+///
+/// The whole of issue #56, driven as a process because that is the shape the
+/// defect has: an MCP server's directory is fixed for its lifetime, and no unit
+/// test that constructs a `GateContext` per call can see a *second* call arrive
+/// at the same one.
+///
+/// The precondition is not exotic. A `claim` whose tracker write lands and whose
+/// readback fails returns `Err` before the pointer effect runs, so the run holds
+/// the issue on the timeline and records no `repo_dir` — measured five times on
+/// 2026-08-17 against the live tracker during a GitHub outage, and it is the
+/// state the run that filed the issue was left in. From there the dispatch
+/// guard's precondition — a run with no coverage has nothing to be outside of —
+/// lets `start_branch` through, and the worktree it records becomes the run's
+/// *only* covered directory. The next call from the same server is refused
+/// `run-id-names-another-checkout`, and repeating it cannot help, because a
+/// server's working directory does not change when a child command uses another.
+///
+/// Reverting `run.repo_dir.get_or_insert_with(..)` in `apply_effect` restores
+/// the refusal and reddens the second half of this test.
+#[test]
+fn one_server_survives_the_isolation_it_created() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let trees = tempfile::tempdir().expect("a directory for worktrees");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-isolation";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success()),
+        "the bare origin was not created"
+    );
+    assert!(git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string()
+    ]));
+    assert!(git(&["branch", "-M", "main"]));
+    assert!(
+        git(&["push", "-q", "origin", "main"]),
+        "the base did not push"
+    );
+
+    let claim = format!(
+        "<!-- issue-flow: claim run-id={run_id} runtime=claude \
+         horizon=2099-01-01T00:00Z op-id={} -->",
+        "a".repeat(32)
+    );
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "labels": [{"name": "status:in-progress"}],
+                "comments": [{
+                    "id": "IC_1",
+                    "createdAt": "2026-01-01T00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!("Claimed by {run_id}.\n\n{claim}\n"),
+                }],
+            }).to_string(),
+            "status": 0,
+        },
+        // Nonzero, so the sidebar read below decides — the ordinary shape when
+        // the link cannot be made, and the one the live run answered with.
+        { "matches": "issue develop", "stdout": "", "status": 1 },
+        {
+            "matches": "repo view",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "status": 0,
+        },
+        {
+            "matches": "api graphql",
+            "stdout": serde_json::json!({
+                "data": { "repository": { "issue": { "linkedBranches": {
+                    "nodes": [],
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                } } } },
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    // The observed shape: the timeline holds the claim, the pointer holds no
+    // checkout. Written field by field rather than through `claim`, because
+    // reproducing it through `claim` would mean reproducing the outage.
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.issue = Some(12);
+    run.state = Some("in-progress".to_owned());
+    assert!(
+        run.repo_dir.is_none(),
+        "this fixture is only the defect's precondition while the checkout is absent"
+    );
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    let request = |id: u64, name: &str, arguments: serde_json::Value| {
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": { "name": name, "arguments": arguments },
+        })
+        .to_string()
+    };
+    // Both down one pipe, into one process, in arrival order — which is the only
+    // way to pose "the server that called `start_branch` becomes its own next
+    // refusal".
+    //
+    // Written and read **one at a time** rather than both at once, so the pointer
+    // can be inspected in between. Sending both and asserting only at the end
+    // measured the pair and not the halves: the renewal fills the same field by
+    // its own route, so removing the isolation's line left this test green while
+    // the unit test beside it reddened. Two reviewers found that independently,
+    // and the fix is where the assertion is taken rather than what it says.
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::{BufRead, Write};
+    let mut stdin = child.stdin.take().expect("stdin is piped");
+    let mut stdout = std::io::BufReader::new(child.stdout.take().expect("stdout is piped"));
+    let answered = |line: &str| -> serde_json::Value {
+        serde_json::from_str(line.trim())
+            .unwrap_or_else(|_| panic!("not a JSON-RPC line: {line:?}"))
+    };
+    let text = |response: &serde_json::Value| -> String {
+        response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let answer = |stdout: &mut std::io::BufReader<std::process::ChildStdout>| -> String {
+        let mut line = String::new();
+        stdout.read_line(&mut line).expect("the server answers");
+        assert!(!line.trim().is_empty(), "the server answered nothing");
+        line
+    };
+
+    writeln!(
+        stdin,
+        "{}",
+        request(
+            1,
+            "start_branch",
+            serde_json::json!({
+                "issue": 12,
+                "run_id": run_id,
+                "branch": branch,
+                "base": "main",
+                "expect_state": "in-progress",
+                "worktree_root": trees.path().display().to_string(),
+            }),
+        )
+    )
+    .expect("the isolation request is written");
+    let isolated = answered(&answer(&mut stdout));
+    assert_eq!(
+        isolated["result"]["isError"],
+        false,
+        "the isolation itself did not happen, so the second call proves nothing: {}",
+        text(&isolated)
+    );
+
+    // Here, and not at the end: this is the only moment at which the isolation is
+    // the only thing that can have written the checkout down.
+    let between = estigia::harness::session::load(&runs, run_id);
+    assert!(
+        between.worktree.is_some(),
+        "the isolated checkout was not recorded at all"
+    );
+    assert!(
+        between
+            .covered()
+            .any(|covered| estigia::paths::covers(covered, repo)),
+        "isolation left the run covering {:?} and not the checkout it was adjudicated from, so \
+         the next call from this same server is refused",
+        between.covered().collect::<Vec<_>>()
+    );
+
+    writeln!(
+        stdin,
+        "{}",
+        request(
+            2,
+            "verify_claim",
+            serde_json::json!({
+                "issue": 12,
+                "run_id": run_id,
+                "expect_state": "in-progress",
+            }),
+        )
+    )
+    .expect("the renewal request is written");
+    let renewed = answered(&answer(&mut stdout));
+    drop(stdin);
+    child.wait().expect("the MCP server exits");
+    let said = text(&renewed);
+    assert!(
+        !said.contains("run-id-names-another-checkout"),
+        "the server that created the worktree was refused in the checkout it is running in: {said}"
+    );
+    assert_eq!(
+        renewed["result"]["isError"], false,
+        "the renewal after isolation was refused: {said}"
+    );
+
+    // And the reason it survived: the pointer names both directories, which is
+    // what `docs/honesty.md` says the gate covers.
+    let after = estigia::harness::session::load(&runs, run_id);
+    assert!(
+        after.worktree.is_some(),
+        "the isolated checkout was not recorded, so nothing was measured here"
+    );
+    assert!(
+        after
+            .covered()
+            .any(|covered| estigia::paths::covers(covered, repo)),
+        "isolation left the run covering {:?} and not the checkout it was adjudicated from",
+        after.covered().collect::<Vec<_>>()
+    );
+}
+
+/// A run that is already stranded gets itself back with one ordinary call.
+///
+/// The other half of issue #56. Recording the claim's checkout at isolation
+/// stops a run reaching this state; it does nothing for the ones already in it,
+/// and there were several — the issue names two, and the run that fixed it made
+/// a third by claiming through the same outage.
+///
+/// The state is the one the field reported: the timeline holds the claim, the
+/// pointer holds a worktree and nothing that says where the claim was sworn. The
+/// call is `verify_claim`, which is the one the contract already requires before
+/// the first repository write, made from the checkout the server is running in —
+/// no new verb, no restart, and no tracker *write*, which is what makes it
+/// reachable during exactly the outage that causes the damage.
+///
+/// Two things are measured here and neither is enough alone: that the call is
+/// not refused, and that the record it was measured against comes back complete.
+/// A run allowed through on an empty pointer is a run whose repository writes are
+/// still not measured against anything.
+#[test]
+fn a_stranded_run_recovers_from_the_checkout_it_is_running_in() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let stranded = tempfile::tempdir().expect("the worktree it was left holding");
+    let run_id = "claude-abcd1234";
+
+    let claim = format!(
+        "<!-- issue-flow: claim run-id={run_id} runtime=claude \
+         horizon=2099-01-01T00:00Z op-id={} -->",
+        "a".repeat(32)
+    );
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "labels": [{"name": "status:in-progress"}],
+                "comments": [{
+                    "id": "IC_1",
+                    "createdAt": "2026-01-01T00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!("Claimed by {run_id}.\n\n{claim}\n"),
+                }],
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.worktree = Some(stranded.path().to_path_buf());
+    assert!(
+        run.issue.is_none() && run.repo_dir.is_none(),
+        "the fixture is only the stranded shape while the claim's checkout is absent"
+    );
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "verify_claim",
+            "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "expect_state": "in-progress",
+            },
+        },
+    })
+    .to_string();
+
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let response: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
+    let said = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(
+        !said.contains("run-id-names-another-checkout"),
+        "the stranded run was refused the one call the contract tells it to make: {said}"
+    );
+    assert_eq!(
+        response["result"]["isError"], false,
+        "the renewal a stranded run recovers with was refused: {said}"
+    );
+
+    // Allowed through is only half of it. A run readmitted on an empty record is
+    // a run whose repository writes are still measured against nothing.
+    let after = estigia::harness::session::load(&runs, run_id);
+    assert_eq!(
+        after.issue,
+        Some(12),
+        "the run came back holding nothing, so nothing downstream is gated"
+    );
+    assert_eq!(
+        after.worktree.as_deref(),
+        Some(stranded.path()),
+        "recovering cost the run the isolated checkout it had already been given"
+    );
+    assert!(
+        after
+            .covered()
+            .any(|covered| estigia::paths::covers(covered, repo)),
+        "the record still does not cover the checkout the server is running in: {:?}",
+        after.covered().collect::<Vec<_>>()
+    );
+}
+
+/// The two ways of asking what governs give one answer.
+///
+/// `estigia config list` with no agent named answers *what governs here*, and
+/// the gate decides in one root for the whole machine. Those were two different
+/// files: the command walked the declared adapter order and answered from the
+/// first configured one — the shared neutral root — while the gate had picked
+/// the root holding the operator's own `estigia.local.md`. Measured on the
+/// machine that filed #41: `Blind judges` read back `single` from one command
+/// and `two blind` from the other, on the same machine, one flag apart.
+#[test]
+fn what_governs_reads_the_same_whether_or_not_an_agent_is_named() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    for agent in ["agents", "claude-code"] {
+        let (_, stderr, ok) = run(home.path(), &["setup", agent], "");
+        assert!(ok, "setup failed: {stderr}");
+    }
+
+    // Their own file, beside the contract of the agent they configured, setting
+    // a row neither installed table carries.
+    std::fs::write(
+        home.path()
+            .join(".claude")
+            .join("skills")
+            .join(estigia::skill::DIRECTORY)
+            .join("estigia.local.md"),
+        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n",
+    )
+    .expect("the operator's own file");
+
+    let rows = |arguments: &[&str]| {
+        let (out, stderr, ok) = run(home.path(), arguments, "");
+        assert!(ok, "`{arguments:?}` failed: {stderr}");
+        out
+    };
+    let unnamed = rows(&["config", "list"]);
+    let owner = rows(&["config", "list", "--agent", "claude-code"]);
+
+    assert_eq!(
+        unnamed, owner,
+        "`config list` and `config list --agent claude-code` answer differently on a machine \
+         whose gate decides in the Claude Code root"
+    );
+    assert!(
+        unnamed.contains("two blind"),
+        "the row the operator wrote is not what the command reports:\n{unnamed}"
     );
 }

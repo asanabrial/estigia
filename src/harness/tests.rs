@@ -306,6 +306,256 @@ fn a_boundary_is_recognised_through_spacing_and_case() {
 }
 
 #[test]
+fn only_one_literal_fast_forward_command_preserves_a_target_for_proof() {
+    for command in [
+        "git merge --ff-only origin/main",
+        "git\tmerge  --ff-only\t-- origin/main",
+    ] {
+        let (action, how) = classify("Bash", &json!({"command": command}));
+        assert_eq!(how, Sensitivity::Boundary, "{command}");
+        let Action::Boundary {
+            command: boundary,
+            local_fast_forward_target,
+        } = action
+        else {
+            panic!("{command} stopped being a boundary");
+        };
+        assert_eq!(boundary, "git merge");
+        assert_eq!(local_fast_forward_target.as_deref(), Some("origin/main"));
+    }
+
+    for command in [
+        "git merge --ff-only origin/main && echo unsafe",
+        "git merge --ff-only origin/main; echo unsafe",
+        "git merge --ff-only origin/main\ngit status",
+        "sudo git merge --ff-only origin/main",
+        "git -C elsewhere merge --ff-only origin/main",
+        "git --git-dir=.git merge --ff-only origin/main",
+        "git -c advice.detachedHead=false merge --ff-only origin/main",
+        "git merge --ff-only --no-edit origin/main",
+        "git merge --ff-only origin/main other",
+        "git merge --ff-only 'origin/main'",
+        "git merge --ff-only $UPSTREAM",
+        "git merge --ff-only origin/{main}",
+        "git merge --ff-only -topic",
+    ] {
+        let (action, how) = classify("Bash", &json!({"command": command}));
+        assert_eq!(how, Sensitivity::Boundary, "{command}");
+        let Action::Boundary {
+            local_fast_forward_target,
+            ..
+        } = action
+        else {
+            panic!("{command} stopped being a boundary");
+        };
+        assert_eq!(
+            local_fast_forward_target, None,
+            "{command} retained metadata that could bypass out-of-phase"
+        );
+    }
+
+    let (array, how) = classify(
+        "Bash",
+        &json!({"command": ["git", "merge", "--ff-only", "origin/main"]}),
+    );
+    assert_eq!(how, Sensitivity::Boundary);
+    assert!(matches!(
+        array,
+        Action::Boundary {
+            local_fast_forward_target: None,
+            ..
+        }
+    ));
+
+    // Each of these carries more than one key that normalises to a command
+    // argument. Classification must still see every boundary named anywhere in
+    // the ambiguous payload, while no one value may donate proof metadata for
+    // another value's classification.
+    for input in [
+        json!({
+            "command": "git merge --ff-only origin/main",
+            "commandLine": "git status",
+        }),
+        json!({
+            "command": "git status",
+            "command_line": "git merge --ff-only origin/main",
+        }),
+        json!({
+            "commandLine": "git merge --ff-only origin/main",
+            "command_line": "git merge --ff-only origin/main",
+        }),
+        json!({
+            "command": ["git", "merge", "--ff-only", "origin/main"],
+            "commandLine": "git status",
+        }),
+        json!({
+            "command": ["git", "status"],
+            "commandLine": ["git", "merge", "--ff-only", "origin/main"],
+        }),
+    ] {
+        let (action, how) = classify("Bash", &input);
+        assert_eq!(
+            how,
+            Sensitivity::Boundary,
+            "ambiguous payload escaped: {input}"
+        );
+        assert!(
+            matches!(
+                action,
+                Action::Boundary {
+                    ref command,
+                    local_fast_forward_target: None,
+                } if command == "git merge"
+            ),
+            "ambiguous payload retained proof metadata: {input} -> {action:?}"
+        );
+    }
+}
+
+#[test]
+fn local_fast_forward_proof_fails_closed_on_repository_state() {
+    let repo = tempfile::tempdir().expect("a temporary repository");
+    let git = |arguments: &[&str]| -> String {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .args(arguments)
+            .output()
+            .expect("git runs");
+        assert!(
+            output.status.success(),
+            "git {arguments:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    git(&["config", "user.email", "nobody@example.invalid"]);
+    git(&["config", "user.name", "nobody"]);
+    git(&["commit", "--allow-empty", "--quiet", "-m", "base"]);
+    let branch = git(&["branch", "--show-current"]);
+    let base = git(&["rev-parse", "HEAD"]);
+    git(&["commit", "--allow-empty", "--quiet", "-m", "upstream"]);
+    let upstream = git(&["rev-parse", "HEAD"]);
+    git(&["tag", "-a", "upstream-tag", "-m", "tag object"]);
+    let tag_object = git(&["rev-parse", "upstream-tag"]);
+    git(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(&["reset", "--hard", "--quiet", &base]);
+    git(&["remote", "add", "origin", "https://example.invalid/o/r.git"]);
+    git(&["config", &format!("branch.{branch}.remote"), "origin"]);
+    git(&[
+        "config",
+        &format!("branch.{branch}.merge"),
+        "refs/heads/main",
+    ]);
+
+    assert!(is_safe_local_fast_forward(repo.path(), "origin/main"));
+    assert!(is_safe_local_fast_forward(
+        repo.path(),
+        "refs/remotes/origin/main"
+    ));
+    assert!(is_safe_local_fast_forward(repo.path(), &upstream));
+    assert!(
+        !is_safe_local_fast_forward(repo.path(), &tag_object),
+        "an object ID that peeled to a different commit ID was accepted"
+    );
+    assert!(!is_safe_local_fast_forward(repo.path(), "origin/other"));
+
+    std::fs::write(repo.path().join("untracked"), "dirty").expect("a dirty worktree");
+    assert!(!is_safe_local_fast_forward(repo.path(), "origin/main"));
+    std::fs::remove_file(repo.path().join("untracked")).expect("the worktree is clean again");
+
+    git(&["checkout", "--detach", "--quiet"]);
+    assert!(!is_safe_local_fast_forward(repo.path(), "origin/main"));
+    git(&["checkout", "--quiet", &branch]);
+
+    git(&["commit", "--allow-empty", "--quiet", "-m", "side"]);
+    let side = git(&["rev-parse", "HEAD"]);
+    git(&["reset", "--hard", "--quiet", &base]);
+    assert!(
+        !is_safe_local_fast_forward(repo.path(), &side),
+        "a commit outside the upstream ancestry was accepted"
+    );
+}
+
+#[test]
+fn every_proof_git_process_removes_repository_steering_environment() {
+    let command = proof_git_command_with_environment(
+        Path::new("repo"),
+        &["status"],
+        [
+            "GIT_DIR",
+            "git_work_tree",
+            "GIT_COMMON_DIR",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_CONFIG_COUNT",
+            "GIT_SHALLOW_FILE",
+            "PATH",
+        ]
+        .map(std::ffi::OsString::from),
+    );
+    let changes: std::collections::BTreeMap<String, Option<std::ffi::OsString>> = command
+        .get_envs()
+        .map(|(name, value)| {
+            (
+                name.to_string_lossy().into_owned(),
+                value.map(std::ffi::OsStr::to_os_string),
+            )
+        })
+        .collect();
+    for name in [
+        "GIT_DIR",
+        "git_work_tree",
+        "GIT_COMMON_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CONFIG_COUNT",
+        "GIT_SHALLOW_FILE",
+    ] {
+        assert_eq!(
+            changes.get(name),
+            Some(&None),
+            "{name} would steer a proof subprocess: {changes:?}"
+        );
+    }
+    assert_eq!(
+        changes.get("PATH"),
+        None,
+        "unrelated environment was changed"
+    );
+    assert!(is_git_environment(std::ffi::OsStr::new("GIT_DIR")));
+    assert!(is_git_environment(std::ffi::OsStr::new("git_work_tree")));
+    assert!(!is_git_environment(std::ffi::OsStr::new("PATH")));
+}
+
+#[test]
+fn shell_steering_environment_cannot_earn_the_fast_forward_exception() {
+    for name in [
+        "BASH_ENV",
+        "bash_env",
+        "ENV",
+        "env",
+        "BASH_FUNC_git%%",
+        "bash_func_GIT%%",
+        "GIT_DIR",
+    ] {
+        assert!(
+            !fast_forward_environment_is_unsteered([std::ffi::OsString::from(name)]),
+            "{name} could make the shell execute a different git"
+        );
+    }
+    for name in ["PATH", "PATHEXT", "SHELL"] {
+        assert!(
+            fast_forward_environment_is_unsteered([std::ffi::OsString::from(name)]),
+            "{name} does not introduce shell-only git resolution"
+        );
+    }
+}
+
+#[test]
 fn reading_the_repository_is_not_the_harness_s_business() {
     for command in ["ls -la", "cat README.md", "git status", "git log --oneline"] {
         let (action, _) = classify("Bash", &json!({ "command": command }));
@@ -380,6 +630,7 @@ fn a_boundary_never_rides_on_the_window() {
 
     let action = Action::Boundary {
         command: "git push".to_owned(),
+        local_fast_forward_target: None,
     };
     let decision = gate(&context, &mut run, &action, Sensitivity::Boundary);
     assert!(
@@ -978,6 +1229,128 @@ fn the_control_surface_is_a_real_location_rather_than_an_empty_path() {
     );
 }
 
+/// Two installed roots, identical contracts, and one operator file.
+///
+/// The shape the defect was measured in: `setup --all` writes the same
+/// `SKILL.md` everywhere, so the only thing telling the candidates apart is the
+/// file Estigia never writes.
+fn two_roots_one_configured(
+    home: &Path,
+) -> (
+    crate::setup::SetupOptions,
+    std::path::PathBuf,
+    std::path::PathBuf,
+) {
+    let options = crate::setup::SetupOptions {
+        home_dir: Some(home.to_path_buf()),
+        config_home: Some(home.join(".config")),
+        app_data: Some(home.join("AppData").join("Roaming")),
+        platform: Some(crate::setup::Platform::Unix),
+        skip_harness: true,
+        ..crate::setup::SetupOptions::default()
+    };
+    let config = crate::config::Config::default();
+    let mut roots = Vec::new();
+    for slug in ["agents", "claude-code"] {
+        let adapter = crate::setup::find_agent(slug).expect("a declared agent");
+        crate::setup::setup(adapter, &config, &options).expect("the install writes");
+        roots.push(
+            crate::setup::resolve_paths(adapter, &options)
+                .expect("paths")
+                .skill_root,
+        );
+    }
+    let claude = roots.pop().expect("the claude-code root");
+    let neutral = roots.pop().expect("the neutral root");
+    (options, neutral, claude)
+}
+
+#[test]
+fn the_canonical_root_is_the_one_holding_the_operators_own_file() {
+    // The gate decides in the root this returns, and it was deciding in the one
+    // that holds none of the operator's values: every candidate carries a
+    // configuration block after `setup --all`, so the preference could not
+    // discriminate and the `AGENTS` order took the shared neutral root. Measured
+    // on the machine that filed #41 — two byte-identical `SKILL.md`, one
+    // `estigia.local.md` beside the Claude Code contract, and a gate answering
+    // `Blind judges: single` to an operator who had written `two blind`.
+    let home = tempfile::tempdir().expect("a temporary home");
+    let (options, neutral, claude) = two_roots_one_configured(home.path());
+
+    // Before their file exists, nothing distinguishes the two and the order
+    // stands: the neutral root, first in `AGENTS`, is still the answer.
+    assert_eq!(
+        discover_skill_root_in(&options).expect("a root"),
+        neutral,
+        "with nothing to tell the roots apart the declared order stopped deciding"
+    );
+
+    std::fs::write(
+        claude.join(crate::config::LOCAL_FILE),
+        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n",
+    )
+    .expect("the operator's own file");
+
+    assert_eq!(
+        discover_skill_root_in(&options).expect("a root"),
+        claude,
+        "the gate decides in a root that holds none of the operator's overrides"
+    );
+}
+
+#[test]
+fn the_gate_reads_the_row_the_operator_wrote_rather_than_its_default() {
+    // The selection is only worth changing if what the gate reads changes with
+    // it. This is the same read `gate_context` performs — the canonical root,
+    // layered — so a root chosen without the operator's file hands the gate
+    // `Config::default()`, which is the loosening direction.
+    let home = tempfile::tempdir().expect("a temporary home");
+    let (options, _neutral, claude) = two_roots_one_configured(home.path());
+    std::fs::write(
+        claude.join(crate::config::LOCAL_FILE),
+        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n| Change size | 120 |\n",
+    )
+    .expect("the operator's own file");
+
+    let canonical = discover_skill_root_in(&options).expect("a root");
+    let (config, _) =
+        crate::skill::installed_config_in_keeping_what_parses(&canonical, home.path());
+
+    assert_eq!(
+        config.judges,
+        crate::config::Judges::TwoBlind,
+        "the gate is adjudicating against a default the operator overrode"
+    );
+    assert_eq!(config.change_size, 120);
+}
+
+#[test]
+fn a_root_with_no_configuration_block_is_still_not_preferred() {
+    // The rule this replaced was written for a real case and keeps its job: an
+    // operator already running upstream `issue-flow` has a root that holds a
+    // contract Estigia never wrote. Their own file landing there must not make
+    // it the place the gate decides, because the block — the thing carrying
+    // every other row — is not in it.
+    let home = tempfile::tempdir().expect("a temporary home");
+    let (options, neutral, claude) = two_roots_one_configured(home.path());
+    std::fs::write(
+        neutral.join(crate::skill::CONTRACT),
+        "# somebody else's contract\n",
+    )
+    .expect("a contract with no block");
+    std::fs::write(
+        neutral.join(crate::config::LOCAL_FILE),
+        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n",
+    )
+    .expect("their file, in the root with no block");
+
+    assert_eq!(
+        discover_skill_root_in(&options).expect("a root"),
+        claude,
+        "a contract with no configuration block was preferred over one that has it"
+    );
+}
+
 #[test]
 fn a_session_holding_an_isolated_checkout_is_told_which_one_it_is() {
     // `references/repository-delivery.md`: "Keep the base checkout read-only.
@@ -1183,6 +1556,7 @@ fn the_gate_honours_a_stand_down_and_stops_when_it_expires() {
         run.mark_verified();
         let action = Action::Boundary {
             command: "git push".to_owned(),
+            local_fast_forward_target: None,
         };
         gate(&context, &mut run, &action, Sensitivity::Boundary)
     };
@@ -2217,8 +2591,12 @@ fn declaring_a_boundary_only_ever_tightens_what_the_gate_says() {
         // A built-in boundary keeps its own name, or the delivery list — which
         // compares the recorded fragment by exact equality — stops recognising
         // it.
-        if let (Action::Boundary { command: was }, Action::Boundary { command: now_named }) =
-            (&bare_action, &declared_action)
+        if let (
+            Action::Boundary { command: was, .. },
+            Action::Boundary {
+                command: now_named, ..
+            },
+        ) = (&bare_action, &declared_action)
             && was != now_named
         {
             looser.push(format!(
@@ -2648,6 +3026,7 @@ fn a_claim_covers_the_work_happening_below_the_checkout_root() {
     // subdirectory went through unadjudicated.
     let push = Action::Boundary {
         command: "git push".to_owned(),
+        local_fast_forward_target: None,
     };
     assert_ne!(
         gate(&context, &mut run, &push, Sensitivity::Boundary),

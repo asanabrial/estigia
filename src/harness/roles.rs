@@ -20,12 +20,12 @@
 //! # How far it reaches, which is less than the sentence above
 //!
 //! This runs inside `PreToolUse`, so it is offered exactly the tools the gate's
-//! matcher wakes the hook for — `Edit|Write|MultiEdit|NotebookEdit|Update|Bash`
+//! matcher wakes the hook for — `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task`
 //! for Claude Code — and a call to anything else never arrives here to be
 //! judged. So what it can refuse is a tool **in the matcher and not in the
 //! list**, and the `builder` cited above is the measurement: of its six declared
 //! tools the gate can judge three, and `Read`, `Glob` and `Grep` are never seen.
-//! `WebFetch`, `WebSearch` and `Task` are not seen either, and they are usually
+//! `WebFetch` and `WebSearch` are not seen either, and they are usually
 //! what somebody narrowing a sub-agent means.
 //!
 //! Widening the matcher would close it, and is the one thing the matcher exists
@@ -126,6 +126,280 @@ pub fn out_of_role(agent: &str, tool: &str, declared: &Policy) -> Refusal {
             ),
         ),
     )
+}
+
+const RESERVED_REVIEWER: &str = "review-blind";
+
+#[derive(Clone, Copy)]
+enum ReviewerLaunchCode {
+    ProjectShadow,
+    ProjectUnprovable,
+    CanonicalUnavailable,
+}
+
+impl ReviewerLaunchCode {
+    fn code(self) -> &'static str {
+        match self {
+            Self::ProjectShadow => "reviewer-project-shadow",
+            Self::ProjectUnprovable => "reviewer-project-unprovable",
+            Self::CanonicalUnavailable => "reviewer-canonical-unavailable",
+        }
+    }
+
+    fn resolution(self) -> &'static str {
+        match self {
+            Self::ProjectShadow => {
+                "remove or rename the project-scoped review-blind definition; do not count or \
+                 replace this judge, and use separate-session or durable handoff review if the \
+                 reserved launch cannot be restored"
+            }
+            Self::ProjectUnprovable => {
+                "make every project .claude/agents candidate readable and remove duplicate \
+                 review-blind declarations; do not count this judge, and use separate-session or \
+                 durable handoff review until the launch is provable"
+            }
+            Self::CanonicalUnavailable => {
+                "restore the canonical user review-blind definition with Claude setup; do not \
+                 count this judge, and use separate-session or durable handoff review until the \
+                 canonical definition is provable"
+            }
+        }
+    }
+}
+
+fn reviewer_launch_refusal(code: ReviewerLaunchCode, message: impl Into<String>) -> Refusal {
+    Refusal::not_started(
+        code.code(),
+        message,
+        Resolution::no_command(NoCommandReason::WorldAction, code.resolution()),
+    )
+}
+
+fn declared_name(definition: &str) -> Result<Option<String>, ()> {
+    let Some(frontmatter) = frontmatter(definition) else {
+        return Ok(None);
+    };
+    let document: serde_yaml_ng::Value = serde_yaml_ng::from_str(frontmatter).map_err(|_| ())?;
+    let mapping = match document {
+        serde_yaml_ng::Value::Null => return Ok(None),
+        serde_yaml_ng::Value::Mapping(mapping) => mapping,
+        _ => return Err(()),
+    };
+    let key = serde_yaml_ng::Value::String("name".to_owned());
+    let Some(raw) = mapping.get(&key) else {
+        return Ok(None);
+    };
+    let name = raw.as_str().ok_or(())?.trim();
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+    {
+        return Err(());
+    }
+    Ok(Some(name.to_owned()))
+}
+
+#[derive(Debug)]
+pub(crate) struct ReviewerCandidateError {
+    path: std::path::PathBuf,
+    detail: String,
+}
+
+impl ReviewerCandidateError {
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    pub(crate) fn detail(&self) -> &str {
+        &self.detail
+    }
+}
+
+pub(crate) fn reviewer_candidates(
+    root: &std::path::Path,
+) -> Result<Vec<std::path::PathBuf>, ReviewerCandidateError> {
+    let root_kind = match std::fs::symlink_metadata(root) {
+        Ok(metadata) => metadata.file_type(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(ReviewerCandidateError {
+                path: root.to_owned(),
+                detail: format!("cannot be inspected: {error}"),
+            });
+        }
+    };
+    if root_kind.is_symlink() || !root_kind.is_dir() {
+        return Err(ReviewerCandidateError {
+            path: root.to_owned(),
+            detail: "is not an unambiguous agent directory".to_owned(),
+        });
+    }
+    let mut pending = vec![root.to_owned()];
+    let mut found = Vec::new();
+    while let Some(directory) = pending.pop() {
+        let entries = std::fs::read_dir(&directory).map_err(|error| ReviewerCandidateError {
+            path: directory.clone(),
+            detail: format!("cannot be inspected recursively: {error}"),
+        })?;
+        for entry in entries {
+            let entry = entry.map_err(|error| ReviewerCandidateError {
+                path: directory.clone(),
+                detail: format!("contains an unreadable entry: {error}"),
+            })?;
+            let path = entry.path();
+            let kind = entry.file_type().map_err(|error| ReviewerCandidateError {
+                path: path.clone(),
+                detail: format!("has an unreadable file type: {error}"),
+            })?;
+            if kind.is_symlink() {
+                return Err(ReviewerCandidateError {
+                    path,
+                    detail: "is a symlink whose effective definition is ambiguous".to_owned(),
+                });
+            }
+            if kind.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            if !kind.is_file()
+                || !path
+                    .extension()
+                    .and_then(std::ffi::OsStr::to_str)
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
+            {
+                continue;
+            }
+            let definition =
+                std::fs::read_to_string(&path).map_err(|error| ReviewerCandidateError {
+                    path: path.clone(),
+                    detail: format!("cannot be read as an agent definition: {error}"),
+                })?;
+            let name = declared_name(&definition).map_err(|()| ReviewerCandidateError {
+                path: path.clone(),
+                detail: "has an ambiguous agent name".to_owned(),
+            })?;
+            if path
+                .file_name()
+                .is_some_and(|name| name == "review-blind.md")
+                || name.as_deref() == Some(RESERVED_REVIEWER)
+            {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
+fn project_reviewer_candidates(
+    repo_dir: &std::path::Path,
+) -> Result<Vec<std::path::PathBuf>, Refusal> {
+    let start = std::path::absolute(repo_dir).map_err(|error| {
+        reviewer_launch_refusal(
+            ReviewerLaunchCode::ProjectUnprovable,
+            format!("{} cannot be resolved: {error}", repo_dir.display()),
+        )
+    })?;
+    let mut roots = Vec::new();
+    let mut repository_found = false;
+    for directory in start.ancestors() {
+        roots.push(directory.join(".claude/agents"));
+        match std::fs::symlink_metadata(directory.join(".git")) {
+            Ok(_) => {
+                repository_found = true;
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(reviewer_launch_refusal(
+                    ReviewerLaunchCode::ProjectUnprovable,
+                    format!(
+                        "{} cannot establish the repository boundary: {error}",
+                        directory.display()
+                    ),
+                ));
+            }
+        }
+    }
+    if !repository_found {
+        roots.truncate(1);
+    }
+
+    let mut found = Vec::new();
+    for root in roots {
+        let candidates = reviewer_candidates(&root).map_err(|error| {
+            reviewer_launch_refusal(
+                ReviewerLaunchCode::ProjectUnprovable,
+                format!("{} {}", error.path().display(), error.detail()),
+            )
+        })?;
+        found.extend(candidates);
+    }
+    found.sort();
+    found.dedup();
+    Ok(found)
+}
+
+/// Proves that Claude's reserved blind reviewer resolves only to Estigia's user definition.
+pub fn authorize_review_blind_launch(
+    repo_dir: &std::path::Path,
+    home: Option<&std::path::Path>,
+) -> Result<(), Refusal> {
+    let project = project_reviewer_candidates(repo_dir)?;
+    if project.len() > 1 {
+        return Err(reviewer_launch_refusal(
+            ReviewerLaunchCode::ProjectUnprovable,
+            format!("multiple project definitions reserve `{RESERVED_REVIEWER}`: {project:?}"),
+        ));
+    }
+    if let Some(path) = project.first() {
+        return Err(reviewer_launch_refusal(
+            ReviewerLaunchCode::ProjectShadow,
+            format!(
+                "{} shadows the operator-owned `{RESERVED_REVIEWER}` role",
+                path.display()
+            ),
+        ));
+    }
+
+    let Some(home) = home else {
+        return Err(reviewer_launch_refusal(
+            ReviewerLaunchCode::CanonicalUnavailable,
+            "the user home containing Claude's canonical reviewer cannot be resolved",
+        ));
+    };
+    let canonical = home.join(".claude/agents/review-blind.md");
+    let user = reviewer_candidates(&home.join(".claude/agents")).map_err(|error| {
+        reviewer_launch_refusal(
+            ReviewerLaunchCode::CanonicalUnavailable,
+            format!("{} {}", error.path().display(), error.detail()),
+        )
+    })?;
+    if user.len() != 1 || user.first() != Some(&canonical) {
+        return Err(reviewer_launch_refusal(
+            ReviewerLaunchCode::CanonicalUnavailable,
+            format!(
+                "the canonical `{RESERVED_REVIEWER}` definition is not unique in the user agent tree: {user:?}"
+            ),
+        ));
+    }
+    let definition = std::fs::read_to_string(&canonical).map_err(|error| {
+        reviewer_launch_refusal(
+            ReviewerLaunchCode::CanonicalUnavailable,
+            format!("{} cannot be read: {error}", canonical.display()),
+        )
+    })?;
+    if !crate::setup::reviewer_is_static(&definition) {
+        return Err(reviewer_launch_refusal(
+            ReviewerLaunchCode::CanonicalUnavailable,
+            format!(
+                "{} differs from Estigia's embedded reviewer",
+                canonical.display()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Whether this call has to be refused, given the definition its caller

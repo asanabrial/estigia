@@ -111,6 +111,48 @@ fn documented() -> String {
     all
 }
 
+#[test]
+fn five_blind_keeps_one_enforced_verdict_and_names_every_unproved_panel_property() {
+    let text = honesty().to_ascii_lowercase();
+    assert!(
+        readme().contains(r#"estigia config set "Blind judges" "two blind" --agent claude-code"#)
+    );
+    assert!(
+        text.contains("one aggregate exact-receipt verdict"),
+        "the honesty boundary does not preserve the transport's one-verdict floor"
+    );
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("skill");
+    for path in ["protocols/rdd.md", "policies/blind-judges.md"] {
+        let contract = std::fs::read_to_string(root.join(path))
+            .unwrap_or_else(|error| panic!("{path} is unreadable: {error}"))
+            .lines()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_ascii_lowercase();
+        assert!(
+            contract.contains("one aggregate exact-receipt verdict"),
+            "{path} contradicts the aggregate evidence floor"
+        );
+        if path == "protocols/rdd.md" {
+            assert!(contract.contains("per-lens or per-judge verdicts"));
+            assert!(contract.contains("remains future design"));
+        }
+    }
+    for unproved in [
+        "panel size",
+        "concurrency",
+        "independence",
+        "blindness",
+        "same-finding identity",
+        "quorum",
+    ] {
+        assert!(
+            text.contains(unproved),
+            "docs/honesty.md does not disclaim proof of {unproved}"
+        );
+    }
+}
+
 /// The number written just before `phrase`, as a word.
 ///
 /// The claims are written for a person — "five agents", "six things" — so the
@@ -345,7 +387,7 @@ fn model_catalog_suggestions_keep_their_honesty_boundary() {
         "forbidden hand-edited rows are ignored",
         "Invalid owned rows still",
         "never promoted into the shared contract",
-        "Host artifacts such as Claude phase definitions use the effective view",
+        "Dynamic host artifacts such as Claude SDD definitions use the effective view",
         "one explicit row never widens into every repository setting",
         "only `NotFound`",
         "invalid UTF-8",
@@ -403,7 +445,7 @@ fn model_catalog_suggestions_keep_their_honesty_boundary() {
         );
     }
     let exclusively_materializes_claude = |claim: &str| {
-        claim.contains("Only Claude Code currently receives planned phase definitions")
+        claim.contains("Only Claude Code currently receives host-routable definitions")
             && claim
                 .contains("OpenCode and every other host keep these values as routing declarations")
     };
@@ -1599,6 +1641,18 @@ fn the_reach_of_the_role_gate_is_stated_where_an_operator_reads_it() {
             "the contract does not name {named}, which the gate never sees"
         );
     }
+    for held in [
+        "current `Agent` and legacy `Task`",
+        "recursively refuses project-scoped shadows",
+        "running reviewer uses the embedded policy",
+        "not that Claude launched the context",
+        "never reduces or serializes the configured panel",
+    ] {
+        assert!(
+            section.contains(held),
+            "the reviewer launch boundary omits {held:?}"
+        );
+    }
 }
 
 /// Where the verdict's binding is enforced is stated, and stated accurately.
@@ -1979,7 +2033,10 @@ fn every_list_the_audit_answers_with_is_one_the_binding_names() {
 /// **What this does not do** is check either number against the code, and the
 /// reason is worth writing down rather than leaving as an omission: how many
 /// checks `doctor::full` produces depends on the machine it is asked about. It
-/// answers seven kinds with no skill root and twelve with one, and the rows
+/// answers six kinds on a machine with nothing installed and twelve with one
+/// adapter configured — measured, because the two numbers that stood here
+/// before were each carried forward by hand and neither was ever true — and the
+/// rows
 /// themselves are more again — the contract, gate and tools checks are emitted
 /// once per configured agent, so counting rows answers *how many agents does
 /// this machine have*. Holding the two spellings to each other is what can be
@@ -2237,8 +2294,6 @@ fn every_setting_is_read_by_the_gate_the_transport_or_the_prose() {
         // *(agent, not scripted)*, so acting on it is a sentence somebody has
         // to write about a command Estigia does not run.
         "Merge strategy",
-        // Which model each role runs on. Nothing in this crate starts a model.
-        "Model routing",
     ];
 
     let mut unread: Vec<&str> = Vec::new();

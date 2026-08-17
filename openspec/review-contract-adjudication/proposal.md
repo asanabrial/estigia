@@ -11,10 +11,11 @@ as it can actually be taken, and no further.
 
 Nothing checks it. `docs/honesty.md` already says so, in its own words:
 
-> **Estigia cannot prove reviewers or blind judges ran.** `publish_review` mechanically freezes a
+> **Estigia cannot prove reviewers or blind judge panels ran.** `publish_review` mechanically freezes a
 > coherent clean draft receipt over epoch, PR, head, base and manifest digest [...] It does not prove
-> an independent context existed, that one or two judges read those bytes, that two judges were blind
-> to each other, or that their verdicts were honest. `single` and `two blind` remain operator-selected
+> an independent context existed or establishes panel size, concurrency, independence, blindness,
+> same-finding identity or quorum. It cannot prove one, two or five judges read those bytes or that
+> their verdicts were honest. `single`, `two blind` and `five blind` remain operator-selected
 > review contracts, not observations the harness can make.
 
 That entry is honest and it is also an admission: the most-repeated rule in the contract is the one
@@ -37,7 +38,7 @@ its members is a contract no authority can adjudicate, and Estigia is the author
 The value of this change is in keeping the three tiers apart. Collapsing them is how a gate that
 decides nothing gets built and believed.
 
-**Tier 1 — refusable today.** Estigia already mints run ids, binds every write to one through
+**Tier 1 — refusable in this design.** Estigia already mints run ids, binds every write to one through
 `verify_claim`, and `publish_review` freezes the reviewed bytes against the publishing run. So these
 are mechanical:
 
@@ -48,6 +49,10 @@ are mechanical:
   4R defect, closed at the authority rather than in each repository's prose.
 - Fewer verdicts than the configured contract requires — `single` versus `two blind` is already an
   operator-selected axis, and counting is not a judgement.
+
+Only the first two exist today. The shipped operation records one aggregate exact-receipt verdict; it
+carries no lens, per-judge outcome, panel count, finding identity or sealing order, and therefore does
+not enforce panel size or quorum.
 
 **Tier 2 — bindable, not provable.** Two judges being blind *to each other* cannot be observed. What
 can be recorded is ordering: each verdict sealed against the frozen digest before the next becomes
@@ -61,9 +66,9 @@ out whole, this change overclaimed.
 
 ## What is being changed
 
-- An operation that records a **verdict**, bound to the frozen digest, the reviewing run id, and the
-  lenses it claims to have applied. Today verdicts land as prose in comments, so nothing can compare
-  who wrote against who judged.
+- Per-judge records, each bound to the frozen digest, the reviewing run id, and the lenses that judge
+  claims to have applied. They extend today's one aggregate marker; that marker is not a panel
+  transcript and cannot compare judges or their lenses.
 - A **declared lens set**, read from the repository the way the settings table is read now. A count
   with no members is refused at configuration time rather than at review time.
 - Refusals for the Tier 1 list, each naming what it prevents.
@@ -75,6 +80,8 @@ out whole, this change overclaimed.
   choose one.
 - No parsing of arbitrary consumer CI YAML — the honesty contract already refuses that, and a lens
   set is not a place to start.
+- No reinterpretation of today's single aggregate marker as a panel transcript. Until structured
+  verdicts ship, panel count, same-finding identity and quorum remain prose and honesty boundaries.
 
 ## Open questions
 
