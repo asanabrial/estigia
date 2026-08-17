@@ -27,11 +27,12 @@ Both judges are **read-only** against that target. A judge that edits is no long
 |---|---|
 | Both judges confirm a severe finding | fix it |
 | One judge sees it, the other does not | record it as a suspicion; **do not fix it automatically** |
-| The judges contradict each other | **stop, and put it to a person** |
+| The judges contradict each other | **stop in `blocked`, and put the contradiction to a named person** |
 
 There is no tie-break and no majority. A majority of two is a coin toss wearing a process, and the
 case where two careful readers disagree about the same bytes is exactly the case worth a human
-minute.
+minute. Before releasing ownership, record the exact decision or exit condition and its discharger,
+plus the branch, PR, frozen receipt, both verdicts, and other evidence already built.
 
 A finding only one judge saw is not discarded — it goes on the record as a suspicion, with which
 judge saw it. Deleting it would make the second judge's work invisible whenever it disagreed, which
@@ -46,9 +47,11 @@ A confirmed finding is fixed, and the fix produces an immutable delta that the j
 the same freeze, the same blindness, the same rules.
 
 **At most two fix rounds in one lineage.** A third round is not a fix; it is a change that has not
-converged, and it goes back to a person with what the rounds learned. This is the same threshold the
-handoff procedure uses: hand off after a known mistake repeats, after three hypotheses fail without
-narrowing, or when editing exceeds measuring.
+converged, and it goes to `blocked` for a named person's decision. Before releasing ownership, record
+that decision or exact exit condition and discharger, the branch, PR, latest receipt, both rounds'
+verdicts, and what the rounds learned. This is the same threshold the handoff procedure uses: hand off
+after a known mistake repeats, after three hypotheses fail without narrowing, or when editing exceeds
+measuring.
 
 ## What Estigia enforces here, and what it does not
 

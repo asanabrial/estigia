@@ -63,7 +63,7 @@ the surviving executable or document owner changes.
 
 | ID | Failure mode and evidence | Protection or invariant | Surviving executable or document owner |
 |---|---|---|---|
-| I09 | Recoverable work was buried by choosing state from the obstacle rather than the evidence: external outages went to analysis, incoherent specifications to blocked, and built work could be hidden as unbuilt. | Route wrong specifications to analysis, unbuilt external waits to blocked, and built-undeliverable work to review; record the evidence and owner of the next action. | Handoff procedure below; `SKILL.md` decision gates |
+| I09 | Recoverable work was buried by choosing state from the obstacle rather than the evidence: external outages went to analysis, incoherent specifications to blocked, and built work could be hidden as unbuilt. | Route wrong specifications to analysis and ordinary built delivery waits to review. A named person's decision is the exception: use blocked with its exact exit condition and discharger while preserving built evidence. | Handoff procedure below; `SKILL.md` decision gates |
 | I10 | During the session that produced the handoff threshold, a long-running agent repeated its already-documented `$?`-after-a-pipe mistake while debugging. | Hand off after repeating a known mistake, three non-narrowing hypotheses, or more editing than measuring; preserve the diagnosis on the issue. | Handoff procedure below |
 | X08 | An issue without acceptance criteria forces the implementer to invent the bar it later claims to have met, and a partial improvement can then masquerade as completion. | Write criteria before implementation or return the issue to analysis; never ship a partial fix as complete. | Handoff procedure below; `SKILL.md` dev steps; `references/domain-composition.md` |
 | X09 | A blocked item has no natural holder or selection queue; vague conditions and unnamed human decisions therefore become abandoned work. | Name the exact exit condition and its discharger, surface overdue human decisions, and move discharged blockers back to ready. | `SKILL.md` Analyst steps and Decision Gates |
@@ -73,7 +73,9 @@ the surviving executable or document owner changes.
 
 - Choose from evidence, not frustration: a wrong or contradictory specification returns to
   `analysis`; an unbuilt external wait goes to `blocked` with its exact exit condition and
-  discharger; built-but-undeliverable work stays in `review`; a useful partial diagnosis returns to
+  discharger; ordinary built-but-undeliverable work stays in `review`; built work awaiting a named
+  person's decision goes to `blocked` only after its branch, PR, receipt, checks, evidence, exact
+  decision or exit condition, and discharger are recorded; a useful partial diagnosis returns to
   `ready`. Never silently reinterpret the issue.
 - Persist ruled-out hypotheses, confirmed evidence, methodological errors, branch/worktree location,
   and the next action on the issue. Preserve an out-of-scope discovery as a separate finding. Chat

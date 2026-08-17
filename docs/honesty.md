@@ -164,6 +164,10 @@ suite. Everything else here is prose held by review.
   two judges were blind to each other, or that their verdicts were honest. A marker can still be
   forged by a collaborator acting outside Estigia. `single` and `two blind` remain operator-selected
   review contracts, not observations the harness can make.
+- **Estigia cannot make a person decide or start a turn.** For a named human-decision wait it can
+  preserve the built branch, PR, receipt, checks, and evidence, and record `blocked` with the exact
+  decision or exit condition and discharger before ownership is released. That durable record is not
+  a scheduler, notification guarantee, or decision; only the named person can discharge it.
 - **One review-protocol readback is held by no test, and one is held only by a string search.** The
   review protocol's guards were mutated one at a time — each disabled, the whole suite run, the tree
   restored from a byte copy. Held by a test that goes red: all three enforcement points of the

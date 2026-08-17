@@ -1604,6 +1604,44 @@ fn the_states_a_routing_accepts_are_the_ones_the_contract_declares() {
 }
 
 #[test]
+fn every_named_disposition_uses_a_transport_state() {
+    let contract = include_str!("../../skill/SKILL.md");
+    let gates = contract
+        .split_once("## Decision Gates")
+        .expect("the contract has decision gates")
+        .1
+        .split_once("## Execution Steps")
+        .expect("execution follows the decision gates")
+        .0;
+    let mut destinations = Vec::new();
+
+    for fragment in gates.split("-> `").skip(1) {
+        let destination = fragment
+            .split_once('`')
+            .expect("a disposition closes its state code span")
+            .0;
+        assert!(
+            crate::config::STATES.contains(&destination),
+            "the contract routes a disposition to unknown state `{destination}`"
+        );
+        destinations.push(destination);
+    }
+
+    assert!(
+        destinations.len() >= crate::config::STATES.len(),
+        "the disposition crossing found too few destinations"
+    );
+    assert!(
+        gates.contains("built work awaiting delivery evidence -> `review`"),
+        "the contract does not name where built delivery-evidence waits go"
+    );
+    assert!(
+        gates.contains("work awaiting a person's decision -> `blocked`"),
+        "the contract does not name where human-decision waits go"
+    );
+}
+
+#[test]
 fn a_model_can_be_named_per_sdd_phase_and_the_most_specific_wins() {
     let routing = |cell: &str| {
         let local = table(&[("Model routing", cell)]);
