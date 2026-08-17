@@ -1632,12 +1632,22 @@ fn every_named_disposition_uses_a_transport_state() {
         "the disposition crossing found too few destinations"
     );
     assert!(
-        gates.contains("built work awaiting delivery evidence -> `review`"),
-        "the contract does not name where built delivery-evidence waits go"
+        gates.contains("ordinary delivery permission -> `review`"),
+        "the contract does not keep ordinary delivery permission in review"
     );
     assert!(
-        gates.contains("work awaiting a person's decision -> `blocked`"),
-        "the contract does not name where human-decision waits go"
+        gates.contains(
+            "exceptional human adjudication outside ordinary delivery gates -> `blocked`"
+        ),
+        "the contract does not name where exceptional human adjudication waits go"
+    );
+    assert!(
+        contract.contains("built work cleared to continue delivery returns to `review`"),
+        "the contract does not restore discharged built work to delivery"
+    );
+    assert!(
+        contract.contains("work requiring implementation returns to `ready`"),
+        "the contract does not restore discharged implementation work to ready"
     );
 }
 

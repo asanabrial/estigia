@@ -63,19 +63,20 @@ the surviving executable or document owner changes.
 
 | ID | Failure mode and evidence | Protection or invariant | Surviving executable or document owner |
 |---|---|---|---|
-| I09 | Recoverable work was buried by choosing state from the obstacle rather than the evidence: external outages went to analysis, incoherent specifications to blocked, and built work could be hidden as unbuilt. | Route wrong specifications to analysis and ordinary built delivery waits to review. A named person's decision is the exception: use blocked with its exact exit condition and discharger while preserving built evidence. | Handoff procedure below; `SKILL.md` decision gates |
+| I09 | Recoverable work was buried by choosing state from the obstacle rather than the evidence: external outages went to analysis, incoherent specifications to blocked, and built work could be hidden as unbuilt. | Route wrong specifications to analysis and ordinary built delivery waits to review. Exceptional human adjudication outside ordinary delivery gates uses blocked with its exact exit condition and discharger while preserving built evidence. | Handoff procedure below; `SKILL.md` decision gates |
 | I10 | During the session that produced the handoff threshold, a long-running agent repeated its already-documented `$?`-after-a-pipe mistake while debugging. | Hand off after repeating a known mistake, three non-narrowing hypotheses, or more editing than measuring; preserve the diagnosis on the issue. | Handoff procedure below |
 | X08 | An issue without acceptance criteria forces the implementer to invent the bar it later claims to have met, and a partial improvement can then masquerade as completion. | Write criteria before implementation or return the issue to analysis; never ship a partial fix as complete. | Handoff procedure below; `SKILL.md` dev steps; `references/domain-composition.md` |
-| X09 | A blocked item has no natural holder or selection queue; vague conditions and unnamed human decisions therefore become abandoned work. | Name the exact exit condition and its discharger, surface overdue human decisions, and move discharged blockers back to ready. | `SKILL.md` Analyst steps and Decision Gates |
+| X09 | A blocked item has no natural holder or selection queue; vague conditions and unnamed human decisions therefore become abandoned work. | Name the exact exit condition and its discharger, surface overdue human decisions, and return discharged blockers to the state their preserved evidence supports. | `SKILL.md` Analyst steps and Decision Gates |
 | I12 | In Investora issue #92 / PR #167, the publishing run could not create an independent review context, retained ownership in `review`, and therefore remained both the only eligible worker and the one worker forbidden to produce the verdict. | Persist an exact-receipt review handoff, release the exact ownership epoch, exclude its publisher/requesters, and let a distinct run record an immutable verdict before the publisher resumes; rejection permits repair, while only acceptance qualifies delivery. | GitHub binding `handoff_review`, `review_verdict`, requester-aware `list_state`; `SKILL.md` dev step 5 |
 
 ### Handoff and incomplete-work procedure
 
 - Choose from evidence, not frustration: a wrong or contradictory specification returns to
   `analysis`; an unbuilt external wait goes to `blocked` with its exact exit condition and
-  discharger; ordinary built-but-undeliverable work stays in `review`; built work awaiting a named
-  person's decision goes to `blocked` only after its branch, PR, receipt, checks, evidence, exact
-  decision or exit condition, and discharger are recorded; a useful partial diagnosis returns to
+  discharger; ordinary built-but-undeliverable work, including a named person's routine delivery
+  permission, stays in `review`; built work awaiting exceptional human adjudication outside those
+  gates goes to `blocked` only after its branch, PR, receipt, checks, evidence, exact decision or exit
+  condition, and discharger are recorded; a useful partial diagnosis returns to
   `ready`. Never silently reinterpret the issue.
 - Persist ruled-out hypotheses, confirmed evidence, methodological errors, branch/worktree location,
   and the next action on the issue. Preserve an out-of-scope discovery as a separate finding. Chat
