@@ -1546,13 +1546,14 @@ suite. Everything else here is prose held by review.
   `config set --agent <slug>` refuses a `Scope::Everywhere` row and does not refuse a
   `Scope::Machine` one, so `estigia config set --agent claude-code "Summary language" Spanish`
   is accepted and reports success — on an adapter with a skill root of its own, where no read-back
-  catches it. The `canonical` check then reports the divergence it produced, correctly, and the way
-  out is one `config set --agent` per root rather than the plain form, because `config set` writes a
-  machine row into the canonical contract alone. Measured on 2026-08-17, on `Summary language` and
-  `Issue body language`, by two independent reviews of the check itself. What is *not* settled is
-  which half is wrong — whether a machine row should be refused per agent the way a repository row
-  is, or whether the plain form should propagate it — so nothing here guesses; the divergence is
-  reported rather than prevented.
+  catches it. **And once two roots disagree about one, no command makes them agree**: the plain
+  `config set` writes a machine row into the canonical contract alone, and the per-agent form cannot
+  hold one in a shared root, where `render_some_agent_rows` drops it and the command exits on its own
+  read-back. So `doctor`'s `canonical` row reports that divergence and names no way out, which is the
+  honest shape rather than a satisfying one. Measured on 2026-08-17 and 2026-08-18, on
+  `Summary language` and `Issue body language`, by four independent reviews of the check itself, each
+  running the named command verbatim. Filed as issue #62; which half is wrong — refuse the per-agent
+  write, or propagate the plain one — is not decided here, and nothing guesses at it.
 - **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it

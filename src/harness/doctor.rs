@@ -1044,16 +1044,19 @@ pub struct Divergence {
 /// lists rather than the three-valued question, so the two `Machine` rows were
 /// classified by falling off the end of it.
 ///
-/// **The resolution is chosen by that scope, because the two are cleared by
-/// different commands.** A repository row set with no `--agent` is written into
-/// every installed contract, so one command clears it. A machine row is not:
-/// `config set` writes it into the canonical contract alone, because `elsewhere`
-/// is asked only for `Everywhere`. So the row survived running the very command
-/// this row had named as the way out — measured by both judges of a second
-/// review, one on `Summary language` and one on `Issue body language`, each
-/// running that command verbatim and watching the row stay red. Naming a dead
-/// end is worse than naming nothing, and this crate's rules say so in as many
-/// words.
+/// **The resolution is chosen by that scope, because only one of them has a way
+/// out.** A repository row set with no `--agent` is written into every installed
+/// contract, so that command is named and clears it — measured. A machine row
+/// has no such command, and two rounds of review were spent discovering it: the
+/// plain form writes the canonical contract alone, because `elsewhere` is asked
+/// only for `Everywhere`; and the per-agent form cannot hold one either, because
+/// a shared root's per-agent file is rendered through `render_some_agent_rows`
+/// and read through `Scope::Agent`, so the row is dropped on the way out and the
+/// command exits on its own read-back. Four judges ran first one form and then
+/// the other, verbatim, and watched the row stay exactly as red. So that branch
+/// names **no** command and says why: naming a dead end is worse than naming
+/// nothing, and this crate's rules say so in as many words. The asymmetry itself
+/// is issue #62; this row is not the place to decide it.
 ///
 /// **Both halves are named in both branches.** They were not: the broken branch
 /// built its sentence from the faulty rows alone, so a deliberately-set
@@ -1169,9 +1172,18 @@ pub fn canonical(root: Option<&Path>, divergent: Option<&[Divergence]>) -> Check
         .flat_map(|(_, rows)| rows.iter())
         .any(|(setting, _, _)| setting.scope() == Scope::Machine);
     let way_out = if any_machine {
-        "those rows made to agree \u{2014} a row about this machine is written into one root at a \
-         time, so it takes `estigia config set --agent <slug> \"<row>\" \"<value>\"` once per \
-         skill root the `contract` rows above name"
+        // No command, because there is none. `config set` writes a machine row
+        // into the canonical contract alone, and the per-agent form cannot hold
+        // one at all: the shared root's per-agent file is rendered and read
+        // through the agent scope, so the row is dropped on the way out and the
+        // command exits on its own read-back. Two rounds of review were spent
+        // naming first one form and then the other, each measured leaving the
+        // row exactly as red as it found it. Saying so is worth more than a
+        // command that refuses — this crate's rules put it the other way round,
+        // that naming a dead end is worse than naming nothing.
+        "those rows made to agree \u{2014} and no command does that yet: `config set` writes a row \
+         about this machine into the root the gate decides in and nowhere else, and a shared root \
+         cannot hold one at all (issue #62)"
     } else {
         "those rows made to agree \u{2014} `estigia config set \"<row>\" \"<value>\"` with no \
          `--agent` writes a row about the repository into every installed contract"
@@ -3982,11 +3994,13 @@ mod tests {
             other => panic!("a gate deciding by rows nobody reads was reported as {other:?}"),
         }
 
-        // A row about the machine is the fault too, and it is NOT cleared by
-        // that command: `config set` writes it into the canonical contract
-        // alone. Both judges of a second review ran the plain form verbatim on
-        // exactly these two rows and watched the row stay red, which is naming
-        // a dead end — the one thing this crate's rules forbid a message doing.
+        // A row about the machine is the fault too, and **no** command clears
+        // it. Two rounds of review were spent naming first the plain form and
+        // then the per-agent one, each measured leaving the row exactly as red:
+        // the first writes the canonical contract alone, and the second cannot
+        // hold a machine row in a shared root at all. So this branch names no
+        // command, which is the rule — naming a dead end is worse than naming
+        // nothing — and this is what holds it to that.
         let machine = canonical(
             Some(&root),
             Some(&[Divergence {
@@ -4003,8 +4017,16 @@ mod tests {
                 assert!(detail.contains("Summary language"), "{detail}");
                 let way_out = format!("{resolution}");
                 assert!(
-                    way_out.contains("--agent <slug>"),
-                    "a machine row was offered a command that does not clear it: {way_out}"
+                    !way_out.contains("--agent"),
+                    "a machine row was offered a command that refuses: {way_out}"
+                );
+                assert!(
+                    !way_out.contains("config set \"<row>\""),
+                    "a machine row was offered the command that does not propagate it: {way_out}"
+                );
+                assert!(
+                    way_out.contains("no command does that yet"),
+                    "the row that has no way out does not say so: {way_out}"
                 );
             }
             other => panic!("a row about the machine differing was reported as {other:?}"),

@@ -84,9 +84,12 @@ question the rest of the crate asks, not a fourth list:
   resolution names `estigia config set "<row>" "<value>"` with no `--agent`, which writes it into
   every installed contract.
 - **Machine** — `Summary language` and `Issue body language`, facts about this machine. Also
-  `BROKEN`, but the plain `config set` does **not** propagate these: it writes the canonical contract
-  and nothing else. So their resolution names the form that does clear it — `config set --agent
-  <slug>` once per adapter holding a contract of its own.
+  `BROKEN`, and their resolution names **no** command, because there is not one: the plain
+  `config set` writes a machine row into the canonical contract and nowhere else, and
+  `config set --agent <slug>` cannot hold one in a shared root at all — the per-agent file is
+  rendered and read through the agent scope, so the row is dropped and the command exits on its own
+  read-back. That asymmetry is [issue #62](https://github.com/asanabrial/estigia/issues/62); until
+  it is settled the row reports the divergence and says plainly that nothing clears it yet.
 
 Rows that differ by design are named in both branches, not only in the quiet one.
 
