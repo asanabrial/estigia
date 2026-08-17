@@ -26,11 +26,8 @@
 //! another 48 minutes** because nothing in its loop read the timeline again.
 //! That run had sworn. The gate kills exactly that case.
 
-use std::path::PathBuf;
-// `Path` is used by this module's tests, which are a child module and see what
-// it imports. Kept named rather than re-imported there: one import for one type.
-#[cfg(test)]
 use std::path::Path;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
@@ -69,6 +66,9 @@ pub enum Action {
         command: String,
         /// The exact pull request named by a narrowly recognised merge command.
         pr: Option<u64>,
+        /// The target of an exact local `git merge --ff-only`, when the shell
+        /// payload was narrow enough to prove rather than interpret.
+        local_fast_forward_target: Option<String>,
     },
     /// Nothing Estigia claims authority over.
     Untouched,
@@ -99,6 +99,7 @@ impl Action {
             Self::Boundary {
                 command,
                 pr: Some(pr),
+                ..
             } if command == "gh pr merge" => Some(format!("{command} {pr}")),
             Self::Boundary { command, .. } => Some(command.clone()),
             Self::Untouched => None,
@@ -1239,7 +1240,7 @@ fn pr_merge_target(command: &str) -> Option<u64> {
 /// shells out to the transport publishes without telling the pointer, and the
 /// honesty contract states that reach rather than implying there is none.
 fn stale_verdict(action: &Action, run: &Run, checkout: &std::path::Path) -> Option<Refusal> {
-    let Action::Boundary { command, pr } = action else {
+    let Action::Boundary { command, pr, .. } = action else {
         return None;
     };
     // The list already declared for exactly this population, rather than a
@@ -1611,13 +1612,13 @@ pub fn classify_with(
         // shell call the gate cannot see at all, and a payload naming `git
         // push` is a `git push`. The cost is a read on a payload that merely
         // mentions one, which is one tracker read.
-        let command = command_argument(input).unwrap_or_else(|| input.to_string());
+        let command = shell_command_argument(input);
         // Two readings of the same line. The fragment lists want whitespace
         // collapsed, so `git   push` matches `git push`. `shell::writes_a_file`
         // wants it kept: it splits commands on newlines, and collapsing them
         // into spaces hides the `rm` on the second line of a two-line script
         // behind the `cd` on the first.
-        let lowercased = command.to_ascii_lowercase();
+        let lowercased = command.text.to_ascii_lowercase();
         let normalized = without_leading_options(&lowercased);
         // Before the delivery boundaries, because this is the one that decides
         // whether any of them are still checked afterwards.
@@ -1634,6 +1635,7 @@ pub fn classify_with(
                 Action::Boundary {
                     command: (*matched).to_owned(),
                     pr: None,
+                    local_fast_forward_target: None,
                 },
                 Sensitivity::Boundary,
             );
@@ -1643,6 +1645,7 @@ pub fn classify_with(
                 Action::Boundary {
                     command: "gh api".to_owned(),
                     pr: None,
+                    local_fast_forward_target: None,
                 },
                 Sensitivity::Boundary,
             );
@@ -1654,8 +1657,12 @@ pub fn classify_with(
             .chain(declared)
             .find(|fragment| contains_whole_command(&normalized, fragment))
         {
+            // The same unambiguous literal both readings need: delivery
+            // identity and the fast-forward proof each refuse an argv array and
+            // a payload naming the command twice, so they read one field rather
+            // than keeping a copy of the rule apiece.
             let pr = if matched == "gh pr merge" {
-                literal_command_argument(input).and_then(pr_merge_target)
+                command.literal.as_deref().and_then(pr_merge_target)
             } else {
                 None
             };
@@ -1663,6 +1670,14 @@ pub fn classify_with(
                 Action::Boundary {
                     command: matched.to_owned(),
                     pr,
+                    local_fast_forward_target: (matched == "git merge")
+                        .then(|| {
+                            command
+                                .literal
+                                .as_deref()
+                                .and_then(exact_local_fast_forward_target)
+                        })
+                        .flatten(),
                 },
                 Sensitivity::Boundary,
             );
@@ -1757,14 +1772,8 @@ pub fn classify_with(
 /// every shell call from that agent classified `Untouched`, from an agent this
 /// build installs a gate into and reports as `gate on`.
 fn argument_named(input: &serde_json::Value, names: &[&str]) -> Option<String> {
-    let letters = |key: &str| -> String {
-        key.chars()
-            .filter(char::is_ascii_alphanumeric)
-            .map(|character| character.to_ascii_lowercase())
-            .collect()
-    };
     input.as_object()?.iter().find_map(|(key, value)| {
-        if !names.contains(&letters(key).as_str()) {
+        if !names.contains(&argument_name(key).as_str()) {
             return None;
         }
         match value {
@@ -1780,25 +1789,11 @@ fn argument_named(input: &serde_json::Value, names: &[&str]) -> Option<String> {
     })
 }
 
-/// One unambiguous literal command field, used only for typed delivery identity.
-fn literal_command_argument(input: &serde_json::Value) -> Option<&str> {
-    let letters = |key: &str| -> String {
-        key.chars()
-            .filter(char::is_ascii_alphanumeric)
-            .map(|character| character.to_ascii_lowercase())
-            .collect()
-    };
-    let values: Vec<&serde_json::Value> = input
-        .as_object()?
-        .iter()
-        .filter_map(|(key, value)| {
-            matches!(letters(key).as_str(), "command" | "commandline").then_some(value)
-        })
-        .collect();
-    match values.as_slice() {
-        [serde_json::Value::String(command)] => Some(command),
-        _ => None,
-    }
+fn argument_name(key: &str) -> String {
+    key.chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|character| character.to_ascii_lowercase())
+        .collect()
 }
 
 /// The path a write tool names.
@@ -1806,9 +1801,206 @@ fn path_argument(input: &serde_json::Value) -> Option<String> {
     argument_named(input, &["filepath", "path", "notebookpath"])
 }
 
-/// The command line a shell tool was handed.
-fn command_argument(input: &serde_json::Value) -> Option<String> {
-    argument_named(input, &["command", "commandline"])
+/// One reading shared by boundary classification and proof metadata.
+///
+/// More than one key that normalises to a command is ambiguous even when the
+/// values agree. Every renderable value remains visible to the conservative
+/// classifier, but no one of them may donate literal metadata to a boundary
+/// found in another.
+struct ShellCommandArgument {
+    text: String,
+    literal: Option<String>,
+}
+
+fn shell_command_argument(input: &serde_json::Value) -> ShellCommandArgument {
+    let values: Vec<&serde_json::Value> = input
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(key, value)| {
+            matches!(argument_name(key).as_str(), "command" | "commandline").then_some(value)
+        })
+        .collect();
+    let rendered = |value: &serde_json::Value| match value {
+        serde_json::Value::String(text) => Some(text.clone()),
+        serde_json::Value::Array(words) => {
+            let words: Vec<&str> = words.iter().filter_map(serde_json::Value::as_str).collect();
+            (!words.is_empty()).then(|| words.join(" "))
+        }
+        _ => None,
+    };
+    if let [value] = values.as_slice()
+        && let Some(text) = rendered(value)
+    {
+        return ShellCommandArgument {
+            literal: value.as_str().map(str::to_owned),
+            text,
+        };
+    }
+    let commands: Vec<String> = values.iter().filter_map(|value| rendered(value)).collect();
+    ShellCommandArgument {
+        text: if commands.is_empty() {
+            input.to_string()
+        } else {
+            commands.join("\n")
+        },
+        literal: None,
+    }
+}
+
+/// The target of one literal local fast-forward command, without shell parsing.
+///
+/// This is deliberately narrower than [`shell_command_argument`]. Joining an
+/// argv array loses whether it was a direct git invocation or `bash -lc`, and
+/// shell syntax broad enough to understand quoting is also broad enough to get
+/// wrong. Only a string made of four words, or five with `--`, can earn the
+/// exception.
+fn exact_local_fast_forward_target(command: &str) -> Option<String> {
+    // Newlines separate commands, while all other shell punctuation is kept
+    // out by the target alphabet below. Spaces and tabs carry no interpretation.
+    if command
+        .chars()
+        .any(|character| character.is_whitespace() && !matches!(character, ' ' | '\t'))
+    {
+        return None;
+    }
+    let words: Vec<&str> = command.split_ascii_whitespace().collect();
+    let target = match words.as_slice() {
+        ["git", "merge", "--ff-only", target] | ["git", "merge", "--ff-only", "--", target] => {
+            *target
+        }
+        _ => return None,
+    };
+    if target.starts_with('-')
+        || target.is_empty()
+        || !target
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "/._-".contains(character))
+    {
+        return None;
+    }
+    Some(target.to_owned())
+}
+
+/// Whether local Git proves this merge can only fast-forward toward its upstream.
+///
+/// Every failed process, malformed answer, detached branch, dirty path or
+/// ancestry miss is `false`: this proof removes one refusal, so unknown cannot
+/// be clearance. It performs no fetch and consults only refs already present in
+/// the checkout.
+fn is_safe_local_fast_forward(repo_dir: &std::path::Path, target: &str) -> bool {
+    // The shell command runs after this process exits. Proving with a scrubbed
+    // environment and then allowing a merge that inherits `GIT_DIR` would prove
+    // one repository and change another, so steering present at entry is unsafe.
+    if !fast_forward_environment_is_unsteered(std::env::vars_os().map(|(name, _)| name)) {
+        return false;
+    }
+    let git = |arguments: &[&str]| {
+        proof_git_command(repo_dir, arguments)
+            .output()
+            .ok()
+            .filter(|answer| answer.status.success())
+    };
+    let text = |arguments: &[&str]| {
+        let answer = git(arguments)?;
+        let value = std::str::from_utf8(&answer.stdout).ok()?.trim();
+        (!value.is_empty() && !value.contains(['\r', '\n'])).then(|| value.to_owned())
+    };
+
+    let branch = text(&["symbolic-ref", "--quiet", "HEAD"]);
+    if !branch.is_some_and(|branch| branch.starts_with("refs/heads/")) {
+        return false;
+    }
+    let upstream = match text(&["rev-parse", "--symbolic-full-name", "@{upstream}"]) {
+        Some(upstream) if upstream.starts_with("refs/remotes/") => upstream,
+        _ => return false,
+    };
+    let short_upstream = match text(&[
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        "@{upstream}",
+    ]) {
+        Some(upstream) => upstream,
+        None => return false,
+    };
+    let oid_length = match text(&["rev-parse", "--show-object-format"]).as_deref() {
+        Some("sha1") => 40,
+        Some("sha256") => 64,
+        _ => return false,
+    };
+    let full_oid =
+        target.len() == oid_length && target.bytes().all(|byte| byte.is_ascii_hexdigit());
+    if target != short_upstream && target != upstream && !full_oid {
+        return false;
+    }
+    if git(&["status", "--porcelain=v1", "--untracked-files=normal"])
+        .is_none_or(|answer| !answer.stdout.is_empty())
+    {
+        return false;
+    }
+    let commit = |revision: &str| {
+        let expression = format!("{revision}^{{commit}}");
+        let oid = text(&["rev-parse", "--verify", "--end-of-options", &expression])?;
+        ((oid.len() == 40 || oid.len() == 64) && oid.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            .then_some(oid)
+    };
+    let (head, target_oid, upstream) = match (commit("HEAD"), commit(target), commit(&upstream)) {
+        (Some(head), Some(target), Some(upstream)) => (head, target, upstream),
+        _ => return false,
+    };
+    if full_oid && target != target_oid {
+        return false;
+    }
+    git(&["merge-base", "--is-ancestor", &head, &target_oid]).is_some()
+        && git(&["merge-base", "--is-ancestor", &target_oid, &upstream]).is_some()
+}
+
+/// A proof subprocess with every inherited Git control variable removed.
+fn proof_git_command(repo_dir: &std::path::Path, arguments: &[&str]) -> std::process::Command {
+    proof_git_command_with_environment(
+        repo_dir,
+        arguments,
+        std::env::vars_os().map(|(name, _)| name),
+    )
+}
+
+fn proof_git_command_with_environment(
+    repo_dir: &std::path::Path,
+    arguments: &[&str],
+    environment: impl IntoIterator<Item = std::ffi::OsString>,
+) -> std::process::Command {
+    let mut command = std::process::Command::new("git");
+    command.arg("-C").arg(repo_dir).args(arguments);
+    for name in environment {
+        if is_git_environment(&name) {
+            command.env_remove(name);
+        }
+    }
+    command
+}
+
+fn is_git_environment(name: &std::ffi::OsStr) -> bool {
+    name.to_string_lossy()
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("GIT_"))
+}
+
+fn fast_forward_environment_is_unsteered(
+    environment: impl IntoIterator<Item = std::ffi::OsString>,
+) -> bool {
+    !environment
+        .into_iter()
+        .any(|name| is_fast_forward_steering_environment(&name))
+}
+
+fn is_fast_forward_steering_environment(name: &std::ffi::OsStr) -> bool {
+    is_git_environment(name)
+        || name.to_str().is_some_and(|name| {
+            ["BASH_ENV", "ENV", "BASH_FUNC_git%%"]
+                .iter()
+                .any(|steering| name.eq_ignore_ascii_case(steering))
+        })
 }
 
 /// Everything the gate needs that it cannot work out for itself.
@@ -2005,7 +2197,8 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
         (
             Action::Boundary {
                 command,
-                pr: Some(command_pr)
+                pr: Some(command_pr),
+                ..
             },
             Some(receipt)
         ) if command == "gh pr merge" && *command_pr == receipt.pr && same_repository
@@ -2181,7 +2374,15 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
                 if let Some(refusal) = stale_verdict(action, run, &context.repo_dir) {
                     return Decision::Deny(Box::new(prefixed(refusal, &subject)));
                 }
-                if let Action::Boundary { command, .. } = action
+                if let Action::Boundary {
+                    command,
+                    local_fast_forward_target,
+                    ..
+                } = action
+                    && !(state == "in-progress"
+                        && local_fast_forward_target.as_deref().is_some_and(|target| {
+                            is_safe_local_fast_forward(&context.repo_dir, target)
+                        }))
                     && let Some(refusal) = out_of_phase(
                         command,
                         &state,
@@ -2242,12 +2443,25 @@ pub fn control_surface() -> PathBuf {
     })
 }
 
-/// The first installed skill root, for a harness that was given no explicit one.
+/// The one installed skill root the gate decides in, for a harness that was
+/// given no explicit one.
+///
+/// Not *the first* one any more, which is what it was and what the defect was.
+/// `claim_to_decide_in`, below, is what now separates two installed candidates.
 pub fn discover_skill_root() -> Result<PathBuf, Refusal> {
-    let options = crate::setup::SetupOptions::default();
+    discover_skill_root_in(&crate::setup::SetupOptions::default())
+}
+
+/// [`discover_skill_root`], for a caller that resolves its own environment.
+///
+/// Separate so the selection can be **measured against roots a test builds**
+/// rather than against whichever agents the machine running the suite happens
+/// to have installed. The rule below was written from one machine's `AGENTS`
+/// order, and a test that asserted that order would have agreed with the defect.
+pub fn discover_skill_root_in(options: &crate::setup::SetupOptions) -> Result<PathBuf, Refusal> {
     let roots: Vec<PathBuf> = crate::setup::AGENTS
         .iter()
-        .filter_map(|adapter| crate::setup::resolve_paths(adapter, &options).ok())
+        .filter_map(|adapter| crate::setup::resolve_paths(adapter, options).ok())
         .map(|paths| paths.skill_root)
         .filter(|root| root.join(crate::skill::CONTRACT).is_file())
         .collect();
@@ -2269,13 +2483,13 @@ pub fn discover_skill_root() -> Result<PathBuf, Refusal> {
     // agent's own contract and reported the operator's values back to them,
     // correctly. Two commands, one machine, and the one that was right was the
     // one that does not decide anything.
+    //
+    // `min_by_key` keeps the first of equal ranks, so where nothing
+    // distinguishes two roots the `AGENTS` order above still decides — the
+    // neutral root first, exactly as before.
     roots
         .iter()
-        .find(|root| {
-            std::fs::read_to_string(root.join(crate::skill::CONTRACT))
-                .is_ok_and(|text| text.contains(crate::config::BLOCK_BEGIN))
-        })
-        .or_else(|| roots.first())
+        .min_by_key(|root| claim_to_decide_in(root))
         .cloned()
         .ok_or_else(|| {
             Refusal::not_started(
@@ -2284,6 +2498,48 @@ pub fn discover_skill_root() -> Result<PathBuf, Refusal> {
                 Resolution::run("estigia setup --all"),
             )
         })
+}
+
+/// How strong a claim one root makes to be the place the gate decides in.
+///
+/// Ordered, lowest first, so [`discover_skill_root_in`] can sort by it.
+///
+/// **The second half is the whole fix.** The first half — does this contract
+/// carry a configuration block — cannot tell two installed roots apart, because
+/// `setup --all` writes that block into every one of them. So the selection
+/// degenerated to `AGENTS` order and took the shared neutral root, and the one
+/// file that distinguishes the candidates was never opened: `estigia.local.md`
+/// is the layer that carries the operator's own values, and it sits beside the
+/// contract of the agent they configured. Measured on the machine that filed
+/// this: two byte-identical `SKILL.md`, one `estigia.local.md`, and a gate
+/// deciding `Blind judges: single` against an operator who had written
+/// `two blind` — the loosening direction, silently, on the row that exists to
+/// make review independent.
+///
+/// **Presence, not "differs from the defaults".** Preferring a root whose
+/// resolved configuration differs from [`crate::config::Config::default`] was
+/// the obvious rule and does not work: `setup` writes real values into the
+/// neutral root's own block too — that machine's neutral root carries a
+/// `Worktree location` and a `Change size` — so both candidates differ from the
+/// defaults, the rule ties, and the order decides again. It would have shipped
+/// green while changing nothing.
+///
+/// **A file that will not parse still counts.** This asks whether the operator
+/// put their file here, not whether every row in it reads — a root holding an
+/// unreadable override is still the root they configured, and choosing another
+/// one would answer their typo by quietly enforcing somebody else's table.
+/// `doctor`'s `contract` row is where an unreadable file is reported.
+fn claim_to_decide_in(root: &Path) -> (u8, u8) {
+    let carries_a_block = std::fs::read_to_string(root.join(crate::skill::CONTRACT))
+        .is_ok_and(|text| text.contains(crate::config::BLOCK_BEGIN));
+    let carries_the_operators_own = root.join(crate::config::LOCAL_FILE).is_file();
+    // The block first, so a root with no configuration block is still never
+    // preferred over one that has it — the case the comment above records, and
+    // an upstream `issue-flow` root is exactly it.
+    (
+        u8::from(!carries_a_block),
+        u8::from(!carries_the_operators_own),
+    )
 }
 
 /// A refusal for a caller that named an issue Estigia cannot parse.

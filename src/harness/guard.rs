@@ -618,6 +618,7 @@ pub fn decide(context: &GateContext, repo_dir: &Path) -> Decision {
         &Action::Boundary {
             command: "git push".to_owned(),
             pr: None,
+            local_fast_forward_target: None,
         },
         Sensitivity::Boundary,
     )

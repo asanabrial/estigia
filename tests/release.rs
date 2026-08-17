@@ -738,3 +738,616 @@ fn ci_uses_no_privileged_pr_context_or_write_permission() {
     assert!(workflow.contains("contents: read"));
     assert!(workflow.contains("persist-credentials: false"));
 }
+
+/// Neither workflow checks out with an action GitHub is already forcing onto a
+/// newer runtime, and a red run keeps what it compiled.
+///
+/// Both halves were unguarded, which is how both got old. `actions/checkout@v4`
+/// targets Node 20 and every run of this repository printed *"Node.js 20 is
+/// deprecated … being forced to run on Node.js 24"* — a warning that becomes a
+/// workflow that will not start, on GitHub's schedule rather than on ours. And
+/// `Swatinem/rust-cache` discards the cache of a failing run by default, so the
+/// fix pushed after a red build recompiles the dependency tree from cold on
+/// every platform. Closing one set of platform failures paid that at least nine
+/// times, three platforms each: `ci` on `main` failed nine consecutive times,
+/// runs `31753883982` through `31760121174`, from late on 2026-08-13 into the
+/// early hours of 2026-08-14, before `31760887100` went green. Nine is a floor
+/// rather than the count — the run the issue names as the first of the episode,
+/// `31752296629`, is no longer retrievable.
+///
+/// The floor is a version rather than a word, because "deprecated" is not
+/// something a file can be asked. Read from each major's own `action.yml`: `v2`,
+/// `v3` and `v4` declare `node12`, `node16` and `node20`; `v1` declares
+/// `runs.plugin` and no Node runtime at all; `v5`, `v6` and `v7` are `node24`,
+/// and there is no `v8`. So the four rejected are rejected on what they say
+/// rather than on a guess, and a future deprecation moves this number — moving
+/// it is the point, because the number is where somebody has to look.
+///
+/// The cache half is read from the block under `Swatinem/rust-cache@` rather
+/// than from the file, because the first version of it searched the whole file
+/// and three ways of turning the fix off left it green: the option commented out
+/// above a `rust-cache` on its defaults, the option parked on another step, and
+/// the caching step deleted. Each of those is now red, and so is a workflow with
+/// no caching step at all — a floor only holds up something that is there. The
+/// block ends where the next step's indentation begins rather than at the first
+/// `- `, so a `cache-directories:` sequence written above the option does not
+/// end the step early and fail a workflow that is configured correctly.
+///
+/// What it has been found not to catch is tabulated in `docs/honesty.md`, with
+/// no count: this reads a workflow as lines, and nobody has enumerated where
+/// that fails. Some of it is meaning a line cannot carry — a commit pin names no
+/// version, a step under `if: false` reads exactly like one that runs — and some
+/// is syntax this reader does not handle, which a YAML parser would close. The
+/// twenty-three correct workflows this guard used to refuse are tabulated beside it,
+/// and both tables were built the same way: by writing the file a different
+/// legal way and running it, rather than by reading this code and reasoning
+/// about what it would do.
+#[test]
+fn no_workflow_checks_out_with_a_deprecated_action_or_discards_a_red_cache() {
+    // The version floor applies to every workflow in the directory, not to the
+    // two this repository happens to have today: a lane added later that checks
+    // out is a lane this floor has to reach.
+    let workflows = every_workflow();
+    assert!(
+        workflows.len() >= 2,
+        "the workflow directory listed {workflows:?}, fewer than the two lanes \
+         this repository is known to have, so the loop below reads almost nothing"
+    );
+    for name in &workflows {
+        let running = what_runs(&read(&format!(".github/workflows/{name}")));
+        // A step written in flow style is one this reader cannot take apart: it
+        // holds every key on one line, so the key reads `{ uses` and the step is
+        // skipped rather than checked. In a lane added later there is no floor
+        // to catch the miss, and a bare `- { uses: Swatinem/rust-cache@v2 }`
+        // discarded every red run's cache while this test stayed green.
+        //
+        // Only inside a job's `steps:`, and only a step of it. The first version
+        // of this refused any `- {` in the file, which is what a `matrix:
+        // include:` entry and a flow mapping in an input value both look like —
+        // correct workflows, told they had written a step they had not.
+        let flow = flow_style_steps(&running);
+        assert!(
+            flow.is_empty(),
+            "{name} writes a step in flow style, which this guard reads as no \
+             step at all rather than as one it has checked: {flow:?}"
+        );
+        let stale: Vec<&String> = running
+            .iter()
+            .filter(|code| {
+                runs_action(code, "actions/checkout")
+                    .and_then(checkout_major)
+                    .is_some_and(|major| major < 5)
+            })
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "{name} checks out with an action GitHub already forces onto a newer \
+             runtime: {stale:?}"
+        );
+    }
+    // The floor is only a floor where a step is there to have a version, and
+    // only these two lanes are known to check out. A scheduled labeller or stale
+    // sweep needs no checkout, so requiring one of every file would fail a
+    // workflow that is written correctly — which is what widening this loop to
+    // the directory did until a review ran that file past it.
+    for name in ["ci.yml", "release.yml"] {
+        let running = what_runs(&read(&format!(".github/workflows/{name}")));
+        assert!(
+            running
+                .iter()
+                .any(|code| runs_action(code, "actions/checkout").is_some()),
+            "{name} has no checkout step, so the version check above read nothing"
+        );
+    }
+
+    assert!(
+        what_runs(&read(".github/workflows/ci.yml"))
+            .iter()
+            .any(|code| runs_action(code, "swatinem/rust-cache").is_some()),
+        "ci.yml has no caching step, so the option check below reads nothing"
+    );
+    // The option only does anything on the step it is written under. Read as a
+    // whole file, a `cache-on-failure: true` parked on some other step — or
+    // commented out beside a `rust-cache` left on its defaults — answers yes
+    // while every red run still discards what it compiled. Every caching step in
+    // every workflow is read: every one, because which of several decides the
+    // saving behaviour is a question about the action rather than about this
+    // file; every workflow, for the same reason the version floor reads them
+    // all, since a lane added later can copy a bare `rust-cache` as easily as
+    // this one carried it.
+    for name in &workflows {
+        let running = what_runs(&read(&format!(".github/workflows/{name}")));
+        for at in 0..running.len() {
+            // The same rule the two floors above use, so a step titled after the
+            // action, or a command echoing its name, is not read as a caching
+            // step and the step around it is not asked for the option.
+            if runs_action(&running[at], "swatinem/rust-cache").is_none() {
+                continue;
+            }
+            // From the line the step opens on, which is not always its `uses:`:
+            // a step that names itself first puts `uses:` and `with:` at the
+            // same depth, and measuring from there ends the block immediately.
+            let opens = step_opening(&running, at);
+            let depth = indent_of(&running[opens]);
+            // A step ends where the next one starts. Stopping at the first `- `
+            // instead would end it at any block sequence inside its own `with:`
+            // — `cache-directories:` above the option would fail a workflow that
+            // is configured correctly.
+            // From the opening line inclusive, because a step's keys are an
+            // unordered mapping: `- with:` then `uses:` is legal, and a search
+            // that starts one line later cannot see that `with:` at all.
+            let under_the_cache: String = std::iter::once(running[opens].clone())
+                .chain(
+                    running[opens + 1..]
+                        .iter()
+                        .take_while(|code| code.trim().is_empty() || indent_of(code) > depth)
+                        .cloned(),
+                )
+                .collect::<Vec<_>>()
+                .join("\n");
+            // The inputs, not the step: read as keys and values, for the reason
+            // the `uses:` half is, and taken from under `with:`, because that is
+            // the only key that sets one.
+            let inputs: Vec<(String, String)> = under_the_key(&under_the_cache, "with")
+                .lines()
+                .filter_map(key_and_value)
+                .collect();
+            // Both sides folded. An input's name reaches the action as
+            // `INPUT_<NAME>` upper-cased, and the runner's own input map compares
+            // without case — so `Save-If: false` is `save-if: false`, and reading
+            // the key as written let it turn off every run's saving while this
+            // test stayed green. The round that folded the action's name and its
+            // value left the key beside them.
+            let set_to = |key: &str| {
+                inputs
+                    .iter()
+                    .find(|(k, _)| k.to_lowercase() == key)
+                    .map(|(_, v)| v.to_lowercase())
+            };
+            assert!(
+                set_to("cache-on-failure").as_deref() == Some("true"),
+                "a red run throws away everything it compiled, so the next push \
+                 starts from cold; the caching step at {name}:{} reads: \
+                 {under_the_cache:?}",
+                opens + 1
+            );
+            // The action saves only when `save-if` reads exactly `true`, so any
+            // other literal — `no`, `off`, `0` — stops every run saving, which
+            // is the red run and all the rest besides. An expression is left
+            // alone: what it evaluates to is not in this file.
+            let saving = set_to("save-if").unwrap_or_else(|| "true".to_owned());
+            assert!(
+                saving == "true" || saving.starts_with("${{"),
+                "the caching step at {name}:{} sets `save-if: {saving}`, so no \
+                 run saves a cache at all and `cache-on-failure` decides nothing",
+                opens + 1
+            );
+        }
+    }
+    // Only `ci.yml` caches, and that is this repository's judgement rather than
+    // the issue's: the issue ruled out caching anything but cargo, which is what
+    // `rust-cache` caches, and said nothing about the release lane. This line
+    // holds that lane where it is so a cache appears there deliberately rather
+    // than by copying — whether one would pay off has not been measured, and
+    // measuring it is what should delete this line, not the copying. A step that
+    // runs the action, for the reason the version floor reads only those: naming
+    // it in a command or a title is talking about it.
+    let cached: Vec<String> = what_runs(&read(".github/workflows/release.yml"))
+        .into_iter()
+        .filter(|code| runs_action(code, "swatinem/rust-cache").is_some())
+        .collect();
+    assert!(
+        cached.is_empty(),
+        "the release lane gained a cache this guard does not check: {cached:?}"
+    );
+}
+
+/// What a workflow runs, line for line: comments stripped, and the body of every
+/// block scalar blanked.
+///
+/// The indices match the file's, so a line number in a message still points at
+/// the line. A `run: |` body is shell or text — a workflow that prints a YAML
+/// recipe, or documents the step it replaced, has `- uses: actions/checkout@v4`
+/// inside a string, and reading that as a step refuses a correct file. `ci.yml`
+/// already writes bodies that shape.
+fn what_runs(workflow: &str) -> Vec<String> {
+    let mut running: Vec<String> = Vec::new();
+    let mut body_under: Option<usize> = None;
+    for line in workflow.lines() {
+        let code = code_of(line);
+        let blank = code.trim().is_empty();
+        if let Some(depth) = body_under {
+            if blank || indent_of(&code) > depth {
+                running.push(String::new());
+                continue;
+            }
+            body_under = None;
+        }
+        if !blank && opens_a_block(&code) {
+            body_under = Some(indent_of(&code));
+        }
+        running.push(code);
+    }
+    running
+}
+
+/// How far a line is indented, in spaces.
+fn indent_of(code: &str) -> usize {
+    code.len() - code.trim_start().len()
+}
+
+/// Whether a line's value is a block scalar header — the whole value, not its
+/// last character.
+///
+/// Read forwards from the `:` rather than by trimming the tail. Trimming took
+/// the chomping indicator off before the indentation one, so `|2-` was a header
+/// and `|-2` was not, though YAML accepts either order: half the header space
+/// was asserted from the half that had been written down. And a value that
+/// merely *ends* in a pipe — `run: cargo test | tee log` — is a command, not a
+/// header, which trimming could not tell apart at all.
+fn opens_a_block(code: &str) -> bool {
+    let Some((_, value)) = code.split_once(':') else {
+        return false;
+    };
+    let value = value.trim();
+    let Some(indicators) = value.strip_prefix('|').or_else(|| value.strip_prefix('>')) else {
+        return false;
+    };
+    indicators
+        .chars()
+        .all(|c| c.is_ascii_digit() || c == '-' || c == '+')
+}
+
+/// The `@ref` of a step that runs `action`, lowercased — `None` for any line
+/// that is not one.
+///
+/// Three things a plain substring search got wrong, each found by writing a
+/// legal workflow and running it. The **key** must be `uses:`, so a step title,
+/// an `if:` expression or a `with:` value that quotes the word beside a version
+/// is not a step. The value must **start** with the action, so
+/// `myorg/tools/actions/checkout@v4` — a different action whose path ends in
+/// this one's name — is not this one. And the comparison is case-folded,
+/// because `Actions/Checkout@v4` slipped both floors while naming the same
+/// action a floor exists to refuse.
+fn runs_action(code: &str, action: &str) -> Option<String> {
+    let (key, value) = key_and_value(code)?;
+    if key != "uses" {
+        return None;
+    }
+    let value = value.to_lowercase();
+    value
+        .strip_prefix(&format!("{action}@"))
+        .map(|reference| reference.to_owned())
+}
+
+/// A line's key and value, split at the first `:`, with a step's `- ` removed,
+/// the key's own spacing dropped and the value unquoted.
+///
+/// Reading the key is what tells a step from a sentence about one: `name: this
+/// uses: actions/checkout@v4` has the key `name`, and a guard that searches the
+/// whole line for `uses:` refuses it. Unquoting matters for the same reason
+/// case-folding did: `uses: "actions/checkout@v7"` is ordinary YAML, and a
+/// comparison against the raw value read it as no step at all — which both
+/// refused a correct workflow and let a quoted `@v4` through a floor. This
+/// document has recorded a guard defeated by a leading quote twice before.
+fn key_and_value(code: &str) -> Option<(String, String)> {
+    let (key, value) = code.split_once(':')?;
+    let key = key.trim().trim_start_matches("- ").trim();
+    Some((unquoted(key).to_owned(), unquoted(value.trim()).to_owned()))
+}
+
+/// A scalar with its surrounding quotes removed, if it has a matching pair.
+///
+/// Used on the key as well as the value, because the round that added it to one
+/// side left the other: `- "uses": Swatinem/rust-cache@v2` refused a correct
+/// workflow and `- "uses": actions/checkout@v4` walked past a floor.
+fn unquoted(scalar: &str) -> &str {
+    match scalar.chars().next() {
+        Some(quote @ ('"' | '\'')) if scalar.len() > 1 && scalar.ends_with(quote) => {
+            &scalar[1..scalar.len() - 1]
+        }
+        _ => scalar,
+    }
+}
+
+/// What a block-sequence item holds, when the line opens one.
+///
+/// The dash and the spaces after it are separation, and YAML allows any run of
+/// them. Reading the item by matching the two bytes `- ` made `-  { … }` a
+/// different thing from `- { … }` to this guard and the same thing to GitHub.
+fn opens_an_item(code: &str) -> Option<&str> {
+    let opening = code.trim_start();
+    let rest = opening.strip_prefix('-')?;
+    if rest.is_empty() || rest.starts_with(' ') {
+        Some(rest.trim_start())
+    } else {
+        None
+    }
+}
+
+/// Every step a workflow writes in flow style, and nothing else.
+///
+/// A step is an item of a job's `steps:`, so this walks each `steps:` block and
+/// looks only at items of it — the `- ` lines at the shallowest such depth
+/// inside the block. A `matrix: include:` entry, and a flow mapping used as an
+/// item of an input's value, are both `- { … }` and neither is a step; refusing
+/// every `- {` in the file called them one.
+///
+/// A whole `steps:` written as a flow sequence — `steps: [{ uses: … }]`, or the
+/// same spread over lines — is the other half: there are no `- ` items at all,
+/// so nothing was read and nothing was refused, and a bare caching step inside
+/// one turned the fix off with this test green.
+fn flow_style_steps(running: &[String]) -> Vec<String> {
+    let mut refused = Vec::new();
+    let mut at = 0;
+    while at < running.len() {
+        let Some((key, value)) = key_and_value(&running[at]) else {
+            at += 1;
+            continue;
+        };
+        // A `jobs:` written as one flow mapping holds every job and every step
+        // on it, and nothing below finds a `steps:` key at all.
+        if key == "jobs" && !value.is_empty() {
+            refused.push(running[at].clone());
+            at += 1;
+            continue;
+        }
+        if key != "steps" {
+            at += 1;
+            continue;
+        }
+        if value.starts_with('[') {
+            refused.push(running[at].clone());
+            at += 1;
+            continue;
+        }
+        let depth = indent_of(&running[at]);
+        // A block sequence may start in its key's own column — `steps:` then
+        // `- uses:` at the same indentation is ordinary GitHub Actions style.
+        // Requiring the items to be deeper made the whole block invisible
+        // there, so a third lane could check out with `@v4` and carry a bare
+        // `rust-cache` with this test green: both halves of the fix off, in the
+        // case the loops were widened for.
+        let block: Vec<&String> = running[at + 1..]
+            .iter()
+            .take_while(|code| {
+                let opening = code.trim_start();
+                code.trim().is_empty()
+                    || indent_of(code) > depth
+                    || (indent_of(code) == depth && (opening == "-" || opening.starts_with("- ")))
+            })
+            .collect();
+        // The steps themselves sit at the shallowest item in the block; an input
+        // value's own list items sit deeper.
+        let item = block
+            .iter()
+            .filter(|code| opens_an_item(code).is_some())
+            .map(|code| indent_of(code))
+            .min();
+        // **A `steps:` that yielded no step is refused**, whatever the reason.
+        // Four rounds running closed one spelling each — `- {`, items in the
+        // key's own column, `-  {` with two spaces, `steps: [` — and the fifth
+        // walked past all of them by putting the `[` on the next line, silently.
+        // This is the invariant those four were each an instance of: an
+        // unhandled spelling is now a red rather than a file nobody read.
+        if item.is_none() {
+            refused.push(running[at].clone());
+            at += 1 + block.len();
+            continue;
+        }
+        for (n, code) in block.iter().enumerate() {
+            if Some(indent_of(code)) != item {
+                continue;
+            }
+            let Some(rest) = opens_an_item(code) else {
+                continue;
+            };
+            // What the item holds, not two literal bytes. Matching `- {` meant
+            // one space: `-  { uses: … }` counted as an item, so it was neither
+            // read nor refused, and `ci.yml` itself could check out with `@v4`
+            // or carry a bare cache with this test green.
+            if rest.starts_with('{') {
+                refused.push((*code).clone());
+                continue;
+            }
+            // A dash alone puts the mapping on the next line. Only there —
+            // reading any `{` in the block as a step refused a `with:` whose
+            // mapping opens beneath it, which is an input value, not a step.
+            if rest.is_empty()
+                && block[n + 1..]
+                    .iter()
+                    .find(|next| !next.trim().is_empty())
+                    .is_some_and(|next| next.trim_start().starts_with('{'))
+            {
+                refused.push((*code).clone());
+            }
+        }
+        at += 1 + block.len();
+    }
+    refused
+}
+
+/// The lines under one of a step's keys — `with:`, holding an action's inputs.
+///
+/// A step's `env:` and its `with:` sit at the same depth, so searching the whole
+/// step for `cache-on-failure` found it under either. Under `env:` it sets a
+/// variable named `cache-on-failure`; the action reads the input
+/// `INPUT_CACHE-ON-FAILURE`, which only `with:` writes, and its `post-if` looks
+/// for `CACHE_ON_FAILURE`. So the workflow reads as configured and every red run
+/// still discards its cache.
+fn under_the_key(block: &str, key: &str) -> String {
+    let lines: Vec<&str> = block.lines().collect();
+    let Some(at) = lines
+        .iter()
+        .position(|line| key_and_value(line).is_some_and(|(k, _)| k == key))
+    else {
+        return String::new();
+    };
+    // `with: { cache-on-failure: true }` is a block step whose inputs are one
+    // flow mapping. It was read as no `with:` at all, so a correctly configured
+    // step was reported as discarding its caches.
+    let mut at = at;
+    let mut value = key_and_value(lines[at]).map(|(_, v)| v).unwrap_or_default();
+    // A mapping may also open on the line *after* its key. Reading only the
+    // form that opens beside it refused that, and said the cache was being
+    // discarded rather than that the reader had stopped.
+    if value.is_empty()
+        && let Some((n, opens)) = lines[at + 1..]
+            .iter()
+            .enumerate()
+            .find(|(_, line)| !line.trim().is_empty())
+        && opens.trim_start().starts_with('{')
+    {
+        at += 1 + n;
+        value = opens.trim().to_owned();
+    }
+    if value.starts_with('{') {
+        // A flow mapping need not close on the line that opens it. Reading only
+        // the one-line form refused a correct step and told it its caches were
+        // being discarded, which is a diagnosis about the workflow rather than
+        // about the reader.
+        let mut whole = value;
+        let mut next = at + 1;
+        while !whole.trim_end().ends_with('}') && next < lines.len() {
+            whole.push(' ');
+            whole.push_str(lines[next].trim());
+            next += 1;
+        }
+        let Some(pairs) = whole
+            .trim()
+            .strip_prefix('{')
+            .and_then(|v| v.trim_end().strip_suffix('}'))
+        else {
+            return String::new();
+        };
+        return pairs
+            .split(',')
+            .map(|pair| pair.trim().to_owned())
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    if !value.is_empty() {
+        return String::new();
+    }
+    // From the key, not from the dash. `- with:` opening a step carries the
+    // step's own indentation, so measuring from there made the step's other
+    // keys look like the input's children and the shallowest of them — `uses:`
+    // — look like the only one.
+    let opening = lines[at].trim_start();
+    let depth = indent_of(lines[at]) + if opening.starts_with("- ") { 2 } else { 0 };
+    let body: Vec<&str> = lines[at + 1..]
+        .iter()
+        .take_while(|line| line.trim().is_empty() || indent_of(line) > depth)
+        .copied()
+        .collect();
+    // Its own keys, not its grandchildren. `with:` → `env:` → the option is a
+    // variable named after the input rather than the input, and taking the whole
+    // subtree read it as one — the row this document says it closed, surviving
+    // one level in.
+    let Some(child) = body
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| indent_of(line))
+        .min()
+    else {
+        return String::new();
+    };
+    body.into_iter()
+        .filter(|line| indent_of(line) == child)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The `actions/checkout` major a `@ref` names, when it names one by tag.
+///
+/// Parsed rather than matched against a list of old spellings: `@v1` is a prefix
+/// of `@v10`, so a list would start refusing the first two-digit major — and
+/// surviving to the next deprecation is the whole point of a floor. A commit pin
+/// carries no major and answers `None`, which is the hole `docs/honesty.md`
+/// records.
+fn checkout_major(reference: String) -> Option<u32> {
+    reference
+        .strip_prefix('v')?
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>()
+        .parse()
+        .ok()
+}
+
+/// The line a step opens on, walking back from any line inside it.
+///
+/// A step's first line is the one carrying the `- `, which is not always the
+/// `uses:`: `- name: …` then `uses:` then `with:` is the form this repository
+/// writes every step it names, and there the `uses:` and the `with:` sit at the
+/// same depth. Reading a step's extent from the `uses:` line ends it at the very
+/// next line, and the guard above then reports a cache being discarded by a
+/// workflow that is configured correctly.
+fn step_opening(running: &[String], at: usize) -> usize {
+    // Shallower than everything between it and the line we started from. A `- `
+    // alone is not enough: `- with:` above the step's `uses:`, holding a
+    // `cache-directories:` sequence, puts a `- ` item *inside* the step and
+    // deeper than it. Walking back to the nearest one landed there, ended the
+    // block at once, and reported a correctly configured action as discarding
+    // its caches. Both halves of that shape were already rows of the table
+    // below; the two together had never been written down and run.
+    let mut shallowest = indent_of(&running[at]);
+    for n in (0..=at).rev() {
+        let line = &running[n];
+        let opening = line.trim_start();
+        let depth = indent_of(line);
+        if (opening == "-" || opening.starts_with("- ")) && depth <= shallowest {
+            return n;
+        }
+        if !opening.is_empty() {
+            shallowest = shallowest.min(depth);
+        }
+    }
+    at
+}
+
+/// Every workflow file the directory holds, sorted, so that "both workflows"
+/// keeps meaning all of them rather than the two that existed when it was
+/// written. A directory named `x.yml` is listed by name and is not a workflow.
+fn every_workflow() -> Vec<String> {
+    let dir = root().join(".github/workflows");
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|why| panic!("{} holds the workflows: {why}", dir.display()))
+        .map(|entry| entry.unwrap_or_else(|why| panic!("the directory listed it: {why}")))
+        .filter(|entry| entry.path().is_file())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(".yml") || name.ends_with(".yaml"))
+        .collect();
+    names.sort();
+    names
+}
+
+/// Everything on a line before its comment, so a guard reads what a workflow
+/// runs rather than what it says about itself. Commenting a setting out is how
+/// one gets turned off without looking turned off.
+fn code_of(text: &str) -> String {
+    text.lines().map(uncommented).collect::<Vec<_>>().join("\n")
+}
+
+/// A line up to the `#` that opens a comment, and no earlier.
+///
+/// YAML starts a comment at a `#` that is outside quotes and follows whitespace
+/// or nothing. Cutting at the first `#` on the line cut inside a quoted value:
+/// `prefix-key: 'v1 # bump'` left an unterminated flow mapping, and a correctly
+/// configured caching step was reported as discarding its caches — a diagnosis
+/// about the workflow when the fault was the reader.
+fn uncommented(line: &str) -> &str {
+    let mut quote: Option<char> = None;
+    let mut previous = ' ';
+    for (at, character) in line.char_indices() {
+        match quote {
+            Some(open) if character == open => quote = None,
+            Some(_) => {}
+            None if character == '"' || character == '\'' => quote = Some(character),
+            None if character == '#' && previous.is_whitespace() => return &line[..at],
+            None => {}
+        }
+        previous = character;
+    }
+    line
+}

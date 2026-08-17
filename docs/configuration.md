@@ -75,6 +75,51 @@ first precedence for ordinary agents and does not add OpenCode launch enforcemen
 contributes no judge; use a separate session or durable handoff rather than reducing or serializing the
 configured panel.
 
+### Which root the gate decides in
+
+An agent reads the contract in **its own** skill root. The gate reads **one** root for the whole
+machine — the canonical one — and `estigia config list` without `--agent` reports that same root, so
+the two answers only agree while the roots do.
+
+That root is chosen by what each candidate carries, not by which agent is running: a contract with a
+configuration block is preferred over one without, and among those, a root holding the operator's own
+`estigia.local.md` is preferred over one that does not. Where nothing distinguishes them the declared
+adapter order decides, which puts the shared neutral root first.
+
+The second half of that rule exists because `setup --all` writes the configuration block into every
+root, so the first half cannot tell two installed roots apart; the selection then fell to the order
+and took a root that held none of the operator's values, and the gate adjudicated at defaults while
+the agent read the operator's table. Preferring "a configuration that differs from the defaults"
+does not separate them either — setup writes real values into the neutral root's block as well.
+
+Two roots can still legitimately hold different tables; `setup` preserves each rather than flattening
+them. What must not stay silent is the gate deciding by rows an agent never reads, so `estigia doctor`
+carries a `canonical` row naming the agent, the setting and both values.
+
+Which divergence is a **fault** is decided by the scope each row already has — the same three-valued
+question the rest of the crate asks, not a fourth list:
+
+- **Agent** — `Delivery authorisation`, `Review delegation`, `Transition authorisation`, `Planning`,
+  `Model routing`, `Blind judges`. These are *meant* to differ by agent; `config set --agent <slug> …`
+  is how you set one. Named on the row, and the row stays `ok`: calling a machine broken for a
+  supported configuration names a fault with no way out of it.
+- **Everywhere** — a fact about the repository, the same whichever agent asks. Two roots answering
+  differently means one agent is being decided for by a file it does not read: `BROKEN`, and the
+  resolution names `estigia config set "<row>" "<value>"` with no `--agent`, which writes it into
+  every installed contract.
+- **Machine** — `Summary language` and `Issue body language`, facts about this machine. Also
+  `BROKEN`, and their resolution names **no** command, because there is not one: the plain
+  `config set` writes a machine row into the canonical contract and nowhere else, and
+  `config set --agent <slug>` cannot hold one in a shared root at all — the per-agent file is
+  rendered and read through the agent scope, so the row is dropped and the command exits on its own
+  read-back. That asymmetry is [issue #62](https://github.com/asanabrial/estigia/issues/62); until
+  it is settled the row reports the divergence and says plainly that nothing clears it yet.
+
+Rows that differ by design are named in both branches, not only in the quiet one.
+
+The row is `skipped`, never `ok`, when the canonical configuration cannot be read: a comparison that
+was not made is not agreement.
+
 ### Model routing suggestions are agent-specific
 
 The stored value remains exactly the one `key=model` cell above, and the CLI remains the place to edit

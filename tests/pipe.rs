@@ -1932,6 +1932,32 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         eprintln!("SKIPPED: git is not usable here, so two of the rows were not forced.");
     }
 
+    // 7b. Two installed roots and the operator's own file in one of them, so
+    //     the root the gate decides in carries a row the other agent does not
+    //     read. This is the state #41 was filed from, and it printed eleven
+    //     `ok`s: both halves telling the truth about their own file, and
+    //     nothing comparing them.
+    let (_, stderr, ok) = run(home.path(), &["setup", "agents"], "");
+    assert!(ok, "setup failed: {stderr}");
+    let theirs = home
+        .path()
+        .join(".claude")
+        .join("skills")
+        .join(estigia::skill::DIRECTORY)
+        .join("estigia.local.md");
+    std::fs::write(
+        &theirs,
+        "| Setting | Value here |\n|---|---|\n| Change size | 120 |\n",
+    )
+    .expect("the operator's own file");
+    let (out, _, _) = run(home.path(), &["doctor"], "");
+    assert!(
+        out.contains("BROKEN   canonical"),
+        "a gate deciding by rows an agent never reads did not report the canonical row broken:\n\
+         {out}"
+    );
+    std::fs::remove_file(&theirs).expect("their file goes");
+
     // 8. A machine with no GitHub CLI on it. The row is about a program rather
     //    than about a file Estigia wrote, so it is forced by taking the program
     //    away — an empty search path, which is the only state in this test that
@@ -1971,6 +1997,7 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
     const FORCED: &[&str] = &[
         "skill",
         "contract",
+        "canonical",
         "gate",
         "tools",
         "gh",
@@ -6577,6 +6604,159 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
     );
 }
 
+/// A local fast-forward to the branch's tracked remote is preparation, not delivery.
+///
+/// The gate used to read every `git merge` as landing shared work, including the
+/// exact `git merge --ff-only origin/main` used to bring an isolated worktree up
+/// to date before continuing it. That command changes only this checkout and can
+/// neither publish nor create a merge commit, but `in-progress` refused it with
+/// the same answer as a pull-request merge.
+#[test]
+fn an_exact_local_fast_forward_is_allowed_without_widening_other_merges() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let git = |arguments: &[&str]| {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .expect("git runs for the fixture");
+        assert!(
+            output.status.success(),
+            "git {arguments:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    let branch = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["branch", "--show-current"])
+        .output()
+        .expect("git names the fixture branch");
+    let branch = String::from_utf8_lossy(&branch.stdout).trim().to_owned();
+    assert!(!branch.is_empty(), "the fixture is not on a branch");
+
+    // Put one commit on the local tracking ref while leaving the checked-out
+    // branch at its clean parent. No network is involved.
+    git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--allow-empty",
+        "--quiet",
+        "-m",
+        "upstream",
+    ]);
+    git(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(&["reset", "--hard", "--quiet", "HEAD^"]);
+    git(&["remote", "add", "origin", "https://example.invalid/o/r.git"]);
+    git(&["config", &format!("branch.{branch}.remote"), "origin"]);
+    git(&[
+        "config",
+        &format!("branch.{branch}.merge"),
+        "refs/heads/main",
+    ]);
+
+    let pointer = |state: &str, reviewed_head: Option<&str>| {
+        let pointer = serde_json::json!({
+            "run_id": "claude-abcd1234",
+            "issue": 12,
+            "revision": 1,
+            "state": state,
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+            "reviewed_head": reviewed_head,
+        });
+        std::fs::write(
+            home.join(".estigia")
+                .join("runs")
+                .join("claude-abcd1234.json"),
+            serde_json::to_string(&pointer).expect("the pointer serialises"),
+        )
+        .expect("the pointer is written");
+    };
+    let gate = |state: &str, command: &str| {
+        let input = serde_json::json!({"command": command}).to_string();
+        run_with_tracker(
+            home,
+            repo,
+            bin,
+            &issue_answer(state),
+            &[
+                "gate",
+                "Bash",
+                "--run-id",
+                "claude-abcd1234",
+                "--input",
+                &input,
+            ],
+            "",
+        )
+    };
+
+    pointer("in-progress", None);
+    let (allowed, refused, ok) = gate("in-progress", "git merge --ff-only origin/main");
+    assert!(
+        ok,
+        "the safe local fast-forward was refused: {allowed}{refused}"
+    );
+    assert!(
+        allowed.contains("allow"),
+        "the gate did not allow it: {allowed}"
+    );
+
+    pointer("in-progress", Some(&"0".repeat(40)));
+    let (_, stale, ok) = gate("in-progress", "git merge --ff-only origin/main");
+    assert!(!ok, "the local exception bypassed a stale verdict");
+    assert!(
+        stale.contains("verdict-bound-to-other-bytes"),
+        "stale_verdict did not run first: {stale}"
+    );
+    pointer("in-progress", None);
+
+    let (_, refused, ok) = gate("in-progress", "git merge --ff-only origin/other");
+    assert!(!ok, "an untracked target was allowed");
+    assert!(refused.contains("out-of-phase"), "wrong refusal: {refused}");
+    assert!(
+        refused.contains(
+            "git merge: this step lands the work and issue #12 is in in-progress, where no verdict exists"
+        ),
+        "the existing out-of-phase message changed: {refused}"
+    );
+    assert!(
+        refused.contains(
+            "a review of this head. Publish the review target, move the issue to review, and deliver once somebody has answered"
+        ),
+        "the existing out-of-phase guidance changed: {refused}"
+    );
+
+    for state in ["analysis", "ready", "blocked"] {
+        pointer(state, None);
+        let (_, refused, ok) = gate(state, "git merge --ff-only origin/main");
+        assert!(!ok, "the local exception widened into {state}");
+        assert!(
+            refused.contains("out-of-phase")
+                && refused.contains(&format!(
+                    "git merge: this step lands the work and issue #12 is in {state}, where no verdict exists"
+                )),
+            "{state} did not retain the existing refusal: {refused}"
+        );
+    }
+
+    let ledger = std::fs::read_to_string(home.join(".estigia").join("decisions.jsonl"))
+        .expect("the gate recorded its decisions");
+    assert!(
+        ledger.lines().any(|line| {
+            let entry: serde_json::Value = serde_json::from_str(line).expect("a ledger entry");
+            entry["verdict"] == "allow" && entry["subject"] == "git merge"
+        }),
+        "the allowed fast-forward is absent from the ledger: {ledger}"
+    );
+}
+
 /// Everything the two post-agreement checks need: a home, a checkout with a
 /// commit in it, and a `gh` that answers.
 struct TrackerRig {
@@ -11069,5 +11249,54 @@ fn a_stranded_run_recovers_from_the_checkout_it_is_running_in() {
             .any(|covered| estigia::paths::covers(covered, repo)),
         "the record still does not cover the checkout the server is running in: {:?}",
         after.covered().collect::<Vec<_>>()
+    );
+}
+
+/// The two ways of asking what governs give one answer.
+///
+/// `estigia config list` with no agent named answers *what governs here*, and
+/// the gate decides in one root for the whole machine. Those were two different
+/// files: the command walked the declared adapter order and answered from the
+/// first configured one — the shared neutral root — while the gate had picked
+/// the root holding the operator's own `estigia.local.md`. Measured on the
+/// machine that filed #41: `Blind judges` read back `single` from one command
+/// and `two blind` from the other, on the same machine, one flag apart.
+#[test]
+fn what_governs_reads_the_same_whether_or_not_an_agent_is_named() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    for agent in ["agents", "claude-code"] {
+        let (_, stderr, ok) = run(home.path(), &["setup", agent], "");
+        assert!(ok, "setup failed: {stderr}");
+    }
+
+    // Their own file, beside the contract of the agent they configured, setting
+    // a row neither installed table carries.
+    std::fs::write(
+        home.path()
+            .join(".claude")
+            .join("skills")
+            .join(estigia::skill::DIRECTORY)
+            .join("estigia.local.md"),
+        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n",
+    )
+    .expect("the operator's own file");
+
+    let rows = |arguments: &[&str]| {
+        let (out, stderr, ok) = run(home.path(), arguments, "");
+        assert!(ok, "`{arguments:?}` failed: {stderr}");
+        out
+    };
+    let unnamed = rows(&["config", "list"]);
+    let owner = rows(&["config", "list", "--agent", "claude-code"]);
+
+    assert_eq!(
+        unnamed, owner,
+        "`config list` and `config list --agent claude-code` answer differently on a machine \
+         whose gate decides in the Claude Code root"
+    );
+    assert!(
+        unnamed.contains("two blind"),
+        "the row the operator wrote is not what the command reports:\n{unnamed}"
     );
 }

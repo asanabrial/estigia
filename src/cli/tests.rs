@@ -2686,6 +2686,7 @@ fn both_doors_to_the_gate_read_one_payload_the_same_way() {
             crate::harness::Action::Boundary {
                 command: "git push".to_owned(),
                 pr: None,
+                local_fast_forward_target: None,
             },
             "`{spelling}` is a push and this door does not see it"
         );
