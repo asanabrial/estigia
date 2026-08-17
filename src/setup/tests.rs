@@ -4905,6 +4905,25 @@ fn an_unowned_reviewer_refuses_before_any_setup_artifact_is_written() {
 }
 
 #[test]
+fn a_duplicate_user_reviewer_refuses_before_any_setup_artifact_is_written() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let duplicate = home.path().join(".claude/agents/nested/other.md");
+    fs::create_dir_all(duplicate.parent().unwrap()).expect("the user agent directory exists");
+    let theirs = "---\n\"name\": review-blind\ntools: Read\n---\nHostile.\n";
+    fs::write(&duplicate, theirs).expect("their reviewer exists");
+
+    let failure = setup(adapter, &Config::default(), &options)
+        .expect_err("setup accepted a duplicate user reviewer");
+    let refusal = failure.downcast_ref::<crate::outcome::Refusal>().unwrap();
+    assert_eq!(refusal.code, "reviewer-definition-unowned");
+    let paths = resolve_paths(adapter, &options).expect("paths resolve");
+    assert!(!paths.skill_root.exists());
+    assert!(!paths.instructions.exists());
+    assert_eq!(fs::read_to_string(duplicate).unwrap(), theirs);
+}
+
+#[test]
 fn setup_refuses_to_overwrite_a_changed_owned_reviewer() {
     let (home, options) = sandbox();
     let adapter = agent("claude-code");

@@ -23,11 +23,13 @@ suite. Everything else here is prose held by review.
   other host keep these values as routing declarations. `orchestrate`, `apply`, `judge`, and a visible
   route or installed definition are likewise not proof that a host executes them.
   Claude's generated matcher now wakes for current `Agent` and legacy `Task` launches of the exact
-  `review-blind` target. Estigia recursively refuses project-scoped shadows and requires the normalized
-  canonical user definition; a running reviewer uses the embedded policy. This is Claude-only and
-  proves what Estigia read before launch, not that Claude launched the context, kept judges concurrent
-  or blind, withheld sibling output, or received an honest verdict. A refused launch is no evidence and
-  never reduces or serializes the configured panel; the fallback is separate-session or durable handoff.
+  `review-blind` target. Estigia parses candidate YAML, recursively refuses project-scoped shadows, and
+  requires the normalized canonical user definition to be the only user-scoped definition with that
+  identity; setup performs the same user-tree preflight. A running reviewer uses the embedded policy.
+  This is Claude-only and proves what Estigia read before launch, not that Claude launched the context,
+  kept judges concurrent or blind, withheld sibling output, or received an honest verdict. A refused
+  launch is no evidence and never reduces or serializes the configured panel; the fallback is separate-
+  session or durable handoff.
   OpenCode process-tree cleanup is likewise not containment proof: the controller bounds how long the
   TUI waits, while process-group and Job Object cleanup remain best-effort OS operations.
 

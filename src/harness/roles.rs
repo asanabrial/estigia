@@ -175,32 +175,21 @@ fn reviewer_launch_refusal(code: ReviewerLaunchCode, message: impl Into<String>)
     )
 }
 
-fn declared_name(definition: &str) -> Result<Option<&str>, ()> {
-    let mut declarations = frontmatter(definition)
-        .into_iter()
-        .flat_map(str::lines)
-        .filter(|line| !line.starts_with([' ', '\t']))
-        .filter_map(|line| line.trim().strip_prefix("name:"));
-    let Some(raw) = declarations.next() else {
+fn declared_name(definition: &str) -> Result<Option<String>, ()> {
+    let Some(frontmatter) = frontmatter(definition) else {
         return Ok(None);
     };
-    if declarations.next().is_some() {
-        return Err(());
-    }
-    let raw = raw.trim();
-    let name = if let Some(quoted) = raw
-        .strip_prefix('"')
-        .and_then(|name| name.strip_suffix('"'))
-    {
-        quoted
-    } else if let Some(quoted) = raw
-        .strip_prefix('\'')
-        .and_then(|name| name.strip_suffix('\''))
-    {
-        quoted
-    } else {
-        raw
+    let document: serde_yaml_ng::Value = serde_yaml_ng::from_str(frontmatter).map_err(|_| ())?;
+    let mapping = match document {
+        serde_yaml_ng::Value::Null => return Ok(None),
+        serde_yaml_ng::Value::Mapping(mapping) => mapping,
+        _ => return Err(()),
     };
+    let key = serde_yaml_ng::Value::String("name".to_owned());
+    let Some(raw) = mapping.get(&key) else {
+        return Ok(None);
+    };
+    let name = raw.as_str().ok_or(())?.trim();
     if name.is_empty()
         || !name
             .chars()
@@ -208,66 +197,66 @@ fn declared_name(definition: &str) -> Result<Option<&str>, ()> {
     {
         return Err(());
     }
-    Ok(Some(name))
+    Ok(Some(name.to_owned()))
 }
 
-fn project_reviewer_candidates(
-    repo_dir: &std::path::Path,
-) -> Result<Vec<std::path::PathBuf>, Refusal> {
-    let root = repo_dir.join(".claude/agents");
-    let root_kind = match std::fs::symlink_metadata(&root) {
+#[derive(Debug)]
+pub(crate) struct ReviewerCandidateError {
+    path: std::path::PathBuf,
+    detail: String,
+}
+
+impl ReviewerCandidateError {
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    pub(crate) fn detail(&self) -> &str {
+        &self.detail
+    }
+}
+
+pub(crate) fn reviewer_candidates(
+    root: &std::path::Path,
+) -> Result<Vec<std::path::PathBuf>, ReviewerCandidateError> {
+    let root_kind = match std::fs::symlink_metadata(root) {
         Ok(metadata) => metadata.file_type(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => {
-            return Err(reviewer_launch_refusal(
-                ReviewerLaunchCode::ProjectUnprovable,
-                format!("{} cannot be inspected: {error}", root.display()),
-            ));
+            return Err(ReviewerCandidateError {
+                path: root.to_owned(),
+                detail: format!("cannot be inspected: {error}"),
+            });
         }
     };
     if root_kind.is_symlink() || !root_kind.is_dir() {
-        return Err(reviewer_launch_refusal(
-            ReviewerLaunchCode::ProjectUnprovable,
-            format!("{} is not an unambiguous agent directory", root.display()),
-        ));
+        return Err(ReviewerCandidateError {
+            path: root.to_owned(),
+            detail: "is not an unambiguous agent directory".to_owned(),
+        });
     }
-    let mut pending = vec![root];
+    let mut pending = vec![root.to_owned()];
     let mut found = Vec::new();
     while let Some(directory) = pending.pop() {
-        let entries = std::fs::read_dir(&directory).map_err(|error| {
-            reviewer_launch_refusal(
-                ReviewerLaunchCode::ProjectUnprovable,
-                format!(
-                    "{} cannot be inspected recursively: {error}",
-                    directory.display()
-                ),
-            )
+        let entries = std::fs::read_dir(&directory).map_err(|error| ReviewerCandidateError {
+            path: directory.clone(),
+            detail: format!("cannot be inspected recursively: {error}"),
         })?;
         for entry in entries {
-            let entry = entry.map_err(|error| {
-                reviewer_launch_refusal(
-                    ReviewerLaunchCode::ProjectUnprovable,
-                    format!(
-                        "{} contains an unreadable entry: {error}",
-                        directory.display()
-                    ),
-                )
+            let entry = entry.map_err(|error| ReviewerCandidateError {
+                path: directory.clone(),
+                detail: format!("contains an unreadable entry: {error}"),
             })?;
             let path = entry.path();
-            let kind = entry.file_type().map_err(|error| {
-                reviewer_launch_refusal(
-                    ReviewerLaunchCode::ProjectUnprovable,
-                    format!("{} has an unreadable file type: {error}", path.display()),
-                )
+            let kind = entry.file_type().map_err(|error| ReviewerCandidateError {
+                path: path.clone(),
+                detail: format!("has an unreadable file type: {error}"),
             })?;
             if kind.is_symlink() {
-                return Err(reviewer_launch_refusal(
-                    ReviewerLaunchCode::ProjectUnprovable,
-                    format!(
-                        "{} is a symlink whose effective definition is ambiguous",
-                        path.display()
-                    ),
-                ));
+                return Err(ReviewerCandidateError {
+                    path,
+                    detail: "is a symlink whose effective definition is ambiguous".to_owned(),
+                });
             }
             if kind.is_dir() {
                 pending.push(path);
@@ -281,25 +270,19 @@ fn project_reviewer_candidates(
             {
                 continue;
             }
-            let definition = std::fs::read_to_string(&path).map_err(|error| {
-                reviewer_launch_refusal(
-                    ReviewerLaunchCode::ProjectUnprovable,
-                    format!(
-                        "{} cannot be read as an agent definition: {error}",
-                        path.display()
-                    ),
-                )
-            })?;
-            let name = declared_name(&definition).map_err(|()| {
-                reviewer_launch_refusal(
-                    ReviewerLaunchCode::ProjectUnprovable,
-                    format!("{} has an ambiguous agent name", path.display()),
-                )
+            let definition =
+                std::fs::read_to_string(&path).map_err(|error| ReviewerCandidateError {
+                    path: path.clone(),
+                    detail: format!("cannot be read as an agent definition: {error}"),
+                })?;
+            let name = declared_name(&definition).map_err(|()| ReviewerCandidateError {
+                path: path.clone(),
+                detail: "has an ambiguous agent name".to_owned(),
             })?;
             if path
                 .file_name()
                 .is_some_and(|name| name == "review-blind.md")
-                || name == Some(RESERVED_REVIEWER)
+                || name.as_deref() == Some(RESERVED_REVIEWER)
             {
                 found.push(path);
             }
@@ -307,6 +290,17 @@ fn project_reviewer_candidates(
     }
     found.sort();
     Ok(found)
+}
+
+fn project_reviewer_candidates(
+    repo_dir: &std::path::Path,
+) -> Result<Vec<std::path::PathBuf>, Refusal> {
+    reviewer_candidates(&repo_dir.join(".claude/agents")).map_err(|error| {
+        reviewer_launch_refusal(
+            ReviewerLaunchCode::ProjectUnprovable,
+            format!("{} {}", error.path().display(), error.detail()),
+        )
+    })
 }
 
 /// Proves that Claude's reserved blind reviewer resolves only to Estigia's user definition.
@@ -338,6 +332,20 @@ pub fn authorize_review_blind_launch(
         ));
     };
     let canonical = home.join(".claude/agents/review-blind.md");
+    let user = reviewer_candidates(&home.join(".claude/agents")).map_err(|error| {
+        reviewer_launch_refusal(
+            ReviewerLaunchCode::CanonicalUnavailable,
+            format!("{} {}", error.path().display(), error.detail()),
+        )
+    })?;
+    if user.len() != 1 || user.first() != Some(&canonical) {
+        return Err(reviewer_launch_refusal(
+            ReviewerLaunchCode::CanonicalUnavailable,
+            format!(
+                "the canonical `{RESERVED_REVIEWER}` definition is not unique in the user agent tree: {user:?}"
+            ),
+        ));
+    }
     let definition = std::fs::read_to_string(&canonical).map_err(|error| {
         reviewer_launch_refusal(
             ReviewerLaunchCode::CanonicalUnavailable,

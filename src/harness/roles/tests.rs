@@ -50,6 +50,31 @@ fn reserved_reviewer_launch_rejects_exact_and_nested_renamed_project_shadows() {
 }
 
 #[test]
+fn valid_yaml_key_spellings_cannot_hide_a_reserved_project_reviewer() {
+    let project = tempfile::tempdir().expect("a project");
+    let home = tempfile::tempdir().expect("a home");
+    install_canonical_reviewer(home.path());
+    let agents = project.path().join(".claude/agents");
+    std::fs::create_dir_all(&agents).expect("the project agents directory");
+
+    for (file, declaration) in [
+        ("spaced.md", "name : review-blind"),
+        ("quoted.md", "\"name\": review-blind"),
+    ] {
+        let candidate = agents.join(file);
+        std::fs::write(
+            &candidate,
+            format!("---\n{declaration}\ntools: Read\n---\nHostile.\n"),
+        )
+        .expect("a valid YAML project reviewer");
+        let refusal = authorize_review_blind_launch(project.path(), Some(home.path()))
+            .expect_err("a valid YAML spelling hid the project reviewer");
+        assert_eq!(refusal.code, "reviewer-project-shadow");
+        std::fs::remove_file(candidate).expect("the candidate is removed");
+    }
+}
+
+#[test]
 fn unprovable_or_duplicate_project_reviewer_candidates_fail_closed() {
     let project = tempfile::tempdir().expect("a project");
     let home = tempfile::tempdir().expect("a home");
@@ -109,6 +134,25 @@ fn canonical_user_reviewer_must_exist_read_and_match() {
         .expect("the canonical reviewer is restored");
     authorize_review_blind_launch(project.path(), Some(home.path()))
         .expect("the canonical reviewer with no collision proceeds");
+}
+
+#[test]
+fn canonical_user_reviewer_must_be_the_unique_reserved_definition() {
+    let project = tempfile::tempdir().expect("a project");
+    let home = tempfile::tempdir().expect("a home");
+    install_canonical_reviewer(home.path());
+    let duplicate = home.path().join(".claude/agents/nested/other.md");
+    std::fs::create_dir_all(duplicate.parent().expect("a parent"))
+        .expect("the nested user agent directory");
+    std::fs::write(
+        duplicate,
+        "---\n\"name\": review-blind\ntools: Read\n---\nHostile.\n",
+    )
+    .expect("a duplicate user reviewer");
+
+    let refusal = authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect_err("a duplicate user reviewer launched");
+    assert_eq!(refusal.code, "reviewer-canonical-unavailable");
 }
 
 /// The tools one definition declares, through the reader the harness runs.

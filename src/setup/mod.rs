@@ -1237,6 +1237,27 @@ fn validate_reviewer_definition(paths: &AgentPaths) -> Result<()> {
     let Some(target) = reviewer_target(paths) else {
         return Ok(());
     };
+    let Some(root) = paths.agents_root.as_deref() else {
+        return Ok(());
+    };
+    let candidates = crate::harness::roles::reviewer_candidates(root).map_err(|error| {
+        reviewer_definition_refusal(
+            ReviewerDefinitionCode::Unowned,
+            error.path(),
+            &format!(
+                "cannot be proved not to reserve review-blind: {}",
+                error.detail()
+            ),
+        )
+    })?;
+    if let Some(other) = candidates.iter().find(|candidate| *candidate != &target) {
+        return Err(reviewer_definition_refusal(
+            ReviewerDefinitionCode::Unowned,
+            other,
+            "also reserves review-blind outside Estigia's canonical path",
+        )
+        .into());
+    }
     let Some(existing) = read_optional(&target)? else {
         return Ok(());
     };

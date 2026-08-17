@@ -131,10 +131,12 @@ definition twice or five times; setup never creates numbered judge files. Direct
 
 `review-blind` is operator-owned and reserved. Before Claude Code's current `Agent` or legacy `Task`
 launches that exact role, Estigia recursively rejects any project `.claude/agents` definition that
-uses its filename or declares `name: review-blind`, and proves the canonical user definition still
-matches the embedded text. Missing, unreadable, changed, duplicated or ambiguous evidence refuses the
-launch. Ordinary agents retain project-first resolution. A refused or unprovable judge does not count,
-and the fallback is a separate session or durable review handoff, never a smaller or serialized panel.
+uses its filename or declares the same name in valid YAML, and proves the canonical user definition is
+the only user-scoped definition with that identity and still matches the embedded text. Setup performs
+the same recursive user-tree uniqueness preflight before writing. Missing, unreadable, changed,
+duplicated or ambiguous evidence refuses. Ordinary agents retain project-first resolution. A refused
+or unprovable judge does not count, and the fallback is a separate session or durable review handoff,
+never a smaller or serialized panel.
 
 The setup screen is the one path here that needs a person, and it ends by printing the commands that
 reproduce the same result without it:
