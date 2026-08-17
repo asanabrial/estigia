@@ -1038,7 +1038,11 @@ suite. Everything else here is prose held by review.
   before replacement, but publication and copy are not atomic and concurrent installers remain
   unserialized. There is no remote update, self-upgrade, rollback, or mutating public upgrade command.
 - **The seam tests check the payload against itself**, not against an agent that read it. They
-  prove the contract does not link to a file that is missing; they do not prove an agent obeys it.
+  measure both directions: every markdown file the payload links to is shipped, and every shipped
+  runtime companion is reachable from another shipped file through a link or its canonical routed
+  identity. The sole exception is `references/migration-inventory.md`, a historical migration
+  ledger, and the guard fails if that exception grows or becomes stale. These prose-to-prose checks
+  cannot prove that an agent opened or obeyed any document.
 - **The harness gates named populations, not every write.** The editing tools each agent ships, the
   git spellings that change the tree, the irreversible steps, and — since 2026-08-01 — the shell
   constructs that visibly write a file: a redirect, a `sed -i`, an interpreter handed code, and the

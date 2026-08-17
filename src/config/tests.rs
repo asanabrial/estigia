@@ -853,9 +853,9 @@ fn a_tracker_that_takes_no_argument_refuses_one_rather_than_dropping_it() {
 
 #[test]
 fn every_selected_document_ships() {
-    // Three axes choose a document by setting rather than by link, so nothing
-    // else would catch a value naming a file Estigia does not install — the
-    // agent would be sent to read something that is not there.
+    // Three axes choose a document by setting. The contract now links the
+    // protocol and policy documents conditionally, but this remains the guard
+    // that each configured value names a file Estigia actually installs.
     let named: Vec<(String, Option<&str>)> = Planning::all()
         .into_iter()
         .map(|planning| (format!("{planning:?}"), planning.document()))
@@ -884,7 +884,7 @@ fn every_selected_document_ships() {
                 .iter()
                 .any(|prefix| document.starts_with(prefix)),
             "{document} is chosen by a setting and sits outside SELECTED_BY_SETTING, so the \
-             seam guard will demand a link that must not exist"
+             seam guards will apply the wrong reachability rule"
         );
     }
     assert!(
