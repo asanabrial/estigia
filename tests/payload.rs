@@ -24,7 +24,7 @@
 
 use std::path::{Path, PathBuf};
 
-use estigia::skill::{CONTRACT, FILES, PHASE_AGENTS, SkillFile};
+use estigia::skill::{AGENT_DEFINITIONS, CONTRACT, FILES, SkillFile};
 
 // This is a historical migration ledger, not a runtime document. Upstream's
 // payload suite made the same sole exception.
@@ -60,7 +60,7 @@ fn no_test_material_is_installed_beside_the_contract() {
 
 #[test]
 fn every_shipped_companion_is_reachable_from_another_shipped_file() {
-    let shipped = FILES.iter().chain(PHASE_AGENTS);
+    let shipped = FILES.iter().chain(AGENT_DEFINITIONS);
     let mut unreachable = shipped
         .clone()
         .filter(|target| target.path != CONTRACT)
@@ -69,7 +69,7 @@ fn every_shipped_companion_is_reachable_from_another_shipped_file() {
                 source.path != target.path
                     && (links_from(source).iter().any(|link| link == target.path)
                         || selected_binding_is_named(source, target)
-                        || phase_agent_is_named(source, target))
+                        || agent_definition_is_named(source, target))
             })
         })
         .map(|file| file.path)
@@ -136,7 +136,7 @@ fn selected_binding_is_named(source: &SkillFile, target: &SkillFile) -> bool {
             .is_some_and(|name| source.contents.contains(&format!("`{name}`")))
 }
 
-fn phase_agent_is_named(source: &SkillFile, target: &SkillFile) -> bool {
+fn agent_definition_is_named(source: &SkillFile, target: &SkillFile) -> bool {
     target.path.starts_with("agents/")
         && target
             .path
