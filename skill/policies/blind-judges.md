@@ -23,14 +23,14 @@ All judges are **read-only** against that target. A judge that edits is no longe
 ### Reserved reviewer role
 
 `review-blind` is operator-owned. For Claude's current `Agent` and legacy `Task` launch surfaces, any
-project definition under recursive `.claude/agents` with that filename or YAML-parsed frontmatter name
-invalidates the panel. Unreadable or duplicate candidates also invalidate it, and the canonical user
-file must be the only user-scoped definition with that identity and match Estigia's normalized embedded
-reviewer. Setup performs the same user-tree uniqueness preflight before writing. A running reviewer is
-gated by the embedded policy, not project-local bytes. A refused or unprovable launch contributes no
-judge. If the collision or canonical file cannot be restored, use a separate session or durable
-handoff; never silently reduce or serialize the panel. Ordinary agent names remain project-first, and
-this prelaunch check is Claude-only.
+project definition under recursive `.claude/agents`, from the launch cwd through the first `.git`
+repository root, with that filename or YAML-parsed frontmatter name invalidates the panel. Unreadable or
+duplicate candidates also invalidate it, and the canonical user file must be the only user-scoped
+definition with that identity and match Estigia's normalized embedded reviewer. Setup performs the same
+user-tree uniqueness preflight before writing. A running reviewer is gated by the embedded policy, not
+project-local bytes. A refused or unprovable launch contributes no judge. If the collision or canonical
+file cannot be restored, use a separate session or durable handoff; never silently reduce or serialize
+the panel. Ordinary agent names remain project-first, and this prelaunch check is Claude-only.
 
 ## What agreement buys
 

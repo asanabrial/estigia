@@ -295,12 +295,50 @@ pub(crate) fn reviewer_candidates(
 fn project_reviewer_candidates(
     repo_dir: &std::path::Path,
 ) -> Result<Vec<std::path::PathBuf>, Refusal> {
-    reviewer_candidates(&repo_dir.join(".claude/agents")).map_err(|error| {
+    let start = std::path::absolute(repo_dir).map_err(|error| {
         reviewer_launch_refusal(
             ReviewerLaunchCode::ProjectUnprovable,
-            format!("{} {}", error.path().display(), error.detail()),
+            format!("{} cannot be resolved: {error}", repo_dir.display()),
         )
-    })
+    })?;
+    let mut roots = Vec::new();
+    let mut repository_found = false;
+    for directory in start.ancestors() {
+        roots.push(directory.join(".claude/agents"));
+        match std::fs::symlink_metadata(directory.join(".git")) {
+            Ok(_) => {
+                repository_found = true;
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(reviewer_launch_refusal(
+                    ReviewerLaunchCode::ProjectUnprovable,
+                    format!(
+                        "{} cannot establish the repository boundary: {error}",
+                        directory.display()
+                    ),
+                ));
+            }
+        }
+    }
+    if !repository_found {
+        roots.truncate(1);
+    }
+
+    let mut found = Vec::new();
+    for root in roots {
+        let candidates = reviewer_candidates(&root).map_err(|error| {
+            reviewer_launch_refusal(
+                ReviewerLaunchCode::ProjectUnprovable,
+                format!("{} {}", error.path().display(), error.detail()),
+            )
+        })?;
+        found.extend(candidates);
+    }
+    found.sort();
+    found.dedup();
+    Ok(found)
 }
 
 /// Proves that Claude's reserved blind reviewer resolves only to Estigia's user definition.

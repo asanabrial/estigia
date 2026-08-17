@@ -50,6 +50,21 @@ fn reserved_reviewer_launch_rejects_exact_and_nested_renamed_project_shadows() {
 }
 
 #[test]
+fn reserved_reviewer_launch_scans_from_the_cwd_through_the_repository_root() {
+    let project = tempfile::tempdir().expect("a project");
+    let home = tempfile::tempdir().expect("a home");
+    install_canonical_reviewer(home.path());
+    std::fs::create_dir(project.path().join(".git")).expect("a repository marker");
+    let nested = project.path().join("src/deep");
+    std::fs::create_dir_all(&nested).expect("a nested launch directory");
+    project_reviewer(project.path(), "root.md");
+
+    let refusal = authorize_review_blind_launch(&nested, Some(home.path()))
+        .expect_err("changing cwd hid the project reviewer");
+    assert_eq!(refusal.code, "reviewer-project-shadow");
+}
+
+#[test]
 fn valid_yaml_key_spellings_cannot_hide_a_reserved_project_reviewer() {
     let project = tempfile::tempdir().expect("a project");
     let home = tempfile::tempdir().expect("a home");

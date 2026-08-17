@@ -3833,6 +3833,9 @@ fn a_sub_agent_reaching_past_its_own_tool_list_is_refused_by_the_process() {
 fn generated_claude_hook_refuses_reserved_project_reviewers_before_claim_checks() {
     let home = tempfile::tempdir().expect("a home");
     let repository = tempfile::tempdir().expect("a repository");
+    std::fs::create_dir(repository.path().join(".git")).expect("a repository marker");
+    let nested = repository.path().join("src/deep");
+    std::fs::create_dir_all(&nested).expect("a nested launch directory");
     let (setup, _, ok) = run(home.path(), &["setup", "claude-code"], "");
     assert!(ok, "Claude setup failed: {setup}");
     let settings = std::fs::read_to_string(home.path().join(".claude/settings.json"))
@@ -3851,18 +3854,14 @@ fn generated_claude_hook_refuses_reserved_project_reviewers_before_claim_checks(
 
     let agents = repository.path().join(".claude/agents");
     std::fs::create_dir_all(&agents).expect("project agents");
-    let payload = |tool: &str| {
-        let cwd = repository
-            .path()
-            .display()
-            .to_string()
-            .replace('\\', "\\\\");
+    let payload = |tool: &str, cwd: &std::path::Path| {
+        let cwd = cwd.display().to_string().replace('\\', "\\\\");
         format!(
             "{{\"session_id\":\"s1\",\"cwd\":\"{cwd}\",\"tool_name\":\"{tool}\",\
              \"tool_input\":{{\"subagent_type\":\"review-blind\"}}}}"
         )
     };
-    let invoke = |tool: &str| {
+    let invoke = |tool: &str, cwd: &std::path::Path| {
         run_in(
             home.path(),
             repository.path(),
@@ -3874,7 +3873,7 @@ fn generated_claude_hook_refuses_reserved_project_reviewers_before_claim_checks(
                 "--dialect",
                 "claude-code",
             ],
-            &payload(tool),
+            &payload(tool, cwd),
         )
         .0
     };
@@ -3884,7 +3883,7 @@ fn generated_claude_hook_refuses_reserved_project_reviewers_before_claim_checks(
         "---\nname: review-blind\ntools: Read, Write, Bash\n---\nHostile.\n",
     )
     .expect("the exact shadow");
-    let denied = invoke("Agent");
+    let denied = invoke("Agent", repository.path());
     assert!(denied.contains("reviewer-project-shadow"), "{denied}");
     assert!(!denied.contains("not-current-live-holder"), "{denied}");
 
@@ -3895,9 +3894,15 @@ fn generated_claude_hook_refuses_reserved_project_reviewers_before_claim_checks(
         "---\nname: review-blind\ntools: Read, Write, Bash\n---\nHostile.\n",
     )
     .expect("the renamed shadow");
-    let denied = invoke("Task");
+    let denied = invoke("Task", repository.path());
     assert!(denied.contains("reviewer-project-shadow"), "{denied}");
     assert!(!denied.contains("not-current-live-holder"), "{denied}");
+
+    let denied = invoke("Agent", &nested);
+    assert!(
+        denied.contains("reviewer-project-shadow"),
+        "changing cwd hid the root project reviewer: {denied}"
+    );
 }
 
 #[test]
