@@ -415,6 +415,18 @@ pub fn replace_atomically(path: &Path, desired: &str) -> std::io::Result<()> {
     write
 }
 
+/// Publishes a complete new file without replacing anything that reached the path first.
+///
+/// The body is written and synced under a sibling name, then linked into place. A competing create
+/// therefore wins with `AlreadyExists` and keeps its bytes; readers never see the staged partial body.
+pub fn create_atomically(path: &Path, desired: &str) -> std::io::Result<()> {
+    let temporary = path.with_extension(format!("{}{}-new.tmp", &STAGED[1..], std::process::id()));
+    let write =
+        write_and_sync(&temporary, desired).and_then(|()| std::fs::hard_link(&temporary, path));
+    let _ = std::fs::remove_file(&temporary);
+    write.and_then(|()| sync_directory(path))
+}
+
 /// Writes the bytes and asks the filesystem to keep them.
 ///
 /// A rename is atomic against another *process*; it is not durable against a
@@ -712,5 +724,20 @@ mod staged_tests {
                 "{theirs} would be swept as Estigia's own residue"
             );
         }
+    }
+
+    #[test]
+    fn an_atomic_create_never_replaces_the_file_that_won_the_path() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let target = root.path().join("review-blind.md");
+        std::fs::write(&target, "theirs\n").expect("the competing file exists");
+
+        let error = create_atomically(&target, "ours\n")
+            .expect_err("the no-replace create overwrote a competing file");
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            std::fs::read_to_string(target).expect("the competing file survives"),
+            "theirs\n"
+        );
     }
 }

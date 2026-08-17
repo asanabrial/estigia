@@ -396,7 +396,7 @@ impl Setting {
             Self::Integration => Answers::all(&["branch", "trunk"]),
             Self::Window => Answers::some(&["default", "1m", "30s"]),
             Self::ReviewProtocol => Answers::all(&["standard", "receipt-driven"]),
-            Self::Judges => Answers::all(&["single", "two blind"]),
+            Self::Judges => Answers::all(&["single", "two blind", "five blind"]),
             Self::ChangeSize => Answers::some(&["800", "400"]),
             Self::Boundaries => Answers::some(&["none"]),
             Self::Board => Answers::some(&["none"]),
@@ -567,6 +567,9 @@ impl Setting {
             (Self::Judges, "two blind") => {
                 "two contexts review it without seeing each other's verdict"
             }
+            (Self::Judges, "five blind") => {
+                "five independent contexts review it blind; 3-of-5 must confirm the same severe finding"
+            }
             (Self::ChangeSize, _) => {
                 "the changed lines a pull request aims to stay under, and splits past unless the \
                  developer records why"
@@ -631,7 +634,7 @@ impl Setting {
             // somebody read this whole screen for it and concluded it was
             // missing.
             Self::ReviewProtocol => "`standard`, or `receipt-driven` (also accepted as `rdd`)",
-            Self::Judges => "`single`, or `two blind`",
+            Self::Judges => "`single`, `two blind`, or `five blind`",
             Self::ChangeSize => "a number of lines, such as `800`",
             Self::Boundaries => "`none`, or commands separated by commas such as `npm publish`",
             Self::Board => "`none`, or a board as `<owner>/<number>`",
@@ -882,6 +885,7 @@ impl Setting {
                 config.judges = match lower(value).trim() {
                     "single" | "one" | "off" => Judges::Single,
                     "two blind" | "two" | "blind" | "on" => Judges::TwoBlind,
+                    "five blind" | "five" => Judges::FiveBlind,
                     _ => return Err(self.reject(value)),
                 }
             }

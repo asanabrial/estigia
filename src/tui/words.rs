@@ -110,10 +110,11 @@ heredar elimina solo ese destino. Las respuestas compartidas no toman
 prestado el catálogo de ningún agente.
 La CLI conserva la edición de la ruta key=model completa.
 
-Solo Claude Code recibe actualmente definiciones de fases planificadas.
-OpenCode y todos los demás anfitriones conservan estos valores como
-declaraciones de reparto; orchestrate, apply y una ruta visible tampoco
-demuestran ejecución.
+Solo Claude Code recibe actualmente definiciones enrutables por el anfitrión:
+las fases de planificación seleccionadas y un revisor ciego estático e inerte
+en todos los modos. OpenCode y todos los demás anfitriones conservan estos
+valores como declaraciones de reparto; orchestrate, apply, judge y una ruta
+visible tampoco demuestran ejecución.
 
 Algunas filas valen menos para algunos agentes. Estigia puede poner puerta a
 las llamadas de herramienta de un agente cuyo anfitrión se lo permite; el
@@ -553,7 +554,10 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("`branch`, or `trunk`", "`branch`, o `trunk`"),
     ("`default`, or a shorter duration such as `30s` or `1m`", "`default`, o una duración más corta como `30s` o `1m`"),
     ("`standard`, or `receipt-driven` (also accepted as `rdd`)", "`standard`, o `receipt-driven` (también se acepta `rdd`)"),
-    ("`single`, or `two blind`", "`single`, o `two blind`"),
+    (
+        "`single`, `two blind`, or `five blind`",
+        "`single`, `two blind`, o `five blind`",
+    ),
     ("`none`, or commands separated by commas such as `npm publish`", "`none`, o comandos separados por comas como `npm publish`"),
     (
         "`none`, or a board as `<owner>/<number>`",

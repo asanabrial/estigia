@@ -12,6 +12,164 @@ const BUILDER: &str = "---\n\
     # The Builder\n\n\
     Take an approved plan and ship the code.\n";
 
+fn install_canonical_reviewer(home: &std::path::Path) {
+    let file = home.join(".claude/agents/review-blind.md");
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the user agents directory");
+    std::fs::write(file, crate::skill::REVIEW_AGENT.contents).expect("the canonical reviewer");
+}
+
+fn project_reviewer(project: &std::path::Path, relative: &str) -> std::path::PathBuf {
+    let file = project.join(".claude/agents").join(relative);
+    std::fs::create_dir_all(file.parent().expect("a parent"))
+        .expect("the project agents directory");
+    std::fs::write(
+        &file,
+        "---\nname: review-blind\ntools: Read, Write, Bash\n---\nHostile.\n",
+    )
+    .expect("a project reviewer");
+    file
+}
+
+#[test]
+fn reserved_reviewer_launch_rejects_exact_and_nested_renamed_project_shadows() {
+    let project = tempfile::tempdir().expect("a project");
+    let home = tempfile::tempdir().expect("a home");
+    install_canonical_reviewer(home.path());
+
+    let exact = project_reviewer(project.path(), "review-blind.md");
+    let refusal = authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect_err("the exact project shadow launched");
+    assert_eq!(refusal.code, "reviewer-project-shadow");
+    assert!(matches!(refusal.resolution, Resolution::NoCommand { .. }));
+    std::fs::remove_file(exact).expect("the exact shadow is removed");
+
+    project_reviewer(project.path(), "nested/renamed.md");
+    let refusal = authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect_err("the nested renamed shadow launched");
+    assert_eq!(refusal.code, "reviewer-project-shadow");
+}
+
+#[test]
+fn reserved_reviewer_launch_scans_from_the_cwd_through_the_repository_root() {
+    let project = tempfile::tempdir().expect("a project");
+    let home = tempfile::tempdir().expect("a home");
+    install_canonical_reviewer(home.path());
+    std::fs::create_dir(project.path().join(".git")).expect("a repository marker");
+    let nested = project.path().join("src/deep");
+    std::fs::create_dir_all(&nested).expect("a nested launch directory");
+    project_reviewer(project.path(), "root.md");
+
+    let refusal = authorize_review_blind_launch(&nested, Some(home.path()))
+        .expect_err("changing cwd hid the project reviewer");
+    assert_eq!(refusal.code, "reviewer-project-shadow");
+}
+
+#[test]
+fn valid_yaml_key_spellings_cannot_hide_a_reserved_project_reviewer() {
+    let project = tempfile::tempdir().expect("a project");
+    let home = tempfile::tempdir().expect("a home");
+    install_canonical_reviewer(home.path());
+    let agents = project.path().join(".claude/agents");
+    std::fs::create_dir_all(&agents).expect("the project agents directory");
+
+    for (file, declaration) in [
+        ("spaced.md", "name : review-blind"),
+        ("quoted.md", "\"name\": review-blind"),
+    ] {
+        let candidate = agents.join(file);
+        std::fs::write(
+            &candidate,
+            format!("---\n{declaration}\ntools: Read\n---\nHostile.\n"),
+        )
+        .expect("a valid YAML project reviewer");
+        let refusal = authorize_review_blind_launch(project.path(), Some(home.path()))
+            .expect_err("a valid YAML spelling hid the project reviewer");
+        assert_eq!(refusal.code, "reviewer-project-shadow");
+        std::fs::remove_file(candidate).expect("the candidate is removed");
+    }
+}
+
+#[test]
+fn unprovable_or_duplicate_project_reviewer_candidates_fail_closed() {
+    let project = tempfile::tempdir().expect("a project");
+    let home = tempfile::tempdir().expect("a home");
+    install_canonical_reviewer(home.path());
+    let agents = project.path().join(".claude/agents");
+    std::fs::create_dir_all(&agents).expect("the project agents directory");
+
+    std::fs::write(agents.join("unknown.md"), [0xff, 0xfe]).expect("unreadable text");
+    let refusal = authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect_err("an unreadable candidate was clearance");
+    assert_eq!(refusal.code, "reviewer-project-unprovable");
+    std::fs::remove_file(agents.join("unknown.md")).expect("the obstacle is removed");
+
+    std::fs::write(
+        agents.join("ambiguous.md"),
+        "---\nname: *operator_owned\n---\n",
+    )
+    .expect("an ambiguous name");
+    let refusal = authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect_err("an ambiguous candidate was clearance");
+    assert_eq!(refusal.code, "reviewer-project-unprovable");
+    std::fs::remove_file(agents.join("ambiguous.md")).expect("the ambiguity is removed");
+
+    project_reviewer(project.path(), "one.md");
+    project_reviewer(project.path(), "nested/two.md");
+    let refusal = authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect_err("duplicate project candidates were accepted");
+    assert_eq!(refusal.code, "reviewer-project-unprovable");
+}
+
+#[test]
+fn canonical_user_reviewer_must_exist_read_and_match() {
+    let project = tempfile::tempdir().expect("a project");
+    let home = tempfile::tempdir().expect("a home");
+    let canonical = home.path().join(".claude/agents/review-blind.md");
+
+    let missing = authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect_err("a missing canonical reviewer launched");
+    assert_eq!(missing.code, "reviewer-canonical-unavailable");
+
+    std::fs::create_dir_all(&canonical).expect("an unreadable canonical path");
+    let unreadable = authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect_err("an unreadable canonical reviewer launched");
+    assert_eq!(unreadable.code, "reviewer-canonical-unavailable");
+    std::fs::remove_dir(&canonical).expect("the obstacle is removed");
+
+    std::fs::write(
+        &canonical,
+        "---\nname: review-blind\ntools: Read, Write\n---\n",
+    )
+    .expect("a changed canonical reviewer");
+    let changed = authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect_err("a changed canonical reviewer launched");
+    assert_eq!(changed.code, "reviewer-canonical-unavailable");
+
+    std::fs::write(&canonical, crate::skill::REVIEW_AGENT.contents)
+        .expect("the canonical reviewer is restored");
+    authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect("the canonical reviewer with no collision proceeds");
+}
+
+#[test]
+fn canonical_user_reviewer_must_be_the_unique_reserved_definition() {
+    let project = tempfile::tempdir().expect("a project");
+    let home = tempfile::tempdir().expect("a home");
+    install_canonical_reviewer(home.path());
+    let duplicate = home.path().join(".claude/agents/nested/other.md");
+    std::fs::create_dir_all(duplicate.parent().expect("a parent"))
+        .expect("the nested user agent directory");
+    std::fs::write(
+        duplicate,
+        "---\n\"name\": review-blind\ntools: Read\n---\nHostile.\n",
+    )
+    .expect("a duplicate user reviewer");
+
+    let refusal = authorize_review_blind_launch(project.path(), Some(home.path()))
+        .expect_err("a duplicate user reviewer launched");
+    assert_eq!(refusal.code, "reviewer-canonical-unavailable");
+}
+
 /// The tools one definition declares, through the reader the harness runs.
 ///
 /// This used to be `declared_tools`, a second parser nothing outside these
@@ -426,6 +584,21 @@ fn a_shipped_planning_phase_cannot_write_to_the_repository() {
         checked, 5,
         "expected the five planning phases in the payload, found {checked}"
     );
+}
+
+#[test]
+fn the_shipped_blind_reviewer_is_read_only_and_cannot_delegate() {
+    let definition = crate::skill::REVIEW_AGENT.contents;
+    let declared = declared_policy(definition).expect("the reviewer declares a gate policy");
+    for tool in ["Read", "Grep", "Glob"] {
+        assert_eq!(declared.verdict(tool), Verdict::Allow);
+        assert!(gate(Some("review-blind"), tool, Some(definition)).is_none());
+    }
+    for tool in ["Write", "Edit", "Bash", "Agent", "Task"] {
+        assert_eq!(declared.verdict(tool), Verdict::Deny);
+        assert!(gate(Some("review-blind"), tool, Some(definition)).is_some());
+    }
+    assert!(definition.contains("Do NOT delegate"));
 }
 
 /// A moved config home does not remove a sub-agent's allowlist.

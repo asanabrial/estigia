@@ -17,6 +17,32 @@ fn agent(slug: &str) -> &'static AgentAdapter {
     find_agent(slug).expect("a declared agent")
 }
 
+fn owns_reviewer(paths: &AgentPaths, reviewer: &Path) -> bool {
+    skill::record::created_outside(&paths.skill_root, reviewer)
+}
+
+fn installed_phases(root: &Path) -> Vec<String> {
+    let mut names: Vec<_> = fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with("sdd-"))
+        .collect();
+    names.sort();
+    names
+}
+
+fn assert_one_action(result: &SetupResult, path: &Path, kind: ActionKind, change: Change) {
+    let matching: Vec<_> = result
+        .actions
+        .iter()
+        .filter(|action| action.path == path)
+        .map(|action| (action.kind, action.change))
+        .collect();
+    assert_eq!(matching, [(kind, change)]);
+}
+
 #[test]
 fn only_the_two_verified_adapters_have_a_skill_root_of_their_own() {
     // The handoff used to name the adapters on the shared root one by one, and
@@ -262,9 +288,8 @@ fn setup_installs_the_skill_and_fences_the_directive() {
 
     let result = setup(adapter, &config, &options).expect("setup succeeds");
     // Every file of the skill, the directive, the hooks, and the MCP entry.
-    // The shipped files, the install record, and the three this adapter
-    // wires up: the instruction file, the hooks and the MCP entry.
-    assert_eq!(result.changed_files(), skill::FILES.len() + 4);
+    // The payload, record, directive, reviewer, hooks, and MCP entry.
+    assert_eq!(result.changed_files(), skill::FILES.len() + 5);
     assert!(is_configured(adapter, &options));
 
     let paths = resolve_paths(adapter, &options).expect("paths resolve");
@@ -278,11 +303,16 @@ fn setup_installs_the_skill_and_fences_the_directive() {
 }
 
 #[test]
-fn a_dry_run_reports_exactly_what_the_real_run_does() {
+fn a_fresh_dry_run_reports_the_one_real_ownership_record_action() {
     // Invariant four. A plan that disagrees with the act is worse than no plan.
     let (_home, options) = sandbox();
-    let adapter = agent("codex");
+    let adapter = agent("claude-code");
     let config = Config::default();
+    let record = skill::record::path(
+        &resolve_paths(adapter, &options)
+            .expect("paths resolve")
+            .skill_root,
+    );
 
     let planned = setup(
         adapter,
@@ -295,14 +325,36 @@ fn a_dry_run_reports_exactly_what_the_real_run_does() {
     .expect("the plan is produced");
     let performed = setup(adapter, &config, &options).expect("setup succeeds");
 
-    let strip = |result: SetupResult| {
-        result
-            .actions
-            .into_iter()
-            .map(|action| (action.kind, action.path, action.change))
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(strip(planned), strip(performed));
+    assert_eq!(planned.actions, performed.actions);
+    assert_one_action(&planned, &record, ActionKind::Skill, Change::Create);
+    assert_one_action(&performed, &record, ActionKind::Skill, Change::Create);
+}
+
+#[test]
+fn an_upgrade_dry_run_reports_the_one_real_ownership_record_action() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let paths = resolve_paths(adapter, &options).expect("paths resolve");
+    let reviewer = home.path().join(".claude/agents/review-blind.md");
+    setup(adapter, &Config::default(), &options).expect("the old installation exists");
+    fs::remove_file(&reviewer).expect("the old installation has no reviewer");
+    skill::record::forget_outside(&paths.skill_root, &reviewer).expect("old ownership is absent");
+
+    let planned = setup(
+        adapter,
+        &Config::default(),
+        &SetupOptions {
+            dry_run: true,
+            ..options.clone()
+        },
+    )
+    .expect("the upgrade plan succeeds");
+    let performed = setup(adapter, &Config::default(), &options).expect("the upgrade succeeds");
+
+    assert_eq!(planned.actions, performed.actions);
+    let record = skill::record::path(&paths.skill_root);
+    assert_one_action(&planned, &record, ActionKind::Skill, Change::Update);
+    assert_one_action(&performed, &record, ActionKind::Skill, Change::Update);
 }
 
 #[test]
@@ -1749,13 +1801,14 @@ fn every_matcher_names_tools_the_gate_can_classify() {
                 name,
                 &serde_json::json!({"command": "git commit -m x", "file_path": "a.rs"}),
             );
-            assert_ne!(
-                action,
-                crate::harness::Action::Untouched,
-                "{} wakes the hook for `{name}` and the classifier does not know it — the gate \
-                 runs and decides nothing",
-                adapter.slug
-            );
+            if action == crate::harness::Action::Untouched {
+                assert!(
+                    crate::harness::hook::is_prelaunch_tool(Some(adapter.slug), name),
+                    "{} wakes the hook for `{name}`, but neither the repository classifier nor \
+                     the dedicated prelaunch gate owns it",
+                    adapter.slug
+                );
+            }
         }
     }
     // How many it walked, because narrowing the walk is how the gap this test
@@ -1772,6 +1825,25 @@ fn every_matcher_names_tools_the_gate_can_classify() {
         reached >= 10,
         "only {reached} gated agent(s) were reached — this stopped covering the fleet"
     );
+}
+
+#[test]
+fn claude_matcher_wakes_current_and_legacy_reserved_launch_tools() {
+    let matcher = agent("claude-code")
+        .gate_spec()
+        .and_then(|spec| spec.matcher)
+        .expect("Claude narrows PreToolUse");
+    for tool in ["Agent", "Task"] {
+        assert!(matcher.split('|').any(|name| name == tool), "{matcher}");
+        assert!(crate::harness::hook::is_prelaunch_tool(
+            Some("claude-code"),
+            tool
+        ));
+        assert!(!crate::harness::hook::is_prelaunch_tool(
+            Some("opencode"),
+            tool
+        ));
+    }
 }
 
 #[test]
@@ -4195,10 +4267,19 @@ fn a_comment_under_the_codex_table_is_not_estigias_to_remove() {
 fn every_tool_a_matcher_wakes_for_is_one_the_classifier_judges() {
     use crate::harness::{SHELL_TOOLS, WRITE_TOOLS};
 
-    let woken: Vec<String> = AGENTS
+    let woken: Vec<(&str, String)> = AGENTS
         .iter()
-        .filter_map(|adapter| adapter.gate_spec().and_then(|spec| spec.matcher))
-        .flat_map(wiring::names_in)
+        .filter_map(|adapter| {
+            adapter
+                .gate_spec()
+                .and_then(|spec| spec.matcher)
+                .map(|matcher| (adapter.slug, matcher))
+        })
+        .flat_map(|(agent, matcher)| {
+            wiring::names_in(matcher)
+                .into_iter()
+                .map(move |name| (agent, name))
+        })
         .collect();
     // The floor: the matchers were really read. An empty list agrees with
     // everything, which is how this crossing's sibling was once satisfied by a
@@ -4214,13 +4295,13 @@ fn every_tool_a_matcher_wakes_for_is_one_the_classifier_judges() {
         .chain(SHELL_TOOLS)
         .map(|name| name.to_ascii_lowercase())
         .collect();
-    for name in &woken {
+    for (agent, name) in &woken {
         assert!(
-            judged.contains(&name.to_ascii_lowercase()),
-            "a matcher wakes the hook for {name:?} and the classifier judges no such tool — the \
-             hook fires, answers `Untouched`, and the write goes through while every report says \
-             that tool is gated. Add it to `WRITE_TOOLS` or `SHELL_TOOLS`, or take it out of the \
-             matcher that names it"
+            judged.contains(&name.to_ascii_lowercase())
+                || crate::harness::hook::is_prelaunch_tool(Some(agent), name),
+            "{agent}'s matcher wakes the hook for {name:?}, but neither the repository classifier \
+             nor a dedicated prelaunch gate owns it — the hook fires, answers `Untouched`, and the \
+             call goes through while every report says it is gated"
         );
     }
 }
@@ -4612,6 +4693,7 @@ fn a_file_that_was_theirs_before_estigia_comes_back_byte_for_byte() {
     let relative: Vec<std::path::PathBuf> = written
         .iter()
         .filter_map(|path| path.strip_prefix(probe.path()).ok().map(Path::to_path_buf))
+        .filter(|path| !path.ends_with(Path::new(skill::REVIEW_AGENT.path)))
         .collect();
     // The floor: a probe that found nothing would make every assertion below
     // vacuous, and the fleet is the point.
@@ -4687,10 +4769,7 @@ fn the_phases_installed_are_the_phases_the_protocol_runs() {
     // `sdd-spec` on a machine configured never to spec is an agent the host can
     // route to and the contract will refuse.
     setup(adapter, &Config::default(), &options).expect("setup runs");
-    assert!(
-        !agents.exists() || fs::read_dir(&agents).into_iter().flatten().next().is_none(),
-        "`direct` installed a planning phase, and `direct` runs none"
-    );
+    assert!(installed_phases(&agents).is_empty());
 
     // The short form runs spec and tasks and nothing else.
     let lite = Config {
@@ -4701,12 +4780,7 @@ fn the_phases_installed_are_the_phases_the_protocol_runs() {
         ..Config::default()
     };
     setup(adapter, &lite, &options).expect("setup runs");
-    let mut written: Vec<String> = fs::read_dir(&agents)
-        .expect("the agents directory")
-        .flatten()
-        .map(|entry| entry.file_name().to_string_lossy().into_owned())
-        .collect();
-    written.sort();
+    let written = installed_phases(&agents);
     assert_eq!(
         written,
         vec!["sdd-spec.md".to_owned(), "sdd-tasks.md".to_owned()],
@@ -4788,6 +4862,163 @@ fn a_model_named_for_a_phase_reaches_that_phases_definition() {
         !declared.contains("Write") && !declared.contains("Edit"),
         "`explore` was handed a write it never needs: {declared}"
     );
+}
+
+#[test]
+fn every_claude_setup_installs_one_idempotent_static_reviewer() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    setup(adapter, &Config::default(), &options).expect("single-mode setup runs");
+    let reviewer = home.path().join(".claude/agents/review-blind.md");
+    assert_eq!(
+        fs::read_to_string(&reviewer).expect("the reviewer is installed"),
+        skill::REVIEW_AGENT.contents
+    );
+    let retry = setup(adapter, &Config::default(), &options).expect("the retry succeeds");
+    assert!(
+        retry
+            .actions
+            .iter()
+            .any(|action| action.path == reviewer && action.change == Change::Unchanged)
+    );
+    uninstall(adapter, &options).expect("uninstall runs");
+    assert!(!reviewer.exists());
+}
+
+#[test]
+fn an_unowned_reviewer_refuses_before_any_setup_artifact_is_written() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let reviewer = home.path().join(".claude/agents/review-blind.md");
+    fs::create_dir_all(reviewer.parent().unwrap()).expect("the agent directory exists");
+    let theirs = "# Their reviewer\n";
+    fs::write(&reviewer, theirs).expect("their reviewer exists");
+
+    let failure = setup(adapter, &Config::default(), &options)
+        .expect_err("setup accepted an unowned stable reviewer");
+    let refusal = failure.downcast_ref::<crate::outcome::Refusal>().unwrap();
+    assert_eq!(refusal.code, "reviewer-definition-unowned");
+    let paths = resolve_paths(adapter, &options).expect("paths resolve");
+    assert!(!paths.skill_root.exists());
+    assert!(!paths.instructions.exists());
+    assert_eq!(fs::read_to_string(reviewer).unwrap(), theirs);
+}
+
+#[test]
+fn a_duplicate_user_reviewer_refuses_before_any_setup_artifact_is_written() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let duplicate = home.path().join(".claude/agents/nested/other.md");
+    fs::create_dir_all(duplicate.parent().unwrap()).expect("the user agent directory exists");
+    let theirs = "---\n\"name\": review-blind\ntools: Read\n---\nHostile.\n";
+    fs::write(&duplicate, theirs).expect("their reviewer exists");
+
+    let failure = setup(adapter, &Config::default(), &options)
+        .expect_err("setup accepted a duplicate user reviewer");
+    let refusal = failure.downcast_ref::<crate::outcome::Refusal>().unwrap();
+    assert_eq!(refusal.code, "reviewer-definition-unowned");
+    let paths = resolve_paths(adapter, &options).expect("paths resolve");
+    assert!(!paths.skill_root.exists());
+    assert!(!paths.instructions.exists());
+    assert_eq!(fs::read_to_string(duplicate).unwrap(), theirs);
+}
+
+#[test]
+fn setup_refuses_to_overwrite_a_changed_owned_reviewer() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    setup(adapter, &Config::default(), &options).expect("setup runs");
+    let paths = resolve_paths(adapter, &options).expect("paths resolve");
+    let reviewer = home.path().join(".claude/agents/review-blind.md");
+    let edited = "operator-owned replacement\n";
+    fs::write(&reviewer, edited).expect("the reviewer is edited");
+
+    let failure = setup(adapter, &Config::default(), &options)
+        .expect_err("setup overwrote a changed owned reviewer");
+    let refusal = failure.downcast_ref::<crate::outcome::Refusal>().unwrap();
+    assert_eq!(refusal.code, "reviewer-definition-changed");
+    uninstall(adapter, &options).expect("uninstall preserves changed bytes");
+    assert_eq!(
+        fs::read_to_string(&reviewer).expect("the edit survives"),
+        edited
+    );
+    assert!(!owns_reviewer(&paths, &reviewer));
+}
+
+#[test]
+fn reviewer_deletion_failure_keeps_ownership_and_is_retryable() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    setup(adapter, &Config::default(), &options).expect("the reviewer installs");
+    let paths = resolve_paths(adapter, &options).expect("paths resolve");
+    let reviewer = home.path().join(".claude/agents/review-blind.md");
+
+    inject_reviewer_definition_removal_failure();
+    uninstall(adapter, &options).expect_err("the injected deletion failure was ignored");
+    assert!(reviewer.exists());
+    assert!(owns_reviewer(&paths, &reviewer));
+    assert!(paths.skill_root.join(skill::CONTRACT).exists());
+
+    uninstall(adapter, &options).expect("the exact retry succeeds");
+    assert!(!reviewer.exists());
+    assert!(!paths.skill_root.exists());
+    assert!(!paths.instructions.exists());
+}
+
+#[test]
+fn reviewer_is_owned_before_its_bytes_are_written_and_the_retry_is_safe() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let paths = resolve_paths(adapter, &options).expect("paths resolve");
+    let reviewer = home.path().join(".claude/agents/review-blind.md");
+
+    inject_reviewer_definition_write_failure();
+    setup(adapter, &Config::default(), &options)
+        .expect_err("the injected reviewer write failure was ignored");
+    assert!(!reviewer.exists());
+    assert!(owns_reviewer(&paths, &reviewer));
+
+    setup(adapter, &Config::default(), &options).expect("the exact retry succeeds");
+    assert!(owns_reviewer(&paths, &reviewer));
+    assert_eq!(
+        fs::read_to_string(reviewer).expect("the reviewer"),
+        skill::REVIEW_AGENT.contents
+    );
+}
+
+#[test]
+fn a_reviewer_created_after_preflight_is_preserved_and_not_owned() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let paths = resolve_paths(adapter, &options).expect("paths resolve");
+    let reviewer = home.path().join(".claude/agents/review-blind.md");
+
+    inject_reviewer_definition_create_collision();
+    setup(adapter, &Config::default(), &options)
+        .expect_err("setup overwrote a reviewer created after preflight");
+
+    assert_eq!(
+        fs::read_to_string(&reviewer).expect("the operator reviewer survives"),
+        INJECTED_REVIEWER_COLLISION
+    );
+    assert!(!owns_reviewer(&paths, &reviewer));
+}
+
+#[test]
+fn normalized_reviewer_line_endings_and_final_newline_remain_deletable() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let reviewer = home.path().join(".claude/agents/review-blind.md");
+    setup(adapter, &Config::default(), &options).expect("the reviewer installs");
+    let normalized = skill::REVIEW_AGENT
+        .contents
+        .replace('\n', "\r\n")
+        .trim_end()
+        .to_owned();
+    fs::write(&reviewer, normalized).expect("only text shape changes");
+
+    uninstall(adapter, &options).expect("normalized text is still owned");
+    assert!(!reviewer.exists());
 }
 
 #[test]
@@ -4884,7 +5115,7 @@ fn a_phase_the_protocol_stopped_running_comes_back_off_the_disk() {
     };
     setup(adapter, &full, &options).expect("setup runs");
     assert_eq!(
-        fs::read_dir(&agents).expect("the agents directory").count(),
+        installed_phases(&agents).len(),
         5,
         "full SDD did not install its five phases"
     );
@@ -4898,12 +5129,7 @@ fn a_phase_the_protocol_stopped_running_comes_back_off_the_disk() {
         ..Config::default()
     };
     setup(adapter, &lite, &options).expect("setup runs");
-    let mut left: Vec<String> = fs::read_dir(&agents)
-        .expect("the agents directory")
-        .flatten()
-        .map(|entry| entry.file_name().to_string_lossy().into_owned())
-        .collect();
-    left.sort();
+    let left = installed_phases(&agents);
     assert_eq!(
         left,
         vec!["sdd-spec.md".to_owned(), "sdd-tasks.md".to_owned()],
@@ -4913,11 +5139,7 @@ fn a_phase_the_protocol_stopped_running_comes_back_off_the_disk() {
     // And all the way back to `direct`, which runs none.
     setup(adapter, &Config::default(), &options).expect("setup runs");
     assert_eq!(
-        fs::read_dir(&agents)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .count(),
+        installed_phases(&agents).len(),
         0,
         "`direct` left a planning phase on disk, and `direct` runs none"
     );
@@ -4955,9 +5177,7 @@ fn a_phase_is_not_written_in_a_dialect_its_host_cannot_read() {
     // And the one host whose dialect this payload *is* written in still gets
     // them, or the guard above would be satisfied by installing nothing at all.
     assert_eq!(
-        fs::read_dir(home.path().join(".claude").join("agents"))
-            .expect("Claude Code's agents directory")
-            .count(),
+        installed_phases(&home.path().join(".claude/agents")).len(),
         5,
         "the host this crate can spell for received no phases"
     );

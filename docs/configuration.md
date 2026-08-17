@@ -31,7 +31,7 @@ estigia config set "Merge strategy" squash
 | Integration | `branch`, or `trunk` |
 | Renewal window | `default`, or a shorter duration such as `30s` or `1m` |
 | Review protocol | `standard`, or `receipt-driven` (also accepted as `rdd`) |
-| Blind judges | `single`, or `two blind` |
+| Blind judges | `single`, `two blind`, or `five blind` |
 | Change size | a number of lines, such as `800` |
 | Irreversible commands | `none`, or commands separated by commas |
 | Project board | `none`, or a board as `<owner>/<number>` |
@@ -50,6 +50,30 @@ set what this table named got exactly that.
 distinct reviewer but does not make Estigia spawn one. If none is available, the run records a durable
 exact-receipt handoff and releases ownership. `ask <duration>` records one request deadline in that
 handoff; no scheduler, sleep, deadline reset, retained claim, or expiry-as-verdict behavior is implied.
+
+`single` remains the default. Every Claude Code setup installs one static read-only definition at
+`~/.claude/agents/review-blind.md`, including in single mode. Its file says `model: inherit` and is
+inert unless the launch prompt names an active blind mode, exact publication receipt and criteria.
+The orchestrator supplies `Model routing`'s effective `judge` assignment when it instantiates that
+definition twice or five times concurrently over the identical target and criteria; there are no
+numbered definitions. In five-blind mode, three independent confirmations of the same severe finding
+are required to block or authorize automatic repair. One or two remain suspicions; dissent, warnings
+and suggestions survive, and ambiguous finding identities never aggregate. Estigia records only one
+aggregate exact-receipt verdict and cannot prove panel size, concurrency, independence, blindness,
+same-finding identity or quorum. `config set` and `config edit` write configuration only; changing
+these rows never rewrites that external definition.
+
+The `review-blind` role is reserved to that operator-owned user file. Claude's generated `PreToolUse`
+matcher wakes for `Agent` and legacy `Task` launches and, before repository classification, checks an
+exact `review-blind` target for recursive project collisions from the launch cwd through the first
+`.git` repository root, using parsed YAML frontmatter, then proves the canonical user text is the only
+user-scoped definition carrying that identity. Setup performs that same recursive user-tree uniqueness
+preflight before writing, repeats it at the external reviewer boundary, and creates a fresh canonical
+file without replacing a path another actor created meanwhile. Unreadable or duplicate candidates and
+a missing, unreadable or changed canonical copy fail closed. This exception does not change project-
+first precedence for ordinary agents and does not add OpenCode launch enforcement. A refused launch
+contributes no judge; use a separate session or durable handoff rather than reducing or serializing the
+configured panel.
 
 ### Model routing suggestions are agent-specific
 
@@ -99,8 +123,10 @@ skill-root setup action; `SKILL.md` is
 rendered once from contract-only portable config, while a selected shared-root agent's Planning/model
 changes land only in its own override. Local, repository, and another agent's values are never promoted
 into the shared contract, and a private-root agent keeps its answer in its contract without a duplicate
-override. Host artifacts such as Claude phase definitions use the effective view, so local and per-agent
-Planning/model rows materialize them and retract them when those rows stop selecting the phase. A
+override. Dynamic host artifacts such as Claude SDD definitions use the effective view, so local and
+per-agent Planning/model rows materialize them and retract them when those rows stop selecting the
+phase. The static reviewer is not configuration output: setup installs it unchanged and launch-time
+routing selects its model. A
 repository save preserves the rows that document already owns and unions only repository-scoped rows
 changed in that session; one explicit row never widens into every repository setting. Direct agent
 writes read the override once and use that same snapshot for ownership and writing; only `NotFound`
