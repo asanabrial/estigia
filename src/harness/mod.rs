@@ -26,11 +26,8 @@
 //! another 48 minutes** because nothing in its loop read the timeline again.
 //! That run had sworn. The gate kills exactly that case.
 
-use std::path::PathBuf;
-// `Path` is used by this module's tests, which are a child module and see what
-// it imports. Kept named rather than re-imported there: one import for one type.
-#[cfg(test)]
 use std::path::Path;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
@@ -2022,12 +2019,25 @@ pub fn control_surface() -> PathBuf {
     })
 }
 
-/// The first installed skill root, for a harness that was given no explicit one.
+/// The one installed skill root the gate decides in, for a harness that was
+/// given no explicit one.
+///
+/// Not *the first* one any more, which is what it was and what the defect was.
+/// `claim_to_decide_in`, below, is what now separates two installed candidates.
 pub fn discover_skill_root() -> Result<PathBuf, Refusal> {
-    let options = crate::setup::SetupOptions::default();
+    discover_skill_root_in(&crate::setup::SetupOptions::default())
+}
+
+/// [`discover_skill_root`], for a caller that resolves its own environment.
+///
+/// Separate so the selection can be **measured against roots a test builds**
+/// rather than against whichever agents the machine running the suite happens
+/// to have installed. The rule below was written from one machine's `AGENTS`
+/// order, and a test that asserted that order would have agreed with the defect.
+pub fn discover_skill_root_in(options: &crate::setup::SetupOptions) -> Result<PathBuf, Refusal> {
     let roots: Vec<PathBuf> = crate::setup::AGENTS
         .iter()
-        .filter_map(|adapter| crate::setup::resolve_paths(adapter, &options).ok())
+        .filter_map(|adapter| crate::setup::resolve_paths(adapter, options).ok())
         .map(|paths| paths.skill_root)
         .filter(|root| root.join(crate::skill::CONTRACT).is_file())
         .collect();
@@ -2049,13 +2059,13 @@ pub fn discover_skill_root() -> Result<PathBuf, Refusal> {
     // agent's own contract and reported the operator's values back to them,
     // correctly. Two commands, one machine, and the one that was right was the
     // one that does not decide anything.
+    //
+    // `min_by_key` keeps the first of equal ranks, so where nothing
+    // distinguishes two roots the `AGENTS` order above still decides — the
+    // neutral root first, exactly as before.
     roots
         .iter()
-        .find(|root| {
-            std::fs::read_to_string(root.join(crate::skill::CONTRACT))
-                .is_ok_and(|text| text.contains(crate::config::BLOCK_BEGIN))
-        })
-        .or_else(|| roots.first())
+        .min_by_key(|root| claim_to_decide_in(root))
         .cloned()
         .ok_or_else(|| {
             Refusal::not_started(
@@ -2064,6 +2074,48 @@ pub fn discover_skill_root() -> Result<PathBuf, Refusal> {
                 Resolution::run("estigia setup --all"),
             )
         })
+}
+
+/// How strong a claim one root makes to be the place the gate decides in.
+///
+/// Ordered, lowest first, so [`discover_skill_root_in`] can sort by it.
+///
+/// **The second half is the whole fix.** The first half — does this contract
+/// carry a configuration block — cannot tell two installed roots apart, because
+/// `setup --all` writes that block into every one of them. So the selection
+/// degenerated to `AGENTS` order and took the shared neutral root, and the one
+/// file that distinguishes the candidates was never opened: `estigia.local.md`
+/// is the layer that carries the operator's own values, and it sits beside the
+/// contract of the agent they configured. Measured on the machine that filed
+/// this: two byte-identical `SKILL.md`, one `estigia.local.md`, and a gate
+/// deciding `Blind judges: single` against an operator who had written
+/// `two blind` — the loosening direction, silently, on the row that exists to
+/// make review independent.
+///
+/// **Presence, not "differs from the defaults".** Preferring a root whose
+/// resolved configuration differs from [`crate::config::Config::default`] was
+/// the obvious rule and does not work: `setup` writes real values into the
+/// neutral root's own block too — that machine's neutral root carries a
+/// `Worktree location` and a `Change size` — so both candidates differ from the
+/// defaults, the rule ties, and the order decides again. It would have shipped
+/// green while changing nothing.
+///
+/// **A file that will not parse still counts.** This asks whether the operator
+/// put their file here, not whether every row in it reads — a root holding an
+/// unreadable override is still the root they configured, and choosing another
+/// one would answer their typo by quietly enforcing somebody else's table.
+/// `doctor`'s `contract` row is where an unreadable file is reported.
+fn claim_to_decide_in(root: &Path) -> (u8, u8) {
+    let carries_a_block = std::fs::read_to_string(root.join(crate::skill::CONTRACT))
+        .is_ok_and(|text| text.contains(crate::config::BLOCK_BEGIN));
+    let carries_the_operators_own = root.join(crate::config::LOCAL_FILE).is_file();
+    // The block first, so a root with no configuration block is still never
+    // preferred over one that has it — the case the comment above records, and
+    // an upstream `issue-flow` root is exactly it.
+    (
+        u8::from(!carries_a_block),
+        u8::from(!carries_the_operators_own),
+    )
 }
 
 /// A refusal for a caller that named an issue Estigia cannot parse.

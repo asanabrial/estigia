@@ -1511,12 +1511,13 @@ suite. Everything else here is prose held by review.
   once failed to pass the home directory to `state_root`, and the push-guard row vanished entirely
   under a tracker with no transport.
 
-  All ten rows that **can** break are now forced through the binary, on states any machine can be put
-  into: no skill; a contract taken from under a registered agent; a gate and a tool server whose
+  All eleven rows that **can** break are now forced through the binary, on states any machine can be
+  put into: no skill; a contract taken from under a registered agent; two installed roots whose
+  machine-wide rows disagree; a gate and a tool server whose
   settings name a binary that is not there; a checkout with no remote; a `pre-push` hook that is not
   text; an unreadable stand-down; an unreadable run pointer; a ledger line saying a call went through
   ungated; and, for the one row that is about the machine rather than the installation, a search path
-  with no `gh` on it. The eleventh, `transport`, has no broken state: it answers `ok`, or `skipped`
+  with no `gh` on it. The twelfth, `transport`, has no broken state: it answers `ok`, or `skipped`
   for a tracker with no executable.
 
   A row added later fails the same test until somebody forces it or says why they cannot.
@@ -1547,14 +1548,27 @@ suite. Everything else here is prose held by review.
 - **The harness holds tools for GitHub only.** `linear` and `trello` ship a binding the agent reads
   and no executable, so the tools refuse (`tracker-has-no-transport`) and the gate stands aside.
   Estigia can install and configure those trackers; it cannot enforce anything for them.
-- **`doctor` checks eleven things, not everything.** Skill, transport, `gh`
+- **`doctor` checks twelve things, not everything.** Skill, transport, `gh`
   authentication, a git remote, this repository's push guard, the contract each configured agent
-  reads, whether the gate each of them registers would actually run, whether the tool server each
+  reads, whether the root the gate decides in carries the rows those agents read, whether the gate
+  each of them registers would actually run, whether the tool server each
   of them registers would actually start, whether the operator has the gate standing down right
   now, whether every run pointer on the machine can still say what it holds, and whether any call
   has reached that gate and gone undecided. It does not check the tracker's labels, the board, or
   whether the repository it found is the one the issues live in.
-- **One of the eleven is about the past.** A call the gate cannot decide on — a payload it cannot
+- **A row about this machine can be made to differ per agent, and nothing refuses it.**
+  `config set --agent <slug>` refuses a `Scope::Everywhere` row and does not refuse a
+  `Scope::Machine` one, so `estigia config set --agent claude-code "Summary language" Spanish`
+  is accepted and reports success — on an adapter with a skill root of its own, where no read-back
+  catches it. **And once two roots disagree about one, no command makes them agree**: the plain
+  `config set` writes a machine row into the canonical contract alone, and the per-agent form cannot
+  hold one in a shared root, where `render_some_agent_rows` drops it and the command exits on its own
+  read-back. So `doctor`'s `canonical` row reports that divergence and names no way out, which is the
+  honest shape rather than a satisfying one. Measured on 2026-08-17 and 2026-08-18, on
+  `Summary language` and `Issue body language`, by four independent reviews of the check itself, each
+  running the named command verbatim. Filed as issue #62; which half is wrong — refuse the per-agent
+  write, or propagate the plain one — is not decided here, and nothing guesses at it.
+- **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it
   quietly. Both leave a ledger line, and `doctor` is what reads those lines back, because an

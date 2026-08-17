@@ -978,6 +978,128 @@ fn the_control_surface_is_a_real_location_rather_than_an_empty_path() {
     );
 }
 
+/// Two installed roots, identical contracts, and one operator file.
+///
+/// The shape the defect was measured in: `setup --all` writes the same
+/// `SKILL.md` everywhere, so the only thing telling the candidates apart is the
+/// file Estigia never writes.
+fn two_roots_one_configured(
+    home: &Path,
+) -> (
+    crate::setup::SetupOptions,
+    std::path::PathBuf,
+    std::path::PathBuf,
+) {
+    let options = crate::setup::SetupOptions {
+        home_dir: Some(home.to_path_buf()),
+        config_home: Some(home.join(".config")),
+        app_data: Some(home.join("AppData").join("Roaming")),
+        platform: Some(crate::setup::Platform::Unix),
+        skip_harness: true,
+        ..crate::setup::SetupOptions::default()
+    };
+    let config = crate::config::Config::default();
+    let mut roots = Vec::new();
+    for slug in ["agents", "claude-code"] {
+        let adapter = crate::setup::find_agent(slug).expect("a declared agent");
+        crate::setup::setup(adapter, &config, &options).expect("the install writes");
+        roots.push(
+            crate::setup::resolve_paths(adapter, &options)
+                .expect("paths")
+                .skill_root,
+        );
+    }
+    let claude = roots.pop().expect("the claude-code root");
+    let neutral = roots.pop().expect("the neutral root");
+    (options, neutral, claude)
+}
+
+#[test]
+fn the_canonical_root_is_the_one_holding_the_operators_own_file() {
+    // The gate decides in the root this returns, and it was deciding in the one
+    // that holds none of the operator's values: every candidate carries a
+    // configuration block after `setup --all`, so the preference could not
+    // discriminate and the `AGENTS` order took the shared neutral root. Measured
+    // on the machine that filed #41 — two byte-identical `SKILL.md`, one
+    // `estigia.local.md` beside the Claude Code contract, and a gate answering
+    // `Blind judges: single` to an operator who had written `two blind`.
+    let home = tempfile::tempdir().expect("a temporary home");
+    let (options, neutral, claude) = two_roots_one_configured(home.path());
+
+    // Before their file exists, nothing distinguishes the two and the order
+    // stands: the neutral root, first in `AGENTS`, is still the answer.
+    assert_eq!(
+        discover_skill_root_in(&options).expect("a root"),
+        neutral,
+        "with nothing to tell the roots apart the declared order stopped deciding"
+    );
+
+    std::fs::write(
+        claude.join(crate::config::LOCAL_FILE),
+        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n",
+    )
+    .expect("the operator's own file");
+
+    assert_eq!(
+        discover_skill_root_in(&options).expect("a root"),
+        claude,
+        "the gate decides in a root that holds none of the operator's overrides"
+    );
+}
+
+#[test]
+fn the_gate_reads_the_row_the_operator_wrote_rather_than_its_default() {
+    // The selection is only worth changing if what the gate reads changes with
+    // it. This is the same read `gate_context` performs — the canonical root,
+    // layered — so a root chosen without the operator's file hands the gate
+    // `Config::default()`, which is the loosening direction.
+    let home = tempfile::tempdir().expect("a temporary home");
+    let (options, _neutral, claude) = two_roots_one_configured(home.path());
+    std::fs::write(
+        claude.join(crate::config::LOCAL_FILE),
+        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n| Change size | 120 |\n",
+    )
+    .expect("the operator's own file");
+
+    let canonical = discover_skill_root_in(&options).expect("a root");
+    let (config, _) =
+        crate::skill::installed_config_in_keeping_what_parses(&canonical, home.path());
+
+    assert_eq!(
+        config.judges,
+        crate::config::Judges::TwoBlind,
+        "the gate is adjudicating against a default the operator overrode"
+    );
+    assert_eq!(config.change_size, 120);
+}
+
+#[test]
+fn a_root_with_no_configuration_block_is_still_not_preferred() {
+    // The rule this replaced was written for a real case and keeps its job: an
+    // operator already running upstream `issue-flow` has a root that holds a
+    // contract Estigia never wrote. Their own file landing there must not make
+    // it the place the gate decides, because the block — the thing carrying
+    // every other row — is not in it.
+    let home = tempfile::tempdir().expect("a temporary home");
+    let (options, neutral, claude) = two_roots_one_configured(home.path());
+    std::fs::write(
+        neutral.join(crate::skill::CONTRACT),
+        "# somebody else's contract\n",
+    )
+    .expect("a contract with no block");
+    std::fs::write(
+        neutral.join(crate::config::LOCAL_FILE),
+        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n",
+    )
+    .expect("their file, in the root with no block");
+
+    assert_eq!(
+        discover_skill_root_in(&options).expect("a root"),
+        claude,
+        "a contract with no configuration block was preferred over one that has it"
+    );
+}
+
 #[test]
 fn a_session_holding_an_isolated_checkout_is_told_which_one_it_is() {
     // `references/repository-delivery.md`: "Keep the base checkout read-only.
