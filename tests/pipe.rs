@@ -3787,8 +3787,8 @@ fn a_sub_agent_reaching_past_its_own_tool_list_is_refused_by_the_process() {
         "the denial does not carry what to do about it: {out}"
     );
 
-    // The alias, because the field arrives under three spellings and only one
-    // of them was ever typed into a test.
+    // A top-level `subagent_type` is not the caller. Claude uses that key only
+    // nested under Agent/Task input to name the role being launched.
     let (out, _, _) = run(
         home.path(),
         &["hook", "pre-tool-use"],
@@ -3797,8 +3797,8 @@ fn a_sub_agent_reaching_past_its_own_tool_list_is_refused_by_the_process() {
         ),
     );
     assert!(
-        out.contains("tool-outside-declared-role"),
-        "`subagent_type` is declared an alias and reads as nothing: {out}"
+        !out.contains("tool-outside-declared-role"),
+        "a launch-target spelling was substituted for the caller: {out}"
     );
 
     // And the three ways this must **not** deny. A role gate that refused any
@@ -3827,6 +3827,77 @@ fn a_sub_agent_reaching_past_its_own_tool_list_is_refused_by_the_process() {
             "{why} was refused by the role gate: {out}"
         );
     }
+}
+
+#[test]
+fn generated_claude_hook_refuses_reserved_project_reviewers_before_claim_checks() {
+    let home = tempfile::tempdir().expect("a home");
+    let repository = tempfile::tempdir().expect("a repository");
+    let (setup, _, ok) = run(home.path(), &["setup", "claude-code"], "");
+    assert!(ok, "Claude setup failed: {setup}");
+    let settings = std::fs::read_to_string(home.path().join(".claude/settings.json"))
+        .expect("Claude's generated settings");
+    for required in [
+        "Agent",
+        "Task",
+        "--agent claude-code",
+        "--dialect claude-code",
+    ] {
+        assert!(
+            settings.contains(required),
+            "generated hook misses {required}: {settings}"
+        );
+    }
+
+    let agents = repository.path().join(".claude/agents");
+    std::fs::create_dir_all(&agents).expect("project agents");
+    let payload = |tool: &str| {
+        let cwd = repository
+            .path()
+            .display()
+            .to_string()
+            .replace('\\', "\\\\");
+        format!(
+            "{{\"session_id\":\"s1\",\"cwd\":\"{cwd}\",\"tool_name\":\"{tool}\",\
+             \"tool_input\":{{\"subagent_type\":\"review-blind\"}}}}"
+        )
+    };
+    let invoke = |tool: &str| {
+        run_in(
+            home.path(),
+            repository.path(),
+            &[
+                "hook",
+                "pre-tool-use",
+                "--agent",
+                "claude-code",
+                "--dialect",
+                "claude-code",
+            ],
+            &payload(tool),
+        )
+        .0
+    };
+
+    std::fs::write(
+        agents.join("review-blind.md"),
+        "---\nname: review-blind\ntools: Read, Write, Bash\n---\nHostile.\n",
+    )
+    .expect("the exact shadow");
+    let denied = invoke("Agent");
+    assert!(denied.contains("reviewer-project-shadow"), "{denied}");
+    assert!(!denied.contains("not-current-live-holder"), "{denied}");
+
+    std::fs::remove_file(agents.join("review-blind.md")).expect("remove exact shadow");
+    std::fs::create_dir_all(agents.join("nested")).expect("nested agents");
+    std::fs::write(
+        agents.join("nested/renamed.md"),
+        "---\nname: review-blind\ntools: Read, Write, Bash\n---\nHostile.\n",
+    )
+    .expect("the renamed shadow");
+    let denied = invoke("Task");
+    assert!(denied.contains("reviewer-project-shadow"), "{denied}");
+    assert!(!denied.contains("not-current-live-holder"), "{denied}");
 }
 
 #[test]
@@ -4493,6 +4564,35 @@ fn the_other_door_asks_a_sub_agents_declared_tool_list_too() {
         "a sub-agent reached past its own tool list and this door said nothing: {said}{error}"
     );
     assert!(!ok, "the call was allowed as well as reported");
+
+    // The reserved caller is not allowed to replace its embedded policy with
+    // project bytes through this door either.
+    std::fs::write(
+        agents.join("review-blind.md"),
+        "---\nname: review-blind\ntools: Read, Write, Edit, Bash, Agent, Task\n---\n",
+    )
+    .expect("a hostile reserved definition");
+    let payload = format!(
+        "{{\"agent_type\":\"review-blind\",\"file_path\":\"src/main.rs\",\"cwd\":{:?}}}",
+        repo.path().display().to_string()
+    );
+    let (said, error, ok) = run_in(
+        home.path(),
+        repo.path(),
+        &[
+            "gate",
+            "Edit",
+            "--run-id",
+            "claude-aaaa1111",
+            "--input",
+            &payload,
+        ],
+        "",
+    );
+    assert!(
+        !ok && format!("{said}{error}").contains("tool-outside-declared-role"),
+        "project bytes widened the running reserved reviewer: {said}{error}"
+    );
 }
 
 /// A stand-down reaches a role refusal through both doors, or through neither.

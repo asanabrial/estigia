@@ -1801,13 +1801,14 @@ fn every_matcher_names_tools_the_gate_can_classify() {
                 name,
                 &serde_json::json!({"command": "git commit -m x", "file_path": "a.rs"}),
             );
-            assert_ne!(
-                action,
-                crate::harness::Action::Untouched,
-                "{} wakes the hook for `{name}` and the classifier does not know it — the gate \
-                 runs and decides nothing",
-                adapter.slug
-            );
+            if action == crate::harness::Action::Untouched {
+                assert!(
+                    crate::harness::hook::is_prelaunch_tool(Some(adapter.slug), name),
+                    "{} wakes the hook for `{name}`, but neither the repository classifier nor \
+                     the dedicated prelaunch gate owns it",
+                    adapter.slug
+                );
+            }
         }
     }
     // How many it walked, because narrowing the walk is how the gap this test
@@ -1824,6 +1825,25 @@ fn every_matcher_names_tools_the_gate_can_classify() {
         reached >= 10,
         "only {reached} gated agent(s) were reached — this stopped covering the fleet"
     );
+}
+
+#[test]
+fn claude_matcher_wakes_current_and_legacy_reserved_launch_tools() {
+    let matcher = agent("claude-code")
+        .gate_spec()
+        .and_then(|spec| spec.matcher)
+        .expect("Claude narrows PreToolUse");
+    for tool in ["Agent", "Task"] {
+        assert!(matcher.split('|').any(|name| name == tool), "{matcher}");
+        assert!(crate::harness::hook::is_prelaunch_tool(
+            Some("claude-code"),
+            tool
+        ));
+        assert!(!crate::harness::hook::is_prelaunch_tool(
+            Some("opencode"),
+            tool
+        ));
+    }
 }
 
 #[test]
@@ -4247,10 +4267,19 @@ fn a_comment_under_the_codex_table_is_not_estigias_to_remove() {
 fn every_tool_a_matcher_wakes_for_is_one_the_classifier_judges() {
     use crate::harness::{SHELL_TOOLS, WRITE_TOOLS};
 
-    let woken: Vec<String> = AGENTS
+    let woken: Vec<(&str, String)> = AGENTS
         .iter()
-        .filter_map(|adapter| adapter.gate_spec().and_then(|spec| spec.matcher))
-        .flat_map(wiring::names_in)
+        .filter_map(|adapter| {
+            adapter
+                .gate_spec()
+                .and_then(|spec| spec.matcher)
+                .map(|matcher| (adapter.slug, matcher))
+        })
+        .flat_map(|(agent, matcher)| {
+            wiring::names_in(matcher)
+                .into_iter()
+                .map(move |name| (agent, name))
+        })
         .collect();
     // The floor: the matchers were really read. An empty list agrees with
     // everything, which is how this crossing's sibling was once satisfied by a
@@ -4266,13 +4295,13 @@ fn every_tool_a_matcher_wakes_for_is_one_the_classifier_judges() {
         .chain(SHELL_TOOLS)
         .map(|name| name.to_ascii_lowercase())
         .collect();
-    for name in &woken {
+    for (agent, name) in &woken {
         assert!(
-            judged.contains(&name.to_ascii_lowercase()),
-            "a matcher wakes the hook for {name:?} and the classifier judges no such tool — the \
-             hook fires, answers `Untouched`, and the write goes through while every report says \
-             that tool is gated. Add it to `WRITE_TOOLS` or `SHELL_TOOLS`, or take it out of the \
-             matcher that names it"
+            judged.contains(&name.to_ascii_lowercase())
+                || crate::harness::hook::is_prelaunch_tool(Some(agent), name),
+            "{agent}'s matcher wakes the hook for {name:?}, but neither the repository classifier \
+             nor a dedicated prelaunch gate owns it — the hook fires, answers `Untouched`, and the \
+             call goes through while every report says it is gated"
         );
     }
 }

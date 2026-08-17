@@ -20,6 +20,16 @@ same static `review-blind` definition for every judge; there are no numbered def
 
 All judges are **read-only** against that target. A judge that edits is no longer judging.
 
+### Reserved reviewer role
+
+`review-blind` is operator-owned. For Claude's current `Agent` and legacy `Task` launch surfaces, any
+project definition under recursive `.claude/agents` with that filename or frontmatter name invalidates
+the panel. Unreadable or duplicate candidates also invalidate it, and the unique canonical user file
+must match Estigia's normalized embedded reviewer. A running reviewer is gated by the embedded policy,
+not project-local bytes. A refused or unprovable launch contributes no judge. If the collision or
+canonical file cannot be restored, use a separate session or durable handoff; never silently reduce or
+serialize the panel. Ordinary agent names remain project-first, and this prelaunch check is Claude-only.
+
 ## What agreement buys
 
 | Outcome | What follows |
@@ -54,8 +64,8 @@ narrowing, or when editing exceeds measuring.
 
 ## What Estigia enforces here, and what it does not
 
-**Enforced, mechanically:** the draft barrier, one aggregate exact-receipt verdict, and the exact
-publication receipt around the judges. Nothing in the transport proves panel execution.
+**Enforced, mechanically:** the draft barrier, one aggregate exact-receipt verdict, the exact
+publication receipt, and Claude's reserved-role prelaunch checks. Nothing proves panel execution.
 
 That is worth stating first and plainly. Estigia gates repository writes against an adjudicated
 claim. It cannot prove panel size, concurrency, independence, blindness, same-finding identity or

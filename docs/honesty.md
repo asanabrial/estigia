@@ -22,6 +22,12 @@ suite. Everything else here is prose held by review.
   `Planning`, and one static `review-blind` definition installed in every mode. OpenCode and every
   other host keep these values as routing declarations. `orchestrate`, `apply`, `judge`, and a visible
   route or installed definition are likewise not proof that a host executes them.
+  Claude's generated matcher now wakes for current `Agent` and legacy `Task` launches of the exact
+  `review-blind` target. Estigia recursively refuses project-scoped shadows and requires the normalized
+  canonical user definition; a running reviewer uses the embedded policy. This is Claude-only and
+  proves what Estigia read before launch, not that Claude launched the context, kept judges concurrent
+  or blind, withheld sibling output, or received an honest verdict. A refused launch is no evidence and
+  never reduces or serializes the configured panel; the fallback is separate-session or durable handoff.
   OpenCode process-tree cleanup is likewise not containment proof: the controller bounds how long the
   TUI waits, while process-group and Job Object cleanup remain best-effort OS operations.
 
@@ -1136,12 +1142,13 @@ suite. Everything else here is prose held by review.
   `tool.execute.before` never sees a call made by a subagent at all. So the second door closes
   nothing today: it is open for a caller that names a sub-agent, and there is not one yet. Where the
   question *is* asked, it sees exactly what the matcher wakes the hook for —
-  `Edit|Write|MultiEdit|NotebookEdit|Update|Bash` for Claude Code — and a tool outside that set is
+  `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task` for Claude Code. `Agent` and `Task` first
+  take the dedicated reserved-reviewer prelaunch path rather than repository classification. A tool outside that set is
   never offered to it. Measured against the list this crate itself cites as the case it exists for,
   a published `builder` sub-agent declaring `Read, Write, Edit, Glob, Grep, Bash`: three of the six are tools the
   gate can judge, and `Read`, `Glob` and `Grep` are never seen. What it can therefore refuse is a
   tool **in the matcher and not in the list** — `MultiEdit`, `NotebookEdit`, `Update` for that
-  builder — and not `WebFetch`, `WebSearch` or `Task`, which are the ones an operator narrowing a
+  builder — and not `WebFetch` or `WebSearch`, which are among those an operator narrowing a
   sub-agent usually means. The module says it *makes the author's policy true*; it makes the part
   of it that overlaps the gate true. Widening the matcher would close it and is the one thing the
   matcher exists to avoid — waking this process for every `Read` and every `Grep` is a cost paid

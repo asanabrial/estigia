@@ -1641,6 +1641,18 @@ fn the_reach_of_the_role_gate_is_stated_where_an_operator_reads_it() {
             "the contract does not name {named}, which the gate never sees"
         );
     }
+    for held in [
+        "current `Agent` and legacy `Task`",
+        "recursively refuses project-scoped shadows",
+        "running reviewer uses the embedded policy",
+        "not that Claude launched the context",
+        "never reduces or serializes the configured panel",
+    ] {
+        assert!(
+            section.contains(held),
+            "the reviewer launch boundary omits {held:?}"
+        );
+    }
 }
 
 /// Where the verdict's binding is enforced is stated, and stated accurately.

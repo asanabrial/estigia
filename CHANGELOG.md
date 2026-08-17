@@ -27,6 +27,11 @@ the workflow, it holds the tools.
   digest now inventories exactly five SDD definitions and that reviewer in one of its two top-level
   asset collections. Transport still enforces one aggregate exact-receipt verdict only: Estigia cannot
   prove panel size, concurrency, independence, blindness, same-finding identity or quorum.
+  `review-blind` is now reserved to the operator-owned Claude definition. Generated Claude hooks wake
+  for current `Agent` and legacy `Task` launches, recursively reject project shadows or unprovable
+  candidates, require the canonical user text, and enforce the embedded policy once running. Refused
+  launches never count or degrade the panel; ordinary agents remain project-first and OpenCode is out
+  of scope.
 - `estigia mcp` serves the workflow operations as **21 MCP tools** over stdio —
   claim, verify_claim, heartbeat, transition, comment, reclaim, release,
   start_branch, publish_review, and the read-only checks. Hand-written

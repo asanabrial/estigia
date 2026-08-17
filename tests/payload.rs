@@ -205,6 +205,10 @@ fn the_blind_panel_policy_requires_same_finding_quorum_without_erasing_dissent()
         "suspicions",
         "preserve dissent",
         "ambiguous finding identities do not aggregate",
+        "review-blind` is operator-owned",
+        "invalidates the panel",
+        "a refused or unprovable launch contributes no judge",
+        "never silently reduce or serialize the panel",
     ] {
         assert!(policy.contains(required), "missing {required:?}");
     }

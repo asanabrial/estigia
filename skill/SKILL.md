@@ -90,6 +90,11 @@ Load [domain composition](references/domain-composition.md) for routing, scale v
    dissent, warnings and suggestions are preserved. The binding still records one aggregate exact-
    receipt verdict. Estigia cannot prove panel size, concurrency, independence, blindness, same-finding
    identity or quorum.
+   `review-blind` is an operator-owned reserved role. For Claude `Agent` and legacy `Task` launches,
+   any recursive project `.claude/agents` collision or an unprovable canonical user definition refuses
+   the launch; a running reviewer is gated by the embedded policy, never project bytes. No refused or
+   unprovable judge counts. Use a separate session or durable handoff when the reserved launch cannot
+   be restored; never reduce or serialize the configured panel.
 6. Renew at each irreversible boundary; merge only when reviewed, green, and current head/base identities match. Deliver on your own only when `Delivery authorisation` authorises this run; otherwise ask first, with the reviewed head and base named. For a merge-commit route, require the delivered SHA's exact parents to be the reviewed base and head; other configured strategies require their binding-declared equivalent topology and any delivered-SHA gate. For each changed version, publish and remotely verify its immutable annotated tag and required Release; renew again, transition to `done`, record review/CI/tests/measurements/PR/delivering SHA/publications with the run-id, and close. On handoff, preserve all evidence: wrong specification goes to `analysis`, unbuilt external wait to `blocked`, built-undeliverable work to `review`, and a useful partial diagnosis to `ready`.
 
 ## Output Contract

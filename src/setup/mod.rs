@@ -1229,7 +1229,7 @@ fn reviewer_target(paths: &AgentPaths) -> Option<PathBuf> {
     Some(paths.agents_root.as_ref()?.join(name))
 }
 
-fn reviewer_is_static(existing: &str) -> bool {
+pub(crate) fn reviewer_is_static(existing: &str) -> bool {
     existing == as_the_file_was(Some(existing), skill::REVIEW_AGENT.contents)
 }
 

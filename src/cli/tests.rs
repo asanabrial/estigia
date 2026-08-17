@@ -58,6 +58,30 @@ fn inventory() -> Vec<Refusal> {
             "WebFetch",
             &crate::harness::roles::Policy::Allowlist(vec!["Read".to_owned(), "Write".to_owned()]),
         ),
+        Refusal::not_started(
+            "reviewer-project-shadow",
+            "a project definition shadows the operator-owned reviewer",
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "remove or rename the project reviewer, or use separate-session review",
+            ),
+        ),
+        Refusal::not_started(
+            "reviewer-project-unprovable",
+            "project reviewer candidates cannot be proved unique and readable",
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "repair the project agent tree, or use durable handoff review",
+            ),
+        ),
+        Refusal::not_started(
+            "reviewer-canonical-unavailable",
+            "the canonical user reviewer cannot be proved current",
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "restore it with Claude setup, or use separate-session review",
+            ),
+        ),
         nothing_configured(),
         // Knowable from the command line: a value the table cannot carry.
         super::config_set(

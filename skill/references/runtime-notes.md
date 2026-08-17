@@ -47,6 +47,15 @@ concurrently, with the identical target and criteria. Each context is denied rep
 and must not delegate or inspect sibling output. Config writes do not mutate this definition. A
 definition is a host constraint and a contract, not evidence that the panel was actually instantiated.
 
+`review-blind` is reserved to the operator-owned canonical user definition. Claude's current `Agent`
+and legacy `Task` launch surfaces are preflighted before repository-write classification: recursively
+search project `.claude/agents` for the reserved filename or frontmatter name, fail closed on unreadable
+or duplicate candidates, and require the normalized canonical user text to match the embedded asset.
+The top-level `agent_type` is the caller; only nested `tool_input.subagent_type` is the launch target.
+An already-running reviewer always receives the embedded read-only policy. This does not alter ordinary
+project-first agent resolution and does not cover OpenCode launches. A refused or unprovable launch
+contributes no judge; use a separate session or durable handoff, never a smaller or serialized panel.
+
 `Review delegation: auto` is permission, not capability. It lets a run acquire a reviewer when its
 runtime can provide one; it does not make Estigia spawn a model, open a session, or prove a context is
 independent. When the capability is absent, use the binding's durable review handoff so another run
