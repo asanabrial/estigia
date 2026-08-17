@@ -306,6 +306,125 @@ fn a_boundary_is_recognised_through_spacing_and_case() {
 }
 
 #[test]
+fn only_one_literal_fast_forward_command_preserves_a_target_for_proof() {
+    for command in [
+        "git merge --ff-only origin/main",
+        "git\tmerge  --ff-only\t-- origin/main",
+    ] {
+        let (action, how) = classify("Bash", &json!({"command": command}));
+        assert_eq!(how, Sensitivity::Boundary, "{command}");
+        let Action::Boundary {
+            command: boundary,
+            local_fast_forward_target,
+        } = action
+        else {
+            panic!("{command} stopped being a boundary");
+        };
+        assert_eq!(boundary, "git merge");
+        assert_eq!(local_fast_forward_target.as_deref(), Some("origin/main"));
+    }
+
+    for command in [
+        "git merge --ff-only origin/main && echo unsafe",
+        "git merge --ff-only origin/main; echo unsafe",
+        "git merge --ff-only origin/main\ngit status",
+        "sudo git merge --ff-only origin/main",
+        "git -C elsewhere merge --ff-only origin/main",
+        "git --git-dir=.git merge --ff-only origin/main",
+        "git -c advice.detachedHead=false merge --ff-only origin/main",
+        "git merge --ff-only --no-edit origin/main",
+        "git merge --ff-only origin/main other",
+        "git merge --ff-only 'origin/main'",
+        "git merge --ff-only $UPSTREAM",
+        "git merge --ff-only origin/{main}",
+        "git merge --ff-only -topic",
+    ] {
+        let (action, how) = classify("Bash", &json!({"command": command}));
+        assert_eq!(how, Sensitivity::Boundary, "{command}");
+        let Action::Boundary {
+            local_fast_forward_target,
+            ..
+        } = action
+        else {
+            panic!("{command} stopped being a boundary");
+        };
+        assert_eq!(
+            local_fast_forward_target, None,
+            "{command} retained metadata that could bypass out-of-phase"
+        );
+    }
+
+    let (array, how) = classify(
+        "Bash",
+        &json!({"command": ["git", "merge", "--ff-only", "origin/main"]}),
+    );
+    assert_eq!(how, Sensitivity::Boundary);
+    assert!(matches!(
+        array,
+        Action::Boundary {
+            local_fast_forward_target: None,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn local_fast_forward_proof_fails_closed_on_repository_state() {
+    let repo = tempfile::tempdir().expect("a temporary repository");
+    let git = |arguments: &[&str]| -> String {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .args(arguments)
+            .output()
+            .expect("git runs");
+        assert!(
+            output.status.success(),
+            "git {arguments:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    git(&["config", "user.email", "nobody@example.invalid"]);
+    git(&["config", "user.name", "nobody"]);
+    git(&["commit", "--allow-empty", "--quiet", "-m", "base"]);
+    let branch = git(&["branch", "--show-current"]);
+    let base = git(&["rev-parse", "HEAD"]);
+    git(&["commit", "--allow-empty", "--quiet", "-m", "upstream"]);
+    let upstream = git(&["rev-parse", "HEAD"]);
+    git(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(&["reset", "--hard", "--quiet", &base]);
+    git(&["remote", "add", "origin", "https://example.invalid/o/r.git"]);
+    git(&["config", &format!("branch.{branch}.remote"), "origin"]);
+    git(&[
+        "config",
+        &format!("branch.{branch}.merge"),
+        "refs/heads/main",
+    ]);
+
+    assert!(is_safe_local_fast_forward(repo.path(), "origin/main"));
+    assert!(is_safe_local_fast_forward(repo.path(), &upstream));
+    assert!(!is_safe_local_fast_forward(repo.path(), "origin/other"));
+
+    std::fs::write(repo.path().join("untracked"), "dirty").expect("a dirty worktree");
+    assert!(!is_safe_local_fast_forward(repo.path(), "origin/main"));
+    std::fs::remove_file(repo.path().join("untracked")).expect("the worktree is clean again");
+
+    git(&["checkout", "--detach", "--quiet"]);
+    assert!(!is_safe_local_fast_forward(repo.path(), "origin/main"));
+    git(&["checkout", "--quiet", &branch]);
+
+    git(&["commit", "--allow-empty", "--quiet", "-m", "side"]);
+    let side = git(&["rev-parse", "HEAD"]);
+    git(&["reset", "--hard", "--quiet", &base]);
+    assert!(
+        !is_safe_local_fast_forward(repo.path(), &side),
+        "a commit outside the upstream ancestry was accepted"
+    );
+}
+
+#[test]
 fn reading_the_repository_is_not_the_harness_s_business() {
     for command in ["ls -la", "cat README.md", "git status", "git log --oneline"] {
         let (action, _) = classify("Bash", &json!({ "command": command }));
@@ -380,6 +499,7 @@ fn a_boundary_never_rides_on_the_window() {
 
     let action = Action::Boundary {
         command: "git push".to_owned(),
+        local_fast_forward_target: None,
     };
     let decision = gate(&context, &mut run, &action, Sensitivity::Boundary);
     assert!(
@@ -1183,6 +1303,7 @@ fn the_gate_honours_a_stand_down_and_stops_when_it_expires() {
         run.mark_verified();
         let action = Action::Boundary {
             command: "git push".to_owned(),
+            local_fast_forward_target: None,
         };
         gate(&context, &mut run, &action, Sensitivity::Boundary)
     };
@@ -2217,8 +2338,12 @@ fn declaring_a_boundary_only_ever_tightens_what_the_gate_says() {
         // A built-in boundary keeps its own name, or the delivery list — which
         // compares the recorded fragment by exact equality — stops recognising
         // it.
-        if let (Action::Boundary { command: was }, Action::Boundary { command: now_named }) =
-            (&bare_action, &declared_action)
+        if let (
+            Action::Boundary { command: was, .. },
+            Action::Boundary {
+                command: now_named, ..
+            },
+        ) = (&bare_action, &declared_action)
             && was != now_named
         {
             looser.push(format!(
@@ -2648,6 +2773,7 @@ fn a_claim_covers_the_work_happening_below_the_checkout_root() {
     // subdirectory went through unadjudicated.
     let push = Action::Boundary {
         command: "git push".to_owned(),
+        local_fast_forward_target: None,
     };
     assert_ne!(
         gate(&context, &mut run, &push, Sensitivity::Boundary),

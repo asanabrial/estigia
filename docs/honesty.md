@@ -1074,6 +1074,23 @@ suite. Everything else here is prose held by review.
   publishing is how a run reaches review, and gating it on review is a deadlock. Boundaries the
   operator declared are never read as deliveries: Estigia cannot know whether a `make deploy`
   delivers or rehearses, and guessing would refuse a step it never understood.
+
+  One `git merge` is preparation rather than delivery: an exact literal `git merge --ff-only
+  <target>` (also accepting `--` before the target) may run from `in-progress` after the tracker
+  agrees when local Git proves all of it. The checkout is on a branch, its upstream is a canonical
+  `refs/remotes/*` ref, the worktree is clean, the target is either that upstream's exact short name
+  or a full object ID, and ancestry runs from `HEAD` through the target to the upstream. It remains a
+  `Boundary`, so it still pays the live tracker read and is recorded in the decision ledger. The
+  verdict-to-bytes check runs first; a stale verdict is refused before this exception can skip only
+  the `out-of-phase` check. Wrappers, compound commands, quoting, expansion, alternate git
+  directories, extra flags or targets, detached branches, dirty trees and any unreadable Git answer
+  retain the existing refusal.
+
+  **The proof is local and can therefore be stale.** It never fetches and cannot establish that the
+  remote-tracking ref still matches the server. It proves only that the merge is safe relative to
+  the tracking ref already present in this checkout; a later fetch may reveal commits it did not
+  know about. Avoiding network access keeps the gate from changing repository state or turning every
+  local update into another remote boundary, and this limitation is recorded rather than hidden.
 - **That narrowing is not configurable, and the asymmetry is the reason.** Every other axis here can
   be switched; this one only tightens, and a setting that could loosen a guard rail turns it into a
   preference. It is the same rule as the operator's boundary list, which adds and never removes.

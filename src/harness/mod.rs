@@ -67,6 +67,9 @@ pub enum Action {
     Boundary {
         /// The command, for the message.
         command: String,
+        /// The target of an exact local `git merge --ff-only`, when the shell
+        /// payload was narrow enough to prove rather than interpret.
+        local_fast_forward_target: Option<String>,
     },
     /// Nothing Estigia claims authority over.
     Untouched,
@@ -94,7 +97,7 @@ impl Action {
     pub fn subject(&self) -> Option<&str> {
         match self {
             Self::Write { target } => Some(target),
-            Self::Boundary { command } => Some(command),
+            Self::Boundary { command, .. } => Some(command),
             Self::Untouched => None,
         }
     }
@@ -1463,6 +1466,7 @@ pub fn classify_with(
             return (
                 Action::Boundary {
                     command: (*matched).to_owned(),
+                    local_fast_forward_target: None,
                 },
                 Sensitivity::Boundary,
             );
@@ -1471,6 +1475,7 @@ pub fn classify_with(
             return (
                 Action::Boundary {
                     command: "gh api".to_owned(),
+                    local_fast_forward_target: None,
                 },
                 Sensitivity::Boundary,
             );
@@ -1485,6 +1490,9 @@ pub fn classify_with(
             return (
                 Action::Boundary {
                     command: matched.to_owned(),
+                    local_fast_forward_target: (matched == "git merge")
+                        .then(|| exact_local_fast_forward_target(input))
+                        .flatten(),
                 },
                 Sensitivity::Boundary,
             );
@@ -1610,6 +1618,113 @@ fn path_argument(input: &serde_json::Value) -> Option<String> {
 /// The command line a shell tool was handed.
 fn command_argument(input: &serde_json::Value) -> Option<String> {
     argument_named(input, &["command", "commandline"])
+}
+
+/// The target of one literal local fast-forward command, without shell parsing.
+///
+/// This is deliberately narrower than [`command_argument`]. Joining an argv
+/// array loses whether it was a direct git invocation or `bash -lc`, and shell
+/// syntax broad enough to understand quoting is also broad enough to get wrong.
+/// Only a string made of four words, or five with `--`, can earn the exception.
+fn exact_local_fast_forward_target(input: &serde_json::Value) -> Option<String> {
+    let command = input.as_object()?.iter().find_map(|(key, value)| {
+        let key: String = key
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .map(|character| character.to_ascii_lowercase())
+            .collect();
+        matches!(key.as_str(), "command" | "commandline")
+            .then(|| value.as_str())
+            .flatten()
+    })?;
+    // Newlines separate commands, while all other shell punctuation is kept
+    // out by the target alphabet below. Spaces and tabs carry no interpretation.
+    if command
+        .chars()
+        .any(|character| character.is_whitespace() && !matches!(character, ' ' | '\t'))
+    {
+        return None;
+    }
+    let words: Vec<&str> = command.split_ascii_whitespace().collect();
+    let target = match words.as_slice() {
+        ["git", "merge", "--ff-only", target] | ["git", "merge", "--ff-only", "--", target] => {
+            *target
+        }
+        _ => return None,
+    };
+    if target.starts_with('-')
+        || target.is_empty()
+        || !target
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "/._-".contains(character))
+    {
+        return None;
+    }
+    Some(target.to_owned())
+}
+
+/// Whether local Git proves this merge can only fast-forward toward its upstream.
+///
+/// Every failed process, malformed answer, detached branch, dirty path or
+/// ancestry miss is `false`: this proof removes one refusal, so unknown cannot
+/// be clearance. It performs no fetch and consults only refs already present in
+/// the checkout.
+fn is_safe_local_fast_forward(repo_dir: &std::path::Path, target: &str) -> bool {
+    let git = |arguments: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo_dir)
+            .args(arguments)
+            .output()
+            .ok()
+            .filter(|answer| answer.status.success())
+    };
+    let text = |arguments: &[&str]| {
+        let answer = git(arguments)?;
+        let value = std::str::from_utf8(&answer.stdout).ok()?.trim();
+        (!value.is_empty() && !value.contains(['\r', '\n'])).then(|| value.to_owned())
+    };
+
+    let branch = text(&["symbolic-ref", "--quiet", "HEAD"]);
+    if !branch.is_some_and(|branch| branch.starts_with("refs/heads/")) {
+        return false;
+    }
+    let upstream = match text(&["rev-parse", "--symbolic-full-name", "@{upstream}"]) {
+        Some(upstream) if upstream.starts_with("refs/remotes/") => upstream,
+        _ => return false,
+    };
+    let short_upstream = match text(&[
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        "@{upstream}",
+    ]) {
+        Some(upstream) => upstream,
+        None => return false,
+    };
+    let full_oid = target.len() == 40 || target.len() == 64;
+    if target != short_upstream
+        && !(full_oid && target.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    {
+        return false;
+    }
+    if git(&["status", "--porcelain=v1", "--untracked-files=normal"])
+        .is_none_or(|answer| !answer.stdout.is_empty())
+    {
+        return false;
+    }
+    let commit = |revision: &str| {
+        let expression = format!("{revision}^{{commit}}");
+        let oid = text(&["rev-parse", "--verify", "--end-of-options", &expression])?;
+        ((oid.len() == 40 || oid.len() == 64) && oid.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            .then_some(oid)
+    };
+    let (head, target, upstream) = match (commit("HEAD"), commit(target), commit(&upstream)) {
+        (Some(head), Some(target), Some(upstream)) => (head, target, upstream),
+        _ => return false,
+    };
+    git(&["merge-base", "--is-ancestor", &head, &target]).is_some()
+        && git(&["merge-base", "--is-ancestor", &target, &upstream]).is_some()
 }
 
 /// Everything the gate needs that it cannot work out for itself.
@@ -1956,12 +2071,18 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
                 // from here `state` is the tracker's answer rather than the
                 // run's belief — which is what makes it safe to decide on.
                 run.mark_verified();
-                if let Action::Boundary { command } = action
+                if let Action::Boundary { command, .. } = action
                     && let Some(refusal) = stale_verdict(command, run)
                 {
                     return Decision::Deny(Box::new(prefixed(refusal, &subject)));
                 }
-                if let Action::Boundary { command } = action
+                if let Action::Boundary {
+                    command,
+                    local_fast_forward_target,
+                } = action
+                    && !local_fast_forward_target
+                        .as_deref()
+                        .is_some_and(|target| is_safe_local_fast_forward(&context.repo_dir, target))
                     && let Some(refusal) = out_of_phase(
                         command,
                         &state,

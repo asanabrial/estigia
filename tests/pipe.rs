@@ -6287,6 +6287,156 @@ fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
     );
 }
 
+/// A local fast-forward to the branch's tracked remote is preparation, not delivery.
+///
+/// The gate used to read every `git merge` as landing shared work, including the
+/// exact `git merge --ff-only origin/main` used to bring an isolated worktree up
+/// to date before continuing it. That command changes only this checkout and can
+/// neither publish nor create a merge commit, but `in-progress` refused it with
+/// the same answer as a pull-request merge.
+#[test]
+fn an_exact_local_fast_forward_is_allowed_without_widening_other_merges() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let git = |arguments: &[&str]| {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .expect("git runs for the fixture");
+        assert!(
+            output.status.success(),
+            "git {arguments:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    let branch = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["branch", "--show-current"])
+        .output()
+        .expect("git names the fixture branch");
+    let branch = String::from_utf8_lossy(&branch.stdout).trim().to_owned();
+    assert!(!branch.is_empty(), "the fixture is not on a branch");
+
+    // Put one commit on the local tracking ref while leaving the checked-out
+    // branch at its clean parent. No network is involved.
+    git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--allow-empty",
+        "--quiet",
+        "-m",
+        "upstream",
+    ]);
+    git(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(&["reset", "--hard", "--quiet", "HEAD^"]);
+    git(&["remote", "add", "origin", "https://example.invalid/o/r.git"]);
+    git(&["config", &format!("branch.{branch}.remote"), "origin"]);
+    git(&[
+        "config",
+        &format!("branch.{branch}.merge"),
+        "refs/heads/main",
+    ]);
+
+    let pointer = serde_json::json!({
+        "run_id": "claude-abcd1234",
+        "issue": 12,
+        "revision": 1,
+        "state": "in-progress",
+        "repo_dir": repo,
+        "worktree": serde_json::Value::Null,
+    });
+    std::fs::write(
+        home.join(".estigia")
+            .join("runs")
+            .join("claude-abcd1234.json"),
+        serde_json::to_string(&pointer).expect("the pointer serialises"),
+    )
+    .expect("the pointer is written");
+    let gate = |command: &str| {
+        let input = serde_json::json!({"command": command}).to_string();
+        run_with_tracker(
+            home,
+            repo,
+            bin,
+            &issue_answer("in-progress"),
+            &[
+                "gate",
+                "Bash",
+                "--run-id",
+                "claude-abcd1234",
+                "--input",
+                &input,
+            ],
+            "",
+        )
+    };
+
+    let (allowed, refused, ok) = gate("git merge --ff-only origin/main");
+    assert!(
+        ok,
+        "the safe local fast-forward was refused: {allowed}{refused}"
+    );
+    assert!(
+        allowed.contains("allow"),
+        "the gate did not allow it: {allowed}"
+    );
+
+    let mut stale_pointer = pointer.clone();
+    stale_pointer["reviewed_head"] = serde_json::Value::String("0".repeat(40));
+    std::fs::write(
+        home.join(".estigia")
+            .join("runs")
+            .join("claude-abcd1234.json"),
+        serde_json::to_string(&stale_pointer).expect("the stale pointer serialises"),
+    )
+    .expect("the stale pointer is written");
+    let (_, stale, ok) = gate("git merge --ff-only origin/main");
+    assert!(!ok, "the local exception bypassed a stale verdict");
+    assert!(
+        stale.contains("verdict-bound-to-other-bytes"),
+        "stale_verdict did not run first: {stale}"
+    );
+    std::fs::write(
+        home.join(".estigia")
+            .join("runs")
+            .join("claude-abcd1234.json"),
+        serde_json::to_string(&pointer).expect("the pointer serialises"),
+    )
+    .expect("the fresh pointer is restored");
+
+    let (_, refused, ok) = gate("git merge --ff-only origin/other");
+    assert!(!ok, "an untracked target was allowed");
+    assert!(refused.contains("out-of-phase"), "wrong refusal: {refused}");
+    assert!(
+        refused.contains(
+            "git merge: this step lands the work and issue #12 is in in-progress, where no verdict exists"
+        ),
+        "the existing out-of-phase message changed: {refused}"
+    );
+    assert!(
+        refused.contains(
+            "a review of this head. Publish the review target, move the issue to review, and deliver once somebody has answered"
+        ),
+        "the existing out-of-phase guidance changed: {refused}"
+    );
+
+    let ledger = std::fs::read_to_string(home.join(".estigia").join("decisions.jsonl"))
+        .expect("the gate recorded its decisions");
+    assert!(
+        ledger.lines().any(|line| {
+            let entry: serde_json::Value = serde_json::from_str(line).expect("a ledger entry");
+            entry["verdict"] == "allow" && entry["subject"] == "git merge"
+        }),
+        "the allowed fast-forward is absent from the ledger: {ledger}"
+    );
+}
+
 /// Everything the two post-agreement checks need: a home, a checkout with a
 /// commit in it, and a `gh` that answers.
 struct TrackerRig {
