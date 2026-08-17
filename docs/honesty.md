@@ -1404,6 +1404,36 @@ suite. Everything else here is prose held by review.
   that same directory before it creates anything. Measured by
   `one_server_survives_the_isolation_it_created`, which drives one real server through both calls
   down one pipe, because no per-call `GateContext` can pose *the same server asking twice*.
+
+  **And a run already in that state gets itself back**, which prevention does not do for the runs
+  that are in it. Two things were needed. The refusal above measured `covered().count()`, which is
+  the right question asked of the wrong field: the worktree is the *additional* directory a claim
+  covers, never the one that says where it was sworn. So a record holding only a worktree could
+  ground a refusal — and an incomplete record is not a narrower claim, it is an unknown one. It
+  measures `repo_dir` now, so a record that never named its checkout stands aside exactly as a run
+  that has claimed nothing does. Nothing is widened for a record that *does* name one: a foreign run
+  id, an unrecorded worktree and a directory outside the coverage are refused as before, and
+  standing aside is not clearance — the call still goes to the tracker, which is the only thing that
+  adjudicates.
+
+  Then the way back is a call the contract already requires. A renewal answered `ok` is the tracker
+  saying, at that moment, that this run is the live holder of this issue in this state — the same
+  fact `Swear` writes, from the same authority — so the pointer is completed from it rather than
+  left broken until something writes to the tracker again. It takes no tracker **write**, which is
+  what makes it reachable during exactly the outage that causes the damage: the state is produced by
+  a `claim` whose write lands and whose readback fails, and during that outage there is no write to
+  be had. Filled and never overwritten, and unable to invent authority, because a run that does not
+  hold the issue is refused before the pointer is touched. Measured by
+  `a_renewal_completes_a_record_the_tracker_has_just_agreed_with` and, as a process,
+  `a_stranded_run_recovers_from_the_checkout_it_is_running_in` — which asserts both halves, since a
+  run readmitted on an empty record is a run whose writes are still measured against nothing.
+
+  What this does **not** do is repair the claim itself. The `claim` that failed this way cannot be
+  retried: its operation id is reused only when the pointer already names the issue, which is the
+  field the failed call did not write, so every retry mints a fresh key and the transport answers
+  `already-owned-by-different-operation` for as long as the claim is live. `release` with the exact
+  epoch and a fresh `claim` is still the only way to re-swear, and both are tracker writes. That is
+  a different defect with a different fix and it is filed separately.
 - **Two checkouts are told apart by resolving them, and by case when they will not resolve.**
   `canonicalize` answers with the real spelling on disk, so a live directory spelled two ways is one
   directory whatever the operator typed. A path this process cannot resolve has only its spelling

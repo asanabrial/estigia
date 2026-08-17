@@ -637,9 +637,27 @@ pub fn run_tool(
     // rule was stated there and not carried here, so a tool call was measured
     // against a claim a write in the same directory would not have been.
     //
-    // Only when the pointer names a checkout: a run that has claimed nothing yet
-    // has nothing to be outside of, which is the `claim` call itself.
-    if run.covered().count() > 0
+    // Only when the pointer names the checkout the claim was made in: a run that
+    // has claimed nothing yet has nothing to be outside of, which is the `claim`
+    // call itself.
+    //
+    // `repo_dir` and not `covered().count()`, which is the same question asked of
+    // the wrong field. The worktree is the *additional* directory a claim covers,
+    // never the one that says where it was sworn — `docs/honesty.md` has said so
+    // in as many words for as long as there have been two. Asking the count let a
+    // record holding only a worktree ground a refusal, and an incomplete record
+    // is not a narrower claim, it is an unknown one. That shape is reachable: a
+    // `claim` whose tracker write lands and whose readback fails records nothing,
+    // and the isolation that follows writes the worktree alone. The run was then
+    // refused everywhere including the recovery, which is a gate with no door in
+    // it — measured on this repository on 2026-08-17, twice by the run that filed
+    // the issue and once more by the run that fixed it.
+    //
+    // Nothing is widened for a record that *does* name its checkout: a foreign
+    // run id, an unrecorded worktree and a directory outside the coverage are all
+    // refused exactly as before. And standing aside here is not clearance — the
+    // call still goes to the tracker, which is the only thing that adjudicates.
+    if run.repo_dir.is_some()
         && !run
             .covered()
             .any(|covered| crate::paths::covers(covered, &context.repo_dir))
@@ -935,8 +953,13 @@ fn apply_effect(
         return true;
     }
     let issue = arguments.get("issue").and_then(Value::as_u64);
+    // `state` is what a claim swears to and `expect_state` is what a renewal was
+    // measured against. Both name the state the tracker has just agreed to, so
+    // both answer here; the swearing tools send the first and never the second,
+    // so their behaviour is unchanged by reading it.
     let state = arguments
         .get("state")
+        .or_else(|| arguments.get("expect_state"))
         .and_then(Value::as_str)
         .unwrap_or("in-progress")
         .to_owned();
@@ -973,7 +996,36 @@ fn apply_effect(
                 }
                 run.mark_verified();
             }
-            PointerEffect::Renew => run.mark_verified(),
+            PointerEffect::Renew => {
+                // A renewal that came back `ok` is the tracker saying, just now,
+                // that this run is the live holder of this issue in this state.
+                // That is the same fact `Swear` writes down, learned the same way
+                // and from the same authority — so a record missing it is
+                // completed here rather than left broken until something writes to
+                // the tracker again.
+                //
+                // This is the way back for a run that has already been stranded.
+                // The pointer is a note and the timeline is the authority, so a
+                // note that lost what the timeline still says is repaired from the
+                // timeline; it takes no tracker *write*, which is what makes it
+                // reachable during exactly the outage that causes the damage.
+                // Every field is filled and none is overwritten: a pointer that
+                // already names an issue, a state or a checkout is describing
+                // something this call has no business replacing, and `verify_claim`
+                // refuses outright when the tracker disagrees with it.
+                //
+                // It cannot invent authority. A renewal only reaches here having
+                // been answered `ok`, and a run that holds nothing is refused by
+                // the tracker before the pointer is touched at all.
+                if run.issue.is_none() {
+                    run.issue = issue;
+                }
+                if run.state.is_none() {
+                    run.state = Some(state.clone());
+                }
+                run.repo_dir.get_or_insert_with(|| repo_dir.clone());
+                run.mark_verified();
+            }
             PointerEffect::Published => {
                 // Kept only when the answer names one. A publish that came back
                 // without a head is not a reason to forget the head this run had.

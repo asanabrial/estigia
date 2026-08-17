@@ -753,23 +753,24 @@ fn a_run_id_that_holds_another_checkout_is_not_one_to_act_under() {
         );
     }
 
-    // A worktree on its own is still not this server's checkout. The rule that
-    // keeps `start_branch` from *producing* this shape lives one file over, in
-    // the pointer effect; it does not make the shape acceptable when something
-    // else writes it, and a fix that widened the guard here instead would have
-    // been a gate deciding less. Reachable by hand-writing a pointer, so it is
-    // measured rather than assumed unreachable.
+    // A record holding only a worktree does not say where its claim was sworn,
+    // and an incomplete record is an unknown one rather than a narrower one. It
+    // is refused nowhere, because refusing it is a gate with no door in it: this
+    // is the shape a run is stranded in, and every way out — the renewal, the
+    // re-claim, the release — is a tool call from the very checkout the refusal
+    // was naming. The call still has to satisfy the tracker, which is the only
+    // thing that adjudicates.
     pointer("claude-worktree-only", None, Some(&elsewhere));
-    let failure = run_tool(
+    if let Err(ToolFailure::Refused(refusal)) = run_tool(
         "release",
         &json!({"issue": 12, "run_id": "claude-worktree-only"}),
         Ok(&context),
-    )
-    .expect_err("a run covering only somebody else's worktree is not in this checkout");
-    let ToolFailure::Refused(refusal) = failure else {
-        panic!("refused as malformed rather than by the rule");
-    };
-    assert_eq!(refusal.code, "run-id-names-another-checkout");
+    ) {
+        assert_ne!(
+            refusal.code, "run-id-names-another-checkout",
+            "a run whose record never named its checkout was refused the way back"
+        );
+    }
 
     // And a run that has claimed nothing has no checkout to be outside of,
     // which is every first `claim` there has ever been.
@@ -2425,6 +2426,114 @@ fn isolating_a_run_records_the_checkout_it_was_adjudicated_from() {
         crate::harness::session::load(&context.state_root, "claude-elsewhere").repo_dir,
         Some(elsewhere),
         "isolation overwrote the checkout the claim was made in with the server's own"
+    );
+}
+
+/// A renewal repairs the record it was measured against.
+///
+/// The cure for a run that is *already* stranded, which the entry above only
+/// prevents. Recording the claim's checkout at isolation stops new runs reaching
+/// the state; it does nothing for the ones in it, and there were several — the
+/// issue this was filed under names two, and the run that fixed it made a third.
+///
+/// A renewal answered `ok` is the tracker saying, at that moment, that this run
+/// is the live holder of this issue in this state. That is the same fact `Swear`
+/// writes, from the same authority — so the pointer is completed from it. It
+/// costs no tracker *write*, which is what makes it reachable during the outage
+/// that causes the damage in the first place.
+///
+/// Filled and never overwritten, and unable to invent anything: a run that does
+/// not hold the issue is refused by the tracker long before the pointer is
+/// touched.
+#[test]
+fn a_renewal_completes_a_record_the_tracker_has_just_agreed_with() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = GateContext {
+        integration: crate::config::Integration::Branch,
+        flag: None,
+        stand_down: None,
+        skill_root: root.path().join("skill"),
+        repo_dir: root.path().join("repo"),
+        state_root: root.path().join("state"),
+        window: super::super::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        boundaries: Vec::new(),
+    };
+    let renew = super::tools::TOOLS
+        .iter()
+        .find(|tool| tool.name == "verify_claim")
+        .expect("the tool is listed");
+    assert_eq!(
+        renew.effect,
+        super::PointerEffect::Renew,
+        "this test is measuring the wrong tool"
+    );
+
+    // Stranded: the timeline holds the claim, the record holds a worktree and
+    // nothing that says where the claim was sworn.
+    let worktree = root.path().join("trees").join("issue-56");
+    let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
+    run.worktree = Some(worktree.clone());
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
+
+    let arguments = serde_json::json!({
+        "issue": 56,
+        "run_id": "claude-abcd1234",
+        "expect_state": "in-progress",
+    });
+    super::apply_effect(
+        renew,
+        &arguments,
+        Some(&serde_json::json!({"ok": true, "issue": 56, "state": "in-progress"})),
+        &mut run,
+        &context,
+    );
+
+    let after = crate::harness::session::load(&context.state_root, "claude-abcd1234");
+    assert_eq!(
+        after.issue,
+        Some(56),
+        "the renewal left the run holding nothing, so the gate goes on measuring nothing"
+    );
+    assert_eq!(
+        after.state.as_deref(),
+        Some("in-progress"),
+        "the state the renewal was measured against was not written down"
+    );
+    assert_eq!(
+        after.worktree.as_ref(),
+        Some(&worktree),
+        "the renewal took the isolated checkout the gate watches"
+    );
+    assert!(
+        after
+            .covered()
+            .any(|covered| crate::paths::covers(covered, &context.repo_dir)),
+        "the run is still stranded after the one call it is told to make before every write"
+    );
+
+    // And it completes rather than replaces. A record that already names an
+    // issue, a state and a checkout is describing something this call has no
+    // business rewriting — `verify_claim` refuses outright when the tracker
+    // disagrees with it, so reaching here is not a licence to overrule it.
+    let elsewhere = root.path().join("another-checkout");
+    let mut held = crate::harness::session::Run::new("claude-elsewhere".to_owned());
+    held.issue = Some(12);
+    held.state = Some("review".to_owned());
+    held.repo_dir = Some(elsewhere.clone());
+    crate::harness::session::store(&context.state_root, &held).expect("the pointer writes");
+    super::apply_effect(
+        renew,
+        &arguments,
+        Some(&serde_json::json!({"ok": true})),
+        &mut held,
+        &context,
+    );
+    let after = crate::harness::session::load(&context.state_root, "claude-elsewhere");
+    assert_eq!(
+        (after.issue, after.state.as_deref(), after.repo_dir),
+        (Some(12), Some("review"), Some(elsewhere)),
+        "a renewal overwrote a record that already said what it held"
     );
 }
 
