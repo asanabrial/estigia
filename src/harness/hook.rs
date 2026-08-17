@@ -960,23 +960,29 @@ pub fn run_as(
             let (action, how) =
                 classify_with(&input.tool_name, &input.tool_input, &context.boundaries);
             let mut run = session::load(&context.state_root, &run_id);
-            let decision = if input.session_id.trim().is_empty() {
+            let (decision, recorded) = if input.session_id.trim().is_empty() {
                 // No session to mint a run id from — the same position a git
                 // hook is in, and the same answer: ask the checkout.
-                super::guard::decide_action(context, &context.repo_dir, &action, how)
+                let adjudication =
+                    super::guard::adjudicate_action(context, &context.repo_dir, &action, how);
+                (
+                    adjudication.decision,
+                    adjudication.holder.unwrap_or_default(),
+                )
             } else {
-                super::gate(context, &mut run, &action, how)
+                (super::gate(context, &mut run, &action, how), run_id)
             };
             if matches!(decision, Decision::Allow(_)) {
                 // Best effort: failing to record when we last asked costs one
                 // extra read, and must not turn into a denial.
                 let _ = session::store(&context.state_root, &run);
             }
+            let subject = action.subject();
             note(
                 context,
-                &run_id,
+                &recorded,
                 &input.tool_name,
-                action.subject(),
+                subject.as_deref(),
                 &decision,
                 &[],
             );

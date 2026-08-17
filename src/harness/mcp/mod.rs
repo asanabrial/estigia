@@ -944,14 +944,18 @@ fn apply_effect(
         .get("to")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
-    let published_head = body
-        .and_then(|body| body.get("head"))
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
-    let receipt_head = arguments
-        .get("head")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
+    let receipt_from = |value: &Value| {
+        let receipt = crate::transport::claim::ReviewReceipt {
+            epoch: value.get("epoch")?.as_str()?.to_owned(),
+            pr: value.get("pr")?.as_u64()?,
+            head: value.get("head")?.as_str()?.to_owned(),
+            base: value.get("base")?.as_str()?.to_owned(),
+            digest: value.get("digest")?.as_str()?.to_owned(),
+        };
+        receipt.is_complete().then_some(receipt)
+    };
+    let published_receipt = body.and_then(receipt_from);
+    let supplied_receipt = receipt_from(arguments);
     let worktree = body
         .and_then(|body| body.get("worktree"))
         .and_then(Value::as_str)
@@ -983,17 +987,18 @@ fn apply_effect(
                 // its recreated pointer can gate delivery from the inherited
                 // worktree after the publisher's pointer was removed.
                 if matches!(tool.name, "record_review_verdict" | "release_ci")
-                    && let Some(head) = &receipt_head
+                    && let Some(receipt) = &supplied_receipt
                 {
-                    run.reviewed_head = Some(head.clone());
+                    run.review_receipt = Some(receipt.clone());
+                    run.reviewed_head = None;
                 }
                 run.mark_verified();
             }
             PointerEffect::Published => {
-                // Kept only when the answer names one. A publish that came back
-                // without a head is not a reason to forget the head this run had.
-                if let Some(head) = &published_head {
-                    run.reviewed_head = Some(head.clone());
+                // Partial publication output cannot manufacture a local receipt.
+                if let Some(receipt) = &published_receipt {
+                    run.review_receipt = Some(receipt.clone());
+                    run.reviewed_head = None;
                 }
                 run.mark_verified();
             }

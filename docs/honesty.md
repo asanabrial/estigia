@@ -1151,18 +1151,27 @@ suite. Everything else here is prose held by review.
   agreement, and it cannot tell one context from two. An identical-byte republish still invalidates old evidence because it creates a new
   epoch. GitHub has no atomic conditional-ready operation, so an out-of-band ready or push can bypass
   this cooperative order.
-  The local delivery gate still checks the published head at the
-  boundary that spends it: a `git merge`, `gh pr merge`, `git tag` or `gh release` from a run whose
-  recorded review head is not the invoking checkout's head is refused as
+  The local delivery gate persists the complete epoch/PR/head/base/digest receipt and still checks
+  the published head at the boundary that spends it: a `git merge`, `gh pr merge`, `git tag` or
+  `gh release` from a run whose recorded review head is not the invoking checkout's head is refused as
   `verdict-bound-to-other-bytes`, naming the path inspected and the head found there. The invoking
   checkout is the covered directory the gate already selected and verified for this call; it is not
   inferred again from the run pointer, whose worktree can be absent after a handoff. For a delivery
-  boundary only, a linked sibling sharing the pointer checkout's Git common directory can reach that
-  verification; it is allowed only when its readable head is the recorded reviewed head. An
+  `gh pr merge` boundary only, a linked sibling sharing the pointer checkout's Git common directory
+  can reach that verification. The classifier first retains one positive numeric PR only from one
+  literal `gh pr merge <number> ...`; malformed, omitted, URL, branch, foreign-`--repo`, duplicate
+  and compound targets remain irreversible boundaries but cannot select sibling evidence. Candidate
+  pointers are then filtered by complete `receipt.pr == command PR`, exactly one holder must remain,
+  and only then is the invoking HEAD compared with that holder's receipt and its live tracker claim
+  verified. Equal HEADs never select between PR lineages. A legacy `reviewed_head` pointer remains
+  readable after upgrade but cannot qualify PR-targeted sibling delivery because it carries no PR,
+  epoch, base or digest. Ambiguous candidates and unreadable pointers select no holder, including for
+  ledger attribution; the recorded holder comes from the same adjudication as the decision rather
+  than a later directory scan. An
   unrelated or unreadable checkout named with that run still refuses
   `verdict-bound-to-other-bytes`; a sessionless call in an unrelated clone has no local holder to
-  adjudicate and remains outside. Verdict and CI-release calls restore their exact receipt head into
-  a reviewer's pointer after a handoff removed the publisher's pointer.
+  adjudicate and remains outside. Publish, republish, verdict and CI-release effects restore all five
+  receipt fields atomically into a reviewer's pointer after a handoff removed the publisher's pointer.
   `git push` and `gh pr create` are deliberately not gated on it, because pushing after a review is
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
   What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still

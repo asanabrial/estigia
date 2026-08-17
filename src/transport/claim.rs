@@ -483,7 +483,7 @@ pub fn confirm_published<'a>(
 }
 
 /// The immutable identity one publication epoch records.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReviewReceipt {
     /// The publication epoch. Every republish creates another.
     pub epoch: String,
@@ -509,7 +509,7 @@ impl ReviewReceipt {
         receipt.is_complete().then_some(receipt)
     }
 
-    fn is_complete(&self) -> bool {
+    pub(crate) fn is_complete(&self) -> bool {
         let exact_hex = |value: &str, width: usize| {
             value.len() == width
                 && value

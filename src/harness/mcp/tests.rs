@@ -2305,7 +2305,7 @@ fn a_call_that_wrote_nothing_leaves_the_run_pointer_alone() {
 }
 
 #[test]
-fn a_reviewer_pointer_recovers_the_exact_receipt_head() {
+fn every_receipt_effect_recovers_the_complete_receipt_atomically() {
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
@@ -2318,30 +2318,49 @@ fn a_reviewer_pointer_recovers_the_exact_receipt_head() {
         tracker: crate::config::Tracker::Github { repo: None },
         boundaries: Vec::new(),
     };
-    let reviewed = "a".repeat(40);
+    let receipt = crate::transport::claim::ReviewReceipt {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head: "b".repeat(40),
+        base: "c".repeat(40),
+        digest: "d".repeat(64),
+    };
+    let receipt_json = serde_json::json!({
+        "epoch": receipt.epoch,
+        "pr": receipt.pr,
+        "head": receipt.head,
+        "base": receipt.base,
+        "digest": receipt.digest,
+    });
 
-    for name in ["record_review_verdict", "release_ci"] {
+    for name in [
+        "publish_review",
+        "republish_review",
+        "record_review_verdict",
+        "release_ci",
+    ] {
         let tool = super::tools::TOOLS
             .iter()
             .find(|tool| tool.name == name)
             .expect("the tool is listed");
         let mut run = crate::harness::session::Run::new(format!("claude-{name}"));
-        super::apply_effect(
-            tool,
-            &serde_json::json!({
-                "issue": 7,
-                "run_id": run.run_id,
-                "head": reviewed,
-            }),
-            Some(&serde_json::json!({"ok": true})),
-            &mut run,
-            &context,
-        );
+        let arguments = if matches!(name, "record_review_verdict" | "release_ci") {
+            receipt_json.clone()
+        } else {
+            serde_json::json!({})
+        };
+        let body = if matches!(name, "publish_review" | "republish_review") {
+            receipt_json.clone()
+        } else {
+            serde_json::json!({"ok": true})
+        };
+        super::apply_effect(tool, &arguments, Some(&body), &mut run, &context);
         assert_eq!(
-            run.reviewed_head.as_deref(),
-            Some(reviewed.as_str()),
-            "{name} did not restore the receipt the reviewer must deliver"
+            run.review_receipt.as_ref(),
+            Some(&receipt),
+            "{name} did not restore all five receipt fields"
         );
+        assert_eq!(run.reviewed_head, None);
     }
 }
 
