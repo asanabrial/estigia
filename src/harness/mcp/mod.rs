@@ -954,15 +954,31 @@ fn apply_effect(
     }
     let issue = arguments.get("issue").and_then(Value::as_u64);
     // `state` is what a claim swears to and `expect_state` is what a renewal was
-    // measured against. Both name the state the tracker has just agreed to, so
-    // both answer here; the swearing tools send the first and never the second,
-    // so their behaviour is unchanged by reading it.
-    let state = arguments
+    // measured against. Either one names a state the tracker has just agreed to,
+    // so either one answers here; the swearing tools send the first and never the
+    // second, so their behaviour is unchanged by reading it.
+    //
+    // Kept as an `Option` beside the defaulted value, because **two of the four
+    // renewing tools carry neither**: `release_ci` and `record_review_verdict`
+    // take a receipt and no state at all. Writing the default down for them would
+    // stamp a pointer with a state nobody named — and `hook::state_clause` then
+    // announces it as fact, `estigia status` prints it where it printed
+    // `unknown`, and the fill below never overwrites, so the one call the docs
+    // nominate as the way back cannot correct it. That is the third rule this
+    // crate is built on, and it is already fixed one layer downstream; defaulting
+    // here would move the fabrication to the writing end, where that fix cannot
+    // see it.
+    //
+    // The default itself stays for the swearing tools, whose schema documents it:
+    // `claim` takes `state` as optional and means `in-progress` by it.
+    let named_state = arguments
         .get("state")
         .or_else(|| arguments.get("expect_state"))
         .and_then(Value::as_str)
-        .unwrap_or("in-progress")
-        .to_owned();
+        .map(ToOwned::to_owned);
+    let state = named_state
+        .clone()
+        .unwrap_or_else(|| "in-progress".to_owned());
     let to = arguments
         .get("to")
         .and_then(Value::as_str)
@@ -1020,8 +1036,14 @@ fn apply_effect(
                 if run.issue.is_none() {
                     run.issue = issue;
                 }
-                if run.state.is_none() {
-                    run.state = Some(state.clone());
+                // Only a state somebody named. `release_ci` and
+                // `record_review_verdict` renew without carrying one, and the
+                // defaulted value beside this is not something the tracker said
+                // on their call — see where `named_state` is read.
+                if run.state.is_none()
+                    && let Some(named) = &named_state
+                {
+                    run.state = Some(named.clone());
                 }
                 run.repo_dir.get_or_insert_with(|| repo_dir.clone());
                 run.mark_verified();

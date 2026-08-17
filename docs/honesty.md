@@ -1403,7 +1403,12 @@ suite. Everything else here is prose held by review.
   manufactured from a client's path — `start_branch` verifies the claim against the tracker from
   that same directory before it creates anything. Measured by
   `one_server_survives_the_isolation_it_created`, which drives one real server through both calls
-  down one pipe, because no per-call `GateContext` can pose *the same server asking twice*.
+  down one pipe, because no per-call `GateContext` can pose *the same server asking twice* — and
+  which reads the pointer **between** the two, because the renewal below fills the same field by its
+  own route. Asserting only at the end measured the pair and not the halves: with the check at the
+  end, removing the isolation's line left that test green while the unit test beside it reddened.
+  Two independent reviewers of this change found that, separately, by deleting the line and running
+  the suite.
 
   **And a run already in that state gets itself back**, which prevention does not do for the runs
   that are in it. Two things were needed. The refusal above measured `covered().count()`, which is
@@ -1427,6 +1432,26 @@ suite. Everything else here is prose held by review.
   `a_renewal_completes_a_record_the_tracker_has_just_agreed_with` and, as a process,
   `a_stranded_run_recovers_from_the_checkout_it_is_running_in` — which asserts both halves, since a
   run readmitted on an empty record is a run whose writes are still measured against nothing.
+
+  **What the renewal's fill accepts on no directory evidence.** `start_branch` at least performs its
+  tracker read from the directory it then records; `verify_claim` performs the same read and neither
+  read binds a directory at all, so the renewal takes the caller's working directory as coverage
+  because it is the only one on offer. Run ids are public — every claim comment carries one — so a
+  call under run A's id arriving from directory B, while `A.repo_dir` is unset, writes B into A's
+  record permanently, and A's own server is then refused in its real checkout. That is this defect
+  in mirror image, and it is not closed: what bounds it is that the shape it needs is the one the
+  isolation fix stops producing, and that the alternative — not filling on renewal — is the stranding
+  itself. Deleting the pointer is the only correction. Both reviewers raised it and neither blocked
+  on it.
+
+  **And the same rule is now spelled two ways.** The dispatch guard asks `repo_dir.is_some()`; the
+  write gate in `src/harness/mod.rs` still asks `covered().count() > 0` about the same question. The
+  semantic argued for above — *an incomplete record is unknown rather than narrow* — applies verbatim
+  to the second, where the direction of failure is the opposite: a worktree-only record makes writes
+  in the base checkout read as `Outside` and go ungated rather than refused. Not a regression, and
+  not made worse here, but this repository's own rule is that a fact written twice is a fact that
+  will disagree with itself, and these two now do. Unifying them is a change to the write gate and
+  belongs to its own issue.
 
   What this does **not** do is repair the claim itself. The `claim` that failed this way cannot be
   retried: its operation id is reused only when the pointer already names the issue, which is the

@@ -2476,15 +2476,20 @@ fn a_renewal_completes_a_record_the_tracker_has_just_agreed_with() {
     run.worktree = Some(worktree.clone());
     crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
 
+    // `review`, and deliberately not `in-progress`: the defaulted value beside
+    // `named_state` is `in-progress`, so a fixture using it cannot tell the state
+    // being *read* from the state being *guessed*. Measured — with this at
+    // `in-progress`, deleting the `expect_state` read left the whole suite green,
+    // which is this repository's own definition of an untested line.
     let arguments = serde_json::json!({
         "issue": 56,
         "run_id": "claude-abcd1234",
-        "expect_state": "in-progress",
+        "expect_state": "review",
     });
     super::apply_effect(
         renew,
         &arguments,
-        Some(&serde_json::json!({"ok": true, "issue": 56, "state": "in-progress"})),
+        Some(&serde_json::json!({"ok": true, "issue": 56, "state": "review"})),
         &mut run,
         &context,
     );
@@ -2497,7 +2502,7 @@ fn a_renewal_completes_a_record_the_tracker_has_just_agreed_with() {
     );
     assert_eq!(
         after.state.as_deref(),
-        Some("in-progress"),
+        Some("review"),
         "the state the renewal was measured against was not written down"
     );
     assert_eq!(
@@ -2535,6 +2540,50 @@ fn a_renewal_completes_a_record_the_tracker_has_just_agreed_with() {
         (Some(12), Some("review"), Some(elsewhere)),
         "a renewal overwrote a record that already said what it held"
     );
+
+    // And a renewal that carries no state writes none. Two of the four renewing
+    // tools take a receipt and never a state — the defaulted value beside
+    // `named_state` is not something the tracker said on their call, and a
+    // pointer stamped with it is announced as fact by `hook::state_clause` and
+    // printed by `estigia status` where it printed `unknown`. Fill-never-
+    // overwrite makes the guess permanent, so the later `verify_claim` that names
+    // the real state cannot take it back.
+    for silent in ["release_ci", "record_review_verdict"] {
+        let tool = super::tools::TOOLS
+            .iter()
+            .find(|tool| tool.name == silent)
+            .expect("the tool is listed");
+        assert_eq!(
+            tool.effect,
+            super::PointerEffect::Renew,
+            "{silent} no longer renews, so this case is measuring nothing"
+        );
+        assert!(
+            !tool
+                .arguments
+                .iter()
+                .any(|argument| matches!(argument.name, "state" | "expect_state")),
+            "{silent} now carries a state, and this case exists because it did not"
+        );
+
+        let mut quiet = crate::harness::session::Run::new(format!("claude-{silent}"));
+        crate::harness::session::store(&context.state_root, &quiet).expect("the pointer writes");
+        super::apply_effect(
+            tool,
+            &serde_json::json!({"issue": 56, "run_id": quiet.run_id}),
+            Some(&serde_json::json!({"ok": true})),
+            &mut quiet,
+            &context,
+        );
+        let after = crate::harness::session::load(&context.state_root, &quiet.run_id);
+        assert_eq!(
+            after.state, None,
+            "{silent} carries no state and stamped one the tracker never named"
+        );
+        // The rest of the completion still happens: the fault is the guess, not
+        // the repair.
+        assert_eq!(after.issue, Some(56), "{silent} completed nothing at all");
+    }
 }
 
 #[test]
