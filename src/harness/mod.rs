@@ -1181,14 +1181,16 @@ pub(crate) fn complete_review_receipt_not_selected() -> Refusal {
 
 /// The one PR target that can be retained without becoming a shell parser.
 fn pr_merge_target(command: &str) -> Option<u64> {
-    if command
-        .chars()
-        .any(|character| matches!(character, '\n' | '\r' | ';' | '&' | '|' | '$' | '`'))
-        || command.contains("<(")
-        || command.contains(">(")
-    {
-        // Retaining a PR here spends review authority. Reject expansion markers
-        // broadly instead of pretending this literal check can parse a shell.
+    if !command.bytes().all(|byte| {
+        byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b' ' | b'\t' | b'-' | b'_' | b'.' | b'/' | b':' | b'=' | b'+'
+            )
+    }) {
+        // Quoting, escaping and expansion can turn raw words into different
+        // arguments. Retaining a PR here spends review authority, so only a
+        // command needing no shell interpretation can select a receipt.
         return None;
     }
     let words: Vec<&str> = command.split_ascii_whitespace().collect();
