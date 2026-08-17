@@ -51,6 +51,28 @@ distinct reviewer but does not make Estigia spawn one. If none is available, the
 exact-receipt handoff and releases ownership. `ask <duration>` records one request deadline in that
 handoff; no scheduler, sleep, deadline reset, retained claim, or expiry-as-verdict behavior is implied.
 
+### Which root the gate decides in
+
+An agent reads the contract in **its own** skill root. The gate reads **one** root for the whole
+machine — the canonical one — and `estigia config list` without `--agent` reports that same root, so
+the two answers only agree while the roots do.
+
+That root is chosen by what each candidate carries, not by which agent is running: a contract with a
+configuration block is preferred over one without, and among those, a root holding the operator's own
+`estigia.local.md` is preferred over one that does not. Where nothing distinguishes them the declared
+adapter order decides, which puts the shared neutral root first.
+
+The second half of that rule exists because `setup --all` writes the configuration block into every
+root, so the first half cannot tell two installed roots apart; the selection then fell to the order
+and took a root that held none of the operator's values, and the gate adjudicated at defaults while
+the agent read the operator's table. Preferring "a configuration that differs from the defaults"
+does not separate them either — setup writes real values into the neutral root's block as well.
+
+Two roots can still legitimately hold different tables; `setup` preserves each rather than flattening
+them. What must not stay silent is the gate deciding by rows an agent never reads, so `estigia doctor`
+carries a `canonical` row: it names the agent, the setting, and both values, and it is quiet when
+every configured agent resolves the rows the gate decides by.
+
 ### Model routing suggestions are agent-specific
 
 The stored value remains exactly the one `key=model` cell above, and the CLI remains the place to edit

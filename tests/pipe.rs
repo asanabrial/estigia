@@ -1932,6 +1932,32 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         eprintln!("SKIPPED: git is not usable here, so two of the rows were not forced.");
     }
 
+    // 7b. Two installed roots and the operator's own file in one of them, so
+    //     the root the gate decides in carries a row the other agent does not
+    //     read. This is the state #41 was filed from, and it printed eleven
+    //     `ok`s: both halves telling the truth about their own file, and
+    //     nothing comparing them.
+    let (_, stderr, ok) = run(home.path(), &["setup", "agents"], "");
+    assert!(ok, "setup failed: {stderr}");
+    let theirs = home
+        .path()
+        .join(".claude")
+        .join("skills")
+        .join(estigia::skill::DIRECTORY)
+        .join("estigia.local.md");
+    std::fs::write(
+        &theirs,
+        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n",
+    )
+    .expect("the operator's own file");
+    let (out, _, _) = run(home.path(), &["doctor"], "");
+    assert!(
+        out.contains("BROKEN   canonical"),
+        "a gate deciding by rows an agent never reads did not report the canonical row broken:\n\
+         {out}"
+    );
+    std::fs::remove_file(&theirs).expect("their file goes");
+
     // 8. A machine with no GitHub CLI on it. The row is about a program rather
     //    than about a file Estigia wrote, so it is forced by taking the program
     //    away — an empty search path, which is the only state in this test that
@@ -1971,6 +1997,7 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
     const FORCED: &[&str] = &[
         "skill",
         "contract",
+        "canonical",
         "gate",
         "tools",
         "gh",
@@ -10773,5 +10800,54 @@ fn a_stranded_run_recovers_from_the_checkout_it_is_running_in() {
             .any(|covered| estigia::paths::covers(covered, repo)),
         "the record still does not cover the checkout the server is running in: {:?}",
         after.covered().collect::<Vec<_>>()
+    );
+}
+
+/// The two ways of asking what governs give one answer.
+///
+/// `estigia config list` with no agent named answers *what governs here*, and
+/// the gate decides in one root for the whole machine. Those were two different
+/// files: the command walked the declared adapter order and answered from the
+/// first configured one — the shared neutral root — while the gate had picked
+/// the root holding the operator's own `estigia.local.md`. Measured on the
+/// machine that filed #41: `Blind judges` read back `single` from one command
+/// and `two blind` from the other, on the same machine, one flag apart.
+#[test]
+fn what_governs_reads_the_same_whether_or_not_an_agent_is_named() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    for agent in ["agents", "claude-code"] {
+        let (_, stderr, ok) = run(home.path(), &["setup", agent], "");
+        assert!(ok, "setup failed: {stderr}");
+    }
+
+    // Their own file, beside the contract of the agent they configured, setting
+    // a row neither installed table carries.
+    std::fs::write(
+        home.path()
+            .join(".claude")
+            .join("skills")
+            .join(estigia::skill::DIRECTORY)
+            .join("estigia.local.md"),
+        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n",
+    )
+    .expect("the operator's own file");
+
+    let rows = |arguments: &[&str]| {
+        let (out, stderr, ok) = run(home.path(), arguments, "");
+        assert!(ok, "`{arguments:?}` failed: {stderr}");
+        out
+    };
+    let unnamed = rows(&["config", "list"]);
+    let owner = rows(&["config", "list", "--agent", "claude-code"]);
+
+    assert_eq!(
+        unnamed, owner,
+        "`config list` and `config list --agent claude-code` answer differently on a machine \
+         whose gate decides in the Claude Code root"
+    );
+    assert!(
+        unnamed.contains("two blind"),
+        "the row the operator wrote is not what the command reports:\n{unnamed}"
     );
 }

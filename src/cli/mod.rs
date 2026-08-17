@@ -3702,7 +3702,27 @@ fn contract_of(
 ) -> Result<(std::path::PathBuf, Config), Refusal> {
     let targets = match agent {
         Some(slug) => vec![find_agent(slug)?],
-        None => configured(options),
+        // With no agent named the question is *what governs here*, and what
+        // governs is the root the gate decides in. This walked `AGENTS` order
+        // and answered from the first configured adapter, which is the shared
+        // neutral root on almost every machine — so `config list` reported one
+        // table while the gate adjudicated another, and `config set` wrote into
+        // the one nothing decides by. Both halves were reading a real file;
+        // neither was reading the same one.
+        //
+        // A stable sort, so this only moves the canonical root's owner to the
+        // front and leaves the declared order intact behind it — including as
+        // the fallback for a machine where no root can be resolved at all.
+        None => {
+            let mut targets = configured(options);
+            if let Ok(canonical) = harness::discover_skill_root_in(options) {
+                targets.sort_by_key(|adapter| {
+                    setup::resolve_paths(adapter, options)
+                        .map_or(true, |paths| paths.skill_root != canonical)
+                });
+            }
+            targets
+        }
     };
     // A contract that is *there* and does not parse is a different answer from
     // one that is not there, and only the second is "nothing is installed". One

@@ -1533,14 +1533,15 @@ suite. Everything else here is prose held by review.
 - **The harness holds tools for GitHub only.** `linear` and `trello` ship a binding the agent reads
   and no executable, so the tools refuse (`tracker-has-no-transport`) and the gate stands aside.
   Estigia can install and configure those trackers; it cannot enforce anything for them.
-- **`doctor` checks eleven things, not everything.** Skill, transport, `gh`
+- **`doctor` checks twelve things, not everything.** Skill, transport, `gh`
   authentication, a git remote, this repository's push guard, the contract each configured agent
-  reads, whether the gate each of them registers would actually run, whether the tool server each
+  reads, whether the root the gate decides in carries the rows those agents read, whether the gate
+  each of them registers would actually run, whether the tool server each
   of them registers would actually start, whether the operator has the gate standing down right
   now, whether every run pointer on the machine can still say what it holds, and whether any call
   has reached that gate and gone undecided. It does not check the tracker's labels, the board, or
   whether the repository it found is the one the issues live in.
-- **One of the eleven is about the past.** A call the gate cannot decide on — a payload it cannot
+- **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it
   quietly. Both leave a ledger line, and `doctor` is what reads those lines back, because an
