@@ -892,6 +892,12 @@ suite. Everything else here is prose held by review.
   `<project>/.git/config` both stand aside. Whether the fix is naming the file or widening what a
   worktree run covers is the question, and it is not this issue's.
 
+  Narrower since `start_branch` began recording the claim's checkout beside the worktree, which is
+  the entry further down about the gate covering two directories: Estigia's own tools no longer
+  *produce* a pointer carrying only a worktree. The residual is unchanged for a pointer that carries
+  one anyway — a run whose `repo_dir` genuinely is a worktree, or a hand-written record — so the
+  entry is narrowed rather than removed, and the question it ends on is still open.
+
 - **A deleted comment is missing evidence, never satisfied evidence.** The verdict requirement does
   not appear only once a handoff exists — if it did, deleting the handoff comment would lower the
   bar from *a distinct reviewer accepted these bytes* to *nothing*, and an erased record would read
@@ -1377,6 +1383,82 @@ suite. Everything else here is prose held by review.
 - **The gate covers two directories: the checkout the claim was made in, and the isolated one
   `start_branch` created.** A run that makes its own worktree by hand gets that write gated but the
   directory is never recorded, so subsequent writes there read as `Outside`. Use the tool.
+
+  *Two* is now what the isolation step writes, rather than what it assumes it will find. It used to
+  record only the worktree, which is correct whenever the claim already recorded a checkout and
+  wrong in the one shape nobody has to do anything strange to reach: a `claim` whose tracker write
+  lands and whose readback fails returns before the pointer effect runs, so no checkout is recorded
+  at all. From there the dispatch guard's own precondition — *a run that has claimed nothing has
+  nothing to be outside of* — lets `start_branch` through, and the worktree it writes becomes the
+  run's **only** covered directory. The server that made the call is then outside its own run, every
+  later call is refused `run-id-names-another-checkout`, and repeating it cannot help: an MCP
+  server's directory does not change when a child command uses another one. The only way out
+  observed in the field was restarting the agent from a path the workflow had just created, which
+  loses the live context and can mint a different runtime identity — the thing claim attribution
+  exists to prevent.
+
+  So `start_branch` fills the claim's checkout in as well as the worktree, and fills rather than
+  overwrites: a run whose claim named checkout A keeps A when a server standing in B calls under its
+  id, because refusing B for that run is exactly what the guard is for. It is not coverage
+  manufactured from a client's path — `start_branch` verifies the claim against the tracker from
+  that same directory before it creates anything. Measured by
+  `one_server_survives_the_isolation_it_created`, which drives one real server through both calls
+  down one pipe, because no per-call `GateContext` can pose *the same server asking twice* — and
+  which reads the pointer **between** the two, because the renewal below fills the same field by its
+  own route. Asserting only at the end measured the pair and not the halves: with the check at the
+  end, removing the isolation's line left that test green while the unit test beside it reddened.
+  Two independent reviewers of this change found that, separately, by deleting the line and running
+  the suite.
+
+  **And a run already in that state gets itself back**, which prevention does not do for the runs
+  that are in it. Two things were needed. The refusal above measured `covered().count()`, which is
+  the right question asked of the wrong field: the worktree is the *additional* directory a claim
+  covers, never the one that says where it was sworn. So a record holding only a worktree could
+  ground a refusal — and an incomplete record is not a narrower claim, it is an unknown one. It
+  measures `repo_dir` now, so a record that never named its checkout stands aside exactly as a run
+  that has claimed nothing does. Nothing is widened for a record that *does* name one: a foreign run
+  id, an unrecorded worktree and a directory outside the coverage are refused as before, and
+  standing aside is not clearance — the call still goes to the tracker, which is the only thing that
+  adjudicates.
+
+  Then the way back is a call the contract already requires. A renewal answered `ok` is the tracker
+  saying, at that moment, that this run is the live holder of this issue in this state — the same
+  fact `Swear` writes, from the same authority — so the pointer is completed from it rather than
+  left broken until something writes to the tracker again. It takes no tracker **write**, which is
+  what makes it reachable during exactly the outage that causes the damage: the state is produced by
+  a `claim` whose write lands and whose readback fails, and during that outage there is no write to
+  be had. Filled and never overwritten, and unable to invent authority, because a run that does not
+  hold the issue is refused before the pointer is touched. Measured by
+  `a_renewal_completes_a_record_the_tracker_has_just_agreed_with` and, as a process,
+  `a_stranded_run_recovers_from_the_checkout_it_is_running_in` — which asserts both halves, since a
+  run readmitted on an empty record is a run whose writes are still measured against nothing.
+
+  **What the renewal's fill accepts on no directory evidence.** `start_branch` at least performs its
+  tracker read from the directory it then records; `verify_claim` performs the same read and neither
+  read binds a directory at all, so the renewal takes the caller's working directory as coverage
+  because it is the only one on offer. Run ids are public — every claim comment carries one — so a
+  call under run A's id arriving from directory B, while `A.repo_dir` is unset, writes B into A's
+  record permanently, and A's own server is then refused in its real checkout. That is this defect
+  in mirror image, and it is not closed: what bounds it is that the shape it needs is the one the
+  isolation fix stops producing, and that the alternative — not filling on renewal — is the stranding
+  itself. Deleting the pointer is the only correction. Both reviewers raised it and neither blocked
+  on it.
+
+  **And the same rule is now spelled two ways.** The dispatch guard asks `repo_dir.is_some()`; the
+  write gate in `src/harness/mod.rs` still asks `covered().count() > 0` about the same question. The
+  semantic argued for above — *an incomplete record is unknown rather than narrow* — applies verbatim
+  to the second, where the direction of failure is the opposite: a worktree-only record makes writes
+  in the base checkout read as `Outside` and go ungated rather than refused. Not a regression, and
+  not made worse here, but this repository's own rule is that a fact written twice is a fact that
+  will disagree with itself, and these two now do. Unifying them is a change to the write gate and
+  belongs to its own issue.
+
+  What this does **not** do is repair the claim itself. The `claim` that failed this way cannot be
+  retried: its operation id is reused only when the pointer already names the issue, which is the
+  field the failed call did not write, so every retry mints a fresh key and the transport answers
+  `already-owned-by-different-operation` for as long as the claim is live. `release` with the exact
+  epoch and a fresh `claim` is still the only way to re-swear, and both are tracker writes. That is
+  a different defect with a different fix and it is filed separately.
 - **Two checkouts are told apart by resolving them, and by case when they will not resolve.**
   `canonicalize` answers with the real spelling on disk, so a live directory spelled two ways is one
   directory whatever the operator typed. A path this process cannot resolve has only its spelling

@@ -10399,3 +10399,379 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
          host named: {wrote}"
     );
 }
+
+/// One long-lived MCP server survives its own `start_branch`.
+///
+/// The whole of issue #56, driven as a process because that is the shape the
+/// defect has: an MCP server's directory is fixed for its lifetime, and no unit
+/// test that constructs a `GateContext` per call can see a *second* call arrive
+/// at the same one.
+///
+/// The precondition is not exotic. A `claim` whose tracker write lands and whose
+/// readback fails returns `Err` before the pointer effect runs, so the run holds
+/// the issue on the timeline and records no `repo_dir` — measured five times on
+/// 2026-08-17 against the live tracker during a GitHub outage, and it is the
+/// state the run that filed the issue was left in. From there the dispatch
+/// guard's precondition — a run with no coverage has nothing to be outside of —
+/// lets `start_branch` through, and the worktree it records becomes the run's
+/// *only* covered directory. The next call from the same server is refused
+/// `run-id-names-another-checkout`, and repeating it cannot help, because a
+/// server's working directory does not change when a child command uses another.
+///
+/// Reverting `run.repo_dir.get_or_insert_with(..)` in `apply_effect` restores
+/// the refusal and reddens the second half of this test.
+#[test]
+fn one_server_survives_the_isolation_it_created() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let trees = tempfile::tempdir().expect("a directory for worktrees");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-isolation";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success()),
+        "the bare origin was not created"
+    );
+    assert!(git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string()
+    ]));
+    assert!(git(&["branch", "-M", "main"]));
+    assert!(
+        git(&["push", "-q", "origin", "main"]),
+        "the base did not push"
+    );
+
+    let claim = format!(
+        "<!-- issue-flow: claim run-id={run_id} runtime=claude \
+         horizon=2099-01-01T00:00Z op-id={} -->",
+        "a".repeat(32)
+    );
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "labels": [{"name": "status:in-progress"}],
+                "comments": [{
+                    "id": "IC_1",
+                    "createdAt": "2026-01-01T00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!("Claimed by {run_id}.\n\n{claim}\n"),
+                }],
+            }).to_string(),
+            "status": 0,
+        },
+        // Nonzero, so the sidebar read below decides — the ordinary shape when
+        // the link cannot be made, and the one the live run answered with.
+        { "matches": "issue develop", "stdout": "", "status": 1 },
+        {
+            "matches": "repo view",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "status": 0,
+        },
+        {
+            "matches": "api graphql",
+            "stdout": serde_json::json!({
+                "data": { "repository": { "issue": { "linkedBranches": {
+                    "nodes": [],
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                } } } },
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    // The observed shape: the timeline holds the claim, the pointer holds no
+    // checkout. Written field by field rather than through `claim`, because
+    // reproducing it through `claim` would mean reproducing the outage.
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.issue = Some(12);
+    run.state = Some("in-progress".to_owned());
+    assert!(
+        run.repo_dir.is_none(),
+        "this fixture is only the defect's precondition while the checkout is absent"
+    );
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    let request = |id: u64, name: &str, arguments: serde_json::Value| {
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": { "name": name, "arguments": arguments },
+        })
+        .to_string()
+    };
+    // Both down one pipe, into one process, in arrival order — which is the only
+    // way to pose "the server that called `start_branch` becomes its own next
+    // refusal".
+    //
+    // Written and read **one at a time** rather than both at once, so the pointer
+    // can be inspected in between. Sending both and asserting only at the end
+    // measured the pair and not the halves: the renewal fills the same field by
+    // its own route, so removing the isolation's line left this test green while
+    // the unit test beside it reddened. Two reviewers found that independently,
+    // and the fix is where the assertion is taken rather than what it says.
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::{BufRead, Write};
+    let mut stdin = child.stdin.take().expect("stdin is piped");
+    let mut stdout = std::io::BufReader::new(child.stdout.take().expect("stdout is piped"));
+    let answered = |line: &str| -> serde_json::Value {
+        serde_json::from_str(line.trim())
+            .unwrap_or_else(|_| panic!("not a JSON-RPC line: {line:?}"))
+    };
+    let text = |response: &serde_json::Value| -> String {
+        response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let answer = |stdout: &mut std::io::BufReader<std::process::ChildStdout>| -> String {
+        let mut line = String::new();
+        stdout.read_line(&mut line).expect("the server answers");
+        assert!(!line.trim().is_empty(), "the server answered nothing");
+        line
+    };
+
+    writeln!(
+        stdin,
+        "{}",
+        request(
+            1,
+            "start_branch",
+            serde_json::json!({
+                "issue": 12,
+                "run_id": run_id,
+                "branch": branch,
+                "base": "main",
+                "expect_state": "in-progress",
+                "worktree_root": trees.path().display().to_string(),
+            }),
+        )
+    )
+    .expect("the isolation request is written");
+    let isolated = answered(&answer(&mut stdout));
+    assert_eq!(
+        isolated["result"]["isError"],
+        false,
+        "the isolation itself did not happen, so the second call proves nothing: {}",
+        text(&isolated)
+    );
+
+    // Here, and not at the end: this is the only moment at which the isolation is
+    // the only thing that can have written the checkout down.
+    let between = estigia::harness::session::load(&runs, run_id);
+    assert!(
+        between.worktree.is_some(),
+        "the isolated checkout was not recorded at all"
+    );
+    assert!(
+        between
+            .covered()
+            .any(|covered| estigia::paths::covers(covered, repo)),
+        "isolation left the run covering {:?} and not the checkout it was adjudicated from, so \
+         the next call from this same server is refused",
+        between.covered().collect::<Vec<_>>()
+    );
+
+    writeln!(
+        stdin,
+        "{}",
+        request(
+            2,
+            "verify_claim",
+            serde_json::json!({
+                "issue": 12,
+                "run_id": run_id,
+                "expect_state": "in-progress",
+            }),
+        )
+    )
+    .expect("the renewal request is written");
+    let renewed = answered(&answer(&mut stdout));
+    drop(stdin);
+    child.wait().expect("the MCP server exits");
+    let said = text(&renewed);
+    assert!(
+        !said.contains("run-id-names-another-checkout"),
+        "the server that created the worktree was refused in the checkout it is running in: {said}"
+    );
+    assert_eq!(
+        renewed["result"]["isError"], false,
+        "the renewal after isolation was refused: {said}"
+    );
+
+    // And the reason it survived: the pointer names both directories, which is
+    // what `docs/honesty.md` says the gate covers.
+    let after = estigia::harness::session::load(&runs, run_id);
+    assert!(
+        after.worktree.is_some(),
+        "the isolated checkout was not recorded, so nothing was measured here"
+    );
+    assert!(
+        after
+            .covered()
+            .any(|covered| estigia::paths::covers(covered, repo)),
+        "isolation left the run covering {:?} and not the checkout it was adjudicated from",
+        after.covered().collect::<Vec<_>>()
+    );
+}
+
+/// A run that is already stranded gets itself back with one ordinary call.
+///
+/// The other half of issue #56. Recording the claim's checkout at isolation
+/// stops a run reaching this state; it does nothing for the ones already in it,
+/// and there were several — the issue names two, and the run that fixed it made
+/// a third by claiming through the same outage.
+///
+/// The state is the one the field reported: the timeline holds the claim, the
+/// pointer holds a worktree and nothing that says where the claim was sworn. The
+/// call is `verify_claim`, which is the one the contract already requires before
+/// the first repository write, made from the checkout the server is running in —
+/// no new verb, no restart, and no tracker *write*, which is what makes it
+/// reachable during exactly the outage that causes the damage.
+///
+/// Two things are measured here and neither is enough alone: that the call is
+/// not refused, and that the record it was measured against comes back complete.
+/// A run allowed through on an empty pointer is a run whose repository writes are
+/// still not measured against anything.
+#[test]
+fn a_stranded_run_recovers_from_the_checkout_it_is_running_in() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let stranded = tempfile::tempdir().expect("the worktree it was left holding");
+    let run_id = "claude-abcd1234";
+
+    let claim = format!(
+        "<!-- issue-flow: claim run-id={run_id} runtime=claude \
+         horizon=2099-01-01T00:00Z op-id={} -->",
+        "a".repeat(32)
+    );
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": serde_json::json!({
+                "state": "OPEN",
+                "labels": [{"name": "status:in-progress"}],
+                "comments": [{
+                    "id": "IC_1",
+                    "createdAt": "2026-01-01T00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!("Claimed by {run_id}.\n\n{claim}\n"),
+                }],
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.worktree = Some(stranded.path().to_path_buf());
+    assert!(
+        run.issue.is_none() && run.repo_dir.is_none(),
+        "the fixture is only the stranded shape while the claim's checkout is absent"
+    );
+    assert!(
+        estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+        "the fixture pointer was not stored"
+    );
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "verify_claim",
+            "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "expect_state": "in-progress",
+            },
+        },
+    })
+    .to_string();
+
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let response: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
+    let said = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(
+        !said.contains("run-id-names-another-checkout"),
+        "the stranded run was refused the one call the contract tells it to make: {said}"
+    );
+    assert_eq!(
+        response["result"]["isError"], false,
+        "the renewal a stranded run recovers with was refused: {said}"
+    );
+
+    // Allowed through is only half of it. A run readmitted on an empty record is
+    // a run whose repository writes are still measured against nothing.
+    let after = estigia::harness::session::load(&runs, run_id);
+    assert_eq!(
+        after.issue,
+        Some(12),
+        "the run came back holding nothing, so nothing downstream is gated"
+    );
+    assert_eq!(
+        after.worktree.as_deref(),
+        Some(stranded.path()),
+        "recovering cost the run the isolated checkout it had already been given"
+    );
+    assert!(
+        after
+            .covered()
+            .any(|covered| estigia::paths::covers(covered, repo)),
+        "the record still does not cover the checkout the server is running in: {:?}",
+        after.covered().collect::<Vec<_>>()
+    );
+}
