@@ -70,8 +70,20 @@ does not separate them either — setup writes real values into the neutral root
 
 Two roots can still legitimately hold different tables; `setup` preserves each rather than flattening
 them. What must not stay silent is the gate deciding by rows an agent never reads, so `estigia doctor`
-carries a `canonical` row: it names the agent, the setting, and both values, and it is quiet when
-every configured agent resolves the rows the gate decides by.
+carries a `canonical` row naming the agent, the setting and both values.
+
+Which divergence is a **fault** is decided by the scope the row already has, not by that row:
+
+- A row from the per-agent set — `Delivery authorisation`, `Review delegation`,
+  `Transition authorisation`, `Planning`, `Model routing`, `Blind judges` — is *meant* to differ by
+  agent; `config set --agent <slug> …` is how you set one. It is named on the row and the row stays
+  `ok`, because calling a machine broken for a supported configuration names a fault with no way out
+  of it.
+- Every other row answers the same whichever agent asks. Two roots answering differently means one
+  agent is being decided for by a file it does not read, and that is `BROKEN`.
+
+The row is `skipped`, never `ok`, when the canonical configuration cannot be read: a comparison that
+was not made is not agreement.
 
 ### Model routing suggestions are agent-specific
 

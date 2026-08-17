@@ -1497,12 +1497,13 @@ suite. Everything else here is prose held by review.
   once failed to pass the home directory to `state_root`, and the push-guard row vanished entirely
   under a tracker with no transport.
 
-  All ten rows that **can** break are now forced through the binary, on states any machine can be put
-  into: no skill; a contract taken from under a registered agent; a gate and a tool server whose
+  All eleven rows that **can** break are now forced through the binary, on states any machine can be
+  put into: no skill; a contract taken from under a registered agent; two installed roots whose
+  machine-wide rows disagree; a gate and a tool server whose
   settings name a binary that is not there; a checkout with no remote; a `pre-push` hook that is not
   text; an unreadable stand-down; an unreadable run pointer; a ledger line saying a call went through
   ungated; and, for the one row that is about the machine rather than the installation, a search path
-  with no `gh` on it. The eleventh, `transport`, has no broken state: it answers `ok`, or `skipped`
+  with no `gh` on it. The twelfth, `transport`, has no broken state: it answers `ok`, or `skipped`
   for a tracker with no executable.
 
   A row added later fails the same test until somebody forces it or says why they cannot.

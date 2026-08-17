@@ -2019,7 +2019,11 @@ pub fn control_surface() -> PathBuf {
     })
 }
 
-/// The first installed skill root, for a harness that was given no explicit one.
+/// The one installed skill root the gate decides in, for a harness that was
+/// given no explicit one.
+///
+/// Not *the first* one any more, which is what it was and what the defect was.
+/// `claim_to_decide_in`, below, is what now separates two installed candidates.
 pub fn discover_skill_root() -> Result<PathBuf, Refusal> {
     discover_skill_root_in(&crate::setup::SetupOptions::default())
 }

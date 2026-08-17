@@ -1947,7 +1947,7 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         .join("estigia.local.md");
     std::fs::write(
         &theirs,
-        "| Setting | Value here |\n|---|---|\n| Blind judges | two blind |\n",
+        "| Setting | Value here |\n|---|---|\n| Change size | 120 |\n",
     )
     .expect("the operator's own file");
     let (out, _, _) = run(home.path(), &["doctor"], "");
