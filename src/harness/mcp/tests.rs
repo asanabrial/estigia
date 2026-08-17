@@ -1580,6 +1580,97 @@ fn a_refusal_reaches_the_caller_with_the_transport_s_own_taxonomy_intact() {
 }
 
 #[test]
+fn publication_refusals_invalidate_only_when_a_remote_write_cannot_be_excluded() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = GateContext {
+        integration: crate::config::Integration::Branch,
+        flag: None,
+        stand_down: None,
+        skill_root: root.path().join("skill"),
+        repo_dir: root.path().join("repo"),
+        state_root: root.path().join("state"),
+        window: super::super::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        boundaries: Vec::new(),
+    };
+    let old_receipt = crate::transport::claim::ReviewReceipt {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head: "b".repeat(40),
+        base: "c".repeat(40),
+        digest: "d".repeat(64),
+    };
+
+    for name in ["publish_review", "republish_review"] {
+        let tool = tools::find(name).expect("the publication tool exists");
+        for (case, answer, invalidates) in [
+            (
+                "committed",
+                tracker::Answer {
+                    code: 1,
+                    body: Some(json!({
+                        "ok": false,
+                        "reason": "draft-readback-failed",
+                        "world": "committed",
+                        "action": "re-read the pull request"
+                    })),
+                },
+                true,
+            ),
+            (
+                "ambiguous",
+                tracker::Answer {
+                    code: 5,
+                    body: Some(
+                        crate::transport::Failure::Write(
+                            "the publication write did not answer".to_owned(),
+                        )
+                        .envelope(),
+                    ),
+                },
+                true,
+            ),
+            (
+                "pre-write",
+                tracker::Answer {
+                    code: 1,
+                    body: Some(json!({
+                        "ok": false,
+                        "reason": "unexpected-state",
+                        "action": "re-read the issue"
+                    })),
+                },
+                false,
+            ),
+        ] {
+            let run_id = format!("claude-{name}-{case}");
+            let mut run = crate::harness::session::Run::new(run_id.clone());
+            run.review_receipt = Some(old_receipt.clone());
+            run.reviewed_head = Some("e".repeat(40));
+            crate::harness::session::store(&context.state_root, &run)
+                .expect("the old authority writes");
+
+            let failure = super::refusal_from_answer(tool, &answer, &mut run, &context)
+                .expect("the dispatch answer is a refusal");
+            assert!(matches!(failure, ToolFailure::Refused(_)));
+
+            let stored = crate::harness::session::load(&context.state_root, &run_id);
+            if invalidates {
+                assert_eq!(stored.review_receipt, None, "{name} {case}");
+                assert_eq!(stored.reviewed_head, None, "{name} {case}");
+            } else {
+                assert_eq!(
+                    stored.review_receipt.as_ref(),
+                    Some(&old_receipt),
+                    "{name} {case}"
+                );
+                assert!(stored.reviewed_head.is_some(), "{name} {case}");
+            }
+        }
+    }
+}
+
+#[test]
 fn a_malformed_call_and_a_refusal_are_not_the_same_failure() {
     // One is the caller's own defect and the other is the world's answer, and a
     // caller acts on them differently: the first is fixed by changing the call,

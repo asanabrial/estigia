@@ -848,8 +848,8 @@ pub fn run_tool(
             body: Some(failure.envelope()),
         },
     };
-    if let Some(refusal) = tracker::translate(&answer, tool.name) {
-        return Err(ToolFailure::Refused(Box::new(refusal)));
+    if let Some(failure) = refusal_from_answer(tool, &answer, &mut run, context) {
+        return Err(failure);
     }
 
     // A pointer keyed by nothing is a file nobody reads and a state the real run
@@ -895,6 +895,28 @@ estigia: this happened on the tracker and could not be written to this run's    
         }],
         "isError": false,
     }))
+}
+
+/// Turns the transport's dispatch answer into the MCP refusal and applies the
+/// local consequence of an uncertain publication.
+fn refusal_from_answer(
+    tool: &Tool,
+    answer: &tracker::Answer,
+    run: &mut session::Run,
+    context: &GateContext,
+) -> Option<ToolFailure> {
+    let refusal = tracker::translate(answer, tool.name)?;
+    if tool.effect == PointerEffect::Published && !refusal.outcome.is_clean() {
+        // A write that landed or may have landed can have minted a new epoch
+        // over the same PR and HEAD. Keeping the old receipt would let that
+        // stale epoch be spent before the remote is reconciled.
+        let (updated, _) = session::updated(&context.state_root, &run.run_id, |run| {
+            run.review_receipt = None;
+            run.reviewed_head = None;
+        });
+        *run = updated;
+    }
+    Some(ToolFailure::Refused(Box::new(refusal)))
 }
 
 /// Moves the run pointer to follow what just became true.

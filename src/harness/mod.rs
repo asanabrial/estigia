@@ -1195,9 +1195,13 @@ fn pr_merge_target(command: &str) -> Option<u64> {
     }
     let words: Vec<&str> = command.split_ascii_whitespace().collect();
     if words.get(..3) != Some(&["gh", "pr", "merge"][..])
-        || words
-            .iter()
-            .any(|word| *word == "--repo" || word.starts_with("--repo=") || word.starts_with("-R"))
+        || words.iter().any(|word| {
+            *word == "--repo"
+                || word.starts_with("--repo=")
+                || word
+                    .strip_prefix('-')
+                    .is_some_and(|short| !short.starts_with('-') && short.contains('R'))
+        })
     {
         return None;
     }
