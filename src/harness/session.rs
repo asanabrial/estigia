@@ -101,6 +101,12 @@ pub struct Run {
     /// for after an ambiguous write posted a second release comment instead.
     #[serde(default)]
     pub release_id: Option<String>,
+    /// The complete immutable publication receipt this run may spend.
+    ///
+    /// A head identifies bytes only after the pull request lineage has been
+    /// selected, so all five receipt fields are persisted together.
+    #[serde(default)]
+    pub review_receipt: Option<crate::transport::claim::ReviewReceipt>,
     /// The head `publish_review` bound the review target to, when it did.
     ///
     /// Recorded because the rule the whole product is named for — *a verdict is
@@ -131,6 +137,7 @@ impl Run {
             verified_at: None,
             operation_id: None,
             release_id: None,
+            review_receipt: None,
             reviewed_head: None,
         }
     }
@@ -887,6 +894,40 @@ impl Silence {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_complete_review_receipt_round_trips_as_one_pointer_field() {
+        let receipt = crate::transport::claim::ReviewReceipt {
+            epoch: "a".repeat(32),
+            pr: 54,
+            head: "b".repeat(40),
+            base: "c".repeat(40),
+            digest: "d".repeat(64),
+        };
+        let mut run = Run::new("claude-receipt".to_owned());
+        run.review_receipt = Some(receipt.clone());
+
+        let encoded = serde_json::to_string(&run).expect("the pointer serialises");
+        let decoded: Run = serde_json::from_str(&encoded).expect("the pointer deserialises");
+        assert_eq!(decoded.review_receipt, Some(receipt));
+        assert_eq!(decoded.reviewed_head, None);
+    }
+
+    #[test]
+    fn a_legacy_reviewed_head_remains_readable_but_is_not_a_complete_receipt() {
+        let legacy = serde_json::json!({
+            "run_id": "claude-legacy",
+            "issue": 20,
+            "state": "review",
+            "repo_dir": serde_json::Value::Null,
+            "verified_at": serde_json::Value::Null,
+            "reviewed_head": "a".repeat(40),
+        })
+        .to_string();
+        let run: Run = serde_json::from_str(&legacy).expect("the legacy pointer remains readable");
+        assert_eq!(run.reviewed_head.as_deref(), Some("a".repeat(40).as_str()));
+        assert_eq!(run.review_receipt, None);
+    }
 
     /// A pointer nobody can read is not one this run may write over.
     ///

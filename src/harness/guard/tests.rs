@@ -1401,3 +1401,138 @@ fn the_closest_claim_holds_a_directory_two_runs_both_cover() {
         "two runs holding one checkout stopped being an ambiguity"
     );
 }
+
+#[test]
+fn sibling_selection_binds_pr_before_head_and_attributes_no_ambiguous_holder() {
+    let Some(repo) = repository() else {
+        return;
+    };
+    for arguments in [
+        &["config", "user.email", "nobody@example.invalid"][..],
+        &["config", "user.name", "nobody"][..],
+        &["commit", "--allow-empty", "--quiet", "-m", "base"][..],
+    ] {
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(repo.path())
+                .args(arguments)
+                .output()
+                .is_ok_and(|output| output.status.success())
+        );
+    }
+    let sibling_root = tempfile::tempdir().expect("a sibling parent");
+    let sibling = sibling_root.path().join("reviewed");
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .args(["worktree", "add", "--quiet", "--detach"])
+            .arg(&sibling)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    let head = super::super::head_of(&sibling).expect("the sibling has a head");
+    let state = tempfile::tempdir().expect("a state root");
+
+    let store = |id: &str, pr: u64, receipt_head: &str| {
+        let mut run = session::Run::new(id.to_owned());
+        run.issue = Some(pr);
+        run.state = Some("review".to_owned());
+        run.repo_dir = Some(repo.path().to_path_buf());
+        run.review_receipt = Some(crate::transport::claim::ReviewReceipt {
+            epoch: format!("{pr:032x}"),
+            pr,
+            head: receipt_head.to_owned(),
+            base: "b".repeat(40),
+            digest: "c".repeat(64),
+        });
+        session::store(state.path(), &run).expect("the pointer writes");
+    };
+    let stale = "d".repeat(40);
+    store("claude-pr54", 54, &stale);
+    store("claude-pr55", 55, &head);
+
+    let action = Action::Boundary {
+        command: "gh pr merge".to_owned(),
+        pr: Some(54),
+        local_fast_forward_target: None,
+    };
+    let selected = holders_for_action(state.path(), &sibling, &action);
+    assert_eq!(selected.len(), 1);
+    assert_eq!(selected[0].run_id, "claude-pr54");
+
+    store("claude-pr54-too", 54, &stale);
+    let root = tempfile::tempdir().expect("a gate root");
+    let mut gate_context = context(root.path(), &sibling);
+    gate_context.state_root = state.path().to_path_buf();
+    let adjudication = adjudicate_action(&gate_context, &sibling, &action, Sensitivity::Boundary);
+    assert!(adjudication.decision.denies());
+    assert_eq!(adjudication.holder, None);
+}
+
+#[test]
+fn an_unreadable_sibling_pointer_selects_no_readable_holder() {
+    let Some(repo) = repository() else {
+        return;
+    };
+    for arguments in [
+        &["config", "user.email", "nobody@example.invalid"][..],
+        &["config", "user.name", "nobody"][..],
+        &["commit", "--allow-empty", "--quiet", "-m", "base"][..],
+    ] {
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(repo.path())
+                .args(arguments)
+                .output()
+                .is_ok_and(|output| output.status.success())
+        );
+    }
+    let sibling_root = tempfile::tempdir().expect("a sibling parent");
+    let sibling = sibling_root.path().join("reviewed");
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .args(["worktree", "add", "--quiet", "--detach"])
+            .arg(&sibling)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    let head = super::super::head_of(&sibling).expect("the sibling has a head");
+    let state = tempfile::tempdir().expect("a state root");
+    let mut run = session::Run::new("claude-readable".to_owned());
+    run.issue = Some(54);
+    run.state = Some("review".to_owned());
+    run.repo_dir = Some(repo.path().to_path_buf());
+    run.review_receipt = Some(crate::transport::claim::ReviewReceipt {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head,
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    });
+    session::store(state.path(), &run).expect("the readable pointer writes");
+    std::fs::write(state.path().join("claude-torn.json"), "{").expect("a torn pointer");
+
+    let root = tempfile::tempdir().expect("a gate root");
+    let mut gate_context = context(root.path(), &sibling);
+    gate_context.state_root = state.path().to_path_buf();
+    let adjudication = adjudicate_action(
+        &gate_context,
+        &sibling,
+        &Action::Boundary {
+            command: "gh pr merge".to_owned(),
+            pr: Some(54),
+            local_fast_forward_target: None,
+        },
+        Sensitivity::Boundary,
+    );
+    let Decision::Deny(refusal) = adjudication.decision else {
+        panic!("an unreadable pointer did not refuse");
+    };
+    assert_eq!(refusal.code, "run-pointers-unreadable");
+    assert_eq!(adjudication.holder, None);
+}

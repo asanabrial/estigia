@@ -617,6 +617,7 @@ pub fn decide(context: &GateContext, repo_dir: &Path) -> Decision {
         repo_dir,
         &Action::Boundary {
             command: "git push".to_owned(),
+            pr: None,
             local_fast_forward_target: None,
         },
         Sensitivity::Boundary,
@@ -656,6 +657,53 @@ pub fn holders_of(state_root: &Path, repo_dir: &Path) -> Vec<session::Run> {
         .collect()
 }
 
+/// The holders relevant to this action, including a reviewed sibling only when
+/// the action would spend delivery evidence.
+pub fn holders_for_action(
+    state_root: &Path,
+    repo_dir: &Path,
+    action: &Action,
+) -> Vec<session::Run> {
+    let covered = holders_of(state_root, repo_dir);
+    if !covered.is_empty() || !super::is_delivery(action) {
+        return covered;
+    }
+    let Some(pr) = action.pr() else {
+        return Vec::new();
+    };
+    session::holdings(state_root)
+        .into_iter()
+        .filter(|run| {
+            run.review_receipt
+                .as_ref()
+                .filter(|receipt| receipt.is_complete())
+                .is_some_and(|receipt| receipt.pr == pr)
+                && run
+                    .covered()
+                    .any(|covered| super::same_git_repository(covered, repo_dir))
+        })
+        .collect()
+}
+
+fn linked_siblings(state_root: &Path, repo_dir: &Path) -> Vec<session::Run> {
+    session::holdings(state_root)
+        .into_iter()
+        .filter(|run| {
+            run.covered()
+                .any(|covered| super::same_git_repository(covered, repo_dir))
+        })
+        .collect()
+}
+
+/// One decision and the holder selected while making it.
+#[derive(Debug)]
+pub struct Adjudication {
+    /// The gate's answer.
+    pub decision: Decision,
+    /// The one holder selected while producing that answer, when there was one.
+    pub holder: Option<String>,
+}
+
 /// Decides one action, finding the run by the checkout it happens in.
 pub fn decide_action(
     context: &GateContext,
@@ -663,6 +711,16 @@ pub fn decide_action(
     action: &Action,
     how: Sensitivity,
 ) -> Decision {
+    adjudicate_action(context, repo_dir, action, how).decision
+}
+
+/// Decides one action and returns the holder selected by that same decision.
+pub fn adjudicate_action(
+    context: &GateContext,
+    repo_dir: &Path,
+    action: &Action,
+    how: Sensitivity,
+) -> Adjudication {
     // Before asking who holds the checkout, because the answer cannot matter:
     // an action the harness does not watch is outside whoever swore what.
     //
@@ -676,9 +734,21 @@ pub fn decide_action(
     // this build does not know could be wrapping `Read` as easily as `Write`,
     // and denying it would deny reads*.
     if matches!(action, Action::Untouched) {
-        return Decision::Outside(super::Aside::NotWatched);
+        return Adjudication {
+            decision: Decision::Outside(super::Aside::NotWatched),
+            holder: None,
+        };
     }
-    let holders = holders_of(&context.state_root, repo_dir);
+    let ordinary_holders = holders_of(&context.state_root, repo_dir);
+    let used_sibling = ordinary_holders.is_empty()
+        && matches!(action, Action::Boundary { command, .. } if command == "gh pr merge");
+    let linked = used_sibling.then(|| linked_siblings(&context.state_root, repo_dir));
+    let mut holders = holders_for_action(&context.state_root, repo_dir, action);
+    if used_sibling && !session::unreadable_holdings(&context.state_root).is_empty() {
+        // A sibling is not path-owned by the readable pointer, so an unreadable
+        // pointer could be its actual holder. Fall into the fail-closed arm.
+        holders.clear();
+    }
 
     // Through the stand-down, like every other decision. `gate` states the rule
     // where it wraps its own: *a stand-down honoured on some paths and not
@@ -692,6 +762,7 @@ pub fn decide_action(
     // not reach them. The `1 =>` arm goes through `gate`, which already wraps,
     // and `over` passes an allowance through untouched, so wrapping once here
     // covers the two that were missing without deciding anything twice.
+    let mut selected = None;
     let decided = match holders.len() {
         // Nothing holds this checkout — unless the reason nothing does is that
         // a pointer would not open. `Outside` is a statement, and it is the one
@@ -703,6 +774,9 @@ pub fn decide_action(
         // the push on its own terms, so the unknown one changes no outcome
         // there — here it changes the only one there is.
         0 => match session::unreadable_holdings(&context.state_root).as_slice() {
+            [] if linked.as_ref().is_some_and(|runs| !runs.is_empty()) => {
+                Decision::Deny(Box::new(super::complete_review_receipt_not_selected()))
+            }
             [] => Decision::Outside(super::Aside::NothingSworn),
             unreadable => Decision::Deny(Box::new(Refusal::not_started(
                 "run-pointers-unreadable",
@@ -727,8 +801,12 @@ pub fn decide_action(
                 session::Run::new(String::new())
             });
             if run.run_id.is_empty() {
-                return Decision::Outside(super::Aside::NothingSworn);
+                return Adjudication {
+                    decision: Decision::Outside(super::Aside::NothingSworn),
+                    holder: None,
+                };
             }
+            selected = Some(run.run_id.clone());
             let decision = super::gate(context, &mut run, action, how);
             // The answer the tracker just gave, written down.
             //
@@ -764,7 +842,14 @@ pub fn decide_action(
             ),
         ))),
     };
-    super::standdown::over(decided, context.stand_down.as_ref(), session::now_seconds())
+    Adjudication {
+        decision: super::standdown::over(
+            decided,
+            context.stand_down.as_ref(),
+            session::now_seconds(),
+        ),
+        holder: selected,
+    }
 }
 
 #[cfg(test)]

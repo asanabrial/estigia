@@ -906,6 +906,7 @@ fn a_shell_call_is_read_whatever_shape_its_command_arrives_in() {
             action,
             crate::harness::Action::Boundary {
                 command: "git push".to_owned(),
+                pr: None,
                 local_fast_forward_target: None,
             },
             "`{tool}` was handed a push in {input} and the gate saw nothing"

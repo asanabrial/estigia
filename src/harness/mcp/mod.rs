@@ -866,8 +866,8 @@ pub fn run_tool(
             body: Some(failure.envelope()),
         },
     };
-    if let Some(refusal) = tracker::translate(&answer, tool.name) {
-        return Err(ToolFailure::Refused(Box::new(refusal)));
+    if let Some(failure) = refusal_from_answer(tool, &answer, &mut run, context) {
+        return Err(failure);
     }
 
     // A pointer keyed by nothing is a file nobody reads and a state the real run
@@ -913,6 +913,28 @@ estigia: this happened on the tracker and could not be written to this run's    
         }],
         "isError": false,
     }))
+}
+
+/// Turns the transport's dispatch answer into the MCP refusal and applies the
+/// local consequence of an uncertain publication.
+fn refusal_from_answer(
+    tool: &Tool,
+    answer: &tracker::Answer,
+    run: &mut session::Run,
+    context: &GateContext,
+) -> Option<ToolFailure> {
+    let refusal = tracker::translate(answer, tool.name)?;
+    if tool.effect == PointerEffect::Published && !refusal.outcome.is_clean() {
+        // A write that landed or may have landed can have minted a new epoch
+        // over the same PR and HEAD. Keeping the old receipt would let that
+        // stale epoch be spent before the remote is reconciled.
+        let (updated, _) = session::updated(&context.state_root, &run.run_id, |run| {
+            run.review_receipt = None;
+            run.reviewed_head = None;
+        });
+        *run = updated;
+    }
+    Some(ToolFailure::Refused(Box::new(refusal)))
 }
 
 /// Moves the run pointer to follow what just became true.
@@ -983,10 +1005,18 @@ fn apply_effect(
         .get("to")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
-    let published_head = body
-        .and_then(|body| body.get("head"))
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
+    let receipt_from = |value: &Value| {
+        let receipt = crate::transport::claim::ReviewReceipt {
+            epoch: value.get("epoch")?.as_str()?.to_owned(),
+            pr: value.get("pr")?.as_u64()?,
+            head: value.get("head")?.as_str()?.to_owned(),
+            base: value.get("base")?.as_str()?.to_owned(),
+            digest: value.get("digest")?.as_str()?.to_owned(),
+        };
+        receipt.is_complete().then_some(receipt)
+    };
+    let published_receipt = body.and_then(receipt_from);
+    let supplied_receipt = receipt_from(arguments);
     let worktree = body
         .and_then(|body| body.get("worktree"))
         .and_then(Value::as_str)
@@ -1013,6 +1043,16 @@ fn apply_effect(
                 run.mark_verified();
             }
             PointerEffect::Renew => {
+                // A reviewer claiming after a handoff receives the receipt in
+                // the verdict and CI-release calls. Preserve that exact head so
+                // its recreated pointer can gate delivery from the inherited
+                // worktree after the publisher's pointer was removed.
+                if matches!(tool.name, "record_review_verdict" | "release_ci")
+                    && let Some(receipt) = &supplied_receipt
+                {
+                    run.review_receipt = Some(receipt.clone());
+                    run.reviewed_head = None;
+                }
                 // A renewal that came back `ok` is the tracker saying, just now,
                 // that this run is the live holder of this issue in this state.
                 // That is the same fact `Swear` writes down, learned the same way
@@ -1049,10 +1089,12 @@ fn apply_effect(
                 run.mark_verified();
             }
             PointerEffect::Published => {
-                // Kept only when the answer names one. A publish that came back
-                // without a head is not a reason to forget the head this run had.
-                if let Some(head) = &published_head {
-                    run.reviewed_head = Some(head.clone());
+                // A successful publication supersedes old authority even when
+                // its output is too incomplete to manufacture a new receipt.
+                run.review_receipt = None;
+                run.reviewed_head = None;
+                if let Some(receipt) = &published_receipt {
+                    run.review_receipt = Some(receipt.clone());
                 }
                 run.mark_verified();
             }
