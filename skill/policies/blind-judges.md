@@ -110,7 +110,9 @@ measuring.
 ## What Estigia enforces here, and what it does not
 
 **Enforced, mechanically:** the draft barrier, one aggregate exact-receipt verdict, the exact
-publication receipt, and Claude's reserved-role prelaunch checks. Nothing proves panel execution.
+publication receipt, Claude's reserved-role prelaunch checks, and the **publication lane refusal** —
+`record_review_verdict` will not bank an accepted verdict for a head whose dispatched CI lane is red or
+still running. Nothing proves panel execution.
 
 That is worth stating first and plainly. Estigia gates repository writes against an adjudicated
 claim. It cannot prove panel size, concurrency, independence, blindness, same-finding identity or
@@ -118,7 +120,12 @@ quorum. It cannot see whether a context read the target, whether a verdict was h
 judges running outside the reserved role were given separate working directories. There is no
 hook that fires when a reviewer forms an opinion.
 
-`publish_review` keeps ordinary compatible CI behind a draft PR and records epoch/PR/head/base/digest.
+`publish_review` keeps ordinary compatible CI behind a draft PR, records epoch/PR/head/base/digest, and
+starts one publication-lane run against the head it pushed. That last one is why the refusal above is
+mechanical rather than a rule somebody has to remember: the signal is collected at publication and the
+gate sits on the single writer of a verdict marker, not in the prompt that launches the judges. It is
+not a proof that a lane exists — a repository without a dispatchable one has no check runs on its
+head, and that proceeds.
 `release_ci` replays the globally latest receipt, current draft PR and coherent clean target before
 marking ready. A republish invalidates earlier evidence even for identical bytes. These checks bind
 the cooperative order to exact bytes; they do not prove who reviewed them. GitHub has no atomic

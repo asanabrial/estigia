@@ -449,6 +449,287 @@ pub fn pr_body_text(body: &str, issue: u64) -> String {
 /// after walking into it.
 pub const PUBLISH_READBACK_ATTEMPTS: usize = 10;
 
+/// The workflow a publication starts against the head it just pushed.
+///
+/// A file name, not a setting and not something read out of the repository. That
+/// is a limit rather than an oversight, and `docs/honesty.md` carries it: Estigia
+/// does not parse arbitrary consumer YAML, so it cannot discover what a
+/// repository's lane is called or whether it has one at all. A repository whose
+/// lane is named differently gets no publication lane, which is exactly the
+/// ordering — and the exposure — it had before this existed.
+///
+/// The one thing that must never happen is the opposite: refusing to publish
+/// because a repository has no `ci.yml`. That would break every consumer in
+/// order to protect the ones that answer, which is why
+/// [`classify_lane_dispatch`] sends everything but a permission refusal to
+/// [`LaneDispatch::Absent`] or [`LaneDispatch::Unknown`].
+const PUBLICATION_LANE_WORKFLOW: &str = "ci.yml";
+
+/// How many check runs one page of the check-run listing may hold.
+///
+/// The listing is asked for in one page because a **partial** answer here is the
+/// failure this crate is named for: thirty green lanes and a red thirty-first
+/// read as thirty green ones. `judge_publication_lane` refuses when
+/// `total_count` outruns what arrived rather than deciding on the page it got,
+/// so a repository with more than this many check runs on one head fails the
+/// read instead of being cleared by it.
+const LANE_PAGE: usize = 100;
+
+/// What starting the publication lane answered.
+///
+/// Four values rather than a `Result`, because three of them are *not* failures
+/// of this operation and one is. A repository with no dispatchable lane and a
+/// caller whose token may not dispatch look identical to a `?`, and they need
+/// opposite outcomes: the first is the ordinary state of every consumer that has
+/// not adopted the lane, and the second is a permission the operator can grant
+/// in one command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum LaneDispatch {
+    /// The request was accepted. Check runs appear on the pushed head.
+    Started,
+    /// There is no dispatchable lane by that name here. Reported, never refused.
+    Absent(String),
+    /// The token may not start workflows. Refused, before a receipt exists.
+    Forbidden(String),
+    /// The call did not answer at all. Reported: an unknown dispatch cannot
+    /// clear anything, because `record_review_verdict` re-reads the world.
+    Unknown(String),
+}
+
+/// Reads one `gh workflow run` outcome without guessing.
+///
+/// **Pure, so the classification can be measured** — posing a 403 through a
+/// scripted `gh` proves the wiring and not the rule, and the rule is where the
+/// damage is.
+///
+/// Only `401` and `403` are read as a permission refusal, and `404` deliberately
+/// is not: GitHub answers `404` both for a workflow that is not there and for
+/// one the caller may not see, and this operation has already pushed to the
+/// repository by the time it asks — so the ambiguous code is sent to the arm
+/// that lets a consumer keep working. Refusing on `404` would turn every
+/// repository without an Estigia-shaped lane into a repository that cannot
+/// publish.
+fn classify_lane_dispatch(status: i32, stderr: &str) -> LaneDispatch {
+    if status == 0 {
+        return LaneDispatch::Started;
+    }
+    let said = stderr.trim().to_owned();
+    if said.contains("HTTP 403") || said.contains("HTTP 401") {
+        return LaneDispatch::Forbidden(said);
+    }
+    // The three ways a repository says *there is no lane here to start*: no
+    // workflow of that name, a workflow the listing does not show, and a
+    // workflow that exists without the trigger. `gh` prints the first itself and
+    // relays the other two from the API.
+    if said.contains("could not find any workflows")
+        || said.contains("HTTP 404")
+        || said.contains("HTTP 422")
+    {
+        return LaneDispatch::Absent(said);
+    }
+    LaneDispatch::Unknown(said)
+}
+
+/// Starts the publication lane against a branch that has just been pushed.
+///
+/// Against the **branch**, because `workflow_dispatch` takes a ref and not a
+/// commit. The window that opens is real and small: somebody pushing over the
+/// branch between this call and the push above starts a lane on their bytes
+/// rather than on these. It degrades to *this head has no check runs*, which
+/// [`judge_publication_lane`] lets through — the old ordering, not a false
+/// clearance — and `docs/honesty.md` says so.
+fn dispatch_publication_lane(context: &Context, branch: &str) -> LaneDispatch {
+    match super::run(
+        &[
+            "gh",
+            "workflow",
+            "run",
+            PUBLICATION_LANE_WORKFLOW,
+            "--ref",
+            branch,
+        ],
+        Some(&context.repo_dir),
+        // A non-zero status is an **answer** here, not a failure: which answer
+        // it is decides between refusing this publication and letting a
+        // repository without a lane carry on.
+        super::How::tolerated(),
+    ) {
+        Ok(output) => classify_lane_dispatch(output.status, &output.stderr),
+        // `run` answers `Read` when the process cannot spawn, whatever `How` it
+        // was given. Nothing was learned, and nothing learned is not a
+        // repository that has no lane.
+        Err(failure) => LaneDispatch::Unknown(failure.detail()),
+    }
+}
+
+/// The publication lane's answer for one exact head, or a read that did not
+/// answer.
+///
+/// **Pure and fed**, for the same reason [`confirm_published`] is: the thing
+/// worth measuring is the decision over four states, not the transport under it.
+///
+/// The state that decides safety is the first one. **No check runs at all is a
+/// pass**, unchanged from before this existed. A repository with no dispatchable
+/// lane has no check runs on any head, and refusing there would stop every such
+/// repository from recording a verdict at all — breaking the consumers this is
+/// supposed to protect. The exposure this change closes is closed only for
+/// repositories that answer.
+///
+/// The other three refuse, and `in_progress` is not `success`: a lane that has
+/// not finished has not said the bytes are sound, and banking a verdict against
+/// it is exactly the trade this change exists to stop.
+fn judge_publication_lane(
+    data: &serde_json::Value,
+    pr: u64,
+    head: &str,
+    path: &str,
+) -> Result<(), Failure> {
+    let unreadable = |what: &str| lane_unreadable(head, path, what);
+    let Some(runs) = data.get("check_runs").and_then(serde_json::Value::as_array) else {
+        return Err(unreadable("the response carries no check_runs list"));
+    };
+    // A truncated page is not a shorter lane. `total_count` is what the API says
+    // there are; anything less than that arrived is an answer about part of the
+    // head, and part of the head cleared as the whole of it is how a red lane
+    // becomes invisible.
+    let Some(total) = data.get("total_count").and_then(serde_json::Value::as_u64) else {
+        return Err(unreadable("the response carries no total_count"));
+    };
+    if total as usize != runs.len() {
+        return Err(unreadable(&format!(
+            "{total} check runs exist and {} arrived, so this is one page of several",
+            runs.len()
+        )));
+    }
+    if runs.is_empty() {
+        return Ok(());
+    }
+
+    let text = |run: &serde_json::Value, key: &str| {
+        run.get(key)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    // A red lane before an unfinished one, because red is the answer that
+    // cannot improve by waiting and the one this issue was filed about.
+    for run in runs {
+        let (status, conclusion) = (text(run, "status"), text(run, "conclusion"));
+        if status != "completed" {
+            continue;
+        }
+        // `neutral` and `skipped` are a lane declining to have an opinion, and a
+        // matrix leg that skips on purpose must not refuse a verdict. Everything
+        // else — including a conclusion nobody here has read, and a completed run
+        // with none at all — refuses, because an unknown result is not clearance.
+        if matches!(conclusion.as_str(), "success" | "neutral" | "skipped") {
+            continue;
+        }
+        let url = text(run, "html_url");
+        let watched = workflow_run_id(&url);
+        let read_it = match &watched {
+            Some(id) => format!("read it with `gh run view {id} --log-failed`"),
+            None => format!("read it at {url}"),
+        };
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "publication-lane-red",
+            "head": head,
+            "lane": text(run, "name"),
+            "conclusion": if conclusion.is_empty() { "none reported".to_owned() } else { conclusion },
+            "run_url": url,
+            "action": format!(
+                "the publication lane for these exact bytes is red, so a verdict recorded against \
+                 them would be discarded the moment CI answers \u{2014} {read_it}, fix it, then \
+                 `republish_review`, which starts a new epoch and a new lane"
+            ),
+        })));
+    }
+    for run in runs {
+        let status = text(run, "status");
+        if status == "completed" {
+            continue;
+        }
+        let url = text(run, "html_url");
+        let watch = match workflow_run_id(&url) {
+            Some(id) => format!("gh run watch {id} --exit-status"),
+            None => format!("gh pr checks {pr} --watch --fail-fast"),
+        };
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "publication-lane-unfinished",
+            "head": head,
+            "lane": text(run, "name"),
+            "status": status,
+            "run_url": url,
+            "action": format!(
+                "the publication lane for these exact bytes has not answered yet, and an \
+                 unfinished lane is not a green one \u{2014} run `{watch}`, then record this same \
+                 verdict again"
+            ),
+        })));
+    }
+    Ok(())
+}
+
+/// The workflow run id inside a check run's own URL.
+///
+/// The check-run payload names the check suite and never the workflow run, and
+/// the run is what `gh run watch` and `gh run view` take. The URL is
+/// `.../actions/runs/<id>/job/<id>`, so the id is read from there or the refusal
+/// falls back to a command that needs no id. Returning `None` rather than
+/// guessing is the point: a refusal naming `gh run watch` with the wrong number
+/// is a dead end, and this repository calls that worse than naming nothing.
+fn workflow_run_id(url: &str) -> Option<String> {
+    let id = url.split("/actions/runs/").nth(1)?.split('/').next()?;
+    (!id.is_empty() && id.chars().all(|c| c.is_ascii_digit())).then(|| id.to_owned())
+}
+
+/// Refuses a verdict whose head the publication lane has not cleared.
+///
+/// The half that makes this change mechanical rather than a memory rule.
+/// Dispatching a lane at publication time and asking somebody to look at it
+/// before launching judges is a rule that depends on whoever writes the prompt,
+/// which is the failure issue #28 concluded against. This is the enforcement
+/// point, and there is exactly one: `record_review_verdict` is the only writer
+/// of a verdict marker, and `release_ci` reads what it wrote rather than
+/// deciding again.
+///
+/// The evidence gets **the binding the verdict has** for free. Check runs attach
+/// to a SHA by construction, so the receipt's own head is the key and nothing
+/// new has to be recorded, compared or invalidated. In particular
+/// [`ReviewReceipt`] is untouched: it is compared by equality in
+/// [`recorded_receipt`], and a run id added to it would change what a republish
+/// invalidates.
+fn require_cleared_publication_lane(context: &Context, pr: u64, head: &str) -> Result<(), Failure> {
+    let (owner, name) = super::closing::repo_identity(context)?;
+    let path = format!("repos/{owner}/{name}/commits/{head}/check-runs?per_page={LANE_PAGE}");
+    // The transport's own read failure, re-said in this operation's words. Left
+    // as it came, it reads `gh api ... failed (1)` and nothing tells the caller
+    // that the thing which did not answer was the lane, or that a lane which did
+    // not answer clears nothing. Both frames are `Failure::Read`, so the outcome
+    // channel is unchanged: this replaces a sentence, not a decision.
+    let data = super::gh_json(&["api", &path], Some(&context.repo_dir))
+        .map_err(|failure| lane_unreadable(head, &path, &failure.detail()))?
+        .ok_or_else(|| lane_unreadable(head, &path, "the response was empty"))?;
+    judge_publication_lane(&data, pr, head, &path)
+}
+
+/// The one sentence a lane that did not answer produces.
+///
+/// One place, because the two callers say the same thing about the same failure
+/// and a copy is where the softer of the two would eventually be written. The
+/// wording is load-bearing: a read that failed and a lane that went red are
+/// different answers with opposite consequences, and reporting the first as the
+/// second sends somebody to fix a test that never ran.
+fn lane_unreadable(head: &str, path: &str, what: &str) -> Failure {
+    Failure::Read(format!(
+        "the publication lane for `{head}` could not be read ({what}); this is a failed read and \
+         not a green lane, so nothing about these bytes has been cleared \u{2014} retry with `gh \
+         api {path}`"
+    ))
+}
+
 /// Whether the remote settled on the head and base that were just pushed.
 ///
 /// **Pure and fed**: the observations come in as a list rather than being
@@ -1353,6 +1634,25 @@ pub fn record_review_verdict(
     let current = read()?;
     let comments = comments_of(&current);
     require_distinct_reviewer(&comments, &receipt, verdict.reviewer)?;
+    // The publication lane, for the receipt's own head, immediately before the
+    // one write this operation makes.
+    //
+    // **`accepted` only**, and that is a decision rather than an omission. An
+    // acceptance is the verdict a red lane destroys: it is the only outcome
+    // `qualifying_review_verdict` counts, and the whole cost this change exists
+    // to stop is a round of acceptances thrown away when CI finally answers. A
+    // *rejection* over a red head is not waste — it is the route out. Refusing
+    // it would leave a reviewer holding a claim over bytes they have already
+    // judged, with no way to resolve the handoff that would let the author fix
+    // and republish, which is a deadlock invented to enforce a rule that had
+    // nothing to say about rejections.
+    //
+    // Last of the checks, so every existing refusal keeps its reason. A caller
+    // with no claim, or one crediting the publisher, is told that and not told
+    // about CI.
+    if verdict.outcome == "accepted" {
+        require_cleared_publication_lane(context, verdict.pr, verdict.head)?;
+    }
 
     let marker = super::markers::render(
         "review-verdict",
@@ -1823,6 +2123,47 @@ fn publish_with(
     // landed*. The narrower sentence is the true one.
     push_to_origin(at, branch, push).map_err(|failure| after_rewriting_the_pr(failure, wrote))?;
 
+    // The publication lane, started **once** and here.
+    //
+    // Here rather than anywhere else, and the two neighbours are why. It cannot
+    // be above the push, because a dispatch names a ref and the bytes it must
+    // measure are the ones the push just put there. It must not be below
+    // `published`, because `published` is what writes the receipt: a receipt
+    // recorded beside a lane nobody could start is an epoch that judges will be
+    // bound to and CI will never answer for, which is the state this whole
+    // change exists to remove. So the one refusal this can produce lands in the
+    // narrowest committed world available — the branch is pushed, no epoch
+    // exists, and re-running the same call after the permission is granted
+    // reuses the pull request and publishes cleanly.
+    //
+    // Once per **publication epoch** and never per push: this body runs once per
+    // `publish_review` or `republish_review` call and each such call creates one
+    // epoch. Dispatching per push is the cardinality `CHANGELOG.md` records the
+    // draft barrier refusing, and it is not what this is.
+    let lane = dispatch_publication_lane(context, branch);
+    if let LaneDispatch::Forbidden(said) = &lane {
+        return Err(after_rewriting_the_pr(
+            Failure::Stop(serde_json::json!({
+                "ok": false,
+                "reason": "publication-lane-forbidden",
+                // The push has happened. `Stop` alone reads as *nothing was
+                // written*, and that sentence here would send somebody looking
+                // for a branch that is already on the remote.
+                "world": "committed",
+                "branch": branch,
+                "workflow": PUBLICATION_LANE_WORKFLOW,
+                "detail": said,
+                "action": "this token may not start workflows, so the publication lane cannot run \
+                           and no publication receipt has been recorded. Grant it that permission \
+                           \u{2014} `gh auth refresh -s workflow` for a `gh auth login` token, or \
+                           add `actions: write` to the token in `GH_TOKEN` \u{2014} then run this \
+                           same call again: the branch is already pushed, so it reuses the pull \
+                           request and publishes",
+            })),
+            wrote,
+        ));
+    }
+
     let answer = published(
         context,
         issue,
@@ -1844,6 +2185,50 @@ fn publish_with(
             )),
             other => other,
         }
+    });
+    // What the publication lane answered, in the call's own report.
+    //
+    // Reported and not refused for every value but `Forbidden`, which has
+    // already returned above. A repository with no dispatchable lane, and a
+    // dispatch whose outcome could not be read, both leave this epoch with no
+    // check runs on its head — and `judge_publication_lane` lets a head with no
+    // check runs through, so the run gets the ordering it had before this
+    // existed rather than a refusal it cannot clear. Saying so in the answer is
+    // the difference between that and losing the protection silently.
+    let answer = answer.map(|mut answer| {
+        let (state, note) = match &lane {
+            LaneDispatch::Started => (
+                "started",
+                format!(
+                    "one run of `{PUBLICATION_LANE_WORKFLOW}` was dispatched against this head; an \
+                     accepted verdict cannot be recorded until it is green"
+                ),
+            ),
+            LaneDispatch::Absent(said) => (
+                "absent",
+                format!(
+                    "this repository has no dispatchable `{PUBLICATION_LANE_WORKFLOW}`, so this \
+                     epoch has no publication lane and verdicts are not gated on one ({said})"
+                ),
+            ),
+            LaneDispatch::Unknown(said) => (
+                "unknown",
+                format!(
+                    "starting `{PUBLICATION_LANE_WORKFLOW}` did not answer, so whether this epoch \
+                     has a lane is unknown; read the checks on this head before obtaining verdicts \
+                     ({said})"
+                ),
+            ),
+            // Returned above, and matched rather than absorbed so that adding a
+            // value to the enum is a compile error here instead of a silent
+            // omission from the report.
+            LaneDispatch::Forbidden(said) => ("forbidden", said.clone()),
+        };
+        if let Some(answer) = answer.as_object_mut() {
+            answer.insert("publication_lane".to_owned(), serde_json::json!(state));
+            answer.insert("publication_lane_note".to_owned(), serde_json::json!(note));
+        }
+        answer
     });
     // Which route ran, in **the answer this call returns**, because the two are
     // not interchangeable to the run reading it back: a leased push moved bytes

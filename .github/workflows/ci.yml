@@ -6,6 +6,18 @@ on:
     branches: [main]
   pull_request:
     types: [ready_for_review]
+  # The publication lane. `publish_review` and `republish_review` start this
+  # workflow against the head they just pushed, so the cheapest disqualifying
+  # signal — a platform this desk cannot run — arrives *before* the review
+  # rounds rather than after them. Measured on issue #2: sixteen reviewers over
+  # eight rounds were discarded for a one-line fixture defect that only POSIX
+  # could see, because `release_ci` is what marks the PR ready and ready is
+  # where CI first answered.
+  #
+  # One run per publication epoch, and that is the whole difference from the
+  # cardinality the draft barrier refused: this is not a trigger on every topic
+  # push, and dispatching does not mark the pull request ready.
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
