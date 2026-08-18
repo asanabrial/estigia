@@ -722,11 +722,21 @@ fn require_cleared_publication_lane(context: &Context, pr: u64, head: &str) -> R
 /// wording is load-bearing: a read that failed and a lane that went red are
 /// different answers with opposite consequences, and reporting the first as the
 /// second sends somebody to fix a test that never ran.
+///
+/// It does **not** say "retry", which is what it said for one round. Not every
+/// cause of this refusal is transient: a token that can push, comment and
+/// dispatch but lacks `Checks: read` fails this read identically every time, and
+/// a message telling that caller to try again is a dead end named as a way out —
+/// the one thing `CLAUDE.md` says a refusal must never do. So the command names
+/// the read that tells the two apart, and the sentence names the fix for the
+/// half that repeating cannot reach.
 fn lane_unreadable(head: &str, path: &str, what: &str) -> Failure {
     Failure::Read(format!(
         "the publication lane for `{head}` could not be read ({what}); this is a failed read and \
-         not a green lane, so nothing about these bytes has been cleared \u{2014} retry with `gh \
-         api {path}`"
+         not a green lane, so nothing about these bytes has been cleared \u{2014} `gh api {path}` \
+         says which failure it was: a transient one answers on a second attempt, and a token \
+         without `Checks: read` answers the same every time and needs the permission rather than \
+         another attempt"
     ))
 }
 

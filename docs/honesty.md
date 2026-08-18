@@ -1331,7 +1331,7 @@ suite. Everything else here is prose held by review.
   that have, so absence is a pass and this entry is where that is admitted rather than a gate that
   looks tighter than it is.
 
-  Four narrower limits, none of them hypothetical:
+  Seven narrower limits, none of them hypothetical:
 
   - **The dispatch names a branch, not a commit.** `workflow_dispatch` takes a ref. Somebody pushing
     over the branch between Estigia's push and its dispatch starts a lane on their bytes; the
@@ -1349,6 +1349,27 @@ suite. Everything else here is prose held by review.
     `per_page=100` and refused when `total_count` outruns what arrived. A repository with more check
     runs than that on one head cannot record an accepted verdict at all until the read is narrowed —
     fail-closed, and untested against a real repository of that size.
+  - **The read side is fail-closed on a permission error, where the dispatch side is lenient.** The
+    two halves disagree on purpose and the cost lands on one token shape. `publish_review` reads
+    `HTTP 404` from `gh workflow run` as *no lane* and proceeds; `record_review_verdict` maps **any**
+    failure of `gh api .../check-runs` to a refusal, because an unknown result is not clearance. So a
+    token that can push, comment and dispatch but lacks `Checks: read` publishes normally and can
+    then never record an accepted verdict — the refusal is `read-failed`, permanently, and no retry
+    reaches it. The refusal says so rather than telling the caller to try again, which is the whole
+    of the mitigation: nothing detects the shape, and the two halves are not going to be made to
+    agree without either refusing repositories that have no lane or clearing heads nobody read.
+  - **A dispatched run is not visible the instant the dispatch returns.** `gh workflow run` answers
+    when GitHub has accepted the request, not when the check run exists on the head. A verdict
+    recorded inside that window sees an empty listing, and an empty listing proceeds. Narrow in
+    practice — a review takes minutes and the check run appears in seconds — but it is a second way
+    "absence proceeds" fires, and unlike the branch-overwrite race above it needs no second actor.
+  - **The listing is every check run on the head, not the lane's.** `commits/{sha}/check-runs`
+    returns whatever anything attached to those bytes: a coverage bot, a security scanner, a
+    repository app unrelated to `ci.yml`. One of those sitting `queued` refuses an accepted verdict
+    naming a lane the reviewer cannot start, watch or clear, and there is no way past it but to wait
+    or to remove the app. Fail-closed, and arguably the right answer for a head nobody has finished
+    checking, but it is a wider net than "the lane Estigia dispatched" and this is where that is
+    admitted.
 
   Nothing here measures whether a dispatched run's check runs satisfy **branch protection's required
   contexts** on a pull request head. The argument that this opens no new hole rests on the draft

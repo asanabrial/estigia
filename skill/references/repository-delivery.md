@@ -152,10 +152,10 @@ just pushed — not once per push, and dispatching does not mark the PR ready. `
 refuses an accepted verdict for a head whose lane is red or unfinished, so a platform-only failure is
 found before the review rounds are spent rather than after. A repository with no dispatchable lane has
 no check runs on its head, which proceeds unchanged: Estigia does not weakly parse arbitrary consumer
-YAML to claim any of this is true. GitHub cannot make the ready write conditional atomically, and out-of-band collaborators or
-repository workflows can bypass the order, start other CI, push new bytes, or forge comments. This is
-cooperative workflow ordering, not proof of panel size, concurrency, independence, blindness,
-same-finding identity or quorum, and not malicious-collaborator authenticity.
+YAML to claim any of this is true. GitHub cannot make the ready write conditional atomically, and
+out-of-band collaborators or repository workflows can bypass the order, start other CI, push new
+bytes, or forge comments. This is cooperative workflow ordering, not proof of panel size, concurrency,
+independence, blindness, same-finding identity or quorum, and not malicious-collaborator authenticity.
 
 The required CI set is the union of host-required checks and every applicable repository lane. Each
 expected lane must exist once and succeed; absent, skipped, queued, cancelled, or failed work is not

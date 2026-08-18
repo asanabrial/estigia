@@ -11733,8 +11733,17 @@ fn each_publication_starts_one_lane_run_before_it_records_the_receipt() {
 ///   result is not clearance, and reporting it as a red lane would send somebody
 ///   to fix a test that never ran.
 ///
+/// One last row poses the narrowing rather than a state of the lane: the same
+/// red listing, recorded as a **rejection**, which succeeds and never reads the
+/// lane at all. That is what stops the gate from inventing a deadlock — a
+/// reviewer who may not reject red bytes cannot resolve the handoff that lets
+/// the author fix them.
+///
 /// Every refusal is checked against the call log for a comment, because a
 /// verdict that refuses and writes anyway has recorded the thing it refused.
+/// Every acceptance is checked against the same log for the **whole path** the
+/// gate issued, because a lane read against the wrong ref is a gate that decides
+/// nothing while answering `ok`.
 #[test]
 fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal() {
     let rig = tracker_rig();
@@ -11792,36 +11801,38 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
     // giving up on it: without this the accepted case always ends on
     // `review verdict is not visible`, whatever the lane said, and the state
     // that must proceed could not be told from the three that must not.
-    let recorded = comment(
-        "IC_verdict",
-        "2026-08-14T11:00:00Z",
-        marker(
-            "review-verdict",
-            &[
-                ("run-id", reviewer),
-                ("reviewer", reviewer),
-                (
-                    "op-id",
-                    &estigia::transport::claim::review_operation_id(
-                        "review-verdict",
-                        &[
-                            reviewer, reviewer, &epoch, "7", &head, &base, &digest, "accepted",
-                        ],
+    let recorded = |outcome: &str| {
+        comment(
+            "IC_verdict",
+            "2026-08-14T11:00:00Z",
+            marker(
+                "review-verdict",
+                &[
+                    ("run-id", reviewer),
+                    ("reviewer", reviewer),
+                    (
+                        "op-id",
+                        &estigia::transport::claim::review_operation_id(
+                            "review-verdict",
+                            &[
+                                reviewer, reviewer, &epoch, "7", &head, &base, &digest, outcome,
+                            ],
+                        ),
                     ),
-                ),
-                ("epoch", &epoch),
-                ("pr", "7"),
-                ("head", &head),
-                ("base", &base),
-                ("digest", &digest),
-                ("outcome", "accepted"),
-            ],
-        ),
-    );
-    let timeline = |verdict: bool| -> String {
+                    ("epoch", &epoch),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                    ("outcome", outcome),
+                ],
+            ),
+        )
+    };
+    let timeline = |verdict: Option<&str>| -> String {
         let mut comments = vec![held.clone(), publication.clone()];
-        if verdict {
-            comments.push(recorded.clone());
+        if let Some(outcome) = verdict {
+            comments.push(recorded(outcome));
         }
         serde_json::json!({
             "state": "OPEN",
@@ -11859,20 +11870,40 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
         "check_runs": [check_run("completed", serde_json::json!("success"))],
     })
     .to_string();
-    let states: [(&str, &str, i64, Option<&str>); 5] = [
-        ("absent", none.as_str(), 0, None),
-        ("red", failed.as_str(), 0, Some("publication-lane-red")),
+    // The last row is the narrowing rather than another state of the lane: the
+    // same red listing, recorded as a **rejection**, which must succeed. A
+    // rejection over a red head is the route out — refusing it would leave the
+    // reviewer holding a claim over bytes they have already judged, with no way
+    // to resolve the handoff that lets the author fix and republish. Widening
+    // the gate to every outcome left this file green until this row existed.
+    let states: [(&str, &str, i64, &str, Option<&str>); 6] = [
+        ("absent", none.as_str(), 0, "accepted", None),
+        (
+            "red",
+            failed.as_str(),
+            0,
+            "accepted",
+            Some("publication-lane-red"),
+        ),
         (
             "running",
             unfinished.as_str(),
             0,
+            "accepted",
             Some("publication-lane-unfinished"),
         ),
-        ("partial", partial.as_str(), 0, Some("read-failed")),
-        ("unreadable", "", 1, Some("read-failed")),
+        (
+            "partial",
+            partial.as_str(),
+            0,
+            "accepted",
+            Some("read-failed"),
+        ),
+        ("unreadable", "", 1, "accepted", Some("read-failed")),
+        ("rejected-over-red", failed.as_str(), 0, "rejected", None),
     ];
 
-    for (label, answer, status, refusal) in states {
+    for (label, answer, status, outcome, refusal) in states {
         let log = trace.path().join(format!("{label}.log"));
         // Three timeline reads precede the one write this operation makes, and
         // every read after it has to show the comment that write posted.
@@ -11880,13 +11911,23 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
         for before in 1..=3 {
             script.push(serde_json::json!({
                 "matches": "issue view", "nth": before,
-                "stdout": timeline(false), "status": 0,
+                "stdout": timeline(None), "status": 0,
             }));
         }
+        // The lane's answer is scripted against **the receipt's own head**, not
+        // against the words `check-runs`. A stand-in that answers any path
+        // containing that substring answers a read of `main` just as happily,
+        // and `main` is green by construction — so the two one-token mutations
+        // that make the gate read the default branch (`{head}` written as `main`
+        // in the `format!`, and `verdict.base` passed where `verdict.head`
+        // belongs) both left this file green. With the head in the matcher they
+        // find no entry, and an unmatched call is empty output, which is a
+        // failed read rather than a cleared lane.
+        let lane = format!("commits/{head}/check-runs");
         script.extend([
-            serde_json::json!({ "matches": "issue view", "stdout": timeline(true), "status": 0 }),
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(Some(outcome)), "status": 0 }),
             serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
-            serde_json::json!({ "matches": "check-runs", "stdout": answer, "status": status }),
+            serde_json::json!({ "matches": lane, "stdout": answer, "status": status }),
             serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
         ]);
         let answers = serde_json::to_string(&script).expect("the fake tracker script serialises");
@@ -11913,7 +11954,7 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
                 "head": head,
                 "base": base,
                 "digest": digest,
-                "outcome": "accepted",
+                "outcome": outcome,
             }}
         })
         .to_string();
@@ -11946,6 +11987,31 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
             .unwrap_or_default()
             .to_owned();
         let calls = std::fs::read_to_string(&log).unwrap_or_default();
+
+        // The path the gate issued, whole, read out of the call log. The
+        // fixture above proves the answer came from the right question; this
+        // proves the question was asked at all and asked with every part of it
+        // intact. `per_page=100` is inside the same string deliberately: it is
+        // what makes a listing longer than one page a failed read, and shrinking
+        // it — 100 to 5, 100 to 3 — changed nothing any test could see.
+        let issued = format!("commits/{head}/check-runs?per_page=100");
+        if outcome == "accepted" {
+            assert!(
+                calls.contains(&issued),
+                "the lane was not read for the receipt's own head ({label}); nothing in the call \
+                 log spells `{issued}`: {calls}"
+            );
+        } else {
+            // The other half of the narrowing, and the reason it is measured
+            // here rather than stated in `skill/bindings/github.md` alone: a
+            // rejection does not consult the lane at all, so a gate widened to
+            // every outcome shows up as an extra call before it shows up as a
+            // refusal.
+            assert!(
+                !calls.contains("check-runs"),
+                "a rejected verdict read the publication lane ({label}): {calls}"
+            );
+        }
 
         let Some(reason) = refusal else {
             // The state that must never refuse. A repository with no
