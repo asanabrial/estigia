@@ -1347,17 +1347,21 @@ suite. Everything else here is prose held by review.
     all, refuses.
   - **More than one page of check runs is a failed read, not a verdict.** The listing is asked for at
     `per_page=100` and refused when `total_count` outruns what arrived. A repository with more check
-    runs than that on one head cannot record an accepted verdict at all until the read is narrowed —
-    fail-closed, and untested against a real repository of that size.
+    runs than that on one head cannot record an accepted verdict at all until the read is **widened**
+    — a larger page, or following the pages until every check run has arrived — fail-closed, and
+    untested against a real repository of that size.
   - **The read side is fail-closed on a permission error, where the dispatch side is lenient.** The
     two halves disagree on purpose and the cost lands on one token shape. `publish_review` reads
     `HTTP 404` from `gh workflow run` as *no lane* and proceeds; `record_review_verdict` maps **any**
     failure of `gh api .../check-runs` to a refusal, because an unknown result is not clearance. So a
     token that can push, comment and dispatch but lacks `Checks: read` publishes normally and can
     then never record an accepted verdict — the refusal is `read-failed`, permanently, and no retry
-    reaches it. The refusal says so rather than telling the caller to try again, which is the whole
-    of the mitigation: nothing detects the shape, and the two halves are not going to be made to
-    agree without either refusing repositories that have no lane or clearing heads nobody read.
+    reaches it. Its **detail** says so, naming the read that failed rather than a lane that answered;
+    the shared `read-failed` envelope it travels in still ends *retry the read*, which for this token
+    shape is advice no retry can take, and that generic sentence is the one every failed read in the
+    crate gets. That detail is the whole of the mitigation: nothing detects the shape, and the two
+    halves are not going to be made to agree without either refusing repositories that have no lane
+    or clearing heads nobody read.
   - **A dispatched run is not visible the instant the dispatch returns.** `gh workflow run` answers
     when GitHub has accepted the request, not when the check run exists on the head. A verdict
     recorded inside that window sees an empty listing, and an empty listing proceeds. Narrow in

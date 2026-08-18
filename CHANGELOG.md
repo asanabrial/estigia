@@ -28,6 +28,14 @@ the workflow, it holds the tools.
   evidence is read for the receipt's own head and `ReviewReceipt` is unchanged: no run id, and
   nothing new for a republish to invalidate.
 
+  **The receipt comment on the timeline now names the lane this epoch got**, because the sentence it
+  used to carry — *CI remains blocked while the PR is draft* — became false in the same call that
+  writes it. That comment is what a blind reviewer reads, so one operation was answering that a lane
+  had started and an accepted verdict waited on it while posting a note saying CI would not run at
+  all. It now says which of `started`, `absent` and `unknown` this publication got, and says the
+  ordinary pull-request-event lane still waits for the pull request to be marked ready — the draft
+  barrier is unchanged, and only the publication lane is new.
+
   **A head with no check runs at all proceeds**, unchanged. A repository with no dispatchable
   `ci.yml` has none, Estigia does not parse consumer YAML to find out whether it has a lane, and
   refusing there would have broken every consumer in order to protect the ones that answer. Only a

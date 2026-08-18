@@ -2477,6 +2477,125 @@ fn only_a_permission_refusal_stops_a_publication_that_could_not_start_its_lane()
     );
 }
 
+/// The receipt comment says what this publication did about CI, and says it per
+/// lane.
+///
+/// **The test that did not exist**, and its absence is why the receipt spent a
+/// whole change contradicting the answer returned beside it. The dispatch sits
+/// immediately above the call that writes this comment, so `publish_review`
+/// answered `"publication_lane": "started"` — with a note saying an accepted
+/// verdict waits on that run — while posting a comment that said *"CI remains
+/// blocked while the PR is draft"*. Two sentences from one call, disagreeing,
+/// on issue #30's own timeline twice. The four contract sentences that had to
+/// move were found by grepping `.md` files; this fifth one is emitted at run
+/// time, so no grep over documents could reach it and nothing here read it.
+///
+/// Three properties, and the middle one is the one that goes stale:
+///
+/// - the evidence lines and the marker survive, because a reviewer binds to
+///   those bytes and prose is not what carries them;
+/// - the CI clause tells the two lanes apart — the publication lane an accepted
+///   verdict waits on, and the pull-request-event lane that still waits for the
+///   pull request to be marked ready. Restoring the old sentence, or dropping
+///   either half, fails here;
+/// - a state that did not start a lane does not claim one did. Absence is the
+///   ordinary condition of every repository that has not adopted the lane, and
+///   a receipt telling those repositories a run is coming is the same defect
+///   one state along.
+#[test]
+fn the_publication_receipt_says_what_it_did_about_ci_and_says_it_per_lane() {
+    let marker = "<!-- issue-flow: published run-id=claude-abcd1234 -->";
+    let note = |lane: &LaneDispatch| {
+        publication_note(
+            "https://github.com/o/r/pull/7",
+            &"e".repeat(32),
+            &"b".repeat(40),
+            &"c".repeat(40),
+            &"d".repeat(64),
+            lane,
+            marker,
+        )
+    };
+
+    for (label, lane) in [
+        ("started", LaneDispatch::Started),
+        ("absent", LaneDispatch::Absent("HTTP 404".to_owned())),
+        ("unknown", LaneDispatch::Unknown("no such host".to_owned())),
+    ] {
+        let text = note(&lane);
+        for line in [
+            &format!("- epoch `{}`", "e".repeat(32)),
+            &format!("- head `{}`", "b".repeat(40)),
+            &format!("- base `{}`", "c".repeat(40)),
+            &format!("- target `{}`", "d".repeat(64)),
+            &marker.to_owned(),
+            &"Review is bound to this complete clean target.".to_owned(),
+            &"any republish creates a new epoch".to_owned(),
+        ] {
+            assert!(
+                text.contains(line.as_str()),
+                "the {label} receipt lost the evidence a review is bound to: {line} is not in \
+                 {text}"
+            );
+        }
+
+        // The sentence this test exists for. It was true of the world before
+        // the publication lane existed and false in every publication after,
+        // and it is the one a blind reviewer reads.
+        assert!(
+            !text.contains("CI remains blocked while the PR is draft"),
+            "the {label} receipt still tells every reviewer CI is blocked, which is what the \
+             publication lane made false: {text}"
+        );
+        // Both lanes, named apart. The draft barrier is still real — a
+        // dispatch does not mark the pull request ready — so dropping this
+        // half would make the receipt claim CI is running when the ordinary
+        // lane is not.
+        assert!(
+            text.contains("still waits for it to be marked ready"),
+            "the {label} receipt no longer says the ordinary pull-request-event lane waits for \
+             the pull request to be readied: {text}"
+        );
+        assert!(
+            text.contains("ci.yml"),
+            "the {label} receipt names no publication lane at all: {text}"
+        );
+    }
+
+    // What each state says about a verdict, which is the thing the receipt is
+    // read for. `started` is the only one that may promise a run.
+    assert!(
+        note(&LaneDispatch::Started).contains(
+            "was started against this head as this receipt was recorded, and an accepted verdict \
+             cannot be recorded until it is green"
+        ),
+        "a started lane does not tell the reviewer a verdict waits on it: {}",
+        note(&LaneDispatch::Started)
+    );
+    for (label, lane) in [
+        ("absent", LaneDispatch::Absent("HTTP 404".to_owned())),
+        ("unknown", LaneDispatch::Unknown("no such host".to_owned())),
+    ] {
+        let text = note(&lane);
+        assert!(
+            !text.contains("was started against this head"),
+            "the {label} receipt claims a lane run that this publication did not start, which is \
+             the receipt disagreeing with the answer beside it one state along: {text}"
+        );
+    }
+    assert!(
+        note(&LaneDispatch::Absent("HTTP 404".to_owned()))
+            .contains("no publication lane and verdicts are not gated on one"),
+        "a repository with no lane is not told its verdicts are ungated, so its reviewers wait \
+         for a run that will never appear"
+    );
+    assert!(
+        note(&LaneDispatch::Unknown("no such host".to_owned()))
+            .contains("read the checks on this head before obtaining verdicts"),
+        "an unknown dispatch is reported as if it were an answer"
+    );
+}
+
 /// The refusal names a run somebody can actually watch, or names none.
 ///
 /// A `gh run watch` with the wrong number is a dead end, and this repository

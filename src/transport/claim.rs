@@ -2184,6 +2184,7 @@ fn publish_with(
         body_text.as_deref(),
         reused,
         target,
+        &lane,
     )
     .map_err(|failure| {
         match failure {
@@ -2367,14 +2368,21 @@ fn after_rewriting_the_pr(failure: Failure, wrote: PullRequestWrites) -> Failure
                 // one commit earlier: replacing the action destroys the only
                 // sentence that names a way forward.
                 //
-                // The one `Stop` that reaches here is the pre-push renewal —
-                // `edit_pr` and `push_to_origin` fail as `Read` or `Write` and
-                // never as `Stop`, which is the half that matters and the half
-                // this said too narrowly: `super::run` answers `Read` when the
-                // process cannot spawn, whatever `How` it was given. Both land in
-                // one arm below, so nothing behaves differently — and a sentence
-                // narrower than the code is still a sentence that will be
-                // believed. And two of
+                // Two `Stop`s reach here: the pre-push renewal, and
+                // `publication-lane-forbidden` from the dispatch that sits
+                // between the push and the receipt. `edit_pr` and
+                // `push_to_origin` fail as `Read` or `Write` and never as
+                // `Stop`, which is the half that matters and the half this said
+                // too narrowly twice — first by claiming they could `Stop`
+                // (`super::run` answers `Read` when the process cannot spawn,
+                // whatever `How` it was given), then by counting the renewal as
+                // the *only* one after a second `Stop` had been added a few
+                // lines above `published`. Both times nothing behaved
+                // differently, because they all land in one arm below — and both
+                // times a sentence narrower than the code was still a sentence
+                // that would be believed. The lane refusal already carries
+                // `world: "committed"` and an action naming the permission to
+                // grant, so appending is exactly right for it too. And two of
                 // that renewal's five actions carry instructions this frame does
                 // not have. *"nobody holds it: claim it again before writing"* is
                 // the one a lapsed horizon gets, and twenty lines of comment above
@@ -2591,6 +2599,11 @@ fn published(
     body_text: Option<&str>,
     reused: Option<serde_json::Value>,
     target: serde_json::Value,
+    // What starting the publication lane answered, because the receipt this
+    // writes has to say it. The dispatch happens immediately above this call,
+    // so a receipt that describes CI without it describes the world as it was
+    // one line earlier — see [`publication_note`].
+    lane: &LaneDispatch,
 ) -> Result<serde_json::Value, Failure> {
     let (pr, created) = match reused {
         Some(pr) => (pr, false),
@@ -2736,12 +2749,17 @@ fn published(
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
     let epoch = publication_epoch(run_id, number, head, base_oid, digest);
-    let note = format!(
-        "Published draft for review: {url}\n\n- epoch `{epoch}`\n- head `{head}`\n- base `{base_oid}`\n- target `{digest}`\n\nReview is bound to this complete clean target. CI remains blocked while the PR is draft; any republish creates a new epoch.\n\n{}\n",
+    let note = publication_note(
+        url,
+        &epoch,
+        head,
+        base_oid,
+        digest,
+        lane,
         // A marker that will not render is a comment that carries no evidence,
         // and posting the prose without it would leave a note nobody can read
         // back as a fact. Refused rather than posted half.
-        super::markers::render(
+        &super::markers::render(
             "published",
             &[
                 ("run-id", run_id),
@@ -2752,9 +2770,7 @@ fn published(
                 ("epoch", &epoch),
             ],
         )
-        .ok_or_else(|| {
-            Failure::Write("the published marker could not be rendered".to_owned())
-        })?
+        .ok_or_else(|| Failure::Write("the published marker could not be rendered".to_owned()))?,
     );
     super::commands::comment_with_body(context, issue, &note)?;
 
@@ -2788,6 +2804,70 @@ fn published(
         );
     }
     Ok(answer)
+}
+
+/// The publication receipt's prose, for one epoch and the lane it got.
+///
+/// **Pure, and separate from [`published`], because nothing read this text.**
+/// It is the sentence every blind reviewer and every resuming run sees, and it
+/// went stale inside the very change that made it wrong: the publication lane
+/// is dispatched immediately above `published`, so a single call answered
+/// `"publication_lane": "started"` — with a note saying an accepted verdict
+/// waits on that run — while the comment it posted beside it said *"CI remains
+/// blocked while the PR is draft"*. A reviewer told CI is blocked has no reason
+/// to look at the lane, and reads a `publication-lane-unfinished` refusal as a
+/// malfunction rather than as the documented gate.
+///
+/// It escaped review because the four contract sentences that had to move were
+/// found by grepping documents, and this fifth one is **emitted at run time**
+/// where no such grep could see it. `src/transport/claim/tests.rs` now reads it.
+///
+/// The two lanes are said apart, because conflating them is what let the old
+/// sentence read as true. The **publication** lane is the `workflow_dispatch`
+/// this operation just started against the pushed head, and it is what an
+/// accepted verdict waits on. The ordinary **pull-request-event** lane is the
+/// one that still does not run until the pull request is marked ready. Saying
+/// only the second left a reviewer nothing to look at.
+///
+/// A function of the lane rather than one sentence, because three of the four
+/// states reach here and they are not the same fact. Claiming a run was started
+/// for a repository that has no dispatchable lane would be the same defect one
+/// state along — a receipt disagreeing with the answer returned beside it.
+fn publication_note(
+    url: &str,
+    epoch: &str,
+    head: &str,
+    base: &str,
+    digest: &str,
+    lane: &LaneDispatch,
+    marker: &str,
+) -> String {
+    let ci = match lane {
+        LaneDispatch::Started => format!(
+            "One run of `{PUBLICATION_LANE_WORKFLOW}` was started against this head as this \
+             receipt was recorded, and an accepted verdict cannot be recorded until it is green."
+        ),
+        LaneDispatch::Absent(_) => format!(
+            "This repository has no dispatchable `{PUBLICATION_LANE_WORKFLOW}`, so this epoch has \
+             no publication lane and verdicts are not gated on one."
+        ),
+        LaneDispatch::Unknown(_) => format!(
+            "Starting `{PUBLICATION_LANE_WORKFLOW}` against this head did not answer, so whether \
+             this epoch has a publication lane is unknown \u{2014} read the checks on this head \
+             before obtaining verdicts."
+        ),
+        // Returned before `published` is ever called, and matched rather than
+        // absorbed for the same reason the report arm above it is: adding a
+        // value to the enum should be a compile error here, not a state that
+        // silently inherits somebody else's sentence.
+        LaneDispatch::Forbidden(_) => format!(
+            "The publication lane `{PUBLICATION_LANE_WORKFLOW}` could not be started for this \
+             head, so nothing will answer for these bytes."
+        ),
+    };
+    format!(
+        "Published draft for review: {url}\n\n- epoch `{epoch}`\n- head `{head}`\n- base `{base}`\n- target `{digest}`\n\nReview is bound to this complete clean target. {ci} The pull request stays draft, so the ordinary pull-request-event lane still waits for it to be marked ready; any republish creates a new epoch.\n\n{marker}\n"
+    )
 }
 
 fn publication_epoch(run_id: &str, pr: u64, head: &str, base: &str, digest: &str) -> String {
