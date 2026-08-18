@@ -53,6 +53,12 @@ were the target's, so neither verdict is a reading of the bytes that were publis
 be reproduced. A panel that cannot be given one such directory per judge runs fewer judges; it does
 not share one.
 
+A judge that finds the target already dirty **stops and reports it rather than restoring it**. Whatever
+made it dirty was somebody's measurement in progress, and restoring is a write like any other: it
+destroys that measurement, races whoever else is repairing the same directory, and leaves the head that
+gets delivered as whatever survived. Reporting a dirty target costs one verdict. Quietly repairing it
+costs the evidence that anything was wrong.
+
 Where those directories come from is not decided here. [Repository delivery](../references/repository-delivery.md)
 already owns run isolation — checkout paths, what makes a checkout this run's own, and per-checkout
 caches — and this rule adds a reason to obey that document rather than a second copy of it.
