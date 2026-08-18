@@ -4009,7 +4009,17 @@ fn git_hook(event: harness::hook::Event) -> Result<(), Refusal> {
             // Still let through — not blocking every push is the stated stance
             // at this boundary, twenty lines above. Doing it without a word is
             // not the same stance.
-            let decision = harness::guard::decide(&context, &repo_dir);
+            let adjudication = harness::guard::adjudicate_action(
+                &context,
+                &repo_dir,
+                &harness::Action::Boundary {
+                    command: "git push".to_owned(),
+                    pr: None,
+                    local_fast_forward_target: None,
+                },
+                harness::Sensitivity::Boundary,
+            );
+            let harness::guard::Adjudication { decision, holder } = adjudication;
             // And when it decided nothing, whether it *could* have.
             //
             // Asked after the decision, not before: the guard works off the run
@@ -4051,10 +4061,7 @@ fn git_hook(event: harness::hook::Event) -> Result<(), Refusal> {
             // checkout rather than by a session. `note` returns without writing
             // for `Outside`, which is why asking for a holder here is safe: when
             // there is nothing to record there was no holder either.
-            let run_id = harness::guard::holders_of(&context.state_root, &repo_dir)
-                .first()
-                .map(|run| run.run_id.clone())
-                .unwrap_or_default();
+            let run_id = holder.unwrap_or_default();
             harness::hook::note(
                 &context,
                 &run_id,
@@ -4779,7 +4786,7 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
         }
     }
     let (action, how) = harness::classify_with(tool, &parsed, &context.boundaries);
-    let decision = match run_id {
+    let (decision, recorded) = match run_id {
         Some(run_id) => {
             let mut run = harness::session::load(&context.state_root, run_id);
             let decided = harness::gate(&context, &mut run, &action, how);
@@ -4799,10 +4806,17 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
                 // costs one extra read and must never become a denial.
                 let _ = harness::session::store(&context.state_root, &run);
             }
-            decided
+            (decided, run_id.to_owned())
         }
         // No session to ask with, so ask the checkout instead.
-        None => harness::guard::decide_action(&context, &context.repo_dir, &action, how),
+        None => {
+            let adjudication =
+                harness::guard::adjudicate_action(&context, &context.repo_dir, &action, how);
+            (
+                adjudication.decision,
+                adjudication.holder.unwrap_or_default(),
+            )
+        }
     };
     // Recorded, because for one adapter this **is** the gate: OpenCode's plugin
     // shells out to exactly this command, so a decision that never reaches the
@@ -4812,15 +4826,16 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
     //
     // Under the run this decision was made for, or under the checkout's holder
     // when no run was named — the same identity the decision itself used.
-    let recorded = match run_id {
-        Some(run_id) => run_id.to_owned(),
-        None => harness::guard::holders_of(&context.state_root, &context.repo_dir)
-            .into_iter()
-            .next()
-            .map_or_else(String::new, |run| run.run_id),
-    };
     if !recorded.is_empty() {
-        harness::hook::note(&context, &recorded, tool, action.subject(), &decision, &[]);
+        let subject = action.subject();
+        harness::hook::note(
+            &context,
+            &recorded,
+            tool,
+            subject.as_deref(),
+            &decision,
+            &[],
+        );
     }
     // `--json` is global and every other command honours it. This one did not,
     // and it is the command a program calls: the OpenCode plugin shells out to
