@@ -76,30 +76,59 @@ fn a_device_name_is_refused_however_it_is_dressed() {
 
 #[test]
 fn a_branch_only_template_is_migrated_to_a_sibling_and_not_a_child() {
-    let (scoped, migrated) = run_scoped_template("/w/<repo>/<branch>");
+    let (scoped, migrated) = scoped_template("/w/<repo>/<branch>");
     assert!(migrated);
     assert_eq!(scoped, "/w/<repo>/<branch>~<run-id>");
     // A sibling: the legacy path is neither a parent of nor a child of it.
     assert!(!scoped.starts_with("/w/<repo>/<branch>/"));
 
     // A trailing separator does not produce an empty segment.
+    assert_eq!(scoped_template("/w/<branch>/").0, "/w/<branch>~<run-id>");
     assert_eq!(
-        run_scoped_template("/w/<branch>/").0,
-        "/w/<branch>~<run-id>"
-    );
-    assert_eq!(
-        run_scoped_template("C:\\w\\<branch>\\").0,
+        scoped_template("C:\\w\\<branch>\\").0,
         "C:\\w\\<branch>~<run-id>"
     );
 
-    // Already run-scoped: untouched, wherever the placeholder sits.
-    for already in ["/w/<run-id>", "/w/<run-id>/<branch>", "<run-id>"] {
+    // Already scoped in **both** dimensions: untouched, wherever the
+    // placeholders sit. This list used to hold `/w/<run-id>` and `<run-id>`
+    // too, on the grounds that a run-scoped template was already scoped — which
+    // is the defect of issue #27 written into a test. A template naming the run
+    // and not the branch gives every branch of one run the same directory, so
+    // it is exactly as unmigrated as a branch-only one.
+    for already in ["/w/<run-id>/<branch>", "<branch>~<run-id>"] {
         assert_eq!(
-            run_scoped_template(already),
+            scoped_template(already),
             (already.to_owned(), false),
             "{already:?} was migrated twice"
         );
     }
+
+    // And the other half of the same rule: a run-scoped template with no branch
+    // gains one, as a sibling, for the reason the branch-only case gains a run.
+    // The sibling matters more here — the legacy path is a checkout this run
+    // owns, so a nested child would be a worktree inside a worktree.
+    for (template, expected) in [
+        ("/w/<run-id>", "/w/<run-id>~<branch>"),
+        ("<run-id>", "<run-id>~<branch>"),
+    ] {
+        let (scoped, migrated) = scoped_template(template);
+        assert!(migrated, "{template:?} was left colliding");
+        assert_eq!(scoped, expected);
+        assert!(
+            !scoped.starts_with(&format!("{template}/")),
+            "the migration nested the new checkout inside the legacy one"
+        );
+    }
+
+    // A template naming neither gains both, and the run stays outermost.
+    assert_eq!(
+        scoped_template("/w/<repo>"),
+        ("/w/<repo>~<branch>~<run-id>".to_owned(), true)
+    );
+    assert_eq!(
+        scoped_template(r"H:\REPO\worktree\estigia").0,
+        r"H:\REPO\worktree\estigia~<branch>~<run-id>"
+    );
 }
 
 #[test]

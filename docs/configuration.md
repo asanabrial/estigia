@@ -24,7 +24,7 @@ estigia config set "Merge strategy" squash
 | Review delegation | `auto`, `ask`, or `ask` with a duration such as `ask 30m` |
 | Transition authorisation | `auto`, `ask`, or `ask` with a duration such as `ask 30m` |
 | Merge strategy | `merge commit`, `squash`, or `rebase` |
-| Worktree location | `unset`, or an absolute directory |
+| Worktree location | `unset`, or an absolute directory — `<repo>`, `<branch>`, `<run-id>` and `<issue>` are substituted, and a template not naming `<branch>` or `<run-id>` gains it in memory so two checkouts never share a directory |
 | Tracker | `github`, `github <owner>/<name>`, `linear`, or `trello` — only `github` has an executable |
 | Planning | `direct`, `sdd`, `sdd lite`, `sdd openspec`, or `sdd lite openspec` — `sdd` makes the phases available, and `protocols/sdd.md` engages them per change on ambiguity; `auto` is accepted as a spelling of `sdd` |
 | Model routing | `unset`, or comma-separated `key=model` pairs. A key is a delegated role (`implementer`, `reviewer`, `judge`), a workflow state (`analysis`, `ready`, `in-progress`, `review`, `blocked`, `done`), a phase of thinking (`explore`, `propose`, `spec`, `design`, `tasks`, `apply`, `orchestrate`), or a sub-agent somebody's orchestrator spawns (`strategist`, `analyst`, `builder`, `refactorer`, `validator`, `auditor`) — Estigia spawns none of these and does not run models; this is a declaration the agent reads |

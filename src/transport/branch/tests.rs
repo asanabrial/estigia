@@ -811,94 +811,105 @@ fn a_legacy_worktree_git_lists_but_nobody_left_behind_is_not_a_stop() {
 }
 
 #[test]
-fn one_runs_second_issue_gets_its_own_checkout_and_still_refuses_another_branchs() {
-    // The isolated checkout's directory was composed from the **run id** and
-    // not the branch, so a run that finished one issue and started the next was
-    // handed the directory its own first checkout was already in. The refusal
-    // it met — `worktree-path-occupied` — was correct for what it could see;
-    // what was wrong is that two branches of one run were ever asked to share a
-    // path. Measured 2026-08-15 by run `claude-81d69d3e372497b6` after
-    // delivering issue #1: the configured template was `<root>/<repo>/<branch>`
-    // and what got created was `<root>/<repo>~<run-id>`, with the branch
-    // nowhere in it. Every run working a queue hit it on its second issue, and
-    // the workaround was the one action the refusal tells an operator not to
-    // take lightly.
+fn a_runs_second_issue_gets_its_own_checkout_from_the_template_an_operator_writes() {
+    // Issue #27: the checkout's directory carried the run and not the branch,
+    // so a run working a queue met the checkout it made for its previous issue
+    // and was refused `worktree-path-occupied` — correct for what the check
+    // could see, wrong that two branches of one run were asked to share a path.
     //
-    // The composition is fixed, and two unit tests next door hold its halves —
-    // the migration to a sibling, and `~` making the composed name
-    // unambiguous. Neither holds the **sequence**, which is the shape the
-    // defect actually had. This does: it composes both paths the way
-    // `start_branch` composes them, then asks the occupancy check the question
-    // it was asked on the second issue.
-    const TEMPLATE: &str = "/w/<repo>/<branch>";
+    // The first attempt at this test picked `/w/<repo>/<branch>` and proved
+    // nothing: a template that already names the branch is the one shape that
+    // cannot exhibit the defect. So the templates here are the ones an operator
+    // actually writes. `docs/configuration.md` documents the accepted value as
+    // "an absolute directory" and names no placeholder at all, and the skill
+    // ships the row `unset` — a bare directory is the ordinary answer, and it is
+    // the shape that collides in both dimensions at once.
     let run = "claude-81d69d3e372497b6";
-    let (scoped, migrated) = crate::transport::worktree::run_scoped_template(TEMPLATE);
-    assert!(
-        migrated,
-        "the operator's branch-only template was not run-scoped"
-    );
-    let path_of = |branch: &str, issue: u64| {
+    let path_of = |template: &str, branch: &str, issue: u64| {
+        let (scoped, migrated) = crate::transport::worktree::scoped_template(template);
+        assert!(migrated, "{template:?} was left as it was");
         crate::transport::worktree::worktree_path(&scoped, "estigia", branch, run, issue)
             .expect("a path is composed")
     };
 
-    let first = path_of("fix/1-publish-review", 1);
-    let second = path_of("fix/2-closed-issue-gates", 2);
-    assert_ne!(
-        first, second,
-        "a run's second issue was handed the checkout it made for its first"
-    );
-    // Named rather than merely different: what keeps two tasks of one run apart
-    // is the branch, and a path that differed for any other reason would pass
-    // the assertion above while leaving the defect in place.
-    for (path, branch) in [
-        (&first, "fix-1-publish-review"),
-        (&second, "fix-2-closed-issue-gates"),
+    for template in [
+        // The reproduction on issue #27, verbatim.
+        r"H:\REPO\worktree\estigia",
+        "/w/<repo>",
+        // Run-scoped and branch-less: the half that was never migrated, and the
+        // one whose legacy directory is a checkout this run owns.
+        "/w/<repo>~<run-id>",
     ] {
-        assert!(
-            path.to_string_lossy().contains(branch),
-            "{branch} is not in the path composed for it: {}",
-            path.display()
+        let first = path_of(template, "fix/1-publish-review", 1);
+        let second = path_of(template, "fix/2-closed-issue-gates", 2);
+        assert_ne!(
+            first, second,
+            "{template:?}: a run's second issue was handed the checkout it made for its first"
         );
+        // Named, not merely different: the branch is what keeps two tasks of one
+        // run apart, and a path differing for any other reason would satisfy the
+        // assertion above while leaving the defect standing.
+        for (path, slug) in [
+            (&first, "fix-1-publish-review"),
+            (&second, "fix-2-closed-issue-gates"),
+        ] {
+            assert!(
+                path.to_string_lossy().contains(slug),
+                "{template:?}: {slug} is not in the path composed for it: {}",
+                path.display()
+            );
+        }
+        // Both still name the run, so two runs of one branch stay apart too —
+        // the dimension that already worked must not be traded for this one.
+        for path in [&first, &second] {
+            assert!(
+                path.to_string_lossy().contains(run),
+                "{template:?}: the run scope was lost: {}",
+                path.display()
+            );
+        }
     }
 
-    // And the sequence, through the check that refused it. The first checkout
-    // exists and is registered to its branch; the second must read as fresh,
-    // not as somebody's occupied directory.
-    let root = std::env::temp_dir().join("estigia-second-issue-probe");
-    let _ = std::fs::remove_dir_all(&root);
-    let held = root.join("first");
-    std::fs::create_dir_all(&held).expect("the first issue's checkout");
-    let mut registry = std::collections::BTreeMap::new();
-    registry.insert(
-        normalise_path(&held),
-        Some("fix/1-publish-review".to_owned()),
-    );
-    let absent = root.join("second");
-    assert!(
-        !may_occupy(&absent, &registry, None, run, "fix/2-closed-issue-gates")
-            .expect("the second issue's path is free"),
-        "a run's second checkout was read as a resume of its first"
-    );
+    // And a template that names both is left exactly as the operator wrote it.
+    let (scoped, migrated) =
+        crate::transport::worktree::scoped_template("/w/<repo>/<branch>~<run-id>");
+    assert!(!migrated, "a fully scoped template was rewritten");
+    assert_eq!(scoped, "/w/<repo>/<branch>~<run-id>");
+}
 
-    // The other half of the acceptance criteria, and the reason this is not a
-    // relaxation: a directory that genuinely holds another branch is still
-    // refused. This is what the second issue used to be told about its own
-    // first checkout, and it must go on being told it when the directory really
-    // is somebody else's.
+#[test]
+fn a_directory_holding_another_branch_is_still_refused() {
+    // The other half of issue #27's acceptance criteria, and the reason the
+    // migration above is not a relaxation: separating two branches of one run
+    // must not make the occupancy check any friendlier to a directory that
+    // genuinely holds somebody else's branch.
+    //
+    // Held next door too, by
+    // `each_way_a_worktree_can_fail_to_be_this_runs_is_refused_by_its_own_name`.
+    // This is the same rule asked at the end of the composition that used to
+    // collide, so that a future change to the path cannot quietly take the
+    // refusal with it.
+    let root = tempfile::tempdir().expect("a fixture root");
+    let (scoped, _) =
+        crate::transport::worktree::scoped_template(root.path().to_string_lossy().as_ref());
+    let run = "claude-81d69d3e372497b6";
+    let first = crate::transport::worktree::worktree_path(&scoped, "estigia", "fix/1-a", run, 1)
+        .expect("the first issue's path");
+    std::fs::create_dir_all(&first).expect("the first issue's checkout exists");
+
+    let mut registered = std::collections::BTreeMap::new();
+    registered.insert(normalise_path(&first), Some("fix/1-a".to_owned()));
     assert_eq!(
         reason(
             may_occupy(
-                &held,
-                &registry,
+                &first,
+                &registered,
                 Some(&serde_json::json!({"run_id": run, "issue": 2})),
                 run,
-                "fix/2-closed-issue-gates"
+                "fix/2-b"
             )
-            .expect_err("another branch's checkout")
+            .expect_err("a directory holding another branch")
         ),
         "worktree-path-occupied"
     );
-
-    let _ = std::fs::remove_dir_all(&root);
 }

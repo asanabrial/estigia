@@ -376,15 +376,27 @@ directory to the OS and two keys to us. Reserved device names (`con`, `nul`, `co
 **every** substituted component, because they name a device rather than a directory in any case and
 with any extension.
 
-**What the path must guarantee is that no two live runs share a directory.** Every template is now
-made to carry that guarantee: one without `<run-id>` is migrated **in memory** to a run-scoped
-sibling — `…/<branch>` becomes `…/<branch>~<run-id>` — and `estigia.local.md` is never rewritten. A
-transport command that silently edits the operator's own policy file is a worse failure than the one
-it fixes, and that file may be shared across machines where the migration is not wanted. The result
-reports `template_migrated` so the substitution is visible rather than assumed.
+**What the path must guarantee is that no two live checkouts share a directory — across runs and
+across branches.** Those are two dimensions and a template missing either one collides. Without
+`<run-id>` every run of a branch lands in the same directory; without `<branch>` every branch of one
+run does, so a run working a queue meets the checkout it made for its previous issue on its second
+issue, every time.
 
-A sibling and not a child (`…/<branch>/<run-id>`), so that a legacy checkout is neither a parent nor
-a child of the new one — runs colliding inside a directory another run owns is the entire defect.
+Every template is now made to carry both: a missing placeholder is added **in memory** as a sibling —
+`…/<branch>` becomes `…/<branch>~<run-id>`, `…/<run-id>` becomes `…/<run-id>~<branch>`, and a template
+naming neither becomes `…~<branch>~<run-id>`. `estigia.local.md` is never rewritten: a transport
+command that silently edits the operator's own policy file is a worse failure than the one it fixes,
+and that file may be shared across machines where the migration is not wanted. The result reports
+`template_migrated` so the substitution is visible rather than assumed.
+
+This matters most for the template an operator is likeliest to write. The `Worktree location` row
+accepts *"an absolute directory"* and the skill ships it `unset`, so a bare path with no placeholder
+in it is the ordinary answer — and it is the one shape that collides in both dimensions at once.
+
+A sibling and not a child, so that a legacy checkout is neither a parent nor a child of the new one:
+colliding inside a directory somebody else owns is the entire defect. The branch dimension needs that
+more sharply than the run one — a run-scoped legacy path **is** a checkout that run owns, so nesting
+the new one under it would put a worktree inside a worktree.
 
 **The migration joins the two halves with `~`, and that is not cosmetic.** Joining with `-` makes
 the composed name ambiguous even though each half is unambiguous on its own: branch `fix/6` with run

@@ -940,7 +940,7 @@ pub fn start_branch(
 
     // The path is resolved next. Everything here can refuse, and refusing
     // before the first remote mutation is the whole ordering guarantee.
-    let (scoped, migrated) = worktree::run_scoped_template(template);
+    let (scoped, migrated) = worktree::scoped_template(template);
     let resolved = worktree::worktree_path(
         &scoped,
         what.repo_name,
