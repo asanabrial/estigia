@@ -505,6 +505,19 @@ suite. Everything else here is prose held by review.
   contracts, not observations the harness can make. The enforced floor remains
   one aggregate exact-receipt verdict: the transport has no per-judge marker and does not implement structured
   multi-verdict adjudication.
+- **Estigia cannot make a person decide or start a turn.** For an exceptional human-adjudication
+  wait it can preserve the built branch, PR, receipt, checks, and evidence, and record `blocked`
+  with the exact decision or exit condition and discharger before ownership is released. That
+  durable record is not a scheduler, notification guarantee, or decision; only the named person can
+  discharge it. An ordinary delivery-evidence wait is not this case: missing review, CI,
+  current-head/base evidence, or delivery permission stays in `review` with its exact blocker, even
+  when a named person must supply the permission. **The projection can still hide it.** Estigia's own
+  state is authoritative, so no agent misroutes — but Linear has no native `blocked`, and the binding
+  creates one as a state *named* `Blocked` whose *type* is `unstarted`. Built, published work with an
+  open pull request therefore projects into the type Linear's own grouping and velocity views read as
+  not begun. That is I09's buried-work failure reappearing one layer down, in the projection rather
+  than in the routing, and nothing here measures it. Found by the blind reviewer of receipt
+  `8c862a3e79bc771fcdbea6dfee1eb508` against `skill/bindings/linear.md`.
 - **One review-protocol readback is held by no test, and one is held only by a string search.** The
   review protocol's guards were mutated one at a time — each disabled, the whole suite run, the tree
   restored from a byte copy. Held by a test that goes red: all three enforcement points of the

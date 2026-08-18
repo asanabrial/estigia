@@ -158,7 +158,10 @@ green. A repository that requires the exact delivered revision also runs its pos
 
 Never bypass a failed gate, missing permission, conflicting rule, or unavailable reviewer. Published
 work that cannot be delivered remains review work with the exact blocker, expected condition, and
-next owner recorded.
+next owner recorded, including ordinary delivery permission supplied by a named person. The exception
+is exceptional human adjudication outside the ordinary review, CI, identity, and delivery-permission
+gates: preserve the branch, PR, receipt, checks, and evidence, then follow the `blocked` decision-wait
+procedure in `SKILL.md` before releasing ownership.
 
 ## Merge and publish versions
 
@@ -184,7 +187,8 @@ Choose handoff state from evidence:
 |---|---|
 | The issue premise or acceptance criteria are wrong | Analysis, with the contradiction and evidence |
 | Nothing is built and an external condition must change | Blocked, with the condition and discharger |
-| Work is built or published but cannot ship | Review, with branch/review target, checks, and blocker |
+| Work is built or published but cannot ship on ordinary delivery evidence | Review, with branch/review target, checks, and blocker |
+| Built work awaits exceptional human adjudication outside ordinary delivery gates | Blocked, with the preserved delivery record, exact decision or exit condition, and discharger |
 | Diagnosis is useful but no fix exists | Ready, with hypotheses tested and the narrowed next step |
 
 Do not discard another run's branch, diagnosis, measurements, or ruled-out hypotheses. Record all of
