@@ -26,9 +26,12 @@ the workflow, it holds the tools.
   propagates a machine row exactly as it propagates a repository one, the per-agent form refuses it
   and names the command that holds it, and `doctor`'s `canonical` row offers that command instead of
   the sentence saying nothing cleared it — a fork that existed only to describe the gap, removed
-  with it. `shadowed()` no longer names a local override it did not find: where the table took a
-  value and the row still reads as something else with no `estigia.local.md` beside it, the refusal
-  is `setting-not-read-back` and it says what was observed rather than naming a cause it cannot see.
+  with it. `config set --repo` refuses a machine row saying it is a fact about the machine rather
+  than what one agent does, and points at the command that holds it instead of at `--agent`, which
+  is the refusal one command later. The three `shadowed*` refusals no longer name a local override
+  they did not find: one lookup answers `Option` for all of them, and where there is no
+  `estigia.local.md` the refusal is `setting-not-read-back`, saying what was observed rather than
+  naming a cause it cannot see.
 
 - `Blind judges` now has canonical `five blind` beside `single` and `two blind`, with `single` still
   the default. Five independent reviewer contexts run concurrently over the identical immutable

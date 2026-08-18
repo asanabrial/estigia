@@ -11336,6 +11336,43 @@ fn a_fact_about_this_machine_reaches_every_contract_and_cannot_be_set_per_agent(
         out.contains("other installed contract"),
         "a machine row reached one contract and said nothing about the rest: {out}"
     );
+    // And it says which kind of fact it just spread. The sentence was hardcoded
+    // "a fact about this repository" and printed for both, so the tool answered
+    // one question two ways in its own output — the row is about the machine
+    // where it refuses, about the repository where it succeeds.
+    assert!(
+        out.contains("fact about this machine"),
+        "the propagation sentence calls a machine row something else: {out}"
+    );
+
+    // `--repo` refuses it, and names a command that works. It used to send the
+    // operator to `--agent`, which is the refusal one command later: a dead end,
+    // which this repository's rules call worse than naming nothing.
+    let checkout = tempfile::tempdir().expect("a temporary checkout");
+    std::fs::create_dir(checkout.path().join(".git"))
+        .expect("something that looks like a checkout");
+    let (_, stderr, ok) = run_in(
+        home.path(),
+        checkout.path(),
+        &["config", "set", "--repo", "Summary language", "English"],
+        "",
+    );
+    assert!(
+        !ok,
+        "a machine row was written as a fact about one repository"
+    );
+    assert!(
+        stderr.contains("setting-not-the-repositorys"),
+        "the wrong refusal: {stderr}"
+    );
+    assert!(
+        stderr.contains("this machine"),
+        "the refusal still says a machine row is what one agent does: {stderr}"
+    );
+    assert!(
+        !stderr.contains("`--agent <agent>` instead"),
+        "the refusal points at the door that refuses it too: {stderr}"
+    );
 
     // Every installed contract, not just the one that answered first. Read
     // through `config list --agent`, because that is the question a run asks.
