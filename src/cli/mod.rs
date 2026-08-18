@@ -3203,13 +3203,30 @@ fn config_set(
         // it — and once the agent is told to read that file too, the agent and
         // the gate disagree about which tracker they are talking to.
         //
+        // A repository row and a machine row are both *not per agent*, and this
+        // door named only the first. `Scope::Machine` fell straight through it:
+        // the write landed in a per-agent file, `render_some_agent_rows`
+        // intersects those rows with `AGENT_SETTINGS` and dropped it on the way
+        // out, and the command then answered `setting-shadowed-by-local-file` —
+        // blaming an operator file that need not exist in that root at all. So
+        // two agents on one machine could be left answering a question that has
+        // one answer differently, with no command that made them agree.
+        //
         // Knowable from the command line, so it is settled before anything on
         // disk is read, like the two checks around it.
-        if setting.scope() == crate::config::Scope::Everywhere {
+        if setting.scope() != crate::config::Scope::Agent {
+            let about = match setting.scope() {
+                crate::config::Scope::Everywhere => "this repository",
+                // A person writes in one language across every checkout they
+                // have — `Scope::Machine`'s own words. What makes the row
+                // un-per-agent is that they are one person whichever agent is
+                // holding the tools.
+                _ => "this machine",
+            };
             return Err(Refusal::not_started(
                 "setting-not-per-agent",
                 format!(
-                    "{} is a fact about this repository, not about one agent",
+                    "{} is a fact about {about}, not about one agent",
                     setting.label()
                 ),
                 Resolution::run(format!(
@@ -3353,7 +3370,13 @@ fn config_set(
     // configuration each of them already holds, rather than copying one over
     // the rest. And a contract that will not read back is left alone — nothing
     // can preserve what it could not read.
-    let (spread, unread) = if setting.scope() == crate::config::Scope::Everywhere {
+    // A machine row spreads for the same reason a repository row does, and it
+    // used to be left behind here because the condition named one scope where
+    // two belong. `Scope::Machine` is a fact about the person at this keyboard,
+    // so a root that goes on answering something else is exactly the divergence
+    // `doctor`'s `canonical` row reports — and, before this, reported with no
+    // way out to offer.
+    let (spread, unread) = if setting.scope() != crate::config::Scope::Agent {
         elsewhere(&contract, setting, value)?
     } else {
         (0, Vec::new())
@@ -3550,9 +3573,15 @@ fn shadowed(
     written: &Config,
     effective: &Config,
 ) -> Refusal {
-    let shadow = skill::local_override(root)
-        .map(|path| path.display().to_string())
-        .unwrap_or_else(|| "the local override".to_owned());
+    // Only when there is one. This used to fall back to the words "the local
+    // override" and blame it anyway, so a row that read back wrong for any
+    // other reason was reported as an operator file overriding it, and the
+    // resolution sent somebody to edit a file that was not there. Naming a
+    // cause the tool cannot see is the same failure as reporting a state it
+    // did not read back.
+    let Some(shadow) = skill::local_override(root).map(|path| path.display().to_string()) else {
+        return unexplained_readback(root, setting, written, effective);
+    };
     Refusal {
         code: "setting-shadowed-by-local-file",
         message: format!(
@@ -3568,6 +3597,44 @@ fn shadowed(
             format!(
                 "that row changed or removed in {shadow} — it is the operator's file, and Estigia will not edit it"
             ),
+        ),
+    }
+}
+
+/// The refusal for a row that read back wrong with nothing there to explain it.
+///
+/// [`shadowed`]'s sibling for the case it used to absorb: the table took the
+/// value, the row still reads as something else, and no `estigia.local.md` sits
+/// beside it. Why is unknown here, so this says what was observed and stops.
+/// The alternative was a sentence naming a file, which reads as a diagnosis and
+/// sent an operator to edit something that does not exist.
+///
+/// No command, because none is known to clear it. `config list` is what shows
+/// where the answer comes from, so it is named as knowledge rather than as a
+/// fix — the rule this crate keeps about naming commands is that running one
+/// has to clear the block.
+fn unexplained_readback(
+    root: &std::path::Path,
+    setting: crate::config::Setting,
+    written: &Config,
+    effective: &Config,
+) -> Refusal {
+    Refusal {
+        code: "setting-not-read-back",
+        message: format!(
+            "{} was written as {} into the table under {}, and reads {} — and no local override \
+             is there to account for it",
+            setting.label(),
+            setting.value_of(written),
+            root.display(),
+            setting.value_of(effective)
+        ),
+        outcome: crate::outcome::MutationOutcome::Committed,
+        replay: crate::outcome::Replayability::NotReplayable,
+        resolution: Resolution::no_command(
+            crate::outcome::NoCommandReason::OperatorKnowledge,
+            "what answers that row instead — `estigia config list --agent <agent>` reports what \
+             each one reads",
         ),
     }
 }

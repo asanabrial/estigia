@@ -12,6 +12,24 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- A row about **this machine** now reaches every installed contract, and cannot be given a different
+  answer for one agent. `Setting::scope()` has three values and both write paths were written as
+  though it had two: the plain `config set` asked `elsewhere()` only for `Scope::Everywhere`, so
+  `Summary language` and `Issue body language` landed in the canonical contract and nowhere else;
+  and `config set --agent <slug>` refused an `Everywhere` row while accepting a `Machine` one it
+  could not hold, since a shared root's per-agent file is rendered through `render_some_agent_rows`
+  and read through `Scope::Agent` — the row was dropped on the way out and the command exited on its
+  own read-back, reporting `setting-shadowed-by-local-file` and blaming an operator file that need
+  not exist in that root at all. Two agents on one machine could therefore answer a question that
+  has one answer differently, with **no command that made them agree**, and nine of the eleven
+  adapters share the neutral root, so the unreachable case was the common one. The plain form now
+  propagates a machine row exactly as it propagates a repository one, the per-agent form refuses it
+  and names the command that holds it, and `doctor`'s `canonical` row offers that command instead of
+  the sentence saying nothing cleared it — a fork that existed only to describe the gap, removed
+  with it. `shadowed()` no longer names a local override it did not find: where the table took a
+  value and the row still reads as something else with no `estigia.local.md` beside it, the refusal
+  is `setting-not-read-back` and it says what was observed rather than naming a cause it cannot see.
+
 - `Blind judges` now has canonical `five blind` beside `single` and `two blind`, with `single` still
   the default. Five independent reviewer contexts run concurrently over the identical immutable
   target and criteria; a severe finding blocks or authorizes automatic repair only when 3-of-5

@@ -1044,19 +1044,19 @@ pub struct Divergence {
 /// lists rather than the three-valued question, so the two `Machine` rows were
 /// classified by falling off the end of it.
 ///
-/// **The resolution is chosen by that scope, because only one of them has a way
-/// out.** A repository row set with no `--agent` is written into every installed
-/// contract, so that command is named and clears it — measured. A machine row
-/// has no such command, and two rounds of review were spent discovering it: the
-/// plain form writes the canonical contract alone, because `elsewhere` is asked
-/// only for `Everywhere`; and the per-agent form cannot hold one either, because
-/// a shared root's per-agent file is rendered through `render_some_agent_rows`
-/// and read through `Scope::Agent`, so the row is dropped on the way out and the
-/// command exits on its own read-back. Four judges ran first one form and then
-/// the other, verbatim, and watched the row stay exactly as red. So that branch
-/// names **no** command and says why: naming a dead end is worse than naming
-/// nothing, and this crate's rules say so in as many words. The asymmetry itself
-/// is issue #62; this row is not the place to decide it.
+/// **Both faulty scopes are offered the same command, and that is new.** The
+/// resolution used to fork, because only one of them had a way out: a repository
+/// row set with no `--agent` was written into every installed contract, while a
+/// machine row had no command at all. Two rounds of review were spent
+/// establishing that — the plain form wrote the canonical contract alone because
+/// `elsewhere` was asked only for `Everywhere`, and the per-agent form could not
+/// hold one either, since a shared root's per-agent file is rendered through
+/// `render_some_agent_rows` and read through `Scope::Agent`, so the row was
+/// dropped on the way out and the command exited on its own read-back. Four
+/// judges ran first one form and then the other, verbatim, and watched the row
+/// stay exactly as red. That was issue #62, and both halves are now fixed: the
+/// plain form propagates a machine row, and the per-agent form refuses one. So
+/// the fork is gone rather than kept as a branch describing a closed gap.
 ///
 /// **Both halves are named in both branches.** They were not: the broken branch
 /// built its sentence from the faulty rows alone, so a deliberately-set
@@ -1163,31 +1163,17 @@ pub fn canonical(root: Option<&Path>, divergent: Option<&[Divergence]>) -> Check
         1 => " (one other agent diverges too)".to_owned(),
         many => format!(" ({many} other agents diverge too)"),
     };
-    // Which command clears this depends on the scope at odds, and a row about
-    // the machine is not written across roots by the plain form. Where both
-    // kinds are at odds, the narrower sentence is the one that holds for all of
-    // them, so it is the one printed.
-    let any_machine = at_odds
-        .iter()
-        .flat_map(|(_, rows)| rows.iter())
-        .any(|(setting, _, _)| setting.scope() == Scope::Machine);
-    let way_out = if any_machine {
-        // No command, because there is none. `config set` writes a machine row
-        // into the canonical contract alone, and the per-agent form cannot hold
-        // one at all: the shared root's per-agent file is rendered and read
-        // through the agent scope, so the row is dropped on the way out and the
-        // command exits on its own read-back. Two rounds of review were spent
-        // naming first one form and then the other, each measured leaving the
-        // row exactly as red as it found it. Saying so is worth more than a
-        // command that refuses — this crate's rules put it the other way round,
-        // that naming a dead end is worse than naming nothing.
-        "those rows made to agree \u{2014} and no command does that yet: `config set` writes a row \
-         about this machine into the root the gate decides in and nowhere else, and a shared root \
-         cannot hold one at all (issue #62)"
-    } else {
-        "those rows made to agree \u{2014} `estigia config set \"<row>\" \"<value>\"` with no \
-         `--agent` writes a row about the repository into every installed contract"
-    };
+    // One sentence for both faulty scopes, because there is now one answer.
+    // This used to fork: a repository row was offered the plain `config set`
+    // and a machine row was told, correctly at the time, that nothing cleared
+    // it — `elsewhere` was asked only for `Everywhere`, so the plain form wrote
+    // the canonical contract alone, and the per-agent form could not hold a
+    // machine row in a shared root either. Both halves are fixed (issue #62),
+    // so the fork went with them rather than staying as a branch describing a
+    // gap that is closed.
+    let way_out = "those rows made to agree \u{2014} `estigia config set \"<row>\" \"<value>\"` \
+                   with no `--agent` writes a row about the repository or about this machine into \
+                   every installed contract";
     Check {
         name: "canonical",
         about,
@@ -3994,13 +3980,14 @@ mod tests {
             other => panic!("a gate deciding by rows nobody reads was reported as {other:?}"),
         }
 
-        // A row about the machine is the fault too, and **no** command clears
-        // it. Two rounds of review were spent naming first the plain form and
-        // then the per-agent one, each measured leaving the row exactly as red:
-        // the first writes the canonical contract alone, and the second cannot
-        // hold a machine row in a shared root at all. So this branch names no
-        // command, which is the rule — naming a dead end is worse than naming
-        // nothing — and this is what holds it to that.
+        // A row about the machine is the fault too, and it now has the same way
+        // out. It did not: two rounds of review measured both forms leaving the
+        // row exactly as red, because the plain one wrote the canonical
+        // contract alone and the per-agent one could not hold a machine row in
+        // a shared root at all. Both halves are fixed (issue #62), so this
+        // asserts the command is named — and, below, that the sentence saying
+        // nothing clears it is gone. A report that goes on describing a closed
+        // gap sends an operator away from the command that works.
         let machine = canonical(
             Some(&root),
             Some(&[Divergence {
@@ -4017,16 +4004,16 @@ mod tests {
                 assert!(detail.contains("Summary language"), "{detail}");
                 let way_out = format!("{resolution}");
                 assert!(
-                    !way_out.contains("--agent"),
-                    "a machine row was offered a command that refuses: {way_out}"
+                    way_out.contains("config set \"<row>\""),
+                    "a machine row was not offered the command that now propagates it: {way_out}"
                 );
                 assert!(
-                    !way_out.contains("config set \"<row>\""),
-                    "a machine row was offered the command that does not propagate it: {way_out}"
+                    way_out.contains("with no `--agent`"),
+                    "the resolution does not say which form of the command holds it: {way_out}"
                 );
                 assert!(
-                    way_out.contains("no command does that yet"),
-                    "the row that has no way out does not say so: {way_out}"
+                    !way_out.contains("no command does that yet"),
+                    "the report still describes a gap that is closed: {way_out}"
                 );
             }
             other => panic!("a row about the machine differing was reported as {other:?}"),

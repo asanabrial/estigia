@@ -945,6 +945,23 @@ fn after_writing() -> Vec<Refusal> {
                 "that row changed or removed in the local file",
             ),
         },
+        // The third of the family, and the one that exists because the first
+        // used to absorb it: the table took the value, the row reads as
+        // something else, and no operator file is there to explain it. No
+        // command, because none is known — and it says what it saw rather than
+        // naming a cause it cannot see, which is what the first one did when it
+        // fell back to the words "the local override".
+        Refusal {
+            code: "setting-not-read-back",
+            message: "the row was written and reads as something else, with no override there"
+                .to_owned(),
+            outcome: crate::outcome::MutationOutcome::Committed,
+            replay: crate::outcome::Replayability::NotReplayable,
+            resolution: Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "what answers that row instead, which `estigia config list --agent <agent>` reports",
+            ),
+        },
         // The sibling above it is the operator's file and has no command; this
         // one is a file Estigia wrote, so there is one and it clears the block.
         Refusal {
@@ -4729,4 +4746,63 @@ fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
         "",
         "the call's argument was read as though the host had named it"
     );
+}
+
+#[test]
+fn a_row_that_reads_back_wrong_with_no_override_beside_it_blames_no_file() {
+    // `shadowed` ended in `unwrap_or_else(|| "the local override")`, so a row
+    // that read back wrong for any reason at all was reported as an operator
+    // file overriding it — and the resolution said to change "those rows" in a
+    // file that need not exist. That is a diagnosis the tool cannot make,
+    // dressed as one it did: the same failure as reporting a state nobody read
+    // back, in the sentence an operator acts on.
+    //
+    // Reached in the field through `config set --agent <slug> "Summary
+    // language"`, which is now refused at the door — so this holds the arm
+    // rather than the route to it, and it is worth holding for that reason: a
+    // branch nothing exercises is where a message goes back to naming a file.
+    let root = tempfile::tempdir().expect("a root with no local override");
+    assert!(
+        crate::skill::local_override(root.path()).is_none(),
+        "the fixture root already carries an override, so this proves nothing"
+    );
+
+    let setting = crate::config::Setting::Summary;
+    let mut written = Config::default();
+    setting
+        .apply(&mut written, "Spanish")
+        .expect("Spanish is an accepted answer");
+    let effective = Config::default();
+
+    let refusal = super::shadowed(root.path(), setting, &written, &effective);
+    assert_eq!(refusal.code, "setting-not-read-back");
+    let said = format!("{} {}", refusal.message, refusal.resolution);
+    assert!(
+        !said.contains("estigia.local.md"),
+        "a file that is not there was named as the cause: {said}"
+    );
+    assert!(
+        !said.contains("the local override overrides"),
+        "the placeholder sentence survived: {said}"
+    );
+    // What it may say is what it saw: both values, and where it looked.
+    assert!(
+        said.contains("Spanish") && said.contains(&root.path().display().to_string()),
+        "the refusal does not say what was written or where: {said}"
+    );
+
+    // And with an override actually there, the old sentence is still the right
+    // one — this narrows the message, it does not remove it.
+    let with_file = tempfile::tempdir().expect("a root that carries an override");
+    let override_path = with_file.path().join("estigia.local.md");
+    std::fs::write(&override_path, "# local\n").expect("the override writes");
+    if crate::skill::local_override(with_file.path()).is_some() {
+        let refusal = super::shadowed(with_file.path(), setting, &written, &effective);
+        assert_eq!(refusal.code, "setting-shadowed-by-local-file");
+        assert!(
+            refusal.message.contains("estigia.local.md"),
+            "the override was there and went unnamed: {}",
+            refusal.message
+        );
+    }
 }
