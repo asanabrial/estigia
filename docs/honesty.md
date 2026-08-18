@@ -2032,20 +2032,6 @@ suite. Everything else here is prose held by review.
   remote state is written and with no data lost. The recovery is the same `git worktree remove`, and
   it is written in the binding rather than enforced here. Measured by the blind reviewer of receipt
   `6b192e0ee94f11004b621c06c8e8e5dd` across twenty-four template shapes.
-- **Two branches can still fold into one directory, because the branch is flattened and not
-  validated.** Path uniqueness across branches now rests on the flattened `<branch>` component, and
-  the flattening is not injective: with template `/w/<repo>`, branches `fix/1-a`, `fix-1-a` and
-  `fix//1-a` in one run all compose `/w/estigia~fix-1-a~<run-id>`. The binding makes exactly this
-  argument as its reason for *validating* `<run-id>` rather than flattening it — the second run finds
-  a registered worktree carrying its own branch at its own path, which is the shape of a legitimate
-  resume — and the branch now carries the same duty without the same protection. Not a regression:
-  the same fold existed for templates naming `<branch>` before. **Nothing bounds which branch names
-  reach it.** An earlier draft of this entry said the fold was unreachable under a
-  `<type>/<issue>-<slug>` convention; no such convention exists. `repository-delivery.md` says only
-  that the name "should carry the issue identity", and the GitHub binding offers `fix/6` and
-  `fix/6-a` as branches an agent may pick — which is the colliding pair. It is recorded rather than
-  closed because closing it means validating the branch as the run ID is validated, and that is a
-  refusal an operator would meet at `start_branch` rather than a silent repair.
 - **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it
@@ -2215,9 +2201,10 @@ suite. Everything else here is prose held by review.
   Absence is `Option` on this side now, the corpus poses all four shapes, and the empty string is
   posed beside them so a fix that folded the two together would fail instead of agreeing.
 
-- **The port stopped a `start-branch` the transport performs.** A worktree template missing a scope is
-  migrated to one that has it — at the time this was measured, only the branch-only case, and both sides then refuse when the *pre-migration* checkout is still
-  registered — it may hold unpushed work, so neither removes it. The transport asks
+- **The port stopped a `start-branch` the transport performs.** A worktree template missing a scope
+  is migrated to one that has it, and both sides then refuse when the *pre-migration* checkout is
+  still registered — it may hold unpushed work, so neither removes it. (At the time this was
+  measured, only a branch-only template was migrated.) The transport asks
   `legacy.exists()` before it consults the registry and the port asked the registry alone, so they
   parted on the most ordinary state a worktree reaches: a directory removed with `rm -rf` instead of
   `git worktree remove`. Measured on a real repository, git goes on listing it — `prunable gitdir

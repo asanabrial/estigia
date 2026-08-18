@@ -383,8 +383,8 @@ run does, so a run working a queue meets the checkout it made for its previous i
 issue, every time.
 
 Every template is now made to carry both: a missing placeholder is added **in memory** as a sibling —
-`…/<branch>` becomes `…/<branch>~<run-id>`, `…/<run-id>` becomes `…/<run-id>~<branch>`, and a template
-naming neither becomes `…~<branch>~<run-id>`. `estigia.local.md` is never rewritten: a transport
+`…/<branch>` becomes `…/<branch>~<run-id>`, `…/<run-id>` becomes `…/<run-id>~<branch>`, and a
+template naming neither becomes `…~<branch>~<run-id>`. `estigia.local.md` is never rewritten: a transport
 command that silently edits the operator's own policy file is a worse failure than the one it fixes,
 and that file may be shared across machines where the migration is not wanted. The result reports
 `template_migrated` so the substitution is visible rather than assumed.
@@ -592,8 +592,7 @@ is exactly what would prove who it belongs to, and starting a sibling beside it 
 checkouts of one branch. (Registered at all: a legacy checkout left detached carries no branch in the
 registry and stops this just the same, reporting `occupied_by_branch: null`. An earlier version of
 this sentence said a detached one does not stop it, which is measurably untrue.) `start-branch` stops
-with
-`legacy-worktree-registered` and neither removes nor writes into it. Push or preserve its work,
+with `legacy-worktree-registered` and neither removes nor writes into it. Push or preserve its work,
 `git worktree remove` it, then re-run — steps 1, 2 and 4 above. An unregistered leftover directory at
 the legacy path blocks nothing, because the sibling is a different directory.
 
