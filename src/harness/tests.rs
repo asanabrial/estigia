@@ -677,6 +677,17 @@ fn a_claim_in_another_checkout_does_not_gate_this_one() {
 fn a_routine_write_rides_on_an_answer_from_inside_the_window() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = context(root.path());
+    // The contract, and only the contract. Issue #29 moved that refusal above
+    // the window, so a fixture that installs nothing measures the refusal
+    // rather than the window — and the fast path this gate exists to keep cheap
+    // would have gone unmeasured while every in-window write silently started
+    // paying for a tracker round trip.
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
     let mut run = sworn(12, &context.repo_dir);
     run.mark_verified();
 
@@ -738,6 +749,36 @@ fn an_unreadable_control_surface_permits_no_write() {
     }
 }
 
+/// The same rule, one `mark_verified()` line later.
+///
+/// The renewal window caches a *claim verification*; it says nothing about
+/// whether the contract is still on disk. While the window's `Allow` answered
+/// above the contract refusal, the fixture above passed only because it was
+/// outside the window — add the stamp and a routine write went through with no
+/// `SKILL.md` installed at all, for the whole width of the window. That is what
+/// stops this ordering drifting back.
+#[test]
+fn an_unreadable_control_surface_permits_no_write_inside_the_renewal_window() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path());
+    let mut run = sworn(12, &context.repo_dir);
+    // The only difference from the fixture above.
+    run.mark_verified();
+
+    let action = Action::Write {
+        target: "src/x.rs".to_owned(),
+    };
+    match gate(&context, &mut run, &action, Sensitivity::Routine) {
+        Decision::Deny(refusal) => {
+            assert_eq!(refusal.code, "control-surface-not-installed");
+            assert!(refusal.to_string().contains("estigia setup --all"));
+        }
+        other => panic!(
+            "an unreadable control surface allowed a write inside the renewal window: {other:?}"
+        ),
+    }
+}
+
 #[test]
 fn a_denial_names_what_was_being_attempted() {
     let root = tempfile::tempdir().expect("a temporary root");
@@ -787,15 +828,38 @@ fn a_window_of_zero_asks_every_time() {
     let root = tempfile::tempdir().expect("a temporary root");
     let mut context = context(root.path());
     context.window = Duration::from_secs(0);
+    // With nothing installed this test passes without the window existing at
+    // all: `control-surface-not-installed` answers above it since issue #29, and
+    // a fixture that measures a refusal it would get either way is a fixture
+    // that has stopped asking its own question.
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
     let mut run = sworn(12, &context.repo_dir);
     run.mark_verified();
 
     let action = Action::Write {
         target: "src/x.rs".to_owned(),
     };
+    let decision = gate(&context, &mut run, &action, Sensitivity::Routine);
     assert!(
-        gate(&context, &mut run, &action, Sensitivity::Routine).denies(),
+        decision.denies(),
         "a zero window still rode on a previous answer"
+    );
+    // And it is the tracker road that refused, not the contract. The pair with
+    // `a_routine_write_rides_on_an_answer_from_inside_the_window` — same context,
+    // same verified run, same installed contract, only the window differs — is
+    // what measures that an in-window routine write is still answered without a
+    // tracker round trip.
+    let Decision::Deny(refusal) = &decision else {
+        unreachable!("just asserted a denial")
+    };
+    assert_ne!(
+        refusal.code, "control-surface-not-installed",
+        "a zero window was refused before the window was ever consulted: {decision:?}"
     );
 }
 
@@ -1068,6 +1132,16 @@ fn a_write_in_the_isolated_checkout_is_covered_by_the_claim() {
     let mut context = context(root.path());
     let worktree = root.path().join("trees").join("issue-12");
     context.repo_dir = worktree.clone();
+    // This fixture is about coverage, and it rides the window to get an answer
+    // without a transport. The contract refusal now answers above the window,
+    // so without this the test would measure an uninstalled Estigia instead of
+    // the checkout it is named for.
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
 
     let mut run = sworn(12, &root.path().join("repo"));
     run.worktree = Some(worktree);
@@ -3615,6 +3689,47 @@ fn an_unreadable_control_surface_refuses_even_a_write_outside_the_claim() {
     );
     let Decision::Deny(refusal) = &decision else {
         panic!("a write was permitted while the control surface was unreadable: {decision:?}");
+    };
+    assert_eq!(
+        refusal.code, "control-surface-not-installed",
+        "the refusal was not the contract's: {decision:?}"
+    );
+}
+
+/// The same road, one `mark_verified()` line later.
+///
+/// The fixture above held only *outside* the renewal window, and the entry in
+/// `docs/honesty.md` said so: the window's `Allow` sat above the contract
+/// refusal, so for the window's duration the agent instruction files — outside
+/// every checkout by construction, and carrying the directive that names this
+/// harness as the authority at all — were writable with no `SKILL.md` on disk.
+/// A reviewer measured exactly this by adding the stamp to the fixture above;
+/// this is that measurement kept as a test rather than as a paragraph.
+#[test]
+fn an_unreadable_control_surface_refuses_a_write_outside_the_claim_inside_the_window() {
+    let root = tempfile::tempdir().expect("a root");
+    let mut context = context(root.path());
+    // Nothing installed: not the contract, not the directory holding it.
+    context.skill_root = root.path().join("never-installed");
+    let mut run = sworn(166, &context.repo_dir);
+    run.state = Some("done".to_owned());
+    // The only difference from the fixture above.
+    run.mark_verified();
+    let outside = root.path().join("elsewhere").join("note.md");
+
+    let decision = decide(
+        &context,
+        &mut run,
+        &Action::Write {
+            target: outside.display().to_string(),
+        },
+        Sensitivity::Routine,
+    );
+    let Decision::Deny(refusal) = &decision else {
+        panic!(
+            "a write was permitted inside the renewal window while the control surface was \
+             unreadable: {decision:?}"
+        );
     };
     assert_eq!(
         refusal.code, "control-surface-not-installed",

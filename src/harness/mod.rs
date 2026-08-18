@@ -2213,6 +2213,44 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
         return Decision::Outside(Aside::AnotherCheckout);
     }
 
+    // The control surface first, and this check is **new work rather than the
+    // same check moved**. Spawning the transport began by asking whether
+    // `scripts/github.py` was on disk, and that file's absence stood in for the
+    // skill's — so an uninstalled Estigia refused here for a reason that was
+    // true by accident. Answering in this process removed the accident and, with
+    // it, the check: the gate went on to ask the tracker while the operator's
+    // contract was not installed at all.
+    //
+    // So it asks about the contract, which is what the authority actually rests
+    // on. `SKILL.md` holds the operator table this gate enforces; without it
+    // there is no surface to read, and *an unreadable control surface permits no
+    // write* is the rule in the contract's own words.
+    //
+    // **Above the renewal window**, which is what issue #29 moved it for. The
+    // window caches a *claim verification*: it says the tracker answered about
+    // the issue two minutes ago, and it says nothing whatever about whether the
+    // contract is still on disk. While it answered first, `Allow — issue #N was
+    // verified inside the renewal window` was the gate's reply to a routine
+    // write made with no `SKILL.md` installed at all, on both roads — inside a
+    // covered checkout and outside every one of them — so the window was a
+    // standing exception to a rule the contract writes without one. It is one
+    // `is_file()` on a path this function was already joining, and it buys the
+    // sentence back whole. The window still rides *below* it: with the contract
+    // present, a routine write inside the window is still allowed here without
+    // the tracker being asked, which is the fast path this gate exists to keep
+    // cheap.
+    let contract = context.skill_root.join(crate::skill::CONTRACT);
+    if !contract.is_file() {
+        return Decision::Deny(Box::new(prefixed(
+            crate::outcome::Refusal::not_started(
+                "control-surface-not-installed",
+                format!("{} is not installed", contract.display()),
+                crate::outcome::Resolution::run("estigia setup --all"),
+            ),
+            &subject,
+        )));
+    }
+
     if how == Sensitivity::Routine && run.within_window(context.window) {
         return Decision::Allow(format!(
             "issue #{issue} was verified inside the renewal window"
@@ -2232,29 +2270,6 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
         .state
         .clone()
         .unwrap_or_else(|| "in-progress".to_owned());
-    // The control surface first, and this check is **new work rather than the
-    // same check moved**. Spawning the transport began by asking whether
-    // `scripts/github.py` was on disk, and that file's absence stood in for the
-    // skill's — so an uninstalled Estigia refused here for a reason that was
-    // true by accident. Answering in this process removed the accident and, with
-    // it, the check: the gate went on to ask the tracker while the operator's
-    // contract was not installed at all.
-    //
-    // So it asks about the contract, which is what the authority actually rests
-    // on. `SKILL.md` holds the operator table this gate enforces; without it
-    // there is no surface to read, and *an unreadable control surface permits no
-    // write* is the rule in the contract's own words.
-    let contract = context.skill_root.join(crate::skill::CONTRACT);
-    if !contract.is_file() {
-        return Decision::Deny(Box::new(prefixed(
-            crate::outcome::Refusal::not_started(
-                "control-surface-not-installed",
-                format!("{} is not installed", contract.display()),
-                crate::outcome::Resolution::run("estigia setup --all"),
-            ),
-            &subject,
-        )));
-    }
 
     // After the contract, and before the tracker.
     //
@@ -2274,14 +2289,14 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
     // that moving it down costs no test, so it moved rather than being written
     // up as a limit.
     //
-    // That buys the rule here and not everywhere: the renewal window above
-    // returns before the contract is looked at, so for its duration the same
-    // files are writable with no contract on disk. Issue #29, and older than
-    // this answer — but do not read this position as the rule being whole.
-    // Moving *this* down was free; moving the window down changes the answer for
-    // every routine write on the fast path this gate exists to keep cheap.
+    // That used to buy the rule here and not everywhere, because the renewal
+    // window returned before the contract was looked at and for its duration the
+    // same files were writable with no contract on disk. Issue #29 moved the
+    // contract check above the window instead, so the sentence now holds without
+    // a qualifier: every answer above that refusal is a deny or a stand-aside,
+    // and the window is below it.
     //
-    // The window also now answers first for a write outside the claim, with a
+    // The window still answers first for a write outside the claim, with a
     // message crediting a claim renewal for clearing a path the claim does not
     // govern, and it takes the `session::store` branch that an `Outside` does
     // not. Both permit, so no gate moved; it is written down because a reviewer
