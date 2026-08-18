@@ -145,6 +145,8 @@ fn five_blind_keeps_one_enforced_verdict_and_names_every_unproved_panel_property
         "blindness",
         "same-finding identity",
         "quorum",
+        "judge isolation outside the reserved role",
+        "shared a working directory",
     ] {
         assert!(
             text.contains(unproved),

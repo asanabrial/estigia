@@ -505,6 +505,21 @@ suite. Everything else here is prose held by review.
   contracts, not observations the harness can make. The enforced floor remains
   one aggregate exact-receipt verdict: the transport has no per-judge marker and does not implement structured
   multi-verdict adjudication.
+
+  **Judge isolation outside the reserved role is unproved, and the asymmetry is measured.** A judge
+  launched under the reserved `review-blind` type cannot write at all, and that half is checkable: the
+  role gate is fed the *embedded* reviewer definition rather than whatever is on disk
+  (`src/harness/hook.rs:940-946` reads `crate::skill::REVIEW_AGENT.contents`), that definition allows
+  `Read`, `Grep` and `Glob` only, and
+  `src/harness/roles/tests.rs::the_shipped_blind_reviewer_is_read_only_and_cannot_delegate` pins
+  `Write`, `Edit`, `Bash`, `Agent` and `Task` to a denial. For that role the question of two judges
+  writing over each other cannot arise. The other half is not checkable at all. A panel launched under
+  **any other subagent type** — which a repository whose evidence standard is mutation forces, because
+  a judge that measures needs exactly the tools the reserved role refuses — is invisible both to the
+  reserved-role prelaunch check and to that gate. Nothing here records how many such judges ran,
+  whether two of them shared a working directory, or what they wrote into it. The isolation rule in
+  `skill/policies/blind-judges.md` is prose an orchestrator follows or does not, on the same footing as
+  panel size and blindness above.
 - **Estigia cannot make a person decide or start a turn.** For an exceptional human-adjudication
   wait it can preserve the built branch, PR, receipt, checks, and evidence, and record `blocked`
   with the exact decision or exit condition and discharger before ownership is released. That
