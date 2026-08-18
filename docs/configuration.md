@@ -107,13 +107,19 @@ question the rest of the crate asks, not a fourth list:
   differently means one agent is being decided for by a file it does not read: `BROKEN`, and the
   resolution names `estigia config set "<row>" "<value>"` with no `--agent`, which writes it into
   every installed contract.
-- **Machine** — `Summary language` and `Issue body language`, facts about this machine. Also
-  `BROKEN`, and their resolution names **no** command, because there is not one: the plain
-  `config set` writes a machine row into the canonical contract and nowhere else, and
-  `config set --agent <slug>` cannot hold one in a shared root at all — the per-agent file is
-  rendered and read through the agent scope, so the row is dropped and the command exits on its own
-  read-back. That asymmetry is [issue #62](https://github.com/asanabrial/estigia/issues/62); until
-  it is settled the row reports the divergence and says plainly that nothing clears it yet.
+- **Machine** — `Summary language` and `Issue body language`, facts about this machine, the same
+  whichever repository is open. Also `BROKEN`, and the resolution names the same command as the row
+  above: `estigia config set "<row>" "<value>"` with no `--agent` writes it into every installed
+  contract. A person writes in one language across every checkout they have, so there is nothing for
+  one agent to answer differently — `config set --agent <slug>` refuses a machine row the way it
+  refuses a repository one, and says which command holds it instead.
+
+  It did not always. The plain form wrote a machine row into the canonical contract and nowhere
+  else, and the per-agent form accepted one it could not hold: the per-agent file is rendered and
+  read through the agent scope, so the row was dropped and the command exited on its own read-back,
+  blaming a local override that need not exist. Two roots could then answer one machine-wide
+  question differently with no command that made them agree, and the `canonical` row reported it
+  with no way out to offer. That was [issue #62](https://github.com/asanabrial/estigia/issues/62).
 
 Rows that differ by design are named in both branches, not only in the quiet one.
 

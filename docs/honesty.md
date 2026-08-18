@@ -1962,18 +1962,26 @@ suite. Everything else here is prose held by review.
   now, whether every run pointer on the machine can still say what it holds, and whether any call
   has reached that gate and gone undecided. It does not check the tracker's labels, the board, or
   whether the repository it found is the one the issues live in.
-- **A row about this machine can be made to differ per agent, and nothing refuses it.**
-  `config set --agent <slug>` refuses a `Scope::Everywhere` row and does not refuse a
-  `Scope::Machine` one, so `estigia config set --agent claude-code "Summary language" Spanish`
-  is accepted and reports success — on an adapter with a skill root of its own, where no read-back
-  catches it. **And once two roots disagree about one, no command makes them agree**: the plain
-  `config set` writes a machine row into the canonical contract alone, and the per-agent form cannot
-  hold one in a shared root, where `render_some_agent_rows` drops it and the command exits on its own
-  read-back. So `doctor`'s `canonical` row reports that divergence and names no way out, which is the
-  honest shape rather than a satisfying one. Measured on 2026-08-17 and 2026-08-18, on
-  `Summary language` and `Issue body language`, by four independent reviews of the check itself, each
-  running the named command verbatim. Filed as issue #62; which half is wrong — refuse the per-agent
-  write, or propagate the plain one — is not decided here, and nothing guesses at it.
+- **`config edit` writes one contract, and `config set` writes them all.** The plain `config set`
+  propagates a row that is not per-agent — about the repository or about this machine — into every
+  installed contract. The guided screen behind `config edit` writes only the target it was opened on:
+  `elsewhere()` has exactly one call site and that is not it, and `tui::edit` runs `App::one_table`
+  with no install step, so no command panel tells the operator what did not spread.
+
+  **Its sharpest form**, which is what makes this worth writing down: `config edit --agent
+  claude-code` — any adapter with a skill root of its own — offers `Setting::Summary`, because such
+  an adapter falls through `writable_config`'s `!discovers_skills()` branch and gets `TUI_SETTINGS`
+  rather than `AGENT_TUI_SETTINGS`. The screen then saves it into that adapter's contract alone. So
+  the screen accepts, per agent and silently, exactly the row `config set --agent` now refuses at the
+  door. On a shared root the screen is safe — `AGENT_TUI_SETTINGS` does not offer the row at all.
+
+  This is a gap rather than a defect because the one command clears whatever the screen creates and
+  `doctor`'s `canonical` row names that command; both were measured. What is new is that the screen
+  and the command disagree about a **machine** row, where before this change they agreed by both
+  writing one contract. Over a repository row they have disagreed all along. Found by the blind
+  reviewers of receipts `c7e7b821a12455ea6293a321ad4be30a` and `0cfd9a216c02aa82133bb0f992389a85`
+  while checking that issue #62 was closed on every write path; the enumeration was every caller of
+  `setup::rewrite_configuration`, `write_agent_configuration*` and `write_repository_configuration`.
 - **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it
