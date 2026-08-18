@@ -1063,6 +1063,16 @@ fn a_verification_through_the_checkout_path_is_written_down() {
     let repo = tempfile::tempdir().expect("a checkout");
     let context = context(home.path(), repo.path());
     let root = context.state_root.clone();
+    // The contract has to be on disk for the window to be reached at all —
+    // issue #29 put `control-surface-not-installed` above it. Without this the
+    // decision below is a refusal, nothing is written down, and the fixture
+    // reports the storing defect it was written for as still open.
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
 
     // Already inside the window, which is the one answer `gate` can give
     // without a transport. The *full* effect — a fresh tracker verification

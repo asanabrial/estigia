@@ -1018,18 +1018,35 @@ suite. Everything else here is prose held by review.
   The hole predates this: the instruction files and the two `~/.claude` paths were never `Boundary`,
   so before issue 2 they were measured against the claim and allowed under a valid one. What was newly lost is the refusal when the claim
   is *not* valid — which is what issue 26 closed for them, and this paragraph is kept because the
-  ordering it goes on to describe is what makes any of it hold. It is no longer lost when no contract is installed **outside the
-  renewal window**: the answer is given after the `control-surface-not-installed` refusal, and
+  ordering it goes on to describe is what makes any of it hold. It is no longer lost when no contract is installed: the answer is
+  given after the `control-surface-not-installed` refusal, and
   `an_unreadable_control_surface_refuses_even_a_write_outside_the_claim` is what stops that drifting
   back. One published head had it the other way round and both reviewers of that head raised the
   cost, so it moved rather than staying here as a declared limit.
 
-  Inside the window it is still lost, and that is issue #29 rather than this entry: the window's
-  `Allow` sits above the contract refusal, so for its duration a routine write is permitted with no
-  `SKILL.md` on disk at all — measured on both roads, and the guard above passes only because its
-  fixture is outside the window. An earlier draft of this paragraph said the rule now applies
-  *without an exception*, which was an absolute the code does not hold; a reviewer measured it by
-  adding one `mark_verified()` line to that fixture.
+  It was lost again **inside the renewal window** for as long as the window's `Allow` sat above the
+  contract refusal — for its duration a routine write was permitted with no `SKILL.md` on disk at
+  all, on both roads, and the guard above passed only because its fixture was outside the window. An
+  earlier draft of this paragraph claimed the rule applied *without an exception* while that was an
+  absolute the code did not hold; a reviewer measured the exception by adding one `mark_verified()`
+  line to that fixture. Issue #29 closed it by moving `control-surface-not-installed` above the
+  window rather than below it, which costs one `is_file()` on a path `decide` was already joining.
+  Each of the two fixtures now has a twin differing only in that `mark_verified()` line —
+  `an_unreadable_control_surface_permits_no_write_inside_the_renewal_window` and
+  `an_unreadable_control_surface_refuses_a_write_outside_the_claim_inside_the_window` — and both go
+  red with `Allow("issue #N was verified inside the renewal window")` if the order is put back.
+
+  One stand-aside still answers above that refusal, and it is not the window. `another-checkout`
+  fires on the directory the hook was invoked in rather than on the write target, so a run claimed in
+  one checkout whose hook fires in an unrelated one stands aside without the contract being read.
+  Unlike `nothing-sworn` and `no-tracker`, which are above the check because a run holding no issue
+  and a project with no transport are outside the remit entirely, this one is reached by a run that
+  *does* hold an issue with a tracker configured. Measured rather than argued:
+  `a_claim_in_another_checkout_does_not_gate_this_one` uses the default fixture context — no contract
+  on disk — with a sworn run, and is green both before and after issue #29. Keeping it above the check
+  was #29's own requirement, so the honest sentence is that every answer above the contract refusal is
+  a deny or a scope stand-aside and the renewal window is no longer among them; the unqualified
+  absolute is not one the code holds.
 
   What was still lost when this entry first said so is closed, and the entry above says how. Three
   drafts of this paragraph described the state before the fix that shipped in the same commit — the
@@ -1801,6 +1818,13 @@ suite. Everything else here is prose held by review.
 - **The renewal window is a cadence, and a cadence is a gap.** A routine write inside two minutes of
   the last answer is not re-verified. A claim lost during those two minutes is a claim the gate does
   not catch until the window closes or a boundary arrives.
+
+  **Claim validity is the whole of what it excepts.** The window used to except the control surface
+  as well — its `Allow` answered above `control-surface-not-installed`, so for two minutes a routine
+  write went through with no `SKILL.md` on disk at all. Issue #29 put the contract check above the
+  window, and what the window caches is now only what it ever measured: that the tracker answered
+  about this issue recently. A boundary never consults it at all, and an unreadable control surface
+  permits no write inside it either.
 - **A JSON file Estigia edits keeps its shape and loses its shaping.** `settings.json` and
   `.claude.json` have to be parsed to be edited safely, and four things are read off the original
   and given back: the indentation, a byte-order mark, the line endings, and whether the file ended
