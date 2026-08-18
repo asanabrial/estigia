@@ -31,7 +31,9 @@ the workflow, it holds the tools.
   is the refusal one command later. The three `shadowed*` refusals no longer name a local override
   they did not find: one lookup answers `Option` for all of them, and where there is no
   `estigia.local.md` the refusal is `setting-not-read-back`, saying what was observed rather than
-  naming a cause it cannot see.
+  naming a cause it cannot see. Only the first of the three is reached today — `local_override` tests
+  `is_file()`, so an unreadable file still answers `Some`, and a root with no file at all round-trips
+  what was written. The other two branches are held by the type rather than by a test.
 
 - `Blind judges` now has canonical `five blind` beside `single` and `two blind`, with `single` still
   the default. Five independent reviewer contexts run concurrently over the identical immutable

@@ -1964,15 +1964,24 @@ suite. Everything else here is prose held by review.
   whether the repository it found is the one the issues live in.
 - **`config edit` writes one contract, and `config set` writes them all.** The plain `config set`
   propagates a row that is not per-agent — about the repository or about this machine — into every
-  installed contract. The guided screen behind `config edit` writes only the target it was opened on,
-  and `elsewhere()` has exactly one call site which is not that one. So a row set through the screen
-  can leave two roots answering differently, and the operator is not told. What makes this a gap
-  rather than a defect is that the one command clears it and `doctor`'s `canonical` row names that
-  command, so nothing is unreachable — but the screen and the command disagree about the same row,
-  and until this was measured they disagreed silently in both directions. Found by the blind reviewer
-  of receipt `c7e7b821a12455ea6293a321ad4be30a` while checking that issue #62 was closed on every
-  write path; the enumeration was `setup::rewrite_configuration`'s three call sites plus
-  `write_agent_configuration*`.
+  installed contract. The guided screen behind `config edit` writes only the target it was opened on:
+  `elsewhere()` has exactly one call site and that is not it, and `tui::edit` runs `App::one_table`
+  with no install step, so no command panel tells the operator what did not spread.
+
+  **Its sharpest form**, which is what makes this worth writing down: `config edit --agent
+  claude-code` — any adapter with a skill root of its own — offers `Setting::Summary`, because such
+  an adapter falls through `writable_config`'s `!discovers_skills()` branch and gets `TUI_SETTINGS`
+  rather than `AGENT_TUI_SETTINGS`. The screen then saves it into that adapter's contract alone. So
+  the screen accepts, per agent and silently, exactly the row `config set --agent` now refuses at the
+  door. On a shared root the screen is safe — `AGENT_TUI_SETTINGS` does not offer the row at all.
+
+  This is a gap rather than a defect because the one command clears whatever the screen creates and
+  `doctor`'s `canonical` row names that command; both were measured. What is new is that the screen
+  and the command disagree about a **machine** row, where before this change they agreed by both
+  writing one contract. Over a repository row they have disagreed all along. Found by the blind
+  reviewers of receipts `c7e7b821a12455ea6293a321ad4be30a` and `0cfd9a216c02aa82133bb0f992389a85`
+  while checking that issue #62 was closed on every write path; the enumeration was every caller of
+  `setup::rewrite_configuration`, `write_agent_configuration*` and `write_repository_configuration`.
 - **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it

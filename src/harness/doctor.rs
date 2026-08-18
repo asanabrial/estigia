@@ -1037,8 +1037,9 @@ pub struct Divergence {
 ///   file it does not read, and one of the two is the root the gate decides in.
 ///   `Broken`.
 /// - `Machine` — a fact about this machine, the same whichever repository is
-///   open. Also `Broken`, and it needs its own resolution, which is the second
-///   thing a review caught here.
+///   open. Also `Broken`, and offered the same resolution as the row above; it
+///   needed its own until the plain `config set` learned to propagate one, and
+///   the paragraph below says what that cost to find.
 ///
 /// The first cut of this asked `AGENT_SETTINGS` instead, which is one of two
 /// lists rather than the three-valued question, so the two `Machine` rows were

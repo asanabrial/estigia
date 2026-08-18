@@ -3694,8 +3694,8 @@ fn unexplained_readback(
     Refusal {
         code: "setting-not-read-back",
         message: format!(
-            "{} was written as {} into the table under {}, and reads {} — and no local override \
-             is there to account for it",
+            "{} was written as {} into the table under {}, and reads {} \u{2014} and no local \
+             override is there to account for it",
             setting.label(),
             setting.value_of(written),
             root.display(),

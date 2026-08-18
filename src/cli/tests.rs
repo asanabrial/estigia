@@ -4796,13 +4796,19 @@ fn a_row_that_reads_back_wrong_with_no_override_beside_it_blames_no_file() {
     let with_file = tempfile::tempdir().expect("a root that carries an override");
     let override_path = with_file.path().join("estigia.local.md");
     std::fs::write(&override_path, "# local\n").expect("the override writes");
-    if crate::skill::local_override(with_file.path()).is_some() {
-        let refusal = super::shadowed(with_file.path(), setting, &written, &effective);
-        assert_eq!(refusal.code, "setting-shadowed-by-local-file");
-        assert!(
-            refusal.message.contains("estigia.local.md"),
-            "the override was there and went unnamed: {}",
-            refusal.message
-        );
-    }
+    // Unconditionally, because an assertion behind an `if` reports pass when it
+    // ran nothing — the shape this repository has already filed against itself,
+    // where sixteen tests answered pass having returned on their first line.
+    // The precondition is asserted; the assertions are not guarded by it.
+    assert!(
+        crate::skill::local_override(with_file.path()).is_some(),
+        "the fixture did not produce the override this half is about"
+    );
+    let refusal = super::shadowed(with_file.path(), setting, &written, &effective);
+    assert_eq!(refusal.code, "setting-shadowed-by-local-file");
+    assert!(
+        refusal.message.contains("estigia.local.md"),
+        "the override was there and went unnamed: {}",
+        refusal.message
+    );
 }
