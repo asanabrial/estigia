@@ -93,11 +93,10 @@ pub fn run_component(text: &str) -> Result<String, Failure> {
 /// Only the first was migrated, and the asymmetry stayed invisible because the
 /// operator who met it had since configured a template naming `<branch>` — so a
 /// later run measured four checkouts, no collision, and read that as a fix. That
-/// is the trap this function is now shaped against: the documented accepted
-/// value for `Worktree location` is *"an absolute directory"*, naming no
-/// placeholder at all, and the skill ships the row `unset`. A plain directory is
-/// the ordinary thing to write, and it is the one shape that carries **both**
-/// collisions at once.
+/// is the trap this function is now shaped against. The skill ships
+/// `Worktree location` as `unset`, so every operator invents a template, and an
+/// absolute directory with no placeholder in it is accepted — the ordinary thing
+/// to write, and the one shape that carries **both** collisions at once.
 ///
 /// Neither is a stale default to reject: both are persisted operator policy,
 /// already in use, and a run that stops dead on one has lost work to protect

@@ -2024,10 +2024,9 @@ suite. Everything else here is prose held by review.
 - **The legacy-checkout stop cannot name the legacy path of a template that named no placeholder.**
   A `Worktree location` missing `<branch>` or `<run-id>` gains it in memory, and `start_branch` stops
   with `legacy-worktree-registered` when the pre-migration checkout is still registered — computed
-  from the raw template. For a template naming one placeholder that is exactly what the previous
-  build created, so the stop fires. For a bare directory naming **neither**, the raw template is a
-  path the previous build never created: what it created was that directory with `~<run-id>`
-  appended. So a run upgrading into this build and resuming such a branch is not stopped by Estigia;
+  from the raw template. For a template naming `<run-id>` and not `<branch>`, that raw path is
+  exactly what an earlier build created, so the stop fires. For a bare directory naming **neither**,
+  it is a path no build created: what they created was that directory with `~<run-id>` appended. So a run upgrading into this build and resuming such a branch is not stopped by Estigia;
   `git worktree add` refuses it instead, with git's own *"already used by worktree at …"*, before any
   remote state is written and with no data lost. The recovery is the same `git worktree remove`, and
   it is written in the binding rather than enforced here. Measured by the blind reviewer of receipt

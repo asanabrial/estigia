@@ -803,10 +803,20 @@ fn a_legacy_worktree_git_lists_but_nobody_left_behind_is_not_a_stop() {
     detached.insert(super::normalise_path(&legacy), None);
     let refusal = super::legacy_worktree_block(&legacy, &scoped, &detached)
         .expect("a detached legacy checkout is still a registration");
-    let envelope = format!("{refusal:?}");
-    assert!(
-        envelope.contains("legacy-worktree-registered"),
+    let envelope = refusal.envelope();
+    assert_eq!(
+        envelope.get("reason").and_then(serde_json::Value::as_str),
+        Some("legacy-worktree-registered"),
         "the stop lost its reason: {envelope}"
+    );
+    // The value, not only the reason. The binding tells an operator this reads
+    // `occupied_by_branch: null` for a detached registration, and until this
+    // assertion existed that half was held by nothing — replacing the field with
+    // a literal left the whole suite green.
+    assert_eq!(
+        envelope.get("occupied_by_branch"),
+        Some(&serde_json::Value::Null),
+        "a detached registration did not report a null branch: {envelope}"
     );
 
     // Registered and gone: what `rm -rf` leaves behind, and what git goes on
@@ -836,10 +846,10 @@ fn a_runs_second_issue_gets_its_own_checkout_from_the_template_an_operator_write
     // The first attempt at this test picked `/w/<repo>/<branch>` and proved
     // nothing: a template that already names the branch is the one shape that
     // cannot exhibit the defect. So the templates here are the ones an operator
-    // actually writes. `docs/configuration.md` documents the accepted value as
-    // "an absolute directory" and names no placeholder at all, and the skill
-    // ships the row `unset` — a bare directory is the ordinary answer, and it is
-    // the shape that collides in both dimensions at once.
+    // actually writes. The skill ships `Worktree location` as `unset`, so every
+    // operator invents one, and an absolute directory with no placeholder in it
+    // is accepted — the ordinary answer, and the shape that collides in both
+    // dimensions at once.
     let run = "claude-81d69d3e372497b6";
     let path_of = |template: &str, branch: &str, issue: u64| {
         let (scoped, migrated) = crate::transport::worktree::scoped_template(template);
