@@ -209,6 +209,14 @@ fn the_blind_panel_policy_requires_same_finding_quorum_without_erasing_dissent()
         "invalidates the panel",
         "a refused or unprovable launch contributes no judge",
         "never silently reduce or serialize the panel",
+        "a repository whose evidence standard is mutation",
+        "two judges run outside the reserved role are never pointed at one working directory",
+        "a directory nothing else writes for the duration of its review",
+        // The scoping half, which the isolation phrases above do not reach: reverting
+        // this sentence to the blanket "All judges are read-only" it replaced restores
+        // the contradiction this change exists to remove, and left the suite green.
+        "cannot mutate the target even if its prompt asks it to",
+        "stops and reports it rather than restoring it",
     ] {
         assert!(policy.contains(required), "missing {required:?}");
     }
