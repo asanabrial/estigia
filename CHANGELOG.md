@@ -37,7 +37,11 @@ the workflow, it holds the tools.
   `docs/honesty.md` rather than closed: the stop cannot name the legacy path of a template that named
   no placeholder at all, so git refuses that resume instead of Estigia; and path uniqueness across
   branches rests on a flattening that is not injective, which the binding already argues is why
-  `<run-id>` is validated rather than flattened.
+  `<run-id>` is validated rather than flattened. The delivery reference, which framed worktree
+  uniqueness as per-run only — the framing that hid this defect — says both dimensions now. And a
+  sentence in the operator's own recovery claimed a detached legacy checkout does not stop
+  `start-branch`; it does, reporting `occupied_by_branch: null`, and there is now a test posing that
+  case rather than a proofread.
 
 - A row about **this machine** now reaches every installed contract, and cannot be given a different
   answer for one agent. `Setting::scope()` has three values and both write paths were written as

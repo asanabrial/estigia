@@ -793,6 +793,22 @@ fn a_legacy_worktree_git_lists_but_nobody_left_behind_is_not_a_stop() {
         "the stop lost its reason: {refusal:?}"
     );
 
+    // Registered **detached**: git lists the path with no branch against it. The
+    // binding said for a long time that this does not stop the command; it does,
+    // and reports `occupied_by_branch: null`. `registered.get(…)?` unwraps only
+    // the outer `Option`, so the inner `None` never reaches the `?`. Posed here
+    // because a sentence in the operator's own recovery said otherwise, and the
+    // way a claim like that stops drifting is a test rather than a proofread.
+    let mut detached = std::collections::BTreeMap::new();
+    detached.insert(super::normalise_path(&legacy), None);
+    let refusal = super::legacy_worktree_block(&legacy, &scoped, &detached)
+        .expect("a detached legacy checkout is still a registration");
+    let envelope = format!("{refusal:?}");
+    assert!(
+        envelope.contains("legacy-worktree-registered"),
+        "the stop lost its reason: {envelope}"
+    );
+
     // Registered and gone: what `rm -rf` leaves behind, and what git goes on
     // listing. The registry entry is untouched, so only existence decides.
     std::fs::remove_dir_all(&legacy).expect("the directory goes");

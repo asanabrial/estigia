@@ -403,8 +403,11 @@ the composed name ambiguous even though each half is unambiguous on its own: bra
 `a-b` and branch `fix/6-a` with run `b` both spell `fix-6-a-b`. Those are two *different* branches,
 so they take two different branch locks, and nothing downstream would notice them sharing one
 directory. Git rejects `~` in a ref name and the run-ID alphabet rejects it too, so it appears in
-neither half and the split point is unique. If you write your own template, join `<branch>` and
-`<run-id>` with a character that cannot occur in either — `~` is the one this binding uses.
+neither value being joined: a template that gains both scopes composes three parts across two joins,
+and every part still ends where the next begins. Nothing reads the composed name back apart; what the
+property buys is that two different pairs cannot spell one directory. If you write your own template,
+join `<branch>` and `<run-id>` with a character that cannot occur in either — `~` is the one this
+binding uses.
 
 Relying on git to catch the collision instead was tried and does not hold. `worktree add` refuses a
 branch already checked out elsewhere (`fatal: '<branch>' is already used by worktree at …`), but that
@@ -586,8 +589,10 @@ A `Worktree location` missing `<branch>` or `<run-id>` gets the in-memory siblin
 and that is usually the end of it. The one hard case is a checkout the previous build created at the
 legacy path that is **still registered to a branch**: it may hold unpushed work, the scope it lacks
 is exactly what would prove who it belongs to, and starting a sibling beside it would leave two live
-checkouts of one branch. (Registered *to a branch* — a legacy checkout left detached carries no
-branch in the registry and does not stop this.) `start-branch` stops with
+checkouts of one branch. (Registered at all: a legacy checkout left detached carries no branch in the
+registry and stops this just the same, reporting `occupied_by_branch: null`. An earlier version of
+this sentence said a detached one does not stop it, which is measurably untrue.) `start-branch` stops
+with
 `legacy-worktree-registered` and neither removes nor writes into it. Push or preserve its work,
 `git worktree remove` it, then re-run — steps 1, 2 and 4 above. An unregistered leftover directory at
 the legacy path blocks nothing, because the sibling is a different directory.

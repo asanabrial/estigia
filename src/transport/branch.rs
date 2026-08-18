@@ -1619,7 +1619,7 @@ pub fn develop_link(
 /// remote and a clock standing by.
 fn legacy_worktree_block(
     legacy: &std::path::Path,
-    run_scoped: &std::path::Path,
+    scoped: &std::path::Path,
     registered: &std::collections::BTreeMap<String, Option<String>>,
 ) -> Option<Failure> {
     if !legacy.exists() {
@@ -1630,7 +1630,7 @@ fn legacy_worktree_block(
         "ok": false,
         "reason": "legacy-worktree-registered",
         "legacy_path": legacy.display().to_string(),
-        "scoped_path": run_scoped.display().to_string(),
+        "scoped_path": scoped.display().to_string(),
         "occupied_by_branch": owner,
         "action": "your worktree template does not name every scope a checkout needs \
                    (the branch, the run, or both), and a checkout from before the \
