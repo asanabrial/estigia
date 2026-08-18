@@ -12,6 +12,29 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- A row about **this machine** now reaches every installed contract, and cannot be given a different
+  answer for one agent. `Setting::scope()` has three values and both write paths were written as
+  though it had two: the plain `config set` asked `elsewhere()` only for `Scope::Everywhere`, so
+  `Summary language` and `Issue body language` landed in the canonical contract and nowhere else;
+  and `config set --agent <slug>` refused an `Everywhere` row while accepting a `Machine` one it
+  could not hold, since a shared root's per-agent file is rendered through `render_some_agent_rows`
+  and read through `Scope::Agent` — the row was dropped on the way out and the command exited on its
+  own read-back, reporting `setting-shadowed-by-local-file` and blaming an operator file that need
+  not exist in that root at all. Two agents on one machine could therefore answer a question that
+  has one answer differently, with **no command that made them agree**, and nine of the eleven
+  adapters share the neutral root, so the unreachable case was the common one. The plain form now
+  propagates a machine row exactly as it propagates a repository one, the per-agent form refuses it
+  and names the command that holds it, and `doctor`'s `canonical` row offers that command instead of
+  the sentence saying nothing cleared it — a fork that existed only to describe the gap, removed
+  with it. `config set --repo` refuses a machine row saying it is a fact about the machine rather
+  than what one agent does, and points at the command that holds it instead of at `--agent`, which
+  is the refusal one command later. The three `shadowed*` refusals no longer name a local override
+  they did not find: one lookup answers `Option` for all of them, and where there is no
+  `estigia.local.md` the refusal is `setting-not-read-back`, saying what was observed rather than
+  naming a cause it cannot see. Only the first of the three is reached today — `local_override` tests
+  `is_file()`, so an unreadable file still answers `Some`, and a root with no file at all round-trips
+  what was written. The other two branches are held by the type rather than by a test.
+
 - `Blind judges` now has canonical `five blind` beside `single` and `two blind`, with `single` still
   the default. Five independent reviewer contexts run concurrently over the identical immutable
   target and criteria; a severe finding blocks or authorizes automatic repair only when 3-of-5
@@ -127,9 +150,12 @@ the workflow, it holds the tools.
   defence against an agent switching the gate off with the tool it uses most. `gh`'s hosts file joins
   that surface in the same change: it decides which account every tracker call acts as, so it is a
   boundary write in both spellings rather than something the stand-aside carries past. The answer is
-  given after the contract check, not before it, so outside the renewal window *an unreadable control
-  surface permits no write* reaches it as it reaches everything else; inside the window nothing is
-  consulted, which is older than this change. A path that **lands** anywhere other than a drive is
+  given after the contract check, not before it, so *an unreadable control surface permits no write*
+  reaches it as it reaches everything else. That held only outside the renewal window until issue #29:
+  the window's `Allow` answered above the contract refusal, so for its width a routine write went
+  through with no `SKILL.md` on disk at all. The contract check now answers above the window, and the
+  window still short-circuits below it when the contract is present — so the sentence reaches inside
+  the window too, and the fast path it protects is unchanged. A path that **lands** anywhere other than a drive is
   declined rather than placed, and a declined path reads as inside. Windows serves every local drive
   as an administrative share, so `\\localhost\C$\repo\src\main.rs` against `C:\repo\...` is one file
   under two spellings, which stood the gate aside for a write that landed inside the claim. Judging

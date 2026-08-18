@@ -11300,3 +11300,156 @@ fn what_governs_reads_the_same_whether_or_not_an_agent_is_named() {
         "the row the operator wrote is not what the command reports:\n{unnamed}"
     );
 }
+
+#[test]
+fn a_fact_about_this_machine_reaches_every_contract_and_cannot_be_set_per_agent() {
+    // Two roots answered one machine-wide question differently and no command
+    // made them agree. `Setting::scope()` has three values and both write paths
+    // were written as though it had two: the plain form asked `elsewhere()`
+    // only for `Scope::Everywhere`, so a machine row landed in the canonical
+    // contract alone; and `config set --agent` refused an `Everywhere` row
+    // while accepting a `Machine` one, which then could not be held — the
+    // per-agent renderer intersects with `AGENT_SETTINGS` and drops it on the
+    // way out.
+    //
+    // Measured before the fix, in a scratchpad home: `config set "Summary
+    // language" Spanish` left `doctor` reporting `agents reads Summary language
+    // English against Spanish`, and the per-agent form answered
+    // `setting-shadowed-by-local-file` — blaming a file that need not exist.
+    //
+    // A person writes in one language across every checkout they have, which is
+    // what `Scope::Machine`'s own doc comment says. So the row spreads like a
+    // repository row, and cannot be given a different answer for one agent.
+    let home = tempfile::tempdir().expect("a temporary home");
+    for agent in ["claude-code", "codex"] {
+        let (_, stderr, ok) = run(home.path(), &["setup", agent], "");
+        assert!(ok, "installing {agent} failed: {stderr}");
+    }
+
+    let (out, stderr, ok) = run(
+        home.path(),
+        &["config", "set", "Summary language", "Spanish"],
+        "",
+    );
+    assert!(ok, "the machine write failed: {stderr}");
+    assert!(
+        out.contains("other installed contract"),
+        "a machine row reached one contract and said nothing about the rest: {out}"
+    );
+    // And it says which kind of fact it just spread. The sentence was hardcoded
+    // "a fact about this repository" and printed for both, so the tool answered
+    // one question two ways in its own output — the row is about the machine
+    // where it refuses, about the repository where it succeeds.
+    assert!(
+        out.contains("fact about this machine"),
+        "the propagation sentence calls a machine row something else: {out}"
+    );
+
+    // `--repo` refuses it, and names a command that works. It used to send the
+    // operator to `--agent`, which is the refusal one command later: a dead end,
+    // which this repository's rules call worse than naming nothing.
+    let checkout = tempfile::tempdir().expect("a temporary checkout");
+    std::fs::create_dir(checkout.path().join(".git"))
+        .expect("something that looks like a checkout");
+    let (_, stderr, ok) = run_in(
+        home.path(),
+        checkout.path(),
+        &["config", "set", "--repo", "Summary language", "English"],
+        "",
+    );
+    assert!(
+        !ok,
+        "a machine row was written as a fact about one repository"
+    );
+    assert!(
+        stderr.contains("setting-not-the-repositorys"),
+        "the wrong refusal: {stderr}"
+    );
+    assert!(
+        stderr.contains("this machine"),
+        "the refusal still says a machine row is what one agent does: {stderr}"
+    );
+    assert!(
+        !stderr.contains("`--agent <agent>` instead"),
+        "the refusal points at the door that refuses it too: {stderr}"
+    );
+
+    // Every installed contract, not just the one that answered first. Read
+    // through `config list --agent`, because that is the question a run asks.
+    for slug in ["claude-code", "codex"] {
+        let (out, _, _) = run(
+            home.path(),
+            &["config", "list", "--agent", slug, "--json"],
+            "",
+        );
+        let rows: serde_json::Value = serde_json::from_str(&out).expect("config list prints JSON");
+        let held = rows
+            .as_array()
+            .expect("an array of rows")
+            .iter()
+            .find(|row| row["setting"] == "Summary language")
+            .map(|row| row["value"].as_str().unwrap_or_default().to_owned())
+            .expect("the row is offered");
+        assert_eq!(
+            held, "Spanish",
+            "{slug} still answers something else for a question about this machine"
+        );
+    }
+
+    // And the divergence `doctor` exists to report is gone, rather than being
+    // reported with no way out. This is the row PR #61 added for #41.
+    let (out, stderr, _) = run(home.path(), &["doctor"], "");
+    let report = format!("{out}{stderr}");
+    assert!(
+        !report.contains("Summary language"),
+        "doctor still reports a machine-wide divergence after the one command that should clear it: {report}"
+    );
+
+    // The other half: the divergence cannot be created per agent either. Told
+    // in the same breath which command does hold it, because a refusal that
+    // does not name a way through is one an operator has to guess past.
+    let (_, stderr, ok) = run(
+        home.path(),
+        &[
+            "config",
+            "set",
+            "--agent",
+            "codex",
+            "Summary language",
+            "English",
+        ],
+        "",
+    );
+    assert!(!ok, "a machine row was accepted for one agent");
+    assert!(
+        stderr.contains("setting-not-per-agent"),
+        "the wrong refusal: {stderr}"
+    );
+    assert!(
+        !stderr.contains("setting-shadowed-by-local-file"),
+        "the refusal still blames a local override for a row that is simply not per-agent: {stderr}"
+    );
+    assert!(
+        stderr.contains("estigia config set"),
+        "the refusal does not name the command that holds the row: {stderr}"
+    );
+
+    // The refusal is a refusal, not a write it then complained about.
+    let (out, _, _) = run(
+        home.path(),
+        &["config", "list", "--agent", "codex", "--json"],
+        "",
+    );
+    let rows: serde_json::Value = serde_json::from_str(&out).expect("config list prints JSON");
+    let held = rows
+        .as_array()
+        .expect("an array of rows")
+        .iter()
+        .find(|row| row["setting"] == "Summary language")
+        .map(|row| row["value"].as_str().unwrap_or_default().to_owned())
+        .expect("the row is offered");
+    assert_eq!(
+        held, "Spanish",
+        "the refused per-agent write changed the answer anyway"
+    );
+}

@@ -18,7 +18,11 @@ head, base, digest, bytes, scope and criteria, and is blind to every sibling's v
 A later opinion that has read an earlier one is not independent. Claude's orchestrator launches the
 same static `review-blind` definition for every judge; there are no numbered definitions.
 
-All judges are **read-only** against that target. A judge that edits is no longer judging.
+A judge launched under the reserved `review-blind` role is **read-only** against that target: the
+role's gate refuses every write, edit, shell and delegation tool, so such a judge cannot mutate the
+target even if its prompt asks it to. A judge in that role that edits is no longer judging. Panels
+launched under any other subagent type are governed by the isolation rule two sections below, not by
+this sentence.
 
 ### Reserved reviewer role
 
@@ -31,6 +35,41 @@ user-tree uniqueness preflight before writing. A running reviewer is gated by th
 project-local bytes. A refused or unprovable launch contributes no judge. If the collision or canonical
 file cannot be restored, use a separate session or durable handoff; never silently reduce or serialize
 the panel. Ordinary agent names remain project-first, and this prelaunch check is Claude-only.
+
+### Panels run outside the reserved role
+
+A verdict is sometimes only worth what it measured. In a repository whose evidence standard is
+mutation — where confirming a finding means building the change, reddening a test, or turning the fix
+off to see the suite go red — the judge that measures cannot be the reserved reviewer, because that
+role is gated read-only and refuses the tools a measurement needs. Such a panel is launched under
+another subagent type, which places it outside the prelaunch check and outside the role gate above.
+It is not thereby ungoverned: this section is the rule that governs it.
+
+**Two judges run outside the reserved role are never pointed at one working directory.** Each judge
+run outside that role is given a directory nothing else writes for the duration of its review — not a
+sibling judge, not the orchestrator, not another run. Two measuring judges in one directory are
+concurrent writers: each reads the other's edits, rebuilt artefacts and test output as though they
+were the target's, so neither verdict is a reading of the bytes that were published and neither can
+be reproduced. A panel that cannot be given one such directory per judge runs fewer judges; it does
+not share one.
+
+A judge that finds the target already dirty **stops and reports it rather than restoring it**. Whatever
+made it dirty was somebody's measurement in progress, and restoring is a write like any other: it
+destroys that measurement, races whoever else is repairing the same directory, and leaves the head that
+gets delivered as whatever survived. Reporting a dirty target costs one verdict. Quietly repairing it
+costs the evidence that anything was wrong.
+
+Where those directories come from is not decided here. [Repository delivery](../references/repository-delivery.md)
+already owns run isolation — checkout paths, what makes a checkout this run's own, and per-checkout
+caches — and this rule adds a reason to obey that document rather than a second copy of it.
+
+Isolation buys reproducibility, not blindness. A judge's reading tools are unrestricted over whatever
+the directory it is handed contains, in the reserved role and outside it alike, so blindness under
+any shared target rests on this prose and on what the orchestrator gives each judge, and nothing
+measures it. Nor does this rule reach a published head a judge mutated: the review target is
+re-derived from a coherent clean snapshot and a dirty path is refused before publication or release,
+so that outcome is a blocked release rather than a bad delivery — a refusal that already existed and
+is not produced by anything written here.
 
 ## What agreement buys
 
@@ -75,7 +114,8 @@ publication receipt, and Claude's reserved-role prelaunch checks. Nothing proves
 
 That is worth stating first and plainly. Estigia gates repository writes against an adjudicated
 claim. It cannot prove panel size, concurrency, independence, blindness, same-finding identity or
-quorum. It cannot see whether a context read the target or whether a verdict was honest. There is no
+quorum. It cannot see whether a context read the target, whether a verdict was honest, or whether two
+judges running outside the reserved role were given separate working directories. There is no
 hook that fires when a reviewer forms an opinion.
 
 `publish_review` keeps ordinary compatible CI behind a draft PR and records epoch/PR/head/base/digest.
