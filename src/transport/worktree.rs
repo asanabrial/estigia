@@ -16,8 +16,11 @@ const DEVICE_NAMES: &[&str] = &[
 /// What joins a scope a template did not name to the template that lacks it.
 ///
 /// Git rejects `~` in a ref name and the run-ID alphabet rejects it too, so it
-/// appears in **neither** half and the composed name has exactly one split
-/// point.
+/// appears in **neither** value it joins. A template can therefore gain both a
+/// branch and a run ID — two joins, three parts — and every part still ends
+/// where the next begins. Nothing here splits the composed name back apart;
+/// what the property buys is that two different pairs cannot spell one
+/// directory, which is the collision the join exists to prevent.
 pub const SCOPE_JOIN: char = '~';
 
 /// Refuses a path component that does not name a plain directory on every

@@ -2021,6 +2021,26 @@ suite. Everything else here is prose held by review.
   reviewers of receipts `c7e7b821a12455ea6293a321ad4be30a` and `0cfd9a216c02aa82133bb0f992389a85`
   while checking that issue #62 was closed on every write path; the enumeration was every caller of
   `setup::rewrite_configuration`, `write_agent_configuration*` and `write_repository_configuration`.
+- **The legacy-checkout stop cannot name the legacy path of a template that named no placeholder.**
+  A `Worktree location` missing `<branch>` or `<run-id>` gains it in memory, and `start_branch` stops
+  with `legacy-worktree-registered` when the pre-migration checkout is still registered — computed
+  from the raw template. For a template naming one placeholder that is exactly what the previous
+  build created, so the stop fires. For a bare directory naming **neither**, the raw template is a
+  path the previous build never created: what it created was that directory with `~<run-id>`
+  appended. So a run upgrading into this build and resuming such a branch is not stopped by Estigia;
+  `git worktree add` refuses it instead, with git's own *"already used by worktree at …"*, before any
+  remote state is written and with no data lost. The recovery is the same `git worktree remove`, and
+  it is written in the binding rather than enforced here. Measured by the blind reviewer of receipt
+  `6b192e0ee94f11004b621c06c8e8e5dd` across twenty-four template shapes.
+- **Two branches can still fold into one directory, because the branch is flattened and not
+  validated.** Path uniqueness across branches now rests on the flattened `<branch>` component, and
+  the flattening is not injective: with template `/w/<repo>`, branches `fix/1-a`, `fix-1-a` and
+  `fix//1-a` in one run all compose `/w/estigia~fix-1-a~<run-id>`. The binding makes exactly this
+  argument as its reason for *validating* `<run-id>` rather than flattening it — the second run finds
+  a registered worktree carrying its own branch at its own path, which is the shape of a legitimate
+  resume — and the branch now carries the same duty without the same protection. Not a regression:
+  the same fold existed for templates naming `<branch>` before. Unreachable under the skill's own
+  `<type>/<issue>-<slug>` branch convention, which is why it is recorded rather than closed.
 - **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it

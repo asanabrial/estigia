@@ -973,8 +973,9 @@ pub fn start_branch(
         what.branch,
     )?;
 
-    // A branch-only template whose legacy path still has a checkout is not this
-    // command's to clean up: it may hold unpushed work.
+    // A template that gained a scope, whose legacy path still has a checkout, is
+    // not this command's to clean up: it may hold unpushed work. Either scope
+    // can be the one that was added — see `worktree::scoped_template`.
     if migrated {
         let legacy = worktree::worktree_path(
             template,
@@ -1592,8 +1593,12 @@ pub fn develop_link(
     Ok(serde_json::json!({"linked": false, "outcome": "not-linked", "detail": detail}))
 }
 
-/// The stop a branch-only template earns when its pre-migration checkout is
-/// still there — and only when it is still **there**.
+/// The stop a template that gained a scope earns when its pre-migration checkout
+/// is still there — and only when it is still **there**.
+///
+/// Either scope can be the one that was added: a template naming the branch and
+/// not the run, or the run and not the branch. Both leave a directory the
+/// previous build created, and neither is this command's to remove.
 ///
 /// Registered *and* on disk, never registered alone. The transport asks
 /// `legacy.exists()` before it looks the path up, and this asked only the
@@ -1625,11 +1630,12 @@ fn legacy_worktree_block(
         "ok": false,
         "reason": "legacy-worktree-registered",
         "legacy_path": legacy.display().to_string(),
-        "run_scoped_path": run_scoped.display().to_string(),
+        "scoped_path": run_scoped.display().to_string(),
         "occupied_by_branch": owner,
-        "action": "your worktree template is branch-only, and a checkout from before \
-                   run-scoping is still registered at the legacy path. It may hold \
-                   unpushed work, so nothing here removes it: push or preserve that \
+        "action": "your worktree template does not name every scope a checkout needs \
+                   (the branch, the run, or both), and a checkout from before the \
+                   missing one was added is still registered at the legacy path. It may \
+                   hold unpushed work, so nothing here removes it: push or preserve that \
                    work, `git worktree remove` it, then re-run this command",
     })))
 }

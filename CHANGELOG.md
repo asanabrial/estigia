@@ -32,6 +32,13 @@ the workflow, it holds the tools.
   never changed. The tests now use the templates an operator actually writes, including the bare
   absolute directory the settings table documents and the skill ships `unset`.
 
+  The `legacy-worktree-registered` stop, its payload key and the binding section that is its only
+  written recovery all described one dimension and now describe both. Two residuals are recorded in
+  `docs/honesty.md` rather than closed: the stop cannot name the legacy path of a template that named
+  no placeholder at all, so git refuses that resume instead of Estigia; and path uniqueness across
+  branches rests on a flattening that is not injective, which the binding already argues is why
+  `<run-id>` is validated rather than flattened.
+
 - A row about **this machine** now reaches every installed contract, and cannot be given a different
   answer for one agent. `Setting::scope()` has three values and both write paths were written as
   though it had two: the plain `config set` asked `elsewhere()` only for `Scope::Everywhere`, so
