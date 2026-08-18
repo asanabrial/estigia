@@ -589,8 +589,8 @@ newline bytes is legal and is handled by the NUL-delimited read below; quote pat
 ### Migrating a worktree template that gained a scope
 
 A `Worktree location` missing `<branch>` or `<run-id>` gets the in-memory sibling described above,
-and that is usually the end of it. The one hard case is a checkout the previous build created at the
-legacy path that is **still registered to a branch**: it may hold unpushed work, the scope it lacks
+and that is usually the end of it. The one hard case is a checkout at the legacy path that is
+**still registered to a branch**: it may hold unpushed work, the scope it lacks
 is exactly what would prove who it belongs to, and starting a sibling beside it would leave two live
 checkouts of one branch. (Registered at all: a legacy checkout left detached carries no branch in the
 registry and stops this just the same, reporting `occupied_by_branch: null`. An earlier version of
@@ -599,10 +599,11 @@ with `legacy-worktree-registered` and neither removes nor writes into it. Push o
 `git worktree remove` it, then re-run — steps 1, 2 and 4 above. An unregistered leftover directory at
 the legacy path blocks nothing, because the sibling is a different directory.
 
-**The stop reaches the template whose legacy path it can name.** For a template naming one
-placeholder and not the other, the legacy path is what that same template produced before, so the
-stop fires. For a template naming **neither** — a bare directory — the legacy path is the raw
-template, which the previous build never created: what it created was that directory with
+**Which scope was added decides whether the stop can fire.** A template naming `<run-id>` and not
+`<branch>` moves on upgrade, and its raw path is what earlier builds created — so the stop fires
+there. A branch-only template does not move at all: it composed `…~<run-id>` before and composes it
+still, so there is nothing to stop. For a template naming **neither** — a bare directory — the path
+does move, but the legacy path is the raw template, which no build created: what it created was that directory with
 `~<run-id>` appended. So on upgrade, a run resuming such a branch is not stopped here; `git worktree
 add` refuses it instead, with git's own *"already used by worktree at …"*, before any remote state is
 written. The recovery is the same `git worktree remove`, and it is written here because nothing else

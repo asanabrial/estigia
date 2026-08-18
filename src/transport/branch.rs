@@ -1596,9 +1596,13 @@ pub fn develop_link(
 /// The stop a template that gained a scope earns when its pre-migration checkout
 /// is still there — and only when it is still **there**.
 ///
-/// Either scope can be the one that was added: a template naming the branch and
-/// not the run, or the run and not the branch. Both leave a directory the
-/// previous build created, and neither is this command's to remove.
+/// Which scope was added decides whether this can fire. A template naming
+/// `<run-id>` and not `<branch>` moves on upgrade and its raw path is what
+/// earlier builds created — the case this stop is for, and not one this command
+/// may clean up, because that directory may hold unpushed work. A branch-only
+/// template does not move at all, so there is nothing to stop. A template naming
+/// neither moves, but its raw path is one no build created; `docs/honesty.md`
+/// records what happens there.
 ///
 /// Registered *and* on disk, never registered alone. The transport asks
 /// `legacy.exists()` before it looks the path up, and this asked only the
