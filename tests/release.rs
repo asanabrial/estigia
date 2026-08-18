@@ -712,8 +712,25 @@ fn every_command_the_rules_tell_you_to_run_is_one_ci_runs() {
     }
 }
 
+/// CI starts on a default-branch push, on a released draft, and on an explicit
+/// dispatch — and on no other pull request event.
+///
+/// The third trigger is the one `publish_review` calls, and it is why this test
+/// was rewritten rather than left passing. As it stood it asserted only that two
+/// spellings were present and that three words were absent, so
+/// `workflow_dispatch:` could be added — or taken away again — with nothing
+/// objecting, while the function's name went on claiming the file said something
+/// it no longer did. A trigger the transport depends on and no test names is a
+/// trigger somebody deletes while tidying, and the first thing that notices is a
+/// delivery that lost its lane.
+///
+/// The absence half is what stops this widening into the cardinality the draft
+/// barrier refused. `CHANGELOG.md` records why open, synchronize and reopen are
+/// not here: one run per push exposes the head to CI before the review barrier
+/// exists. One run per **publication epoch** is a different number, and it is
+/// the only one this file gained.
 #[test]
-fn pull_request_ci_starts_only_when_a_draft_is_released() {
+fn ci_starts_on_a_released_draft_or_an_explicit_dispatch_and_on_nothing_else() {
     let workflow = read(".github/workflows/ci.yml");
     let compact: String = workflow.chars().filter(|c| !c.is_whitespace()).collect();
 
@@ -721,6 +738,15 @@ fn pull_request_ci_starts_only_when_a_draft_is_released() {
         compact.contains("push:branches:[main]")
             && compact.contains("pull_request:types:[ready_for_review]"),
         "CI is not limited to default-branch pushes and ready-for-review events:\n{workflow}"
+    );
+    // The trigger `publish_review` dispatches against the head it just pushed.
+    // Without it `gh workflow run` answers `HTTP 422` and every publication
+    // silently loses its lane, which is the whole of what this change bought.
+    assert!(
+        compact.contains("workflow_dispatch:"),
+        "the publication lane cannot be dispatched: `publish_review` starts this workflow against \
+         the head it published, and a workflow with no `workflow_dispatch` trigger refuses that \
+         request:\n{workflow}"
     );
     for forbidden in ["opened", "synchronize", "reopened"] {
         assert!(

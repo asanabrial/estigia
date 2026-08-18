@@ -2262,3 +2262,368 @@ fn the_refusal_reads_as_a_sentence_in_every_combination() {
         }
     }
 }
+
+/// One check run, as the check-run listing spells it.
+fn check_run(name: &str, status: &str, conclusion: Option<&str>) -> serde_json::Value {
+    serde_json::json!({
+        "name": name,
+        "status": status,
+        "conclusion": conclusion,
+        "html_url": "https://github.com/o/r/actions/runs/31865504912/job/99",
+    })
+}
+
+/// The listing, with the count the API reports beside it.
+fn check_runs(runs: &[serde_json::Value]) -> serde_json::Value {
+    serde_json::json!({ "total_count": runs.len(), "check_runs": runs })
+}
+
+/// The four states the publication lane can be in, and the first one decides
+/// whether this change is a fix or a disaster.
+///
+/// **Absence proceeds.** A consumer repository with no dispatchable lane has no
+/// check runs on any head; refusing there would stop every such repository from
+/// recording a verdict at all, which breaks the consumers this exists to
+/// protect. It is measured on its own, because a test that omitted it would let
+/// a later change turn absence into a refusal with nothing objecting.
+///
+/// The other three refuse, and `in_progress` is the one most easily written the
+/// wrong way round: a lane that has not answered has not said the bytes are
+/// sound.
+#[test]
+fn the_publication_lane_clears_only_a_head_that_has_answered_and_answered_green() {
+    let head = "b".repeat(40);
+    let path = format!("repos/o/r/commits/{head}/check-runs?per_page=100");
+    let judged = |data: &serde_json::Value| judge_publication_lane(data, 7, &head, &path);
+
+    // None at all: the behaviour before this existed, exactly.
+    assert!(
+        judged(&check_runs(&[])).is_ok(),
+        "a head with no check runs was refused, which breaks every repository that has no lane"
+    );
+
+    // Green, and the two completed conclusions that are a lane declining to
+    // have an opinion rather than a lane that failed.
+    for conclusion in ["success", "neutral", "skipped"] {
+        assert!(
+            judged(&check_runs(&[check_run(
+                "check (ubuntu-latest)",
+                "completed",
+                Some(conclusion)
+            )]))
+            .is_ok(),
+            "a completed `{conclusion}` lane refused a verdict"
+        );
+    }
+
+    // Red, in every spelling that is not one of those three. A completed run
+    // with no conclusion at all is included: an unknown result is not clearance.
+    for conclusion in [
+        Some("failure"),
+        Some("timed_out"),
+        Some("cancelled"),
+        Some("action_required"),
+        Some("startup_failure"),
+        None,
+    ] {
+        let refusal = judged(&check_runs(&[
+            check_run("check (windows-latest)", "completed", Some("success")),
+            check_run("check (ubuntu-latest)", "completed", conclusion),
+        ]))
+        .expect_err("a lane that did not conclude green cleared a verdict");
+        let Failure::Stop(envelope) = &refusal else {
+            panic!("a red lane is a stop, not {refusal:?}");
+        };
+        assert_eq!(envelope["reason"], "publication-lane-red", "{conclusion:?}");
+        assert_eq!(
+            envelope["lane"], "check (ubuntu-latest)",
+            "the refusal names the wrong lane: {envelope}"
+        );
+        // A command that clears it, not a dead end: the run is readable by id,
+        // and the way past a red lane is a new epoch over fixed bytes.
+        let action = envelope["action"].as_str().unwrap_or_default();
+        assert!(
+            action.contains("gh run view 31865504912 --log-failed")
+                && action.contains("republish_review"),
+            "the red refusal names no command that clears it: {action}"
+        );
+        assert_eq!(
+            envelope["run_url"],
+            "https://github.com/o/r/actions/runs/31865504912/job/99"
+        );
+    }
+
+    // Unfinished. `in_progress` is not `success`, and neither is anything else
+    // GitHub reports before a run has settled.
+    for status in ["queued", "in_progress", "waiting", "pending", "requested"] {
+        let refusal = judged(&check_runs(&[
+            check_run("check (windows-latest)", "completed", Some("success")),
+            check_run("check (macos-latest)", status, None),
+        ]))
+        .expect_err("a lane that had not answered cleared a verdict");
+        let Failure::Stop(envelope) = &refusal else {
+            panic!("an unfinished lane is a stop, not {refusal:?}");
+        };
+        assert_eq!(
+            envelope["reason"], "publication-lane-unfinished",
+            "{status} was not read as unfinished"
+        );
+        assert_eq!(envelope["lane"], "check (macos-latest)");
+        assert!(
+            envelope["action"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("gh run watch 31865504912 --exit-status"),
+            "the unfinished refusal names no command to watch it: {envelope}"
+        );
+    }
+
+    // Red before unfinished when both are there. Waiting cannot turn a failed
+    // lane green, so the answer that cannot improve is the one to report.
+    let both = judged(&check_runs(&[
+        check_run("check (macos-latest)", "in_progress", None),
+        check_run("check (ubuntu-latest)", "completed", Some("failure")),
+    ]))
+    .expect_err("a red lane beside an unfinished one cleared a verdict");
+    let Failure::Stop(envelope) = &both else {
+        panic!("expected a stop: {both:?}");
+    };
+    assert_eq!(envelope["reason"], "publication-lane-red");
+}
+
+/// A listing that did not answer is a failed read, never a green lane and never
+/// a red one.
+///
+/// The partial page is the half worth having. `total_count` is what the API says
+/// exists; anything less than that arrived is an answer about *part* of the
+/// head, and thirty green lanes cleared as the whole of it is how a red
+/// thirty-first becomes invisible. It is the rule `connection_page` states for
+/// the closing-PR listing, for the same reason.
+#[test]
+fn an_unreadable_check_run_listing_fails_the_read_rather_than_clearing_the_head() {
+    let head = "b".repeat(40);
+    let path = format!("repos/o/r/commits/{head}/check-runs?per_page=100");
+    let judged = |data: serde_json::Value| judge_publication_lane(&data, 7, &head, &path);
+
+    for (what, data) in [
+        ("no check_runs list", serde_json::json!({"total_count": 0})),
+        (
+            "check_runs is not a list",
+            serde_json::json!({"total_count": 0, "check_runs": "none"}),
+        ),
+        (
+            "no total_count",
+            serde_json::json!({"check_runs": [check_run("check", "completed", Some("success"))]}),
+        ),
+        (
+            "one page of several",
+            serde_json::json!({
+                "total_count": 120,
+                "check_runs": [check_run("check", "completed", Some("success"))],
+            }),
+        ),
+        ("nothing at all", serde_json::json!({})),
+    ] {
+        let refusal = judged(data).expect_err("an unreadable listing cleared a verdict");
+        assert!(
+            matches!(refusal, Failure::Read(_)),
+            "{what} was reported as something other than a failed read: {refusal:?}"
+        );
+        let detail = refusal.detail();
+        assert!(
+            detail.contains("this is a failed read and not a green lane"),
+            "{what} does not say it is a read failure rather than a red lane: {detail}"
+        );
+    }
+}
+
+/// `gh workflow run` is read for what it says, and a repository with no lane is
+/// not a caller without permission.
+///
+/// The two look identical to a `?` and need opposite outcomes. `404` is
+/// deliberately on the permissive side: GitHub answers it both for a workflow
+/// that is not there and for one the caller may not see, and refusing a
+/// publication on the ambiguous code would stop every repository that has not
+/// adopted this lane from publishing at all.
+#[test]
+fn only_a_permission_refusal_stops_a_publication_that_could_not_start_its_lane() {
+    assert_eq!(classify_lane_dispatch(0, ""), LaneDispatch::Started);
+
+    for said in [
+        "HTTP 403: Resource not accessible by personal access token",
+        "gh: HTTP 401: Bad credentials",
+    ] {
+        assert!(
+            matches!(classify_lane_dispatch(1, said), LaneDispatch::Forbidden(_)),
+            "a permission refusal was not read as one: {said}"
+        );
+    }
+    for said in [
+        "could not find any workflows named ci.yml",
+        "gh: HTTP 404: Not Found",
+        "gh: HTTP 422: Workflow does not have 'workflow_dispatch' trigger",
+    ] {
+        assert!(
+            matches!(classify_lane_dispatch(1, said), LaneDispatch::Absent(_)),
+            "a repository with no dispatchable lane would have been refused a publication: {said}"
+        );
+    }
+    assert!(
+        matches!(
+            classify_lane_dispatch(1, "dial tcp: lookup api.github.com: no such host"),
+            LaneDispatch::Unknown(_)
+        ),
+        "a call that did not answer was read as an answer"
+    );
+}
+
+/// The receipt comment says what this publication did about CI, and says it per
+/// lane.
+///
+/// **The test that did not exist**, and its absence is why the receipt spent a
+/// whole change contradicting the answer returned beside it. The dispatch sits
+/// immediately above the call that writes this comment, so `publish_review`
+/// answered `"publication_lane": "started"` — with a note saying an accepted
+/// verdict waits on that run — while posting a comment that said *"CI remains
+/// blocked while the PR is draft"*. Two sentences from one call, disagreeing,
+/// on issue #30's own timeline twice. The four contract sentences that had to
+/// move were found by grepping `.md` files; this fifth one is emitted at run
+/// time, so no grep over documents could reach it and nothing here read it.
+///
+/// Three properties, and the middle one is the one that goes stale:
+///
+/// - the evidence lines and the marker survive, because a reviewer binds to
+///   those bytes and prose is not what carries them;
+/// - the CI clause tells the two lanes apart — the publication lane an accepted
+///   verdict waits on, and the pull-request-event lane that still waits for the
+///   pull request to be marked ready. Restoring the old sentence, or dropping
+///   either half, fails here;
+/// - a state that did not start a lane does not claim one did. Absence is the
+///   ordinary condition of every repository that has not adopted the lane, and
+///   a receipt telling those repositories a run is coming is the same defect
+///   one state along.
+#[test]
+fn the_publication_receipt_says_what_it_did_about_ci_and_says_it_per_lane() {
+    let marker = "<!-- issue-flow: published run-id=claude-abcd1234 -->";
+    let note = |lane: &LaneDispatch| {
+        publication_note(
+            "https://github.com/o/r/pull/7",
+            &"e".repeat(32),
+            &"b".repeat(40),
+            &"c".repeat(40),
+            &"d".repeat(64),
+            lane,
+            marker,
+        )
+    };
+
+    for (label, lane) in [
+        ("started", LaneDispatch::Started),
+        ("absent", LaneDispatch::Absent("HTTP 404".to_owned())),
+        ("unknown", LaneDispatch::Unknown("no such host".to_owned())),
+    ] {
+        let text = note(&lane);
+        for line in [
+            &format!("- epoch `{}`", "e".repeat(32)),
+            &format!("- head `{}`", "b".repeat(40)),
+            &format!("- base `{}`", "c".repeat(40)),
+            &format!("- target `{}`", "d".repeat(64)),
+            &marker.to_owned(),
+            &"Review is bound to this complete clean target.".to_owned(),
+            &"any republish creates a new epoch".to_owned(),
+        ] {
+            assert!(
+                text.contains(line.as_str()),
+                "the {label} receipt lost the evidence a review is bound to: {line} is not in \
+                 {text}"
+            );
+        }
+
+        // The sentence this test exists for. It was true of the world before
+        // the publication lane existed and false in every publication after,
+        // and it is the one a blind reviewer reads.
+        assert!(
+            !text.contains("CI remains blocked while the PR is draft"),
+            "the {label} receipt still tells every reviewer CI is blocked, which is what the \
+             publication lane made false: {text}"
+        );
+        // Both lanes, named apart. The draft barrier is still real — a
+        // dispatch does not mark the pull request ready — so dropping this
+        // half would make the receipt claim CI is running when the ordinary
+        // lane is not.
+        assert!(
+            text.contains("still waits for it to be marked ready"),
+            "the {label} receipt no longer says the ordinary pull-request-event lane waits for \
+             the pull request to be readied: {text}"
+        );
+        assert!(
+            text.contains("ci.yml"),
+            "the {label} receipt names no publication lane at all: {text}"
+        );
+    }
+
+    // What each state says about a verdict, which is the thing the receipt is
+    // read for. `started` is the only one that may promise a run.
+    assert!(
+        note(&LaneDispatch::Started).contains(
+            "was started against this head as this receipt was recorded, and an accepted verdict \
+             cannot be recorded until it is green"
+        ),
+        "a started lane does not tell the reviewer a verdict waits on it: {}",
+        note(&LaneDispatch::Started)
+    );
+    for (label, lane) in [
+        ("absent", LaneDispatch::Absent("HTTP 404".to_owned())),
+        ("unknown", LaneDispatch::Unknown("no such host".to_owned())),
+    ] {
+        let text = note(&lane);
+        assert!(
+            !text.contains("was started against this head"),
+            "the {label} receipt claims a lane run that this publication did not start, which is \
+             the receipt disagreeing with the answer beside it one state along: {text}"
+        );
+    }
+    assert!(
+        note(&LaneDispatch::Absent("HTTP 404".to_owned()))
+            .contains("no publication lane and verdicts are not gated on one"),
+        "a repository with no lane is not told its verdicts are ungated, so its reviewers wait \
+         for a run that will never appear"
+    );
+    assert!(
+        note(&LaneDispatch::Unknown("no such host".to_owned()))
+            .contains("read the checks on this head before obtaining verdicts"),
+        "an unknown dispatch is reported as if it were an answer"
+    );
+}
+
+/// The refusal names a run somebody can actually watch, or names none.
+///
+/// A `gh run watch` with the wrong number is a dead end, and this repository
+/// calls naming one worse than naming nothing.
+#[test]
+fn a_check_runs_url_yields_the_workflow_run_or_nothing_at_all() {
+    assert_eq!(
+        workflow_run_id("https://github.com/o/r/actions/runs/31865504912/job/91234"),
+        Some("31865504912".to_owned())
+    );
+    assert_eq!(
+        workflow_run_id("https://github.com/o/r/actions/runs/31865504912"),
+        Some("31865504912".to_owned())
+    );
+    for nothing in [
+        "",
+        "https://example.invalid/checks/1",
+        // A check run written by an app rather than by Actions: the URL names no
+        // workflow run, and deriving one from the check id would send somebody
+        // to a different run entirely.
+        "https://github.com/o/r/runs/12345",
+        "https://github.com/o/r/actions/runs//job/1",
+        "https://github.com/o/r/actions/runs/not-a-number/job/1",
+    ] {
+        assert_eq!(
+            workflow_run_id(nothing),
+            None,
+            "invented a run id for {nothing:?}"
+        );
+    }
+}

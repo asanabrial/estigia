@@ -148,11 +148,16 @@ a new epoch and invalidates old evidence even for identical bytes; base movement
 stale.
 
 The repository compatibility requirement is explicit: PR CI starts on `ready_for_review`, not topic
-push/open/synchronize/reopen. Estigia does not weakly parse arbitrary consumer YAML to claim this is
-true. GitHub cannot make the ready write conditional atomically, and out-of-band collaborators or
-repository workflows can bypass the order, start other CI, push new bytes, or forge comments. This is
-cooperative workflow ordering, not proof of panel size, concurrency, independence, blindness,
-same-finding identity or quorum, and not malicious-collaborator authenticity.
+push/open/synchronize/reopen. Beside it sits the **publication lane**: a `workflow_dispatch` trigger
+that `publish_review` and `republish_review` start once per publication epoch against the head they
+just pushed — not once per push, and dispatching does not mark the PR ready. `record_review_verdict`
+refuses an accepted verdict for a head whose lane is red or unfinished, so a platform-only failure is
+found before the review rounds are spent rather than after. A repository with no dispatchable lane has
+no check runs on its head, which proceeds unchanged: Estigia does not weakly parse arbitrary consumer
+YAML to claim any of this is true. GitHub cannot make the ready write conditional atomically, and
+out-of-band collaborators or repository workflows can bypass the order, start other CI, push new
+bytes, or forge comments. This is cooperative workflow ordering, not proof of panel size, concurrency,
+independence, blindness, same-finding identity or quorum, and not malicious-collaborator authenticity.
 
 The required CI set is the union of host-required checks and every applicable repository lane. Each
 expected lane must exist once and succeed; absent, skipped, queued, cancelled, or failed work is not
