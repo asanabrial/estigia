@@ -6984,6 +6984,37 @@ fn tracker_command(
     command
 }
 
+/// The publication receipt this run staged, read back off disk.
+///
+/// `comment_with_body` posts `--body-file`, so the call log carries a path and
+/// never the prose. The prose is what a blind reviewer reads, and until this
+/// existed nothing in the suite read a word of it — which is how the comment
+/// came to say *"CI remains blocked while the PR is draft"* in the same call
+/// that answered `"publication_lane": "started"`.
+///
+/// The staged file is left where it was written, so pointing the child's
+/// temporary directory into the trace both recovers it and keeps the fixture's
+/// residue inside the directory the test owns.
+fn staged_receipt(temp: &std::path::Path, issue: u64) -> String {
+    let suffix = format!("-{issue}-published.md");
+    let found: Vec<std::path::PathBuf> = std::fs::read_dir(temp)
+        .expect("the redirected temporary directory is readable")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(&suffix))
+        })
+        .collect();
+    assert_eq!(
+        found.len(),
+        1,
+        "exactly one publication receipt should have been staged in {}, found {found:?}",
+        temp.display()
+    );
+    std::fs::read_to_string(&found[0]).expect("the staged receipt is readable")
+}
+
 /// CI release must refuse a receipt no distinct reviewer accepted, and must
 /// refuse it *before* it touches the pull request.
 ///
@@ -11452,4 +11483,951 @@ fn a_fact_about_this_machine_reaches_every_contract_and_cannot_be_set_per_agent(
         held, "Spanish",
         "the refused per-agent write changed the answer anyway"
     );
+}
+
+/// Every publication starts the lane **once**, and starts it before the receipt
+/// exists.
+///
+/// Two properties, and neither is provable from the source. The count is the one
+/// this issue turns on: `CHANGELOG.md` records why CI does not start on a topic
+/// push, open, synchronize or reopen — one run per push exposes the head before
+/// the review barrier exists — so a fix that started a run per push would have
+/// re-created exactly what the barrier refused, while looking like more
+/// coverage. One run per **publication epoch** is a different number, and this
+/// is where it is counted.
+///
+/// The ordering is the other. The dispatch sits between the push and the
+/// `published` marker, so a token that may not start workflows refuses while no
+/// epoch exists — rather than recording a receipt whose lane nobody could start,
+/// which is a head judges get bound to and CI never answers for. Measured as a
+/// position in the call log: the dispatch is before the comment that carries the
+/// marker.
+///
+/// Both entry points, because they share a body today and nothing says they
+/// always will.
+#[test]
+fn each_publication_starts_one_lane_run_before_it_records_the_receipt() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-lane";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    let sha = |what: &str| -> String {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(["rev-parse", what])
+            .output()
+            .expect("git answers");
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    assert!(git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string()
+    ]));
+    assert!(git(&["branch", "-M", "main"]));
+    std::fs::write(repo.join("kept.txt"), "base\n").expect("the base file");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "base content",
+    ]));
+    assert!(git(&["push", "-q", "origin", "main"]));
+
+    assert!(git(&["checkout", "-q", "-b", branch]));
+    std::fs::write(repo.join("kept.txt"), "changed\n").expect("the change");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "a change that names no issue",
+    ]));
+    // Pushed already, so both routes land: the ordinary push is a no-op
+    // fast-forward and the leased one leases against the head the receipt below
+    // names. What is being counted is the dispatch, not the push.
+    assert!(git(&["push", "-q", "-u", "origin", branch]));
+    let head = sha("HEAD");
+    let base_sha = sha("origin/main");
+
+    let body = trace.path().join("pr-body.md");
+    std::fs::write(&body, "A body that names nothing.\n").expect("the body");
+
+    let timeline = serde_json::json!({
+        "state": "OPEN",
+        "labels": [{"name": "status:in-progress"}],
+        "comments": [
+            {
+                "id": "IC_1",
+                "createdAt": "2026-01-01T00:00Z",
+                "viewerDidAuthor": true,
+                "includesCreatedEdit": false,
+                "body": format!(
+                    "Claimed.\n\n<!-- issue-flow: claim run-id={run_id} runtime=claude \
+                     horizon=2099-01-01T00:00Z op-id={} -->\n",
+                    "a".repeat(32)
+                ),
+            },
+            {
+                "id": "IC_2",
+                "createdAt": "2026-01-01T01:00Z",
+                "viewerDidAuthor": true,
+                "includesCreatedEdit": false,
+                "body": format!(
+                    "Published draft for review.\n\n<!-- issue-flow: published run-id={run_id} \
+                     pr=7 head={head} base={base_sha} digest={} epoch={} -->\n",
+                    "c".repeat(64),
+                    "a".repeat(32)
+                ),
+            },
+        ],
+    })
+    .to_string();
+    let pr = serde_json::json!({
+        "number": 7,
+        "url": "https://github.com/o/r/pull/7",
+        "headRefOid": head,
+        "baseRefOid": base_sha,
+        "state": "OPEN",
+        "isDraft": true,
+    });
+    let answers = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "stdout": timeline, "status": 0 },
+        { "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 },
+        { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
+        { "matches": "json body", "stdout": serde_json::json!({"body": "names nothing"}).to_string(), "status": 0 },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        {
+            "matches": "api graphql",
+            "stdout": serde_json::json!({
+                "data": { "repository": { "issue": { "closedByPullRequestsReferences": {
+                    "nodes": [],
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                } } } },
+            }).to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    for tool in ["publish_review", "republish_review"] {
+        let runs = home.join(".estigia").join("runs");
+        // Revision-guarded: the second pass needs a clean pointer.
+        let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
+        let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+        run.issue = Some(12);
+        run.state = Some("in-progress".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": tool, "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "branch": branch,
+                "base": "main",
+                "pr_title": "Something",
+                "pr_body_file": body.display().to_string(),
+                "worktree": repo.display().to_string(),
+            }}
+        })
+        .to_string();
+
+        let log = trace.path().join(format!("lane-{tool}.log"));
+        // Where the receipt this call stages can be read back from. One
+        // directory per entry point, because the staged name carries the
+        // child's process id and two children would leave two files.
+        let temp = trace.path().join(format!("temp-{tool}"));
+        std::fs::create_dir_all(&temp).expect("a temporary directory for the child");
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .env("TMPDIR", &temp)
+            .env("TMP", &temp)
+            .env("TEMP", &temp)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        assert_eq!(
+            response["result"]["isError"], false,
+            "{tool} did not land: {text}"
+        );
+        assert!(
+            text.contains("\"publication_lane\": \"started\""),
+            "{tool} did not report that it started the lane: {text}"
+        );
+
+        let calls: Vec<String> = std::fs::read_to_string(&log)
+            .expect("the call log")
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        let dispatched: Vec<&String> = calls
+            .iter()
+            .filter(|line| line.contains("workflow run"))
+            .collect();
+        assert_eq!(
+            dispatched.len(),
+            1,
+            "{tool} started {} lane runs for one publication epoch; one per push is the \
+             cardinality the draft barrier refused: {calls:?}",
+            dispatched.len()
+        );
+        assert!(
+            dispatched[0].contains(&format!("workflow run ci.yml --ref {branch}")),
+            "{tool} dispatched something other than this repository's lane against the published \
+             branch: {}",
+            dispatched[0]
+        );
+
+        let started = calls
+            .iter()
+            .position(|line| line.contains("workflow run"))
+            .expect("the lane was started");
+        let recorded = calls
+            .iter()
+            .position(|line| line.contains("issue comment"))
+            .expect("the publication marker was written");
+        assert!(
+            started < recorded,
+            "{tool} recorded the publication receipt before it started the lane, so a token that \
+             cannot dispatch would leave an epoch with a lane nobody can start: {calls:?}"
+        );
+
+        // And what that receipt **says**, which is the half no test read. The
+        // answer above and the comment here come out of one call, and they used
+        // to contradict each other: one reported a lane an accepted verdict
+        // waits on, the other told every reviewer CI was blocked until the pull
+        // request is readied. A reviewer who believes the comment never looks at
+        // the lane, and reads its refusal as a malfunction.
+        let receipt = staged_receipt(&temp, 12);
+        assert!(
+            !receipt.contains("CI remains blocked while the PR is draft"),
+            "{tool} posted a receipt saying CI is blocked in the same call that started the \
+             publication lane: {receipt}"
+        );
+        assert!(
+            receipt.contains(
+                "One run of `ci.yml` was started against this head as this receipt was recorded, \
+                 and an accepted verdict cannot be recorded until it is green."
+            ),
+            "{tool} posted a receipt that does not say a verdict waits on the lane it started: \
+             {receipt}"
+        );
+        assert!(
+            receipt.contains("still waits for it to be marked ready"),
+            "{tool} posted a receipt that drops the draft barrier, so it now reads as though the \
+             ordinary pull-request-event lane were running too: {receipt}"
+        );
+    }
+}
+
+/// The lane refusal refuses, and the two lenient states publish — through the
+/// real server, over the wire the transport actually uses.
+///
+/// **The step nothing held.** The classification is measured pure
+/// (`only_a_permission_refusal_stops_a_publication_that_could_not_start_its_lane`)
+/// and the position is measured in the call log (the test above), but what joins
+/// them — that `Forbidden` returns `Err` and that nothing else does — was
+/// measured by no test at all. Both directions were mutated and both stayed
+/// green: deleting the whole refusal block, and making `Absent` refuse beside
+/// `Forbidden`. The second is the one that matters most, because it breaks every
+/// consumer repository that has no `ci.yml` while looking like a tighter gate.
+///
+/// Three rows, one per state that can reach the join:
+///
+/// - **`HTTP 403` refuses**, `publication-lane-forbidden`, and refuses *before*
+///   the epoch marker: nothing is posted to the timeline. The envelope carries
+///   `world: "committed"`, because the push has already happened and a bare stop
+///   would send somebody looking for a branch that is on the remote.
+/// - **`HTTP 404` publishes**, reporting `absent`. Estigia does not parse
+///   consumer YAML and cannot tell a workflow that is not there from one it may
+///   not see, so the ambiguous code is on the permissive side by construction.
+/// - **A dispatch that does not answer publishes**, reporting `unknown`. An
+///   unknown result is not clearance, but it is not a reason to refuse a
+///   publication either — `record_review_verdict` re-reads the world.
+///
+/// The state word is asserted for each, not only the refusal: only `started` was
+/// ever pinned, so a wrong word in `absent` or `unknown` was invisible, and the
+/// note beside it is what tells a resuming run whether to go looking for checks.
+#[test]
+fn only_a_forbidden_dispatch_refuses_a_publication_and_the_other_states_report() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-lane-states";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    let sha = |what: &str| -> String {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(["rev-parse", what])
+            .output()
+            .expect("git answers");
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    assert!(git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string()
+    ]));
+    assert!(git(&["branch", "-M", "main"]));
+    std::fs::write(repo.join("kept.txt"), "base\n").expect("the base file");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "base content",
+    ]));
+    assert!(git(&["push", "-q", "origin", "main"]));
+
+    assert!(git(&["checkout", "-q", "-b", branch]));
+    std::fs::write(repo.join("kept.txt"), "changed\n").expect("the change");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "a change that names no issue",
+    ]));
+    assert!(git(&["push", "-q", "-u", "origin", branch]));
+    let head = sha("HEAD");
+    let base_sha = sha("origin/main");
+
+    let body = trace.path().join("pr-body.md");
+    std::fs::write(&body, "A body that names nothing.\n").expect("the body");
+
+    let timeline = serde_json::json!({
+        "state": "OPEN",
+        "labels": [{"name": "status:in-progress"}],
+        "comments": [
+            {
+                "id": "IC_1",
+                "createdAt": "2026-01-01T00:00Z",
+                "viewerDidAuthor": true,
+                "includesCreatedEdit": false,
+                "body": format!(
+                    "Claimed.\n\n<!-- issue-flow: claim run-id={run_id} runtime=claude \
+                     horizon=2099-01-01T00:00Z op-id={} -->\n",
+                    "a".repeat(32)
+                ),
+            },
+        ],
+    })
+    .to_string();
+    let pr = serde_json::json!({
+        "number": 7,
+        "url": "https://github.com/o/r/pull/7",
+        "headRefOid": head,
+        "baseRefOid": base_sha,
+        "state": "OPEN",
+        "isDraft": true,
+    });
+
+    // The three states that can reach the join, as `gh workflow run` answers
+    // them. `Started` is the fourth and the test above holds it.
+    let states: [(&str, &str, Option<&str>); 3] = [
+        (
+            "forbidden",
+            "gh: HTTP 403: Resource not accessible by personal access token",
+            None,
+        ),
+        ("absent", "gh: HTTP 404: Not Found", Some("absent")),
+        (
+            "unknown",
+            "dial tcp: lookup api.github.com: no such host",
+            Some("unknown"),
+        ),
+    ];
+
+    for (label, said, reported) in states {
+        let answers = serde_json::to_string(&serde_json::json!([
+            // First, and narrowly: the dispatch is the only call whose answer
+            // this test varies, and an entry placed after a broader `matches`
+            // would never be reached.
+            { "matches": "workflow run", "stderr": said, "status": 1 },
+            { "matches": "issue view", "stdout": timeline, "status": 0 },
+            { "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 },
+            { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
+            { "matches": "json body", "stdout": serde_json::json!({"body": "names nothing"}).to_string(), "status": 0 },
+            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+            {
+                "matches": "api graphql",
+                "stdout": serde_json::json!({
+                    "data": { "repository": { "issue": { "closedByPullRequestsReferences": {
+                        "nodes": [],
+                        "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                    } } } },
+                }).to_string(),
+                "status": 0,
+            },
+            { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+        ]))
+        .expect("the fake tracker script serialises");
+
+        let runs = home.join(".estigia").join("runs");
+        let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
+        let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+        run.issue = Some(12);
+        run.state = Some("in-progress".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "publish_review", "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "branch": branch,
+                "base": "main",
+                "pr_title": "Something",
+                "pr_body_file": body.display().to_string(),
+                "worktree": repo.display().to_string(),
+            }}
+        })
+        .to_string();
+
+        let log = trace.path().join(format!("{label}.log"));
+        let temp = trace.path().join(format!("temp-{label}"));
+        std::fs::create_dir_all(&temp).expect("a temporary directory for the child");
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .env("TMPDIR", &temp)
+            .env("TMP", &temp)
+            .env("TEMP", &temp)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let calls = std::fs::read_to_string(&log).unwrap_or_default();
+
+        // Every row dispatches. A publication that stopped asking would pass
+        // the two lenient rows below without ever reaching the branch they are
+        // here to hold.
+        assert!(
+            calls.contains("workflow run ci.yml"),
+            "the {label} row never started a publication lane at all, so the state it reports is \
+             not the state it measured: {calls}"
+        );
+
+        let Some(state) = reported else {
+            assert_eq!(
+                response["result"]["isError"], true,
+                "a token that may not start workflows published anyway, so this epoch has a lane \
+                 nobody can start: {text}"
+            );
+            assert!(
+                text.contains("publication-lane-forbidden"),
+                "the forbidden dispatch refused for the wrong reason: {text}"
+            );
+            // Before the marker, and this is where that is worth more than a
+            // position in the log: the timeline is empty, so no reviewer can be
+            // bound to an epoch whose lane never ran.
+            assert!(
+                !calls.contains("issue comment"),
+                "the forbidden dispatch recorded a publication receipt anyway: {calls}"
+            );
+            // The push did happen. Asserted through the sentence the harness
+            // renders rather than through the key, because that is what the
+            // reader sees: `world: "committed"` becomes this line, and a
+            // refusal carrying no world at all renders **no such line** — so
+            // dropping the key from the envelope reddens here.
+            assert!(
+                text.contains("What happened to the world: the write landed"),
+                "the forbidden refusal reads as though nothing was written, which sends somebody \
+                 looking for a branch that is already on the remote: {text}"
+            );
+            // Naming a dead end is worse than naming nothing, and the appended
+            // clause about the rewritten pull request must not have replaced
+            // the one command that clears this.
+            assert!(
+                text.contains("gh auth refresh -s workflow"),
+                "the forbidden refusal names no command that clears it: {text}"
+            );
+            continue;
+        };
+
+        // The direction that breaks every consumer with no `ci.yml`. Absence is
+        // the ordinary condition of a repository that has not adopted the lane,
+        // and an unknown dispatch is not an answer that anything downstream
+        // trusts — neither is a reason to refuse a publication.
+        assert_eq!(
+            response["result"]["isError"], false,
+            "the {label} publication lane refused a publication, which breaks every repository \
+             that has no dispatchable lane: {text}"
+        );
+        assert!(
+            text.contains(&format!("\"publication_lane\": \"{state}\"")),
+            "the {label} row did not report `{state}`, so a wrong state word would be invisible: \
+             {text}"
+        );
+        assert!(
+            calls.contains("issue comment"),
+            "the {label} row published without recording a receipt: {calls}"
+        );
+        // And the receipt says the same thing the answer did. One call, two
+        // sentences, and they are read by different people.
+        let receipt = staged_receipt(&temp, 12);
+        assert!(
+            !receipt.contains("was started against this head"),
+            "the {label} receipt promises a lane run this publication did not start: {receipt}"
+        );
+        assert!(
+            !receipt.contains("CI remains blocked while the PR is draft"),
+            "the {label} receipt still carries the sentence the publication lane made false: \
+             {receipt}"
+        );
+    }
+}
+
+/// A verdict is not banked for a head whose publication lane has not cleared it,
+/// and absence of a lane is not a refusal.
+///
+/// This is the half that makes the change mechanical. Dispatching a lane and
+/// asking whoever writes the review prompt to look at it first is a rule that
+/// depends on somebody remembering, which is the failure issue #28 concluded
+/// against. `record_review_verdict` is the single writer of a verdict marker, so
+/// one refusal here covers every route to one — including the handoff route,
+/// where a different run entirely records the verdict.
+///
+/// Four states, driven through the real server against a scripted `gh`:
+///
+/// - **no check runs at all proceeds.** First, and on its own line, because it
+///   is what keeps every repository that has no dispatchable lane working. A
+///   later change that turned absence into a refusal would break every consumer,
+///   and this is the assertion that would say so.
+/// - a failed conclusion refuses, naming the lane and the run;
+/// - a queued or running lane refuses, naming the run to watch — `in_progress`
+///   is not `success`, and this is the branch most easily written the wrong way
+///   round;
+/// - a listing that cannot be read refuses as a **read failure**. An unknown
+///   result is not clearance, and reporting it as a red lane would send somebody
+///   to fix a test that never ran.
+///
+/// One last row poses the narrowing rather than a state of the lane: the same
+/// red listing, recorded as a **rejection**, which succeeds and never reads the
+/// lane at all. That is what stops the gate from inventing a deadlock — a
+/// reviewer who may not reject red bytes cannot resolve the handoff that lets
+/// the author fix them.
+///
+/// Every refusal is checked against the call log for a comment, because a
+/// verdict that refuses and writes anyway has recorded the thing it refused.
+/// Every acceptance is checked against the same log for the **whole path** the
+/// gate issued, because a lane read against the wrong ref is a gate that decides
+/// nothing while answering `ok`.
+#[test]
+fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let publisher = "claude-abcd1234";
+    let reviewer = "gemini-c0ffee00";
+    let epoch = "e".repeat(32);
+    let head = "b".repeat(40);
+    let base = "c".repeat(40);
+    let digest = "d".repeat(64);
+    let marker = |kind, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let held = comment(
+        "IC_claim",
+        "2026-08-14T09:00:00Z",
+        marker(
+            "claim",
+            &[
+                ("run-id", reviewer),
+                ("runtime", "gemini"),
+                ("horizon", "2099-01-01T00:00Z"),
+                ("op-id", &"a".repeat(32)),
+            ],
+        ),
+    );
+    let publication = comment(
+        "IC_publication",
+        "2026-08-14T09:10:00Z",
+        marker(
+            "published",
+            &[
+                ("run-id", publisher),
+                ("epoch", &epoch),
+                ("pr", "7"),
+                ("head", &head),
+                ("base", &base),
+                ("digest", &digest),
+            ],
+        ),
+    );
+    // The verdict this call is about to write, as the timeline carries it
+    // afterwards. The operation id is the one the server mints from the
+    // arguments, so the readback finds the marker it just posted rather than
+    // giving up on it: without this the accepted case always ends on
+    // `review verdict is not visible`, whatever the lane said, and the state
+    // that must proceed could not be told from the three that must not.
+    let recorded = |outcome: &str| {
+        comment(
+            "IC_verdict",
+            "2026-08-14T11:00:00Z",
+            marker(
+                "review-verdict",
+                &[
+                    ("run-id", reviewer),
+                    ("reviewer", reviewer),
+                    (
+                        "op-id",
+                        &estigia::transport::claim::review_operation_id(
+                            "review-verdict",
+                            &[
+                                reviewer, reviewer, &epoch, "7", &head, &base, &digest, outcome,
+                            ],
+                        ),
+                    ),
+                    ("epoch", &epoch),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                    ("outcome", outcome),
+                ],
+            ),
+        )
+    };
+    let timeline = |verdict: Option<&str>| -> String {
+        let mut comments = vec![held.clone(), publication.clone()];
+        if let Some(outcome) = verdict {
+            comments.push(recorded(outcome));
+        }
+        serde_json::json!({
+            "state": "OPEN",
+            "assignees": [],
+            "labels": [{"name": "status:review"}],
+            "comments": comments,
+        })
+        .to_string()
+    };
+
+    let check_run = |status: &str, conclusion: serde_json::Value| {
+        serde_json::json!({
+            "name": "check (ubuntu-latest)",
+            "status": status,
+            "conclusion": conclusion,
+            "html_url": "https://github.com/o/r/actions/runs/31865504912/job/99",
+        })
+    };
+    let listing = |runs: Vec<serde_json::Value>| {
+        serde_json::json!({"total_count": runs.len(), "check_runs": runs}).to_string()
+    };
+
+    // The four states, each as the answer the check-run listing gives. `status`
+    // is the exit code of the scripted `gh`, so the last one is a call that
+    // could not be made at all rather than one that answered emptily.
+    let none = listing(vec![]);
+    let failed = listing(vec![check_run("completed", serde_json::json!("failure"))]);
+    let unfinished = listing(vec![check_run("in_progress", serde_json::Value::Null)]);
+    // One page of several, which is the unreadable shape that answers `ok`. The
+    // call below it is one `gh` could not make at all. Both are failed reads and
+    // they fail in different places, so both are posed: thirty green lanes read
+    // as the whole of a head is how a red thirty-first becomes invisible.
+    let partial = serde_json::json!({
+        "total_count": 9,
+        "check_runs": [check_run("completed", serde_json::json!("success"))],
+    })
+    .to_string();
+    // The last row is the narrowing rather than another state of the lane: the
+    // same red listing, recorded as a **rejection**, which must succeed. A
+    // rejection over a red head is the route out — refusing it would leave the
+    // reviewer holding a claim over bytes they have already judged, with no way
+    // to resolve the handoff that lets the author fix and republish. Widening
+    // the gate to every outcome left this file green until this row existed.
+    let states: [(&str, &str, i64, &str, Option<&str>); 6] = [
+        ("absent", none.as_str(), 0, "accepted", None),
+        (
+            "red",
+            failed.as_str(),
+            0,
+            "accepted",
+            Some("publication-lane-red"),
+        ),
+        (
+            "running",
+            unfinished.as_str(),
+            0,
+            "accepted",
+            Some("publication-lane-unfinished"),
+        ),
+        (
+            "partial",
+            partial.as_str(),
+            0,
+            "accepted",
+            Some("read-failed"),
+        ),
+        ("unreadable", "", 1, "accepted", Some("read-failed")),
+        ("rejected-over-red", failed.as_str(), 0, "rejected", None),
+    ];
+
+    for (label, answer, status, outcome, refusal) in states {
+        let log = trace.path().join(format!("{label}.log"));
+        // Three timeline reads precede the one write this operation makes, and
+        // every read after it has to show the comment that write posted.
+        let mut script = vec![];
+        for before in 1..=3 {
+            script.push(serde_json::json!({
+                "matches": "issue view", "nth": before,
+                "stdout": timeline(None), "status": 0,
+            }));
+        }
+        // The lane's answer is scripted against **the receipt's own head**, not
+        // against the words `check-runs`. A stand-in that answers any path
+        // containing that substring answers a read of `main` just as happily,
+        // and `main` is green by construction — so the two one-token mutations
+        // that make the gate read the default branch (`{head}` written as `main`
+        // in the `format!`, and `verdict.base` passed where `verdict.head`
+        // belongs) both left this file green. With the head in the matcher they
+        // find no entry, and an unmatched call is empty output, which is a
+        // failed read rather than a cleared lane.
+        let lane = format!("commits/{head}/check-runs");
+        script.extend([
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(Some(outcome)), "status": 0 }),
+            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+            serde_json::json!({ "matches": lane, "stdout": answer, "status": status }),
+            serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
+        ]);
+        let answers = serde_json::to_string(&script).expect("the fake tracker script serialises");
+
+        let runs = home.join(".estigia").join("runs");
+        let _ = std::fs::remove_file(runs.join(format!("{reviewer}.json")));
+        let mut run = estigia::harness::session::Run::new(reviewer.to_owned());
+        run.issue = Some(12);
+        run.state = Some("review".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "record_review_verdict", "arguments": {
+                "issue": 12,
+                "run_id": reviewer,
+                "reviewer": reviewer,
+                "epoch": epoch,
+                "pr": 7,
+                "head": head,
+                "base": base,
+                "digest": digest,
+                "outcome": outcome,
+            }}
+        })
+        .to_string();
+
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env(
+                "ESTIGIA_FAKE_COUNT",
+                trace.path().join(format!("{label}-count.json")),
+            )
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let calls = std::fs::read_to_string(&log).unwrap_or_default();
+
+        // The path the gate issued, whole, read out of the call log. The
+        // fixture above proves the answer came from the right question; this
+        // proves the question was asked at all and asked with every part of it
+        // intact. `per_page=100` is inside the same string deliberately: it is
+        // what makes a listing longer than one page a failed read, and shrinking
+        // it — 100 to 5, 100 to 3 — changed nothing any test could see.
+        let issued = format!("commits/{head}/check-runs?per_page=100");
+        if outcome == "accepted" {
+            assert!(
+                calls.contains(&issued),
+                "the lane was not read for the receipt's own head ({label}); nothing in the call \
+                 log spells `{issued}`: {calls}"
+            );
+        } else {
+            // The other half of the narrowing, and the reason it is measured
+            // here rather than stated in `skill/bindings/github.md` alone: a
+            // rejection does not consult the lane at all, so a gate widened to
+            // every outcome shows up as an extra call before it shows up as a
+            // refusal.
+            assert!(
+                !calls.contains("check-runs"),
+                "a rejected verdict read the publication lane ({label}): {calls}"
+            );
+        }
+
+        let Some(reason) = refusal else {
+            // The state that must never refuse. A repository with no
+            // dispatchable lane has no check runs on any head.
+            assert_eq!(
+                response["result"]["isError"], false,
+                "a head with no check runs was refused, which breaks every repository that has \
+                 no lane: {text}"
+            );
+            assert!(
+                calls.contains("issue comment"),
+                "the verdict was accepted and never written: {calls}"
+            );
+            continue;
+        };
+        assert_eq!(
+            response["result"]["isError"], true,
+            "the {label} lane cleared a verdict: {text}"
+        );
+        assert!(
+            text.contains(reason),
+            "the {label} lane refused for the wrong reason: {text}"
+        );
+        assert!(
+            !calls.contains("issue comment"),
+            "a refused verdict still wrote to the timeline ({label}): {calls}"
+        );
+        // The command that clears it. Naming a dead end is worse than naming
+        // nothing, so each refusal carries the one thing to run next.
+        match label {
+            "red" => assert!(
+                text.contains("gh run view 31865504912 --log-failed"),
+                "the red refusal names no way to read the failure: {text}"
+            ),
+            "running" => assert!(
+                text.contains("gh run watch 31865504912 --exit-status"),
+                "the unfinished refusal names no run to watch: {text}"
+            ),
+            // A failed read is neither of those, and saying so is the point:
+            // the harness renders it as *write nothing and retry the read*
+            // rather than as a lane that answered.
+            _ => assert!(
+                text.contains("failed read and not a green lane"),
+                "an unreadable listing was reported as a lane that answered: {text}"
+            ),
+        }
+    }
 }

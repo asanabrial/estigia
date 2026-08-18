@@ -12,6 +12,45 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **CI now answers before the reviewing, instead of after it.** `.github/workflows/ci.yml` gains a
+  `workflow_dispatch` trigger, `publish_review` and `republish_review` start **one run of it per
+  publication epoch** against the head they just pushed, and `record_review_verdict` refuses to bank
+  an `accepted` verdict for a head whose lane concluded red or has not finished. Before this, the
+  first cross-platform signal arrived when `release_ci` marked the pull request ready — after every
+  verdict had been obtained — so a platform-only defect killed the receipt and every verdict bound
+  to it. Measured on issue #2: sixteen reviewers across eight rounds discarded for a missing
+  `create_dir_all` in a fixture that only POSIX could see.
+
+  Both halves, because the first alone is a rule somebody has to remember, which is the failure
+  issue #28 concluded against. The refusal sits on `record_review_verdict` because it is the single
+  writer of a verdict marker — `release_ci` reads what it wrote — so one enforcement point covers
+  every route to one, including the handoff route. Check runs attach to a SHA by construction, so the
+  evidence is read for the receipt's own head and `ReviewReceipt` is unchanged: no run id, and
+  nothing new for a republish to invalidate.
+
+  **The receipt comment on the timeline now names the lane this epoch got**, because the sentence it
+  used to carry — *CI remains blocked while the PR is draft* — became false in the same call that
+  writes it. That comment is what a blind reviewer reads, so one operation was answering that a lane
+  had started and an accepted verdict waited on it while posting a note saying CI would not run at
+  all. It now says which of `started`, `absent` and `unknown` this publication got, and says the
+  ordinary pull-request-event lane still waits for the pull request to be marked ready — the draft
+  barrier is unchanged, and only the publication lane is new.
+
+  **A head with no check runs at all proceeds**, unchanged. A repository with no dispatchable
+  `ci.yml` has none, Estigia does not parse consumer YAML to find out whether it has a lane, and
+  refusing there would have broken every consumer in order to protect the ones that answer. Only a
+  token that may not dispatch refuses, `publication-lane-forbidden`, and it refuses **after the push
+  and before the receipt** — so the branch is on the remote, no epoch exists, and running the same
+  call again after granting `actions: write` publishes cleanly. Red and unfinished lanes refuse
+  `publication-lane-red` and `publication-lane-unfinished`, each naming the lane, the run and the one
+  command that clears it. An unreadable listing is a failed read and never a green lane.
+
+  One run per **epoch** is not the cardinality the draft barrier refused: topic push, open,
+  synchronize and reopen still start nothing, and a dispatch does not mark the pull request ready.
+  What this cannot do is protect its own delivery — `workflow_dispatch` has to exist on the default
+  branch before it can be dispatched against a topic ref — and what it does not prove is in
+  `docs/honesty.md`.
+
 - A row about **this machine** now reaches every installed contract, and cannot be given a different
   answer for one agent. `Setting::scope()` has three values and both write paths were written as
   though it had two: the plain `config set` asked `elsewhere()` only for `Scope::Everywhere`, so
@@ -273,7 +312,8 @@ the workflow, it holds the tools.
   by readback. GitHub cannot condition ready atomically; out-of-band collaborators and repository
   workflows can bypass the order, so no malicious-collaborator authenticity is claimed.
   Topic pushes and PR open/synchronize events no longer start CI; default-branch pushes
-  remain, and PR CI starts on `ready_for_review`.
+  remain, PR CI starts on `ready_for_review`, and — since the publication lane above —
+  `publish_review` dispatches one run of the workflow per publication epoch.
 - `estigia hook <event>` gates repository writes. Once a run has claimed an
   issue, every write is measured against that claim and every irreversible
   boundary re-reads the tracker timeline. A run that has sworn nothing is not

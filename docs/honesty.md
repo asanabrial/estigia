@@ -1101,9 +1101,17 @@ suite. Everything else here is prose held by review.
   this is measured by nobody who reads it.** The `..` handling in `placed` is where the two
   platforms genuinely disagree — Windows collapses the segment in the spelling, POSIX resolves the
   link first — and the arm that says so is a `cfg!(unix)` *expression*, so it is compiled on this
-  desk and never runs here. The CI lanes are the only place it runs, and CI does not start on a
-  topic branch: it starts when `release_ci` marks the pull request ready, which is after every
-  review has been obtained.
+  desk and never runs here. The CI lanes are the only place it runs.
+
+  **Narrowed by issue #30, and only for repositories that answer.** When this was written CI first
+  ran when `release_ci` marked the pull request ready, which is after every review has been
+  obtained; `publish_review` now starts a publication lane against the head it pushes and
+  `record_review_verdict` refuses to bank an accepted verdict for a head whose lane is red or still
+  running. So on **this** repository a POSIX-only failure is found before the verdicts are spent
+  rather than after. What is unchanged is everything below about the review itself — nobody reading
+  the change runs the POSIX arm, nothing in `skill/SKILL.md` or `skill/references/` asks for a
+  platform, and the lane answers a question no reviewer asked. The gap is smaller; the reason it
+  existed is not closed.
 
   What that costs, measured on this change:
   `a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled` wrote through
@@ -1125,7 +1133,8 @@ suite. Everything else here is prose held by review.
   And the lanes measure less than "the lanes" suggests: `cargo test` is fail-fast across targets, so
   when the lib target failed on Linux and macOS the integration targets never ran there at all —
   `tests/pipe.rs`, which is where this change's end-to-end evidence lives, never executed on POSIX on
-  this branch. That is issue #30.
+  this branch. That half was issue #30's diagnosis comment and is closed separately: the workflow
+  passes `--no-fail-fast`, so a red run reports every target rather than the first.
 
   What is **not** true, and was written here for one commit: that those sixteen tests had never run
   on any runner. They had. A bare `cargo test` builds examples — cargo says so, and
@@ -1301,10 +1310,83 @@ suite. Everything else here is prose held by review.
   publisher, so this is a lost later objection rather than an unreviewed merge — but it is a
   deletion that clears, and saying otherwise would be the sentence, not the code, doing the work.
 - **The draft/ready CI barrier is cooperative, not adversarial.** Compatible repositories start PR
-  CI on `ready_for_review`, not topic push/open/synchronize/reopen. GitHub has no atomic
-  conditional-ready operation. Collaborators or repository workflows acting outside Estigia can mark
-  ready, push, trigger other CI or forge comments; Estigia neither parses arbitrary consumer YAML with
-  weak substring checks nor claims malicious-collaborator authenticity.
+  CI on `ready_for_review`, not topic push/open/synchronize/reopen. Beside it they carry a
+  `workflow_dispatch` **publication lane**, which `publish_review` starts once per publication epoch
+  against the head it pushed — not once per push, and dispatching does not mark the PR ready. GitHub
+  has no atomic conditional-ready operation. Collaborators or repository workflows acting outside
+  Estigia can mark ready, push, trigger other CI or forge comments; Estigia neither parses arbitrary
+  consumer YAML with weak substring checks nor claims malicious-collaborator authenticity.
+
+- **Estigia starts the publication lane and cannot prove a repository has one.** The refusal in
+  `record_review_verdict` is real — an accepted verdict is not banked for a head whose check runs
+  are red or unfinished — but everything upstream of it is best-effort, and the shape of what it
+  does not cover is worth being exact about.
+
+  It dispatches **one fixed file name**, `ci.yml`, because it does not parse consumer YAML and has no
+  other way to learn what a repository's lane is called or whether the trigger exists. A repository
+  whose lane is named otherwise, or that has none, gets no check runs on its head — and **a head
+  with no check runs proceeds**, deliberately. That is the old ordering and the old exposure: the
+  reviewers spend their rounds first and CI answers afterwards, exactly as before. Refusing there
+  instead would have broken every consumer that has not adopted the lane in order to protect the ones
+  that have, so absence is a pass and this entry is where that is admitted rather than a gate that
+  looks tighter than it is.
+
+  Seven narrower limits, none of them hypothetical:
+
+  - **The dispatch names a branch, not a commit.** `workflow_dispatch` takes a ref. Somebody pushing
+    over the branch between Estigia's push and its dispatch starts a lane on their bytes; the
+    published head then has no check runs and clears, which is the old ordering rather than a false
+    green.
+  - **`HTTP 404` is read as *no lane*, not as *no permission*.** GitHub answers `404` for both, so a
+    token that cannot see the workflow loses the protection silently instead of being refused. Only
+    `401` and `403` refuse (`publication-lane-forbidden`). The alternative — refusing on the
+    ambiguous code — stops repositories that have no lane at all from publishing.
+  - **Only `accepted` is gated.** A rejection over a red head is the route out, not the waste this
+    issue measured, so it records. And `neutral` and `skipped` conclusions clear, because a matrix
+    leg that skips on purpose must not refuse a verdict; every other conclusion, including none at
+    all, refuses.
+  - **More than one page of check runs is a failed read, not a verdict.** The listing is asked for at
+    `per_page=100` and refused when `total_count` outruns what arrived. A repository with more check
+    runs than that on one head cannot record an accepted verdict at all until the read is **widened**
+    — a larger page, or following the pages until every check run has arrived — fail-closed, and
+    untested against a real repository of that size.
+  - **The read side is fail-closed on a permission error, where the dispatch side is lenient.** The
+    two halves disagree on purpose and the cost lands on one token shape. `publish_review` reads
+    `HTTP 404` from `gh workflow run` as *no lane* and proceeds; `record_review_verdict` maps **any**
+    failure of `gh api .../check-runs` to a refusal, because an unknown result is not clearance. So a
+    token that can push, comment and dispatch but lacks `Checks: read` publishes normally and can
+    then never record an accepted verdict — the refusal is `read-failed`, permanently, and no retry
+    reaches it. Its **detail** says so, naming the read that failed rather than a lane that answered;
+    the shared `read-failed` envelope it travels in still ends *retry the read*, which for this token
+    shape is advice no retry can take, and that generic sentence is the one every failed read in the
+    crate gets. That detail is the whole of the mitigation: nothing detects the shape, and the two
+    halves are not going to be made to agree without either refusing repositories that have no lane
+    or clearing heads nobody read.
+  - **A dispatched run is not visible the instant the dispatch returns.** `gh workflow run` answers
+    when GitHub has accepted the request, not when the check run exists on the head. A verdict
+    recorded inside that window sees an empty listing, and an empty listing proceeds. Narrow in
+    practice — a review takes minutes and the check run appears in seconds — but it is a second way
+    "absence proceeds" fires, and unlike the branch-overwrite race above it needs no second actor.
+  - **The listing is every check run on the head, not the lane's.** `commits/{sha}/check-runs`
+    returns whatever anything attached to those bytes: a coverage bot, a security scanner, a
+    repository app unrelated to `ci.yml`. One of those sitting `queued` refuses an accepted verdict
+    naming a lane the reviewer cannot start, watch or clear, and there is no way past it but to wait
+    or to remove the app. Fail-closed, and arguably the right answer for a head nobody has finished
+    checking, but it is a wider net than "the lane Estigia dispatched" and this is where that is
+    admitted.
+
+  Nothing here measures whether a dispatched run's check runs satisfy **branch protection's required
+  contexts** on a pull request head. The argument that this opens no new hole rests on the draft
+  barrier rather than on that experiment: `release_ci` still verifies a draft PR before marking it
+  ready, and GitHub refuses to merge a draft whatever its checks say. The experiment was named in the
+  issue's acceptance criteria and has not been run — it needs a live repository with protection
+  configured, which this change had no way to arrange from a checkout.
+
+  And it **cannot protect its own delivery.** `workflow_dispatch` has to exist on the default branch
+  before `gh workflow run` will accept it against a topic ref, so the publication that carries this
+  change is dispatched against a `main` that does not yet have the trigger and is refused `HTTP 422`
+  — reported as `publication_lane: absent`, not as a failure. The first delivery this protects is
+  the one after it.
 - **The two readers of the configuration table are not identical, and one half is now closed.**
   Both read the same block of the same file, and they resolve a row differently. The binding looks a
   setting up by **prefix** — `cfg` returns the first key that `startswith` the label — and this crate
