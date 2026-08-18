@@ -150,9 +150,12 @@ the workflow, it holds the tools.
   defence against an agent switching the gate off with the tool it uses most. `gh`'s hosts file joins
   that surface in the same change: it decides which account every tracker call acts as, so it is a
   boundary write in both spellings rather than something the stand-aside carries past. The answer is
-  given after the contract check, not before it, so outside the renewal window *an unreadable control
-  surface permits no write* reaches it as it reaches everything else; inside the window nothing is
-  consulted, which is older than this change. A path that **lands** anywhere other than a drive is
+  given after the contract check, not before it, so *an unreadable control surface permits no write*
+  reaches it as it reaches everything else. That held only outside the renewal window until issue #29:
+  the window's `Allow` answered above the contract refusal, so for its width a routine write went
+  through with no `SKILL.md` on disk at all. The contract check now answers above the window, and the
+  window still short-circuits below it when the contract is present — so the sentence reaches inside
+  the window too, and the fast path it protects is unchanged. A path that **lands** anywhere other than a drive is
   declined rather than placed, and a declined path reads as inside. Windows serves every local drive
   as an administrative share, so `\\localhost\C$\repo\src\main.rs` against `C:\repo\...` is one file
   under two spellings, which stood the gate aside for a write that landed inside the claim. Judging
