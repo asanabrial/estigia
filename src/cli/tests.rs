@@ -1815,10 +1815,10 @@ fn a_contract_that_will_not_parse_does_not_hand_out_what_it_could_not_grant() {
     // the same excuse, three blind reviewers each defeated the source-text guard
     // it justified while the suite stayed green, and the crossing that replaced it
     // drives the binary against a throwaway home — which `tests/pipe.rs` already
-    // does routinely, in most of its tests. A reviewer measured that this said
-    // *sixteen* and the real number is an order of magnitude higher, in the
-    // direction that weakened the argument it was making; the point is that the
-    // pattern is ordinary here, and a count is not what carries it.
+    // does routinely, in most of its tests. This said *sixteen* until a reviewer
+    // counted, and the correction then said *an order of magnitude* until another
+    // one did. The pattern being ordinary is what carries the argument; a number
+    // is not, and two of them in a row got it wrong.
     //
     // This row has not been moved yet. Saying so is better than repeating the
     // excuse, and `the_reserved_reviewer_grant_is_the_same_through_both_doors` is

@@ -274,6 +274,68 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
     .map(|(_, value)| value)
 }
 
+/// No guard reading the whole documentation set blames the README.
+///
+/// The third sweep of this, and the reason it is a test rather than a fourth.
+/// `documented()` concatenates the README with every file in `docs/`, so a
+/// failure from a guard that reads it may be about any of them — and three
+/// of the phrases those guards key on appear **only** in `docs/honesty.md`. A
+/// reviewer drifted one and was sent to `README.md`, where the sentence does not
+/// exist.
+///
+/// Two sweeps missed it. The first reworded an `assert_eq!` and left the
+/// `panic!` four lines above; the second reworded every `format!` message and
+/// left five `.expect(...)` strings, then shipped a sentence saying every guard
+/// had been corrected. Both were true of what they touched, which is what made
+/// them easy to believe.
+///
+/// So the property is asserted instead of promised: a function that binds
+/// `documented()` may not name the README in any string it carries. Guards that
+/// read `readme()` are untouched by this — theirs is the one document, and
+/// saying so is correct.
+#[test]
+fn no_guard_reading_every_document_blames_the_readme() {
+    let source = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("honesty.rs"),
+    )
+    .expect("this file reads");
+
+    let mut blaming = Vec::new();
+    for function in source.split("\nfn ").skip(1) {
+        let name = function
+            .split('(')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        if !function.contains("documented();")
+            || name == "no_guard_reading_every_document_blames_the_readme"
+        {
+            continue;
+        }
+        for (offset, line) in function.lines().enumerate() {
+            let trimmed = line.trim_start();
+            // Comments explain; only the strings a failure prints are the
+            // subject, and a comment saying what went wrong here has to be
+            // able to use the word.
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            if line.contains("the README") {
+                blaming.push(format!("{name} line {offset}: {}", line.trim()));
+            }
+        }
+    }
+
+    assert!(
+        blaming.is_empty(),
+        "these guards read every document and blame the README, which sends a reader to a file \
+         that may not carry the sentence at all: {blaming:#?}"
+    );
+}
+
 /// The settings table in the README names the rows this binary has.
 ///
 /// It named nine of eighteen, and one of the nine was `Task body language` — a
@@ -364,7 +426,7 @@ fn the_settings_table_names_every_value_a_closed_row_takes() {
             .lines()
             .find(|line| line.starts_with(&format!("| {label} |")))
         else {
-            silent.push(format!("{label}: the README has no row at all"));
+            silent.push(format!("{label}: no document carries that row at all"));
             continue;
         };
         let missing: Vec<&str> = answers
@@ -379,7 +441,7 @@ fn the_settings_table_names_every_value_a_closed_row_takes() {
     }
     assert!(
         silent.is_empty(),
-        "the README's settings table names fewer values than the picker offers, so a value an \
+        "the documented settings table names fewer values than the picker offers, so a value an \
          operator can choose is one they cannot discover:\n  {}",
         silent.join("\n  ")
     );
@@ -700,7 +762,7 @@ fn the_number_of_gated_agents_is_the_number_the_readme_claims() {
     // not gated is not an agent.
     assert!(
         documents.contains("every agent Estigia knows"),
-        "the README makes no checkable claim about how many agents are gated"
+        "no document makes a checkable claim about how many agents are gated"
     );
     let ungated: Vec<&str> = estigia::setup::AGENTS
         .iter()
@@ -718,14 +780,14 @@ fn the_number_of_gated_agents_is_the_number_the_readme_claims() {
     // of them, in three dialects" while ten were gated in five. A claim that is
     // half-checked reads exactly like one that is checked.
     let counted = number_before(&documents, "of them, in")
-        .expect("the README counts the gated agents beside the claim that all of them are");
+        .expect("no document counts the gated agents beside the claim that all of them are");
     assert_eq!(
         gated, counted,
         "the documents say {counted} agents are gated and {gated} are"
     );
 
     let dialects = estigia::harness::hook::Dialect::all().len();
-    let claimed = number_before(&documents, "dialects").expect("the README counts the dialects");
+    let claimed = number_before(&documents, "dialects").expect("no document counts the dialects");
     assert_eq!(
         dialects, claimed,
         "the documents claim {claimed} dialects and the code has {dialects}"
@@ -739,7 +801,7 @@ fn the_number_of_declared_populations_is_the_number_the_readme_claims() {
     // adding `writing-shell` would have left the prose saying two.
     let documents = documented();
     let claimed = number_before(&documents, "`guard:population` comments")
-        .expect("the README counts the declared populations");
+        .expect("no document counts the declared populations");
 
     let mut declared = 0;
     let mut pending = vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")];
@@ -777,7 +839,7 @@ fn the_number_of_declared_populations_is_the_number_the_readme_claims() {
 fn the_number_of_things_doctor_checks_is_the_number_the_readme_claims() {
     let documents = documented();
     let claimed = number_before(&documents, "things, not everything")
-        .expect("the README counts doctor's checks");
+        .expect("no document counts doctor's checks");
     // The **kinds**, not the rows. Two of the eleven produce one row per
     // configured agent, so a run on a bare machine reports seven rows and a run
     // on a busy one reports twenty — and the README's count was being measured
