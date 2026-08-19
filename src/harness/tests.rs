@@ -11,6 +11,7 @@ fn context(root: &Path) -> GateContext {
     GateContext {
         stand_down: None,
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         skill_root: root.join("skill"),
         repo_dir: root.join("repo"),

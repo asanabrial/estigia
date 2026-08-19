@@ -12,6 +12,41 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **A delegated role can now do the work its own contract asks of it, and the judges that measure run
+  as that role instead of outside it.** Estigia shipped six role definitions and every one was
+  read-only: the reviewer carried a fixed `tools: Read, Grep, Glob`, and the planning phases' widest
+  substitution was `Read, Grep, Glob, Write, Edit`. No branch produced a shell. In a repository whose
+  findings are established by running something — building the change, reddening a test, turning the
+  fix off to see the suite go green — that reviewer cannot check anything, so every panel worth having
+  was launched under a generic type, outside the role and outside every guarantee the contract hangs
+  on it. Measured on issue #36 before this landed: twelve independent judge launches, and the
+  read-only guarantee governed **none** of them.
+
+  A new setting, `Evidence standard`, states the one fact only an operator knows — whether a verdict
+  here is backed by reading or by running — and the reviewer's tool grant is derived from it instead
+  of being a constant. `measuring` adds a shell **and nothing else**: write, edit and delegation stay
+  refused, so a judge still cannot rewrite what it is judging or hand the work on. The default is
+  `reading`, which is what every installation already had, so no upgrade widens anything by itself.
+
+  Two consequences, both deliberate. `reviewer_is_static` used to mean one spelling and now means one
+  of the spellings Estigia can produce, enumerated under an exhaustive match so a third standard
+  cannot be added without arriving there. And the gate carries the row in `GateContext` beside the
+  renewal window, narrowed the same way for the same reason: an unreadable contract answers `reading`,
+  because a fault must not hand out a capability.
+
+  The isolation rule moved with the capability rather than after it. It bound a run's checkout and
+  said nothing about anywhere else a delegated context writes; it now covers every location. That was
+  not a precaution — a five-judge panel sharing one scratch directory had one judge's script
+  overwritten by another's and executed inside a third judge's checkout, while a fourth read the
+  implementing run's planning notes. No checkout rule was broken and two verdicts still stopped being
+  independent readings.
+
+  `docs/honesty.md` carries what this does not buy, and the sharp edge is worth repeating here: a
+  judge that measures writes inside a checkout of its own, which is outside every path a claim covers,
+  so giving the role a shell does **not** put its mutations under the gate. What makes them safe is
+  the isolation, not the gate.
+
+
 - **A transition to the state an issue already holds no longer strips its state label, and a
   read-back that disagrees no longer says nothing was written.** `transition` appended the removal
   whichever state `--from` named, so `--from done --to done` built

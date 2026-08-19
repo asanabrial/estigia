@@ -330,6 +330,68 @@ pub enum Judges {
     FiveBlind,
 }
 
+/// What a verdict in this repository has to be backed by.
+///
+/// The one fact about a repository that only its operator knows, and the one
+/// this crate cannot infer: whether a reviewer here establishes a finding by
+/// **reading** the change or by **running** something against it.
+///
+/// It is a row rather than a constant because a constant was the defect. Every
+/// role definition Estigia installs used to carry a fixed read-only grant, so a
+/// judge could not build, could not run the suite, and could not turn a fix off
+/// to see whether the suite went green. In a repository whose stated evidence
+/// standard is mutation — this one's is — that judge cannot check the two
+/// sentences its own `CLAUDE.md` makes load-bearing, so every panel that mattered
+/// was launched under a generic type instead, outside the role and outside every
+/// guarantee the contract attaches to it.
+///
+/// It is not derived from a neighbouring row, and that was considered: `Review
+/// protocol` decides what identifies the target, `Blind judges` how many read it,
+/// `Planning` what is written before it. None of them encodes what a verdict has
+/// to be backed by, and loading a second meaning onto a row that already has one
+/// is the shape this crate refuses everywhere else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Evidence {
+    /// A finding is established by reading the target.
+    ///
+    /// The default, and deliberately the narrower one. A grant that widened on
+    /// upgrade would hand every delegated context a shell nobody asked for,
+    /// which is the gate-widening this repository's own rules refuse.
+    Reading,
+    /// A finding is established by running something against the target.
+    ///
+    /// A reviewer here gets the capability to build, test and mutate — and with
+    /// it the precondition that makes that safe, which is a directory nothing
+    /// else writes for the duration. The capability without the isolation is
+    /// concurrent writers with one tree between them, measured live: two judges
+    /// sharing one scratch directory overwrote each other's scripts, ran a
+    /// measurement inside a third judge's checkout, and one read the implementing
+    /// run's own notes.
+    Measuring,
+}
+
+impl Evidence {
+    /// The value as it is written in the table.
+    pub fn as_value(self) -> &'static str {
+        match self {
+            Self::Reading => "reading",
+            Self::Measuring => "measuring",
+        }
+    }
+
+    /// Every standard, under an exhaustive match so a new one cannot be
+    /// forgotten. See [`Judges::all`].
+    pub fn all() -> Vec<Self> {
+        let every = vec![Self::Reading, Self::Measuring];
+        for evidence in &every {
+            match evidence {
+                Self::Reading | Self::Measuring => {}
+            }
+        }
+        every
+    }
+}
+
 impl Judges {
     /// The document describing this policy, or `None` when there is nothing
     /// beyond what the contract already says.
@@ -594,6 +656,8 @@ pub struct Config {
     pub review_protocol: ReviewProtocol,
     /// How many independent contexts judge a change before it is delivered.
     pub judges: Judges,
+    /// What a verdict here has to be backed by, and so what a reviewer may do.
+    pub evidence: Evidence,
     /// The changed lines a pull request aims to stay under.
     ///
     /// Guidance the contract states and nothing enforces — Estigia gates writes,
@@ -676,6 +740,9 @@ impl Default for Config {
             // One independent review, which is what the contract has always
             // required. Two is a stronger claim and costs a second context.
             judges: Judges::Single,
+            // The narrower answer, so no installation widens a delegated
+            // context's capabilities by being upgraded.
+            evidence: Evidence::Reading,
             worktree: WorktreeRoot::Auto,
             summary_language: Language("English".to_owned()),
             body_language: Language("English".to_owned()),

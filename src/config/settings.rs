@@ -11,7 +11,7 @@ use std::time::Duration;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 
 use super::{
-    Authority, BoardRef, Config, DEFAULT_ASK_TIMEOUT, DeliveryRoute, Judges, Language,
+    Authority, BoardRef, Config, DEFAULT_ASK_TIMEOUT, DeliveryRoute, Evidence, Judges, Language,
     MergeStrategy, Planning, RepoRef, ReviewProtocol, Tracker, WorktreeRoot,
 };
 
@@ -44,6 +44,11 @@ pub enum Setting {
     ReviewProtocol,
     /// How many independent contexts judge a change.
     Judges,
+    /// What a verdict here has to be backed by, and so what a reviewer may do.
+    ///
+    /// Beside `Blind judges` in every ordered list, because the two answer one
+    /// question between them: how many contexts look, and what a look is worth.
+    Evidence,
     /// How large a change may get before it is split.
     ///
     /// Guidance, and the contract says so — not a gate, because Estigia gates
@@ -94,6 +99,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting::Window,
     Setting::ReviewProtocol,
     Setting::Judges,
+    Setting::Evidence,
     Setting::ChangeSize,
     Setting::Boundaries,
     Setting::Board,
@@ -216,6 +222,7 @@ pub const EVERYWHERE_SETTINGS: &[Setting] = &[
     // repository's rows in one order and the contract wrote them in another.
     Setting::Window,
     Setting::ReviewProtocol,
+    Setting::Evidence,
     Setting::ChangeSize,
     Setting::Boundaries,
     Setting::Board,
@@ -242,6 +249,7 @@ pub const OPTIONS_SETTINGS: &[Setting] = &[
     Setting::Integration,
     Setting::Window,
     Setting::ReviewProtocol,
+    Setting::Evidence,
     Setting::ChangeSize,
     Setting::Boundaries,
     Setting::Board,
@@ -269,6 +277,7 @@ pub const OPTIONS_SETTINGS_WITHOUT_BOARD: &[Setting] = &[
     Setting::Integration,
     Setting::Window,
     Setting::ReviewProtocol,
+    Setting::Evidence,
     Setting::ChangeSize,
     Setting::Boundaries,
     Setting::Summary,
@@ -321,6 +330,11 @@ impl Setting {
             | Self::Tracker
             | Self::Integration
             | Self::ReviewProtocol
+            // Everywhere rather than per agent, and the suite is what said so:
+            // the gate reads this row to render the reserved reviewer's grant,
+            // and a row the gate reads cannot have a different answer depending
+            // on which agent asked — there is one gate.
+            | Self::Evidence
             | Self::Boundaries
             | Self::Board => Scope::Everywhere,
             // Written across every checkout somebody has, so they belong to
@@ -349,6 +363,9 @@ impl Setting {
             Self::Window => "how long a routine write may ride on the last verification",
             Self::ReviewProtocol => "what a review verdict is bound to (RDD lives here)",
             Self::Judges => "how many independent contexts look at a change before it lands",
+            Self::Evidence => {
+                "what a verdict here has to be backed by, and so what a reviewer may do"
+            }
             Self::ChangeSize => "how many changed lines a pull request aims to stay under",
             Self::Boundaries => "the commands this repository treats as one-way doors",
             Self::Board => "the project board workflow state is mirrored onto",
@@ -397,6 +414,7 @@ impl Setting {
             Self::Window => Answers::some(&["default", "1m", "30s"]),
             Self::ReviewProtocol => Answers::all(&["standard", "receipt-driven"]),
             Self::Judges => Answers::all(&["single", "two blind", "five blind"]),
+            Self::Evidence => Answers::all(&["reading", "measuring"]),
             Self::ChangeSize => Answers::some(&["800", "400"]),
             Self::Boundaries => Answers::some(&["none"]),
             Self::Board => Answers::some(&["none"]),
@@ -420,6 +438,7 @@ impl Setting {
             Self::Window => "Renewal window",
             Self::ReviewProtocol => "Review protocol",
             Self::Judges => "Blind judges",
+            Self::Evidence => "Evidence standard",
             Self::ChangeSize => "Change size",
             Self::Boundaries => "Irreversible commands",
             Self::Board => "Project board",
@@ -563,6 +582,17 @@ impl Setting {
                 "RDD: a verdict must carry a receipt, the reviewer's own evidence bound to those \
                  bytes"
             }
+            // Neither answer is the feature switched off, so neither sentence
+            // is written as an absence. What separates them is what a finding
+            // has to be produced by, and the capability follows from that rather
+            // than the other way round.
+            (Self::Evidence, "reading") => {
+                "a finding here is established by reading the change, so a reviewer needs no shell"
+            }
+            (Self::Evidence, "measuring") => {
+                "a finding here is established by running something, so a reviewer gets a shell \
+                 and a directory nothing else writes"
+            }
             (Self::Judges, "single") => "one context reviews the change",
             (Self::Judges, "two blind") => {
                 "two contexts review it without seeing each other's verdict"
@@ -635,6 +665,7 @@ impl Setting {
             // missing.
             Self::ReviewProtocol => "`standard`, or `receipt-driven` (also accepted as `rdd`)",
             Self::Judges => "`single`, `two blind`, or `five blind`",
+            Self::Evidence => "`reading`, or `measuring`",
             Self::ChangeSize => "a number of lines, such as `800`",
             Self::Boundaries => "`none`, or commands separated by commas such as `npm publish`",
             Self::Board => "`none`, or a board as `<owner>/<number>`",
@@ -889,6 +920,17 @@ impl Setting {
                     _ => return Err(self.reject(value)),
                 }
             }
+            // No `on`/`off` synonyms here on purpose, unlike the row above. Both
+            // answers are a positive statement about this repository, and there
+            // is no direction in which one of them is the feature being switched
+            // off — `reading` is the narrower grant, not the absent one.
+            Self::Evidence => {
+                config.evidence = match lower(value).trim() {
+                    "reading" | "read" => Evidence::Reading,
+                    "measuring" | "measure" | "mutation" => Evidence::Measuring,
+                    _ => return Err(self.reject(value)),
+                }
+            }
             Self::Board => {
                 config.board = match lower(value).as_str() {
                     "none" | "unset" | "" => None,
@@ -938,6 +980,7 @@ impl Setting {
             }
             Self::ReviewProtocol => config.review_protocol.as_value().to_owned(),
             Self::Judges => config.judges.as_value().to_owned(),
+            Self::Evidence => config.evidence.as_value().to_owned(),
             Self::Boundaries => {
                 if config.boundaries.is_empty() {
                     "none".to_owned()

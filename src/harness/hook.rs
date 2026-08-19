@@ -1086,6 +1086,7 @@ mod tests {
         let context = GateContext {
             stand_down: None,
             integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
             flag: None,
             skill_root: root.path().join("skill"),
             repo_dir: root.path().join("repo"),
@@ -1146,6 +1147,7 @@ mod tests {
         let context = GateContext {
             stand_down: None,
             integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
             flag: None,
             skill_root: root.path().join("skill"),
             repo_dir: root.path().join("repo"),
@@ -1254,6 +1256,7 @@ mod tests {
         let context = GateContext {
             stand_down: None,
             integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
             flag: None,
             skill_root: root.path().join("skill"),
             repo_dir: root.path().join("repo"),
@@ -1296,6 +1299,7 @@ mod tests {
         let context = GateContext {
             stand_down: None,
             integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
             flag: None,
             skill_root: root.path().join("skill"),
             repo_dir: root.path().join("repo"),
@@ -1357,6 +1361,7 @@ mod tests {
         let context = GateContext {
             stand_down: None,
             integration: crate::config::Integration::Trunk,
+            evidence: crate::config::Evidence::Reading,
             flag: Some("ff.new-checkout".to_owned()),
             skill_root: root.path().join("skill"),
             repo_dir: root.path().join("repo"),
@@ -1420,6 +1425,7 @@ mod tests {
         let context = GateContext {
             stand_down: None,
             integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
             flag: None,
             skill_root: root.path().join("skill"),
             repo_dir: root.path().join("repo"),
@@ -1629,6 +1635,7 @@ mod tests {
         let context = GateContext {
             stand_down: None,
             integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
             flag: None,
             skill_root: root.path().join("skill"),
             repo_dir: repo,
@@ -1770,6 +1777,7 @@ mod tests {
         GateContext {
             stand_down: None,
             integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
             flag: None,
             skill_root: std::path::PathBuf::from("estigia-no-skill-here"),
             repo_dir: std::path::PathBuf::from("estigia-no-repo-here"),
@@ -1894,6 +1902,7 @@ mod tests {
         let current = GateContext {
             stand_down: None,
             integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
             flag: None,
             skill_root: root.path().to_path_buf(),
             ..nowhere()
@@ -1923,6 +1932,7 @@ mod tests {
         let root = tempfile::tempdir().expect("a temporary root");
         let context = GateContext {
             integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
             flag: None,
             stand_down: None,
             skill_root: root.path().join("skill"),

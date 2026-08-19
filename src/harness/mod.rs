@@ -2169,6 +2169,18 @@ pub struct GateContext {
     pub tracker: crate::config::Tracker,
     /// Where work integrates: a reviewed branch, or trunk behind a flag.
     pub integration: crate::config::Integration,
+    /// What a verdict here has to be backed by.
+    ///
+    /// Carried for one reason: it decides the tool grant the reserved reviewer
+    /// role runs under, and the gate enforces that grant from Estigia's own
+    /// embedded definition rather than from the file on disk. A grant derived
+    /// from the contract therefore has to reach here, or the gate would enforce
+    /// a policy the installer no longer writes.
+    ///
+    /// An unreadable contract answers [`crate::config::Evidence::Reading`], the
+    /// narrower one — the same direction `window` is narrowed for the same
+    /// reason. A fault must not hand out a capability.
+    pub evidence: crate::config::Evidence,
     /// The feature flag this run declared, if any.
     ///
     /// Read from the environment rather than the contract, because it is a

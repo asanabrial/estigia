@@ -387,6 +387,7 @@ const TUI_SETTINGS: &[Setting] = &[
     Setting::Window,
     Setting::ReviewProtocol,
     Setting::Judges,
+    Setting::Evidence,
     Setting::ChangeSize,
     Setting::Boundaries,
     Setting::Board,

@@ -50,6 +50,7 @@ fn context(root: &Path, repo: &Path) -> GateContext {
     GateContext {
         stand_down: None,
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         skill_root: root.join("skill"),
         repo_dir: repo.to_path_buf(),

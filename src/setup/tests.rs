@@ -4954,7 +4954,7 @@ fn every_claude_setup_installs_one_idempotent_static_reviewer() {
     let reviewer = home.path().join(".claude/agents/review-blind.md");
     assert_eq!(
         fs::read_to_string(&reviewer).expect("the reviewer is installed"),
-        skill::REVIEW_AGENT.contents
+        render_reviewer_agent(skill::REVIEW_AGENT.contents, Config::default().evidence)
     );
     let retry = setup(adapter, &Config::default(), &options).expect("the retry succeeds");
     assert!(
@@ -5064,7 +5064,7 @@ fn reviewer_is_owned_before_its_bytes_are_written_and_the_retry_is_safe() {
     assert!(owns_reviewer(&paths, &reviewer));
     assert_eq!(
         fs::read_to_string(reviewer).expect("the reviewer"),
-        skill::REVIEW_AGENT.contents
+        render_reviewer_agent(skill::REVIEW_AGENT.contents, Config::default().evidence)
     );
 }
 
@@ -5092,11 +5092,14 @@ fn normalized_reviewer_line_endings_and_final_newline_remain_deletable() {
     let adapter = agent("claude-code");
     let reviewer = home.path().join(".claude/agents/review-blind.md");
     setup(adapter, &Config::default(), &options).expect("the reviewer installs");
-    let normalized = skill::REVIEW_AGENT
-        .contents
-        .replace('\n', "\r\n")
-        .trim_end()
-        .to_owned();
+    // The **rendered** definition, because that is what is on disk. Normalising
+    // the raw asset writes a file no install ever produced, so the uninstall
+    // rightly declined to own it and this test measured its own fixture.
+    let normalized =
+        render_reviewer_agent(skill::REVIEW_AGENT.contents, Config::default().evidence)
+            .replace('\n', "\r\n")
+            .trim_end()
+            .to_owned();
     fs::write(&reviewer, normalized).expect("only text shape changes");
 
     uninstall(adapter, &options).expect("normalized text is still owned");

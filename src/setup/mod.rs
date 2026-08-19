@@ -27,7 +27,7 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::config::{CONFIG_FENCE, Config, ModelRouting};
+use crate::config::{CONFIG_FENCE, Config, Evidence, ModelRouting};
 use crate::fence::Fence;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use crate::paths;
@@ -1365,8 +1365,60 @@ fn reviewer_target(paths: &AgentPaths) -> Option<PathBuf> {
     Some(paths.agents_root.as_ref()?.join(name))
 }
 
+/// The reviewer definition with this repository's evidence standard filled in.
+///
+/// The grant is derived rather than fixed, for the reason
+/// [`crate::config::Evidence`] gives: a constant cannot know whether a verdict
+/// here is established by reading the change or by running something against it,
+/// and in a repository whose answer is the second, a read-only judge cannot check
+/// the sentences its own rules make load-bearing.
+///
+/// The discipline paragraph moves with the grant, because a capability handed
+/// over without the rule that bounds it is worse than not handing it over: a
+/// judge that may mutate and has not been told where is two writers of one tree
+/// the moment there is a second judge.
+pub fn render_reviewer_agent(template: &str, evidence: Evidence) -> String {
+    let (tools, discipline) = match evidence {
+        // What ships by default, and what every installation had before this was
+        // a row at all.
+        Evidence::Reading => (
+            "Read, Grep, Glob",
+            "Remain read-only. Do NOT edit files, run a shell, change tracker state, record the \
+             aggregate verdict, or repair a finding.",
+        ),
+        // A shell, because a finding established by running something cannot be
+        // established without running it — and the isolation rule in the same
+        // breath, because the capability alone is the concurrent-writer defect.
+        Evidence::Measuring => (
+            "Read, Grep, Glob, Bash",
+            "A finding here is established by running something, so you may build, test and \
+             mutate — inside the directory this launch hands you and nowhere else. That directory \
+             is yours alone for the duration: not a sibling judge's, not the orchestrator's, not \
+             another run's. Restore every mutation and confirm the tree is clean before you \
+             report. If it is already dirty when you arrive, stop and say so rather than \
+             restoring it — whatever made it dirty was somebody's measurement, and repairing it \
+             destroys theirs. Still do NOT change tracker state, record the aggregate verdict, or \
+             repair a finding.",
+        ),
+    };
+    template
+        .replace("{{TOOLS}}", tools)
+        .replace("{{DISCIPLINE}}", discipline)
+}
+
+/// Whether the installed reviewer is one Estigia authored.
+///
+/// It used to mean *one* spelling, and could, because the definition was a
+/// constant. With the grant derived it means *one of the spellings Estigia can
+/// produce*, enumerated over [`Evidence::all`] under that type's own exhaustive
+/// match — so a third standard cannot be added without arriving here. That keeps
+/// this a proof rather than turning it into a guess: the set is closed and the
+/// compiler holds it closed.
 pub(crate) fn reviewer_is_static(existing: &str) -> bool {
-    existing == as_the_file_was(Some(existing), skill::REVIEW_AGENT.contents)
+    Evidence::all().into_iter().any(|evidence| {
+        let rendered = render_reviewer_agent(skill::REVIEW_AGENT.contents, evidence);
+        existing == as_the_file_was(Some(existing), &rendered)
+    })
 }
 
 fn validate_reviewer_definition(paths: &AgentPaths) -> Result<()> {
@@ -1906,12 +1958,13 @@ fn setup_into_with_skill(
             existing.as_deref(),
             options.dry_run,
             ownership_added,
+            effective.evidence,
         )));
         pending.insert(
             target,
             Some(as_the_file_was(
                 existing.as_deref(),
-                skill::REVIEW_AGENT.contents,
+                &render_reviewer_agent(skill::REVIEW_AGENT.contents, effective.evidence),
             )),
         );
     }
@@ -2598,12 +2651,14 @@ fn write_reviewer_definition(
     existing: Option<&str>,
     dry_run: bool,
     ownership_added: bool,
+    evidence: Evidence,
 ) -> Result<SetupAction> {
+    let desired = render_reviewer_agent(skill::REVIEW_AGENT.contents, evidence);
     if existing.is_some() || dry_run {
         return write_file(
             path,
             existing,
-            skill::REVIEW_AGENT.contents,
+            &desired,
             ActionKind::AgentDefinition,
             dry_run,
         );
@@ -2617,7 +2672,7 @@ fn write_reviewer_definition(
         .parent()
         .with_context(|| format!("{} has no parent directory", path.display()))?;
     fs::create_dir_all(parent).with_context(|| format!("create directory {}", parent.display()))?;
-    match paths::create_atomically(path, skill::REVIEW_AGENT.contents) {
+    match paths::create_atomically(path, &desired) {
         Ok(()) => Ok(SetupAction {
             kind: ActionKind::AgentDefinition,
             path: path.to_owned(),

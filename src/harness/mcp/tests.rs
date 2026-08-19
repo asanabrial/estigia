@@ -381,6 +381,7 @@ fn a_claim_records_the_key_its_retry_depends_on() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -446,6 +447,7 @@ fn releasing_another_issue_leaves_the_held_ones_retry_key_alone() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -586,6 +588,7 @@ fn a_record_nothing_can_read_stops_every_tool_that_names_a_run() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -683,6 +686,7 @@ fn a_run_id_that_holds_another_checkout_is_not_one_to_act_under() {
     std::fs::create_dir_all(&elsewhere).expect("the other one");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -822,6 +826,7 @@ fn a_run_whose_pointer_will_not_parse_cannot_swear_to_another_issue() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -1209,6 +1214,7 @@ fn a_run_that_already_holds_an_issue_cannot_swear_to_a_second() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -1246,6 +1252,7 @@ fn re_claiming_the_same_issue_is_a_renewal_and_is_not_refused() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -1278,6 +1285,7 @@ fn holding_nothing_is_not_holding_something_else() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -1309,6 +1317,7 @@ fn a_pointer_is_never_written_under_an_empty_run_id() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -1470,6 +1479,7 @@ fn a_tracker_with_no_executable_refuses_instead_of_running_the_wrong_one() {
     ] {
         let context = GateContext {
             integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
             flag: None,
             stand_down: None,
             skill_root: root.path().join("skill"),
@@ -1535,6 +1545,7 @@ fn a_transition_cannot_be_made_without_saying_whose_run_it_is() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -1603,6 +1614,7 @@ fn publication_refusals_invalidate_only_when_a_remote_write_cannot_be_excluded()
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -1697,6 +1709,7 @@ fn a_malformed_call_and_a_refusal_are_not_the_same_failure() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -2361,6 +2374,7 @@ fn a_call_that_wrote_nothing_leaves_the_run_pointer_alone() {
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -2441,6 +2455,7 @@ fn isolating_a_run_records_the_checkout_it_was_adjudicated_from() {
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -2541,6 +2556,7 @@ fn a_renewal_completes_a_record_the_tracker_has_just_agreed_with() {
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -2682,6 +2698,7 @@ fn every_receipt_effect_recovers_the_complete_receipt_atomically() {
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -2742,6 +2759,7 @@ fn a_partial_publication_receipt_invalidates_old_local_authority() {
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -2847,6 +2865,7 @@ fn discovering_a_takeover_does_not_make_the_run_its_holder() {
     let root = tempfile::tempdir().expect("a state root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
@@ -2910,6 +2929,7 @@ fn no_tool_bound_to_a_run_accepts_the_name_that_names_none() {
     let context = GateContext {
         stand_down: None,
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         skill_root: root.path().join("skill"),
         repo_dir: root.path().join("repo"),
@@ -3001,6 +3021,7 @@ fn refusing_a_nameless_run_names_a_way_out_that_is_one() {
     let context = GateContext {
         stand_down: None,
         integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         skill_root: root.path().join("skill"),
         repo_dir: root.path().join("repo"),

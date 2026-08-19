@@ -1354,6 +1354,60 @@ suite. Everything else here is prose held by review.
     `the_only_thing_without_a_gate_is_the_thing_that_is_not_an_agent`. None of the eight is closed
     here.
 
+- **Estigia defined roles its own roles could not do the work of.** Issue 83. Six shipped definitions,
+  every one read-only: `review-blind` carried a fixed `tools: Read, Grep, Glob`, and the five planning
+  phases carried `{{TOOLS}}` whose widest substitution was `Read, Grep, Glob, Write, Edit`. **No branch
+  produced a shell.** In a repository whose stated evidence standard is mutation — this one's is, and
+  `CLAUDE.md` makes two sentences load-bearing on it — a reviewer that cannot run the suite cannot
+  check either. So every panel that mattered was launched under a generic type instead, and the
+  read-only guarantee `policies/blind-judges.md` states for a judge governed **none** of them.
+
+  Measured on issue #36 before this closed: three publication epochs, twelve independent judge
+  launches, all generic. The role gate governed zero. The reserved-role prelaunch check governed zero.
+  Every capability bound on those contexts came from prose in a launch prompt written by hand that
+  turn — the failure mode issue #35 closed for the reviewer's *brief* and left open for its
+  *capabilities*.
+
+  **What closes it.** `Evidence standard` — `reading` or `measuring`, defaulting to `reading` — and
+  the reviewer's grant derived from it rather than fixed. Under `measuring` the role gets a shell and
+  nothing else: write, edit and delegation stay refused, so a judge still cannot rewrite what it is
+  judging, and a test walks `Evidence::all()` asserting exactly that shape for every standard.
+
+  Two things had to give, and both were deliberate:
+
+  - `reviewer_is_static` meant *one* spelling and now means *one of the spellings Estigia can
+    produce*, enumerated over `Evidence::all()`. The set is closed and the compiler holds it closed,
+    so this stays a proof rather than becoming a guess.
+  - The gate had to read the row. It carries it in `GateContext` beside `window`, and narrows the same
+    way for the same sentence: **an unreadable contract answers `reading`**, because a fault must not
+    hand out a capability.
+
+  **What it does not buy, and this is the part worth a reader's attention.** A judge that measures
+  writes inside a checkout of its own, which is outside every path the claim covers — so issue #2's
+  stand-aside answers before the tracker is asked. **Giving the role a shell does not put its
+  mutations under the gate.** What makes them safe is the isolation precondition, and that is why the
+  isolation rule moved in the same change: it bound the checkout and said nothing about anywhere else
+  a judge writes. Measured on a five-judge panel that shared one scratch directory — one judge's
+  script overwritten by another's and executed inside a third judge's checkout, a fourth reading the
+  implementing run's planning notes — two verdicts stopped being independent readings and one had to
+  be discounted. Nothing in the delivery target was touched and no checkout rule was broken, which is
+  precisely why the rule needed the second half.
+
+  **Still open, and named rather than implied.**
+
+  - Only one of the two derived families is compiler-forced. `instruction_directory_fragment` matches
+    `InstructionFile`, so a twelfth adapter cannot skip it; `skills_root_fragment` matches
+    `SkillsRoot`, whose variants a twelfth adapter reuses.
+  - The eight `_` arms on the instruction enum are untouched, `mcp_format` among them. Nothing here
+    closes them and the entry above says which has teeth.
+  - Estigia still cannot prove a panel ran, how many contexts it had, or that any two of them were
+    given separate directories. This narrows what a judge **can** do and proves nothing about what a
+    judge **did** — the same boundary `policies/blind-judges.md` draws for everything else about
+    panels.
+  - `Evidence standard` is one row for one shipped reviewer definition. It is not per role: the
+    planning phases keep their own derivation from `Planning`, and a repository wanting a measuring
+    `spec` phase has no way to say so.
+
 - **A skip spelled as a pass, in the places issue #22 did not reach.** That issue took the skip out of
   `tracker_rig`'s *type*, so no caller of it can be handed a value meaning *did not run*. Two other
   fixtures still answer one, and neither was measured before.

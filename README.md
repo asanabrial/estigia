@@ -342,7 +342,7 @@ What that costs is in `UNIMPLEMENTED`: no resources, no prompts, no sampling, no
 
 ## Configuration
 
-Eighteen typed settings, in [`docs/configuration.md`](docs/configuration.md). Reading the table produces a
+Nineteen typed settings, in [`docs/configuration.md`](docs/configuration.md). Reading the table produces a
 valid configuration or a refusal naming what may be written instead.
 
 ## The ratchet

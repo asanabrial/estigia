@@ -15,7 +15,17 @@ const BUILDER: &str = "---\n\
 fn install_canonical_reviewer(home: &std::path::Path) {
     let file = home.join(".claude/agents/review-blind.md");
     std::fs::create_dir_all(file.parent().expect("a parent")).expect("the user agents directory");
-    std::fs::write(file, crate::skill::REVIEW_AGENT.contents).expect("the canonical reviewer");
+    // The default rendering, because that is what a default install writes. The
+    // grant is derived from the evidence standard since issue 83, so the raw
+    // asset is a template and no installed file ever holds it.
+    std::fs::write(
+        file,
+        crate::setup::render_reviewer_agent(
+            crate::skill::REVIEW_AGENT.contents,
+            crate::config::Evidence::Reading,
+        ),
+    )
+    .expect("the canonical reviewer");
 }
 
 fn project_reviewer(project: &std::path::Path, relative: &str) -> std::path::PathBuf {
@@ -145,8 +155,14 @@ fn canonical_user_reviewer_must_exist_read_and_match() {
         .expect_err("a changed canonical reviewer launched");
     assert_eq!(changed.code, "reviewer-canonical-unavailable");
 
-    std::fs::write(&canonical, crate::skill::REVIEW_AGENT.contents)
-        .expect("the canonical reviewer is restored");
+    std::fs::write(
+        &canonical,
+        crate::setup::render_reviewer_agent(
+            crate::skill::REVIEW_AGENT.contents,
+            crate::config::Evidence::Reading,
+        ),
+    )
+    .expect("the canonical reviewer is restored");
     authorize_review_blind_launch(project.path(), Some(home.path()))
         .expect("the canonical reviewer with no collision proceeds");
 }
@@ -588,17 +604,52 @@ fn a_shipped_planning_phase_cannot_write_to_the_repository() {
 
 #[test]
 fn the_shipped_blind_reviewer_is_read_only_and_cannot_delegate() {
-    let definition = crate::skill::REVIEW_AGENT.contents;
-    let declared = declared_policy(definition).expect("the reviewer declares a gate policy");
-    for tool in ["Read", "Grep", "Glob"] {
-        assert_eq!(declared.verdict(tool), Verdict::Allow);
-        assert!(gate(Some("review-blind"), tool, Some(definition)).is_none());
+    // Both renderings, because the grant is derived from the evidence standard
+    // since issue 83 and the raw asset carries a placeholder rather than a tool
+    // list. Walked over `Evidence::all()` so a third standard cannot be added
+    // without deciding here what its reviewer may do.
+    //
+    // The shape this holds is the whole of what `measuring` buys: **a shell and
+    // nothing else**. Reading stays reading in both, and the four tools that
+    // would let a judge rewrite the target or hand the work to somebody else are
+    // denied whichever answer the operator gave. A grant that widened past the
+    // shell would be a judge that can edit what it is judging, which is the one
+    // thing no evidence standard makes acceptable.
+    for evidence in crate::config::Evidence::all() {
+        let definition =
+            crate::setup::render_reviewer_agent(crate::skill::REVIEW_AGENT.contents, evidence);
+        let declared = declared_policy(&definition).expect("the reviewer declares a gate policy");
+        for tool in ["Read", "Grep", "Glob"] {
+            assert_eq!(
+                declared.verdict(tool),
+                Verdict::Allow,
+                "{evidence:?} {tool}"
+            );
+            assert!(gate(Some("review-blind"), tool, Some(&definition)).is_none());
+        }
+        let shell = match evidence {
+            crate::config::Evidence::Reading => Verdict::Deny,
+            crate::config::Evidence::Measuring => Verdict::Allow,
+        };
+        assert_eq!(declared.verdict("Bash"), shell, "{evidence:?} Bash");
+        assert_eq!(
+            gate(Some("review-blind"), "Bash", Some(&definition)).is_none(),
+            shell == Verdict::Allow,
+            "{evidence:?}: the gate and the declaration disagree about the shell"
+        );
+        for tool in ["Write", "Edit", "Agent", "Task"] {
+            assert_eq!(declared.verdict(tool), Verdict::Deny, "{evidence:?} {tool}");
+            assert!(gate(Some("review-blind"), tool, Some(&definition)).is_some());
+        }
+        assert!(definition.contains("Do NOT delegate"));
+        // And the placeholder is gone. A rendering that left `{{TOOLS}}` in
+        // place would be parsed as an allowlist naming one tool called
+        // `{{TOOLS}}`, which denies everything and reads as a working gate.
+        assert!(
+            !definition.contains("{{"),
+            "{evidence:?}: a placeholder survived"
+        );
     }
-    for tool in ["Write", "Edit", "Bash", "Agent", "Task"] {
-        assert_eq!(declared.verdict(tool), Verdict::Deny);
-        assert!(gate(Some("review-blind"), tool, Some(definition)).is_some());
-    }
-    assert!(definition.contains("Do NOT delegate"));
 }
 
 /// A moved config home does not remove a sub-agent's allowlist.

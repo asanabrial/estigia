@@ -4511,6 +4511,14 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
         } else {
             installed.window.min(harness::hook::default_window())
         },
+        // Narrowed the same way and for the same sentence: this row decides what
+        // a delegated reviewer may do, and a document that could not be read is
+        // the last thing that should widen it.
+        evidence: if unreadable {
+            crate::config::Evidence::Reading
+        } else {
+            installed.evidence
+        },
         tracker,
         boundaries,
     })
@@ -4874,9 +4882,14 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
     // is the door for a caller that names one; nothing in this tree does yet.
     if let Some(agent) = payload_agent(&parsed) {
         if agent == "review-blind" {
-            if let Some(refusal) =
-                harness::roles::gate(Some(agent), tool, Some(crate::skill::REVIEW_AGENT.contents))
-            {
+            // Rendered with the effective row rather than taken raw: the
+            // definition carries a `{{TOOLS}}` placeholder now, and a gate that
+            // parsed the placeholder would enforce an allowlist naming no tool.
+            let reviewer = crate::setup::render_reviewer_agent(
+                crate::skill::REVIEW_AGENT.contents,
+                context.evidence,
+            );
+            if let Some(refusal) = harness::roles::gate(Some(agent), tool, Some(&reviewer)) {
                 return report_gate(tool, json, harness::Decision::Deny(Box::new(refusal)));
             }
         } else {
