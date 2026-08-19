@@ -773,6 +773,41 @@ pub fn run_tool(
         flags.push("--runtime".to_owned());
         flags.push(session::DEFAULT_RUNTIME.to_owned());
     }
+    if tool.operation == "review-finding" {
+        let field = |name: &str| {
+            arguments
+                .get(name)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+        };
+        let pr = arguments
+            .get("pr")
+            .and_then(Value::as_u64)
+            .unwrap_or_default()
+            .to_string();
+        // The finding's own identity is in the key, so recording two different
+        // findings against one receipt mints two operations rather than one
+        // replay — and re-recording the *same* finding after an unreadable
+        // answer mints the same key and reads back what it already wrote. That
+        // is the difference between a ledger and a counter: a retry must not be
+        // able to turn one observation into two confirmations.
+        let key = crate::transport::claim::review_operation_id(
+            "review-finding",
+            &[
+                run_id,
+                field("reviewer"),
+                field("epoch"),
+                &pr,
+                field("head"),
+                field("base"),
+                field("digest"),
+                field("id"),
+                field("class"),
+            ],
+        );
+        flags.push("--operation-id".to_owned());
+        flags.push(key);
+    }
     if tool.operation == "review-verdict" {
         let field = |name: &str| {
             arguments

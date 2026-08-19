@@ -2205,7 +2205,7 @@ fn every_tool_sends_flags_the_transport_accepts() {
         let added: &[&str] = match tool.operation {
             "claim" | "reclaim" | "unassign" => &["--operation-id", "--runtime"],
             "handoff-review" => &["--operation-id", "--runtime"],
-            "review-verdict" => &["--operation-id"],
+            "review-finding" | "review-verdict" => &["--operation-id"],
             _ => &[],
         };
 

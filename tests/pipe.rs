@@ -12200,8 +12200,49 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
             ),
         )
     };
-    let timeline = |verdict: Option<&str>| -> String {
+    // The severe finding a rejection rests on, since issue 46. A `rejected`
+    // verdict with nothing behind it is refused now — which is the whole of that
+    // change — so this fixture has to carry one or the rejection cases would
+    // measure the new refusal instead of the lane. The accepted cases are left
+    // exactly as they were, so what this test is about is unchanged in both
+    // directions.
+    let found = comment(
+        "IC_finding",
+        "2026-08-14T10:30:00Z",
+        marker(
+            "review-finding",
+            &[
+                ("run-id", reviewer),
+                ("reviewer", reviewer),
+                ("op-id", &"b".repeat(32)),
+                ("epoch", &epoch),
+                ("pr", "7"),
+                ("head", &head),
+                ("base", &base),
+                ("digest", &digest),
+                ("id", "lane-fixture-defect"),
+                ("class", "severe"),
+                (
+                    "evidence",
+                    "the fixture's own defect, so the rejection has a subject",
+                ),
+                (
+                    "impact",
+                    "without it the rejection cases could not be recorded at all",
+                ),
+            ],
+        ),
+    );
+    // `rejecting` is separate from `verdict` because the finding is on the
+    // timeline **before** the verdict is written, not alongside it. Folding the
+    // two together put it only in the readback, where the refusal that reads it
+    // never looks, and the rejecting row failed for the reason it is here to
+    // prove is enforced.
+    let timeline = |verdict: Option<&str>, rejecting: bool| -> String {
         let mut comments = vec![held.clone(), publication.clone()];
+        if rejecting {
+            comments.push(found.clone());
+        }
         if let Some(outcome) = verdict {
             comments.push(recorded(outcome));
         }
@@ -12282,7 +12323,7 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
         for before in 1..=3 {
             script.push(serde_json::json!({
                 "matches": "issue view", "nth": before,
-                "stdout": timeline(None), "status": 0,
+                "stdout": timeline(None, outcome == "rejected"), "status": 0,
             }));
         }
         // The lane's answer is scripted against **the receipt's own head**, not
@@ -12296,7 +12337,7 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
         // failed read rather than a cleared lane.
         let lane = format!("commits/{head}/check-runs");
         script.extend([
-            serde_json::json!({ "matches": "issue view", "stdout": timeline(Some(outcome)), "status": 0 }),
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(Some(outcome), outcome == "rejected"), "status": 0 }),
             serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
             serde_json::json!({ "matches": lane, "stdout": answer, "status": status }),
             serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
@@ -12793,4 +12834,512 @@ fn the_repair_a_failed_read_back_names_clears_the_item_it_was_named_over() {
         vec!["status:done".to_owned(), "priority:high".to_owned()],
         "the repair left the wrong labels on the issue"
     );
+}
+
+/// The operation id a row means when it means *some other finding*.
+///
+/// Spelled once, so a row that must not collide with the accepted finding
+/// cannot silently become the row that does.
+fn a_different_finding() -> &'static str {
+    "cccccccccccccccccccccccccccccccc"
+}
+
+/// A rejection rests on a severe finding that reviewer recorded against these
+/// exact bytes, or it is refused.
+///
+/// The defect issue 46 names: before this, every observation a reviewer could
+/// make reduced to one bit. A preference about a word cost what a reproducible
+/// correctness defect cost — a rejection, a republish, a new epoch and a full
+/// re-review of settled work. This repository paid that on its own deliveries.
+///
+/// Four of the six rows are the narrowings, and each is a mutation that would
+/// otherwise pass: dropping the class filter, reading the pool instead of the
+/// reviewer's own findings, and dropping the receipt bound. The fifth is the
+/// route the rule must leave open, and the sixth is the outcome it must not
+/// touch at all — an acceptance carrying warnings is still an acceptance.
+#[test]
+fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_bytes() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let publisher = "claude-abcd1234";
+    let reviewer = "gemini-c0ffee00";
+    let other = "codex-beef0000";
+    let epoch = "e".repeat(32);
+    let stale = "9".repeat(32);
+    let head = "b".repeat(40);
+    let base = "c".repeat(40);
+    let digest = "d".repeat(64);
+    let marker = |kind, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let held = comment(
+        "IC_claim",
+        "2026-08-14T09:00:00Z",
+        marker(
+            "claim",
+            &[
+                ("run-id", reviewer),
+                ("runtime", "gemini"),
+                ("horizon", "2099-01-01T00:00Z"),
+                ("op-id", &"a".repeat(32)),
+            ],
+        ),
+    );
+    let publication = comment(
+        "IC_publication",
+        "2026-08-14T09:10:00Z",
+        marker(
+            "published",
+            &[
+                ("run-id", publisher),
+                ("epoch", &epoch),
+                ("pr", "7"),
+                ("head", &head),
+                ("base", &base),
+                ("digest", &digest),
+            ],
+        ),
+    );
+    // One finding, spelled by the three things the rule reads: who found it,
+    // how severe it is, and which publication it stands against. Everything
+    // else is held constant so a failing row names its own cause.
+    let finding = |op: &str, by: &str, class: &str, against: &str| {
+        comment(
+            "IC_finding",
+            "2026-08-14T10:30:00Z",
+            marker(
+                "review-finding",
+                &[
+                    ("run-id", by),
+                    ("reviewer", by),
+                    ("op-id", op),
+                    ("epoch", against),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                    ("id", "the-finding"),
+                    ("class", class),
+                    ("evidence", "a command that reddens"),
+                    ("impact", "what it costs a reader"),
+                ],
+            ),
+        )
+    };
+    let recorded = |outcome: &str| {
+        comment(
+            "IC_verdict",
+            "2026-08-14T11:00:00Z",
+            marker(
+                "review-verdict",
+                &[
+                    ("run-id", reviewer),
+                    ("reviewer", reviewer),
+                    (
+                        "op-id",
+                        &estigia::transport::claim::review_operation_id(
+                            "review-verdict",
+                            &[
+                                reviewer, reviewer, &epoch, "7", &head, &base, &digest, outcome,
+                            ],
+                        ),
+                    ),
+                    ("epoch", &epoch),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                    ("outcome", outcome),
+                ],
+            ),
+        )
+    };
+
+    let mine = "b".repeat(32);
+    #[allow(clippy::type_complexity)]
+    let rows: [(&str, Option<(&str, &str, &str)>, &str, bool); 6] = [
+        // Nothing behind it at all: the state the operation could not refuse.
+        ("nothing", None, "rejected", true),
+        // Present, and not severe. If the class filter is dropped this row is
+        // the one that goes green, because a warning is exactly the observation
+        // this change exists to stop costing a republish.
+        (
+            "only-a-warning",
+            Some((a_different_finding(), reviewer, "warning")),
+            "rejected",
+            true,
+        ),
+        // Severe, and somebody else's. Two contexts each holding one suspicion
+        // is not one confirmed defect, and reading the ledger as a pool would
+        // make it look like one.
+        (
+            "another-reviewer",
+            Some((a_different_finding(), other, "severe")),
+            "rejected",
+            true,
+        ),
+        // Severe, this reviewer's, and against bytes that are no longer the
+        // ones under review. A finding does not follow the work across a
+        // republish; the lineage decides what a repair inherits.
+        (
+            "another-epoch",
+            Some((a_different_finding(), reviewer, "severe")),
+            "rejected",
+            true,
+        ),
+        // The route the rule must leave open.
+        (
+            "its-own-severe",
+            Some((mine.as_str(), reviewer, "severe")),
+            "rejected",
+            false,
+        ),
+        // And the outcome it must not touch: an acceptance carrying a warning
+        // is still an acceptance, which is the half that makes a warning worth
+        // recording rather than escalating.
+        (
+            "accepted-over-warnings",
+            Some((mine.as_str(), reviewer, "warning")),
+            "accepted",
+            false,
+        ),
+    ];
+
+    for (label, shape, outcome, refused) in rows {
+        let log = trace.path().join(format!("{label}.log"));
+        let against = if label == "another-epoch" {
+            &stale
+        } else {
+            &epoch
+        };
+        let ledger = shape.map(|(id, by, class)| finding(id, by, class, against));
+        let timeline = |verdict: Option<&str>| -> String {
+            let mut comments = vec![held.clone(), publication.clone()];
+            if let Some(entry) = ledger.clone() {
+                comments.push(entry);
+            }
+            if let Some(outcome) = verdict {
+                comments.push(recorded(outcome));
+            }
+            serde_json::json!({
+                "state": "OPEN",
+                "assignees": [],
+                "labels": [{"name": "status:review"}],
+                "comments": comments,
+            })
+            .to_string()
+        };
+        let mut script = vec![];
+        for before in 1..=3 {
+            script.push(serde_json::json!({
+                "matches": "issue view", "nth": before,
+                "stdout": timeline(None), "status": 0,
+            }));
+        }
+        script.extend([
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(Some(outcome)), "status": 0 }),
+            serde_json::json!({ "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 }),
+            serde_json::json!({
+                "matches": format!("commits/{head}/check-runs"),
+                "stdout": serde_json::json!({"total_count": 0, "check_runs": []}).to_string(),
+                "status": 0,
+            }),
+            serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
+        ]);
+        let answers = serde_json::to_string(&script).expect("the fake tracker script serialises");
+
+        let runs = home.join(".estigia").join("runs");
+        let _ = std::fs::remove_file(runs.join(format!("{reviewer}.json")));
+        let mut run = estigia::harness::session::Run::new(reviewer.to_owned());
+        run.issue = Some(12);
+        run.state = Some("review".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "record_review_verdict", "arguments": {
+                "issue": 12,
+                "run_id": reviewer,
+                "reviewer": reviewer,
+                "epoch": epoch,
+                "pr": 7,
+                "head": head,
+                "base": base,
+                "digest": digest,
+                "outcome": outcome,
+            }}
+        })
+        .to_string();
+
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env(
+                "ESTIGIA_FAKE_COUNT",
+                trace.path().join(format!("{label}-count.json")),
+            )
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let calls = std::fs::read_to_string(&log).unwrap_or_default();
+        assert_eq!(
+            response["result"]["isError"], refused,
+            "{label}: the verdict was not adjudicated the way this row states: {text}"
+        );
+        if refused {
+            assert!(
+                text.contains("rejection-without-severe-finding"),
+                "{label}: refused for some other reason, so this row proves nothing about the \
+                 rule it is here for: {text}"
+            );
+            assert!(
+                !calls.contains("issue comment"),
+                "{label}: a refused verdict still wrote to the timeline: {calls}"
+            );
+        } else {
+            assert!(
+                calls.contains("issue comment"),
+                "{label}: the verdict was allowed and never written: {calls}"
+            );
+        }
+    }
+}
+
+/// A finding says what it is, how it was found and what it costs, or it is not
+/// recorded at all.
+///
+/// A classification with no evidence cannot be re-run and one with no impact
+/// cannot be weighed, and either is a preference wearing the word `severe`.
+/// Since a severe finding is now what authorises a rejection, this is the gate
+/// on the thing the gate above reads.
+#[test]
+fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let publisher = "claude-abcd1234";
+    let reviewer = "gemini-c0ffee00";
+    let epoch = "e".repeat(32);
+    let head = "b".repeat(40);
+    let base = "c".repeat(40);
+    let digest = "d".repeat(64);
+    let marker = |kind, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let held = comment(
+        "IC_claim",
+        "2026-08-14T09:00:00Z",
+        marker(
+            "claim",
+            &[
+                ("run-id", reviewer),
+                ("runtime", "gemini"),
+                ("horizon", "2099-01-01T00:00Z"),
+                ("op-id", &"a".repeat(32)),
+            ],
+        ),
+    );
+    let publication = comment(
+        "IC_publication",
+        "2026-08-14T09:10:00Z",
+        marker(
+            "published",
+            &[
+                ("run-id", publisher),
+                ("epoch", &epoch),
+                ("pr", "7"),
+                ("head", &head),
+                ("base", &base),
+                ("digest", &digest),
+            ],
+        ),
+    );
+
+    for (label, class, id, evidence, impact, refused) in [
+        // A fourth class nobody defined. The names are the vocabulary the
+        // decision tables are written in, so an unknown one is a finding no
+        // table can weigh rather than a stricter one.
+        ("unknown-class", "critical", "x", "e", "i", true),
+        ("no-id", "severe", "   ", "e", "i", true),
+        ("no-evidence", "severe", "x", "", "i", true),
+        ("no-impact", "severe", "x", "e", "  ", true),
+        ("complete", "severe", "x", "e", "i", false),
+    ] {
+        let log = trace.path().join(format!("finding-{label}.log"));
+        let written = comment(
+            "IC_finding",
+            "2026-08-14T10:30:00Z",
+            marker(
+                "review-finding",
+                &[
+                    ("run-id", reviewer),
+                    ("reviewer", reviewer),
+                    (
+                        "op-id",
+                        &estigia::transport::claim::review_operation_id(
+                            "review-finding",
+                            &[
+                                reviewer, reviewer, &epoch, "7", &head, &base, &digest, id, class,
+                            ],
+                        ),
+                    ),
+                    ("epoch", &epoch),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                    ("id", id),
+                    ("class", class),
+                    ("evidence", evidence),
+                    ("impact", impact),
+                ],
+            ),
+        );
+        let timeline = |after: bool| -> String {
+            let mut comments = vec![held.clone(), publication.clone()];
+            if after {
+                comments.push(written.clone());
+            }
+            serde_json::json!({
+                "state": "OPEN",
+                "assignees": [],
+                "labels": [{"name": "status:review"}],
+                "comments": comments,
+            })
+            .to_string()
+        };
+        let mut script = vec![];
+        for before in 1..=3 {
+            script.push(serde_json::json!({
+                "matches": "issue view", "nth": before,
+                "stdout": timeline(false), "status": 0,
+            }));
+        }
+        script.extend([
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(true), "status": 0 }),
+            serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
+        ]);
+        let answers = serde_json::to_string(&script).expect("the fake tracker script serialises");
+
+        let runs = home.join(".estigia").join("runs");
+        let _ = std::fs::remove_file(runs.join(format!("{reviewer}.json")));
+        let mut run = estigia::harness::session::Run::new(reviewer.to_owned());
+        run.issue = Some(12);
+        run.state = Some("review".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "record_review_finding", "arguments": {
+                "issue": 12,
+                "run_id": reviewer,
+                "reviewer": reviewer,
+                "epoch": epoch,
+                "pr": 7,
+                "head": head,
+                "base": base,
+                "digest": digest,
+                "id": id,
+                "class": class,
+                "evidence": evidence,
+                "impact": impact,
+            }}
+        })
+        .to_string();
+
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env(
+                "ESTIGIA_FAKE_COUNT",
+                trace.path().join(format!("finding-{label}-count.json")),
+            )
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let calls = std::fs::read_to_string(&log).unwrap_or_default();
+        // Two doors refuse here and the row does not care which one answered:
+        // the tool schema rejects a class outside the enum before the transport
+        // is reached, while an empty field is refused by the transport and comes
+        // back as a tool error. Asserting on the *shape* of the refusal would
+        // pin which door answers, and moving a check between them is not a
+        // regression — writing anything to the timeline is.
+        let denied = response["error"].is_object() || response["result"]["isError"] == true;
+        assert_eq!(
+            denied, refused,
+            "{label}: the finding was not adjudicated the way this row states: {text} ::              {response}"
+        );
+        if refused {
+            assert!(
+                !calls.contains("issue comment"),
+                "{label}: a refused finding still wrote to the timeline: {calls}"
+            );
+        } else {
+            assert!(
+                calls.contains("issue comment"),
+                "{label}: a complete finding was never written: {calls}"
+            );
+        }
+    }
 }

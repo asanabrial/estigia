@@ -558,6 +558,7 @@ fn every_tool_the_readme_lists_is_one_this_server_exposes() {
                 18 => "Eighteen",
                 20 => "Twenty",
                 21 => "Twenty-one",
+                22 => "Twenty-two",
                 other => panic!("{other} tools, and this test has no word for that"),
             }
         )),
