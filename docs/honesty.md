@@ -1462,6 +1462,26 @@ suite. Everything else here is prose held by review.
     it — so a role can be lost to a race with a tool write. Nothing another writer set is lost, which
     is the fail-closed direction.
 
+  - **The row that decides this grant is reachable by an ordinary repository write.** `Evidence
+    standard` is `Scope::Everywhere`, so it can be set per repository, and a repository row lives in
+    `.git/estigia/estigia.local.md` — a path `CONTROL_SURFACE` does not carry and
+    `is_control_surface` does not derive. Measured by asking the gate with a live claim held: that
+    file answers *"verified inside the renewal window"*, exactly as `src/lib.rs` does, while
+    `.estigia/` re-reads the claim instead.
+
+    So a run holding this checkout can widen the grant its own judges receive, and the judges are what
+    decide whether that run’s work ships. Estigia already refuses the rows that decide what one
+    agent may do — `config set --repo "Delivery authorisation"` answers *"is what one agent does,
+    not what this repository is"* — and this row is not among them. The shape is older than this
+    change: `Irreversible commands` is repository-scoped today. What this change adds is the first row
+    on that surface which grants a **capability**. It is issue #94, filed rather than closed here,
+    because narrowing which rows may be repository-scoped is a decision about what a repository is
+    allowed to differ on.
+
+    Bounded, and the bounds are real: it needs a live claim, the widened grant buys `Bash` and nothing
+    else, and a judge with a shell writes inside its own checkout, which is outside every path the
+    claim covers. None of that makes the row unreachable.
+
   - Estigia still cannot prove a panel ran, how many contexts it had, or that any two of them were
     given separate directories. This narrows what a judge **can** do and proves nothing about what a
     judge **did** — the same boundary `policies/blind-judges.md` draws for everything else about

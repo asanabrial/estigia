@@ -289,10 +289,20 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
 /// had been corrected. Both were true of what they touched, which is what made
 /// them easy to believe.
 ///
-/// So the property is asserted instead of promised: a function that binds
-/// `documented()` may not name the README in any string it carries. Guards that
-/// read `readme()` are untouched by this — theirs is the one document, and
-/// saying so is correct.
+/// So the property is asserted instead of promised — but **only as far as the
+/// admission test reaches**, and saying more than that is how the three sweeps
+/// before it were believed. What it checks: a function whose text carries
+/// `documented()` or `counted()` may not attribute a claim to the README in any
+/// non-comment line. What it does not: a reader reached some other way, a
+/// misdirection phrased without one of the attributing verbs, and any file but
+/// this one.
+///
+/// Two judges wrote past the first version — one restored the removed message
+/// into the count guard, which binds `counted()` and was skipped; the other
+/// wrote `README.md counts` where it had said `the README counts`. A third
+/// renamed the helper and left the guard reporting success over nothing, which
+/// is what the floor below is for. Guards that read `readme()` are untouched:
+/// theirs is the one document, and saying so is correct.
 #[test]
 fn no_guard_reading_every_document_blames_the_readme() {
     let source = std::fs::read_to_string(
@@ -303,6 +313,7 @@ fn no_guard_reading_every_document_blames_the_readme() {
     .expect("this file reads");
 
     let mut blaming = Vec::new();
+    let mut examined = 0_usize;
     for function in source.split("\nfn ").skip(1) {
         let name = function
             .split('(')
@@ -310,11 +321,17 @@ fn no_guard_reading_every_document_blames_the_readme() {
             .unwrap_or_default()
             .trim()
             .to_owned();
-        if !function.contains("documented();")
-            || name == "no_guard_reading_every_document_blames_the_readme"
-        {
+        // Both readers, and neither spelled with its semicolon. The first
+        // version admitted on `documented();`, which excluded the one function
+        // this guard was written for: the count guard binds `counted()`, the
+        // widest reader of all, and a judge put the removed message back into it
+        // with the whole target green. `documented().to_string()` slipped
+        // through the same way.
+        let reads = function.contains("documented()") || function.contains("counted()");
+        if !reads || name == "no_guard_reading_every_document_blames_the_readme" {
             continue;
         }
+        examined += 1;
         for (offset, line) in function.lines().enumerate() {
             let trimmed = line.trim_start();
             // Comments explain; only the strings a failure prints are the
@@ -323,12 +340,44 @@ fn no_guard_reading_every_document_blames_the_readme() {
             if trimmed.starts_with("//") {
                 continue;
             }
-            if line.contains("the README") {
+            // What is refused is **attribution**, not mention. A `what`
+            // description saying *the sentence that opens the README’s
+            // configuration section* is precise and helpful — one of these
+            // sentences really is the README’s. What misleads is a failure
+            // saying the README *claims* or *counts* something that lives
+            // somewhere else.
+            //
+            // Both spellings of the subject, because a judge evaded the first
+            // version by writing `README.md counts the dialects` where it had
+            // said `the README counts` — the same misdirection in different
+            // words.
+            let attributes = [
+                "claims",
+                "says",
+                "counts",
+                "no longer",
+                "makes no",
+                "has no",
+                "tabulates",
+                "ships",
+            ];
+            if line.contains("README") && attributes.iter().any(|verb| line.contains(verb)) {
                 blaming.push(format!("{name} line {offset}: {}", line.trim()));
             }
         }
     }
 
+    // The floor every other reader in this file has, and this one did not.
+    // Renaming the helper left zero functions examined and the guard reporting
+    // success — a read that finds nothing makes every assertion pass by
+    // having nothing to disagree with, which the module docstring names as the
+    // shape to guard against.
+    assert!(
+        examined >= 8,
+        "only {examined} guards were found reading the documentation set, which is fewer than \
+         this file has \u{2014} the admission test has stopped matching and this guard is now \
+         passing by examining nothing"
+    );
     assert!(
         blaming.is_empty(),
         "these guards read every document and blame the README, which sends a reader to a file \
@@ -738,7 +787,7 @@ fn every_setting_the_readme_tabulates_is_one_this_binary_has() {
         .collect();
     assert_eq!(
         tabulated, labels,
-        "the README's settings table is not this binary's rows, in its order"
+        "the configuration reference's settings table is not this binary's rows, in its order"
     );
 }
 
@@ -1701,7 +1750,7 @@ fn every_name_this_list_declares_is_one_doctor_can_report() {
     for name in estigia::harness::doctor::CHECKS {
         assert!(
             reported.contains(name),
-            "the list declares {name:?} and `doctor` never reports it \u{2014} the README counts \
+            "the list declares {name:?} and `doctor` never reports it \u{2014} the honesty contract counts \
              this list, so a name outliving its check is a number that stops being true"
         );
     }

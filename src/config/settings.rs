@@ -113,8 +113,10 @@ pub const SETTINGS: &[Setting] = &[
 /// setting is stored — [`crate::skill::installed_config_for`] already layers a
 /// shared contract under a per-adapter file. What it changes is who is *asked*.
 ///
-/// Sixteen rows repeated once per agent is sixteen chances to set the tracker
-/// eleven times and get it wrong on the fourth. A repository has one tracker
+/// A table repeated once per agent is one chance per agent to set the tracker
+/// again and get it wrong on one of them. This said *sixteen rows* until a
+/// reviewer counted; the number has moved twice since and the argument never
+/// depended on it. A repository has one tracker
 /// whichever agent looks at it, and asking each agent separately implies
 /// otherwise.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
