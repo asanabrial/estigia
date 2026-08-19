@@ -27,12 +27,12 @@ the workflow, it holds the tools.
   the measurement rather than a correction made quietly.
 
 - **A delegated role can now do the work its own contract asks of it, and the judges that measure run
-  as that role instead of outside it.** Estigia shipped six role definitions and **not one of them could run
-  anything**: the reviewer carried a fixed `tools: Read, Grep, Glob`, and the planning phases'
-  substitutions were `Read, Grep, Glob`, `Read, Grep, Glob, Write, Edit` and
-  `Read, Grep, Glob, WebFetch, WebSearch`. Two of those three write, so read-only was never the
-  property; no branch produced a shell was. In a repository whose
-  findings are established by running something — building the change, reddening a test, turning the
+  as that role instead of outside it.** Estigia shipped six role definitions and **not one of them
+  could run anything**: the reviewer carried a fixed `tools: Read, Grep, Glob`, and the planning
+  phases' substitutions were `Read, Grep, Glob`, `Read, Grep, Glob, Write, Edit` and
+  `Read, Grep, Glob, WebFetch, WebSearch` — two of them strict supersets of the third, and one of
+  those two writes. So *read-only* was never the property all six shared; **no branch produced a
+  shell** was. In a repository whose findings are established by running something — building the change, reddening a test, turning the
   fix off to see the suite go green — that reviewer cannot check anything, so every panel worth having
   was launched under a generic type, outside the role and outside every guarantee the contract hangs
   on it. Measured on issue #36 before this landed: twelve independent judge launches, and the

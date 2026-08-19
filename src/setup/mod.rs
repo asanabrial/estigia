@@ -1989,21 +1989,22 @@ fn setup_into_with_skill(
                 });
             }
         }
+        // One rendering, handed to the write and to the record of what that
+        // write will leave behind. This rendered twice from the same row, and
+        // no test crossed the second: narrowing the `pending` copy alone left
+        // the whole suite green, which two blind judges measured independently.
+        // The fix is the one this repository prefers — the copy is gone rather
+        // than guarded, so the two cannot disagree at all.
+        let desired = render_reviewer_agent(skill::REVIEW_AGENT.contents, effective.evidence);
         actions.push(write_step!(write_reviewer_definition(
             &paths.skill_root,
             &target,
             existing.as_deref(),
             options.dry_run,
             ownership_added,
-            effective.evidence,
+            &desired,
         )));
-        pending.insert(
-            target,
-            Some(as_the_file_was(
-                existing.as_deref(),
-                &render_reviewer_agent(skill::REVIEW_AGENT.contents, effective.evidence),
-            )),
-        );
+        pending.insert(target, Some(as_the_file_was(existing.as_deref(), &desired)));
     }
 
     // The planning phases, as sub-agent definitions the host routes to.
@@ -2688,14 +2689,13 @@ fn write_reviewer_definition(
     existing: Option<&str>,
     dry_run: bool,
     ownership_added: bool,
-    evidence: Evidence,
+    desired: &str,
 ) -> Result<SetupAction> {
-    let desired = render_reviewer_agent(skill::REVIEW_AGENT.contents, evidence);
     if existing.is_some() || dry_run {
         return write_file(
             path,
             existing,
-            &desired,
+            desired,
             ActionKind::AgentDefinition,
             dry_run,
         );
@@ -2709,7 +2709,7 @@ fn write_reviewer_definition(
         .parent()
         .with_context(|| format!("{} has no parent directory", path.display()))?;
     fs::create_dir_all(parent).with_context(|| format!("create directory {}", parent.display()))?;
-    match paths::create_atomically(path, &desired) {
+    match paths::create_atomically(path, desired) {
         Ok(()) => Ok(SetupAction {
             kind: ActionKind::AgentDefinition,
             path: path.to_owned(),

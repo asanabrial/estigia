@@ -137,6 +137,14 @@ fn counted() -> String {
 /// Asserted from the same extraction `counted` performs, rather than a phrase
 /// copied out of the changelog: a literal here would be a second place holding
 /// one fact, and it would rot the first time that entry was edited.
+///
+/// **What it does not reach.** The witness is one line of the unreleased entry,
+/// so a widening that carried some *other* slice of the changelog would pass
+/// here. That is not constructible today — the file holds exactly one `## `
+/// heading, which makes the unreleased entry effectively the whole of it — and
+/// it stops being true the moment a second heading lands. A judge measured the
+/// gap; it is recorded rather than closed, because closing it means asserting
+/// against a released entry this guard deliberately does not read.
 #[test]
 fn the_present_tense_reader_does_not_carry_the_changelog() {
     let carried = counted();
