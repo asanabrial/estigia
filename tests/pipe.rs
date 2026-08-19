@@ -13250,7 +13250,15 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
     // receipt was superseded in the meantime is not a retry of anything still
     // under review, and without this row it answers `ok: true, blocking: true`
     // and names no epoch at all.
-    for (label, holder, names, class, id, evidence, impact, replayed, refused) in [
+    // `bytes` is the head the call names, empty for the published one. It is
+    // here for a single row, and that row is the half of the currency check
+    // nothing reached: `require_latest_receipt` compares the **whole** receipt,
+    // and every other row that must be refused differs in its epoch, so
+    // weakening the comparison to the epoch alone left the suite green. Same
+    // epoch, different head is exactly the forgery a whole-receipt comparison
+    // exists to stop.
+    let other_head = "5".repeat(40);
+    for (label, holder, names, bytes, class, id, evidence, impact, replayed, refused) in [
         // A fourth class nobody defined. The names are the vocabulary the
         // decision tables are written in, so an unknown one is a finding no
         // table can weigh rather than a stricter one.
@@ -13258,6 +13266,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "unknown-class",
             reviewer,
             &epoch,
+            "",
             "critical",
             "x",
             "e",
@@ -13266,12 +13275,13 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             true,
         ),
         (
-            "no-id", reviewer, &epoch, "severe", "   ", "e", "i", false, true,
+            "no-id", reviewer, &epoch, "", "severe", "   ", "e", "i", false, true,
         ),
         (
             "no-evidence",
             reviewer,
             &epoch,
+            "",
             "severe",
             "x",
             "",
@@ -13283,6 +13293,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "no-impact",
             reviewer,
             &epoch,
+            "",
             "severe",
             "x",
             "e",
@@ -13291,13 +13302,14 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             true,
         ),
         (
-            "complete", reviewer, &epoch, "severe", "x", "e", "i", false, false,
+            "complete", reviewer, &epoch, "", "severe", "x", "e", "i", false, false,
         ),
         // Well-formed, and not the publication under review.
         (
             "superseded-receipt",
             reviewer,
             &superseded,
+            "",
             "severe",
             "x",
             "e",
@@ -13310,6 +13322,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "invented-receipt",
             reviewer,
             &invented,
+            "",
             "severe",
             "x",
             "e",
@@ -13323,6 +13336,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "replayed-superseded",
             reviewer,
             &superseded,
+            "",
             "severe",
             "x",
             "e",
@@ -13330,12 +13344,42 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             true,
             true,
         ),
+        // The receipt this issue published, named by a head it never had.
+        (
+            "same-epoch-other-head",
+            reviewer,
+            &epoch,
+            &other_head,
+            "severe",
+            "x",
+            "e",
+            "i",
+            false,
+            true,
+        ),
+        // A retry of a write that already landed, over the receipt still under
+        // review. It is the replay branch answering, and its `blocking` was
+        // pinned by nothing: the round that added the assertion added it to the
+        // write path only, so half the declared repair was still green.
+        (
+            "replayed-complete",
+            reviewer,
+            &epoch,
+            "",
+            "severe",
+            "x",
+            "e",
+            "i",
+            true,
+            false,
+        ),
         // Complete, current, and recorded by a run that does not hold the
         // claim. Nothing else in this table can see `verify_claim`.
         (
             "claim-elsewhere",
             intruder,
             &epoch,
+            "",
             "severe",
             "x",
             "e",
@@ -13345,6 +13389,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
         ),
     ] {
         let log = trace.path().join(format!("finding-{label}.log"));
+        let named_head = if bytes.is_empty() { &head } else { bytes };
         let written = comment(
             "IC_finding",
             "2026-08-14T10:30:00Z",
@@ -13358,13 +13403,14 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
                         &estigia::transport::claim::review_operation_id(
                             "review-finding",
                             &[
-                                reviewer, reviewer, names, "7", &head, &base, &digest, id, class,
+                                reviewer, reviewer, names, "7", named_head, &base, &digest, id,
+                                class,
                             ],
                         ),
                     ),
                     ("epoch", names),
                     ("pr", "7"),
-                    ("head", &head),
+                    ("head", named_head),
                     ("base", &base),
                     ("digest", &digest),
                     ("id", id),
@@ -13419,7 +13465,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
                 "reviewer": reviewer,
                 "epoch": names,
                 "pr": 7,
-                "head": head,
+                "head": named_head,
                 "base": base,
                 "digest": digest,
                 "id": id,
@@ -13473,6 +13519,25 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             assert!(
                 !calls.contains("issue comment"),
                 "{label}: a refused finding still wrote to the timeline: {calls}"
+            );
+        } else if replayed {
+            // Nothing new is written — that is what a replay is — and the answer
+            // comes from the marker already on the timeline rather than from the
+            // arguments. `blocking` is the field an orchestrator acts on, and on
+            // this branch it was reported by the code and read by no test.
+            let answer: serde_json::Value =
+                serde_json::from_str(&text).expect("the finding answer is JSON");
+            assert_eq!(
+                answer["reused_existing_finding"].as_bool(),
+                Some(true),
+                "{label}: a retry of a finding already on the timeline wrote a second one: {text}"
+            );
+            assert_eq!(
+                answer["blocking"].as_bool(),
+                Some(class == "severe"),
+                "{label}: the replay reports a blocking disposition that disagrees with the class \
+                 it read back, so a retry after an unreadable answer is told its severe finding is \
+                 a note: {text}"
             );
         } else {
             assert!(
@@ -14290,6 +14355,14 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         })
         .to_string();
 
+        // Where the body this call stages can be read back from. The answer
+        // reports the *requested* parent and origin, so asserting on it proves
+        // nothing about what the timeline will hold — and deleting both marker
+        // fields left the whole suite green, because the readback deliberately
+        // does not compare them. The durable ledger is the only copy a
+        // re-review ever sees.
+        let temp = trace.path().join(format!("repair-{label}-tmp"));
+        std::fs::create_dir_all(&temp).expect("a temporary directory for the child");
         let mut child = tracker_command(home, repo, bin, &answers)
             .arg("mcp")
             .env(
@@ -14297,6 +14370,9 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
                 trace.path().join(format!("repair-{label}-count.json")),
             )
             .env("ESTIGIA_FAKE_LOG", &log)
+            .env("TMPDIR", &temp)
+            .env("TMP", &temp)
+            .env("TEMP", &temp)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -14337,6 +14413,20 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
                 calls.contains("issue comment"),
                 "{label}: the finding was allowed and never written: {calls}"
             );
+            let staged = staged_receipt(&temp, 12);
+            for (name, value) in [("parent", parent), ("origin", origin)] {
+                if value.is_empty() {
+                    assert!(
+                        !staged.contains(&format!("{name}=")),
+                        "{label}: the marker carries a {name} this call never supplied: {staged}"
+                    );
+                } else {
+                    assert!(
+                        staged.contains(&format!("{name}={value}")),
+                        "{label}: the marker does not carry `{name}={value}`, so the ledger a                          re-review reads cannot tell a reassessment from a new observation:                          {staged}"
+                    );
+                }
+            }
         }
     }
 }
