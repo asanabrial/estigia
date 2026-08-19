@@ -511,9 +511,17 @@ suite. Everything else here is prose held by review.
 
 - **A structured finding is a legible claim, not a checked one.** `record_review_finding` refuses a
   class outside `severe`/`warning`/`suggestion`, a finding missing its identity, evidence or impact, a
-  receipt that is not the current one, and — across a repair — a parent identity the parent epoch never
-  recorded or a new severe finding that states no origin. `record_review_verdict` refuses `rejected`
-  unless that reviewer already recorded a `severe` finding against that exact receipt.
+  receipt that is not the current one, and — across a repair — a parent identity the parent receipt
+  never recorded or a new severe finding that states no origin. `record_review_verdict` refuses
+  `rejected` unless that reviewer already recorded a `severe` finding against that exact receipt.
+
+  The receipt-currency clause in that sentence was **false when it was first written**, and it is
+  recorded here rather than quietly corrected. The operation validated the receipt's shape and never
+  asked whether it named the publication under review; four reviewers found the mismatch and two
+  drove it through the real surface, recording severe findings against a superseded epoch and against
+  one no publication ever had. Three costs followed, and the third is the one worth remembering: the
+  verdict's refusal named `record_review_finding` as the way out, which is a command that had already
+  succeeded. A false sentence in this document produced a dead-end refusal loop in the product.
 
   Every one of those is a check on **shape and reference**. Nothing here can check that a `severe`
   finding is severe, that a `suggestion` is not a defect in disguise, that the stated evidence
@@ -530,13 +538,28 @@ suite. Everything else here is prose held by review.
     one identity for different defects do. The policy asks reviewers to derive the identity from the
     affected behaviour and location; nothing measures whether they did.
   - **The fix-delta digest names a repair; it does not scope a review.** A publication over an earlier
-    one records the parent epoch, the parent head and a digest covering both ends, derived from the
-    timeline rather than supplied by the run being reviewed — that half is real, and a caller cannot
-    name a parent it prefers. But Estigia does not compute the diff between those heads, does not hand
+    one records the whole parent receipt and a digest covering both ends, derived from the timeline
+    rather than supplied by the run being reviewed — that half is real, and a caller cannot name a
+    parent it prefers. But Estigia does not compute the diff between those heads, does not hand
     it to a judge, does not restrict what a judge reads, and cannot tell a delta-scoped re-review from
     a full-target resweep. `parent_head..head` is a pair of SHAs a reviewer can act on. Whether one did
     is unmeasured, and issue #46's acceptance criterion about delta-scoped judgement is met by the
     *record*, not by an enforcement.
+  - **A lineage is silently absent when the parent publication came from another account.**
+    `latest_publication` keeps only comments `viewerDidAuthor` vouches for, because a marker this
+    identity did not write is one anybody could have forged. `republish_review` turns that into a
+    refusal (`published-receipt-missing`); `publish_review` does not, so an ordinary continuation
+    after a cross-account reclaim publishes as a **first** publication and neither lineage rule
+    applies to its findings. The direction is permissive rather than a wrong delivery, and it is the
+    same account filter this document already records one section above — but the consequence for the
+    parent ledger is new and is stated here rather than left to be rediscovered.
+  - **Which reviewer an aggregate panel verdict credits is a contract, not a check.** The severity
+    rule reads *that reviewer's* findings while a panel records one aggregate verdict, so
+    `policies/blind-judges.md` prescribes recording each judge's findings under that judge's identity
+    and crediting the verdict to a judge whose severe finding it rests on. Nothing enforces it.
+    Re-recording one judge's finding under a panel name would satisfy the rule and inflate the
+    same-identity agreement count at once, and the harness cannot tell that apart from two judges
+    agreeing.
 
   **Judge isolation outside the reserved role is unproved, and the asymmetry is measured.** A judge
   launched under the reserved `review-blind` type cannot write at all, and that half is checkable: the

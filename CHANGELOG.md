@@ -31,14 +31,23 @@ the workflow, it holds the tools.
   unreadable target or a stale receipt is not a review finding, and recording an outage as a cosmetic
   acceptance is the mislabelling this rule exists to stop.
 
-  The second half is lineage. A publication over an earlier one records the parent epoch, the parent
-  head and a delta digest covering both ends — **derived from the timeline, never supplied by the run
-  being reviewed**, because a run that could name its own parent could name the epoch whose findings
-  were mildest. The parent's findings stay where they are; nothing rewrites them. What a re-review owes
+  The second half is lineage. A publication over an earlier one records the **whole parent receipt**
+  and a delta digest covering both ends — **derived from the timeline, never supplied by the run being
+  reviewed**, because a run that could name its own parent could name the epoch whose findings were
+  mildest. The receipt rather than its epoch: an epoch is not a function of the bytes it names, and a
+  finding's epoch field is whatever the finding says it is, so a parent ledger matched on the epoch
+  alone could be written into after the fact by recording a finding that named the parent epoch and
+  carried the repair's own bytes. The parent's findings stay where they are; nothing rewrites them. What a re-review owes
   is the reference: a finding that reassesses one names it, and the name must exist against the parent
   epoch; a `severe` finding new to the repair states whether the repair `introduced` the defect or
   `exposed` one already there. A warning or a suggestion new to a repair owes nothing, because pricing
   the cheap observation is the defect this whole change repairs.
+
+  Every finding must also name the publication **under review**, not merely a well-formed receipt.
+  That check was documented before it existed: the first version of this change shipped two sentences
+  saying a stale receipt was refused while the operation only validated the receipt's shape. Four
+  reviewers found it, two drove it, and the repair is the check rather than the retraction —
+  `docs/honesty.md` records that history beside the limit.
 
   What is checked is shape and reference. Nothing here can tell whether a `severe` finding is severe
   or whether a repair introduced what its reviewer says it did, and the delta digest names a repair

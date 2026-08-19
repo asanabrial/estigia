@@ -1,7 +1,12 @@
 # Blind judges
 
 `single` requires one independent review context. `two blind` uses the two-context rules below;
-`five blind` uses the additional quorum section. Neither changes the mandatory frozen publication
+`five blind` uses the additional quorum section.
+
+**This document is routed by `two blind` and `five blind` only.** A run configured `single` is never
+handed it, so everything the `single` table below states is also stated in the contract itself, and
+the table here is a restatement rather than the only copy. Issue #18 owns that reachability gap; what
+matters for a reader of *this* file is that finding the rule here does not mean a `single` run saw it. Neither changes the mandatory frozen publication
 receipt or the one aggregate verdict Estigia requires before CI release.
 
 The setting is orthogonal to `Planning` and to `Review protocol`. Under `standard` review the judges
@@ -90,7 +95,8 @@ defect, in which case say which one and classify it as that.
 **The precision gate.** If concrete evidence and material impact cannot both be stated, omit the
 observation or keep it as a non-blocking note. A classification with no evidence cannot be re-run and
 one with no stated impact cannot be weighed, and either is a preference wearing the word `severe`.
-`record_review_finding` refuses a finding missing any of the three.
+`record_review_finding` refuses a finding missing any of the three, and refuses one that names any
+receipt but the publication under review.
 
 **The identity is chosen from the affected behaviour and location**, never from the run or the
 wording. That is what lets two judges reporting the same defect count as agreeing rather than as two
@@ -104,9 +110,20 @@ defects, and what lets a repair name what it answers.
 | Only warnings and suggestions | `accepted`, with those notes preserved against the receipt |
 | Nothing | `accepted` |
 
-**Mechanically enforced.** `record_review_verdict` refuses `rejected` unless that reviewer has already
-recorded a `severe` finding against the exact receipt — the reviewer's own findings, not the panel's
-pool. Two contexts each holding one suspicion is not one confirmed defect.
+**One direction of that table is mechanically enforced**, and it is worth being exact about which.
+`record_review_verdict` refuses `rejected` unless that reviewer has already recorded a `severe`
+finding against the exact receipt — the reviewer's own findings, not the panel's pool, because two
+contexts each holding one suspicion is not one confirmed defect. **Nothing refuses `accepted` over a
+severe finding.** Row 1 of the table is a rule for reviewers; rows 2 and 3 are what the transport
+holds them to. A reviewer that accepts over its own severe finding is making an error the harness
+cannot see.
+
+**Who the verdict credits, when a panel produced it.** The rule reads *that reviewer's* findings, and
+a panel records one aggregate verdict — so the two have to be reconciled somewhere, and it is here.
+Record each judge's findings under **that judge's** identity, which is what makes the same-`id`
+agreement count meaningful. Then credit the aggregate verdict to a judge whose severe finding the
+outcome rests on. Re-recording one judge's finding under a panel name would satisfy the rule and
+inflate the agreement count at the same time, which is the one thing this arrangement must not do.
 
 Operational failures are not review findings and keep their own fail-closed refusals: a missing
 reviewer, an unreadable target, a stale receipt or a target mismatch is a hold, and recording one as a
@@ -154,17 +171,22 @@ being delivered as unreviewed ones. What it must not also do is throw away what 
 settled.
 
 A publication over an earlier one records, **derived from the timeline and never supplied by the run
-being reviewed**, the parent epoch, the parent head, and a delta digest covering both ends. A run that
-could name its own parent could name the epoch whose findings were mildest. `parent_head..head` is the
-delta; Estigia records the two ends and does not compute the diff, scope the review to it, or check
-that a judge read only it.
+being reviewed**, the whole parent receipt — epoch, PR, head, base and target digest — and a delta
+digest covering both ends. A run that could name its own parent could name the epoch whose findings
+were mildest. `parent-head..head` is the delta; Estigia records the two ends and does not compute the
+diff, scope the review to it, or check that a judge read only it.
+
+The receipt rather than the epoch, and that is a repair rather than a flourish. An epoch is not a
+function of the bytes it names, and a finding's epoch field is whatever the finding says it is — so a
+parent ledger matched on the epoch alone could be written into after the fact, by recording a finding
+that named the parent epoch and carried the repair's own bytes. Matched on the receipt, it cannot.
 
 The parent's findings stay on the timeline. Preserving settled work is not an operation — nothing
 rewrites those markers — so what a re-review owes is the *reference*:
 
 | The finding | What it must say |
 |---|---|
-| Reassesses one the parent ledger holds | `--parent <that identity>`, which must exist against the parent epoch |
+| Reassesses one the parent ledger holds | `--parent <that identity>`, which must exist against the parent **receipt** |
 | Is `severe` and new to this repair | `--origin introduced` if the repair created it, `--origin exposed` if the repair made an existing defect reachable |
 | Is a warning or a suggestion new to this repair | Nothing. Pricing the cheap observation is the defect this whole mechanism repairs |
 
@@ -190,8 +212,9 @@ measuring.
 publication receipt, Claude's reserved-role prelaunch checks, the **publication lane refusal** —
 `record_review_verdict` will not bank an accepted verdict for a head whose dispatched CI lane is red or
 still running — the **severity rule**, which refuses `rejected` without that reviewer's own severe
-finding against that receipt, and the **lineage references**, which refuse a parent identity the
-parent epoch never recorded and a new severe finding against a repair that states no origin. Nothing
+finding against that receipt, the **receipt currency**, which refuses a finding naming any receipt but
+the one under review, and the **lineage references**, which refuse a parent identity the parent
+receipt never recorded and a new severe finding against a repair that states no origin. Nothing
 proves panel execution.
 
 That is worth stating first and plainly. Estigia gates repository writes against an adjudicated

@@ -956,7 +956,7 @@ struct LatestPublication {
 /// `review-finding` backfilled after the repair, carrying the parent epoch and
 /// the repair's own bytes, satisfied the parent-existence rule and let a new
 /// severe finding through with no origin. Carrying the receipt lets the parent
-/// ledger be read by [`findings_for`], receipt-exact, and deletes the looser
+/// ledger be read by the same receipt-exact reader every other ledger here uses, and deletes the looser
 /// reader rather than guarding it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicationLineage {
