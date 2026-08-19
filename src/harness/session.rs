@@ -60,6 +60,17 @@ pub struct Run {
     /// looking for it.
     #[serde(skip)]
     pub unreadable: bool,
+    /// Why the read failed, when it did: the pointer path and the error.
+    ///
+    /// Not serialised, like [`Self::unreadable`]: it describes the read, not
+    /// the run. Carried so the refusal a gate or tool builds can name the
+    /// **file** the operator has to look at — an unreadable pointer that names
+    /// no path is one a person cannot find to read or take away, and the
+    /// resolutions already in place tell them to do exactly that. A read that
+    /// failed because the pointer was simply not there needs no reason: that is
+    /// the ordinary state, and it does not reach this field.
+    #[serde(skip)]
+    pub unreadable_reason: Option<String>,
     /// The workflow state the run believes the issue is in.
     ///
     /// Handed to `verify-claim --expect-state`, which is what turns "somebody
@@ -131,6 +142,7 @@ impl Run {
             issue: None,
             revision: 0,
             unreadable: false,
+            unreadable_reason: None,
             state: None,
             repo_dir: None,
             worktree: None,
@@ -342,14 +354,65 @@ pub fn pointer_path(root: &Path, run_id: &str) -> PathBuf {
 
 /// Reads this run's pointer, or a fresh one.
 ///
-/// A missing or unreadable pointer is a run that has sworn nothing, not an
-/// error: the file is a convenience, and the gate that consults it treats
-/// "nothing held" as outside its authority rather than as a denial.
+/// Only a pointer that is **not there** is a run that has sworn nothing. A
+/// pointer that is there and cannot be read — a directory at its path, a
+/// permission failure, a transient I/O error — says a run under this name
+/// existed and not what it swore, so it loads as *unreadable*, never as fresh:
+/// the gate that consults it refuses that state rather than treating "nothing
+/// held" as outside its authority. Issue #38 measured what the collapse cost:
+/// the installer took a live pointer, and the run kept its claim while every
+/// write passed through ungated, because the missing record read as an unsworn
+/// run and nothing anywhere said so.
 pub fn load(root: &Path, run_id: &str) -> Run {
-    let Ok(text) = fs::read_to_string(pointer_path(root, run_id)) else {
+    let path = pointer_path(root, run_id);
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
         // No pointer at all: this run has sworn nothing, which is the ordinary
-        // state and the one the oath model is built on.
-        return Run::new(run_id.to_owned());
+        // state and the one the oath model is built on. `NotFound` is the only
+        // read failure that may answer this — every other way the read fails
+        // proves nothing about whether the pointer exists.
+        //
+        // And `NotFound` only answers it while the directory the pointer would
+        // be in is one. Windows answers a path whose parent is **not** a
+        // directory with `ERROR_PATH_NOT_FOUND`, which std maps to `NotFound`
+        // — measured, os error 3 — so a state root that is a file reads as
+        // *every run swore nothing* and stands every gate aside at once. That
+        // is this issue's own failure arriving through the arm meant to be
+        // safe, so absence is confirmed against the root rather than taken from
+        // the error kind. A root that is not there at all is still absence: it
+        // is what a machine looks like before anything was ever claimed.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return match fs::metadata(root) {
+                Ok(found) if !found.is_dir() => Run {
+                    unreadable: true,
+                    unreadable_reason: Some(format!(
+                        "{}: the directory run pointers are kept in is not a directory, so no \
+                         pointer under it can be read",
+                        root.display()
+                    )),
+                    ..Run::new(run_id.to_owned())
+                },
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => Run {
+                    unreadable: true,
+                    unreadable_reason: Some(format!(
+                        "{}: the directory run pointers are kept in cannot be read — {error}",
+                        root.display()
+                    )),
+                    ..Run::new(run_id.to_owned())
+                },
+                _ => Run::new(run_id.to_owned()),
+            };
+        }
+        // Present and unopenable, which is not the same as absent. The path and
+        // the error ride along so the refusal a gate or tool builds can name
+        // the file an operator has to look at.
+        Err(error) => {
+            return Run {
+                unreadable: true,
+                unreadable_reason: Some(format!("{}: {error}", path.display())),
+                ..Run::new(run_id.to_owned())
+            };
+        }
     };
     match serde_json::from_str::<Run>(&text) {
         Ok(run) if run.run_id == run_id => run,
@@ -367,12 +430,16 @@ pub fn load(root: &Path, run_id: &str) -> Run {
 pub fn store(root: &Path, run: &Run) -> Result<bool, Refusal> {
     let path = pointer_path(root, &run.run_id);
     // Not written in place. `fs::write` truncates first, so a reader arriving
-    // mid-write sees a partial file — and `load` answers an unparseable pointer
-    // with a *fresh* run, which holds no issue, which `gate` reads as a run that
-    // swore nothing and lets through. An agent making parallel tool calls stores
-    // after every allowed write, so a store racing a load on one pointer is the
-    // ordinary case rather than an unlucky one, and the gate opening for the
-    // length of a truncation is not something anybody would see in a log.
+    // mid-write would see a partial file — and `load` answers an unparseable
+    // pointer with an *unreadable* run, which the gate refuses: every write
+    // from that run stops until a person reads the file out. An agent making
+    // parallel tool calls stores after every allowed write, so a store racing a
+    // load on one pointer is the ordinary case rather than an unlucky one, and
+    // an atomic replace is what keeps that race from manufacturing a pointer
+    // nobody can read. (Older builds answered the same torn read with a fresh
+    // run and let the write through, which is the hole the unreadable reading
+    // closed; this comment named that older consequence long after it stopped
+    // being true, and this issue's fix is exactly about such drift.)
     // The stale-writer check. A pointer on disk that has been written more times
     // than the one in hand is news this caller has not seen, and overwriting it
     // would drop whatever arrived in between.
@@ -1035,6 +1102,88 @@ mod tests {
             fs::read_to_string(&path).expect("still there"),
             wreckage,
             "update wrote over it after store had refused to"
+        );
+    }
+
+    #[test]
+    fn an_io_unreadable_pointer_is_an_unknown_and_is_never_written_over() {
+        // Issue #38, at the loader rather than at the gate: a pointer the
+        // filesystem refuses to read — not one that is absent — must load as
+        // *unreadable*, never as a fresh run. The fresh-run reading is the one
+        // `gate` answers `Outside(NothingSworn)` for, and that is the silent
+        // disarming the issue is about: the tracker still names the run as
+        // holder while its writes pass through ungated.
+        let dir = tempfile::tempdir().expect("a temporary root");
+        let root = dir.path();
+        let path = pointer_path(root, "claude-dirblock");
+        std::fs::create_dir_all(&path).expect("a directory where the pointer should be");
+
+        let run = load(root, "claude-dirblock");
+        assert!(
+            run.unreadable,
+            "an unreadable pointer was loaded as a run that swore nothing"
+        );
+        assert!(
+            run.unreadable_reason
+                .as_deref()
+                .is_some_and(|why| why.contains("claude-dirblock.json")),
+            "the reason does not name the pointer it could not read: {:?}",
+            run.unreadable_reason
+        );
+        assert_eq!(run.issue, None, "an unreadable pointer answers no issue");
+
+        // And `store` leaves the unreadable thing alone: the guard that stops a
+        // run whose own copy came from unreadable bytes must also stop a run
+        // whose pointer cannot be opened, because writing a fresh pointer over
+        // it would discard the only sign that the run's record was lost.
+        let mut stale = Run::new("claude-dirblock".to_owned());
+        stale.issue = Some(7);
+        assert_eq!(
+            store(root, &stale),
+            Ok(false),
+            "a store wrote a pointer over a record that could not be read"
+        );
+        assert!(
+            path.is_dir(),
+            "the unreadable thing was replaced, and with it the only sign of it"
+        );
+    }
+
+    #[test]
+    fn a_state_root_that_is_not_a_directory_is_an_unknown_and_not_an_empty_one() {
+        // The spec for this issue asked for a pointer whose parent is a file,
+        // expecting the read to fail with something that is not `NotFound`.
+        // Measured on Windows it is exactly `NotFound` — `ERROR_PATH_NOT_FOUND`,
+        // os error 3 — so the arm that answers *this run swore nothing* is the
+        // one it lands in, for every run at once, and the gate stands every one
+        // of them aside. On Linux the same shape answers `NotADirectory`, which
+        // is why reading the error kind alone cannot decide it. Absence is
+        // confirmed against the root instead.
+        let dir = tempfile::tempdir().expect("a temporary root");
+        let root = dir.path().join("runs");
+        std::fs::write(&root, "a file where the pointers should live")
+            .expect("something that is not a directory");
+
+        let run = load(&root, "claude-notadir");
+        assert!(
+            run.unreadable,
+            "a state root that cannot hold a pointer was read as a run that swore nothing"
+        );
+        assert!(
+            run.unreadable_reason
+                .as_deref()
+                .is_some_and(|why| why.contains("runs")),
+            "the reason names no root, so nobody can find what to look at: {:?}",
+            run.unreadable_reason
+        );
+
+        // The ordinary case is the other side of the same arm and must stay
+        // exactly as it was: nothing claimed yet on this machine, so the root
+        // is simply not there.
+        let fresh = load(&dir.path().join("never-created"), "claude-firstrun");
+        assert!(
+            !fresh.unreadable && fresh.issue.is_none(),
+            "a machine with no state yet was refused instead of being read as unsworn"
         );
     }
 
@@ -1727,6 +1876,15 @@ mod store_outcome_tests {
     /// the record of it did not, so the gate reads a run that swore nothing and
     /// every write after it goes through ungated while the tracker says the
     /// issue is held.
+    ///
+    /// The directory fixture this used to reach that arm with was posing two
+    /// things at once, and issue #38 separated them: a directory at the pointer
+    /// path is a **read** failure before it is a write failure, and `load` now
+    /// answers it as unreadable — so `updated` refuses before any write is
+    /// attempted, which is the arm below. The remaining write failures are
+    /// environmental — a read-only home, a full disk, a lock — and no std-only
+    /// fixture poses them deterministically on every platform; the arm stays in
+    /// the code and this states rather than claims its coverage.
     #[test]
     fn a_pointer_that_could_not_be_written_says_so() {
         let root = tempfile::tempdir().expect("a temporary state root");
@@ -1741,20 +1899,31 @@ mod store_outcome_tests {
             "the pointer this said it wrote is not on disk"
         );
 
-        // A directory where the pointer file has to go: the write cannot land,
-        // on every platform, and nothing about the caller changes.
-        std::fs::create_dir_all(pointer_path(root.path(), "claude-bbbb2222"))
-            .expect("something unwritable in its place");
+        // A directory where the pointer file has to go: the read cannot
+        // succeed, on every platform, so the update refuses before anything is
+        // written, and the change is never applied to the run in hand.
+        let blocked = pointer_path(root.path(), "claude-bbbb2222");
+        std::fs::create_dir_all(&blocked).expect("something unreadable in its place");
         let (run, on_disk) = updated(root.path(), "claude-bbbb2222", |run| run.issue = Some(9));
         assert!(
             !on_disk,
-            "a pointer that could not be written was reported as written"
+            "an unreadable pointer was reported as having taken an update"
         );
-        // The run in hand still carries what was asked for — the caller may
-        // need it to say what did not get recorded.
-        assert_eq!(run.issue, Some(9));
+        assert!(
+            run.unreadable,
+            "the update answered a fresh run for a pointer it could not read"
+        );
+        assert!(
+            run.unreadable_reason
+                .as_deref()
+                .is_some_and(|why| why.contains("claude-bbbb2222.json")),
+            "the update named no pointer path: {:?}",
+            run.unreadable_reason
+        );
+        assert!(blocked.is_dir(), "the unreadable thing was written over");
 
-        // And an unreadable pointer is the same answer: nothing was applied.
+        // And a pointer of bytes nobody can parse is the same answer: nothing
+        // was applied.
         let path = pointer_path(root.path(), "claude-cccc3333");
         fs::write(&path, "esto no parsea").expect("a pointer that will not parse");
         let (_, on_disk) = updated(root.path(), "claude-cccc3333", |run| run.issue = Some(11));

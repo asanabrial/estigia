@@ -12,6 +12,46 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **A run pointer that is there and cannot be opened now stops the write and names the file.**
+  `session::load` collapsed every `read_to_string` failure into a fresh unsworn run, so a pointer the
+  filesystem refused — a directory at its path, a permission failure, a transient I/O error — read as
+  *this run swore nothing*. The gate answers that reading `outside` **before** the tracker is asked,
+  so the writes of a run that still held its claim stood aside from measurement while `verify_claim`
+  went on answering `ok`: measured on 2026-08-15, when `claude-81d69d3e372497b6` held issue #26
+  through a reinstall that took its pointer, then published, released CI, merged and closed with the
+  gate reading nothing. A disarmed gate looks exactly like a gate with nothing to do, which is why
+  this direction is the one that had to change. Only `ErrorKind::NotFound` answers absence now; every
+  other read failure loads as unreadable and carries the pointer path and the underlying error into
+  the refusal, so `run-pointer-unreadable` — from the gate and from the MCP boundary, which build the
+  same sentence — names the file an operator has to look at instead of only the run that lost it. The
+  reason word is unchanged, so the documented refusal inventory is unchanged.
+
+  The installer half is the question the issue recorded as **not measured**, and it is a measurement
+  now rather than a reading of the call graph: `forget_state` is wired only into the take-out path, and
+  `a_live_run_pointer_survives_a_plain_reinstall` sets up every adapter twice over one live pointer and
+  asserts the bytes are the same afterwards. `uninstall --all` still takes the state with the last
+  agent — the operator's recorded requirement, and `taking_estigia_out_takes_its_own_state_with_it_and_not_before`
+  still holds it — so `docs/what-it-writes.md` now draws the line between live run state and what the
+  person keeps, where it used to say `~/.estigia/` stays unconditionally.
+
+  **`NotFound` alone does not prove absence, and Windows is where that stops being pedantic.** The
+  acceptance criteria asked for a pointer whose parent is a file, expecting a read failure that is
+  not `NotFound`; measured, Windows answers `ERROR_PATH_NOT_FOUND` — os error 3, mapped to
+  `NotFound` — while Linux answers `NotADirectory` for the same shape. Reading the error kind alone
+  would therefore have left the whole point of this change open on one platform in its widest form:
+  a state root that is a file makes **every** pointer read as absence, so every run reads as unsworn
+  and every gate stands aside at once. Absence is now confirmed against the root rather than taken
+  from the kind, and a root that is simply not there is still absence — that is what a machine looks
+  like before anything was ever claimed, and refusing it would refuse every first run.
+
+  Two deterministic fixtures reach the arm on both platforms, because the incident itself does not
+  reduce to a script: a directory at the pointer path is a read failure that is not `NotFound`, and it
+  is posed at the loader, at the gate, and across every MCP tool that takes a run id. One older test
+  moved with the fix rather than being kept green: the directory fixture in
+  `a_pointer_that_could_not_be_written_says_so` was posing a write failure, and the same bytes are now
+  refused one step earlier, at the read — the remaining write failures are environmental, no std-only
+  fixture poses them on every platform, and the test says so rather than claiming the coverage.
+
 - **A transition to the state an issue already holds no longer strips its state label, and a
   read-back that disagrees no longer says nothing was written.** `transition` appended the removal
   whichever state `--from` named, so `--from done --to done` built

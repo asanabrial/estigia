@@ -2331,12 +2331,21 @@ suite. Everything else here is prose held by review.
   missing transport denies a sworn run's write and lets an unsworn one through — the oath is what
   brings a run inside, and nothing else does.
 
-- **An unreadable run record stops a write, and does not stop a push.** The gate denies it: a
-  pointer that exists and will not parse says a run existed and not what it swore, and an unknown is
-  not clearance. The push guard cannot answer the same way, because it asks *which runs hold this
-  checkout* and an unreadable pointer does not say. Denying every push in the repository over a file
-  that may belong to unrelated work would be a lock, so the push goes through and this is written
-  down instead.
+- **An unreadable run record stops a write; a push stops when no readable holder can cover the
+  checkout.** The gate denies the write: a pointer that exists and will not read — bytes that will
+  not parse, a directory at its path, a permission failure — says a run existed and not what it
+  swore, and an unknown is not clearance. `session::load` treats only a `NotFound` read as absence,
+  and only while the directory the pointers live in is one: Windows answers a path whose parent is
+  not a directory with `ERROR_PATH_NOT_FOUND`, measured as os error 3 and mapped to `NotFound`, so a
+  state root that is a file would otherwise read as *every run swore nothing* and stand every gate
+  aside at once. A root that is not there at all stays absence, because that is what a machine looks
+  like before anything was claimed. Every other read failure loads as unreadable and carries the
+  pointer path and the underlying error into the refusal, so the message names the file an operator
+  has to look at. The push guard
+  cannot ask one unreadable pointer which checkout it holds, so it denies `run-pointers-unreadable`
+  when nothing readable covers the checkout and some holding is unreadable; when a readable holder
+  does cover it, the unknown one changes no outcome and the push proceeds on that holder's own
+  terms.
 
 - **A contract row the gate cannot read costs that row, and no longer costs the rows beside it.** The
   gate reads the installed contract with a fallback to defaults rather than refusing, because a file

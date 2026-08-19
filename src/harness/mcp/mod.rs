@@ -564,12 +564,19 @@ pub fn run_tool(
             .unwrap_or_default();
         let holding = session::load(&context.state_root, named);
         if holding.unreadable {
-            return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
-                "run-pointer-unreadable",
-                format!(
+            let what = match holding.unreadable_reason.as_deref() {
+                Some(reason) => format!(
+                    "{named}: this run's record exists and cannot be read, so whether it holds \
+                     an issue is unknown \u{2014} {reason}"
+                ),
+                None => format!(
                     "{named}: this run's record exists and cannot be read, so whether it holds \
                      an issue is unknown"
                 ),
+            };
+            return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
+                "run-pointer-unreadable",
+                what,
                 Resolution::no_command(
                     crate::outcome::NoCommandReason::OperatorKnowledge,
                     "what that run holds, read from the tracker \u{2014} then claimed again, or \
