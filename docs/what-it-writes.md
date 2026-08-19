@@ -78,7 +78,7 @@ Five invariants, and the tests are named after them:
    to any adapter, and uninstalling one agent out of eleven must not take them. Both are measured by
    `uninstall_leaves_the_checkouts_answers_and_the_list_of_checkouts`.
 
-   A third leave is temporary: eight adapters share `~/.agents/skills`, so taking one of them out
+   A third leave is temporary: nine adapters share `~/.agents/skills`, so taking one of them out
    leaves the skill for the agents that remain and it goes with the last of them. The note that
    accounts for the surviving directory names **only the files no line of the run already named** —
    not everything still on disk. Naming everything was measured, and it said sixteen files were the

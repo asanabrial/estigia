@@ -313,6 +313,20 @@ pub enum ModelCatalogSource {
     None,
 }
 
+/// How many adapters take the agent-neutral skills root.
+///
+/// Derived, because it was not. Three documents and one test each carried the
+/// number by hand and three of them said **eight** while the table held nine —
+/// a reviewer widened a count guard to reach the changelog and the disagreement
+/// fell out. A hand-spelled count agrees with the table only until somebody adds
+/// a row, and adding a row is the ordinary thing that happens here.
+pub fn adapters_on_the_neutral_root() -> usize {
+    AGENTS
+        .iter()
+        .filter(|adapter| matches!(adapter.skills, SkillsRoot::Neutral))
+        .count()
+}
+
 /// Every agent adapter, in the order `--all` walks them.
 pub const AGENTS: &[AgentAdapter] = &[
     // The neutral root first: it is the one that works when nothing else is

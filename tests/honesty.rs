@@ -93,6 +93,22 @@ fn documented() -> String {
     // asked *does the documentation still say this?* — three times in one
     // afternoon, each time reported as a drifted claim it was not. A file added
     // to `docs/` joins this on its own.
+    // And the changelog's **unreleased** section, which describes the crate as
+    // it is now and is therefore a claim like any other. A reviewer found it
+    // stating eighteen settings while the code had nineteen and every other
+    // sentence had been moved: nothing here reached it, so nothing said so.
+    //
+    // Only that section. A released version's entry is a record of what shipped
+    // then, and holding it to today's counts would force a document to lie about
+    // history in order to pass a test about the present.
+    let changelog = std::fs::read_to_string(root.join("CHANGELOG.md"))
+        .expect("CHANGELOG.md ships with the crate");
+    let unreleased = changelog
+        .split_once("## ")
+        .map(|(_, rest)| rest)
+        .and_then(|rest| rest.split_once("\n## ").map(|(head, _)| head))
+        .unwrap_or(&changelog);
+    all.push_str(unreleased);
     let mut docs: Vec<_> = std::fs::read_dir(root.join("docs"))
         .expect("docs/ ships with the crate")
         .map(|entry| entry.expect("a readable directory entry").path())
@@ -2226,9 +2242,34 @@ fn the_readme_counts_what_the_crate_actually_has() {
             estigia::config::SETTINGS.len(),
             "settings, in the sentence that opens the README's configuration section",
         ),
+        // The fourth statement of the settings count, and the one that says
+        // `rows` rather than `settings` — so none of the three phrases above
+        // reached it and a reviewer changed it to *ninety* with the whole suite
+        // green. Keyed on its own words.
         (
-            "adapters share",
-            8_usize,
+            "rows and `config list` reports",
+            estigia::config::SETTINGS.len(),
+            "rows, in the sentence about what `config list` reports",
+        ),
+        // The changelog states the count in its own words, so none of the three
+        // phrases above reached it and it sat at **eighteen** while the crate
+        // held nineteen. Reaching the file was not enough on its own: a reviewer
+        // widened `documented()` to include the unreleased section and the count
+        // stayed unheld, because a guard that reaches a document and keys on no
+        // sentence in it measures nothing.
+        (
+            "typed settings. Reading the table",
+            estigia::config::SETTINGS.len(),
+            "settings, in the changelog's unreleased entry",
+        ),
+        // Keyed on the backticked path, which only `docs/what-it-writes.md`
+        // carries. The bare `adapters share` also matches *"nine of the eleven
+        // adapters share the neutral root"*, and `number_before` takes the
+        // number nearest the phrase — so the pair read **eleven**, the total,
+        // against a count of how many share it. Two sentences, one hook.
+        (
+            "adapters share `~/.agents/skills`",
+            estigia::setup::adapters_on_the_neutral_root(),
             "adapters sharing the neutral root",
         ),
     ] {

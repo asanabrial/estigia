@@ -496,7 +496,7 @@ the workflow, it holds the tools.
   else, and a file that held nothing but Estigia's block does not survive as an
   empty husk. JSON keeps the operator's key order; markdown comes back byte for
   byte.
-- Eighteen typed settings. Reading the table produces a valid configuration or a
+- Nineteen typed settings. Reading the table produces a valid configuration or a
   refusal that names what may be written instead.
 - **The installed skill directory is `flow`.** It was `issue-flow`, upstream's
   name, kept so the two could be the same directory. Estigia now installs under
@@ -672,7 +672,7 @@ the workflow, it holds the tools.
 - **A row an agent's own file answers is no longer reported as in force.**
   `config set` read its own write back from the shared table, and what a run
   actually reads is that table with the agent's `estigia.<slug>.md` laid over
-  it — eight adapters share the neutral root, so a row answered there is the row
+  it — nine adapters share the neutral root, so a row answered there is the row
   that arrives. Measured on a real machine: the command answered *Planning is
   now direct*, all three shared tables said `direct`, and `config list` one
   command later said `sdd lite`. It now checks each adapter under that root and
