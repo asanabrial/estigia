@@ -509,7 +509,7 @@ suite. Everything else here is prose held by review.
 
   **Judge isolation is unproved, and what is checkable about it moved.** The role gate is fed the
   *embedded* reviewer definition rather than whatever is on disk, rendered with the effective
-  `Evidence standard`, and `the_shipped_blind_reviewer_is_read_only_and_cannot_delegate` pins the
+  `Evidence standard`, and `the_shipped_blind_reviewer_gets_the_grant_its_standard_decides` pins the
   shape for both standards: `Write`, `Edit`, `Agent` and `Task` denied under either, `Bash` following
   the row. So under `reading` the question of two judges writing over each other cannot arise, and
   under `measuring` it arises by design and the isolation rule is what answers it.
@@ -1392,8 +1392,13 @@ suite. Everything else here is prose held by review.
 
   **What closes it.** `Evidence standard` — `reading` or `measuring`, defaulting to `reading` — and
   the reviewer's grant derived from it rather than fixed. Under `measuring` the role gets a shell and
-  nothing else: write, edit and delegation stay refused, so a judge still cannot rewrite what it is
-  judging, and a test walks `Evidence::all()` asserting exactly that shape for every standard.
+  nothing else: write, edit and delegation stay refused, so no tool call reaches the target, and a
+  test walks `Evidence::all()` asserting exactly that shape for every standard. A shell is not
+  narrower than what those refusals withhold — it writes, and it launches — which is why the
+  paragraph below says the isolation precondition is the only thing making a measuring judge safe.
+  Three shipped sentences drew the opposite conclusion from the same grant and two blind judges
+  caught all three independently; the surviving statement of what a shell does not buy is in
+  `skill/policies/blind-judges.md`, and the rest point at it rather than restating it.
 
   Two things had to give, and both were deliberate:
 

@@ -85,8 +85,9 @@ Load [domain composition](references/domain-composition.md) for routing, scale v
    **Blind-panel clarification for step 5.** `five blind` is canonical beside `single` and `two blind`.
    Claude setup always installs one inert `review-blind` definition with `model: inherit`, whose tool
    grant is derived from `Evidence standard`: under `reading` it is read-only; under `measuring` it
-   also gets a shell, and nothing else — write, edit and delegation stay refused, so a judge still
-   cannot rewrite what it is judging. Every judge runs **as** that role. A panel this harness cannot
+   also gets a shell, and nothing else — write, edit and delegation stay refused, so no tool call
+   reaches the target. A shell is not narrower than what those refusals withhold: it writes, and it
+   launches. What confines a measuring judge is the isolation rule, not its grant. Every judge runs **as** that role. A panel this harness cannot
    place in the role is governed by the same isolation rule rather than exempted from it, and that
    rule covers every location a judge writes, not only its checkout.
    The orchestrator passes the effective `judge` model and launches it twice or five times concurrently

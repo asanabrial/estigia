@@ -1330,7 +1330,7 @@ fn paths_in(adapter: &AgentAdapter, environment: &Environment) -> AgentPaths {
 /// artifact behind need to write it, so they get `Write` and `Edit` and the two
 /// that only think do not. A single fixed list would have to be the wider one,
 /// which would hand `explore` a write it never needs.
-fn render_phase_agent(template: &str, phase: &str, config: &Config) -> String {
+pub fn render_phase_agent(template: &str, phase: &str, config: &Config) -> String {
     let model = config.models.for_phase(phase).unwrap_or("inherit");
     let writes_artifacts = matches!(
         config.planning,

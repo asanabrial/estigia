@@ -379,8 +379,9 @@ impl Evidence {
         }
     }
 
-    /// Every standard, under an exhaustive match so a new one cannot be
-    /// forgotten. See [`Judges::all`].
+    /// Every standard, under an exhaustive match, so a new one cannot be added
+    /// without arriving here. Arriving is not being returned — widening the
+    /// arm and leaving the list short still compiles. See [`Judges::all`].
     pub fn all() -> Vec<Self> {
         let every = vec![Self::Reading, Self::Measuring];
         for evidence in &every {
@@ -939,7 +940,9 @@ impl Role {
         }
     }
 
-    /// Every role, under an exhaustive match so a new one cannot be forgotten.
+    /// Every role, under an exhaustive match, so a new one cannot be
+    /// added without arriving here. Arriving is not being returned — widening
+    /// the arm and leaving the list short still compiles.
     pub fn all() -> Vec<Self> {
         let every = vec![Self::Implementer, Self::Reviewer, Self::Judge];
         for role in &every {
@@ -1368,7 +1371,9 @@ impl Integration {
         }
     }
 
-    /// Every mode, under an exhaustive match so a new one cannot be forgotten.
+    /// Every mode, under an exhaustive match, so a new one cannot be
+    /// added without arriving here. Arriving is not being returned — widening
+    /// the arm and leaving the list short still compiles.
     pub fn all() -> Vec<Self> {
         let every = vec![Self::Branch, Self::Trunk];
         for mode in &every {

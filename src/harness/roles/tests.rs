@@ -559,6 +559,19 @@ fn both_dialects_directories_are_searched() {
 /// one, which is the failure this whole module exists to refuse.
 #[test]
 fn a_shipped_planning_phase_cannot_write_to_the_repository() {
+    for openspec in [false, true] {
+        let config = crate::config::Config {
+            planning: crate::config::Planning::Sdd {
+                openspec,
+                lite: false,
+            },
+            ..crate::config::Config::default()
+        };
+        a_shipped_planning_phase_cannot_write(&config, openspec);
+    }
+}
+
+fn a_shipped_planning_phase_cannot_write(config: &crate::config::Config, openspec: bool) {
     let mut checked = 0;
     for file in crate::skill::PHASE_AGENTS {
         let Some(phase) = file
@@ -568,25 +581,53 @@ fn a_shipped_planning_phase_cannot_write_to_the_repository() {
         else {
             continue;
         };
-        // The installed file carries a resolved list; the payload carries the
-        // placeholder. Substituted with the read-only answer this crate writes
-        // when the artifacts live on the issue, which is the default.
-        let definition = file.contents.replace("{{TOOLS}}", "Read, Grep, Glob");
+        // Rendered by the function that ships, under both answers `Planning`
+        // can give. Substituting one literal here crossed the read-only grant
+        // and left the two wider ones crossed by nothing — including
+        // `Read, Grep, Glob, Write, Edit`, which is what an `openspec` install
+        // actually writes, so the rendering most able to do harm was the one
+        // this test never saw. Two blind judges measured that on issue 83.
+        let definition = crate::setup::render_phase_agent(file.contents, phase, config);
         let declared = declared_policy(&definition).unwrap_or_else(|| {
             panic!("agents/sdd-{phase}.md declares no policy, so the gate would enforce nothing")
         });
 
-        // The three the gate can actually judge. `roles.rs` runs inside
-        // `PreToolUse`, so it is only offered what the matcher wakes it for —
-        // this asserts the reachable half rather than the declared one.
-        for tool in ["Write", "Edit", "Bash"] {
+        // A phase that files an artifact on disk needs to write it; one that
+        // only thinks does not, and `explore` reaches outward instead. This
+        // is the same condition `render_phase_agent` decides by, asserted
+        // from the other side: the grant has to match the work.
+        let writes_artifacts = openspec && matches!(phase, "spec" | "design" | "tasks");
+        let artifact = match writes_artifacts {
+            true => Verdict::Allow,
+            false => Verdict::Deny,
+        };
+        for tool in ["Write", "Edit"] {
+            assert_eq!(
+                declared.verdict(tool),
+                artifact,
+                "sdd-{phase} under openspec={openspec} answers the wrong thing for {tool}, so \
+                 either a planning phase writes where it should not or the one that files an \
+                 artifact cannot file it"
+            );
+        }
+        // No answer buys a shell, and none buys the authority to hand the
+        // work on. `roles.rs` runs inside `PreToolUse`, so this asserts the
+        // reachable half rather than the declared one.
+        for tool in ["Bash", "Agent", "Task"] {
             assert_eq!(
                 declared.verdict(tool),
                 Verdict::Deny,
-                "sdd-{phase} would be allowed to run {tool}, and a planning phase that writes is \
-                 the thing the declared list exists to stop"
+                "sdd-{phase} would be allowed to run {tool}, and a planning phase that runs or \
+                 delegates is the thing the declared list exists to stop"
             );
         }
+        // A rendering that left `{{TOOLS}}` in place parses as an allowlist
+        // naming one tool called `{{TOOLS}}`, which denies everything and
+        // reads as a working gate.
+        assert!(
+            !definition.contains("{{"),
+            "sdd-{phase}: a placeholder survived the rendering"
+        );
         // And it is not an empty allowlist: a phase that could do nothing at all
         // would satisfy the loop above and be useless.
         assert_eq!(
@@ -603,7 +644,7 @@ fn a_shipped_planning_phase_cannot_write_to_the_repository() {
 }
 
 #[test]
-fn the_shipped_blind_reviewer_is_read_only_and_cannot_delegate() {
+fn the_shipped_blind_reviewer_gets_the_grant_its_standard_decides() {
     // Both renderings, because the grant is derived from the evidence standard
     // since issue 83 and the raw asset carries a placeholder rather than a tool
     // list. Walked over `Evidence::all()` so a third standard cannot be added

@@ -362,7 +362,11 @@ fn no_guard_reading_every_document_blames_the_readme() {
                 "ships",
             ];
             if line.contains("README") && attributes.iter().any(|verb| line.contains(verb)) {
-                blaming.push(format!("{name} line {offset}: {}", line.trim()));
+                blaming.push(format!(
+                    "{name}, {} lines into the function: {}",
+                    offset,
+                    line.trim()
+                ));
             }
         }
     }

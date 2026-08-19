@@ -43,8 +43,8 @@ For Claude Code, every setup installs one stable `review-blind` definition with 
 in `single` mode. It is inert unless its launch prompt names an active blind mode, the exact publication
 receipt and the review criteria. The orchestrator passes `Model routing`'s effective `judge` model on
 each launch, and starts that same definition twice for `two blind` or five times for `five blind`,
-concurrently, with the identical target and criteria. Each context is denied repository-writing tools
-and must not delegate or inspect sibling output. Config writes do not mutate this definition. A
+concurrently, with the identical target and criteria. Each context runs on the grant `Evidence
+standard` decides, and must not delegate or inspect sibling output. Config writes do not mutate this definition. A
 definition is a host constraint and a contract, not evidence that the panel was actually instantiated.
 
 `review-blind` is reserved to the operator-owned canonical user definition. Claude's current `Agent`
