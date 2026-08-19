@@ -558,7 +558,7 @@ fn both_dialects_directories_are_searched() {
 /// frontmatter written here would keep passing after somebody widened the real
 /// one, which is the failure this whole module exists to refuse.
 #[test]
-fn a_shipped_planning_phase_cannot_write_to_the_repository() {
+fn a_shipped_planning_phase_gets_the_grant_its_own_work_needs() {
     for openspec in [false, true] {
         let config = crate::config::Config {
             planning: crate::config::Planning::Sdd {

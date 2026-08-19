@@ -1375,8 +1375,8 @@ suite. Everything else here is prose held by review.
     `the_only_thing_without_a_gate_is_the_thing_that_is_not_an_agent`. None of the eight is closed
     here.
 
-- **Estigia defined roles its own roles could not do the work of.** Issue 83. Six shipped definitions,
-  every one read-only: `review-blind` carried a fixed `tools: Read, Grep, Glob`, and the five planning
+- **Estigia defined roles its own roles could not do the work of.** Issue 83. Six shipped definitions and not one of
+  them able to run anything: `review-blind` carried a fixed `tools: Read, Grep, Glob`, and the five planning
   phases carried `{{TOOLS}}`, substituted to `Read, Grep, Glob`, `Read, Grep, Glob, Write, Edit` or
   `Read, Grep, Glob, WebFetch, WebSearch` — three branches, two of them strict supersets of the third, and
   an earlier draft of this sentence named only the second. **No branch produced a shell.** In a repository whose stated evidence standard is mutation — this one's is, and
@@ -1398,7 +1398,9 @@ suite. Everything else here is prose held by review.
   isolation precondition is the only thing making a measuring judge safe.
   Three shipped sentences drew the opposite conclusion from the same grant and two blind judges
   caught all three independently; the surviving statement of what a shell does not buy is in
-  `skill/policies/blind-judges.md`, and the rest point at it rather than restating it.
+  `skill/policies/blind-judges.md`. The others state the grant and name that rule; two of them do
+  restate the consequence in the safe direction, `CHANGELOG.md` saying so in the same breath, and
+  a judge measured that this sentence claimed otherwise.
 
   Two things had to give, and both were deliberate:
 
@@ -1450,8 +1452,8 @@ suite. Everything else here is prose held by review.
 
   **A count corrected in the documents and left in the source comments.** This change derives the
   neutral-root adapter count and corrects the two documents that carry it: `CHANGELOG.md` and
-  `docs/what-it-writes.md`, whose sentence the count guard binds. `README.md` states no adapter
-  count and is not among them — an earlier version of this entry said it was, which is the shape
+  `docs/what-it-writes.md`, whose sentence the count guard binds. `README.md` states no *neutral-root* adapter
+  count and is not among them — it counts the adapters themselves, at eleven — an earlier version of this entry said it was, which is the shape
   this document exists to refuse. Source comments still say *eight*, in `src/skill/record.rs`,
   `src/cli/mod.rs` and `src/setup/mod.rs` among others; the set is the search below, not this
   list. Nothing reads them and no shipped document repeats them, so no behaviour is
@@ -1506,8 +1508,12 @@ suite. Everything else here is prose held by review.
     fires on a **new role** as well as on an allow, so a call the claim gate denied writes a
     pointer where only an allowed one did — including under the `<runtime>-unknown` name a blank
     `session_id` produces, which `SessionEnd` deliberately does not remove. Such a pointer holds
-    no issue, so it cannot loosen the gate, and the allow path could already create it; it is
-    recorded because it is a write case this change added and not one it inherited.
+    no issue, so it cannot loosen the gate, and the allow path could already create it. The wider
+    half is a real run pointer: `gate` takes `&mut run` and calls `mark_verified` once the tracker
+    answers, before the refusals that can follow it, so a **denied** call carrying a role not seen
+    before now persists that watermark where it used to be discarded. What is persisted is true —
+    the tracker did answer — and the next routine write can ride the window without asking again.
+    Recorded because it is a change to the gate's own state that no other sentence names.
 
     One more, found by a judge rather than by design: the role write goes through `session::store`,
     which drops a stale write whole when another writer moved the revision first. `session::update`
@@ -1522,7 +1528,10 @@ suite. Everything else here is prose held by review.
     file answers *"verified inside the renewal window"*, exactly as `src/lib.rs` does, while
     `.estigia/` re-reads the claim instead.
 
-    So a run holding this checkout can widen the grant its own judges receive, and the judges are what
+    So a run holding this checkout can widen the grant its own judges receive **where a judge reads
+    the same repository row** — `repository_config_path` resolves under the git common directory,
+    which a linked worktree shares and a separate clone does not, and a judge in a fresh clone is
+    answered `reading` instead. That direction fails closed. Where it does hold, the judges are what
     decide whether that run’s work ships. Estigia already refuses the rows that decide what one
     agent may do — `config set --repo "Delivery authorisation"` answers *"is what one agent does,
     not what this repository is"* — and this row is not among them. The shape is older than this

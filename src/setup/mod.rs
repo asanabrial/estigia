@@ -319,8 +319,10 @@ pub enum ModelCatalogSource {
 /// number by hand and said **eight** while the table held nine — a reviewer
 /// widened a count guard to reach the changelog and the disagreement fell out.
 /// Two, not three: an earlier version of this comment counted `README.md`,
-/// which carries no adapter count at all, and a judge measured that after the
-/// register had already withdrawn the same claim. A hand-spelled count agrees with the table only until somebody adds
+/// which carries no *neutral-root* count — it counts the adapters themselves,
+/// at eleven — and a judge measured that after the register had already
+/// withdrawn the same claim. A second judge then measured the correction, which
+/// had turned a false inclusion into a false absolute. A hand-spelled count agrees with the table only until somebody adds
 /// a row, and adding a row is the ordinary thing that happens here.
 pub fn adapters_on_the_neutral_root() -> usize {
     AGENTS

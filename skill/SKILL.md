@@ -71,7 +71,7 @@ Load [domain composition](references/domain-composition.md) for routing, scale v
 
 ### Analyst
 
-1. Keep the repository and non-tracker external systems read-only. Drain `analysis` oldest first, then inspect `blocked`: move a discharged condition to the state its preserved evidence supports — built work cleared to continue delivery returns to `review`, while work requiring implementation returns to `ready`; date conditions that still hold, and name how long a person has owed any pending decision.
+1. Keep the repository and non-tracker external systems read-only, with the bounded `measuring` exception in the Hard Rules above. Drain `analysis` oldest first, then inspect `blocked`: move a discharged condition to the state its preserved evidence supports — built work cleared to continue delivery returns to `review`, while work requiring implementation returns to `ready`; date conditions that still hold, and name how long a person has owed any pending decision.
 2. Analyse only the bounded scope under the left-hand domain rule book. With no conditions or domain, use the autonomous `general` contract; verify evidence and duplicates, then keep at most the strongest defensible finding or report that none survived.
 3. Validate the fields, route, scale, and body contract for queued and new findings. For queued work, add missing handoff material with `comment` and transition only that same complete item; never create a replacement. For a new finding, fill the [analyst issue template](assets/analyst-issue-template.md) and `create` it with every marker plus `analyst:<runtime>` and run-id attribution. Use `ready`, or `blocked` with the exact missing condition and discharger; then STOP without implementing or assigning it.
 

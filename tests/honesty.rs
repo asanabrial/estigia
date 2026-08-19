@@ -123,6 +123,46 @@ fn counted() -> String {
     all
 }
 
+/// The present-tense reader does not carry the changelog.
+///
+/// [`documented`] answers *does the documentation still say this?* and
+/// [`counted`] answers *is this number right?*. Only the second direction was
+/// held: a pair in the count guard keys on a changelog sentence, so narrowing
+/// `counted()` reddens. Re-widening `documented()` reddened **nothing** — every
+/// count in the unreleased entry agrees with the code today, so the guards that
+/// ask a present-tense question would go on passing while being answered from a
+/// record of what shipped. A blind judge measured it against the published head
+/// and this is the assertion that was missing.
+///
+/// Asserted from the same extraction `counted` performs, rather than a phrase
+/// copied out of the changelog: a literal here would be a second place holding
+/// one fact, and it would rot the first time that entry was edited.
+#[test]
+fn the_present_tense_reader_does_not_carry_the_changelog() {
+    let carried = counted();
+    let present = documented();
+    let unreleased = carried.strip_prefix(present.as_str()).expect(
+        "counted() is documented() plus a suffix, or this guard is reading the wrong thing",
+    );
+    assert!(
+        !unreleased.trim().is_empty(),
+        "counted() added nothing to documented(), so the unreleased filter has stopped matching \
+         and every count guard reading it is now passing over a document it never sees"
+    );
+    // One line is enough to prove the concatenation, and the first non-empty
+    // one is stable against the entry being reordered below it.
+    let witness = unreleased
+        .lines()
+        .map(str::trim)
+        .find(|line| line.len() > 40)
+        .expect("the unreleased entry has a line long enough to identify it");
+    assert!(
+        !present.contains(witness),
+        "documented() carries the changelog again, so a guard asking whether the documentation \
+         still names a mechanism can be answered out of an append-only history: {witness:?}"
+    );
+}
+
 fn documented() -> String {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut all = readme();

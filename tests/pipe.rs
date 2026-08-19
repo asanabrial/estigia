@@ -4640,8 +4640,10 @@ fn the_other_door_asks_a_sub_agents_declared_tool_list_too() {
 /// Every test that existed walked the **denied** tools, which stay denied under a
 /// placeholder, so all of them agreed with the broken road. Two blind judges
 /// measured it through the real binary. This asks the other direction, which is
-/// the one that was never asked: **is the tool the row grants actually allowed**,
-/// on both doors, for every value the row takes.
+/// the one that was never asked: **does the role gate refuse the tool the row
+/// grants**, on both doors, for every value the row takes. It reads the refusal
+/// this gate emits, so another gate declining the same call would not show here
+/// — narrower than *allowed*, and the direction that was missing.
 #[test]
 fn the_reserved_reviewer_grant_is_the_same_through_both_doors() {
     for (row, granted, refused) in [("reading", "Read", "Bash"), ("measuring", "Bash", "Write")] {
