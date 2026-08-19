@@ -2178,7 +2178,7 @@ fn the_readme_counts_what_the_crate_actually_has() {
         (
             "settings, all typed",
             estigia::config::SETTINGS.len(),
-            "settings",
+            "settings, in the second sentence of the configuration reference",
         ),
         // The same count, in the other sentence that states it. A reviewer
         // measured that this guard keyed on one phrase only: `docs/configuration.md`
@@ -2228,7 +2228,11 @@ fn the_readme_counts_what_the_crate_actually_has() {
         });
         assert_eq!(
             claimed, actual,
-            "the README claims {claimed} {what} and the crate has {actual}"
+            // Not "the README claims": three of these four phrases resolve
+            // inside `docs/configuration.md`, and a reviewer measured that a
+            // drift there fails naming the wrong file. `what` carries the
+            // sentence, so the message names it rather than guessing a file.
+            "the documents claim {claimed} {what}, and the crate has {actual}"
         );
     }
 }

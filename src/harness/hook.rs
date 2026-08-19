@@ -1099,7 +1099,10 @@ pub fn run_as(
             // first version of this failed its own test.
             //
             // Still best effort, and still never a denial: failing to record
-            // costs one extra read and a role missing from a later run's view.
+            // costs one extra read and a role missing from this run's own view
+            // on a resume. Not a later run's: no later run has one, and this
+            // clause said otherwise until a judge found the withdrawn claim
+            // surviving in a subordinate clause about the race.
             if saw_new_role || matches!(decision, Decision::Allow(_)) {
                 let _ = session::store(&context.state_root, &run);
             }
