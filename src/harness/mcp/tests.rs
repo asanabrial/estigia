@@ -689,6 +689,9 @@ fn a_record_that_will_not_open_stops_every_tool_that_names_a_run() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        // The narrower row, and this test says nothing about the grant: it
+        // poses a pointer the filesystem refuses.
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
