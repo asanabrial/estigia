@@ -456,8 +456,10 @@ impl AgentAdapter {
     /// the defect this method exists to remove rather than the entries themselves.
     /// A hand-spelled list closes the class for the adapters somebody thought of;
     /// a twelfth adapter whose rule file lands in a directory its host reads whole
-    /// received **nothing**, silently, with the whole suite green — measured by
-    /// adding one. The `match` below has no `_` arm, so adding an
+    /// received **nothing**, silently, with the suite otherwise green — measured
+    /// by adding one. *Otherwise* is doing work in that sentence: an added
+    /// adapter reddens four tests of its own, and none of them is about its rules
+    /// directory. The `match` below has no `_` arm, so adding an
     /// `InstructionFile` variant now fails to compile until its author answers
     /// the question for it.
     ///
@@ -1262,7 +1264,11 @@ fn paths_in(adapter: &AgentAdapter, environment: &Environment) -> AgentPaths {
     // its `_ => None` arm handed every future adapter a `None` nobody chose. A
     // twelfth adapter with sub-agent definitions got no root, was never crossed
     // by `every_control_file_an_adapter_has_is_one_the_gate_measures`, and
-    // `definition_for` never read it — silently, with the suite green. The same
+    // `definition_for` would not read it — silently, with the suite otherwise
+    // green. That second clause is narrower than it sounds and is worth being
+    // exact about: `definition_for` reads *no* adapter's `agents_root`, for any
+    // adapter, because it holds five hand-spelled roots of its own. What the
+    // wildcard cost was the crossing, not the reading. The same
     // shape as the rules directories one file over, and it is closed the same
     // way: an added variant fails to compile until somebody writes `None` on
     // purpose.

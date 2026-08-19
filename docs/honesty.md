@@ -639,9 +639,12 @@ suite. Everything else here is prose held by review.
   exactly one of those — `~/.claude/CLAUDE.md`, `~/.agents/AGENTS.md`, `~/.codex/AGENTS.md`,
   `<xdg>/opencode/AGENTS.md`, `~/.gemini/GEMINI.md`, `~/.qwen/QWEN.md`, `<xdg>/crush/CRUSH.md`. So
   seven fragments the crossing used to hold are now covered incidentally by a literal that has
-  nothing to do with them, on top of the three their rules directories already covered. Cursor's
-  `estigia-workflow-authority.md` is the only instruction file that is not also a per-project root
-  file name, which is why it is the one left.
+  nothing to do with them, on top of the three their rules directories already covered. Cursor is the one left
+  because `estigia-workflow-authority.md` is neither a per-project root file name nor inside a rules
+  directory this crate derives. Three other fragments are not root file names either —
+  `.continue/rules/estigia.md`, `.cline/rules/estigia.md` and `windsurf/memories/global_rules.md` —
+  and they were already covered by their own derived directories, which is the three the base
+  measurement named.
 
   Nothing is thereby unguarded, and that was measured rather than assumed:
   `the_spelled_instruction_files_and_the_adapter_table_agree` was run against the same eleven
@@ -944,7 +947,9 @@ suite. Everything else here is prose held by review.
 
   That last clause stopped being true at issue 36, and the change is deliberate rather than
   incidental: `<repo>/CLAUDE.md` and `<repo>/AGENTS.md` are `Boundary` now, which is **two** of this
-  repository's own tracked files, measured by classifying every path `git ls-files` reports. A run
+  repository's own tracked files, measured by classifying every path `git ls-files` reports.
+  `<repo>/.claude/plugins/**` joins the list above in the same change and is not in it, because that
+  list was written for issue 26. A run
   holding a claim that edits this repository's own instructions pays one tracker read for the
   privilege, which is the honest price of the rule the sentence above states.
 
@@ -968,13 +973,25 @@ suite. Everything else here is prose held by review.
     names a path under those three directories in the `Routine` direction.
 
     A draft of this bullet at issue 36 said **one**, and named crush and gemini in the bullet above
-    as reddening *through* `the_declared_over_gating_is_the_shape_the_document_names`. Two blind
-    reviewers of that head re-ran the widening and it was backwards, for a reason worth keeping: that
-    fixture's rows are `vendor/mycrush/crush.md` and `vendor/mygemini/gemini.md`, and they are
-    `Boundary` only because a **file** fragment without a leading dot is unanchored. Widening the
-    fragment to the bare directory makes it a *directory* fragment, which **is** anchored — so the
-    widening removes the very match the row depends on and the row goes `Routine` with the fixture
-    green. A widening that deletes its own witness cannot be caught by that witness.
+    as reddening *through* `the_declared_over_gating_is_the_shape_the_document_names`. Blind reviewers
+    re-ran the widening and it is not so. A second draft then explained the silence by saying the
+    widening makes those fixture rows answer `Routine`, and reviewers of *that* head measured it
+    false in both halves: `/repo/vendor/mycrush/crush.md` and `/repo/vendor/mygemini/gemini.md` stay
+    `Boundary` under the widening — held by the `crush.md` and `gemini.md` entries this same change
+    added, which match a whole segment at any depth — and a row that *did* flip would turn that
+    fixture **red**, not leave it green, because the fixture asserts `Boundary`. Measured on windsurf,
+    where the row does flip: `~/.codeium/notwindsurf/memories/global_rules.md` goes `Routine` and the
+    fixture reddens, which is why windsurf is in the eight.
+
+    So there is no special mechanism here, and the two sentences that claimed one are gone. Crush and
+    gemini are silent for the ordinary reason the bullet above states for all three: nothing in this
+    crate names a path under those directories in the `Routine` direction.
+
+    One consequence is worth keeping, because it is a coverage fact rather than an explanation: those
+    two fixture rows are now **double-covered**, by the unanchored file fragment and by the
+    per-project entry. Deleting `crush.md` alone leaves that fixture green — the entry is still held,
+    by `a_projects_own_always_loaded_rules_are_a_boundary`, but the row whose comment describes the
+    unanchored shape no longer isolates it.
 
     This list has now said *one*, then *four*, then two, then one, then three. The four was true
     until `the_suffix_ladder_does_not_synthesise_a_path` landed and began catching `.agents/` and
@@ -1235,13 +1252,25 @@ suite. Everything else here is prose held by review.
   claim that edits this repository's instructions pays one live tracker read for it. A run holding no
   claim is `Outside` and pays nothing.
 
-  That count is the **write** road only, and a reviewer measured that it understates the other one.
-  `apply_patch` and `patch` put the path in a patch body, so `classify_with` reads the whole payload
-  as prose — and a patch body that merely *mentions* `AGENTS.md` or `CLAUDE.md` in a sentence now
-  answers `Boundary` for whatever file it actually edits. Measured: a patch to `README.md` whose body
-  contains *see AGENTS.md for the rules* is `Boundary`, and the same patch without the mention is
-  `Routine`. That is the price of matching a bare file name at all, it is paid by Codex and OpenCode
-  and not by the tools that name a `file_path`, and no count in this document covers it.
+  That count is the **write** road only, and it understates the roads that read prose. Two of them
+  do. `apply_patch` and `patch` put the path in a patch body, so `classify_with` reads the whole
+  payload: a patch to `README.md` whose body contains *see AGENTS.md for the rules* is `Boundary`,
+  and the same patch without the mention is `Routine`. And a **shell** line pays it too, whenever the
+  command is already one `writes_a_file` recognises. Measured, each against its own control:
+
+  ```
+  Routine   git commit -m "update AGENTS.md"          Routine   echo see CLAUDE.md
+  Routine   grep -rn agents.md src                    Routine   echo hi > /repo/notes.txt
+  Boundary  echo 'see AGENTS.md' > /repo/notes.txt
+  Boundary  rm -rf /tmp/scratch # see AGENTS.md
+  Boundary  sed -i 's/x/y/' /repo/notes.txt # per AGENTS.md
+  ```
+
+  So the rule is not *which agent* but *whether the line writes at all*: a command that is not a write
+  never reaches the matcher, and one that is pays for every control-surface name anywhere in its text,
+  including a trailing comment. Two reviewers measured the writing half and one measured the
+  non-writing half and read the scope as accurate; both are right about their own examples, and this
+  is the statement that covers both. No count in this document covers this road.
 
   **What is still open, and none of it is closed by this entry.**
 
@@ -1256,13 +1285,35 @@ suite. Everything else here is prose held by review.
   - `<repo>/.opencode/plugins` is still `Routine`, unchanged and named in the entry above. Estigia
     reads nothing from a project-local plugin directory, which is the stated reason and not a
     measurement.
-  - The over-gating direction is still not derived from the adapter table. The paragraph above
-    re-measures it: one adapter is silent now rather than two, and the one that stopped being silent
-    was caught from the under-gating side by accident of a new test rather than by anything watching
-    for over-gating.
+  - The over-gating direction is still not derived from the adapter table. How many adapters are
+    silent when their fragment is widened is measured in the paragraph above and stated **only**
+    there — this bullet used to repeat the number and the two disagreed after the count was corrected
+    in one place. One fact, one place.
   - A host that reads a directory whole and is declared not to is invisible here, in exactly the way
     the four hand-spelled entries were invisible for the adapters nobody thought of. The declaration
     moved from a distant list onto the adapter; it did not become checkable.
+  - **Only one of the two derived families is compiler-forced.** `instruction_directory_fragment`
+    matches `InstructionFile`, so a twelfth adapter cannot skip it; `skills_root_fragment` matches
+    `SkillsRoot`, whose three variants are all enumerated — but a twelfth adapter picks an existing
+    one, so nothing is forced there. Correct as written and worth knowing before reading the second as
+    carrying the same teeth as the first.
+  - **The derivation discards one shape without a word.** `instruction_directory_fragment` ends in
+    `fragment.rfind('/').map(…)`, so an adapter that answers *this host reads the directory whole* with
+    a separator-free fragment gets `None` back, and
+    `a_gated_rules_directory_is_the_instruction_fragment_truncated` skips a `None`. Unreachable with
+    the eleven fragments that exist — all have separators — and `None` is arguably right there, since
+    the "directory" would be the home root. It is named because it is the one place in a method whose
+    stated point is *no wildcard arm* where an answer is dropped silently.
+  - **Plugin-provided sub-agent definitions are the same shape as `.opencode/agent/`.**
+    `~/.claude/plugins/**/agents/*.md` is a `Boundary` now and `roles::definition_for` does not search
+    it, so such a definition is `Ok(None)` on read, which `declared_policy` reads as *every tool
+    allowed*. Gated against being written, not read when enforcing.
+  - The over-gating this change adds is declared **by shape, not by instance**: left-anchored only, a
+    whole segment at any depth, and `.clinerules` / `.continue/config` as prefixes. Instances a
+    reviewer measured beyond the fixture's rows — `/repo/.cursorrules-old`, `/repo/.windsurfrules.bak`,
+    `/repo/.github/copilot-instructions.md.bak`, `/repo/target/doc/qwen.md`, `/repo/qwen.mdx`,
+    `/repo/vendor/gemini/extensions/pack/manifest.json` — each follow one of those shapes. The fixture
+    holds representatives, not the family.
   - **This change narrowed the crossing's own diagnostic value**, and the paragraph on staling the
     eleven fragments carries the measurement: from eight of eleven caught to one, because the
     per-project entries also match every adapter's home instruction file. Nothing is unguarded —
@@ -1274,13 +1325,34 @@ suite. Everything else here is prose held by review.
     `Ok(None)` when read, which `declared_policy` reads as *every tool allowed*. This change closed
     the gate half of a one-letter asymmetry and left the enforcement half; the sentence above about
     five definition roots is not falsified, but a sixth spelling is known now and is not searched.
-  - **Other wildcards of the `agents_root` shape survive**, and are named rather than implied. Adding
-    a twelfth `InstructionFile` variant fails to compile in five places; it still receives a silent
-    default from `hooks` (`_ => return None`), `plugin` (`_ => None`), `gate_spec` (`_ => None`),
-    `model_profiles` (`_ => &[]`) and `model_catalog` (`_ => …None`). `gate_spec`'s default is caught
-    behaviourally by `the_only_thing_without_a_gate_is_the_thing_that_is_not_an_agent`, and `hooks`
-    and `plugin` are reachable only behind a declared gate — so they are narrower than the one that
-    was closed, and none of them is closed here.
+  - **Other wildcards of the `agents_root` shape survive.** Adding a twelfth `InstructionFile`
+    variant fails to compile in five places, and **eight** `_` arms on that enum then hand it a
+    default nobody chose. Read by hand with `grep`, and that is the limit of the claim — nothing
+    derives this list, so it is a reading and not a measurement, and an earlier draft that said these
+    were *named rather than implied* named five of the eight:
+
+    | where | arm | reachable by a twelfth adapter |
+    |---|---|---|
+    | `setup/mod.rs` `hooks` | `_ => return None` | only behind `gate_spec` |
+    | `setup/mod.rs` `plugin` | `_ => None` | yes |
+    | `setup/mod.rs` `apply`'s plugin body | `_ => plugin::source(…)` | only behind `plugin` |
+    | `setup/mod.rs` `model_profiles` | `_ => &[]` | yes, and advisory |
+    | `setup/mod.rs` `model_catalog` | `_ => …None` | yes, and advisory |
+    | `setup/render.rs` `gate_spec` | `_ => None` | yes, and caught behaviourally |
+    | `setup/render.rs` `gate_gap` | `_ => "no published reference…"` | yes, and the text is benign |
+    | `setup/render.rs` `mcp_format` | `_ => McpFormat::McpServers` | **yes, and it has teeth** |
+
+    `mcp_format` is the one that is *not* narrower than the defect this change closed, and three
+    reviewers found it independently. `mcp_config` is one of the five the compiler forces, so a
+    twelfth adapter's author is made to choose an MCP file — and the moment they answer `Some`, the
+    **dialect** written into it comes from a wildcard. Nothing crosses it: no test asserts the format
+    for an adapter that does not already have one. `paths_in`'s own comment beside `mcp_config` is the
+    argument against it — *an MCP entry written where the agent does not read it reports success and
+    configures nothing; a wrong path is worse than a missing one, because it fails while claiming to
+    have worked* — and a wrong dialect in the right file fails the same way.
+    `gate_spec`'s default is caught behaviourally by
+    `the_only_thing_without_a_gate_is_the_thing_that_is_not_an_agent`. None of the eight is closed
+    here.
 
 - **A skip spelled as a pass, in the places issue #22 did not reach.** That issue took the skip out of
   `tracker_rig`'s *type*, so no caller of it can be handed a value meaning *did not run*. Two other

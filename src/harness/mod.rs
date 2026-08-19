@@ -440,7 +440,9 @@ const CONTROL_SURFACE: &[&str] = &[
     // the adapters somebody thought of and reopens it for the next one: measured
     // with a twelfth adapter whose rules file resolved to
     // `~/.acme/rules/estigia.md`, its directive was `Boundary` and its neighbour
-    // `~/.acme/rules/zz-override.md` was `Routine`, with the whole suite green.
+    // `~/.acme/rules/zz-override.md` was `Routine`, with the suite otherwise
+    // green — an added adapter reddens four tests of its own, and none of them
+    // is about its rules directory, which is the whole point.
     // `AgentAdapter::instruction_directory_fragment` is that mechanism, and its
     // `match` has no wildcard arm.
     //
@@ -540,8 +542,11 @@ const CONTROL_SURFACE: &[&str] = &[
     // Plugins supply hooks, sub-agents, skills and commands at once. `~/.claude.json`
     // is gated and always was; the payload those entries point at, on disk, was not.
     // A plugin-provided sub-agent definition is invisible to `roles::definition_for`
-    // as well — measured `found: false` — so it is an allowlist nothing enforces
-    // *and* nothing watched.
+    // as well — measured `found: false` — so it is an allowlist nothing enforces.
+    // It is watched from here on, and only watched: `roles::definition_for` still
+    // does not search a plugin's `agents/` directory, so the gate half and the
+    // enforcement half disagree the way they do for `.opencode/agent/` below.
+    // `docs/honesty.md` carries both.
     ".claude/plugins/",
     // Commands and prompts. Lower authority than an always-loaded rule and
     // listed on the same principle: the host puts their names and descriptions in
