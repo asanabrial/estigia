@@ -7,6 +7,7 @@
 //! truth. `bindings/github.md` refuses to cache configuration for exactly that
 //! reason, and the same rule applies here.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -121,6 +122,24 @@ pub struct Run {
     /// contract states the reach rather than the rule.
     #[serde(default)]
     pub reviewed_head: Option<String>,
+    /// The roles this run's delegated contexts actually ran as.
+    ///
+    /// **Observed, not declared.** Claude Code sends `agent_type` on every tool
+    /// event fired inside a sub-agent, so this is what the gate *saw* rather than
+    /// what an orchestrator said it launched. A later run reads it from the same
+    /// pointer it reads the claim from.
+    ///
+    /// What it does not carry, stated here because the field invites the wider
+    /// reading: a context refused at the role gate before any allowed call is
+    /// **not** here, because the pointer is stored on the allow path — which is
+    /// the honest shape, since a launch that is refused contributes no judge. Nor
+    /// is a host that does not send `agent_type` visible at all. `docs/honesty.md`
+    /// carries both.
+    ///
+    /// A set, so re-entering one role does not grow the file, and ordered, so two
+    /// runs that saw the same roles write the same bytes.
+    #[serde(default)]
+    pub roles: BTreeSet<String>,
 }
 
 impl Run {
@@ -137,6 +156,7 @@ impl Run {
             verified_at: None,
             operation_id: None,
             release_id: None,
+            roles: BTreeSet::new(),
             review_receipt: None,
             reviewed_head: None,
         }

@@ -2197,6 +2197,26 @@ fn the_readme_counts_what_the_crate_actually_has() {
             estigia::config::SETTINGS.len(),
             "settings, in the sentence that opens the configuration reference",
         ),
+        // And the sentence a reader of the README meets first, which neither
+        // pair above reaches. Three reviewers measured that: every phrase this
+        // test keyed on resolves inside `docs/configuration.md` — `settings, all
+        // typed` at its line 11, `typed settings, read from one table` at its
+        // line 3 — while `README.md` says `typed settings, in` and matched
+        // neither. The README could claim **ninety** settings with the whole
+        // suite green, through a change whose own pull request said this guard
+        // "crosses both sentences and bites on `README.md` too". It did not.
+        //
+        // Keyed on `typed settings, in`, which only the README carries: the
+        // configuration reference ends that phrase with `read from one table`
+        // and `all typed`. `number_before` takes the first occurrence over the
+        // concatenation, so a phrase shared between the two files guards
+        // whichever comes first and leaves the other unheld — the trap this
+        // pair exists to stay out of, and the one the previous repair fell into.
+        (
+            "typed settings, in",
+            estigia::config::SETTINGS.len(),
+            "settings, in the sentence that opens the README's configuration section",
+        ),
         (
             "adapters share",
             8_usize,

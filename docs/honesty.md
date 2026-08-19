@@ -1307,9 +1307,11 @@ suite. Everything else here is prose held by review.
     the gate would allow, and the judge is told one thing by its own definition and answered another
     by the hook. Nothing reports it, and `reviewer_is_static` accepts either rendering by design, so
     the launch check cannot see it either.
-  - **Only one of the two derived families is compiler-forced**, which is the entry above's subject
-    and is named here only because this row now decides a grant beside them. That entry has the
-    measurement; this one does not repeat it.
+  - **Only one of the two derived families is compiler-forced**, named here only because this row now
+    decides a grant beside them. The measurement is in this same entry's *Still open* list further
+    **down** — the bullet beginning *"Only one of the two derived families"* — and is not repeated
+    here. An earlier version of this sentence sent a reader to *the entry above*, where the material
+    is not; a reviewer measured that the two are 100 lines apart in the other direction.
   - **The derivation discards one shape without a word.** `instruction_directory_fragment` ends in
     `fragment.rfind('/').map(…)`, so an adapter that answers *this host reads the directory whole* with
     a separator-free fragment gets `None` back, and
@@ -1413,6 +1415,20 @@ suite. Everything else here is prose held by review.
     `InstructionFile`, so a twelfth adapter cannot skip it; `skills_root_fragment` matches
     `SkillsRoot`, whose variants a twelfth adapter reuses.
   - The eight `_` arms on the instruction enum are untouched, and the entry above owns them.
+  - **The roles a run’s delegated contexts ran as are recorded, and the record is narrower than the
+    sentence.** Since issue 83 the gate writes each distinct `agent_type` it sees into the run
+    pointer, and `SessionStart` reads them back to the next run. That is an **observation** rather
+    than a declaration — it is what fired on a tool call, not what a launch prompt claimed — which is
+    the strong half.
+
+    Three things it does not carry, and each is a way the set can be empty while contexts ran. A host
+    that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart from nothing
+    having been delegated. A context refused at the role gate before any call is not recorded, which
+    is deliberate — a refused launch contributes no judge — but it means the record shows what
+    worked and never what was turned away. And the field names a role, never a *count*: five contexts
+    under one role and one context under it write the same byte, so nothing here bears on panel size,
+    which the entry below already states this crate cannot see.
+
   - Estigia still cannot prove a panel ran, how many contexts it had, or that any two of them were
     given separate directories. This narrows what a judge **can** do and proves nothing about what a
     judge **did** — the same boundary `policies/blind-judges.md` draws for everything else about

@@ -676,6 +676,33 @@ pub fn session_start_response(context: &GateContext, run: &session::Run) -> Valu
         ),
         None => String::new(),
     };
+    // Which roles this run's delegated contexts actually ran as, from the
+    // pointer rather than from anybody's account of the panel.
+    //
+    // Criterion 5 of issue 83 asks that this be recorded "where a later run can
+    // read it", and this is the message every run reads first. Said here rather
+    // than only sitting in the file because a record nobody surfaces is one
+    // nobody consults, which is the same argument the isolation line above
+    // makes for itself.
+    //
+    // Absent when the set is empty, and that absence is deliberately **not**
+    // spelled as "no contexts were delegated". An empty set also means a host
+    // that never sent `agent_type`, and a line saying nothing was delegated
+    // would be this crate asserting something it cannot see.
+    let delegated = if run.roles.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n\nDelegated contexts this run has already gated ran as: {}. That is what the gate \
+             saw on their tool calls, not what a launch declared \u{2014} a context refused at the \
+             role gate never reached it, and a host that does not name the role leaves it empty.",
+            run.roles
+                .iter()
+                .map(|role| format!("`{role}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
     // A name, or the fact that there is none. `session::run_id` answers a
     // session with no identity with `<runtime>-unknown`, and this line used to
     // hand that back as though it were one — so every unidentifiable session on
@@ -705,7 +732,7 @@ This session carries no identity Estigia can derive a run id from, so nothing ca
             "additionalContext": format!(
                 "## Estigia
 
-Run id `{}`. {held}{isolation}{}",
+Run id `{}`. {held}{isolation}{delegated}{}",
                 run.run_id,
                 drift_note(context)
             ),
@@ -1016,6 +1043,26 @@ pub fn run_as(
             let (action, how) =
                 classify_with(&input.tool_name, &input.tool_input, &context.boundaries);
             let mut run = session::load(&context.state_root, &run_id);
+            // Criterion 5 of issue 83: which role each delegated context ran as,
+            // recorded where a later run can read it.
+            //
+            // Here rather than beside the role gate above, and that placement is
+            // the semantics. This point is past the role gate, so a context
+            // refused there returns before it and leaves no trace — which is the
+            // honest reading of *ran as*, and it matches the panel policy, where
+            // a refused launch contributes no judge. What lands in the pointer is
+            // what the gate saw a context actually do.
+            //
+            // `agent_type` is the host's word for the role the call fired inside.
+            // Estigia does not mint it and cannot check it; a host that does not
+            // send it leaves this empty, which `docs/honesty.md` states rather
+            // than letting an empty set read as *nothing was delegated*.
+            let saw_new_role = input
+                .agent_type
+                .as_deref()
+                .map(str::trim)
+                .filter(|agent| !agent.is_empty())
+                .is_some_and(|agent| run.roles.insert(agent.to_owned()));
             let (decision, recorded) = if input.session_id.trim().is_empty() {
                 // No session to mint a run id from — the same position a git
                 // hook is in, and the same answer: ask the checkout.
@@ -1028,9 +1075,18 @@ pub fn run_as(
             } else {
                 (super::gate(context, &mut run, &action, how), run_id)
             };
-            if matches!(decision, Decision::Allow(_)) {
-                // Best effort: failing to record when we last asked costs one
-                // extra read, and must not turn into a denial.
+            // `saw_new_role` and not only `Allow`, and the difference is the
+            // point. The store below was written for the renewal watermark,
+            // which is only meaningful on a call that was allowed — but the role
+            // record is about what the gate **saw**, and a delegated context
+            // reading files makes calls this gate answers `Outside` rather than
+            // `Allow`. Keying the role on the allow path recorded nothing for
+            // exactly the contexts the criterion is about, which is how the
+            // first version of this failed its own test.
+            //
+            // Still best effort, and still never a denial: failing to record
+            // costs one extra read and a role missing from a later run's view.
+            if saw_new_role || matches!(decision, Decision::Allow(_)) {
                 let _ = session::store(&context.state_root, &run);
             }
             let subject = action.subject();
@@ -1685,6 +1741,108 @@ mod tests {
                 "{tool}: {answer}"
             );
         }
+    }
+
+    /// The role a delegated context ran as reaches the pointer, and the message
+    /// a later run reads first.
+    ///
+    /// Acceptance criterion 5 of issue 83: *"which role each delegated context
+    /// ran as is recorded where a later run can read it."* It was undelivered
+    /// when the first three panels read this branch, and the intention recorded
+    /// at the time — requiring the verdict to name the role — would have
+    /// recorded a **declaration**. This records what the gate saw.
+    ///
+    /// Two halves, and both are crossed here because either alone is a record
+    /// nobody consults: the pointer keeps it, and `SessionStart` says it.
+    ///
+    /// The negative half matters as much. An ordinary call carrying no
+    /// `agent_type` must leave the set empty, or every run would report a role
+    /// it never delegated to — and an empty set is deliberately not spelled
+    /// as *nothing was delegated*, because a host that never sends the field
+    /// looks identical from here.
+    #[test]
+    fn the_role_a_delegated_context_ran_as_reaches_the_pointer() {
+        let root = tempfile::tempdir().expect("a state root");
+        let repo = root.path().join("repo");
+        std::fs::create_dir_all(&repo).expect("a repository directory");
+        let state_root = root.path().join("state");
+        let context = GateContext {
+            stand_down: None,
+            integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
+            flag: None,
+            skill_root: root.path().join("skill"),
+            repo_dir: repo,
+            state_root: state_root.clone(),
+            window: super::super::RENEWAL_WINDOW,
+            tracker: crate::config::Tracker::Github { repo: None },
+            boundaries: Vec::new(),
+        };
+
+        let roles_after = |agent: Option<&str>| -> std::collections::BTreeSet<String> {
+            let _ = std::fs::remove_dir_all(&state_root);
+            let input = Input {
+                agent_type: agent.map(str::to_owned),
+                tool_name: "Read".to_owned(),
+                tool_input: json!({"file_path": "src/x.rs"}),
+                session_id: "abcd1234".to_owned(),
+                ..Input::default()
+            };
+            let answer = run_as(
+                Dialect::ClaudeCode,
+                Some("claude-code"),
+                Event::PreToolUse,
+                &input,
+                Some(&context),
+            );
+            assert_ne!(
+                answer["hookSpecificOutput"]["permissionDecision"], "deny",
+                "a read this role declares should not be refused: {answer}"
+            );
+            session::load(
+                &state_root,
+                &session::run_id(session::DEFAULT_RUNTIME, "abcd1234"),
+            )
+            .roles
+        };
+
+        let delegated = roles_after(Some("review-blind"));
+        assert!(
+            delegated.contains("review-blind"),
+            "the gate saw a call fired inside `review-blind` and the pointer does not carry it, so \
+             a later run cannot read which role the context ran as: {delegated:?}"
+        );
+
+        let ordinary = roles_after(None);
+        assert!(
+            ordinary.is_empty(),
+            "a call carrying no `agent_type` recorded a role anyway, so the record says a context \
+             was delegated where none was: {ordinary:?}"
+        );
+
+        // And the surface. A record kept where nothing reads it aloud is the
+        // shape this repository refuses everywhere else.
+        let mut run = session::Run::new("claude-abcd1234".to_owned());
+        run.roles.insert("review-blind".to_owned());
+        let announced = session_start_response(&context, &run);
+        let text = announced["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or_default();
+        assert!(
+            text.contains("review-blind"),
+            "the first message a run reads does not name the roles its delegated contexts ran as: \
+             {text}"
+        );
+
+        let silent =
+            session_start_response(&context, &session::Run::new("claude-abcd1234".to_owned()));
+        let quiet = silent["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or_default();
+        assert!(
+            !quiet.contains("Delegated contexts"),
+            "a run that has gated no delegated context announced one: {quiet}"
+        );
     }
 
     /// The event a response declares is the event it answers.
