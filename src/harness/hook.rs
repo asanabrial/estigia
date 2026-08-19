@@ -679,11 +679,16 @@ pub fn session_start_response(context: &GateContext, run: &session::Run) -> Valu
     // Which roles this run's delegated contexts actually ran as, from the
     // pointer rather than from anybody's account of the panel.
     //
-    // Criterion 5 of issue 83 asks that this be recorded "where a later run can
-    // read it", and this is the message every run reads first. Said here rather
-    // than only sitting in the file because a record nobody surfaces is one
-    // nobody consults, which is the same argument the isolation line above
-    // makes for itself.
+    // Said here rather than only sitting in the file because a record nobody
+    // surfaces is one nobody consults, which is the same argument the isolation
+    // line above makes for itself.
+    //
+    // **This is the run that gated them, not a later one.** Issue 83 asked for a
+    // record a later run could read; this line does not answer that and #91 owns
+    // it. The wording here quoted that criterion until a judge found it still
+    // doing so one round after the claim was withdrawn everywhere else — a
+    // withdrawal completed in the documents and left standing in the code is the
+    // same defect wearing a correction.
     //
     // Absent when the set is empty, and that absence is deliberately **not**
     // spelled as "no contexts were delegated". An empty set also means a host
@@ -1753,7 +1758,7 @@ mod tests {
     }
 
     /// The role a delegated context ran as reaches the pointer, and the message
-    /// a later run reads first.
+    /// this run reads on a resume.
     ///
     /// Acceptance criterion 5 of issue 83: *"which role each delegated context
     /// ran as is recorded where a later run can read it."* This crossing holds
@@ -1821,7 +1826,8 @@ mod tests {
         assert!(
             delegated.contains("review-blind"),
             "the gate saw a call fired inside `review-blind` and the pointer does not carry it, so \
-             a later run cannot read which role the context ran as: {delegated:?}"
+             nothing can read which role the context ran as, not even this run on a resume: \
+             {delegated:?}"
         );
 
         let ordinary = roles_after(None);

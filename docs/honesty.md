@@ -1306,16 +1306,18 @@ suite. Everything else here is prose held by review.
     rather than from the file: a host offering a grant the row no longer asks for is refused there.
     The other direction is not the gate’s doing at all — with the row widened and the file not
     yet re-rendered, the gate **allows**, and what refuses is the host’s stale `tools:` line, if
-    that host enforces one, which the opening entry of this document says Estigia cannot prove. An
-    earlier version of this sentence said both directions fail closed at the gate, and contradicted
-    itself one clause later. and the judge is told one thing by its own definition and answered another
-    by the hook. Nothing reports it, and `reviewer_is_static` accepts either rendering by design, so
+    that host enforces one, which the opening entry of this document says Estigia cannot prove. Either way the judge is told one thing by its own
+    definition and answered another by the hook. An earlier version of this sentence said both
+    directions fail closed at the gate, and contradicted itself one clause later; the repair for that
+    left this fragment behind, which a reviewer then found. Nothing reports it, and `reviewer_is_static` accepts either rendering by design, so
     the launch check cannot see it either.
   - **Only one of the two derived families is compiler-forced**, named here only because this row now
-    decides a grant beside them. The measurement is in this same entry's *Still open* list further
-    **down** — the bullet beginning *"Only one of the two derived families"* — and is not repeated
-    here. An earlier version of this sentence sent a reader to *the entry above*, where the material
-    is not; a reviewer measured that the two are 100 lines apart in the other direction.
+    decides a grant beside them. The measurement is **further down and in a different entry** — the
+    issue-83 entry’s *Still open* list, under the bullet beginning *"Only one of the two derived
+    families"* — and is not repeated here. Two earlier versions of this pointer were wrong in two
+    different ways: the first sent a reader to *the entry above*, where the material is not, and the
+    second fixed the direction and still said *this same entry*, which it is not either. Both were
+    found by reviewers.
   - **The derivation discards one shape without a word.** `instruction_directory_fragment` ends in
     `fragment.rfind('/').map(…)`, so an adapter that answers *this host reads the directory whole* with
     a separator-free fragment gets `None` back, and
