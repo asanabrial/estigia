@@ -430,24 +430,29 @@ const CONTROL_SURFACE: &[&str] = &[
     // moment that root was added to what it walks, which is the better argument for
     // crossing a hand-spelled entry than any reasoning about reachability.
     ".claude/agents/",
-    // The rules **directories**, not only Estigia's own filename inside them.
-    // `paths_in`'s comments say so for two of these — Continue applies any rule
-    // that is not `invokable` and declares no globs, Cline loads the directory
-    // for every task. The other two are here on the restated rule rather than on
-    // anything this crate verified: Windsurf's comment is about a character cap
-    // on one file, and `.cursor/rules` holds no Estigia file at all — Cursor's
-    // directive is `~/.cursor/estigia-workflow-authority.md`. `docs/honesty.md`
-    // carries which is which. So gating `estigia.md` and leaving the directory open is defeated by
-    // a neighbour: a reviewer measured `~/.cline/rules/zz-override.md` answering
-    // `Routine`, and a sibling saying *Estigia is retired* changes exactly what
-    // the restated population clause is about — what an agent is told this
-    // harness may enforce — without touching a `Boundary` path.
+    // The one rules **directory** that is still spelled here, and the reason it
+    // is the only one.
     //
-    // With trailing slashes, which `names` reads as *directory* — see the entry
-    // above for the round these spent without them.
-    ".cline/rules/",
-    ".continue/rules/",
-    "windsurf/memories/",
+    // Three siblings stood beside it — `.cline/rules/`, `.continue/rules/` and
+    // `windsurf/memories/` — and they are gone from this list because they are
+    // now *derived*, by truncating the instruction fragment each of those
+    // adapters already declares. A hand-spelled directory closes the class for
+    // the adapters somebody thought of and reopens it for the next one: measured
+    // with a twelfth adapter whose rules file resolved to
+    // `~/.acme/rules/estigia.md`, its directive was `Boundary` and its neighbour
+    // `~/.acme/rules/zz-override.md` was `Routine`, with the suite otherwise
+    // green — an added adapter reddens four tests of its own, and none of them
+    // is about its rules directory, which is the whole point.
+    // `AgentAdapter::instruction_directory_fragment` is that mechanism, and its
+    // `match` has no wildcard arm.
+    //
+    // `.cursor/rules` cannot be derived, and that is a fact about Cursor rather
+    // than an exception carved for it: Estigia's directive for that adapter goes
+    // to `~/.cursor/estigia-workflow-authority.md`, so this crate writes no file
+    // into the rules directory and there is no fragment to truncate. It stays a
+    // literal, on the restated population clause — a file there is loaded for
+    // every task, and a sibling saying *Estigia is retired* changes what the
+    // agent is told this harness may enforce without touching a `Boundary` path.
     ".cursor/rules/",
     ".claude.json",
     ".codex/hooks.json",
@@ -507,6 +512,123 @@ const CONTROL_SURFACE: &[&str] = &[
     "crush/crush.json",
     ".codeium/windsurf/hooks.json",
     ".cline/hooks",
+    // ------------------------------------------------------------------
+    // What the **host reads**, beside what Estigia writes.
+    //
+    // Everything above this line is a file Estigia authors or a file it reads
+    // its own answers from. That is where the enumeration stopped, and stopping
+    // there is what issue 36 is about: an agent loads a great deal it was not
+    // handed by this installer, with exactly the authority of the directive that
+    // *was*. A file put **beside** the watched one achieves the same thing
+    // without touching a watched path.
+    //
+    // Decided as a set rather than one path at a time, on one stated principle:
+    // **a path is here when a host loads it without a person choosing it at the
+    // moment of use** — always-loaded context, or configuration the host reads to
+    // decide what an agent may do. Every row of the issue's table satisfies it,
+    // including the commands and prompts the issue itself marks lower authority:
+    // a command is invoked explicitly, but its name and description are put in
+    // front of the agent whether or not it ever is. Splitting on *how always is
+    // always* is the one-path-at-a-time reasoning that left this open.
+    //
+    // The cost is one tracker read per write, for a run holding a claim, on
+    // another agent's configuration — which is a write it should not be making
+    // unmeasured. A run holding no claim is `Outside` and pays nothing.
+    //
+    // The skills trees are **not** here: they are derived per adapter from the
+    // same `skills` field that decides where the installer writes, next to the
+    // rules directories and for the same reason.
+    //
+    // Plugins supply hooks, sub-agents, skills and commands at once. `~/.claude.json`
+    // is gated and always was; the payload those entries point at, on disk, was not.
+    // A plugin-provided sub-agent definition is invisible to `roles::definition_for`
+    // as well — measured `found: false` — so it is an allowlist nothing enforces.
+    // It is watched from here on, and only watched: `roles::definition_for` still
+    // does not search a plugin's `agents/` directory, so the gate half and the
+    // enforcement half disagree the way they do for `.opencode/agent/` below.
+    // `docs/honesty.md` carries both.
+    ".claude/plugins/",
+    // Commands and prompts. Lower authority than an always-loaded rule and
+    // listed on the same principle: the host puts their names and descriptions in
+    // front of the agent unprompted.
+    ".claude/commands/",
+    ".codex/prompts/",
+    ".cursor/commands/",
+    // Cursor's own CLI configuration, which is read like the two gated files
+    // beside it — `.cursor/hooks.json` and `.cursor/mcp.json` — and was the one
+    // of the three nobody had listed.
+    ".cursor/cli-config.json",
+    // Extensions carry always-loaded context files, MCP servers **and**
+    // `excludeTools`, so they are a compliance input and an enforcement input in
+    // the same directory. Both Gemini spellings, for the reason
+    // `gemini/settings.json` has both: `%APPDATA%\gemini` on Windows and
+    // `~/.gemini` elsewhere.
+    ".gemini/extensions/",
+    "gemini/extensions/",
+    ".qwen/extensions/",
+    // Continue's assistant configuration, which can carry `rules:` inline and
+    // `mcpServers:`. `.continue/rules` was gated and this file — which holds the
+    // same rules in another shape — was not. Without the extension, the same
+    // trimming `.claude/settings` needed: Continue reads `config.yaml`,
+    // `config.json` and `config.ts` under one stem.
+    ".continue/config",
+    ".continue/assistants/",
+    // Windsurf's MCP configuration, which `paths_in` already records as
+    // unverified — and unverified was never gated either, which is a different
+    // thing from decided-against. Its workflows are read the way commands are.
+    ".codeium/windsurf/mcp_config.json",
+    ".codeium/windsurf/workflows/",
+    // ------------------------------------------------------------------
+    // The **per-project** twins of everything above.
+    //
+    // A smaller thing than the home paths and not a different one: inside a
+    // checkout these stay measured against the claim rather than standing aside,
+    // so the gate answers rather than waves them past. What was wrong was that
+    // the line between covered and not was drawn by which home-path fragment
+    // happened to carry a dotted-directory prefix. There is no principle by which
+    // `<repo>/.claude/CLAUDE.md` is a boundary and `<repo>/CLAUDE.md` — the file
+    // Claude Code loads by default, and the one **this repository itself** uses —
+    // is not. It is one now, and this crate pays that cost on its own root file.
+    //
+    // `.clinerules` and `.windsurf/rules/` are the two that were hardest to
+    // defend leaving out: they are the per-project twins of two directories issue
+    // 26 gated at home, so the neighbour-defeats-the-gate hole was closed on one
+    // road and left open on the other in the same round. No trailing slash on
+    // `.clinerules`, deliberately — Cline reads it as a file *or* a directory, and
+    // as a prefix this entry reaches both spellings.
+    ".clinerules",
+    ".windsurf/rules/",
+    ".windsurfrules",
+    ".cursorrules",
+    ".github/copilot-instructions.md",
+    ".mcp.json",
+    // The singular spelling, which is OpenCode's per-project definition
+    // directory beside the plural `.opencode/agents/` already here. Two
+    // directories one letter apart, and the gate reached one of them.
+    ".opencode/agent/",
+    // The project instruction files, which carry no dotted directory to anchor
+    // them and are therefore the reason `anchored` reads a separator-free
+    // fragment as a whole segment. Without that, `agents.md` reaches
+    // `myagents.md`.
+    //
+    // A whole segment at **any** depth, not only at a root, and the difference is
+    // deliberate rather than a side effect: a rules file deeper in a tree is
+    // loaded the same way, and `<repo>/services/api/AGENTS.md` is asserted beside
+    // the root one. The cost is that a documentation page called `gemini.md` or
+    // `qwen.md` anywhere in any tree answers `Boundary`, which `docs/honesty.md`
+    // declares and a fixture holds rather than leaving it to be found.
+    //
+    // The `.local.` siblings are spelled out rather than reached by trimming the
+    // extension. `agents.` would have covered both and would also have covered
+    // `src/agents.rs` — an ordinary source file in somebody's tree, which is a
+    // tracker read for nothing. Two entries beat one that over-reaches.
+    "claude.md",
+    "claude.local.md",
+    "agents.md",
+    "agents.local.md",
+    "gemini.md",
+    "qwen.md",
+    "crush.md",
 ];
 
 /// Commands that make a file useless without writing a byte of it.
@@ -835,8 +957,15 @@ fn matches_a_fragment(path: &str) -> bool {
     // exists to match **mid-segment**, because the Windows spelling is
     // `GitHub CLI/hosts.yml` and `github cli` is one segment holding a space. That
     // is the whole of what stays unanchored, and `docs/honesty.md` measures it.
+    //
+    // A fragment holding **no** separator at all is anchored too, and it is the
+    // third kind rather than an exception to the first two. `agents.md` names a
+    // whole file name, so every real target has it as a whole segment — and left
+    // unanchored it reaches `myagents.md`, which is somebody's ordinary source
+    // file. `cli/hosts.yml` is the one shape that must stay unanchored, and it
+    // has a separator in it, so the two rules do not overlap.
     let anchored = |needle: &str| {
-        if needle.starts_with('.') || needle.ends_with('/') {
+        if needle.starts_with('.') || needle.ends_with('/') || !needle.contains('/') {
             path.starts_with(needle) || path.contains(&format!("/{needle}"))
         } else {
             path.contains(needle)
@@ -858,9 +987,28 @@ fn matches_a_fragment(path: &str) -> bool {
     };
 
     names(&installed)
-        || crate::setup::AGENTS
-            .iter()
-            .any(|adapter| names(adapter.instruction_fragment()))
+        || crate::setup::AGENTS.iter().any(|adapter| {
+            names(adapter.instruction_fragment())
+                // The directory the instruction file sits in, when the host
+                // reads every file in it — derived from the fragment above by
+                // truncation rather than spelled again. Three of these were
+                // literals below, and a hand-spelled list closes the class only
+                // for the adapters somebody thought of: a twelfth adapter whose
+                // rule file lands in a directory its host reads whole got
+                // nothing, with the suite green. See
+                // `AgentAdapter::instruction_directory_fragment`, whose `match`
+                // has no wildcard arm.
+                || adapter
+                    .instruction_directory_fragment()
+                    .is_some_and(&names)
+                // And the skills tree around Estigia's own installed contract.
+                // `installed` above gates `skills/flow/`; the tree holding it was
+                // `Routine`, so a **sibling** skill directory — whose name and
+                // description this harness's own host loads whether or not it is
+                // ever invoked — was the neighbour that defeats the gate one
+                // level up from where issue 26 closed it.
+                || names(adapter.skills_root_fragment())
+        })
         || CONTROL_SURFACE.iter().any(|fragment| names(fragment))
 }
 

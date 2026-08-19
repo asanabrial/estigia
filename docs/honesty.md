@@ -628,13 +628,34 @@ suite. Everything else here is prose held by review.
   honest attribution and not the flattering one.
 
   And the crossing catches a stale fragment **only where nothing else already matches the path**.
-  Measured by staling each of the eleven in turn: it reddens for eight and stays green for three —
-  continue, cline and windsurf, whose paths the rules-directory entries cover independently.
-  OpenCode's *is* caught, because the crossing walks the relocated `XDG_CONFIG_HOME` layout where
-  nothing else matches `<moved>/opencode/AGENTS.md`. All eleven are caught by
-  `the_spelled_instruction_files_and_the_adapter_table_agree`, which reads the spelled list against
-  the table. Three drafts of this sentence were wrong — it was deleted with the version of the fix it
-  described, restored saying four, and inverted to read as though eight was the small number.
+  Measured by staling each of the eleven in turn — last component replaced, directory kept — and
+  running the crossing on its own. At the base it reddened for eight and stayed green for three:
+  continue, cline and windsurf, whose paths their rules directories cover independently. **At this
+  head it reddens for one and stays green for ten**, and the one is cursor.
+
+  That is a **cost of the per-project entries**, not a mistake in them, and naming it is the only
+  reason this paragraph exists. `claude.md`, `agents.md`, `gemini.md`, `qwen.md` and `crush.md` are
+  matched as whole segments at any depth, and every adapter's **home** instruction file is named
+  exactly one of those — `~/.claude/CLAUDE.md`, `~/.agents/AGENTS.md`, `~/.codex/AGENTS.md`,
+  `<xdg>/opencode/AGENTS.md`, `~/.gemini/GEMINI.md`, `~/.qwen/QWEN.md`, `<xdg>/crush/CRUSH.md`. So
+  seven fragments the crossing used to hold are now covered incidentally by a literal that has
+  nothing to do with them, on top of the three their rules directories already covered. Cursor is the one left
+  because `estigia-workflow-authority.md` is neither a per-project root file name nor inside a rules
+  directory this crate derives. Three other fragments are not root file names either —
+  `.continue/rules/estigia.md`, `.cline/rules/estigia.md` and `windsurf/memories/global_rules.md` —
+  and they were already covered by their own derived directories, which is the three the base
+  measurement named.
+
+  Nothing is thereby unguarded, and that was measured rather than assumed:
+  `the_spelled_instruction_files_and_the_adapter_table_agree` was run against the same eleven
+  stalings and **reddens for all eleven**. What narrowed is the crossing's own diagnostic value, and
+  this document is the only place that would say so.
+  OpenCode's *was* caught at the base, because the crossing walks the relocated `XDG_CONFIG_HOME`
+  layout where nothing else matched `<moved>/opencode/AGENTS.md`. Four drafts of this sentence have
+  been wrong now — it was deleted with the version of the fix it described, restored saying four,
+  inverted to read as though eight was the small number, and then re-asserted at issue 36 as a
+  re-measurement that had in fact re-run only three of the eleven and reasoned about the rest. A
+  blind reviewer of that head ran all eleven and found one.
 
   **What the missing dimensions were hiding.**
   `%APPDATA%\gemini\settings.json` — where this harness registers Gemini's own deny hook — answered
@@ -659,6 +680,13 @@ suite. Everything else here is prose held by review.
   population because the restated rule covers them, not because this crate has verified the
   read-whole behaviour. A first draft of this paragraph claimed all four were documented; a reviewer
   read `paths_in` and found two.
+
+  Three of those four were hand-spelled entries until issue 36 and are derived now. The weaker basis
+  is unchanged by that and is worth restating rather than losing in the move: what the derivation
+  makes impossible is a directory drifting from the file inside it, and what it still cannot do is
+  check whether a host reads a directory whole. That is a fact about somebody else's product, and the
+  `match` behind `instruction_directory_fragment` forces the **question** to be answered for a new
+  adapter, never the answer to be right.
 
   **The cost, which the population's own declaration understated.** That declaration says a false
   positive costs one tracker read "and that is the direction this chooses on purpose", illustrated by
@@ -914,8 +942,16 @@ suite. Everything else here is prose held by review.
   `<repo>/.cursor/rules/*`, `<repo>/.cline/rules/*`, `<repo>/.continue/rules/*` and
   `<repo>/.claude/settings.local.json` are `Boundary` now. A project that keeps its own agent
   definitions or rules pays a live tracker read on every write to them. This crate ships agent
-  definitions under `skill/agents/`, which is not one of those paths — measured, no file tracked in
-  this repository trips any fragment today.
+  definitions under `skill/agents/`, which is not one of those paths — and at the head this paragraph
+  was written for, no file tracked in this repository tripped any fragment.
+
+  That last clause stopped being true at issue 36, and the change is deliberate rather than
+  incidental: `<repo>/CLAUDE.md` and `<repo>/AGENTS.md` are `Boundary` now, which is **two** of this
+  repository's own tracked files, measured by classifying every path `git ls-files` reports.
+  `<repo>/.claude/plugins/**` joins the list above in the same change and is not in it, because that
+  list was written for issue 26. A run
+  holding a claim that edits this repository's own instructions pays one tracker read for the
+  privilege, which is the honest price of the rule the sentence above states.
 
   **Two things this change leaves open, both measured by reviewers of it.**
 
@@ -925,26 +961,53 @@ suite. Everything else here is prose held by review.
   written row happens to sit under it. Measured, one adapter at a time, each widened to its bare
   directory and the full suite re-run:
 
-  - `crush/crush.md` → `crush/` **reddens** — `the_declared_over_gating_is_the_shape_the_document_names`
-    names `vendor/mycrush/crush.md`. So does `.cursor/estigia-workflow-authority.md` → `.cursor/`,
-    through the `.cursor/rulesets.md` row in the ends-alike fixture. `gemini/gemini.md` and
-    `opencode/agents.md` are covered by the same over-gating fixture.
-  - **Two** are silent, measured one at a time with the full suite: `.qwen/qwen.md` → `.qwen/` and
-    `.cline/rules/estigia.md` → `.cline/` leave every test green. Nothing in this crate names a path
-    under those two directories in the `Routine` direction. This list has now said *one*, then *four*,
-    then two — the four was true until `the_suffix_ladder_does_not_synthesise_a_path` landed in this
-    same branch and began catching `.agents/` and `.codex/`, and nobody re-ran it. Both re-counts came
-    from a reviewer rather than from this repository.
+  - **Eight** redden: `.agents/agents` → `.agents/`, `.claude/claude` → `.claude/`, `.codex/agents` →
+    `.codex/`, `opencode/agents.md` → `opencode/`, `.cursor/estigia-workflow-authority.md` →
+    `.cursor/`, `.continue/rules/estigia.md` → `.continue/`, `.cline/rules/estigia.md` → `.cline/`
+    and `windsurf/memories/global_rules.md` → `windsurf/`. Cline's is caught by
+    `a_gated_rules_directory_is_the_instruction_fragment_truncated` rather than by an over-gating
+    fixture — coverage arriving from the under-gating side, which is worth distinguishing because it
+    holds the *derivation* and not the width.
+  - **Three** are silent, each widened on its own with the full suite re-run: `.qwen/qwen.md` →
+    `.qwen/`, `gemini/gemini.md` → `gemini/` and `crush/crush.md` → `crush/`. Nothing in this crate
+    names a path under those three directories in the `Routine` direction.
 
-  The earlier draft of this paragraph used crush as its example of the silent case, which stopped
-  being true in the same change that added the fixture above; qwen is the measurement now. The
-  under-gating direction is crossed against `resolve_paths` for all eleven adapters. This one is
+    A draft of this bullet at issue 36 said **one**, and named crush and gemini in the bullet above
+    as reddening *through* `the_declared_over_gating_is_the_shape_the_document_names`. Blind reviewers
+    re-ran the widening and it is not so. A second draft then explained the silence by saying the
+    widening makes those fixture rows answer `Routine`, and reviewers of *that* head measured it
+    false in both halves: `/repo/vendor/mycrush/crush.md` and `/repo/vendor/mygemini/gemini.md` stay
+    `Boundary` under the widening — held by the `crush.md` and `gemini.md` entries this same change
+    added, which match a whole segment at any depth — and a row that *did* flip would turn that
+    fixture **red**, not leave it green, because the fixture asserts `Boundary`. Measured on windsurf,
+    where the row does flip: `~/.codeium/notwindsurf/memories/global_rules.md` goes `Routine` and the
+    fixture reddens, which is why windsurf is in the eight.
+
+    So there is no special mechanism here, and the two sentences that claimed one are gone. Crush and
+    gemini are silent for the ordinary reason the bullet above states for all three: nothing in this
+    crate names a path under those directories in the `Routine` direction.
+
+    One consequence is worth keeping, because it is a coverage fact rather than an explanation: those
+    two fixture rows are now **double-covered**, by the unanchored file fragment and by the
+    per-project entry. Deleting `crush.md` alone leaves that fixture green — the entry is still held,
+    by `a_projects_own_always_loaded_rules_are_a_boundary`, but the row whose comment describes the
+    unanchored shape no longer isolates it.
+
+    This list has now said *one*, then *four*, then two, then one, then three. The four was true
+    until `the_suffix_ladder_does_not_synthesise_a_path` landed and began catching `.agents/` and
+    `.codex/`, and nobody re-ran it. Every re-count but the first came from a reviewer rather than
+    from this repository, which is the honest attribution and the argument for deriving this
+    direction rather than counting it again.
+
+  The under-gating direction is crossed against `resolve_paths` for all eleven adapters. This one is
   crossed against nothing, and the coverage it has is incidental rather than derived.
 
   And the **containing** directories are `Routine` on both roads while their contents are now
-  `Boundary`: `~/.claude`, `~/.claude/skills`, `~/.codex`, `~/.cursor`, `~/.qwen`, `~/.agents`,
+  `Boundary`: `~/.claude`, `~/.codex`, `~/.cursor`, `~/.qwen`, `~/.agents`,
   `~/.gemini`, `~/.cline`, `~/.continue`, `~/.codeium`, `~/.codeium/windsurf`, `~/.config/crush`,
-  `~/.config/gh`. So a single recursive delete of `~/.claude` — taking the settings file the gate is
+  `~/.config/gh`. `~/.claude/skills` was in that list and is not any more: issue 36 derives the skills
+  tree per adapter, so `~/.claude/skills`, `~/.agents/skills` and `~/.codex/skills` are `Boundary`
+  themselves. So a single recursive delete of `~/.claude` — taking the settings file the gate is
   registered in, the workflow-authority directive, the agent definitions and the installed contract —
   answers `Routine`, and being outside every checkout it is answered by `outside-the-claim` before the
   tracker is asked. Identical at the base commit, so not a regression; recorded because *this* change
@@ -987,10 +1050,11 @@ suite. Everything else here is prose held by review.
   change does not touch — `src/harness/shell.rs` is byte-identical between the two commits. `wget
   "-O<path>"` is a `Boundary` in the same spelling, which is what makes the asymmetry visible.
 
-  Still `Routine`, and not closed here: a project's own `AGENTS.md` or `CLAUDE.md` at its root,
-  `.cursorrules`, `.clinerules`, `.windsurfrules`, `.github/copilot-instructions.md` and `.mcp.json`.
+  Still `Routine` at the head this paragraph was written for, and **closed by issue 36**: a project's
+  own `AGENTS.md` or `CLAUDE.md` at its root, `.cursorrules`, `.clinerules`, `.windsurfrules`,
+  `.github/copilot-instructions.md` and `.mcp.json`.
   They carry the same always-loaded authority, and they are **inside** a checkout, so they stay
-  measured against the claim rather than standing aside — which is why they are a smaller thing than
+  measured against the claim rather than standing aside — which is why they were a smaller thing than
   what this issue closed, not the same thing. `harness::roles::definition_for` reads its **five**
   definition roots from a hand-spelled list that nothing crosses against the gate. All five answer
   `Boundary` today and a sixth would not — but that sentence said *four*, and said it while one of
@@ -1145,6 +1209,150 @@ suite. Everything else here is prose held by review.
   filtered run in a cold tree, which is exactly how every mutation measurement in this document is
   taken. Issue #22 removed the skip from the rig's type; `cargo clippy --all-targets` remains no help
   there, leaving a `.d` and a zero-byte `.rmeta`.
+
+- **The gate named what Estigia writes, and the host reads further than that.** Issue 36, and it is
+  the layer immediately outside the one above. Issue 26 closed the class for the instruction file each
+  adapter's `setup` authors and for four rules directories; a reviewer of that change walked one step
+  further out and found the same shape in three places it did not reach.
+
+  **The mechanism, which is the half with teeth.** The instruction *file* is derived from the adapter
+  table; the four rules *directories* were hand-spelled. So a twelfth adapter's directive was gated
+  with no edit to any list and its rules directory was not — measured with an `acme` adapter whose
+  instructions resolved to `~/.acme/rules/estigia.md`, whose neighbour `zz-override.md` answered
+  `Routine` with the whole suite green. Three of the four are derived now, by truncating the fragment
+  the adapter already declares, behind a `match` with **no wildcard arm**: a new `InstructionFile`
+  variant does not compile until its author answers whether that host reads the directory whole.
+  `agents_root` had the same defect in the more usual spelling — `match adapter.slug` with `_ => None`,
+  and a `&str` match can never be exhaustive — so it moved onto the same enum.
+
+  What that buys is bounded, and the bound is the interesting part: the compiler forces the
+  **question** for every future adapter and can never check the **answer**, because whether a host
+  loads every file in a directory is a fact about somebody else's product. `.cursor/rules/` stays a
+  hand-spelled literal for a reason of the same kind — Estigia writes no file into it, so there is no
+  fragment to truncate — and the entry says so rather than leaving the asymmetry to be rediscovered.
+
+  **The two decisions, taken as sets.** The remaining items were enumerations rather than mechanisms,
+  and the issue asked for them to be decided together rather than one path at a time. They were, on
+  one stated principle: *a path is on the control surface when a host loads it without a person
+  choosing it at the moment of use*. Under it, the skills tree around Estigia's own installed contract
+  (derived per adapter from the same field that decides where the installer writes), plugin payloads,
+  commands and prompts, the Gemini and Qwen extension roots, Continue's assistant configuration and
+  Windsurf's MCP file and workflows all join — and so do the per-project twins, including a project's
+  own root `CLAUDE.md`, `AGENTS.md`, `.clinerules` and `.windsurf/rules`, which the previous line
+  excluded by nothing better than which home fragment happened to carry a dotted prefix.
+
+  The commands and prompts directories are the one row where the principle is doing visible work
+  rather than confirming an obvious answer. A slash command is invoked explicitly, which is the
+  weaker authority the issue itself noted; its name and description are put in front of the agent
+  whether or not it ever is, which is the always-loaded half. Deciding that per directory is the
+  reasoning that left the class open in the first place, so the principle decides it.
+
+  **What it costs, measured.** Every path `git ls-files` reports was classified: **two** of this
+  repository's own tracked files are `Boundary` now, `CLAUDE.md` and `AGENTS.md`. A run holding a
+  claim that edits this repository's instructions pays one live tracker read for it. A run holding no
+  claim is `Outside` and pays nothing.
+
+  That count is the **write** road only, and it understates the roads that read prose. Two of them
+  do. `apply_patch` and `patch` put the path in a patch body, so `classify_with` reads the whole
+  payload: a patch to `README.md` whose body contains *see AGENTS.md for the rules* is `Boundary`,
+  and the same patch without the mention is `Routine`. And a **shell** line pays it too, whenever the
+  command is already one `writes_a_file` recognises. Measured, each against its own control:
+
+  ```
+  Routine   git commit -m "update AGENTS.md"          Routine   echo see CLAUDE.md
+  Routine   grep -rn agents.md src                    Routine   echo hi > /repo/notes.txt
+  Boundary  echo 'see AGENTS.md' > /repo/notes.txt
+  Boundary  rm -rf /tmp/scratch # see AGENTS.md
+  Boundary  sed -i 's/x/y/' /repo/notes.txt # per AGENTS.md
+  ```
+
+  So the rule is not *which agent* but *whether the line writes at all*: a command that is not a write
+  never reaches the matcher, and one that is pays for every control-surface name anywhere in its text,
+  including a trailing comment. Two reviewers measured the writing half and one measured the
+  non-writing half and read the scope as accurate; both are right about their own examples, and this
+  is the statement that covers both. No count in this document covers this road.
+
+  **What is still open, and none of it is closed by this entry.**
+
+  - The matcher grew a third anchoring rule — a fragment holding no separator is a whole segment,
+    without which `agents.md` reaches `myagents.md` — and it anchors only the **left** side. So
+    `<repo>/AGENTS.md.bak` and `<repo>/CLAUDE.md.orig` are `Boundary`, as `.claude/settings` already
+    reached `.claude/settingsmap.ts`. Deliberate and the same trade: the right side is where
+    `settings.local.json` and `CLAUDE.local.md` live, and trimming to reach them is why those entries
+    are prefixes at all.
+  - `.continue/config` is trimmed to reach `config.yaml`, `config.json` and `config.ts` under one
+    stem, so `~/.continue/configuration-notes.md` is `Boundary` too.
+  - `<repo>/.opencode/plugins` is still `Routine`, unchanged and named in the entry above. Estigia
+    reads nothing from a project-local plugin directory, which is the stated reason and not a
+    measurement.
+  - The over-gating direction is still not derived from the adapter table. How many adapters are
+    silent when their fragment is widened is measured in the paragraph above and stated **only**
+    there — this bullet used to repeat the number and the two disagreed after the count was corrected
+    in one place. One fact, one place.
+  - A host that reads a directory whole and is declared not to is invisible here, in exactly the way
+    the four hand-spelled entries were invisible for the adapters nobody thought of. The declaration
+    moved from a distant list onto the adapter; it did not become checkable.
+  - **Only one of the two derived families is compiler-forced.** `instruction_directory_fragment`
+    matches `InstructionFile`, so a twelfth adapter cannot skip it; `skills_root_fragment` matches
+    `SkillsRoot`, whose three variants are all enumerated — but a twelfth adapter picks an existing
+    one, so nothing is forced there. Correct as written and worth knowing before reading the second as
+    carrying the same teeth as the first.
+  - **The derivation discards one shape without a word.** `instruction_directory_fragment` ends in
+    `fragment.rfind('/').map(…)`, so an adapter that answers *this host reads the directory whole* with
+    a separator-free fragment gets `None` back, and
+    `a_gated_rules_directory_is_the_instruction_fragment_truncated` skips a `None`. Unreachable with
+    the eleven fragments that exist — all have separators — and `None` is arguably right there, since
+    the "directory" would be the home root. It is named because it is the one place in a method whose
+    stated point is *no wildcard arm* where an answer is dropped silently.
+  - **Plugin-provided sub-agent definitions are the same shape as `.opencode/agent/`.**
+    `~/.claude/plugins/**/agents/*.md` is a `Boundary` now and `roles::definition_for` does not search
+    it, so such a definition is `Ok(None)` on read, which `declared_policy` reads as *every tool
+    allowed*. Gated against being written, not read when enforcing.
+  - The over-gating this change adds is declared **by shape, not by instance**: left-anchored only, a
+    whole segment at any depth, and `.clinerules` / `.continue/config` as prefixes. Instances a
+    reviewer measured beyond the fixture's rows — `/repo/.cursorrules-old`, `/repo/.windsurfrules.bak`,
+    `/repo/.github/copilot-instructions.md.bak`, `/repo/target/doc/qwen.md`, `/repo/qwen.mdx`,
+    `/repo/vendor/gemini/extensions/pack/manifest.json` — each follow one of those shapes. The fixture
+    holds representatives, not the family.
+  - **This change narrowed the crossing's own diagnostic value**, and the paragraph on staling the
+    eleven fragments carries the measurement: from eight of eleven caught to one, because the
+    per-project entries also match every adapter's home instruction file. Nothing is unguarded —
+    `the_spelled_instruction_files_and_the_adapter_table_agree` reddens for all eleven — but a
+    reviewer relying on the crossing to catch a stale fragment now has one adapter's worth of signal.
+  - `.opencode/agent/` — the singular spelling — is a `Boundary` now, and
+    `roles::definition_for` still searches only `.opencode/agents` beside `.claude/agents`. So a
+    sub-agent defined in the singular directory is gated against being written and is still
+    `Ok(None)` when read, which `declared_policy` reads as *every tool allowed*. This change closed
+    the gate half of a one-letter asymmetry and left the enforcement half; the sentence above about
+    five definition roots is not falsified, but a sixth spelling is known now and is not searched.
+  - **Other wildcards of the `agents_root` shape survive.** Adding a twelfth `InstructionFile`
+    variant fails to compile in five places, and **eight** `_` arms on that enum then hand it a
+    default nobody chose. Read by hand with `grep`, and that is the limit of the claim — nothing
+    derives this list, so it is a reading and not a measurement, and an earlier draft that said these
+    were *named rather than implied* named five of the eight:
+
+    | where | arm | reachable by a twelfth adapter |
+    |---|---|---|
+    | `setup/mod.rs` `hooks` | `_ => return None` | only behind `gate_spec` |
+    | `setup/mod.rs` `plugin` | `_ => None` | yes |
+    | `setup/mod.rs` `apply`'s plugin body | `_ => plugin::source(…)` | only behind `plugin` |
+    | `setup/mod.rs` `model_profiles` | `_ => &[]` | yes, and advisory |
+    | `setup/mod.rs` `model_catalog` | `_ => …None` | yes, and advisory |
+    | `setup/render.rs` `gate_spec` | `_ => None` | yes, and caught behaviourally |
+    | `setup/render.rs` `gate_gap` | `_ => "no published reference…"` | yes, and the text is benign |
+    | `setup/render.rs` `mcp_format` | `_ => McpFormat::McpServers` | **yes, and it has teeth** |
+
+    `mcp_format` is the one that is *not* narrower than the defect this change closed, and three
+    reviewers found it independently. `mcp_config` is one of the five the compiler forces, so a
+    twelfth adapter's author is made to choose an MCP file — and the moment they answer `Some`, the
+    **dialect** written into it comes from a wildcard. Nothing crosses it: no test asserts the format
+    for an adapter that does not already have one. `paths_in`'s own comment beside `mcp_config` is the
+    argument against it — *an MCP entry written where the agent does not read it reports success and
+    configures nothing; a wrong path is worse than a missing one, because it fails while claiming to
+    have worked* — and a wrong dialect in the right file fails the same way.
+    `gate_spec`'s default is caught behaviourally by
+    `the_only_thing_without_a_gate_is_the_thing_that_is_not_an_agent`. None of the eight is closed
+    here.
 
 - **A skip spelled as a pass, in the places issue #22 did not reach.** That issue took the skip out of
   `tracker_rig`'s *type*, so no caller of it can be handed a value meaning *did not run*. Two other

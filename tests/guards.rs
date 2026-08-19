@@ -615,7 +615,42 @@ const AFFIRMED: &[(&str, u64)] = &[
     // watched. A definition not found is `Ok(None)`, which `declared_policy`
     // reads as *every tool allowed*, so the file that writes an agent its own
     // allowlist was the one riding the renewal window.
-    ("control-surface", 2144014802560117266),
+    // Reopened 2026-08-15 by issue 36, and this time by the **shape** of the list
+    // rather than by any one member. Read against the declaration and affirmed:
+    // the rule is unchanged — *any path a write to which changes what this
+    // harness enforces, or what an agent is told this harness may enforce* — and
+    // the population is wider in three ways, each of which the rule as stated
+    // already covered while the list did not.
+    //
+    // - Three members **left** this list and are not a loosening. `.cline/rules/`,
+    //   `.continue/rules/` and `windsurf/memories/` are derived now, by truncating
+    //   the instruction fragment each of those adapters already declares, and
+    //   `a_gated_rules_directory_is_the_instruction_fragment_truncated` reads the
+    //   claim rather than trusting it. Hand-spelling them closed the class for the
+    //   adapters somebody thought of: measured with a twelfth adapter resolving to
+    //   `~/.acme/rules/estigia.md`, its directive was `Boundary` and its neighbour
+    //   `Routine`, with the whole suite green. The `match` behind the derivation
+    //   has no wildcard arm, so the next adapter cannot compile without answering.
+    //   `.cursor/rules/` stayed a literal and says why: Estigia writes no file into
+    //   it, so there is no fragment to truncate.
+    // - What the **host reads**, beside what this installer writes — the skills
+    //   trees (derived from the same field that decides where the installer
+    //   writes), plugins, commands and prompts, the Gemini and Qwen extension
+    //   roots, Continue's assistant configuration, Windsurf's MCP file and
+    //   workflows. Decided as a set on one principle rather than one path at a
+    //   time: a path is here when a host loads it **without a person choosing it at
+    //   the moment of use**. That is why the commands directories are in despite
+    //   being explicitly invoked — their names and descriptions are put in front of
+    //   the agent whether or not they ever are.
+    // - The **per-project** twins, including this repository's own root
+    //   `CLAUDE.md`. There was no principle by which `<repo>/.claude/CLAUDE.md` was
+    //   a boundary and the file Claude Code loads by default was not; the line was
+    //   drawn by which home-path fragment happened to carry a dotted prefix.
+    //
+    // The matcher grew a third anchoring rule with them — a fragment holding no
+    // separator is a whole segment — and that is the matcher rather than the rule,
+    // so it is recorded here and does not by itself reopen anything.
+    ("control-surface", 8974379144280019162),
     // Reopened 2026-08-05 by measuring the enumeration instead of reading it.
     // Thirty command lines that visibly put bytes on disk were classified and
     // twenty-six came back Untouched, among them "wget -O src/main.rs URL" —
