@@ -329,7 +329,7 @@ WRITE  record_review_verdict (issue, run_id, reviewer, epoch, pr, head, base, di
 WRITE  release_ci       (issue, run_id, epoch, pr, head, base, digest)
 ```
 
-Twenty-two tools. The contract names nineteen operations every binding must map; four are not exposed and each says
+Twenty-two tools. The contract names twenty operations every binding must map; four are not exposed and each says
 why in `NOT_EXPOSED` — `publish_version` and `close` are declared *(agent, not scripted)* upstream,
 `last_activity` maps to a raw `gh` call rather than the transport, and `label` is not mapped by the
 GitHub binding at all. A seam test holds the two lists together: an operation that is neither

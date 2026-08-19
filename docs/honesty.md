@@ -503,8 +503,40 @@ suite. Everything else here is prose held by review.
   read those bytes or that their verdicts were honest. A marker can still be forged by a collaborator
   acting outside Estigia. `single`, `two blind` and `five blind` remain operator-selected review
   contracts, not observations the harness can make. The enforced floor remains
-  one aggregate exact-receipt verdict: the transport has no per-judge marker and does not implement structured
-  multi-verdict adjudication.
+  one aggregate exact-receipt verdict: the transport has no per-judge **verdict** marker and does not
+  implement multi-verdict adjudication. Since issue #46 it does have a per-finding marker, credited to
+  a named reviewer and bound to the exact receipt — so the *evidence* a panel produced can be recorded
+  separately even though the *verdict* it reduces to cannot. Counting those findings into a quorum is
+  still the orchestrator's, and the entry below says what that record does and does not carry.
+
+- **A structured finding is a legible claim, not a checked one.** `record_review_finding` refuses a
+  class outside `severe`/`warning`/`suggestion`, a finding missing its identity, evidence or impact, a
+  receipt that is not the current one, and — across a repair — a parent identity the parent epoch never
+  recorded or a new severe finding that states no origin. `record_review_verdict` refuses `rejected`
+  unless that reviewer already recorded a `severe` finding against that exact receipt.
+
+  Every one of those is a check on **shape and reference**. Nothing here can check that a `severe`
+  finding is severe, that a `suggestion` is not a defect in disguise, that the stated evidence
+  reproduces, that the impact is real, or that a repair `introduced` what its reviewer says it did. A
+  reviewer that classifies every preference as `severe` clears the rule exactly as a reviewer that
+  reads carefully does; what changed is that the claim is now written down where somebody can argue
+  with it, not that anybody did.
+
+  Two narrower limits, both worth stating because the words invite the opposite reading:
+
+  - **A finding identity is agreement by spelling.** Two judges "confirming the same finding" means
+    two markers carrying the same `id` string. Estigia does not compare evidence, locations or
+    behaviour, so two judges that describe one defect differently do not aggregate, and two that reuse
+    one identity for different defects do. The policy asks reviewers to derive the identity from the
+    affected behaviour and location; nothing measures whether they did.
+  - **The fix-delta digest names a repair; it does not scope a review.** A publication over an earlier
+    one records the parent epoch, the parent head and a digest covering both ends, derived from the
+    timeline rather than supplied by the run being reviewed — that half is real, and a caller cannot
+    name a parent it prefers. But Estigia does not compute the diff between those heads, does not hand
+    it to a judge, does not restrict what a judge reads, and cannot tell a delta-scoped re-review from
+    a full-target resweep. `parent_head..head` is a pair of SHAs a reviewer can act on. Whether one did
+    is unmeasured, and issue #46's acceptance criterion about delta-scoped judgement is met by the
+    *record*, not by an enforcement.
 
   **Judge isolation outside the reserved role is unproved, and the asymmetry is measured.** A judge
   launched under the reserved `review-blind` type cannot write at all, and that half is checkable: the

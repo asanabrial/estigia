@@ -12,6 +12,38 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **A rejection now rests on a severe finding, and a repair records what it repairs.** Durable review
+  evidence reduced every observation a reviewer could make to one bit. A preference about a word cost
+  exactly what a reproducible correctness defect cost: a rejection, a republish, a new epoch and a full
+  re-review of work that was already settled. This repository paid that on its own deliveries, and
+  afterwards the tracker could not tell the two apart.
+
+  `record_review_finding` is a new operation — the twenty-second — writing one immutable marker per
+  finding, bound to the exact publication receipt, carrying an identity, concrete evidence, stated
+  material impact and one of `severe`, `warning` or `suggestion`. It refuses a finding missing any of
+  the three, because a classification that cannot be re-run cannot be checked and one with no stated
+  impact cannot be weighed. `record_review_verdict` then refuses `rejected` unless **that reviewer**
+  has recorded a `severe` finding against that exact receipt — the reviewer's own findings, not the
+  panel's pool, since two contexts each holding one suspicion is not one confirmed defect. An
+  acceptance carrying warnings and suggestions is still an acceptance and still releases CI.
+
+  Operational failures deliberately keep their existing fail-closed refusals. A missing reviewer, an
+  unreadable target or a stale receipt is not a review finding, and recording an outage as a cosmetic
+  acceptance is the mislabelling this rule exists to stop.
+
+  The second half is lineage. A publication over an earlier one records the parent epoch, the parent
+  head and a delta digest covering both ends — **derived from the timeline, never supplied by the run
+  being reviewed**, because a run that could name its own parent could name the epoch whose findings
+  were mildest. The parent's findings stay where they are; nothing rewrites them. What a re-review owes
+  is the reference: a finding that reassesses one names it, and the name must exist against the parent
+  epoch; a `severe` finding new to the repair states whether the repair `introduced` the defect or
+  `exposed` one already there. A warning or a suggestion new to a repair owes nothing, because pricing
+  the cheap observation is the defect this whole change repairs.
+
+  What is checked is shape and reference. Nothing here can tell whether a `severe` finding is severe
+  or whether a repair introduced what its reviewer says it did, and the delta digest names a repair
+  rather than scoping a review — `docs/honesty.md` carries both limits in those words.
+
 - **A transition to the state an issue already holds no longer strips its state label, and a
   read-back that disagrees no longer says nothing was written.** `transition` appended the removal
   whichever state `--from` named, so `--from done --to done` built

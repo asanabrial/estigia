@@ -71,6 +71,47 @@ re-derived from a coherent clean snapshot and a dirty path is refused before pub
 so that outcome is a blocked release rather than a bad delivery — a refusal that already existed and
 is not produced by anything written here.
 
+## What a finding is
+
+A verdict is one bit and a review is not. Every observation worth carrying is recorded as its own
+finding with `review_finding`, bound to the exact publication receipt, before the aggregate verdict is
+recorded. Each one carries an identity, concrete evidence, stated material impact, and exactly one
+class:
+
+| Class | What it means | What it costs |
+|---|---|---|
+| `severe` | A reproducible correctness, security, reliability or contract defect with concrete user or delivery impact | It can block, and only it can |
+| `warning` | A bounded risk with no demonstrated incorrectness | Recorded beside the verdict; never withdraws an acceptance |
+| `suggestion` | Optional improvement, cosmetic wording, style, preference | The same |
+
+**Cosmetic, style and preference observations are `suggestion`** unless they identify a concrete
+defect, in which case say which one and classify it as that.
+
+**The precision gate.** If concrete evidence and material impact cannot both be stated, omit the
+observation or keep it as a non-blocking note. A classification with no evidence cannot be re-run and
+one with no stated impact cannot be weighed, and either is a preference wearing the word `severe`.
+`record_review_finding` refuses a finding missing any of the three.
+
+**The identity is chosen from the affected behaviour and location**, never from the run or the
+wording. That is what lets two judges reporting the same defect count as agreeing rather than as two
+defects, and what lets a repair name what it answers.
+
+### Single
+
+| What the reviewer found | The verdict |
+|---|---|
+| At least one `severe` finding | `rejected` |
+| Only warnings and suggestions | `accepted`, with those notes preserved against the receipt |
+| Nothing | `accepted` |
+
+**Mechanically enforced.** `record_review_verdict` refuses `rejected` unless that reviewer has already
+recorded a `severe` finding against the exact receipt — the reviewer's own findings, not the panel's
+pool. Two contexts each holding one suspicion is not one confirmed defect.
+
+Operational failures are not review findings and keep their own fail-closed refusals: a missing
+reviewer, an unreadable target, a stale receipt or a target mismatch is a hold, and recording one as a
+cosmetic acceptance is the mislabelling this table exists to stop.
+
 ## What agreement buys
 
 | Outcome | What follows |
@@ -87,6 +128,12 @@ branch, PR, frozen receipt, both verdicts, and other evidence already built.
 A finding only one judge saw is not discarded; it remains a suspicion with which judge saw it.
 Warnings and suggestions are recorded and not acted on automatically.
 
+*Confirm* means both judges recorded a `severe` finding **with the same identity** against the same
+receipt. Two severe findings with different identities are two findings, each with one confirmation;
+under this mode neither authorises an automatic repair. Estigia records each judge's findings and
+counts nothing: quorum is the orchestrator's to apply, and the section at the end of this document
+says so rather than implying otherwise.
+
 ### Five blind
 
 Launch five independent reviewer contexts concurrently over the identical immutable target and criteria.
@@ -100,6 +147,36 @@ After either blind mode, record one aggregate exact-receipt verdict, not one mar
 A confirmed finding is fixed, and the fix produces an immutable delta that the judges read again —
 the same freeze, the same blindness, the same rules.
 
+### What a repair carries
+
+Republishing mints a new epoch and invalidates every prior verdict, which is what stops reviewed bytes
+being delivered as unreviewed ones. What it must not also do is throw away what the last round
+settled.
+
+A publication over an earlier one records, **derived from the timeline and never supplied by the run
+being reviewed**, the parent epoch, the parent head, and a delta digest covering both ends. A run that
+could name its own parent could name the epoch whose findings were mildest. `parent_head..head` is the
+delta; Estigia records the two ends and does not compute the diff, scope the review to it, or check
+that a judge read only it.
+
+The parent's findings stay on the timeline. Preserving settled work is not an operation — nothing
+rewrites those markers — so what a re-review owes is the *reference*:
+
+| The finding | What it must say |
+|---|---|
+| Reassesses one the parent ledger holds | `--parent <that identity>`, which must exist against the parent epoch |
+| Is `severe` and new to this repair | `--origin introduced` if the repair created it, `--origin exposed` if the repair made an existing defect reachable |
+| Is a warning or a suggestion new to this repair | Nothing. Pricing the cheap observation is the defect this whole mechanism repairs |
+
+Both are refused when absent, which is what keeps a full-target resweep that rediscovers or rephrases
+settled work from arriving indistinguishable from a defect the repair caused. What Estigia adjudicates
+is that the reference exists and the origin is one of the two words. Whether it is *true* is the
+reviewer's claim, like every other field here.
+
+Delivery identity is untouched by any of this. `release_ci` still re-derives the coherent clean target
+and matches the complete current head, base and digest. A lineage says what a repair descends from; it
+never becomes the thing that is delivered.
+
 **At most two fix rounds in one lineage.** A third round is not a fix; it is a change that has not
 converged, and it goes to `blocked` for a named person's decision. Before releasing ownership, record
 that decision or exact exit condition and discharger, the branch, PR, latest receipt, both rounds'
@@ -110,15 +187,25 @@ measuring.
 ## What Estigia enforces here, and what it does not
 
 **Enforced, mechanically:** the draft barrier, one aggregate exact-receipt verdict, the exact
-publication receipt, Claude's reserved-role prelaunch checks, and the **publication lane refusal** —
+publication receipt, Claude's reserved-role prelaunch checks, the **publication lane refusal** —
 `record_review_verdict` will not bank an accepted verdict for a head whose dispatched CI lane is red or
-still running. Nothing proves panel execution.
+still running — the **severity rule**, which refuses `rejected` without that reviewer's own severe
+finding against that receipt, and the **lineage references**, which refuse a parent identity the
+parent epoch never recorded and a new severe finding against a repair that states no origin. Nothing
+proves panel execution.
 
 That is worth stating first and plainly. Estigia gates repository writes against an adjudicated
 claim. It cannot prove panel size, concurrency, independence, blindness, same-finding identity or
 quorum. It cannot see whether a context read the target, whether a verdict was honest, or whether two
 judges running outside the reserved role were given separate working directories. There is no
 hook that fires when a reviewer forms an opinion.
+
+The findings are the same kind of evidence and carry the same limit. Estigia adjudicates that a class
+is one of three words, that evidence and impact were stated, that a receipt is the current one and that
+a named parent exists. It cannot check that a `severe` finding is severe, that a `suggestion` is not a
+defect in disguise, that the evidence reproduces, that the impact is real, or that a repair `introduced`
+what its reviewer says it introduced. A structured claim is still a claim; what changed is that it is
+now legible enough to be argued with.
 
 `publish_review` keeps ordinary compatible CI behind a draft PR, records epoch/PR/head/base/digest, and
 starts one publication-lane run against the head it pushed. That last one is why the refusal above is

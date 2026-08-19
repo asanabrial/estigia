@@ -31,7 +31,7 @@ estigia config set "Merge strategy" squash
 | Integration | `branch`, or `trunk` |
 | Renewal window | `default`, or a shorter duration such as `30s` or `1m` |
 | Review protocol | `standard`, or `receipt-driven` (also accepted as `rdd`) |
-| Blind judges | `single`, `two blind`, or `five blind` |
+| Blind judges | `single`, `two blind`, or `five blind` — what each decides is the decision table in [`blind-judges.md`](../skill/policies/blind-judges.md), which every mode reads in the same finding vocabulary |
 | Change size | a number of lines, such as `800` |
 | Irreversible commands | `none`, or commands separated by commas |
 | Project board | `none`, or a board as `<owner>/<number>` |
