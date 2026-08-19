@@ -4077,6 +4077,17 @@ fn a_host_read_root_carries_the_same_authority_as_the_directive() {
         "/home/me/.gemini/extensions/pack/GEMINI.md",
         r"C:\Users\me\AppData\Roaming\gemini\extensions\pack\GEMINI.md",
         "/home/me/.qwen/extensions/pack/QWEN.md",
+        // And the manifests, which are the rows that actually hold these three
+        // entries. Two blind reviewers measured that deleting
+        // `.gemini/extensions/`, `gemini/extensions/` and `.qwen/extensions/`
+        // left the whole lib suite green: the rows above end in `GEMINI.md` and
+        // `QWEN.md`, so the per-project instruction fragments satisfy them and
+        // the entry under test is never the reason. The manifest is also the file
+        // carrying `excludeTools` and `mcpServers`, which is the enforcement half
+        // of why the directory is here at all.
+        "/home/me/.gemini/extensions/pack/gemini-extension.json",
+        r"C:\Users\me\AppData\Roaming\gemini\extensions\pack\gemini-extension.json",
+        "/home/me/.qwen/extensions/pack/qwen-extension.json",
         // Continue's assistant configuration, which carries `rules:` inline and
         // `mcpServers:` — the same rules `.continue/rules` holds, in another
         // shape, and only one of the two was gated.
@@ -4348,6 +4359,20 @@ fn the_declared_over_gating_is_the_shape_the_document_names() {
         // `.claude/settingsmap.ts`.
         "/repo/AGENTS.md.bak",
         "/repo/CLAUDE.md.orig",
+        "/repo/AGENTS.mdx",
+        "/repo/.mcp.json.bak",
+        // And the **depth** of the same fragments, which is deliberate — a rules
+        // file deeper in a tree is read the same way — but is paid for by every
+        // document that happens to be called one of these names. Two reviewers
+        // measured the width; the declaration had named only the right-hand side.
+        "/repo/docs/agents.md",
+        "/repo/docs/gemini.md",
+        "/repo/website/content/blog/qwen.md",
+        "/repo/node_modules/pkg/AGENTS.md",
+        // `.clinerules` is a prefix so that it reaches Cline's file *and* its
+        // directory, which is the same trade `.claude/settings` makes and was not
+        // declared beside it.
+        "/repo/.clinerules-archive/note.md",
         // And `.continue/config`, trimmed to one stem so it reaches `config.yaml`,
         // `config.json` and `config.ts` at once.
         "/home/me/.continue/configuration-notes.md",

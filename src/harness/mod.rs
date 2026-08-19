@@ -601,9 +601,17 @@ const CONTROL_SURFACE: &[&str] = &[
     // directory beside the plural `.opencode/agents/` already here. Two
     // directories one letter apart, and the gate reached one of them.
     ".opencode/agent/",
-    // The root instruction files, which carry no dotted directory to anchor them
-    // and are therefore the reason `anchored` reads a separator-free fragment as
-    // a whole segment. Without that, `agents.md` reaches `myagents.md`.
+    // The project instruction files, which carry no dotted directory to anchor
+    // them and are therefore the reason `anchored` reads a separator-free
+    // fragment as a whole segment. Without that, `agents.md` reaches
+    // `myagents.md`.
+    //
+    // A whole segment at **any** depth, not only at a root, and the difference is
+    // deliberate rather than a side effect: a rules file deeper in a tree is
+    // loaded the same way, and `<repo>/services/api/AGENTS.md` is asserted beside
+    // the root one. The cost is that a documentation page called `gemini.md` or
+    // `qwen.md` anywhere in any tree answers `Boundary`, which `docs/honesty.md`
+    // declares and a fixture holds rather than leaving it to be found.
     //
     // The `.local.` siblings are spelled out rather than reached by trimming the
     // extension. `agents.` would have covered both and would also have covered
