@@ -73,10 +73,20 @@ Five invariants, and the tests are named after them:
    `.git/estigia/` stay: uninstall takes an **agent** out and was never given a repository, so
    reaching into whichever checkout somebody happened to be standing in is the failure this design
    refuses — `config forget` is the one command that removes them, and it says which file it
-   removed. `~/.estigia/` stays for the same reason in the other direction: the screen's language,
-   the list of checkouts and machine-wide binary lifecycle evidence belong to the person rather than
-   to any adapter, and uninstalling one agent out of eleven must not take them. Both are measured by
-   `uninstall_leaves_the_checkouts_answers_and_the_list_of_checkouts`.
+   removed. Both are measured by `uninstall_leaves_the_checkouts_answers_and_the_list_of_checkouts`.
+
+   `~/.estigia/` splits the difference, and the line between the two halves is *live run state*
+   against *what the person keeps*. The run pointers, the ledger and any stand-down record who
+   holds what and what was last asked: they go with the **last** agent, so `uninstall --all` with
+   nothing left installed takes them — by name, and an empty directory only, so a file of the
+   operator's own keeps the directory. Taking them at that point is the operator's recorded
+   requirement and it is deliberate; taking them while any agent remains would silently strip a
+   live run of the file its gate reads, which is why a plain reinstall never touches them and
+   `setup` does not either. The machine-wide binary lifecycle evidence under `~/.estigia/lifecycle`
+   belongs to the person rather than to any adapter and is not named by the removal, so it stays
+   with whatever else is there. Both halves are measured by
+   `taking_estigia_out_takes_its_own_state_with_it_and_not_before` and
+   `a_live_run_pointer_survives_a_plain_reinstall`.
 
    A third leave is temporary: nine adapters share `~/.agents/skills`, so taking one of them out
    leaves the skill for the agents that remain and it goes with the last of them. The note that

@@ -1341,6 +1341,50 @@ fn a_run_record_that_cannot_be_read_is_an_unknown_rather_than_an_absence() {
 }
 
 #[test]
+fn a_pointer_that_will_not_open_is_an_unknown_rather_than_an_absence() {
+    // The sibling test above poses bytes that will not parse. This poses a
+    // pointer the filesystem refuses to read at all — issue #38's measured
+    // incident, reduced: a run's pointer is gone or unreadable while the
+    // tracker still names that run as holder, and the gate must not read the
+    // missing record as "this run swore nothing". A directory at the pointer
+    // path is the deterministic cross-platform spelling of a failed read that
+    // is not `NotFound`: the read fails on both platforms, with an error kind
+    // that is not absence.
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path());
+    std::fs::create_dir_all(&context.state_root).expect("the state directory");
+    std::fs::create_dir_all(context.state_root.join("claude-blocked0.json"))
+        .expect("a directory where the pointer should be");
+
+    let mut run = session::load(&context.state_root, "claude-blocked0");
+    assert!(
+        run.unreadable,
+        "a pointer the filesystem refuses to read was reported as a run that swore nothing"
+    );
+    assert!(
+        run.unreadable_reason
+            .as_deref()
+            .is_some_and(|why| why.contains("claude-blocked0.json")),
+        "the refusal carries no path, so nobody can find the file to look at: {:?}",
+        run.unreadable_reason
+    );
+
+    let action = Action::Write {
+        target: "src/x.rs".to_owned(),
+    };
+    match gate(&context, &mut run, &action, Sensitivity::Routine) {
+        Decision::Deny(refusal) => {
+            assert_eq!(refusal.code, "run-pointer-unreadable");
+            assert!(
+                refusal.to_string().contains("claude-blocked0.json"),
+                "the gate named no path for a record it could not read: {refusal}"
+            );
+        }
+        other => panic!("a failed read was read as clearance: {other:?}"),
+    }
+}
+
+#[test]
 fn the_predicate_the_other_tests_lean_on_answers_for_itself() {
     // Mutation testing found this one, and it is the sharpest of the twelve:
     // `denies()` is used by five assertions and by no shipping code, so

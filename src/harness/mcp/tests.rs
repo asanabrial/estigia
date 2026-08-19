@@ -678,6 +678,81 @@ fn a_record_nothing_can_read_stops_every_tool_that_names_a_run() {
 }
 
 #[test]
+fn a_record_that_will_not_open_stops_every_tool_that_names_a_run() {
+    // The test above poses a record that will not parse. This poses issue
+    // #38's reduced reproduction: the pointer is there in name, and the
+    // filesystem refuses to read it — a directory at its path — while the
+    // tracker timeline can still name that run as holder. The loader used to
+    // answer "this run swore nothing" for that, and a tool call then went to
+    // the tracker unchecked. The refusal must come from the same guard for
+    // every tool that takes a run id, so this walks the whole table.
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = GateContext {
+        integration: crate::config::Integration::Branch,
+        flag: None,
+        stand_down: None,
+        skill_root: root.path().join("skill"),
+        repo_dir: root.path().join("repo"),
+        state_root: root.path().join("state"),
+        window: super::super::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        boundaries: Vec::new(),
+    };
+    std::fs::create_dir_all(&context.state_root).expect("the state directory");
+    std::fs::create_dir_all(context.state_root.join("claude-shut.json"))
+        .expect("a directory where the pointer should be");
+
+    let mut bound = 0;
+    for tool in super::tools::TOOLS {
+        if !tool
+            .arguments
+            .iter()
+            .any(|argument| argument.name == "run_id")
+        {
+            continue;
+        }
+        bound += 1;
+        let mut arguments = serde_json::Map::new();
+        for argument in tool.arguments {
+            arguments.insert(
+                argument.name.to_owned(),
+                match argument.json_type {
+                    "integer" => json!(12),
+                    "boolean" => json!(true),
+                    _ => argument
+                        .choices
+                        .map_or_else(|| json!("x"), |choices| json!(choices[0])),
+                },
+            );
+        }
+        arguments.insert("run_id".to_owned(), json!("claude-shut"));
+
+        let failure = run_tool(tool.name, &Value::Object(arguments), Ok(&context))
+            .expect_err("a run whose record will not open is not one to act under");
+        let ToolFailure::Refused(refusal) = failure else {
+            panic!(
+                "{}: refused as malformed rather than by the rule",
+                tool.name
+            );
+        };
+        assert_eq!(
+            refusal.code, "run-pointer-unreadable",
+            "{} was refused for something else first: {refusal}",
+            tool.name
+        );
+        assert!(
+            refusal.to_string().contains("claude-shut.json"),
+            "{}: the refusal names no pointer path, so nobody can find the record: {refusal}",
+            tool.name
+        );
+    }
+    assert!(
+        bound >= 7,
+        "only {bound} tools were seen to take a run id, so this checked almost nothing"
+    );
+}
+
+#[test]
 fn a_run_id_that_holds_another_checkout_is_not_one_to_act_under() {
     let root = tempfile::tempdir().expect("a temporary root");
     let here = root.path().join("here");
