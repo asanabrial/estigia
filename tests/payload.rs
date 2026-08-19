@@ -219,8 +219,11 @@ fn the_blind_panel_policy_requires_same_finding_quorum_without_erasing_dissent()
         // The scoping half, twice over. Reverting either to the blanket "All
         // judges are read-only" restores the contradiction this policy exists to
         // remove — a guarantee stated for a role no measuring panel could use —
-        // and reverting the second to a blanket permission removes the only
-        // sentence keeping a judge from editing what it is judging.
+        // and reverting the second to a blanket permission widens the grant past
+        // the shell, which is the one widening no evidence standard makes
+        // acceptable. What keeps a measuring judge from editing what it is
+        // judging is the isolation rule, pinned by its own phrases below — not
+        // this sentence, which a shell defeats.
         "cannot mutate the target even if its prompt asks it to",
         "the role gets a shell **and nothing else**",
         "stops and reports it rather than restoring it",

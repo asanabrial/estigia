@@ -1392,10 +1392,10 @@ suite. Everything else here is prose held by review.
 
   **What closes it.** `Evidence standard` — `reading` or `measuring`, defaulting to `reading` — and
   the reviewer's grant derived from it rather than fixed. Under `measuring` the role gets a shell and
-  nothing else: write, edit and delegation stay refused, so no tool call reaches the target, and a
-  test walks `Evidence::all()` asserting exactly that shape for every standard. A shell is not
-  narrower than what those refusals withhold — it writes, and it launches — which is why the
-  paragraph below says the isolation precondition is the only thing making a measuring judge safe.
+  nothing else: `Write`, `Edit`, `Agent` and `Task` stay refused, and a test walks `Evidence::all()`
+  asserting exactly that shape for every standard. That withholds four tools and not the
+  capability — a shell writes, and it launches — which is why the paragraph below says the
+  isolation precondition is the only thing making a measuring judge safe.
   Three shipped sentences drew the opposite conclusion from the same grant and two blind judges
   caught all three independently; the surviving statement of what a shell does not buy is in
   `skill/policies/blind-judges.md`, and the rest point at it rather than restating it.
@@ -1403,8 +1403,12 @@ suite. Everything else here is prose held by review.
   Two things had to give, and both were deliberate:
 
   - `reviewer_is_static` meant *one* spelling and now means *one of the spellings Estigia can
-    produce*, enumerated over `Evidence::all()`. The set is closed and the compiler holds it closed,
-    so this stays a proof rather than becoming a guess.
+    produce*, enumerated over `Evidence::all()`. The compiler holds the **enumeration** closed — a
+    third standard cannot be added without arriving at that function — and a test holds the
+    **acceptance**. Arriving is not being returned: the arm can be widened with the list left
+    short, and `Evidence::all` says so on itself. So what keeps this a proof rather than a guess
+    is the pair, and the acceptance test walks the same list, so it inherits that limit rather
+    than covering it.
   - The gate had to read the row. It carries it in `GateContext` beside `window`, and narrows the same
     way for the same sentence: **an unreadable contract answers `reading`**, because a fault must not
     hand out a capability.
@@ -1419,6 +1423,26 @@ suite. Everything else here is prose held by review.
   implementing run's planning notes — two verdicts stopped being independent readings and one had to
   be discounted. Nothing in the delivery target was touched and no checkout rule was broken, which is
   precisely why the rule needed the second half.
+
+  **And the workflow front door is reachable the same way.** `estigia claim` and
+  `estigia transition` are CLI entrances onto the operations the tool server runs, and the role
+  gate bars tool *names*, not shell commands # so under `measuring` the same shell that reaches
+  the target reaches those. What holds a judge off them is the sentence *"Still do NOT change
+  tracker state, record the aggregate verdict, or repair a finding"* in its own rendered
+  definition: an instruction, not a gate. The claim gate answers separately and a judge holds no
+  claim, so a write against the repository still refuses; what is unguarded is the tracker call
+  a judge could make in its own name. Named here rather than implied, because the last acceptance
+  criterion on issue 83 says no delegated context gains orchestration authority, and at the grant
+  that is true while at the shell it is prose.
+
+  **One row, one file, and a machine can hold two answers.** `Evidence standard` is
+  `Scope::Everywhere`, so it is set per repository, while the artifact it decides is a single
+  user-level `review-blind.md` rendered from whichever checkout last ran `setup` or `sync`. On a
+  machine holding one `reading` repository and one `measuring` repository, the drift
+  `docs/configuration.md` frames as lasting *until the file is next written* is permanent for
+  whichever repository was not last written, and no re-render fixes both. The gate answers per
+  repository and narrows on an unreadable contract, so this costs a capability rather than
+  granting one # a measuring judge offered the reading grant, which fails closed.
 
   **Still open, and named rather than implied.**
 
@@ -1445,7 +1469,8 @@ suite. Everything else here is prose held by review.
 
     `run_id` is derived from `session_id`, so the pointer is per-session, and `Event::SessionEnd`
     calls `session::forget`, which removes it. The one store that does survive a session is the
-    decision ledger, and it carries the *adapter* slug rather than `agent_type` — and `note` returns
+    decision ledger, where no ordinary entry carries an agent at all: the *adapter* slug is on
+    the fault lines only, and `agent_type` is nowhere — and `note` returns
     early on `Decision::Outside`, which is what a delegated context’s reads produce. So the
     cross-run half is not merely absent, it has no existing road. It is issue #91.
 
@@ -1456,8 +1481,9 @@ suite. Everything else here is prose held by review.
     Three narrower limits on the within-run record, each a way the set can be empty while contexts
     ran. A host that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart
     from nothing having been delegated. A context refused at the role gate before any call is not
-    recorded, which is deliberate — a refused launch contributes no judge — but it means the record
-    shows what worked and never what was turned away. And the field names a role, never a *count*:
+    recorded, which is deliberate — a refused launch contributes no judge — but it means the record carries
+    nothing for a launch the role gate refused. A call the *claim* gate denied is recorded, since
+    the store fires on a new role or an allow — so this is one gate's refusals, not every gate's. And the field names a role, never a *count*:
     five contexts under one role and one context under it write the same byte, so nothing here bears
     on panel size, which the entry below already states this crate cannot see.
 

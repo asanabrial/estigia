@@ -1438,9 +1438,11 @@ pub fn render_reviewer_agent(template: &str, evidence: Evidence) -> String {
 /// It used to mean *one* spelling, and could, because the definition was a
 /// constant. With the grant derived it means *one of the spellings Estigia can
 /// produce*, enumerated over [`Evidence::all`] under that type's own exhaustive
-/// match — so a third standard cannot be added without arriving here. That keeps
-/// this a proof rather than turning it into a guess: the set is closed and the
-/// compiler holds it closed.
+/// match — so a third standard cannot be added without arriving here. Arriving
+/// is not being returned: the arm can be widened with the list left short, and
+/// then this rejects the rendering setup itself writes. What keeps it a proof
+/// rather than a guess is that pairing with the acceptance test, not the
+/// compiler alone.
 pub(crate) fn reviewer_is_static(existing: &str) -> bool {
     Evidence::all().into_iter().any(|evidence| {
         let rendered = render_reviewer_agent(skill::REVIEW_AGENT.contents, evidence);

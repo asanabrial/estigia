@@ -21,7 +21,7 @@ Load [domain composition](references/domain-composition.md) for handoff, priorit
 ## Hard Rules
 
 - Issue Flow owns roles, states, claims, and transitions; routed domains own value, priority, evidence, and done criteria. Neither side invents the other's policy.
-- An analyst, including an adversarial reviewer, is read-only for the repository and every external system except the configured tracker operations required below: it creates no branch/worktree/commit/PR and runs no migration, sync, database write, or delivery action. It files at most one evidenced issue. Review MUST use a context that did not write the change.
+- An analyst, including an adversarial reviewer, is read-only for the repository and every external system except the configured tracker operations required below: it creates no branch/worktree/commit/PR and runs no migration, sync, database write, or delivery action. One exception, and it is bounded: a judge on a repository whose `Evidence standard` is `measuring` builds, tests and mutates inside the isolated directory its launch hands it and nowhere else — which is outside every path a claim covers, so the repository stays read-only to it. It files at most one evidenced issue. Review MUST use a context that did not write the change.
 - Mint one `<runtime>-<session-prefix>` run-id and reuse it for every write. Keep bounded runtime attribution in `analyst:<runtime>`/`dev:<runtime>` labels and unbounded run-id attribution in text; analyst labels persist, while dev labels are removed on release but retained on delivery.
 - Resume this run's held issue before consulting queues. Use the selected binding's timeline-adjudicated claim; the earliest live claim wins. Run `verify_claim` before the first repository write, every heartbeat, and every expensive or irreversible boundary; an unreadable control surface permits no write.
 - Keep exactly one of `analysis`, `ready`, `in-progress`, `review`, `blocked`, or `done`. The binding's workflow state is authoritative; every configured projection is updated and read back, and `done` is explicit before tracker closure.
@@ -85,9 +85,9 @@ Load [domain composition](references/domain-composition.md) for routing, scale v
    **Blind-panel clarification for step 5.** `five blind` is canonical beside `single` and `two blind`.
    Claude setup always installs one inert `review-blind` definition with `model: inherit`, whose tool
    grant is derived from `Evidence standard`: under `reading` it is read-only; under `measuring` it
-   also gets a shell, and nothing else — write, edit and delegation stay refused, so no tool call
-   reaches the target. A shell is not narrower than what those refusals withhold: it writes, and it
-   launches. What confines a measuring judge is the isolation rule, not its grant. Every judge runs **as** that role. A panel this harness cannot
+   also gets a shell, and nothing else — `Write`, `Edit`, `Agent` and `Task` stay refused. That
+   withholds four tools and not the capability: a shell writes, and it launches. What confines a
+   measuring judge is the isolation rule, not its grant. Every judge runs **as** that role. A panel this harness cannot
    place in the role is governed by the same isolation rule rather than exempted from it, and that
    rule covers every location a judge writes, not only its checkout.
    The orchestrator passes the effective `judge` model and launches it twice or five times concurrently

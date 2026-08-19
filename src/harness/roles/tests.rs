@@ -621,6 +621,24 @@ fn a_shipped_planning_phase_cannot_write(config: &crate::config::Config, openspe
                  delegates is the thing the declared list exists to stop"
             );
         }
+        // `explore` is the one phase that reaches outward, and the pair that
+        // lets it is what its grant is *for*. This gate never sees either call
+        // # the module note above says so # which makes the declared list the
+        // whole of that boundary, and is exactly why narrowing it has to redden
+        // something here rather than nowhere.
+        let outward = match phase {
+            "explore" => Verdict::Allow,
+            _ => Verdict::Deny,
+        };
+        for tool in ["WebFetch", "WebSearch"] {
+            assert_eq!(
+                declared.verdict(tool),
+                outward,
+                "sdd-{phase} answers the wrong thing for {tool}, so either a planning phase \
+                 reaches outward where it should not or `explore` cannot do the one thing it \
+                 is for"
+            );
+        }
         // A rendering that left `{{TOOLS}}` in place parses as an allowlist
         // naming one tool called `{{TOOLS}}`, which denies everything and
         // reads as a working gate.

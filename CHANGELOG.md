@@ -39,10 +39,9 @@ the workflow, it holds the tools.
 
   A new setting, `Evidence standard`, states the one fact only an operator knows — whether a verdict
   here is backed by reading or by running — and the reviewer's tool grant is derived from it instead
-  of being a constant. `measuring` adds a shell **and nothing else**: write, edit and delegation stay
-  refused, so no tool call reaches the target. A shell is not narrower than what those refusals
-  withhold — it writes, and it launches — so what confines a measuring judge is the isolation
-  rule, not the grant. The default is
+  of being a constant. `measuring` adds a shell **and nothing else**: `Write`, `Edit`, `Agent` and
+  `Task` stay refused. That withholds four tools and not the capability — a shell writes, and it
+  launches — so what confines a measuring judge is the isolation rule, not the grant. The default is
   `reading`, which is what every installation already had, so no upgrade widens anything by itself.
 
   Two consequences, both deliberate. `reviewer_is_static` used to mean one spelling and now means one

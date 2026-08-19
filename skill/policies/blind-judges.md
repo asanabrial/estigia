@@ -24,10 +24,9 @@ same `review-blind` definition for every judge; there are no numbered definition
 Under `reading`, the role is read-only against the target: its gate refuses every write, edit, shell
 and delegation tool, so such a judge cannot mutate the target even if its prompt asks it to.
 
-Under `measuring`, the role gets a shell **and nothing else** — write, edit and delegation stay
-refused, so no tool call reaches the target or hands the work on. Through the shell it can of course
-do both: what stops that being anybody else's problem is the directory it is confined to, not the
-grant. The isolation rule below is doing that work, and it is the
+Under `measuring`, the role gets a shell **and nothing else** — `Write`, `Edit`, `Agent` and `Task`
+stay refused. Through the shell it can of course write and launch anyway: what stops that being
+anybody else's problem is the directory it is confined to, not the grant. The isolation rule below is doing that work, and it is the
 only thing doing it. A repository whose findings are established by reading wants the first answer; one
 whose evidence standard is mutation needs the second, because a judge that cannot run the suite
 cannot check whether turning the fix off leaves it green.
