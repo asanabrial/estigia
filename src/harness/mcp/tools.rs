@@ -290,7 +290,9 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "from",
                 "string",
-                "The state being left. Omitting it removes whatever stale state labels are found.",
+                "The state being left. Omitting it removes whatever stale state labels are \
+                 found. Naming the state being entered removes nothing, so asserting the state \
+                 an issue already holds is safe.",
             )
             .of(crate::config::STATES),
         ],

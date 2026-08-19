@@ -606,6 +606,12 @@ pub fn create(
 /// `--remove-label` can apply partially, so reporting its failure as a read
 /// would tell the caller "nothing happened, retry" about an issue that may
 /// already be carrying two states.
+///
+/// That is true of the *read-back* as well, and it is the half this operation
+/// got wrong for longer: everything below the edit is refused as a write that
+/// landed, because it did. Two rules follow from it — the removal is never the
+/// label being added, and a read-back that disagrees says so on the `world`
+/// rather than leaving a caller to read *nothing was written*.
 pub fn transition(
     context: &Context,
     issue: u64,
@@ -629,8 +635,27 @@ pub fn transition(
     ];
     match from.filter(|value| !value.is_empty()) {
         Some(from) => {
-            arguments.push("--remove-label".to_owned());
-            arguments.push(format!("status:{from}"));
+            let leaving = format!("status:{from}");
+            // The removal, unless it is the label being added.
+            //
+            // `--add-label status:done --remove-label status:done` is a
+            // self-cancelling edit and `gh` settles it by dropping the label:
+            // measured on issue #3, which came out of exactly that call wearing
+            // no state at all, invisible to `list_state` in every partition and
+            // disagreeing with every `verify_claim --expect-state`. The
+            // read-back then found nothing and the refusal said *nothing was
+            // written*.
+            //
+            // Naming the state being entered as the state being left is not
+            // exotic — it is what a run sends to assert the state it believes an
+            // issue is already in, the same reflex `verify_claim` exists for.
+            // The add is kept, so the call still ends with the issue in `to`
+            // whether or not it started there; only the window with no state is
+            // gone.
+            if leaving != add {
+                arguments.push("--remove-label".to_owned());
+                arguments.push(leaving);
+            }
         }
         None => {
             // Without `--from`, remove whatever stale state labels are there.
@@ -681,8 +706,25 @@ pub fn transition(
         return Err(Failure::Stop(serde_json::json!({
             "ok": false,
             "reason": "label-readback-failed",
+            // The edit above ran and reported success, so whatever the labels
+            // are now, they are what this call left. Without this key a `Stop`
+            // renders as *nothing was written* with *do not repeat this call*
+            // under it, over an issue whose labels this very call has just
+            // changed — the shape issue #1 opened `MutationOutcome::Committed`
+            // for, in `publish_review`, and the one `transition` was never
+            // covered by. A caller who believes both sentences stops, and the
+            // state stays broken.
+            "world": "committed",
             "detail": format!("expected exactly [status:{to}], found {after:?}"),
-            "action": "fix on the spot — a two-state item poisons every query touching either state",
+            // Naming the repair rather than forbidding it. Omitting `from`
+            // removes whatever stale state labels are found — documented on the
+            // arm above, and what actually restored issue #3 — so the call this
+            // refusal used to warn against is the call that clears it.
+            "action": format!(
+                "fix on the spot \u{2014} a two-state item poisons every query touching either \
+                 state. Repeat this transition as `transition --to {to}` with `from` omitted, \
+                 which removes whatever stale state labels are found"
+            ),
         })));
     }
 

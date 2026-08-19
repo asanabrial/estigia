@@ -12,6 +12,32 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **A transition to the state an issue already holds no longer strips its state label, and a
+  read-back that disagrees no longer says nothing was written.** `transition` appended the removal
+  whichever state `--from` named, so `--from done --to done` built
+  `gh issue edit N --add-label status:done --remove-label status:done` — a self-cancelling edit that
+  `gh` settles by dropping the label. Measured on issue #3 on 2026-08-15: the timeline shows
+  `unlabeled status:done`, nothing put it back, and the issue carried **no** state label at all —
+  invisible to `list_state` in every partition, and disagreeing with every
+  `verify_claim --expect-state`. The removal is now skipped when it names the label being added, so
+  the call still ends with the issue in `--to` and there is no window where it is in nothing.
+
+  The half with teeth is the report. `label-readback-failed` is a stop and it carried no `world`, so
+  the envelope rendered *nothing was written* with *do not repeat this call* under it — over an edit
+  that had already run, and against the one call that repairs what it left. It now carries
+  `"world": "committed"`, the road `MutationOutcome::Committed` opened after issue #1 in
+  `publish_review`, so the sentence reads *the write landed; what failed came after it*; and its
+  resolution names the repair — the same transition with `--from` omitted, which removes whatever
+  stale state labels are found and is what actually restored issue #3 — instead of forbidding it.
+  The reason word is unchanged, so the documented refusal inventory is unchanged.
+
+  Both halves are separately measured, and the stand-in `gh` gained a **label store** to measure
+  them at all: `nth` lets a scripted world change its mind on a schedule and cannot let a read answer
+  with what the write before it did, so every fixture answered the same labels before and after
+  `gh issue edit` and a transition that destroyed the label was indistinguishable from one that kept
+  it. The board mirror is untouched and still runs first, which is asserted on the wire in the same
+  call rather than inferred.
+
 - **CI now answers before the reviewing, instead of after it.** `.github/workflows/ci.yml` gains a
   `workflow_dispatch` trigger, `publish_review` and `republish_review` start **one run of it per
   publication epoch** against the head they just pushed, and `record_review_verdict` refuses to bank

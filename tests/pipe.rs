@@ -12431,3 +12431,366 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
         }
     }
 }
+
+/// Moving an issue to the state it already holds must leave the label on it.
+///
+/// Measured on issue #3 on 2026-08-15: `transition --from done --to done` built
+/// `gh issue edit 3 --add-label status:done --remove-label status:done`, a
+/// self-cancelling edit, and the issue came out of it carrying **no** state
+/// label at all. `list_state` could then see it in no partition and every
+/// `verify_claim --expect-state` disagreed with it.
+///
+/// The label is read back out of the stand-in's store rather than off the
+/// answer, because the answer is the half that was already lying: the refusal
+/// said *nothing was written* over the write that had just happened. A store the
+/// call's own edits mutate is the only thing here that can tell a label that
+/// survived from a label the fixture was told to repeat.
+///
+/// The board is measured in the same call, and it is measured because the mirror
+/// runs **first**: a `from == to` call that stopped touching the label must not
+/// quietly stop mirroring either, and *the board did not move* is not something
+/// this test may infer from the label half.
+#[test]
+fn a_transition_to_the_state_an_issue_already_holds_keeps_its_label() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let labels = trace.path().join("labels.json");
+    let log = trace.path().join("calls.log");
+    std::fs::write(
+        &labels,
+        serde_json::json!(["priority:high", "status:done"]).to_string(),
+    )
+    .expect("the issue's labels are written");
+
+    // A board the mirror can actually address, so *the board moved* is a fact
+    // read off the wire rather than the absence of one.
+    let (_, refused, ok) = run_in(
+        home,
+        repo,
+        &["config", "set", "Project board", "acme/7"],
+        "",
+    );
+    assert!(ok, "the fixture board could not be configured: {refused}");
+
+    let project = |body: serde_json::Value| {
+        serde_json::json!({ "data": { "user": { "projectV2": body } } }).to_string()
+    };
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "updateProjectV2ItemFieldValue",
+            "stdout": serde_json::json!({
+                "data": { "updateProjectV2ItemFieldValue": { "projectV2Item": { "id": "PVTI_1" } } }
+            })
+            .to_string(),
+            "status": 0,
+        },
+        {
+            "matches": "fields(first: 100)",
+            "stdout": project(serde_json::json!({
+                "id": "PVT_1",
+                "fields": { "nodes": [{
+                    "id": "PVTSSF_1",
+                    "name": "Status",
+                    "options": [{ "id": "opt_done", "name": "Done", "description": "status:done" }],
+                }] },
+            })),
+            "status": 0,
+        },
+        {
+            "matches": "items(first: 100",
+            "stdout": project(serde_json::json!({
+                "items": {
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                    "nodes": [{
+                        "id": "PVTI_1",
+                        "content": { "number": 12, "labels": { "totalCount": 0, "nodes": [] } },
+                        "fieldValueByName": { "name": "Done" },
+                    }],
+                },
+            })),
+            "status": 0,
+        },
+        { "matches": "issue view", "labels": true, "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "transition",
+            "arguments": {
+                "issue": 12,
+                "to": "done",
+                "from": "done",
+                "run_id": "claude-abcd1234",
+            },
+        },
+    })
+    .to_string();
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_LABELS", &labels)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    // The criterion, and it is the labels rather than the answer: whatever this
+    // call decided, the issue still wears the state it was asked to be moved to.
+    let held: Vec<String> = serde_json::from_str(
+        &std::fs::read_to_string(&labels).expect("the label store is readable"),
+    )
+    .expect("the label store is a list of names");
+    assert!(
+        held.iter().any(|name| name == "status:done"),
+        "a transition to the state the issue already held stripped its state label, leaving \
+         {held:?}: {text}"
+    );
+
+    let calls = std::fs::read_to_string(&log).expect("the call log is readable");
+    assert!(
+        !calls.contains("--remove-label status:done"),
+        "the state being moved to was sent for removal in the same edit that added it: {calls}"
+    );
+    assert_eq!(
+        response["result"]["isError"], false,
+        "asserting the state an issue is already in was refused: {text}"
+    );
+
+    // The board half. The mirror runs before the label edit and answers in its
+    // own words; a `from == to` call that stopped writing the label must not
+    // have stopped mirroring, and *it did not move* may not be inferred from the
+    // label assertions above.
+    let answer: serde_json::Value = serde_json::from_str(&text)
+        .unwrap_or_else(|_| panic!("the transition answer is JSON: {text}"));
+    assert_eq!(
+        answer["board"],
+        serde_json::json!({ "attempted": true, "set_to": "Done" }),
+        "the board mirror did not report moving the card to the state asked for: {text}"
+    );
+    let mirrored = calls
+        .find("updateProjectV2ItemFieldValue")
+        .expect("the board mutation is on the wire");
+    let edited = calls
+        .find("issue edit")
+        .expect("the label edit is on the wire");
+    assert!(
+        mirrored < edited,
+        "the board mirror no longer runs before the label edit: {calls}"
+    );
+}
+
+/// A refusal raised after the label edit landed has to say the edit landed.
+///
+/// `label-readback-failed` is a `Stop`, and a `Stop` carrying no `world` renders
+/// as *nothing was written* with *do not repeat this call* under it. Both
+/// sentences are false here: `gh issue edit` has already run, and the call that
+/// repairs what it left is `transition --to <state>` with `from` omitted — the
+/// one this refusal was telling the caller not to make. Issue #1 opened
+/// `MutationOutcome::Committed` for exactly this, and `transition` was not
+/// covered by it.
+///
+/// Independent of the same-state half by construction: the transition here is a
+/// genuine `from != to` move, so the `from == to` fix decides nothing about it.
+#[test]
+fn a_label_readback_that_fails_after_the_edit_landed_reports_the_write_and_names_the_repair() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let labels = trace.path().join("labels.json");
+    let log = trace.path().join("calls.log");
+    // Two state labels, and `--from` names only one of them. The edit lands and
+    // the read-back still disagrees, which is the shape that reaches the stop
+    // with a write behind it.
+    std::fs::write(
+        &labels,
+        serde_json::json!(["status:review", "status:blocked"]).to_string(),
+    )
+    .expect("the issue's labels are written");
+
+    let answers = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "labels": true, "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "transition",
+            "arguments": {
+                "issue": 12,
+                "to": "done",
+                "from": "review",
+                "run_id": "claude-abcd1234",
+            },
+        },
+    })
+    .to_string();
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_LABELS", &labels)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    // The floor: this must still be the refusal it always was, on the same
+    // reason word, over an edit that really did land.
+    assert_eq!(
+        response["result"]["isError"], true,
+        "a two-state read-back was answered as a success: {text}"
+    );
+    assert!(
+        text.contains("label-readback-failed"),
+        "the refusal changed its reason word, which `tests/honesty.rs` crosses against the \
+         documented inventory: {text}"
+    );
+    let held: Vec<String> = serde_json::from_str(
+        &std::fs::read_to_string(&labels).expect("the label store is readable"),
+    )
+    .expect("the label store is a list of names");
+    assert_eq!(
+        held,
+        vec!["status:blocked".to_owned(), "status:done".to_owned()],
+        "the fixture did not reach the state this test is about"
+    );
+
+    // The sentence a caller reads, not the JSON key on its own.
+    assert!(
+        text.contains("the write landed; what failed came after it"),
+        "a refusal raised after the label edit landed still says the world is untouched: {text}"
+    );
+    assert!(
+        !text.contains("nothing was written"),
+        "the refusal reports that nothing was written over an edit that landed: {text}"
+    );
+    assert!(
+        !text.contains("do not repeat this call"),
+        "the refusal still forbids the call, and the repair is a call: {text}"
+    );
+    // And the repair is named. `transition --to <state>` with `from` omitted is
+    // what the tool's own contract documents as removing whatever stale state
+    // labels are found, and it is what restored issue #3.
+    assert!(
+        text.contains("transition --to done") && text.contains("`from` omitted"),
+        "the refusal does not name the call that repairs it: {text}"
+    );
+}
+
+/// The call the refusal above names has to be the call that clears it.
+///
+/// `CLAUDE.md`: never name a command in a message unless running it clears the
+/// block, because naming a dead end is worse than naming nothing. The refusal
+/// next door now names `transition --to <state>` with `from` omitted, so what
+/// that call does to a two-state item is no longer somebody else's test.
+///
+/// It also holds the arm this change did **not** touch: `from` omitted removes
+/// every stale state label except the one being added, and leaves every label
+/// that is not a state alone.
+#[test]
+fn the_repair_a_failed_read_back_names_clears_the_item_it_was_named_over() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let labels = trace.path().join("labels.json");
+    let log = trace.path().join("calls.log");
+    // Exactly what the refusal next door leaves behind, plus a label that is
+    // nobody's state: a predicate answering yes to everything would take the
+    // operator's triage with it.
+    std::fs::write(
+        &labels,
+        serde_json::json!(["status:blocked", "status:done", "priority:high"]).to_string(),
+    )
+    .expect("the issue's labels are written");
+
+    let answers = serde_json::to_string(&serde_json::json!([
+        { "matches": "issue view", "labels": true, "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "transition",
+            "arguments": { "issue": 12, "to": "done", "run_id": "claude-abcd1234" },
+        },
+    })
+    .to_string();
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_LABELS", &labels)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    assert_eq!(
+        response["result"]["isError"], false,
+        "the call the refusal names does not clear the state it was named over: {text}"
+    );
+    let held: Vec<String> = serde_json::from_str(
+        &std::fs::read_to_string(&labels).expect("the label store is readable"),
+    )
+    .expect("the label store is a list of names");
+    assert_eq!(
+        held,
+        vec!["status:done".to_owned(), "priority:high".to_owned()],
+        "the repair left the wrong labels on the issue"
+    );
+}

@@ -30,6 +30,61 @@
 //! its own process and that file is the only thing they share. Without it a
 //! world cannot change its mind, and a command that reads, writes and reads
 //! back can only be posed on the paths where it refuses.
+//!
+//! `ESTIGIA_FAKE_LABELS` names a file holding one issue's labels, and it is the
+//! same gap for the one write this stand-in can model exactly. `nth` lets a
+//! world change its mind on a *schedule*; it cannot let a read answer with what
+//! the write before it actually did. So a fixture answered the same labels
+//! before and after `gh issue edit`, and a transition that stripped the label it
+//! was asked to set was indistinguishable from one that kept it — the shape of
+//! issue #31, which the whole suite was green over. With this, `--add-label` and
+//! `--remove-label` change what the next `issue view --json labels` reports, so
+//! a test can measure the label rather than the answer.
+
+/// One issue's labels, after whatever this invocation did to them.
+///
+/// `None` when no test asked for a store, which is every fixture that existed
+/// before this one and the reason they answer exactly as they did.
+///
+/// Additions are applied **before** removals, so `--add-label status:done
+/// --remove-label status:done` leaves the label off. That is not a guess about
+/// `gh`: it is what was measured on issue #3 on 2026-08-15, where a transition
+/// sending exactly that pair left the issue carrying no state label at all. A
+/// store that let the addition win would answer *the label survived* about the
+/// call that destroyed it, which is the failure this store exists to expose.
+fn labels_after_this_call(arguments: &[String], line: &str) -> Option<Vec<String>> {
+    let path = std::env::var("ESTIGIA_FAKE_LABELS").ok()?;
+    let mut labels: Vec<String> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    if !line.contains("issue edit") {
+        return Some(labels);
+    }
+    let mut removals: Vec<&str> = Vec::new();
+    let mut flag: Option<&str> = None;
+    for argument in arguments {
+        match flag.take() {
+            Some("--add-label") => {
+                if !labels.iter().any(|held| held == argument) {
+                    labels.push(argument.clone());
+                }
+            }
+            Some(_) => removals.push(argument),
+            None => {
+                if argument == "--add-label" || argument == "--remove-label" {
+                    flag = Some(argument);
+                }
+            }
+        }
+    }
+    labels.retain(|held| !removals.iter().any(|dropped| dropped == held));
+    let _ = std::fs::write(
+        &path,
+        serde_json::to_string(&labels).unwrap_or_else(|_| "[]".to_owned()),
+    );
+    Some(labels)
+}
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
@@ -64,6 +119,10 @@ fn main() {
     }
     let script = std::env::var("ESTIGIA_FAKE_ANSWERS").unwrap_or_else(|_| "[]".to_owned());
     let answers: Vec<serde_json::Value> = serde_json::from_str(&script).unwrap_or_default();
+
+    // The one write this stand-in can model exactly, applied before anything is
+    // answered so a read later in the same process sees it.
+    let labels = labels_after_this_call(&arguments, &line);
 
     // How many times each `matches` has been asked, counting this call.
     //
@@ -121,6 +180,18 @@ fn main() {
             && counts.get(matches).copied().unwrap_or(0) != nth
         {
             continue;
+        }
+        // `gh issue view <n> --json labels`, answered from the store rather than
+        // from the script. A scripted answer is the fixture repeating itself; the
+        // point of the store is that the edits this same run made are what comes
+        // back.
+        if answer.get("labels").and_then(serde_json::Value::as_bool) == Some(true) {
+            let names: Vec<serde_json::Value> = labels
+                .iter()
+                .flatten()
+                .map(|name| serde_json::json!({ "name": name }))
+                .collect();
+            println!("{}", serde_json::json!({ "labels": names }));
         }
         if let Some(text) = answer.get("stdout").and_then(|v| v.as_str()) {
             println!("{text}");
