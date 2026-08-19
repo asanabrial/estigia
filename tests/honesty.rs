@@ -145,7 +145,10 @@ fn five_blind_keeps_one_enforced_verdict_and_names_every_unproved_panel_property
         "blindness",
         "same-finding identity",
         "quorum",
-        "judge isolation outside the reserved role",
+        // Was "judge isolation outside the reserved role" until issue 83, which
+        // removed the distinction: every judge runs as the role now, and the
+        // isolation is what is unproved whichever standard the role carries.
+        "judge isolation",
         "shared a working directory",
     ] {
         assert!(
@@ -2176,6 +2179,16 @@ fn the_readme_counts_what_the_crate_actually_has() {
             "settings, all typed",
             estigia::config::SETTINGS.len(),
             "settings",
+        ),
+        // The same count, in the other sentence that states it. A reviewer
+        // measured that this guard keyed on one phrase only: `docs/configuration.md`
+        // opened with **eighteen** and said **nineteen** nine lines later, through a
+        // change that edited the guarded sentence and not the unguarded one, and
+        // `README.md`'s count could be set to anything at all.
+        (
+            "typed settings",
+            estigia::config::SETTINGS.len(),
+            "settings, in the other sentence that counts them",
         ),
         (
             "adapters share",

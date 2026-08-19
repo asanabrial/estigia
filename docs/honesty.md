@@ -506,17 +506,19 @@ suite. Everything else here is prose held by review.
   one aggregate exact-receipt verdict: the transport has no per-judge marker and does not implement structured
   multi-verdict adjudication.
 
-  **Judge isolation outside the reserved role is unproved, and the asymmetry is measured.** A judge
-  launched under the reserved `review-blind` type cannot write at all, and that half is checkable: the
-  role gate is fed the *embedded* reviewer definition rather than whatever is on disk
-  (`src/harness/hook.rs:940-946` reads `crate::skill::REVIEW_AGENT.contents`), that definition allows
-  `Read`, `Grep` and `Glob` only, and
-  `src/harness/roles/tests.rs::the_shipped_blind_reviewer_is_read_only_and_cannot_delegate` pins
-  `Write`, `Edit`, `Bash`, `Agent` and `Task` to a denial. For that role the question of two judges
-  writing over each other cannot arise. The other half is not checkable at all. A panel launched under
-  **any other subagent type** — which a repository whose evidence standard is mutation forces, because
-  a judge that measures needs exactly the tools the reserved role refuses — is invisible both to the
-  reserved-role prelaunch check and to that gate. Nothing here records how many such judges ran,
+  **Judge isolation is unproved, and what is checkable about it moved.** The role gate is fed the
+  *embedded* reviewer definition rather than whatever is on disk, rendered with the effective
+  `Evidence standard`, and `the_shipped_blind_reviewer_is_read_only_and_cannot_delegate` pins the
+  shape for both standards: `Write`, `Edit`, `Agent` and `Task` denied under either, `Bash` following
+  the row. So under `reading` the question of two judges writing over each other cannot arise, and
+  under `measuring` it arises by design and the isolation rule is what answers it.
+
+  The sentence that used to stand here — that a mutation-standard repository **forces** a panel under
+  some other subagent type, because a judge that measures needs tools the reserved role refuses — was
+  true and is the defect issue 83 closed. It is gone rather than softened: leaving it would tell a
+  reader to do the exact thing the entry below now says not to. What remains true is that a panel this
+  harness cannot place in the role is invisible both to the reserved-role prelaunch check and to that
+  gate. Nothing here records how many such judges ran,
   whether two of them shared a working directory, or what they wrote into it. The isolation rule in
   `skill/policies/blind-judges.md` is prose an orchestrator follows or does not, on the same footing as
   panel size and blindness above.
@@ -1356,8 +1358,9 @@ suite. Everything else here is prose held by review.
 
 - **Estigia defined roles its own roles could not do the work of.** Issue 83. Six shipped definitions,
   every one read-only: `review-blind` carried a fixed `tools: Read, Grep, Glob`, and the five planning
-  phases carried `{{TOOLS}}` whose widest substitution was `Read, Grep, Glob, Write, Edit`. **No branch
-  produced a shell.** In a repository whose stated evidence standard is mutation — this one's is, and
+  phases carried `{{TOOLS}}`, substituted to `Read, Grep, Glob`, `Read, Grep, Glob, Write, Edit` or
+  `Read, Grep, Glob, WebFetch, WebSearch` — three branches, none of them a superset of the others, and
+  an earlier draft of this sentence named only the second. **No branch produced a shell.** In a repository whose stated evidence standard is mutation — this one's is, and
   `CLAUDE.md` makes two sentences load-bearing on it — a reviewer that cannot run the suite cannot
   check either. So every panel that mattered was launched under a generic type instead, and the
   read-only guarantee `policies/blind-judges.md` states for a judge governed **none** of them.
@@ -2276,7 +2279,7 @@ suite. Everything else here is prose held by review.
   `a_checkout_this_process_cannot_resolve_is_still_one_checkout`, whose corpus differs by an
   accented pair rather than an ASCII one, because an ASCII pair cannot tell the two rules apart.
 - **Three settings are read by nobody, and two more were until this change.**
-  An operator sets eighteen rows and `config list` reports all of them. Measured: `context.get` is
+  An operator sets nineteen rows and `config list` reports all of them. Measured: `context.get` is
   called for exactly three labels — `project board`, `worktree location` and, since the review
   handoff, `Review delegation`, which the transport reads to stamp one deadline on a request it
   never waits for. The gate reads `Irreversible commands`, and the payload's prose

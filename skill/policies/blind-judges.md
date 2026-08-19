@@ -25,7 +25,10 @@ Under `reading`, the role is read-only against the target: its gate refuses ever
 and delegation tool, so such a judge cannot mutate the target even if its prompt asks it to.
 
 Under `measuring`, the role gets a shell **and nothing else** — write, edit and delegation stay
-refused, so a judge still cannot rewrite what it is judging or hand the work on. What it may do is
+refused, so a judge cannot hand the work on, and cannot reach the target through a tool call. It can
+of course rewrite a file *through the shell*: what stops that being anybody else's problem is the
+directory it is confined to, not the grant. The isolation rule below is doing that work, and it is the
+only thing doing it. What it may do is
 build, test and mutate inside the one directory the launch hands it, which is what the isolation rule
 below is for. A repository whose findings are established by reading wants the first answer; one
 whose evidence standard is mutation needs the second, because a judge that cannot run the suite
@@ -134,7 +137,7 @@ still running. Nothing proves panel execution.
 That is worth stating first and plainly. Estigia gates repository writes against an adjudicated
 claim. It cannot prove panel size, concurrency, independence, blindness, same-finding identity or
 quorum. It cannot see whether a context read the target, whether a verdict was honest, or whether two
-two judges were given separate directories — for their checkouts or for anything else they wrote.
+judges were given separate directories — for their checkouts or for anything else they wrote.
 There is no hook that fires when a reviewer forms an opinion, and none that notices two of them
 sharing a scratch path.
 

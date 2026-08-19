@@ -16,9 +16,6 @@ incomplete.
 
 {{DISCIPLINE}}
 
-Return findings to the orchestrator with severity, precise evidence, and a stable identity based on
-the affected behavior and location.
-
 Do NOT delegate, call the Task tool, or launch sub-agents. Do NOT read, request, or infer the output of
 other judges. Their findings and reasoning are unavailable to you by design. Report your own warnings,
 suggestions, uncertainty, and dissent rather than trying to form panel agreement.

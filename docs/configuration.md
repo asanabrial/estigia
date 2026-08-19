@@ -1,6 +1,6 @@
 # Configuration
 
-Eighteen typed settings, read from one table. Reading it produces a valid configuration or a refusal
+Nineteen typed settings, read from one table. Reading it produces a valid configuration or a refusal
 that names what may be written instead — there is no third outcome where a misspelled value is
 quietly ignored.
 
@@ -52,7 +52,7 @@ distinct reviewer but does not make Estigia spawn one. If none is available, the
 exact-receipt handoff and releases ownership. `ask <duration>` records one request deadline in that
 handoff; no scheduler, sleep, deadline reset, retained claim, or expiry-as-verdict behavior is implied.
 
-`single` remains the default. Every Claude Code setup installs one static read-only definition at
+`single` remains the default. Every Claude Code setup installs one inert definition at
 `~/.claude/agents/review-blind.md`, including in single mode. Its file says `model: inherit` and is
 inert unless the launch prompt names an active blind mode, exact publication receipt and criteria.
 The orchestrator supplies `Model routing`'s effective `judge` assignment when it instantiates that
@@ -62,7 +62,11 @@ are required to block or authorize automatic repair. One or two remain suspicion
 and suggestions survive, and ambiguous finding identities never aggregate. Estigia records only one
 aggregate exact-receipt verdict and cannot prove panel size, concurrency, independence, blindness,
 same-finding identity or quorum. `config set` and `config edit` write configuration only; changing
-these rows never rewrites that external definition.
+these rows never rewrites that external definition — including `Evidence standard`, which decides that
+definition's tool grant. **So flipping that row takes effect only when `estigia setup` or `estigia sync`
+next writes the file**, and until then the host offers the previous grant while the gate enforces the
+new one. Both directions of that mismatch fail closed at the gate, nothing reports it, and
+`docs/honesty.md` records it as open.
 
 The `review-blind` role is reserved to that operator-owned user file. Claude's generated `PreToolUse`
 matcher wakes for `Agent` and legacy `Task` launches and, before repository classification, checks an
@@ -179,8 +183,8 @@ changes land only in its own override. Local, repository, and another agent's va
 into the shared contract, and a private-root agent keeps its answer in its contract without a duplicate
 override. Dynamic host artifacts such as Claude SDD definitions use the effective view, so local and
 per-agent Planning/model rows materialize them and retract them when those rows stop selecting the
-phase. The static reviewer is not configuration output: setup installs it unchanged and launch-time
-routing selects its model. A
+phase. The reviewer is configuration output too, since `Evidence standard` decides its tool
+grant; launch-time routing still selects its model. A
 repository save preserves the rows that document already owns and unions only repository-scoped rows
 changed in that session; one explicit row never widens into every repository setting. Direct agent
 writes read the override once and use that same snapshot for ownership and writing; only `NotFound`

@@ -14,8 +14,9 @@ the workflow, it holds the tools.
 
 - **A delegated role can now do the work its own contract asks of it, and the judges that measure run
   as that role instead of outside it.** Estigia shipped six role definitions and every one was
-  read-only: the reviewer carried a fixed `tools: Read, Grep, Glob`, and the planning phases' widest
-  substitution was `Read, Grep, Glob, Write, Edit`. No branch produced a shell. In a repository whose
+  read-only: the reviewer carried a fixed `tools: Read, Grep, Glob`, and the planning phases'
+  substitutions were `Read, Grep, Glob`, `Read, Grep, Glob, Write, Edit` and
+  `Read, Grep, Glob, WebFetch, WebSearch`. No branch produced a shell. In a repository whose
   findings are established by running something — building the change, reddening a test, turning the
   fix off to see the suite go green — that reviewer cannot check anything, so every panel worth having
   was launched under a generic type, outside the role and outside every guarantee the contract hangs

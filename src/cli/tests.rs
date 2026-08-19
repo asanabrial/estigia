@@ -1369,6 +1369,36 @@ fn codes_named_by_a_code_method(source: &str) -> Vec<String> {
     codes
 }
 
+/// A contract nobody could read narrows the reviewer's grant, measured.
+///
+/// This replaces an assertion that read `gate_context`'s **source** for the words
+/// `if unreadable`. Three blind reviewers each defeated that one independently —
+/// `if unreadable && false`, a second guard bound to `false`, and a `let narrow`
+/// that swapped the arms — every time with the whole suite green. A guard that a
+/// reader can satisfy while the property is false is not a guard.
+///
+/// It was written that way on a stated excuse: that a behavioural twin would have
+/// to move `HOME`, and moving `HOME` on this platform has destroyed a profile
+/// twice. The danger is real and the excuse was not — the narrowing is a pure
+/// function of two values, and nothing about testing it touches a home directory.
+#[test]
+fn an_unreadable_contract_narrows_the_reviewers_grant() {
+    use crate::config::Evidence;
+
+    for installed in Evidence::all() {
+        assert_eq!(
+            effective_evidence(true, installed),
+            Evidence::Reading,
+            "{installed:?}: a contract that could not be read handed out the wider grant"
+        );
+        assert_eq!(
+            effective_evidence(false, installed),
+            installed,
+            "{installed:?}: a readable contract was not believed"
+        );
+    }
+}
+
 /// The first string literal after each `Refusal::not_started(` or `code:`.
 fn codes_in(source: &str) -> Vec<String> {
     let mut codes = Vec::new();
@@ -2039,53 +2069,6 @@ fn every_setting_the_gate_reads_is_one_that_cannot_vary_by_agent() {
             EVERYWHERE_SETTINGS.contains(&setting),
             "{setting:?} is read by the gate and can be written per agent, so a \
              per-agent value for it would be written, read back, and ignored"
-        );
-    }
-
-    // A row the gate reads to hand out a **capability** is narrowed when the
-    // contract cannot be read, and this is the assertion that says so. Removing
-    // the fallback left the whole suite green — measured — which is this
-    // repository's own definition of a fix that is not tested.
-    //
-    // Read from the source for the same reason as the count below: the property
-    // is about the constructor, and `gate_context` resolves its roots from the
-    // environment. A behavioural twin would have to move `HOME`, which on this
-    // platform is how a profile gets deleted rather than how a test gets written.
-    {
-        let source = code_of(include_str!("mod.rs"));
-        let (start, _) = source
-            .match_indices("fn gate_context(")
-            .next()
-            .expect("the gate's context is built here");
-        let body = &source[start..];
-        let end = body
-            .find(
-                "
-}
-",
-            )
-            .unwrap_or(body.len());
-        let body = &body[..end];
-        let (at, _) = body
-            .match_indices("evidence:")
-            .next()
-            .expect("the gate carries the evidence standard");
-        let clause = &body[at..(at + 200).min(body.len())];
-        assert!(
-            clause.contains("if unreadable"),
-            "the evidence standard reaches the gate without asking whether the contract could \
-             be read, so a fault would hand out the wider grant"
-        );
-        let (narrow, wide) = (
-            clause.find("Evidence::Reading"),
-            clause.find("installed.evidence"),
-        );
-        let narrow = narrow.expect("the unreadable answer is spelled out");
-        let wide = wide.expect("the readable answer is the installed row");
-        assert!(
-            narrow < wide,
-            "the unreadable branch does not answer the narrower standard first, so an \
-             unreadable contract may be widening the reviewer's grant"
         );
     }
 

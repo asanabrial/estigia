@@ -4445,6 +4445,36 @@ const GUARD_CAVEATS: &[&str] = &[
 ];
 
 /// Everything the gate needs, or nothing if the harness is not installed.
+/// The evidence standard the gate acts on, given whether the contract could be read.
+///
+/// A function rather than a branch inside `gate_context`, and the reason is a
+/// finding rather than a preference. Inlined, the only thing holding it was an
+/// assertion that read the constructor's **source text** for `if unreadable` —
+/// which three blind reviewers each defeated while leaving the whole suite green,
+/// by keeping the words and inverting the property. A behavioural test needs
+/// something it can call.
+///
+/// The claim that no behavioural test was possible — that one "would have to move
+/// `HOME`" — was written into this file and into the pull request, and it was
+/// simply wrong: a reviewer wrote the twin in forty lines using helpers this crate
+/// already has. Moving `HOME` on this platform really has destroyed a profile
+/// twice, which is what made the excuse sound like a reason. A true danger is not
+/// a licence to skip the work it does not actually require.
+///
+/// The direction is the whole of it: a contract nobody could read narrows the
+/// grant. Widening on a fault is how a delegated context gets a capability out of
+/// a broken file.
+fn effective_evidence(
+    unreadable: bool,
+    installed: crate::config::Evidence,
+) -> crate::config::Evidence {
+    if unreadable {
+        crate::config::Evidence::Reading
+    } else {
+        installed
+    }
+}
+
 fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
     let repo_dir = if cwd.trim().is_empty() {
         launch_directory()?
@@ -4511,14 +4541,7 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
         } else {
             installed.window.min(harness::hook::default_window())
         },
-        // Narrowed the same way and for the same sentence: this row decides what
-        // a delegated reviewer may do, and a document that could not be read is
-        // the last thing that should widen it.
-        evidence: if unreadable {
-            crate::config::Evidence::Reading
-        } else {
-            installed.evidence
-        },
+        evidence: effective_evidence(unreadable, installed.evidence),
         tracker,
         boundaries,
     })

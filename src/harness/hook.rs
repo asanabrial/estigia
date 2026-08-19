@@ -939,11 +939,27 @@ pub fn run_as(
             // claim, a state, or a window, only on what the author wrote.
             if let Some(agent) = input.agent_type.as_deref() {
                 if agent == "review-blind" {
-                    if let Some(refusal) = super::roles::gate(
-                        Some(agent),
-                        &input.tool_name,
-                        Some(crate::skill::REVIEW_AGENT.contents),
-                    ) {
+                    // Rendered with the effective row, exactly as the other door
+                    // does. The asset is a template since issue 83, and handing
+                    // this the raw bytes makes `declared_policy` read an allowlist
+                    // naming one tool called `{{TOOLS}}` — which denies **every**
+                    // call, including the reads a reviewer had before that change,
+                    // and prints the placeholder into the operator's refusal.
+                    //
+                    // It shipped that way for one head. There are two callers of
+                    // `roles::gate` for this role and only one was rendered; a
+                    // blind judge measured the other through the real binary. The
+                    // allow-path crossing below is what makes the two doors
+                    // impossible to separate again, because every test that
+                    // existed walked the **denied** tools, which stay denied under
+                    // a placeholder and so agreed with the broken road.
+                    let reviewer = crate::setup::render_reviewer_agent(
+                        crate::skill::REVIEW_AGENT.contents,
+                        context.evidence,
+                    );
+                    if let Some(refusal) =
+                        super::roles::gate(Some(agent), &input.tool_name, Some(&reviewer))
+                    {
                         return dialect.deny(&refusal);
                     }
                 } else {

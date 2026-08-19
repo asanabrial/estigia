@@ -4627,6 +4627,88 @@ fn the_other_door_asks_a_sub_agents_declared_tool_list_too() {
     );
 }
 
+/// The reserved reviewer's grant is the same through both doors.
+///
+/// Two callers hand `roles::gate` this role's definition — `show_gate`, behind
+/// `estigia gate`, and the `PreToolUse` hook, which is the one a running agent
+/// goes through. Issue 83 made that definition a template and rendered it at the
+/// first door only. So the hook parsed `tools: {{TOOLS}}` as an allowlist naming
+/// one tool of that name and refused **every** call, including the reads the
+/// reviewer had before the change, printing the placeholder into the operator's
+/// refusal — a gate that denies everything reads exactly like a gate that works.
+///
+/// Every test that existed walked the **denied** tools, which stay denied under a
+/// placeholder, so all of them agreed with the broken road. Two blind judges
+/// measured it through the real binary. This asks the other direction, which is
+/// the one that was never asked: **is the tool the row grants actually allowed**,
+/// on both doors, for every value the row takes.
+#[test]
+fn the_reserved_reviewer_grant_is_the_same_through_both_doors() {
+    for (row, granted, refused) in [("reading", "Read", "Bash"), ("measuring", "Bash", "Write")] {
+        let home = tempfile::tempdir().expect("a temporary home");
+        std::fs::create_dir_all(home.path().join("AppData").join("Roaming"))
+            .expect("a roaming dir");
+        run(home.path(), &["install", "claude-code"], "");
+        let (said, error, ok) = run(
+            home.path(),
+            &["config", "set", "Evidence standard", row],
+            "",
+        );
+        assert!(ok, "{row} was refused: {said}{error}");
+
+        let repo = tempfile::tempdir().expect("a checkout");
+        let payload = format!(
+            "{{\"agent_type\":\"review-blind\",\"file_path\":\"src/main.rs\",\"command\":\"x\",\"cwd\":{:?}}}",
+            repo.path().display().to_string()
+        );
+
+        // Door one: the diagnostic verb.
+        let verb = |tool: &str| {
+            run_in(
+                home.path(),
+                repo.path(),
+                &[
+                    "gate",
+                    tool,
+                    "--run-id",
+                    "claude-aaaa1111",
+                    "--input",
+                    &payload,
+                ],
+                "",
+            )
+        };
+        // Door two: what a running agent actually goes through.
+        let hook = |tool: &str| {
+            let event = format!(
+                "{{\"session_id\":\"probe\",\"agent_type\":\"review-blind\",\"tool_name\":{tool:?},\"tool_input\":{{\"file_path\":\"src/main.rs\",\"command\":\"x\"}},\"cwd\":{:?}}}",
+                repo.path().display().to_string()
+            );
+            run_in(home.path(), repo.path(), &["hook", "pre-tool-use"], &event)
+        };
+
+        for (door, answer) in [("gate", verb(granted)), ("hook", hook(granted))] {
+            let (said, error, _) = answer;
+            assert!(
+                !format!("{said}{error}").contains("declared"),
+                "{row}/{door}: {granted} is what this row grants and the {door} door refused it:                  {said}{error}"
+            );
+            assert!(
+                !format!("{said}{error}").contains("{{"),
+                "{row}/{door}: a placeholder reached the operator, so the definition was never                  rendered: {said}{error}"
+            );
+        }
+
+        for (door, answer) in [("gate", verb(refused)), ("hook", hook(refused))] {
+            let (said, error, _) = answer;
+            assert!(
+                format!("{said}{error}").contains("declared"),
+                "{row}/{door}: {refused} is outside this row's grant and the {door} door allowed                  it: {said}{error}"
+            );
+        }
+    }
+}
+
 /// A stand-down reaches a role refusal through both doors, or through neither.
 ///
 /// The hook wraps its role denial in `standdown::over`; the door added beside

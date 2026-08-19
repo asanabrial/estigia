@@ -1379,16 +1379,28 @@ fn reviewer_target(paths: &AgentPaths) -> Option<PathBuf> {
 /// the moment there is a second judge.
 pub fn render_reviewer_agent(template: &str, evidence: Evidence) -> String {
     let (tools, discipline) = match evidence {
-        // What ships by default, and what every installation had before this was
-        // a row at all.
+        // What ships by default, and the paragraph is reproduced **exactly** as
+        // every build before this one wrote it — same wrapping, same sentence
+        // order, the closing sentence in the same paragraph rather than a new
+        // one. That is not tidiness. `reviewer_is_static` compares bytes, so a
+        // rendering that merely says the same thing differently makes every
+        // installed copy foreign: a blind reviewer of this change measured that
+        // an existing install then refuses every judge launch, `setup` refuses
+        // too, and `uninstall` followed by `setup` leaves the file unowned and
+        // unrecoverable — with the only action that works named by no refusal
+        // and no document. `the_default_rendering_is_the_bytes_already_installed`
+        // pins it.
         Evidence::Reading => (
             "Read, Grep, Glob",
-            "Remain read-only. Do NOT edit files, run a shell, change tracker state, record the \
-             aggregate verdict, or repair a finding.",
+            "Remain read-only. Do NOT edit files, run a shell, change tracker state, record the aggregate verdict,\n\
+             or repair a finding. Return findings to the orchestrator with severity, precise evidence, and a stable\n\
+             identity based on the affected behavior and location.",
         ),
         // A shell, because a finding established by running something cannot be
         // established without running it — and the isolation rule in the same
         // breath, because the capability alone is the concurrent-writer defect.
+        // The grant does not stop a judge rewriting the target; the directory it
+        // is confined to does, and `docs/honesty.md` says exactly that.
         Evidence::Measuring => (
             "Read, Grep, Glob, Bash",
             "A finding here is established by running something, so you may build, test and \
@@ -1398,7 +1410,8 @@ pub fn render_reviewer_agent(template: &str, evidence: Evidence) -> String {
              report. If it is already dirty when you arrive, stop and say so rather than \
              restoring it — whatever made it dirty was somebody's measurement, and repairing it \
              destroys theirs. Still do NOT change tracker state, record the aggregate verdict, or \
-             repair a finding.",
+             repair a finding. Return findings to the orchestrator with severity, precise \
+             evidence, and a stable identity based on the affected behavior and location.",
         ),
     };
     template

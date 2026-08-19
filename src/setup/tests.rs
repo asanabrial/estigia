@@ -4946,6 +4946,59 @@ fn a_model_named_for_a_phase_reaches_that_phases_definition() {
     );
 }
 
+/// The default rendering is the bytes every earlier build already installed.
+///
+/// `reviewer_is_static` compares bytes. So when issue 83 made the reviewer a
+/// template, a rendering that said the same thing with different line breaks
+/// made **every installed copy foreign** — and a blind reviewer measured what
+/// that costs on a machine that already had Estigia: every judge launch refused,
+/// `setup` refusing rather than repairing it, and `uninstall` followed by `setup`
+/// leaving the file unowned and unrecoverable. The one action that works —
+/// deleting the file — is named by no refusal and no document, which is the thing
+/// `CLAUDE.md` forbids most plainly.
+///
+/// It shipped that way for one head and nothing noticed, because every other test
+/// compares the rendering against *itself*. This compares it against history,
+/// which is the only comparison that can see a migration at all.
+///
+/// The literal below is the asset at `fe4ff4b1`, the last commit before the
+/// template. Updating it asserts *every installation may be refused until it
+/// re-runs setup* — do not update it to make a wording change pass.
+#[test]
+fn the_default_rendering_is_the_bytes_already_installed() {
+    const AS_SHIPPED_BEFORE_THE_TEMPLATE: &str = "---\nname: review-blind\ndescription: >\n  Independently review one immutable publication receipt against the supplied criteria. The\n  orchestrator launches this same definition twice or five times for a blind panel.\nmodel: inherit\ntools: Read, Grep, Glob\n---\n\nYou are one blind reviewer. Review the exact immutable target and criteria in your prompt. Do not\nsubstitute a newer head, a different digest, or criteria inferred from the implementation.\n\nThis definition is inert unless the launch prompt names an active blind mode, the exact publication\nreceipt, and the review criteria. Without all three, stop and report that the panel invocation is\nincomplete.\n\nRemain read-only. Do NOT edit files, run a shell, change tracker state, record the aggregate verdict,\nor repair a finding. Return findings to the orchestrator with severity, precise evidence, and a stable\nidentity based on the affected behavior and location.\n\nDo NOT delegate, call the Task tool, or launch sub-agents. Do NOT read, request, or infer the output of\nother judges. Their findings and reasoning are unavailable to you by design. Report your own warnings,\nsuggestions, uncertainty, and dissent rather than trying to form panel agreement.\n\nThe orchestrator alone compares independently produced findings. You do not count confirmations,\ndecide quorum, or authorize repair.\n";
+
+    assert_eq!(
+        render_reviewer_agent(skill::REVIEW_AGENT.contents, Evidence::Reading),
+        AS_SHIPPED_BEFORE_THE_TEMPLATE,
+        "the default rendering is not what earlier builds installed, so every existing \
+         installation is about to be refused"
+    );
+    assert_eq!(
+        Config::default().evidence,
+        Evidence::Reading,
+        "the default standard moved, so the rendering above is no longer the default one"
+    );
+
+    // And every rendering is accepted, not only the default one. Narrowing this
+    // back to a single spelling left the whole suite green while refusing every
+    // judge launch on a `measuring` install — a blind reviewer measured it. The
+    // widening is what makes the feature work at all, so it is asserted rather
+    // than described.
+    for evidence in Evidence::all() {
+        assert!(
+            reviewer_is_static(&render_reviewer_agent(
+                skill::REVIEW_AGENT.contents,
+                evidence
+            )),
+            "{evidence:?}: setup writes a definition its own launch check calls foreign"
+        );
+    }
+    assert!(
+        !reviewer_is_static(skill::REVIEW_AGENT.contents),
+        "the unrendered template is accepted, so a placeholder could reach the host"
+    );
+}
 #[test]
 fn every_claude_setup_installs_one_idempotent_static_reviewer() {
     let (home, options) = sandbox();
