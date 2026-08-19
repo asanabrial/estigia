@@ -1426,7 +1426,7 @@ suite. Everything else here is prose held by review.
 
   **And the workflow front door is reachable the same way.** `estigia claim` and
   `estigia transition` are CLI entrances onto the operations the tool server runs, and the role
-  gate bars tool *names*, not shell commands # so under `measuring` the same shell that reaches
+  gate bars tool *names*, not shell commands — so under `measuring` the same shell that reaches
   the target reaches those. What holds a judge off them is the sentence *"Still do NOT change
   tracker state, record the aggregate verdict, or repair a finding"* in its own rendered
   definition: an instruction, not a gate. The claim gate answers separately and a judge holds no
@@ -1439,10 +1439,19 @@ suite. Everything else here is prose held by review.
   `Scope::Everywhere`, so it is set per repository, while the artifact it decides is a single
   user-level `review-blind.md` rendered from whichever checkout last ran `setup` or `sync`. On a
   machine holding one `reading` repository and one `measuring` repository, the drift
-  `docs/configuration.md` frames as lasting *until the file is next written* is permanent for
+  `docs/configuration.md` frames as lasting only until `setup` or `sync` next writes the file is
+  permanent for
   whichever repository was not last written, and no re-render fixes both. The gate answers per
   repository and narrows on an unreadable contract, so this costs a capability rather than
-  granting one # a measuring judge offered the reading grant, which fails closed.
+  granting one — a measuring judge offered the reading grant, which fails closed.
+
+  **A count corrected in the documents and left in the source comments.** This change derives the
+  neutral-root adapter count and corrects `README.md`, `CHANGELOG.md` and `docs/what-it-writes.md`
+  to nine. Source comments across `src/skill/record.rs`, `src/cli/mod.rs` and `src/setup/mod.rs`
+  still say *eight*. Nothing reads them and no shipped document repeats them, so no behaviour is
+  wrong; what is wrong is that a reader of the code is told a number the code disagrees with. All
+  pre-existing at `fe4ff4b1` and filed as **#93**, which carries the search rather than a list —
+  its first version listed fourteen sites by hand where the search answers 31.
 
   **Still open, and named rather than implied.**
 
@@ -1478,14 +1487,19 @@ suite. Everything else here is prose held by review.
     run"*. It is corrected here rather than quietly, because a false sentence in the register of what
     is not measured is the one kind this document cannot carry.
 
-    Three narrower limits on the within-run record, each a way the set can be empty while contexts
-    ran. A host that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart
+    Four narrower limits on the within-run record. The first three are ways the set can be empty
+    while contexts ran; the fourth is a write that did not happen before. A host that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart
     from nothing having been delegated. A context refused at the role gate before any call is not
     recorded, which is deliberate — a refused launch contributes no judge — but it means the record carries
     nothing for a launch the role gate refused. A call the *claim* gate denied is recorded, since
     the store fires on a new role or an allow — so this is one gate's refusals, not every gate's. And the field names a role, never a *count*:
     five contexts under one role and one context under it write the same byte, so nothing here bears
-    on panel size, which the entry below already states this crate cannot see.
+    on panel size, which the entry below already states this crate cannot see. And the store now
+    fires on a **new role** as well as on an allow, so a call the claim gate denied writes a
+    pointer where only an allowed one did — including under the `<runtime>-unknown` name a blank
+    `session_id` produces, which `SessionEnd` deliberately does not remove. Such a pointer holds
+    no issue, so it cannot loosen the gate, and the allow path could already create it; it is
+    recorded because it is a write case this change added and not one it inherited.
 
     One more, found by a judge rather than by design: the role write goes through `session::store`,
     which drops a stale write whole when another writer moved the revision first. `session::update`

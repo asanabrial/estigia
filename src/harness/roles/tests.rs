@@ -623,7 +623,7 @@ fn a_shipped_planning_phase_cannot_write(config: &crate::config::Config, openspe
         }
         // `explore` is the one phase that reaches outward, and the pair that
         // lets it is what its grant is *for*. This gate never sees either call
-        // # the module note above says so # which makes the declared list the
+        // — the module note above says so — which makes the declared list the
         // whole of that boundary, and is exactly why narrowing it has to redden
         // something here rather than nowhere.
         let outward = match phase {
@@ -669,11 +669,17 @@ fn the_shipped_blind_reviewer_gets_the_grant_its_standard_decides() {
     // without deciding here what its reviewer may do.
     //
     // The shape this holds is the whole of what `measuring` buys: **a shell and
-    // nothing else**. Reading stays reading in both, and the four tools that
-    // would let a judge rewrite the target or hand the work to somebody else are
-    // denied whichever answer the operator gave. A grant that widened past the
-    // shell would be a judge that can edit what it is judging, which is the one
-    // thing no evidence standard makes acceptable.
+    // nothing else**. Reading stays reading in both, and `Write`, `Edit`,
+    // `Agent` and `Task` are denied whichever answer the operator gave.
+    //
+    // What that is worth, stated exactly, because five other places in this
+    // change said it wrong: it holds the *grant* to four refusals and a shell.
+    // It does not stop a measuring judge editing the target — the shell does
+    // that, and `skill/policies/blind-judges.md` says the directory it is
+    // confined to is the only thing answering for it. So a widening past the
+    // shell is refused here because the isolation rule is written for a judge
+    // with a shell and nothing wider, not because this assertion is what keeps
+    // the target safe.
     for evidence in crate::config::Evidence::all() {
         let definition =
             crate::setup::render_reviewer_agent(crate::skill::REVIEW_AGENT.contents, evidence);

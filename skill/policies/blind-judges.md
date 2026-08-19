@@ -157,7 +157,9 @@ conditional-ready operation, and out-of-band collaborators or workflows can bypa
 evidence. There is no malicious-collaborator authenticity claim.
 
 For Claude Code, setup always installs one stable inert reviewer definition where the host finds it;
-the setting does not create or rewrite that file. The orchestrator remains responsible for passing the
+`Blind judges` does not create or rewrite that file — it decides how many contexts are launched,
+not what one may do. `Evidence standard` is the row that decides the file's tool grant, and it is
+applied when `setup` or `sync` next writes it. The orchestrator remains responsible for passing the
 effective judge model, activating the right number of contexts concurrently, withholding sibling
 output, applying finding identity and quorum, and preserving dissent. That is a real contract, not
 mechanical proof that it happened.

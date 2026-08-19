@@ -254,7 +254,7 @@ fn one_stable_blind_reviewer_definition_is_in_the_agent_manifest_not_the_skill()
     for placeholder in ["{{TOOLS}}", "{{DISCIPLINE}}"] {
         assert!(
             reviewer.contains(placeholder),
-            "the reviewer asset no longer carries {placeholder}, so the evidence              standard cannot reach it"
+            "the reviewer asset no longer carries {placeholder}, so the evidence standard cannot reach it"
         );
     }
     for evidence in estigia::config::Evidence::all() {

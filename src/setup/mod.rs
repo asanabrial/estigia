@@ -1417,15 +1417,16 @@ pub fn render_reviewer_agent(template: &str, evidence: Evidence) -> String {
         // is confined to does, and `docs/honesty.md` says exactly that.
         Evidence::Measuring => (
             "Read, Grep, Glob, Bash",
-            "A finding here is established by running something, so you may build, test and \
-             mutate — inside the directory this launch hands you and nowhere else. That directory \
-             is yours alone for the duration: not a sibling judge's, not the orchestrator's, not \
-             another run's. Restore every mutation and confirm the tree is clean before you \
-             report. If it is already dirty when you arrive, stop and say so rather than \
-             restoring it — whatever made it dirty was somebody's measurement, and repairing it \
-             destroys theirs. Still do NOT change tracker state, record the aggregate verdict, or \
-             repair a finding. Return findings to the orchestrator with severity, precise \
-             evidence, and a stable identity based on the affected behavior and location.",
+            "A finding here is established by running something, so you may build, test and mutate\n\
+             — inside the directory this launch hands you and nowhere else. That directory\n\
+             is yours alone for the duration: not a sibling judge's, not the orchestrator's,\n\
+             not another run's. Restore every mutation and confirm the tree is clean before\n\
+             you report. If it is already dirty when you arrive, stop and say so rather than\n\
+             restoring it — whatever made it dirty was somebody's measurement, and repairing\n\
+             it destroys theirs. Still do NOT change tracker state, record the aggregate\n\
+             verdict, or repair a finding. Return findings to the orchestrator with severity,\n\
+             precise evidence, and a stable identity based on the affected behavior and\n\
+             location.",
         ),
     };
     template

@@ -4720,11 +4720,12 @@ fn the_reserved_reviewer_grant_is_the_same_through_both_doors() {
             let (said, error, _) = answer;
             assert!(
                 !format!("{said}{error}").contains("declared"),
-                "{row}/{door}: {granted} is what this row grants and the {door} door refused it:                  {said}{error}"
+                "{row}/{door}: {granted} is what this row grants and the {door} door refused it: {said}{error}"
             );
             assert!(
                 !format!("{said}{error}").contains("{{"),
-                "{row}/{door}: a placeholder reached the operator, so the definition was never                  rendered: {said}{error}"
+                "{row}/{door}: a placeholder reached the operator, so the definition was never rendered: \
+                 {said}{error}"
             );
         }
 
@@ -4767,7 +4768,8 @@ fn the_reserved_reviewer_grant_is_the_same_through_both_doors() {
                 let (said, error, _) = answer;
                 assert!(
                     format!("{said}{error}").contains("declared"),
-                    "{door}: a contract that would not parse handed the reviewer the wider                      grant: {said}{error}"
+                    "{door}: a contract that would not parse handed the reviewer the wider grant: \
+                     {said}{error}"
                 );
             }
         }

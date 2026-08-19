@@ -2318,7 +2318,7 @@ fn the_payload_names_no_implementation_this_crate_retired() {
 /// `the_handoff_counts_what_the_crate_actually_has` opens by saying *"the
 /// README's counts are crossed against the code above"*. They are not, for the
 /// one a reader meets first: the Configuration section said **"Nine settings,
-/// all typed"** and the crate has eighteen, while the handoff's `18 settings`
+/// all typed"** and the crate had eighteen at the time, while the handoff's `18 settings`
 /// was crossed and correct three files away. The sentence claiming the coverage
 /// was the reason nobody looked.
 ///
@@ -2446,8 +2446,8 @@ fn the_readme_counts_what_the_crate_actually_has() {
 /// Measured, and five did not. `context.get` is called for exactly three labels —
 /// `project board`, `worktree location` and `Review delegation`, which is what
 /// `READ_BY_THE_TRANSPORT`
-/// says — the gate reads `Irreversible commands`, and the payload's prose names
-/// eleven. That left `Delivery authorisation`, `Transition authorisation`,
+/// says — the gate read `Irreversible commands`, and the payload's prose named
+/// eleven of them then. That left `Delivery authorisation`, `Transition authorisation`,
 /// `Delivery route`, `Merge strategy` and `Model routing` read by nobody: not
 /// the gate, not the transport, and no sentence an agent is given.
 ///
