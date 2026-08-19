@@ -13343,3 +13343,655 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
         }
     }
 }
+
+/// A publication says what it descends from, and says it from the timeline.
+///
+/// The lineage half of issue 46. Two rows, and the pair is the whole crossing:
+///
+/// - **A first publication records no parent at all.** Absence is the answer,
+///   not a missing field, and a mechanism that invented one here would make
+///   every first publication look like a repair of something.
+/// - **A publication over a recorded one records that one.** The parent epoch,
+///   head and digest in this fixture are deliberately *not* the ones being
+///   published — a run that derived the parent from its own arguments, or that
+///   accepted a parent from the caller, answers with the wrong bytes rather than
+///   with nothing, which is why the fixture makes all three differ.
+///
+/// The delta is recomputed here from the two ends the answer itself reports
+/// rather than by calling the function that produced it. Asserting
+/// `fix_delta_digest(..) == fix_delta_digest(..)` would hold whatever that
+/// function did, including returning a constant.
+#[test]
+fn a_publication_records_the_one_it_repairs_and_a_first_one_records_nothing() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let origin = tempfile::tempdir().expect("a bare origin");
+    let run_id = "claude-abcd1234";
+    let branch = "fix/12-lineage";
+
+    let git = |arguments: &[&str]| -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    let sha = |what: &str| -> String {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(["rev-parse", what])
+            .output()
+            .expect("git answers");
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(origin.path())
+            .output()
+            .is_ok_and(|output| output.status.success())
+    );
+    assert!(git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.path().display().to_string()
+    ]));
+    assert!(git(&["branch", "-M", "main"]));
+    std::fs::write(repo.join("kept.txt"), "base\n").expect("the base file");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "base content",
+    ]));
+    assert!(git(&["push", "--quiet", "-u", "origin", "main"]));
+    let base_sha = sha("main");
+    assert!(git(&["checkout", "--quiet", "-b", branch]));
+    std::fs::write(repo.join("kept.txt"), "changed\n").expect("the changed file");
+    assert!(git(&["add", "kept.txt"]));
+    assert!(git(&[
+        "-c",
+        "user.email=nobody@example.invalid",
+        "-c",
+        "user.name=nobody",
+        "commit",
+        "--quiet",
+        "-m",
+        "the change",
+    ]));
+    let head = sha(branch);
+
+    let body = trace.path().join("body.md");
+    std::fs::write(&body, "Refs #12.\n").expect("the pull request body");
+
+    // The parent, and every part of it different from what is being published,
+    // so a row that answers with its own receipt fails rather than coincides.
+    let parent_epoch = "7".repeat(32);
+    let parent_head = "9".repeat(40);
+    let parent_digest = "8".repeat(64);
+    let claimed = serde_json::json!({
+        "id": "IC_1",
+        "createdAt": "2026-01-01T00:00Z",
+        "viewerDidAuthor": true,
+        "includesCreatedEdit": false,
+        "body": format!(
+            "Claimed.\n\n<!-- issue-flow: claim run-id={run_id} runtime=claude \
+             horizon=2099-01-01T00:00Z op-id={} -->\n",
+            "a".repeat(32)
+        ),
+    });
+    let earlier = serde_json::json!({
+        "id": "IC_2",
+        "createdAt": "2026-01-01T01:00Z",
+        "viewerDidAuthor": true,
+        "includesCreatedEdit": false,
+        "body": format!(
+            "Published draft for review.\n\n<!-- issue-flow: published run-id={run_id} \
+             pr=7 head={parent_head} base={base_sha} digest={parent_digest} \
+             epoch={parent_epoch} -->\n"
+        ),
+    });
+
+    let pr = serde_json::json!({
+        "number": 7,
+        "url": "https://github.com/o/r/pull/7",
+        "headRefOid": head,
+        "baseRefOid": base_sha,
+        "state": "OPEN",
+        "isDraft": true,
+    });
+
+    for (label, repairs) in [("first", false), ("repair", true)] {
+        let mut comments = vec![claimed.clone()];
+        if repairs {
+            comments.push(earlier.clone());
+        }
+        let timeline = serde_json::json!({
+            "state": "OPEN",
+            "assignees": [],
+            "labels": [{"name": "status:in-progress"}],
+            "comments": comments,
+        })
+        .to_string();
+        let answers = serde_json::to_string(&serde_json::json!([
+            { "matches": "issue view", "stdout": timeline, "status": 0 },
+            { "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 },
+            { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
+            { "matches": "json body", "stdout": serde_json::json!({"body": "names nothing"}).to_string(), "status": 0 },
+            { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+            {
+                "matches": "api graphql",
+                "stdout": serde_json::json!({
+                    "data": { "repository": { "issue": { "closedByPullRequestsReferences": {
+                        "nodes": [],
+                        "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                    } } } },
+                }).to_string(),
+                "status": 0,
+            },
+            { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+        ]))
+        .expect("the fake tracker script serialises");
+
+        let runs = home.join(".estigia").join("runs");
+        let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
+        let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+        run.issue = Some(12);
+        run.state = Some("in-progress".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "publish_review", "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "branch": branch,
+                "base": "main",
+                "pr_title": "Something",
+                "pr_body_file": body.display().to_string(),
+                "worktree": repo.display().to_string(),
+            }}
+        })
+        .to_string();
+
+        let log = trace.path().join(format!("lineage-{label}.log"));
+        let temp = trace.path().join(format!("temp-{label}"));
+        std::fs::create_dir_all(&temp).expect("a temporary directory for the child");
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .env("TMPDIR", &temp)
+            .env("TMP", &temp)
+            .env("TEMP", &temp)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        assert_eq!(
+            response["result"]["isError"], false,
+            "{label}: the publication did not land: {text}"
+        );
+        let answer: serde_json::Value =
+            serde_json::from_str(&text).expect("the publication answer is JSON");
+        let receipt = staged_receipt(&temp, 12);
+
+        if !repairs {
+            for field in ["parent", "parent_head", "delta"] {
+                assert!(
+                    answer[field].is_null(),
+                    "{label}: a first publication answered with a {field}, so it descends from \
+                     something this issue never published: {text}"
+                );
+            }
+            assert!(
+                !receipt.contains(" parent=") && !receipt.contains(" delta="),
+                "{label}: a first publication staged a lineage in its receipt: {receipt}"
+            );
+            continue;
+        }
+
+        let published_digest = answer["digest"]
+            .as_str()
+            .expect("the target digest")
+            .to_owned();
+        // Recomputed from the two ends rather than from the function under test.
+        let expected = estigia::transport::ownership::sha256_hex(
+            [
+                parent_epoch.as_str(),
+                parent_head.as_str(),
+                parent_digest.as_str(),
+                head.as_str(),
+                published_digest.as_str(),
+            ]
+            .join("\n")
+            .as_bytes(),
+        );
+        assert_eq!(
+            answer["parent"].as_str(),
+            Some(parent_epoch.as_str()),
+            "{label}: the parent is not the epoch this issue last published: {text}"
+        );
+        assert_eq!(
+            answer["parent_head"].as_str(),
+            Some(parent_head.as_str()),
+            "{label}: the parent head is not the one on the timeline, so `parent_head..head` \
+             names a delta nobody can read: {text}"
+        );
+        assert_eq!(
+            answer["delta"].as_str(),
+            Some(expected.as_str()),
+            "{label}: the delta does not cover both ends of the repair: {text}"
+        );
+        // And in the durable record, which is the only copy that survives this
+        // process. The answer is what the caller sees; the marker is what the
+        // next reviewer reads.
+        for spelled in [
+            format!("parent={parent_epoch}"),
+            format!("parent-head={parent_head}"),
+            format!("delta={expected}"),
+        ] {
+            assert!(
+                receipt.contains(&spelled),
+                "{label}: the staged receipt does not carry `{spelled}`, so the answer reported a \
+                 lineage the timeline will not hold: {receipt}"
+            );
+        }
+    }
+}
+
+/// Across a repair, a finding says whether it is old work or new, and a new
+/// blocker says why the repair is answerable for it.
+///
+/// The other half of the lineage. The parent ledger stays on the timeline —
+/// nothing rewrites it — so what needs adjudicating is the *reference*: an
+/// identity that names nothing makes a fresh observation read as settled work,
+/// and a severe finding that names nothing at all is how a full-target resweep
+/// arrives looking like a defect the repair caused.
+///
+/// Six rows. Four of them are refusals a mutation would turn green, one is the
+/// reassessment the mechanism exists to allow, and one is the deliberate
+/// asymmetry: a warning new to a repair owes nobody an explanation, because
+/// pricing the cheap observation is the defect this whole change repairs.
+#[test]
+fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let publisher = "claude-abcd1234";
+    let reviewer = "gemini-c0ffee00";
+    let parent_epoch = "7".repeat(32);
+    let parent_head = "9".repeat(40);
+    let parent_digest = "8".repeat(64);
+    let epoch = "e".repeat(32);
+    let head = "b".repeat(40);
+    let base = "c".repeat(40);
+    let digest = "d".repeat(64);
+    let delta = "f".repeat(64);
+    let marker = |kind, fields: &[(&str, &str)]| {
+        estigia::transport::markers::render(kind, fields).expect("a protocol marker")
+    };
+    let comment = |id: &str, at: &str, body: String| {
+        serde_json::json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let held = comment(
+        "IC_claim",
+        "2026-08-14T09:00:00Z",
+        marker(
+            "claim",
+            &[
+                ("run-id", reviewer),
+                ("runtime", "gemini"),
+                ("horizon", "2099-01-01T00:00Z"),
+                ("op-id", &"a".repeat(32)),
+            ],
+        ),
+    );
+    // The publication that was reviewed, and the one severe finding it drew.
+    // Both stay on the timeline: preserving settled work is not an operation
+    // here, it is the absence of one.
+    let earlier = comment(
+        "IC_parent",
+        "2026-08-14T09:10:00Z",
+        marker(
+            "published",
+            &[
+                ("run-id", publisher),
+                ("epoch", &parent_epoch),
+                ("pr", "7"),
+                ("head", &parent_head),
+                ("base", &base),
+                ("digest", &parent_digest),
+            ],
+        ),
+    );
+    let settled = comment(
+        "IC_settled",
+        "2026-08-14T09:30:00Z",
+        marker(
+            "review-finding",
+            &[
+                ("run-id", reviewer),
+                ("reviewer", reviewer),
+                ("op-id", &"1".repeat(32)),
+                ("epoch", &parent_epoch),
+                ("pr", "7"),
+                ("head", &parent_head),
+                ("base", &base),
+                ("digest", &parent_digest),
+                ("id", "old-defect"),
+                ("class", "severe"),
+                ("evidence", "the command that reddened"),
+                ("impact", "what it cost"),
+            ],
+        ),
+    );
+    // The repair, with the lineage the publication derived. `lineage=false`
+    // strips it, which is the only shape in which naming a parent is incoherent
+    // rather than merely wrong.
+    // A finding this reviewer recorded against the publication under review.
+    // It is on the same timeline as the parent ledger and it is **not** part of
+    // it: citing it as a parent would let a repair present its own fresh
+    // observation as work that was already agreed.
+    let current = comment(
+        "IC_current",
+        "2026-08-14T10:15:00Z",
+        marker(
+            "review-finding",
+            &[
+                ("run-id", reviewer),
+                ("reviewer", reviewer),
+                ("op-id", &"2".repeat(32)),
+                ("epoch", &epoch),
+                ("pr", "7"),
+                ("head", &head),
+                ("base", &base),
+                ("digest", &digest),
+                ("id", "this-epoch"),
+                ("class", "warning"),
+                ("evidence", "noticed while reviewing the repair"),
+                ("impact", "small"),
+            ],
+        ),
+    );
+    let repair = |lineage: bool| {
+        let mut fields: Vec<(&str, &str)> = vec![
+            ("run-id", publisher),
+            ("epoch", &epoch),
+            ("pr", "7"),
+            ("head", &head),
+            ("base", &base),
+            ("digest", &digest),
+        ];
+        if lineage {
+            fields.push(("parent", &parent_epoch));
+            fields.push(("parent-head", &parent_head));
+            fields.push(("delta", &delta));
+        }
+        comment(
+            "IC_publication",
+            "2026-08-14T10:00:00Z",
+            marker("published", &fields),
+        )
+    };
+
+    for (label, lineage, id, class, parent, origin, refused, reason) in [
+        // The reassessment: an identity the parent ledger holds.
+        (
+            "reassessed",
+            true,
+            "old-defect",
+            "severe",
+            "old-defect",
+            "",
+            false,
+            "",
+        ),
+        // An identity it does not. Without this check `parent` is free text and
+        // a fresh observation reads as already agreed.
+        (
+            "invented-parent",
+            true,
+            "new-defect",
+            "severe",
+            "never-found",
+            "",
+            true,
+            "finding-parent-unknown",
+        ),
+        // A new blocker with nothing said about why the repair owns it.
+        (
+            "unexplained-blocker",
+            true,
+            "new-defect",
+            "severe",
+            "",
+            "",
+            true,
+            "new-blocker-without-origin",
+        ),
+        // The same finding, explained.
+        (
+            "explained-blocker",
+            true,
+            "new-defect",
+            "severe",
+            "",
+            "introduced",
+            false,
+            "",
+        ),
+        // The asymmetry: a warning new to a repair owes nothing.
+        ("new-warning", true, "a-note", "warning", "", "", false, ""),
+        // An identity that exists, on this timeline, against **this** epoch.
+        // The parent ledger is the parent epoch and nothing else; reading the
+        // whole timeline would make this row pass and let a repair cite its own
+        // fresh observation as settled.
+        (
+            "parent-from-this-epoch",
+            true,
+            "new-defect",
+            "severe",
+            "this-epoch",
+            "",
+            true,
+            "finding-parent-unknown",
+        ),
+        // A parent named against a publication that descends from nothing.
+        (
+            "parent-without-lineage",
+            false,
+            "new-defect",
+            "severe",
+            "old-defect",
+            "",
+            true,
+            "finding-parent-without-lineage",
+        ),
+    ] {
+        let log = trace.path().join(format!("repair-{label}.log"));
+        let mut fields: Vec<(&str, &str)> = vec![
+            ("run-id", reviewer),
+            ("reviewer", reviewer),
+            ("epoch", &epoch),
+            ("pr", "7"),
+            ("head", &head),
+            ("base", &base),
+            ("digest", &digest),
+            ("id", id),
+            ("class", class),
+            ("evidence", "a command that reddens"),
+            ("impact", "what it costs"),
+        ];
+        if !parent.is_empty() {
+            fields.push(("parent", parent));
+        }
+        if !origin.is_empty() {
+            fields.push(("origin", origin));
+        }
+        let key = estigia::transport::claim::review_operation_id(
+            "review-finding",
+            &[
+                reviewer, reviewer, &epoch, "7", &head, &base, &digest, id, class,
+            ],
+        );
+        fields.insert(2, ("op-id", &key));
+        let written = comment(
+            "IC_written",
+            "2026-08-14T10:30:00Z",
+            marker("review-finding", &fields),
+        );
+        let timeline = |after: bool| -> String {
+            let mut comments = vec![
+                held.clone(),
+                earlier.clone(),
+                settled.clone(),
+                repair(lineage),
+                current.clone(),
+            ];
+            if after {
+                comments.push(written.clone());
+            }
+            serde_json::json!({
+                "state": "OPEN",
+                "assignees": [],
+                "labels": [{"name": "status:review"}],
+                "comments": comments,
+            })
+            .to_string()
+        };
+        let mut script = vec![];
+        for before in 1..=3 {
+            script.push(serde_json::json!({
+                "matches": "issue view", "nth": before,
+                "stdout": timeline(false), "status": 0,
+            }));
+        }
+        script.extend([
+            serde_json::json!({ "matches": "issue view", "stdout": timeline(true), "status": 0 }),
+            serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
+        ]);
+        let answers = serde_json::to_string(&script).expect("the fake tracker script serialises");
+
+        let runs = home.join(".estigia").join("runs");
+        let _ = std::fs::remove_file(runs.join(format!("{reviewer}.json")));
+        let mut run = estigia::harness::session::Run::new(reviewer.to_owned());
+        run.issue = Some(12);
+        run.state = Some("review".to_owned());
+        run.repo_dir = Some(repo.to_path_buf());
+        assert!(
+            estigia::harness::session::store(&runs, &run).expect("the pointer is writable"),
+            "the fixture pointer was not stored"
+        );
+
+        let mut arguments = serde_json::json!({
+            "issue": 12,
+            "run_id": reviewer,
+            "reviewer": reviewer,
+            "epoch": epoch,
+            "pr": 7,
+            "head": head,
+            "base": base,
+            "digest": digest,
+            "id": id,
+            "class": class,
+            "evidence": "a command that reddens",
+            "impact": "what it costs",
+        });
+        if !parent.is_empty() {
+            arguments["parent"] = serde_json::json!(parent);
+        }
+        if !origin.is_empty() {
+            arguments["origin"] = serde_json::json!(origin);
+        }
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "record_review_finding", "arguments": arguments }
+        })
+        .to_string();
+
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env(
+                "ESTIGIA_FAKE_COUNT",
+                trace.path().join(format!("repair-{label}-count.json")),
+            )
+            .env("ESTIGIA_FAKE_LOG", &log)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        use std::io::Write;
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+                panic!(
+                    "the MCP response is not JSON: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                )
+            });
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let calls = std::fs::read_to_string(&log).unwrap_or_default();
+        assert_eq!(
+            response["result"]["isError"], refused,
+            "{label}: the finding was not adjudicated the way this row states: {text}"
+        );
+        if refused {
+            assert!(
+                text.contains(reason),
+                "{label}: refused for something other than `{reason}`, so this row proves \
+                 nothing about the rule it is here for: {text}"
+            );
+            assert!(
+                !calls.contains("issue comment"),
+                "{label}: a refused finding still wrote to the timeline: {calls}"
+            );
+        } else {
+            assert!(
+                calls.contains("issue comment"),
+                "{label}: the finding was allowed and never written: {calls}"
+            );
+        }
+    }
+}
