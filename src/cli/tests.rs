@@ -3188,12 +3188,12 @@ fn a_row_an_agents_own_file_answers_is_not_reported_as_in_force() {
 }
 
 #[test]
-fn config_writes_never_mutate_the_static_reviewer() {
+fn config_writes_never_mutate_the_installed_reviewer() {
     let (home, options) = sandbox();
     let adapter = crate::setup::find_agent("claude-code").expect("Claude Code is an adapter");
     crate::setup::setup(adapter, &Config::default(), &options).expect("setup runs");
     let reviewer = home.path().join(".claude/agents/review-blind.md");
-    let before = fs::read(&reviewer).expect("the static reviewer reads");
+    let before = fs::read(&reviewer).expect("the installed reviewer reads");
 
     super::config_set(
         "Model routing",

@@ -5024,7 +5024,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
     );
 }
 #[test]
-fn every_claude_setup_installs_one_idempotent_static_reviewer() {
+fn every_claude_setup_installs_one_idempotent_reviewer() {
     let (home, options) = sandbox();
     let adapter = agent("claude-code");
     setup(adapter, &Config::default(), &options).expect("single-mode setup runs");

@@ -2048,19 +2048,24 @@ fn every_list_the_audit_answers_with_is_one_the_binding_names() {
 /// held from here, and it is what the defect needed.
 #[test]
 fn the_number_of_doctor_checks_is_the_same_number_everywhere_it_is_claimed() {
-    let readme = documented();
+    // Both phrases live in `docs/honesty.md`, not the README. The sibling guard
+    // below carried the same wrong file in its messages until a reviewer
+    // measured it there and named this one fifteen lines away as the same
+    // defect; fixing the instance and leaving the shape is what this repository
+    // says not to do.
+    let documents = documented();
     let phrases = ["things, not everything", "is about the past"];
     let claimed: Vec<usize> = phrases
         .iter()
         .map(|phrase| {
-            number_before(&readme, phrase).unwrap_or_else(|| {
-                panic!("the README no longer carries a number before {phrase:?}")
+            number_before(&documents, phrase).unwrap_or_else(|| {
+                panic!("no document carries a number before {phrase:?} any more")
             })
         })
         .collect();
     assert_eq!(
         claimed[0], claimed[1],
-        "the README says {} checks in one entry and {} in the next, three lines apart",
+        "the documents say {} checks in one entry and {} in the next, three lines apart",
         claimed[0], claimed[1]
     );
 }
@@ -2173,7 +2178,11 @@ fn the_payload_names_no_implementation_this_crate_retired() {
 /// what this names.
 #[test]
 fn the_readme_counts_what_the_crate_actually_has() {
-    let readme = documented();
+    // Named for what it is: `documented()` concatenates the README **and**
+    // the reference documents, and three of the four phrases below resolve
+    // outside the README. Calling it `readme` is what made two messages
+    // claim the README carries a count it does not.
+    let documents = documented();
     for (phrase, actual, what) in [
         (
             "settings, all typed",
@@ -2223,15 +2232,28 @@ fn the_readme_counts_what_the_crate_actually_has() {
             "adapters sharing the neutral root",
         ),
     ] {
-        let claimed = number_before(&readme, phrase).unwrap_or_else(|| {
-            panic!("the README no longer carries a number before {phrase:?}, so the {what} count is unchecked again")
+        // Neither message names a file, and the reason is measured rather
+        // than assumed. The four phrases resolve in **three** documents:
+        // `settings, all typed` and `typed settings, read from one table` in
+        // `docs/configuration.md`, `typed settings, in` in `README.md`, and
+        // `adapters share` in `docs/what-it-writes.md`. So *the README claims*
+        // is wrong for three of the four, and a reviewer was sent to the README
+        // to look for a drift in the configuration reference.
+        //
+        // The first repair reworded the `assert_eq!` and left the `panic!` four
+        // lines above it saying the same thing, in the commit whose message said
+        // it had removed that shape — and then explained itself with a count
+        // that was also wrong, claiming three of four in `docs/configuration.md`
+        // when two are. Both are fixed here, and `what` carries the sentence so
+        // neither has to guess.
+        let claimed = number_before(&documents, phrase).unwrap_or_else(|| {
+            panic!(
+                "no document carries a number before {phrase:?} any more, so the {what} count is \
+                 unchecked again"
+            )
         });
         assert_eq!(
             claimed, actual,
-            // Not "the README claims": three of these four phrases resolve
-            // inside `docs/configuration.md`, and a reviewer measured that a
-            // drift there fails naming the wrong file. `what` carries the
-            // sentence, so the message names it rather than guessing a file.
             "the documents claim {claimed} {what}, and the crate has {actual}"
         );
     }

@@ -1764,12 +1764,15 @@ mod tests {
     /// this run reads on a resume.
     ///
     /// Acceptance criterion 5 of issue 83: *"which role each delegated context
-    /// ran as is recorded where a later run can read it."* This crossing holds
-    /// the part that ships — the record itself, and the fact that it is an
-    /// **observation** rather than the declaration the earlier intention would
-    /// have produced. It does **not** hold the criterion, which asks for a later
-    /// run and is issue #91: nothing here survives `SessionEnd`, and asserting
-    /// across two runs is what that issue owes.
+    /// ran as is recorded for the life of the run that delegated it, as an
+    /// observation of what the gate saw rather than as a launch declaration."*
+    ///
+    /// That is the criterion **as amended**, and this crossing holds it: the
+    /// record, and that it comes from `agent_type` on a tool call rather than
+    /// from a launch. It read *"where a later run can read it"* until this branch
+    /// measured that nothing here survives `SessionEnd`; that half is #91, and
+    /// quoting the pre-amendment wording here made this crossing look weaker than
+    /// it is.
     ///
     /// Two halves, and both are crossed here because either alone is a record
     /// nobody consults: the pointer keeps it, and `SessionStart` says it.
