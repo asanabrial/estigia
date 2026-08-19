@@ -435,6 +435,89 @@ impl AgentAdapter {
         }
     }
 
+    /// The directory holding this adapter's instruction file, when the host
+    /// reads **every** file in it.
+    ///
+    /// Derived from [`Self::instruction_fragment`] by truncation rather than
+    /// spelled beside it, for the same reason the fragment itself is derived from
+    /// the adapter table: a second spelling of a path agrees with the first only
+    /// until somebody renames one. Rename the rule file and the directory follows
+    /// it, because there is only one place the name is written.
+    ///
+    /// Gating Estigia's own filename and leaving the directory open is defeated
+    /// by a neighbour. A reviewer measured `~/.cline/rules/zz-override.md`
+    /// answering `Routine`, and a sibling saying *Estigia is retired* changes
+    /// exactly what the restated population clause is about — what an agent is
+    /// told this harness may enforce — without touching a `Boundary` path.
+    ///
+    /// # The wildcard that is not here
+    ///
+    /// Three of these directories were literals in `CONTROL_SURFACE`, and that is
+    /// the defect this method exists to remove rather than the entries themselves.
+    /// A hand-spelled list closes the class for the adapters somebody thought of;
+    /// a twelfth adapter whose rule file lands in a directory its host reads whole
+    /// received **nothing**, silently, with the whole suite green — measured by
+    /// adding one. The `match` below has no `_` arm, so adding an
+    /// `InstructionFile` variant now fails to compile until its author answers
+    /// the question for it.
+    ///
+    /// What that buys is that the question is *asked*, not that the answer is
+    /// right: whether a host reads a directory whole is a fact about that host and
+    /// no code here can check it. `docs/honesty.md` says so beside this.
+    ///
+    /// `~/.cursor/rules` is deliberately **not** derivable and stays a literal.
+    /// Cursor's directive goes to `~/.cursor/estigia-workflow-authority.md`, so
+    /// Estigia writes no file into that directory at all and there is no
+    /// instruction file to truncate.
+    pub fn instruction_directory_fragment(&self) -> Option<&'static str> {
+        // Answered per host, exhaustively. `Continue` applies any rule that is
+        // not `invokable` and declares no globs; `Cline` loads its rules
+        // directory for every task; `Windsurf`'s memories directory is here on
+        // the restated population clause rather than on anything this crate
+        // verified, and `docs/honesty.md` records which is which.
+        let read_whole = match self.instructions {
+            InstructionFile::Continue | InstructionFile::Cline | InstructionFile::Windsurf => true,
+            InstructionFile::Neutral
+            | InstructionFile::ClaudeCode
+            | InstructionFile::Codex
+            | InstructionFile::OpenCode
+            | InstructionFile::GeminiCli
+            | InstructionFile::Cursor
+            | InstructionFile::Qwen
+            | InstructionFile::Crush => false,
+        };
+        if !read_whole {
+            return None;
+        }
+        // Up to and **including** the last separator, so the answer names a
+        // directory in the spelling the gate reads as one. A fragment ending in
+        // `/` is matched by what is under it or by itself; without the slash it
+        // is a prefix, and `.cline/rules` would reach `.cline/rulesets.md`.
+        let fragment = self.instruction_fragment();
+        fragment.rfind('/').map(|cut| &fragment[..=cut])
+    }
+
+    /// The skills tree this adapter's host discovers, as the gate spells paths.
+    ///
+    /// Estigia's **own** delivery root, and the reason it is a control surface is
+    /// that it holds more than Estigia: Claude Code loads every skill's name and
+    /// description whether or not one is ever invoked, so a sibling directory
+    /// beside `skills/flow` is read with the same authority as the contract. The
+    /// contract's own directory was already gated — derived from
+    /// [`crate::skill::DIRECTORY`] — and the tree around it was `Routine`, which
+    /// is the neighbour-defeats-the-gate shape one level up.
+    ///
+    /// Derived from the same `skills` field that decides where the installer
+    /// writes, so the two cannot disagree, and exhaustive for the reason
+    /// [`Self::instruction_directory_fragment`] gives.
+    pub fn skills_root_fragment(&self) -> &'static str {
+        match self.skills {
+            SkillsRoot::Neutral => ".agents/skills/",
+            SkillsRoot::ClaudeCode => ".claude/skills/",
+            SkillsRoot::Codex => ".codex/skills/",
+        }
+    }
+
     /// Reviewed presets this adapter can expand without probing the host.
     pub fn model_profiles(&self) -> &'static [ModelProfile] {
         match self.instructions {
@@ -1173,9 +1256,28 @@ fn paths_in(adapter: &AgentAdapter, environment: &Environment) -> AgentPaths {
     // rendering its dialect, and the way to know it is right is its own schema —
     // not this file's assumption that a second reader of the same idea spells it
     // the same way.
-    let agents_root = match adapter.slug {
-        "claude-code" => Some(environment.home.join(".claude").join("agents")),
-        _ => None,
+    //
+    // Matched on the **instruction enum** rather than on `adapter.slug`, and the
+    // difference is the whole point: a `&str` match can never be exhaustive, so
+    // its `_ => None` arm handed every future adapter a `None` nobody chose. A
+    // twelfth adapter with sub-agent definitions got no root, was never crossed
+    // by `every_control_file_an_adapter_has_is_one_the_gate_measures`, and
+    // `definition_for` never read it — silently, with the suite green. The same
+    // shape as the rules directories one file over, and it is closed the same
+    // way: an added variant fails to compile until somebody writes `None` on
+    // purpose.
+    let agents_root = match adapter.instructions {
+        InstructionFile::ClaudeCode => Some(environment.home.join(".claude").join("agents")),
+        InstructionFile::Neutral
+        | InstructionFile::Codex
+        | InstructionFile::OpenCode
+        | InstructionFile::GeminiCli
+        | InstructionFile::Cursor
+        | InstructionFile::Qwen
+        | InstructionFile::Crush
+        | InstructionFile::Continue
+        | InstructionFile::Cline
+        | InstructionFile::Windsurf => None,
     };
 
     AgentPaths {

@@ -4040,6 +4040,124 @@ fn a_sibling_in_a_rules_directory_is_a_boundary_too() {
     }
 }
 
+/// What the **host** reads, beside what this installer writes.
+///
+/// The enumeration stopped at the files `setup` authors, and an agent loads a
+/// great deal it was not handed by this installer with exactly the authority of
+/// the directive that was. Every one of these answered `Routine`, and every one
+/// is outside a checkout by construction — so `outside-the-claim` waved them past
+/// without asking the tracker at all.
+///
+/// Both roads, because `surface_of` splits a command on whitespace and an entry
+/// that works on one road only is one an agent walks round with `rm`.
+#[test]
+fn a_host_read_root_carries_the_same_authority_as_the_directive() {
+    for spelled in [
+        // Estigia's own delivery root. `skills/flow` was gated by derivation and
+        // the tree holding it was not, so a sibling skill — whose name and
+        // description Claude Code loads whether or not it is ever invoked — was
+        // the neighbour that defeats the gate one level up.
+        "/home/me/.claude/skills/zz-other/SKILL.md",
+        "/home/me/.claude/skills",
+        "/home/me/.agents/skills/zz-other/SKILL.md",
+        "/home/me/.codex/skills/zz-other/SKILL.md",
+        // Plugins, which supply hooks, sub-agents, skills and commands at once.
+        // `~/.claude.json` names them and was gated; the payload on disk was not.
+        "/home/me/.claude/plugins/config.json",
+        "/home/me/.claude/plugins/pack/hooks/hooks.json",
+        "/home/me/.claude/plugins/pack/agents/builder.md",
+        // Commands and prompts, whose names and descriptions the host puts in
+        // front of the agent unprompted.
+        "/home/me/.claude/commands/ship.md",
+        "/home/me/.codex/prompts/ship.md",
+        "/home/me/.cursor/commands/ship.md",
+        "/home/me/.cursor/cli-config.json",
+        // Extensions: always-loaded context, MCP servers, and `excludeTools` —
+        // a compliance input and an enforcement input in one directory.
+        "/home/me/.gemini/extensions/pack/GEMINI.md",
+        r"C:\Users\me\AppData\Roaming\gemini\extensions\pack\GEMINI.md",
+        "/home/me/.qwen/extensions/pack/QWEN.md",
+        // Continue's assistant configuration, which carries `rules:` inline and
+        // `mcpServers:` — the same rules `.continue/rules` holds, in another
+        // shape, and only one of the two was gated.
+        "/home/me/.continue/config.yaml",
+        "/home/me/.continue/config.json",
+        "/home/me/.continue/assistants/mine.yaml",
+        // Windsurf's MCP configuration, which `paths_in` records as unverified.
+        // Unverified is not decided-against, and it was not gated either.
+        "/home/me/.codeium/windsurf/mcp_config.json",
+        "/home/me/.codeium/windsurf/workflows/ship.md",
+    ] {
+        for (road, payload) in [
+            ("Write", serde_json::json!({ "file_path": spelled })),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("rm -rf {spelled}") }),
+            ),
+        ] {
+            let (_, how) = classify(road, &payload);
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "{road} on {spelled} answers routine, and the host reads it with the same \
+                 authority as the directive naming this harness"
+            );
+        }
+    }
+}
+
+/// A project's own always-loaded rules, which the dotted prefix reached by luck.
+///
+/// Inside a checkout these stay measured against the claim rather than standing
+/// aside, so they are a smaller thing than the home paths — not a different one.
+/// What was wrong is that the line between covered and not was drawn by which
+/// home-path fragment happened to carry a dotted-directory prefix:
+/// `<repo>/.claude/CLAUDE.md` was a boundary and `<repo>/CLAUDE.md` — the file
+/// Claude Code loads by default, and the one **this repository itself** uses —
+/// was not.
+#[test]
+fn a_projects_own_always_loaded_rules_are_a_boundary() {
+    for spelled in [
+        "/repo/CLAUDE.md",
+        "/repo/CLAUDE.local.md",
+        "/repo/AGENTS.md",
+        "/repo/AGENTS.local.md",
+        "/repo/GEMINI.md",
+        "/repo/QWEN.md",
+        "/repo/CRUSH.md",
+        // Nested, because a rules file deeper in a tree is read the same way.
+        "/repo/services/api/AGENTS.md",
+        // The two that were hardest to defend leaving out: the per-project twins
+        // of directories issue 26 gated at home, so the hole was closed on one
+        // road and left open on the other in the same round.
+        "/repo/.clinerules",
+        "/repo/.clinerules/zz-override.md",
+        "/repo/.windsurf/rules/zz-override.md",
+        "/repo/.windsurfrules",
+        "/repo/.cursorrules",
+        "/repo/.github/copilot-instructions.md",
+        "/repo/.mcp.json",
+        // The singular spelling, one letter from `.opencode/agents/` beside it.
+        "/repo/.opencode/agent/builder.md",
+    ] {
+        for (road, payload) in [
+            ("Write", serde_json::json!({ "file_path": spelled })),
+            (
+                "Bash",
+                serde_json::json!({ "command": format!("rm -rf {spelled}") }),
+            ),
+        ] {
+            let (_, how) = classify(road, &payload);
+            assert_eq!(
+                how,
+                Sensitivity::Boundary,
+                "{road} on {spelled} answers routine, and it is always-loaded context \
+                 carrying the same authority as the directive"
+            );
+        }
+    }
+}
+
 /// A directory this harness reads from is a boundary spelled bare, on both roads.
 ///
 /// The entries used to carry a trailing slash. `surface_of` appends a separator
@@ -4151,6 +4269,31 @@ fn a_directory_entry_does_not_gate_a_name_that_only_starts_the_same() {
         "/repo/xyzopencode/agents",
         "/repo/notwindsurf/memories",
         "/home/me/.claude/myskills/issue-flow",
+        // The **separator-free** fragments, which are the third anchoring rule
+        // and arrived with the project's own rule files. A whole file name is a
+        // whole segment in every real target, so `agents.md` is anchored — and
+        // unanchored it reaches `myagents.md`, which is somebody's ordinary
+        // source file. Measured: without the anchor these four answer `Boundary`.
+        "/repo/myagents.md",
+        "/repo/myclaude.md",
+        "/repo/notgemini.md",
+        "/repo/vendor/mycrush.md",
+        // And the extension is kept rather than trimmed, so a source file named
+        // for the same idea is untouched. `agents.` would have covered the
+        // `.local.` sibling in one entry and taken this with it.
+        "/repo/src/agents.rs",
+        // The new home roots, on their left side. A dot-directory is a whole
+        // segment, so a lookalike beside it is ordinary.
+        "/home/me/my.claude/skills/zz-other/SKILL.md",
+        "/home/me/.claude/mycommands/ship.md",
+        "/home/me/.claude/myplugins/config.json",
+        "/home/me/.gemini/extensions-archive/pack/manifest.json",
+        "/home/me/.codeium/windsurf/workflows-archive/ship.md",
+        // And the project ones.
+        "/repo/x.clinerules",
+        "/repo/my.mcp.json",
+        "/repo/.windsurf/rules-archive/zz-override.md",
+        "/repo/.opencode/agentry/builder.md",
         // Not here, and measured: `~/.codeium/notwindsurf/memories/global_rules.md`
         // still answers `Boundary`. The **file** fragments that do not begin with a
         // dot stay unanchored, because `cli/hosts.yml` has to match inside the
@@ -4198,6 +4341,16 @@ fn the_declared_over_gating_is_the_shape_the_document_names() {
         "/repo/vendor/mygemini/gemini.md",
         "/repo/vendor/mycrush/crush.md",
         "/home/me/.codeium/notwindsurf/memories/global_rules.md",
+        // The right side of the separator-free fragments, which are anchored on
+        // the left only. `agents.md` cannot be closed on the right without
+        // giving up what closes `CLAUDE.local.md` one entry over, and the same
+        // trade already stands for `.claude/settings` reaching
+        // `.claude/settingsmap.ts`.
+        "/repo/AGENTS.md.bak",
+        "/repo/CLAUDE.md.orig",
+        // And `.continue/config`, trimmed to one stem so it reaches `config.yaml`,
+        // `config.json` and `config.ts` at once.
+        "/home/me/.continue/configuration-notes.md",
     ] {
         for (road, payload) in [
             ("Write", serde_json::json!({ "file_path": named })),

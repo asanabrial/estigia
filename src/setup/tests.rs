@@ -2686,6 +2686,56 @@ fn every_file_estigia_reads_configuration_from_is_named_in_text_the_agent_reads(
     );
 }
 
+/// A gated rules directory is the instruction file's own path, truncated.
+///
+/// The point is that there is **one** spelling. Three of these directories were
+/// literals in `CONTROL_SURFACE` and the instruction files beside them were
+/// derived, which is two places holding one fact — the arrangement that made the
+/// installed contract writable once already, when `skill::DIRECTORY` was renamed
+/// and a literal was not. A directory that stops being the file's own parent
+/// fails here rather than quietly gating somewhere nothing is written.
+///
+/// It also checks the three literals really moved. Removing an entry from
+/// `CONTROL_SURFACE` is a loosening unless something else covers it, and
+/// "something else covers it" is a claim, so it is read here.
+#[test]
+fn a_gated_rules_directory_is_the_instruction_fragment_truncated() {
+    let mut derived = Vec::new();
+    for adapter in AGENTS {
+        let file = adapter.instruction_fragment();
+        let Some(directory) = adapter.instruction_directory_fragment() else {
+            continue;
+        };
+        assert!(
+            directory.ends_with('/'),
+            "{}: `{directory}` does not end in a separator, so the gate reads it as a \
+                 prefix and it reaches a sibling that merely starts alike",
+            adapter.slug
+        );
+        assert!(
+            file.starts_with(directory),
+            "{}: `{directory}` is not where `{file}` lives, so it is a second spelling \
+                 rather than the file's own parent",
+            adapter.slug
+        );
+        assert!(
+            !file[directory.len()..].contains('/'),
+            "{}: `{file}` is not directly inside `{directory}`, so the truncation dropped \
+                 more than one component",
+            adapter.slug
+        );
+        derived.push(directory);
+    }
+
+    for moved in [".cline/rules/", ".continue/rules/", "windsurf/memories/"] {
+        assert!(
+            derived.contains(&moved),
+            "`{moved}` was a `CONTROL_SURFACE` literal and no adapter derives it now, so \
+             removing the literal was a loosening"
+        );
+    }
+}
+
 /// The plan matches the act for every adapter, in every state a run meets.
 ///
 /// `a_dry_run_reports_exactly_what_the_real_run_does` states the invariant and
@@ -2774,6 +2824,38 @@ fn every_control_file_an_adapter_has_is_one_the_gate_measures() {
                 // as the shape the change's own prose condemns. `definition_for`
                 // reads the tool allowlist it enforces from here.
                 watched.extend(paths.agents_root.clone());
+                // The directory the instruction file sits in, and a **neighbour**
+                // in it, whenever the adapter declares that its host reads that
+                // directory whole. This is the half the four hand-spelled entries
+                // never had: they were literals in `CONTROL_SURFACE`, so this walk
+                // could not tell a directory that is gated from one that merely
+                // happens to be spelled in a list somewhere. Measured with a
+                // twelfth adapter resolving to `~/.acme/rules/estigia.md`, whose
+                // directive was `Boundary` and whose neighbour
+                // `~/.acme/rules/zz-override.md` was `Routine` with the whole
+                // suite green.
+                if adapter.instruction_directory_fragment().is_some() {
+                    let directory = paths
+                        .instructions
+                        .parent()
+                        .expect("an instruction file has a directory")
+                        .to_path_buf();
+                    watched.push(directory.join("zz-override.md"));
+                    watched.push(directory);
+                }
+                // Estigia's own delivery root, one level up from the contract it
+                // installs. `skill::DIRECTORY` is derived into the gate, so
+                // `skills/flow` was watched and the tree holding it was not — and
+                // Claude Code loads every skill's name and description whether or
+                // not it is invoked, so a sibling directory carries the same
+                // authority as the contract beside it.
+                let skills = paths
+                    .skill_root
+                    .parent()
+                    .expect("a skill root has a tree above it")
+                    .to_path_buf();
+                watched.push(skills.join("zz-other-skill").join("SKILL.md"));
+                watched.push(skills);
 
                 for file in watched {
                     let target = file.display().to_string();
