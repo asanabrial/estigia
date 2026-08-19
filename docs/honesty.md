@@ -1301,10 +1301,14 @@ suite. Everything else here is prose held by review.
     also a hazard: measured, `estigia config set "Evidence standard" measuring` answers `Evidence
     standard is now measuring` with exit 0 while `~/.claude/agents/review-blind.md` still reads
     `tools: Read, Grep, Glob`, and `doctor` answers `ok canonical — and every configured agent reads
-    the rows it decides by`. Only `setup` or `sync` re-renders. Both directions of the mismatch fail
-    closed **at the gate**, which enforces from the embedded definition rendered with the effective
-    row rather than from the file — so the host may offer a grant the gate then refuses, or refuse one
-    the gate would allow, and the judge is told one thing by its own definition and answered another
+    the rows it decides by`. Only `setup` or `sync` re-renders. **One** direction of the mismatch fails
+    closed at the gate, which enforces from the embedded definition rendered with the effective row
+    rather than from the file: a host offering a grant the row no longer asks for is refused there.
+    The other direction is not the gate’s doing at all — with the row widened and the file not
+    yet re-rendered, the gate **allows**, and what refuses is the host’s stale `tools:` line, if
+    that host enforces one, which the opening entry of this document says Estigia cannot prove. An
+    earlier version of this sentence said both directions fail closed at the gate, and contradicted
+    itself one clause later. and the judge is told one thing by its own definition and answered another
     by the hook. Nothing reports it, and `reviewer_is_static` accepts either rendering by design, so
     the launch check cannot see it either.
   - **Only one of the two derived families is compiler-forced**, named here only because this row now
@@ -1372,7 +1376,7 @@ suite. Everything else here is prose held by review.
 - **Estigia defined roles its own roles could not do the work of.** Issue 83. Six shipped definitions,
   every one read-only: `review-blind` carried a fixed `tools: Read, Grep, Glob`, and the five planning
   phases carried `{{TOOLS}}`, substituted to `Read, Grep, Glob`, `Read, Grep, Glob, Write, Edit` or
-  `Read, Grep, Glob, WebFetch, WebSearch` — three branches, none of them a superset of the others, and
+  `Read, Grep, Glob, WebFetch, WebSearch` — three branches, two of them strict supersets of the third, and
   an earlier draft of this sentence named only the second. **No branch produced a shell.** In a repository whose stated evidence standard is mutation — this one's is, and
   `CLAUDE.md` makes two sentences load-bearing on it — a reviewer that cannot run the suite cannot
   check either. So every panel that mattered was launched under a generic type instead, and the
@@ -1415,19 +1419,46 @@ suite. Everything else here is prose held by review.
     `InstructionFile`, so a twelfth adapter cannot skip it; `skills_root_fragment` matches
     `SkillsRoot`, whose variants a twelfth adapter reuses.
   - The eight `_` arms on the instruction enum are untouched, and the entry above owns them.
-  - **The roles a run’s delegated contexts ran as are recorded, and the record is narrower than the
-    sentence.** Since issue 83 the gate writes each distinct `agent_type` it sees into the run
-    pointer, and `SessionStart` reads them back to the next run. That is an **observation** rather
-    than a declaration — it is what fired on a tool call, not what a launch prompt claimed — which is
-    the strong half.
+  - **The roles a run’s delegated contexts ran as are recorded, and the record lives only as long
+    as the run.** Since issue 83 the gate writes each distinct `agent_type` it sees into the run
+    pointer, and `SessionStart` reads it back to **that same run** on a resume. That is an
+    **observation** rather than a declaration — what fired on a tool call, not what a launch prompt
+    claimed — which is the half worth having.
 
-    Three things it does not carry, and each is a way the set can be empty while contexts ran. A host
-    that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart from nothing
-    having been delegated. A context refused at the role gate before any call is not recorded, which
-    is deliberate — a refused launch contributes no judge — but it means the record shows what
-    worked and never what was turned away. And the field names a role, never a *count*: five contexts
-    under one role and one context under it write the same byte, so nothing here bears on panel size,
-    which the entry below already states this crate cannot see.
+    **It is not an audit trail, and issue 83’s fifth acceptance criterion asked for one.** That
+    criterion wanted the role recorded "where a later run can read it", so a run "can be audited for
+    it afterwards", and *afterwards* is exactly when this record does not exist. Two judges drove it
+    through the built binary and it is stated here in their terms rather than softened:
+
+    ```
+    same session    -> "Delegated contexts this run has already gated ran as: `review-blind`"
+    a different run -> no such line at all
+    session-end     -> the pointer file is gone
+    ```
+
+    `run_id` is derived from `session_id`, so the pointer is per-session, and `Event::SessionEnd`
+    calls `session::forget`, which removes it. The one store that does survive a session is the
+    decision ledger, and it carries the *adapter* slug rather than `agent_type` — and `note` returns
+    early on `Decision::Outside`, which is what a delegated context’s reads produce. So the
+    cross-run half is not merely absent, it has no existing road. It is issue #91.
+
+    This entry claimed the opposite for one publication: *"`SessionStart` reads them back to the next
+    run"*. It is corrected here rather than quietly, because a false sentence in the register of what
+    is not measured is the one kind this document cannot carry.
+
+    Three narrower limits on the within-run record, each a way the set can be empty while contexts
+    ran. A host that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart
+    from nothing having been delegated. A context refused at the role gate before any call is not
+    recorded, which is deliberate — a refused launch contributes no judge — but it means the record
+    shows what worked and never what was turned away. And the field names a role, never a *count*:
+    five contexts under one role and one context under it write the same byte, so nothing here bears
+    on panel size, which the entry below already states this crate cannot see.
+
+    One more, found by a judge rather than by design: the role write goes through `session::store`,
+    which drops a stale write whole when another writer moved the revision first. `session::update`
+    exists for exactly the case of a writer carrying information only it has, and this is not using
+    it — so a role can be lost to a race with a tool write. Nothing another writer set is lost, which
+    is the fail-closed direction.
 
   - Estigia still cannot prove a panel ran, how many contexts it had, or that any two of them were
     given separate directories. This narrows what a judge **can** do and proves nothing about what a

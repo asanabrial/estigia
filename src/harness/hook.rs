@@ -1043,8 +1043,17 @@ pub fn run_as(
             let (action, how) =
                 classify_with(&input.tool_name, &input.tool_input, &context.boundaries);
             let mut run = session::load(&context.state_root, &run_id);
-            // Criterion 5 of issue 83: which role each delegated context ran as,
-            // recorded where a later run can read it.
+            // The role a delegated context ran as, recorded for the length of
+            // this run.
+            //
+            // Issue 83 asked for a record "where a later run can read it" and
+            // this is **not** that: the pointer is keyed on this session and
+            // `SessionEnd` removes it. Two judges drove that through the binary
+            // after one publication claimed otherwise. What survives a session is
+            // the decision ledger, which carries the adapter slug rather than
+            // `agent_type` and whose writer returns early on `Outside` — the
+            // decision a delegated context’s reads produce — so the cross-run
+            // half has no existing road and is issue #91.
             //
             // Here rather than beside the role gate above, and that placement is
             // the semantics. This point is past the role gate, so a context
@@ -1747,10 +1756,12 @@ mod tests {
     /// a later run reads first.
     ///
     /// Acceptance criterion 5 of issue 83: *"which role each delegated context
-    /// ran as is recorded where a later run can read it."* It was undelivered
-    /// when the first three panels read this branch, and the intention recorded
-    /// at the time — requiring the verdict to name the role — would have
-    /// recorded a **declaration**. This records what the gate saw.
+    /// ran as is recorded where a later run can read it."* This crossing holds
+    /// the part that ships — the record itself, and the fact that it is an
+    /// **observation** rather than the declaration the earlier intention would
+    /// have produced. It does **not** hold the criterion, which asks for a later
+    /// run and is issue #91: nothing here survives `SessionEnd`, and asserting
+    /// across two runs is what that issue owes.
     ///
     /// Two halves, and both are crossed here because either alone is a record
     /// nobody consults: the pointer keeps it, and `SessionStart` says it.
@@ -1818,6 +1829,17 @@ mod tests {
             ordinary.is_empty(),
             "a call carrying no `agent_type` recorded a role anyway, so the record says a context \
              was delegated where none was: {ordinary:?}"
+        );
+
+        // A host that sends the field and leaves it empty. Distinct from not
+        // sending it at all, and a judge measured that dropping the filter left
+        // the whole suite green: the set would gain an empty name and
+        // `SessionStart` would announce a role spelled as nothing.
+        let blank = roles_after(Some("   "));
+        assert!(
+            blank.is_empty(),
+            "an empty `agent_type` was recorded as a role, so a later reader is told a context ran \
+             as something with no name: {blank:?}"
         );
 
         // And the surface. A record kept where nothing reads it aloud is the

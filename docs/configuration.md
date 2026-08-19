@@ -65,7 +65,7 @@ same-finding identity or quorum. `config set` and `config edit` write configurat
 these rows never rewrites that external definition — including `Evidence standard`, which decides that
 definition's tool grant. **So flipping that row takes effect only when `estigia setup` or `estigia sync`
 next writes the file**, and until then the host offers the previous grant while the gate enforces the
-new one. Both directions of that mismatch fail closed at the gate, nothing reports it, and
+new one. The narrowing direction fails closed at the gate; the widening direction is refused only by the host’s stale `tools:` line, if it enforces one. Nothing reports either, and
 `docs/honesty.md` records it as open.
 
 The `review-blind` role is reserved to that operator-owned user file. Claude's generated `PreToolUse`

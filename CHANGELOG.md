@@ -12,6 +12,20 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The gate records which role each delegated context ran as, for the length of the run.** Claude
+  Code sends `agent_type` on every tool event fired inside a sub-agent, so the run pointer now carries
+  what the gate **saw** rather than what a launch prompt declared, and `SessionStart` reads it back on
+  a resume.
+
+  Recording it on the allow path alone recorded nothing for exactly the contexts this is about — a
+  delegated context reading files makes calls the gate answers `Outside`, not `Allow` — so the
+  store is keyed on the role set having grown as well.
+
+  **It is not an audit trail.** The pointer is keyed on the session and `SessionEnd` removes it, so no
+  later run reads it; issue #83’s criterion asking for one is split out as #91. One publication
+  claimed otherwise and two judges disproved it through the built binary; `docs/honesty.md` carries
+  the measurement rather than a correction made quietly.
+
 - **A delegated role can now do the work its own contract asks of it, and the judges that measure run
   as that role instead of outside it.** Estigia shipped six role definitions and every one was
   read-only: the reviewer carried a fixed `tools: Read, Grep, Glob`, and the planning phases'
