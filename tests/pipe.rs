@@ -13195,15 +13195,36 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
         ),
     );
 
-    for (label, class, id, evidence, impact, refused) in [
+    // The publication under review is `epoch`. `names` is what the call claims to
+    // judge, and the last three rows are the reason this column exists: the
+    // operation validated the receipt\'s **shape** and never asked whether it was
+    // the receipt anybody is reviewing. A finding against a superseded epoch, or
+    // against one no publication ever had, recorded `ok: true` and sat on the
+    // timeline looking like evidence — while two shipped sentences said it was
+    // refused. Four reviewers found it and two drove it through this surface.
+    let superseded = "1".repeat(32);
+    let invented = "2".repeat(32);
+    for (label, names, class, id, evidence, impact, refused) in [
         // A fourth class nobody defined. The names are the vocabulary the
         // decision tables are written in, so an unknown one is a finding no
         // table can weigh rather than a stricter one.
-        ("unknown-class", "critical", "x", "e", "i", true),
-        ("no-id", "severe", "   ", "e", "i", true),
-        ("no-evidence", "severe", "x", "", "i", true),
-        ("no-impact", "severe", "x", "e", "  ", true),
-        ("complete", "severe", "x", "e", "i", false),
+        ("unknown-class", &epoch, "critical", "x", "e", "i", true),
+        ("no-id", &epoch, "severe", "   ", "e", "i", true),
+        ("no-evidence", &epoch, "severe", "x", "", "i", true),
+        ("no-impact", &epoch, "severe", "x", "e", "  ", true),
+        ("complete", &epoch, "severe", "x", "e", "i", false),
+        // Well-formed, and not the publication under review.
+        (
+            "superseded-receipt",
+            &superseded,
+            "severe",
+            "x",
+            "e",
+            "i",
+            true,
+        ),
+        // Well-formed, and never published at all.
+        ("invented-receipt", &invented, "severe", "x", "e", "i", true),
     ] {
         let log = trace.path().join(format!("finding-{label}.log"));
         let written = comment(
@@ -13219,11 +13240,11 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
                         &estigia::transport::claim::review_operation_id(
                             "review-finding",
                             &[
-                                reviewer, reviewer, &epoch, "7", &head, &base, &digest, id, class,
+                                reviewer, reviewer, names, "7", &head, &base, &digest, id, class,
                             ],
                         ),
                     ),
-                    ("epoch", &epoch),
+                    ("epoch", names),
                     ("pr", "7"),
                     ("head", &head),
                     ("base", &base),
@@ -13278,7 +13299,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
                 "issue": 12,
                 "run_id": reviewer,
                 "reviewer": reviewer,
-                "epoch": epoch,
+                "epoch": names,
                 "pr": 7,
                 "head": head,
                 "base": base,
@@ -13566,7 +13587,14 @@ fn a_publication_records_the_one_it_repairs_and_a_first_one_records_nothing() {
         let receipt = staged_receipt(&temp, 12);
 
         if !repairs {
-            for field in ["parent", "parent_head", "delta"] {
+            for field in [
+                "parent",
+                "parent_pr",
+                "parent_head",
+                "parent_base",
+                "parent_digest",
+                "delta",
+            ] {
                 assert!(
                     answer[field].is_null(),
                     "{label}: a first publication answered with a {field}, so it descends from \
@@ -13607,6 +13635,26 @@ fn a_publication_records_the_one_it_repairs_and_a_first_one_records_nothing() {
             "{label}: the parent head is not the one on the timeline, so `parent_head..head` \
              names a delta nobody can read: {text}"
         );
+        // The rest of the parent receipt, and it is not decoration. The ledger a
+        // re-review reads is matched on the whole receipt; recording only the
+        // epoch left `--parent` satisfiable by one backfilled marker, which is
+        // what two reviewers drove.
+        assert_eq!(
+            answer["parent_pr"].as_u64(),
+            Some(7),
+            "{label}: the parent receipt is incomplete without its pull request: {text}"
+        );
+        assert_eq!(
+            answer["parent_base"].as_str(),
+            Some(base_sha.as_str()),
+            "{label}: the parent receipt is incomplete without its base: {text}"
+        );
+        assert_eq!(
+            answer["parent_digest"].as_str(),
+            Some(parent_digest.as_str()),
+            "{label}: the parent receipt is incomplete without its target digest, which is the \
+             field a backfilled ledger entry cannot forge: {text}"
+        );
         assert_eq!(
             answer["delta"].as_str(),
             Some(expected.as_str()),
@@ -13617,7 +13665,10 @@ fn a_publication_records_the_one_it_repairs_and_a_first_one_records_nothing() {
         // next reviewer reads.
         for spelled in [
             format!("parent={parent_epoch}"),
+            "parent-pr=7".to_owned(),
             format!("parent-head={parent_head}"),
+            format!("parent-base={base_sha}"),
+            format!("parent-digest={parent_digest}"),
             format!("delta={expected}"),
         ] {
             assert!(
@@ -13749,6 +13800,30 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
             ],
         ),
     );
+    // Recorded after the repair, naming the parent epoch and carrying the
+    // repair\'s bytes. Nothing refuses writing it; what must be refused is
+    // reading it as the parent ledger.
+    let backfilled = comment(
+        "IC_backfilled",
+        "2026-08-14T10:20:00Z",
+        marker(
+            "review-finding",
+            &[
+                ("run-id", reviewer),
+                ("reviewer", reviewer),
+                ("op-id", &"3".repeat(32)),
+                ("epoch", &parent_epoch),
+                ("pr", "7"),
+                ("head", &head),
+                ("base", &base),
+                ("digest", &digest),
+                ("id", "invented-settled-work"),
+                ("class", "severe"),
+                ("evidence", "written after the repair was published"),
+                ("impact", "none, which is the point"),
+            ],
+        ),
+    );
     let repair = |lineage: bool| {
         let mut fields: Vec<(&str, &str)> = vec![
             ("run-id", publisher),
@@ -13760,7 +13835,10 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         ];
         if lineage {
             fields.push(("parent", &parent_epoch));
+            fields.push(("parent-pr", "7"));
             fields.push(("parent-head", &parent_head));
+            fields.push(("parent-base", &base));
+            fields.push(("parent-digest", &parent_digest));
             fields.push(("delta", &delta));
         }
         comment(
@@ -13818,6 +13896,36 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         ),
         // The asymmetry: a warning new to a repair owes nothing.
         ("new-warning", true, "a-note", "warning", "", "", false, ""),
+        // The attack, and the reason the lineage carries the parent receipt
+        // rather than its epoch. `backfilled` is a finding recorded after the
+        // repair, naming the parent **epoch** while carrying the repair\'s own
+        // head, base and digest — which is what a reviewer can write at any
+        // time, since nothing binds a finding\'s epoch field to a publication.
+        // Read by epoch it is a parent-ledger entry; read by receipt it is not
+        // one, and citing it must be refused or `--parent` is satisfiable on
+        // demand and `new-blocker-without-origin` is bypassed by one extra write.
+        (
+            "backfilled-parent",
+            true,
+            "new-defect",
+            "severe",
+            "invented-settled-work",
+            "",
+            true,
+            "finding-parent-unknown",
+        ),
+        // A suggestion, new to the repair, owing nothing — the third class, which
+        // no fixture exercised until a reviewer counted them.
+        (
+            "new-suggestion",
+            true,
+            "a-nit",
+            "suggestion",
+            "",
+            "",
+            false,
+            "",
+        ),
         // An identity that exists, on this timeline, against **this** epoch.
         // The parent ledger is the parent epoch and nothing else; reading the
         // whole timeline would make this row pass and let a repair cite its own
@@ -13883,6 +13991,7 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
                 settled.clone(),
                 repair(lineage),
                 current.clone(),
+                backfilled.clone(),
             ];
             if after {
                 comments.push(written.clone());

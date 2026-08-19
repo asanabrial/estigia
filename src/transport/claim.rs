@@ -947,31 +947,43 @@ struct LatestPublication {
 /// cannot name a parent it prefers and a repair cannot be recorded as a first
 /// publication. Absent on a first publication, which is the only shape that has
 /// nothing to descend from.
+///
+/// **The whole parent receipt, not its epoch.** The first version of this
+/// carried the epoch and the head, and the reader that used it matched findings
+/// on the epoch alone — which is a looser identity than it looks, because
+/// `publication_epoch` mixes a clock into its hash and a finding's epoch field
+/// is whatever the finding says it is. Three reviewers demonstrated the cost: a
+/// `review-finding` backfilled after the repair, carrying the parent epoch and
+/// the repair's own bytes, satisfied the parent-existence rule and let a new
+/// severe finding through with no origin. Carrying the receipt lets the parent
+/// ledger be read by [`findings_for`], receipt-exact, and deletes the looser
+/// reader rather than guarding it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicationLineage {
-    /// The epoch of the publication this one repairs.
-    pub parent: String,
-    /// That publication's head, so `parent_head..head` is the delta and anyone
-    /// holding the timeline can compute it without asking this crate for it.
-    pub parent_head: String,
+    /// The complete receipt of the publication this one repairs.
+    pub parent: ReviewReceipt,
     /// One immutable name for this exact repair. See [`fix_delta_digest`].
     pub delta: String,
 }
 
 impl PublicationLineage {
     fn from_marker(marker: &super::markers::Marker) -> Option<Self> {
-        // All three or none. A marker carrying one of them is a marker whose
-        // lineage cannot be acted on, and treating it as a partial answer would
-        // let a repair look like a first publication in one reader and a repair
-        // in the next.
-        let parent = marker.get("parent")?.clone();
-        let parent_head = marker.get("parent-head")?.clone();
+        // All of it or none. A marker carrying part of a lineage is a marker
+        // whose lineage cannot be acted on, and treating it as a partial answer
+        // would let a repair look like a first publication in one reader and a
+        // repair in the next.
+        let parent = ReviewReceipt {
+            epoch: marker.get("parent")?.clone(),
+            pr: marker.get("parent-pr")?.parse().ok()?,
+            head: marker.get("parent-head")?.clone(),
+            base: marker.get("parent-base")?.clone(),
+            digest: marker.get("parent-digest")?.clone(),
+        };
         let delta = marker.get("delta")?.clone();
-        (!parent.is_empty() && !parent_head.is_empty() && !delta.is_empty()).then_some(Self {
-            parent,
-            parent_head,
-            delta,
-        })
+        // The same completeness the live receipt is held to. A parent of the
+        // wrong shape is one no finding could ever match, so admitting it would
+        // reopen by the back door what the shape check closes at the front.
+        (parent.is_complete() && !delta.is_empty()).then_some(Self { parent, delta })
     }
 }
 
@@ -1173,21 +1185,6 @@ fn findings_for(comments: &[ownership::Comment], receipt: &ReviewReceipt) -> Vec
 /// to rest on what *that* context found. Two judges each holding one suspicion is
 /// not one confirmed defect, and reading the ledger as a pool would make it look
 /// like one.
-/// Every finding standing against one publication **epoch**.
-///
-/// The epoch alone, not the whole receipt, because this is what reads a *parent*
-/// ledger: the caller holds the parent epoch from the lineage and not its base
-/// or its digest, and requiring the whole receipt would make that ledger
-/// unreadable from the only place that needs it. An epoch is minted from the
-/// full receipt, so this is not a looser identity — it is the same one, shorter.
-fn findings_in_epoch(comments: &[ownership::Comment], epoch: &str) -> Vec<ReviewFinding> {
-    first_protocol_markers(comments, "review-finding")
-        .iter()
-        .filter_map(ReviewFinding::from_marker)
-        .filter(|finding| finding.receipt.epoch == epoch)
-        .collect()
-}
-
 fn severe_findings_by(
     comments: &[ownership::Comment],
     receipt: &ReviewReceipt,
@@ -1848,12 +1845,10 @@ pub fn record_review_finding(
             })));
         }
     }
-    // Bound and dropped: what this call is for is the **validation**, not the
-    // value. `review_receipt` is what refuses an epoch, head, base or digest of
-    // the wrong shape, and a finding recorded against bytes that cannot exist is
-    // a ledger entry no verdict could ever match — it would sit on the timeline
-    // looking like evidence and count for nothing.
-    let _ = review_receipt(
+    // The shape first: `review_receipt` refuses an epoch, head, base or digest
+    // that could not name anything. Whether it names the publication actually
+    // under review is asked below, once the timeline has been read.
+    let receipt = review_receipt(
         finding.epoch,
         finding.pr,
         finding.head,
@@ -1888,6 +1883,30 @@ pub fn record_review_finding(
     let data = read()?;
     let comments = comments_of(&data);
     reject_operation_kind_conflict(&comments, &operation_id, &["review-finding"])?;
+    // The receipt has to be the one under review, and this operation did not ask.
+    //
+    // Four reviewers found the same hole and two drove it: a finding against a
+    // superseded epoch — or against an epoch **no publication ever had** —
+    // recorded `ok: true, blocking: true` and sat on the timeline looking like
+    // evidence. Two shipped sentences said it was refused, which is how it was
+    // found. Three separate costs, and each one is why the check is here rather
+    // than the sentences being deleted:
+    //
+    // - The ledger a verdict reads is receipt-bound, so those findings counted
+    //   for nothing while reading as though they counted.
+    // - `ancestry` below resolves through the live publication, so against any
+    //   other epoch **both** lineage rules silently disengaged: no origin was
+    //   required and the parent rule could not run.
+    // - One mistyped hex character recorded a finding that satisfied nothing,
+    //   and the verdict's refusal then named `record_review_finding` as the way
+    //   out — a command that had already succeeded and would succeed again
+    //   without clearing the block. `CLAUDE.md`: naming a dead end is worse than
+    //   naming nothing.
+    //
+    // On the replay branch too, which is where `record_review_verdict` puts its
+    // own copy of this. A retry whose receipt has been superseded since is not a
+    // retry of anything that is still under review.
+    require_latest_receipt(&comments, &receipt)?;
     if let Some(marker) = operation_marker(&comments, &operation_id, "review-finding", &expected)? {
         let persisted = ReviewFinding::from_marker(&marker).ok_or_else(|| {
             Failure::Stop(serde_json::json!({
@@ -1912,9 +1931,12 @@ pub fn record_review_finding(
 
     // What this publication descends from, and therefore which of the two
     // lineage rules apply. Read off the timeline; a caller does not get to say.
-    let ancestry = latest_publication(&comments)
-        .filter(|publication| publication.receipt.epoch == finding.epoch)
-        .and_then(|publication| publication.lineage);
+    //
+    // No epoch filter any more, and its removal is the point: the receipt was
+    // checked against the live publication above, so this *is* that publication.
+    // The filter it replaces was what made both rules disengage silently on any
+    // other epoch.
+    let ancestry = latest_publication(&comments).and_then(|publication| publication.lineage);
 
     // A finding that says it continues an earlier one must name one that exists.
     // Otherwise `parent` is free text that makes a fresh observation look
@@ -1929,7 +1951,13 @@ pub fn record_review_finding(
                            for that identity to have come from",
             })));
         };
-        let known: Vec<String> = findings_in_epoch(&comments, &lineage.parent)
+        // The parent ledger by the parent **receipt**, not by its epoch. An
+        // epoch is not a function of the receipt — `publication_epoch` mixes a
+        // clock into its hash — and a finding's epoch field is whatever the
+        // finding says it is, so matching on it alone made `--parent` satisfiable
+        // by backfilling one marker that named the parent epoch and carried the
+        // repair's own bytes. Two reviewers drove exactly that.
+        let known: Vec<String> = findings_for(&comments, &lineage.parent)
             .into_iter()
             .map(|earlier| earlier.id)
             .collect();
@@ -1938,7 +1966,7 @@ pub fn record_review_finding(
                 "ok": false,
                 "reason": "finding-parent-unknown",
                 "parent": finding.parent,
-                "parent_epoch": lineage.parent,
+                "parent_epoch": lineage.parent.epoch,
                 "recorded": known,
                 "action": "name a finding recorded against the parent epoch, or record this as \
                            new to this publication and state its origin",
@@ -3307,14 +3335,15 @@ fn published(
             "gh issue view {issue} returned nothing while reading the publication lineage"
         ))
     })?;
-    let lineage = latest_publication(&comments_of(&previous)).map(|parent| {
-        (
-            parent.receipt.epoch.clone(),
-            parent.receipt.head.clone(),
-            fix_delta_digest(&parent.receipt, head, digest),
-        )
+    let lineage = latest_publication(&comments_of(&previous)).map(|parent| PublicationLineage {
+        delta: fix_delta_digest(&parent.receipt, head, digest),
+        parent: parent.receipt,
     });
     let pr_number = number.to_string();
+    let parent_pr = lineage
+        .as_ref()
+        .map(|lineage| lineage.parent.pr.to_string())
+        .unwrap_or_default();
     let mut fields: Vec<(&str, &str)> = vec![
         ("run-id", run_id),
         ("pr", &pr_number),
@@ -3323,10 +3352,17 @@ fn published(
         ("digest", digest),
         ("epoch", &epoch),
     ];
-    if let Some((parent, parent_head, delta)) = &lineage {
-        fields.push(("parent", parent));
-        fields.push(("parent-head", parent_head));
-        fields.push(("delta", delta));
+    if let Some(lineage) = &lineage {
+        // The parent receipt whole, so the ledger it names can be read the way
+        // every other ledger here is read — by the exact receipt. Recording only
+        // the epoch made the parent a name rather than an identity, and a name
+        // is what a backfilled marker can claim.
+        fields.push(("parent", &lineage.parent.epoch));
+        fields.push(("parent-pr", &parent_pr));
+        fields.push(("parent-head", &lineage.parent.head));
+        fields.push(("parent-base", &lineage.parent.base));
+        fields.push(("parent-digest", &lineage.parent.digest));
+        fields.push(("delta", &lineage.delta));
     }
     let note = publication_note(
         url,
@@ -3357,9 +3393,12 @@ fn published(
         "digest": digest,
         // Absent on a first publication, and that absence is the answer rather
         // than a missing field: there is nothing to descend from.
-        "parent": lineage.as_ref().map(|(parent, _, _)| parent),
-        "parent_head": lineage.as_ref().map(|(_, head, _)| head),
-        "delta": lineage.as_ref().map(|(_, _, delta)| delta),
+        "parent": lineage.as_ref().map(|lineage| &lineage.parent.epoch),
+        "parent_pr": lineage.as_ref().map(|lineage| lineage.parent.pr),
+        "parent_head": lineage.as_ref().map(|lineage| &lineage.parent.head),
+        "parent_base": lineage.as_ref().map(|lineage| &lineage.parent.base),
+        "parent_digest": lineage.as_ref().map(|lineage| &lineage.parent.digest),
+        "delta": lineage.as_ref().map(|lineage| &lineage.delta),
         "autoclose": verdict,
         "next": "transition --to review, obtain the configured blind verdicts, then release_ci with this exact receipt",
     });
