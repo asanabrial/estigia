@@ -3329,7 +3329,20 @@ fn published(
     let previous = super::gh_json(
         &["issue", "view", &issue.to_string(), "--json", "comments"],
         Some(&context.repo_dir),
-    )?
+    )
+    // Named, because a refusal that does not say what it was doing sends a
+    // reader looking in the wrong place. This read happens after the push and
+    // after the pull request, so a bare `gh issue view failed` arrives beside
+    // `a write may have landed` and reads as though the *publication* failed.
+    .map_err(|failure| match failure {
+        Failure::Read(message) => Failure::Read(format!(
+            "{message} \u{2014} reading the publication lineage"
+        )),
+        Failure::Write(message) => Failure::Write(format!(
+            "{message} \u{2014} reading the publication lineage"
+        )),
+        other => other,
+    })?
     .ok_or_else(|| {
         Failure::Read(format!(
             "gh issue view {issue} returned nothing while reading the publication lineage"

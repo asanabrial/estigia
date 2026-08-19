@@ -12882,19 +12882,21 @@ fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_byt
             "body": body,
         })
     };
-    let held = comment(
-        "IC_claim",
-        "2026-08-14T09:00:00Z",
-        marker(
-            "claim",
-            &[
-                ("run-id", reviewer),
-                ("runtime", "gemini"),
-                ("horizon", "2099-01-01T00:00Z"),
-                ("op-id", &"a".repeat(32)),
-            ],
-        ),
-    );
+    let claimed_by = |run: &str| {
+        comment(
+            "IC_claim",
+            "2026-08-14T09:00:00Z",
+            marker(
+                "claim",
+                &[
+                    ("run-id", run),
+                    ("runtime", "gemini"),
+                    ("horizon", "2099-01-01T00:00Z"),
+                    ("op-id", &"a".repeat(32)),
+                ],
+            ),
+        )
+    };
     let publication = comment(
         "IC_publication",
         "2026-08-14T09:10:00Z",
@@ -12913,14 +12915,14 @@ fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_byt
     // One finding, spelled by the three things the rule reads: who found it,
     // how severe it is, and which publication it stands against. Everything
     // else is held constant so a failing row names its own cause.
-    let finding = |op: &str, by: &str, class: &str, against: &str| {
+    let finding = |op: &str, attester: &str, by: &str, class: &str, against: &str| {
         comment(
             "IC_finding",
             "2026-08-14T10:30:00Z",
             marker(
                 "review-finding",
                 &[
-                    ("run-id", by),
+                    ("run-id", attester),
                     ("reviewer", by),
                     ("op-id", op),
                     ("epoch", against),
@@ -12936,21 +12938,21 @@ fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_byt
             ),
         )
     };
-    let recorded = |outcome: &str| {
+    let recorded = |caller: &str, outcome: &str| {
         comment(
             "IC_verdict",
             "2026-08-14T11:00:00Z",
             marker(
                 "review-verdict",
                 &[
-                    ("run-id", reviewer),
+                    ("run-id", caller),
                     ("reviewer", reviewer),
                     (
                         "op-id",
                         &estigia::transport::claim::review_operation_id(
                             "review-verdict",
                             &[
-                                reviewer, reviewer, &epoch, "7", &head, &base, &digest, outcome,
+                                caller, reviewer, &epoch, "7", &head, &base, &digest, outcome,
                             ],
                         ),
                     ),
@@ -12965,16 +12967,37 @@ fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_byt
         )
     };
 
+    // The run **recording** the verdict, which is not always the context credited
+    // with the review. The crate models the two separately — a finding carries an
+    // `attester` beside its `reviewer`, and a verdict reports `self_attested`
+    // when they differ — and a panel orchestrator writing on behalf of a judge is
+    // the shape that makes the distinction real.
+    let orchestrator = "claude-0rchestr";
     let mine = "b".repeat(32);
     #[allow(clippy::type_complexity)]
-    let rows: [(&str, Option<(&str, &str, &str)>, &str, bool); 6] = [
+    let rows: [(&str, &str, Option<(&str, &str, &str)>, &str, bool); 7] = [
+        // The row that tells the rule apart from the caller. Every other row
+        // records under the reviewer\'s own run, so reading `run_id` where
+        // `reviewer` belongs was invisible: one reviewer measured this at the
+        // exact line and the mutation stayed green. Here the recording run is an
+        // orchestrator that found nothing, and the severe finding belongs to the
+        // judge it credits — so a rule that searched the caller\'s findings would
+        // refuse a rejection the panel is entitled to.
+        (
+            "attested-for-a-judge",
+            orchestrator,
+            Some((mine.as_str(), reviewer, "severe")),
+            "rejected",
+            false,
+        ),
         // Nothing behind it at all: the state the operation could not refuse.
-        ("nothing", None, "rejected", true),
+        ("nothing", reviewer, None, "rejected", true),
         // Present, and not severe. If the class filter is dropped this row is
         // the one that goes green, because a warning is exactly the observation
         // this change exists to stop costing a republish.
         (
             "only-a-warning",
+            reviewer,
             Some((a_different_finding(), reviewer, "warning")),
             "rejected",
             true,
@@ -12984,6 +13007,7 @@ fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_byt
         // make it look like one.
         (
             "another-reviewer",
+            reviewer,
             Some((a_different_finding(), other, "severe")),
             "rejected",
             true,
@@ -12993,6 +13017,7 @@ fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_byt
         // republish; the lineage decides what a repair inherits.
         (
             "another-epoch",
+            reviewer,
             Some((a_different_finding(), reviewer, "severe")),
             "rejected",
             true,
@@ -13000,6 +13025,7 @@ fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_byt
         // The route the rule must leave open.
         (
             "its-own-severe",
+            reviewer,
             Some((mine.as_str(), reviewer, "severe")),
             "rejected",
             false,
@@ -13009,27 +13035,30 @@ fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_byt
         // recording rather than escalating.
         (
             "accepted-over-warnings",
+            reviewer,
             Some((mine.as_str(), reviewer, "warning")),
             "accepted",
             false,
         ),
     ];
 
-    for (label, shape, outcome, refused) in rows {
+    for (label, caller, shape, outcome, refused) in rows {
         let log = trace.path().join(format!("{label}.log"));
         let against = if label == "another-epoch" {
             &stale
         } else {
             &epoch
         };
-        let ledger = shape.map(|(id, by, class)| finding(id, by, class, against));
+        // The attester is the recording run; the reviewer is who found it. They
+        // are the same on every row but the first.
+        let ledger = shape.map(|(id, by, class)| finding(id, caller, by, class, against));
         let timeline = |verdict: Option<&str>| -> String {
-            let mut comments = vec![held.clone(), publication.clone()];
+            let mut comments = vec![claimed_by(caller), publication.clone()];
             if let Some(entry) = ledger.clone() {
                 comments.push(entry);
             }
             if let Some(outcome) = verdict {
-                comments.push(recorded(outcome));
+                comments.push(recorded(caller, outcome));
             }
             serde_json::json!({
                 "state": "OPEN",
@@ -13059,8 +13088,8 @@ fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_byt
         let answers = serde_json::to_string(&script).expect("the fake tracker script serialises");
 
         let runs = home.join(".estigia").join("runs");
-        let _ = std::fs::remove_file(runs.join(format!("{reviewer}.json")));
-        let mut run = estigia::harness::session::Run::new(reviewer.to_owned());
+        let _ = std::fs::remove_file(runs.join(format!("{caller}.json")));
+        let mut run = estigia::harness::session::Run::new(caller.to_owned());
         run.issue = Some(12);
         run.state = Some("review".to_owned());
         run.repo_dir = Some(repo.to_path_buf());
@@ -13073,7 +13102,7 @@ fn a_rejection_rests_on_the_reviewers_own_severe_finding_against_these_exact_byt
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": { "name": "record_review_verdict", "arguments": {
                 "issue": 12,
-                "run_id": reviewer,
+                "run_id": caller,
                 "reviewer": reviewer,
                 "epoch": epoch,
                 "pr": 7,
@@ -13166,19 +13195,21 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "body": body,
         })
     };
-    let held = comment(
-        "IC_claim",
-        "2026-08-14T09:00:00Z",
-        marker(
-            "claim",
-            &[
-                ("run-id", reviewer),
-                ("runtime", "gemini"),
-                ("horizon", "2099-01-01T00:00Z"),
-                ("op-id", &"a".repeat(32)),
-            ],
-        ),
-    );
+    let claimed_by = |run: &str| {
+        comment(
+            "IC_claim",
+            "2026-08-14T09:00:00Z",
+            marker(
+                "claim",
+                &[
+                    ("run-id", run),
+                    ("runtime", "gemini"),
+                    ("horizon", "2099-01-01T00:00Z"),
+                    ("op-id", &"a".repeat(32)),
+                ],
+            ),
+        )
+    };
     let publication = comment(
         "IC_publication",
         "2026-08-14T09:10:00Z",
@@ -13204,18 +13235,52 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
     // refused. Four reviewers found it and two drove it through this surface.
     let superseded = "1".repeat(32);
     let invented = "2".repeat(32);
-    for (label, names, class, id, evidence, impact, refused) in [
+    // Who holds the live claim. Every row but the last is the recording run
+    // itself; the last is somebody else, which is the one shape that makes
+    // `verify_claim` observable here. A reviewer deleted that call outright and
+    // the whole suite stayed green — the rule `CLAUDE.md` puts first, on a write
+    // that lands on somebody else\'s issue.
+    let intruder = "codex-beef0000";
+    for (label, holder, names, class, id, evidence, impact, refused) in [
         // A fourth class nobody defined. The names are the vocabulary the
         // decision tables are written in, so an unknown one is a finding no
         // table can weigh rather than a stricter one.
-        ("unknown-class", &epoch, "critical", "x", "e", "i", true),
-        ("no-id", &epoch, "severe", "   ", "e", "i", true),
-        ("no-evidence", &epoch, "severe", "x", "", "i", true),
-        ("no-impact", &epoch, "severe", "x", "e", "  ", true),
-        ("complete", &epoch, "severe", "x", "e", "i", false),
+        (
+            "unknown-class",
+            reviewer,
+            &epoch,
+            "critical",
+            "x",
+            "e",
+            "i",
+            true,
+        ),
+        ("no-id", reviewer, &epoch, "severe", "   ", "e", "i", true),
+        (
+            "no-evidence",
+            reviewer,
+            &epoch,
+            "severe",
+            "x",
+            "",
+            "i",
+            true,
+        ),
+        (
+            "no-impact",
+            reviewer,
+            &epoch,
+            "severe",
+            "x",
+            "e",
+            "  ",
+            true,
+        ),
+        ("complete", reviewer, &epoch, "severe", "x", "e", "i", false),
         // Well-formed, and not the publication under review.
         (
             "superseded-receipt",
+            reviewer,
             &superseded,
             "severe",
             "x",
@@ -13224,7 +13289,28 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             true,
         ),
         // Well-formed, and never published at all.
-        ("invented-receipt", &invented, "severe", "x", "e", "i", true),
+        (
+            "invented-receipt",
+            reviewer,
+            &invented,
+            "severe",
+            "x",
+            "e",
+            "i",
+            true,
+        ),
+        // Complete, current, and recorded by a run that does not hold the
+        // claim. Nothing else in this table can see `verify_claim`.
+        (
+            "claim-elsewhere",
+            intruder,
+            &epoch,
+            "severe",
+            "x",
+            "e",
+            "i",
+            true,
+        ),
     ] {
         let log = trace.path().join(format!("finding-{label}.log"));
         let written = comment(
@@ -13257,7 +13343,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             ),
         );
         let timeline = |after: bool| -> String {
-            let mut comments = vec![held.clone(), publication.clone()];
+            let mut comments = vec![claimed_by(holder), publication.clone()];
             if after {
                 comments.push(written.clone());
             }
@@ -13360,6 +13446,18 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             assert!(
                 calls.contains("issue comment"),
                 "{label}: a complete finding was never written: {calls}"
+            );
+            // The field a caller reads to know whether this finding can block.
+            // It was returned by both the write and the replay path and asserted
+            // by nothing, so pinning it to `false` left the suite green — the
+            // answer would tell an orchestrator its severe finding is a note.
+            let answer: serde_json::Value =
+                serde_json::from_str(&text).expect("the finding answer is JSON");
+            assert_eq!(
+                answer["blocking"].as_bool(),
+                Some(class == "severe"),
+                "{label}: the answer reports a blocking disposition that disagrees with the \
+                 class it recorded: {text}"
             );
         }
     }
@@ -13492,7 +13590,19 @@ fn a_publication_records_the_one_it_repairs_and_a_first_one_records_nothing() {
         "isDraft": true,
     });
 
-    for (label, repairs) in [("first", false), ("repair", true)] {
+    // `readable` is the third row and the reason this loop has one. The lineage
+    // is read from the timeline with `gh issue view <n> --json comments`, the
+    // only read in this operation asking for exactly that shape — so it can be
+    // failed on its own without touching the reads before it. The code there
+    // argues, at length, that a failed read is not an absent parent. Nothing
+    // measured the argument: a reviewer turned that read into a silent `None`
+    // and the whole suite stayed green, which is this repository\'s own
+    // definition of a fix that is not tested.
+    for (label, repairs, readable) in [
+        ("first", false, true),
+        ("repair", true, true),
+        ("unreadable-lineage", true, false),
+    ] {
         let mut comments = vec![claimed.clone()];
         if repairs {
             comments.push(earlier.clone());
@@ -13504,7 +13614,16 @@ fn a_publication_records_the_one_it_repairs_and_a_first_one_records_nothing() {
             "comments": comments,
         })
         .to_string();
-        let answers = serde_json::to_string(&serde_json::json!([
+        let mut script: Vec<serde_json::Value> = vec![];
+        if !readable {
+            // First, so the generic entry below cannot answer it. `--json
+            // comments` is not a substring of `--json labels,comments`, so this
+            // fails the lineage read and nothing before it.
+            script.push(serde_json::json!({
+                "matches": "issue view 12 --json comments", "stdout": "", "status": 1,
+            }));
+        }
+        let ordinary = serde_json::json!([
             { "matches": "issue view", "stdout": timeline, "status": 0 },
             { "matches": "pr list", "stdout": serde_json::json!([pr]).to_string(), "status": 0 },
             { "matches": "headRefOid", "stdout": pr.to_string(), "status": 0 },
@@ -13521,8 +13640,15 @@ fn a_publication_records_the_one_it_repairs_and_a_first_one_records_nothing() {
                 "status": 0,
             },
             { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
-        ]))
-        .expect("the fake tracker script serialises");
+        ]);
+        script.extend(
+            ordinary
+                .as_array()
+                .expect("the ordinary script is an array")
+                .iter()
+                .cloned(),
+        );
+        let answers = serde_json::to_string(&script).expect("the fake tracker script serialises");
 
         let runs = home.join(".estigia").join("runs");
         let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
@@ -13578,6 +13704,36 @@ fn a_publication_records_the_one_it_repairs_and_a_first_one_records_nothing() {
             .as_str()
             .unwrap_or_default()
             .to_owned();
+        if !readable {
+            // A read that did not answer is not an answer. Recording this as a
+            // first publication would erase a lineage rather than report that it
+            // could not be seen — and it would disable both lineage refusals for
+            // the round after it, silently, on the one issue where a repair is
+            // under review.
+            //
+            // The **reason** is asserted, not only the refusal. An earlier
+            // version of this row checked `isError` alone and passed under the
+            // very mutation it exists to catch, because the operation was
+            // refusing something else entirely. A row that cannot say why it
+            // went red measures nothing.
+            assert_eq!(
+                response["result"]["isError"], true,
+                "{label}: an unreadable timeline was published as a first publication, so a \
+                 repair records no parent and both lineage rules stop applying: {text}"
+            );
+            assert!(
+                text.contains("publication lineage"),
+                "{label}: the publication refused for some other reason, so this row proves \
+                 nothing about the read it is here for: {text}"
+            );
+            let calls = std::fs::read_to_string(&log).unwrap_or_default();
+            assert!(
+                !calls.contains("issue comment"),
+                "{label}: a publication whose lineage could not be read still posted a receipt, \
+                 which is the erased lineage written down as evidence: {calls}"
+            );
+            continue;
+        }
         assert_eq!(
             response["result"]["isError"], false,
             "{label}: the publication did not land: {text}"
