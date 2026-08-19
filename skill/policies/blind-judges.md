@@ -6,8 +6,11 @@
 **This document is routed by `two blind` and `five blind` only.** A run configured `single` is never
 handed it, so everything the `single` table below states is also stated in the contract itself, and
 the table here is a restatement rather than the only copy. Issue #18 owns that reachability gap; what
-matters for a reader of *this* file is that finding the rule here does not mean a `single` run saw it. Neither changes the mandatory frozen publication
-receipt or the one aggregate verdict Estigia requires before CI release.
+matters for a reader of *this* file is that finding the rule here does not mean a `single` run saw
+it.
+
+No mode changes the mandatory frozen publication receipt or the one aggregate verdict Estigia
+requires before CI release.
 
 The setting is orthogonal to `Planning` and to `Review protocol`. Under `standard` review the judges
 read the published review target; under `receipt-driven` they read the frozen digest; when `Planning`
@@ -181,6 +184,13 @@ function of the bytes it names, and a finding's epoch field is whatever the find
 parent ledger matched on the epoch alone could be written into after the fact, by recording a finding
 that named the parent epoch and carried the repair's own bytes. Matched on the receipt, it cannot.
 
+A lineage reaches **one publication back**, and that bound is worth knowing before a third round
+needs it: `--parent` is matched against the ledger of the receipt this publication descends from,
+not against every ancestor. A severe finding raised in round one and not re-recorded in round two
+cannot be cited in round three — the reviewer is told which identities the parent receipt holds
+and records it as new, with an origin. Each round that still stands on a finding re-records it and
+the chain holds; a round that lets one lapse ends it.
+
 The parent's findings stay on the timeline. Preserving settled work is not an operation — nothing
 rewrites those markers — so what a re-review owes is the *reference*:
 
@@ -190,8 +200,10 @@ rewrites those markers — so what a re-review owes is the *reference*:
 | Is `severe` and new to this repair | `--origin introduced` if the repair created it, `--origin exposed` if the repair made an existing defect reachable |
 | Is a warning or a suggestion new to this repair | Nothing. Pricing the cheap observation is the defect this whole mechanism repairs |
 
-Both are refused when absent, which is what keeps a full-target resweep that rediscovers or rephrases
-settled work from arriving indistinguishable from a defect the repair caused. What Estigia adjudicates
+The **origin** is refused when absent, which is what keeps a full-target resweep that rediscovers
+or rephrases settled work from arriving indistinguishable from a defect the repair caused. The
+parent reference cannot be refused when absent — a finding that silently declines to name what it
+reassesses is indistinguishable from a new one, and nothing here can tell them apart. What Estigia adjudicates
 is that the reference exists and the origin is one of the two words. Whether it is *true* is the
 reviewer's claim, like every other field here.
 

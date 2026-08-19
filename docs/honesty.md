@@ -530,7 +530,9 @@ suite. Everything else here is prose held by review.
   reads carefully does; what changed is that the claim is now written down where somebody can argue
   with it, not that anybody did.
 
-  Two narrower limits, both worth stating because the words invite the opposite reading:
+  Four narrower limits, each worth stating because the words invite the opposite reading. The
+  first two shipped with the mechanism; the last two were added after reviewers found them, and
+  the lead-in still said *two* until they found that as well:
 
   - **A finding identity is agreement by spelling.** Two judges "confirming the same finding" means
     two markers carrying the same `id` string. Estigia does not compare evidence, locations or
@@ -551,7 +553,7 @@ suite. Everything else here is prose held by review.
     refusal (`published-receipt-missing`); `publish_review` does not, so an ordinary continuation
     after a cross-account reclaim publishes as a **first** publication and neither lineage rule
     applies to its findings. The direction is permissive rather than a wrong delivery, and it is the
-    same account filter this document already records one section above — but the consequence for the
+    same account filter this document records for `republish_review` further down, under the entry about leasing against a receipt published from a different account — but the consequence for the
     parent ledger is new and is stated here rather than left to be rediscovered.
   - **Which reviewer an aggregate panel verdict credits is a contract, not a check.** The severity
     rule reads *that reviewer's* findings while a panel records one aggregate verdict, so

@@ -13241,7 +13241,16 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
     // the whole suite stayed green — the rule `CLAUDE.md` puts first, on a write
     // that lands on somebody else\'s issue.
     let intruder = "codex-beef0000";
-    for (label, holder, names, class, id, evidence, impact, refused) in [
+    // `replayed` puts this finding\'s own marker on the timeline **before** the
+    // call, so the call is a retry of a write that already landed rather than a
+    // first one. It exists for one row, and that row is about *where* the
+    // currency check sits rather than whether it is there: a reviewer moved it
+    // below the replay branch and the whole suite stayed green, while the
+    // comment at the call site claims the placement is deliberate. A retry whose
+    // receipt was superseded in the meantime is not a retry of anything still
+    // under review, and without this row it answers `ok: true, blocking: true`
+    // and names no epoch at all.
+    for (label, holder, names, class, id, evidence, impact, replayed, refused) in [
         // A fourth class nobody defined. The names are the vocabulary the
         // decision tables are written in, so an unknown one is a finding no
         // table can weigh rather than a stricter one.
@@ -13253,9 +13262,12 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "x",
             "e",
             "i",
+            false,
             true,
         ),
-        ("no-id", reviewer, &epoch, "severe", "   ", "e", "i", true),
+        (
+            "no-id", reviewer, &epoch, "severe", "   ", "e", "i", false, true,
+        ),
         (
             "no-evidence",
             reviewer,
@@ -13264,6 +13276,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "x",
             "",
             "i",
+            false,
             true,
         ),
         (
@@ -13274,9 +13287,12 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "x",
             "e",
             "  ",
+            false,
             true,
         ),
-        ("complete", reviewer, &epoch, "severe", "x", "e", "i", false),
+        (
+            "complete", reviewer, &epoch, "severe", "x", "e", "i", false, false,
+        ),
         // Well-formed, and not the publication under review.
         (
             "superseded-receipt",
@@ -13286,6 +13302,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "x",
             "e",
             "i",
+            false,
             true,
         ),
         // Well-formed, and never published at all.
@@ -13297,6 +13314,20 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "x",
             "e",
             "i",
+            false,
+            true,
+        ),
+        // The retry, over bytes that stopped being under review between the
+        // first attempt and this one.
+        (
+            "replayed-superseded",
+            reviewer,
+            &superseded,
+            "severe",
+            "x",
+            "e",
+            "i",
+            true,
             true,
         ),
         // Complete, current, and recorded by a run that does not hold the
@@ -13309,6 +13340,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
             "x",
             "e",
             "i",
+            false,
             true,
         ),
     ] {
@@ -13344,7 +13376,7 @@ fn a_finding_states_its_class_evidence_and_impact_or_it_is_not_recorded() {
         );
         let timeline = |after: bool| -> String {
             let mut comments = vec![claimed_by(holder), publication.clone()];
-            if after {
+            if after || replayed {
                 comments.push(written.clone());
             }
             serde_json::json!({
@@ -13980,7 +14012,15 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
             ],
         ),
     );
-    let repair = |lineage: bool| {
+    // `whole` distinguishes a lineage marker carrying the parent receipt entire
+    // from one carrying part of it. `PublicationLineage::from_marker` argues at
+    // its own site that a partial lineage must read as no lineage — all of it or
+    // none, so one reader cannot see a repair where the next sees a first
+    // publication — and nothing measured the argument: a reviewer made the
+    // missing `parent-base` fall back to the child\'s and the whole suite stayed
+    // green, which would hand both lineage rules a parent receipt that never
+    // existed.
+    let repair = |lineage: bool, whole: bool| {
         let mut fields: Vec<(&str, &str)> = vec![
             ("run-id", publisher),
             ("epoch", &epoch),
@@ -13993,7 +14033,13 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
             fields.push(("parent", &parent_epoch));
             fields.push(("parent-pr", "7"));
             fields.push(("parent-head", &parent_head));
-            fields.push(("parent-base", &base));
+            // Exactly one field withheld, and the one a reviewer proved could be
+            // filled in from the child. Withholding two would let the second
+            // `?` carry the row while the first was quietly defaulted, and the
+            // mutation this exists to catch would stay green.
+            if whole {
+                fields.push(("parent-base", &base));
+            }
             fields.push(("parent-digest", &parent_digest));
             fields.push(("delta", &delta));
         }
@@ -14004,10 +14050,11 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         )
     };
 
-    for (label, lineage, id, class, parent, origin, refused, reason) in [
+    for (label, lineage, whole, id, class, parent, origin, refused, reason) in [
         // The reassessment: an identity the parent ledger holds.
         (
             "reassessed",
+            true,
             true,
             "old-defect",
             "severe",
@@ -14021,6 +14068,7 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         (
             "invented-parent",
             true,
+            true,
             "new-defect",
             "severe",
             "never-found",
@@ -14031,6 +14079,7 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         // A new blocker with nothing said about why the repair owns it.
         (
             "unexplained-blocker",
+            true,
             true,
             "new-defect",
             "severe",
@@ -14043,6 +14092,7 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         (
             "explained-blocker",
             true,
+            true,
             "new-defect",
             "severe",
             "",
@@ -14051,7 +14101,17 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
             "",
         ),
         // The asymmetry: a warning new to a repair owes nothing.
-        ("new-warning", true, "a-note", "warning", "", "", false, ""),
+        (
+            "new-warning",
+            true,
+            true,
+            "a-note",
+            "warning",
+            "",
+            "",
+            false,
+            "",
+        ),
         // The attack, and the reason the lineage carries the parent receipt
         // rather than its epoch. `backfilled` is a finding recorded after the
         // repair, naming the parent **epoch** while carrying the repair\'s own
@@ -14062,6 +14122,7 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         // demand and `new-blocker-without-origin` is bypassed by one extra write.
         (
             "backfilled-parent",
+            true,
             true,
             "new-defect",
             "severe",
@@ -14074,6 +14135,7 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         // no fixture exercised until a reviewer counted them.
         (
             "new-suggestion",
+            true,
             true,
             "a-nit",
             "suggestion",
@@ -14089,6 +14151,7 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         (
             "parent-from-this-epoch",
             true,
+            true,
             "new-defect",
             "severe",
             "this-epoch",
@@ -14096,10 +14159,27 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
             true,
             "finding-parent-unknown",
         ),
+        // The lineage marker carrying four of its five parent fields. Read
+        // all-or-none it is no lineage at all, so a severe finding new to
+        // this publication owes no origin and lands. Read leniently it is a
+        // parent receipt nobody published, and the same finding is refused
+        // for want of an origin against an ancestor that does not exist.
+        (
+            "partial-lineage",
+            true,
+            false,
+            "new-defect",
+            "severe",
+            "",
+            "",
+            false,
+            "",
+        ),
         // A parent named against a publication that descends from nothing.
         (
             "parent-without-lineage",
             false,
+            true,
             "new-defect",
             "severe",
             "old-defect",
@@ -14145,7 +14225,7 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
                 held.clone(),
                 earlier.clone(),
                 settled.clone(),
-                repair(lineage),
+                repair(lineage, whole),
                 current.clone(),
                 backfilled.clone(),
             ];

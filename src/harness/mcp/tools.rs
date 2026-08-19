@@ -482,9 +482,9 @@ pub const TOOLS: &[Tool] = &[
                 "parent",
                 "string",
                 "The identity of the finding in the parent publication that this \
-                 one reassesses. Naming one that was never recorded against the \
-                 parent epoch is refused, because `parent` is what makes a fresh \
-                 observation readable as settled work.",
+                 one reassesses. Naming one the parent **receipt** never recorded \
+                 is refused \u{2014} an epoch alone would let a marker written after \
+                 the repair claim to be settled work.",
             ),
             Argument::optional(
                 "origin",

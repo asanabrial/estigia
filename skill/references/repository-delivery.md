@@ -140,7 +140,11 @@ Publish the configured review target as a draft before moving work to review. Re
 review request when resuming; duplicate review targets split evidence. A reused ready PR must become
 draft and be read back before push. A new PR is created draft after a topic push that does not trigger
 CI. Capture epoch, PR, head, base and target digest, and require every independent verdict to identify
-that full receipt. After the configured single, two-blind or five-blind review mode completes,
+that full receipt. Each observation worth carrying is recorded against that receipt as its own finding, classified
+`severe`, `warning` or `suggestion` with concrete evidence and stated impact, before the verdict that
+reduces them: a `rejected` verdict is refused unless that reviewer recorded a `severe` finding against
+that exact receipt, and warnings and suggestions stand beside an acceptance without withdrawing it.
+After the configured single, two-blind or five-blind review mode completes,
 the orchestrator records one aggregate exact-receipt verdict and `release_ci`
 replays the globally latest recorded receipt, current draft PR and a clean target bounded by equal
 HEAD/status observations before marking the PR ready and reading the outcome back. A republish creates

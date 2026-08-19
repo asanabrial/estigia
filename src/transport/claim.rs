@@ -952,7 +952,7 @@ struct LatestPublication {
 /// carried the epoch and the head, and the reader that used it matched findings
 /// on the epoch alone — which is a looser identity than it looks, because
 /// `publication_epoch` mixes a clock into its hash and a finding's epoch field
-/// is whatever the finding says it is. Three reviewers demonstrated the cost: a
+/// is whatever the finding says it is. Two reviewers demonstrated the cost: a
 /// `review-finding` backfilled after the repair, carrying the parent epoch and
 /// the repair's own bytes, satisfied the parent-existence rule and let a new
 /// severe finding through with no origin. Carrying the receipt lets the parent
@@ -989,7 +989,13 @@ impl PublicationLineage {
 
 /// One immutable name for the transition between two publications.
 ///
-/// Both ends, whole: move either receipt and the digest moves. It names *which*
+/// The parent whole, and the child by the two fields a repair moves. The parent
+/// contributes its epoch, which `publication_epoch` mints from that receipt
+/// entire; the child contributes its head and its target digest, not its base,
+/// pull request or epoch. A reviewer measured that the omitted fields are not
+/// independently reachable — a moved base moves the digest — and nothing reads
+/// this value for a decision, so the bound is legibility rather than a gate.
+/// It names *which*
 /// repair this is; it is not an enumeration of the changed paths and nothing
 /// here claims it is. The delta a reviewer reads is `parent_head..head`, which
 /// this records the ends of — `docs/honesty.md` carries what that does and does
@@ -1968,8 +1974,9 @@ pub fn record_review_finding(
                 "parent": finding.parent,
                 "parent_epoch": lineage.parent.epoch,
                 "recorded": known,
-                "action": "name a finding recorded against the parent epoch, or record this as \
-                           new to this publication and state its origin",
+                "action": "name a finding recorded against the parent receipt \u{2014} the \
+                           identities it holds are listed above \u{2014} or record this as new \
+                           to this publication and state its origin",
             })));
         }
     // And the other half: a **new** blocker against a repair has to say why the

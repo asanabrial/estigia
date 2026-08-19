@@ -39,7 +39,7 @@ the workflow, it holds the tools.
   alone could be written into after the fact by recording a finding that named the parent epoch and
   carried the repair's own bytes. The parent's findings stay where they are; nothing rewrites them. What a re-review owes
   is the reference: a finding that reassesses one names it, and the name must exist against the parent
-  epoch; a `severe` finding new to the repair states whether the repair `introduced` the defect or
+  receipt — an epoch alone is claimable by a marker written after the repair; a `severe` finding new to the repair states whether the repair `introduced` the defect or
   `exposed` one already there. A warning or a suggestion new to a repair owes nothing, because pricing
   the cheap observation is the defect this whole change repairs.
 

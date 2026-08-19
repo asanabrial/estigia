@@ -81,8 +81,10 @@ boundary; one run holding one task; the state the tracker reports; a push that n
 authorises, refused under git; one aggregate exact-receipt verdict bound to the latest publication;
 and, since the finding ledger exists, that a `rejected` verdict rests on a `severe` finding that
 reviewer recorded against that same receipt, that every finding names the publication under review
-rather than merely a well-formed one, and that a repair's finding either names a parent its parent
-receipt recorded or states whether the repair `introduced` or `exposed` the defect.
+rather than merely a well-formed one, and that a repair's **severe** finding either names a parent
+its parent receipt recorded or states whether the repair `introduced` or `exposed` the defect. A
+warning or a suggestion new to a repair is asked for neither, which is deliberate and pinned:
+requiring an origin of every class reddens the lineage test.
 
 **Not enforced:** per-lens or per-judge verdicts, whether the lenses named were the right ones, or
 whether the aggregate verdict was honest. A per-judge verdict marker remains

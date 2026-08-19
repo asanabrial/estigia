@@ -2189,7 +2189,7 @@ mod tests {
     /// Operations the contract requires that a binding does not map.
     ///
     /// Frozen, and it may only shrink. `SKILL.md` says every binding **MUST**
-    /// map the nineteen operations it lists, and adds that *"bindings MUST
+    /// map the twenty operations it lists, and adds that *"bindings MUST
     /// declare unsupported capabilities and fail closed"* — so a gap here is
     /// either a missing row or an undeclared capability, and both are upstream's
     /// to settle. What is settled here is that the number cannot grow.
