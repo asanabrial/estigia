@@ -1410,7 +1410,11 @@ suite. Everything else here is prose held by review.
     **acceptance**. Arriving is not being returned: the arm can be widened with the list left
     short, and `Evidence::all` says so on itself. So what keeps this a proof rather than a guess
     is the pair, and the acceptance test walks the same list, so it inherits that limit rather
-    than covering it.
+    than covering it. The crossing that binds the *installed* bytes —
+    `the_reserved_reviewer_grant_is_the_same_through_both_doors` — walks a hand-written pair of rows
+    rather than `Evidence::all()`, so a third standard would arrive at the rendering and at
+    `reviewer_is_static` and reach that test only if somebody added it there. A judge measured that
+    this was disclosed for the first and not for the second.
   - The gate had to read the row. It carries it in `GateContext` beside `window`, and narrows the same
     way for the same sentence: **an unreadable contract answers `reading`**, because a fault must not
     hand out a capability.
@@ -1439,6 +1443,22 @@ suite. Everything else here is prose held by review.
   a judge could make in its own name. Named here rather than implied, because the last acceptance
   criterion on issue 83 says no delegated context gains orchestration authority, and at the grant
   that is true while at the shell it is prose.
+
+  **And `setup` and `sync` reach further than a redirected `HOME`.** Named here because a judge
+  measured it while reviewing this very change, not because it was reasoned about. Under `measuring`
+  a judge ran `estigia sync --allow-source-build` with `HOME` and `USERPROFILE` pointed at its own
+  scratch directory — the isolation every launch brief here asks for — and the run walked every
+  adapter. The `gemini-cli` root resolves under `%APPDATA%`, which neither variable governs, so two
+  files in the operator's real profile were rewritten: the skill path repointed at the sandbox, and
+  the MCP command and `BeforeTool` hook repointed at the judge's own `target/debug/estigia.exe` —
+  a binary inside a checkout that gets deleted. The judge disclosed it and restored both files, and
+  the restoration was verified independently before this was written.
+
+  So what a shell reaches is not only the tracker front door above but `setup` and `sync`, which
+  rewrite host agent definitions — the reviewer's own `tools:` line among them — at machine-scoped
+  paths no launch directory encloses. Redirecting the home is what every judge brief on this
+  repository calls isolation, and for this command it is not sufficient. Filed as **#97**, and not
+  fixed here: it is a property of the adapter table, not of the grant this change derives.
 
   **One row, one file, and a machine can hold two answers.** `Evidence standard` is
   `Scope::Everywhere`, so it is set per repository, while the artifact it decides is a single
