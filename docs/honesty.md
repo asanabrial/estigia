@@ -19,7 +19,8 @@ suite. Everything else here is prose held by review.
   successful line is still not proof that a later run accepts or uses the ID. Estigia does not
   validate catalog membership, execute models, or inspect or filter their tool-call capability.
   Only Claude Code currently receives host-routable definitions: the planning phases selected by
-  `Planning`, and one static `review-blind` definition installed in every mode. OpenCode and every
+  `Planning`, and one `review-blind` definition installed in every mode, whose tool grant
+  `Evidence standard` decides. OpenCode and every
   other host keep these values as routing declarations. `orchestrate`, `apply`, `judge`, and a visible
   route or installed definition are likewise not proof that a host executes them.
   Claude's generated matcher now wakes for current `Agent` and legacy `Task` launches of the exact
@@ -1294,11 +1295,21 @@ suite. Everything else here is prose held by review.
   - A host that reads a directory whole and is declared not to is invisible here, in exactly the way
     the four hand-spelled entries were invisible for the adapters nobody thought of. The declaration
     moved from a distant list onto the adapter; it did not become checkable.
-  - **Only one of the two derived families is compiler-forced.** `instruction_directory_fragment`
-    matches `InstructionFile`, so a twelfth adapter cannot skip it; `skills_root_fragment` matches
-    `SkillsRoot`, whose three variants are all enumerated — but a twelfth adapter picks an existing
-    one, so nothing is forced there. Correct as written and worth knowing before reading the second as
-    carrying the same teeth as the first.
+  - **Flipping the row does not re-render the installed definition, and nothing reports the drift.**
+    `config set` writes the contract table and reads it back; it never writes an agent's files, which
+    is true of every row and stated as a safety property in `docs/configuration.md`. For this row it is
+    also a hazard: measured, `estigia config set "Evidence standard" measuring` answers `Evidence
+    standard is now measuring` with exit 0 while `~/.claude/agents/review-blind.md` still reads
+    `tools: Read, Grep, Glob`, and `doctor` answers `ok canonical — and every configured agent reads
+    the rows it decides by`. Only `setup` or `sync` re-renders. Both directions of the mismatch fail
+    closed **at the gate**, which enforces from the embedded definition rendered with the effective
+    row rather than from the file — so the host may offer a grant the gate then refuses, or refuse one
+    the gate would allow, and the judge is told one thing by its own definition and answered another
+    by the hook. Nothing reports it, and `reviewer_is_static` accepts either rendering by design, so
+    the launch check cannot see it either.
+  - **Only one of the two derived families is compiler-forced**, which is the entry above's subject
+    and is named here only because this row now decides a grant beside them. That entry has the
+    measurement; this one does not repeat it.
   - **The derivation discards one shape without a word.** `instruction_directory_fragment` ends in
     `fragment.rfind('/').map(…)`, so an adapter that answers *this host reads the directory whole* with
     a separator-free fragment gets `None` back, and
@@ -1401,8 +1412,7 @@ suite. Everything else here is prose held by review.
   - Only one of the two derived families is compiler-forced. `instruction_directory_fragment` matches
     `InstructionFile`, so a twelfth adapter cannot skip it; `skills_root_fragment` matches
     `SkillsRoot`, whose variants a twelfth adapter reuses.
-  - The eight `_` arms on the instruction enum are untouched, `mcp_format` among them. Nothing here
-    closes them and the entry above says which has teeth.
+  - The eight `_` arms on the instruction enum are untouched, and the entry above owns them.
   - Estigia still cannot prove a panel ran, how many contexts it had, or that any two of them were
     given separate directories. This narrows what a judge **can** do and proves nothing about what a
     judge **did** — the same boundary `policies/blind-judges.md` draws for everything else about

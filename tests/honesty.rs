@@ -2185,10 +2185,17 @@ fn the_readme_counts_what_the_crate_actually_has() {
         // opened with **eighteen** and said **nineteen** nine lines later, through a
         // change that edited the guarded sentence and not the unguarded one, and
         // `README.md`'s count could be set to anything at all.
+        // Keyed on a phrase unique to `docs/configuration.md`'s opening line.
+        // A first attempt used the bare `"typed settings"`, which `README.md`
+        // also carries — and `number_before` takes the **first** occurrence over
+        // a concatenation that puts the README first, so the pair guarded the
+        // README twice and the sentence that had actually drifted not at all. A
+        // reviewer measured that by changing the opening line and watching the
+        // suite stay green.
         (
-            "typed settings",
+            "typed settings, read from one table",
             estigia::config::SETTINGS.len(),
-            "settings, in the other sentence that counts them",
+            "settings, in the sentence that opens the configuration reference",
         ),
         (
             "adapters share",
@@ -2208,7 +2215,7 @@ fn the_readme_counts_what_the_crate_actually_has() {
 
 /// Every setting is acted on by something, and the something is named.
 ///
-/// An operator sets eighteen rows. `config list` reports them, the contract
+/// An operator sets nineteen rows. `config list` reports them, the contract
 /// carries them, and `doctor` has a row for the ones a *tracker* declares
 /// nothing for. Nothing asked the plainer question: does anything at all read
 /// this row.

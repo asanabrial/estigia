@@ -4980,6 +4980,30 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         "the default standard moved, so the rendering above is no longer the default one"
     );
 
+    // The `measuring` paragraph carries the rule that bounds the capability it
+    // announces. Four shipped documents say that paragraph is **the only thing**
+    // making the shell safe, and a reviewer measured that replacing the whole arm
+    // with `"Do NOT delegate."` left the suite green: the grant survived and every
+    // word telling the judge where it may write was gone. The asymmetry was the
+    // tell — `Reading` is pinned byte for byte above and `Measuring` was pinned by
+    // nothing.
+    //
+    // Clauses rather than bytes, deliberately: this paragraph is prose that should
+    // be free to improve, and what must not vanish is the rule inside it.
+    let measuring = render_reviewer_agent(skill::REVIEW_AGENT.contents, Evidence::Measuring);
+    for clause in [
+        "inside the directory this launch hands you and nowhere else",
+        "yours alone for the duration",
+        "Restore every mutation",
+        "stop and say so rather than",
+        "Still do NOT change tracker state",
+    ] {
+        assert!(
+            measuring.contains(clause),
+            "the measuring grant no longer carries the rule that bounds it: {clause:?}"
+        );
+    }
+
     // And every rendering is accepted, not only the default one. Narrowing this
     // back to a single spelling left the whole suite green while refusing every
     // judge launch on a `measuring` install — a blind reviewer measured it. The

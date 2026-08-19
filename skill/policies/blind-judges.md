@@ -16,7 +16,7 @@ in every combination.
 Build and publish the complete clean target as a draft first. Every judge receives the same epoch, PR,
 head, base, digest, bytes, scope and criteria, and is blind to every sibling's verdict and reasoning.
 A later opinion that has read an earlier one is not independent. Claude's orchestrator launches the
-same static `review-blind` definition for every judge; there are no numbered definitions.
+same `review-blind` definition for every judge; there are no numbered definitions.
 
 **Every judge runs as the reserved `review-blind` role**, and what that role may do is the
 `Evidence standard` row's answer rather than a constant.
@@ -28,9 +28,7 @@ Under `measuring`, the role gets a shell **and nothing else** — write, edit an
 refused, so a judge cannot hand the work on, and cannot reach the target through a tool call. It can
 of course rewrite a file *through the shell*: what stops that being anybody else's problem is the
 directory it is confined to, not the grant. The isolation rule below is doing that work, and it is the
-only thing doing it. What it may do is
-build, test and mutate inside the one directory the launch hands it, which is what the isolation rule
-below is for. A repository whose findings are established by reading wants the first answer; one
+only thing doing it. A repository whose findings are established by reading wants the first answer; one
 whose evidence standard is mutation needs the second, because a judge that cannot run the suite
 cannot check whether turning the fix off leaves it green.
 

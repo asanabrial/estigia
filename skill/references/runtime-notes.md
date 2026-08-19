@@ -54,7 +54,8 @@ reserved filename or frontmatter name, fail closed on unreadable or duplicate ca
 the normalized canonical user text to be the only user-scoped definition with that identity. Setup
 performs the same recursive user-tree preflight before writing. The top-level `agent_type` is the caller;
 only nested `tool_input.subagent_type` is the launch target. An already-running reviewer always receives
-the embedded policy — read-only, or read-only plus a shell, as `Evidence standard` decides — rather than whatever is on disk. This does not alter ordinary project-first agent resolution and does not
+the embedded policy — read-only, or read-only plus a shell, as `Evidence standard`
+decides — rather than whatever is on disk. This does not alter ordinary project-first agent resolution and does not
 cover OpenCode launches. A refused or unprovable launch contributes no judge; use a separate session or
 durable handoff, never a smaller or serialized panel.
 

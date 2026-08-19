@@ -170,7 +170,7 @@ the workflow, it holds the tools.
   target and criteria; a severe finding blocks or authorizes automatic repair only when 3-of-5
   independently confirm the same finding. One or two confirmations remain suspicions, ambiguous
   identities do not aggregate, and dissent, warnings and suggestions survive. Every Claude Code setup
-  installs one static read-only `review-blind` definition with `model: inherit`; it remains inert unless
+  installs one inert `review-blind` definition with `model: inherit`; it remains inert unless
   a launch names the active blind mode, exact receipt and criteria. The orchestrator supplies the
   effective `judge` model when it launches that definition twice or five times. Config writes never
   mutate it. Setup refuses an unowned or changed copy before writing other artifacts, and uninstall

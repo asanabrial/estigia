@@ -753,7 +753,7 @@ pub enum ActionKind {
     Plugin,
     /// One SDD planning phase, as a sub-agent definition the host routes to.
     PhaseAgent,
-    /// The one static blind-review definition Claude Code routes to.
+    /// The one blind-review definition Claude Code routes to, as a template.
     AgentDefinition,
     /// One adapter's configuration inside a shared skill root.
     AgentConfiguration,
@@ -1474,7 +1474,7 @@ fn validate_reviewer_definition(paths: &AgentPaths) -> Result<()> {
         return Err(reviewer_definition_refusal(
             ReviewerDefinitionCode::Changed,
             &target,
-            "was created by Estigia but no longer matches its static definition",
+            "was created by Estigia but matches no rendering of its definition",
         )
         .into());
     }
@@ -2227,7 +2227,7 @@ pub fn uninstall_from(
         None => None,
     };
 
-    // The static reviewer is decided and removed before the skill ledger that
+    // The reviewer is decided and removed before the skill ledger that
     // proves ownership. Changed text is the operator's work: keep it and
     // relinquish the path. Line-ending and final-newline shape are normalized;
     // only a completed deletion permits ownership to be forgotten.

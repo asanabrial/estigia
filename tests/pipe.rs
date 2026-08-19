@@ -4656,6 +4656,35 @@ fn the_reserved_reviewer_grant_is_the_same_through_both_doors() {
         );
         assert!(ok, "{row} was refused: {said}{error}");
 
+        // The file the **host** reads, after the row is set the way an operator
+        // sets it: `config set` writes the contract, `sync` re-renders what that
+        // contract decides. Asserted because nothing did: forcing setup to write
+        // the default rendering whatever the row said left the whole suite green,
+        // which would make `measuring` buy a grant at Estigia's gate and none at
+        // the host — a feature that is on everywhere except where it matters. Two
+        // judges disagreed about whether `sync` re-renders at all, which is a
+        // measurable fact, so it is measured here rather than argued.
+        run(home.path(), &["sync"], "");
+        let installed = std::fs::read_to_string(
+            home.path()
+                .join(".claude")
+                .join("agents")
+                .join("review-blind.md"),
+        )
+        .expect("the reviewer is installed");
+        let declared = installed
+            .lines()
+            .find(|line| line.starts_with("tools:"))
+            .expect("the definition declares its tools");
+        assert_eq!(
+            declared,
+            match row {
+                "measuring" => "tools: Read, Grep, Glob, Bash",
+                _ => "tools: Read, Grep, Glob",
+            },
+            "{row}: the host reads a grant the row did not ask for"
+        );
+
         let repo = tempfile::tempdir().expect("a checkout");
         let payload = format!(
             "{{\"agent_type\":\"review-blind\",\"file_path\":\"src/main.rs\",\"command\":\"x\",\"cwd\":{:?}}}",
@@ -4705,6 +4734,42 @@ fn the_reserved_reviewer_grant_is_the_same_through_both_doors() {
                 format!("{said}{error}").contains("declared"),
                 "{row}/{door}: {refused} is outside this row's grant and the {door} door allowed                  it: {said}{error}"
             );
+        }
+
+        // And a contract nobody can read hands out the narrower grant, on both
+        // doors. This is the case the property lives or dies on, and it is here
+        // rather than beside the pure function because a test of the function
+        // proves the function: the previous head moved the narrowing into
+        // `effective_evidence`, tested it there, and deleted the assertion that
+        // held the **call site** — after which dropping the call left the whole
+        // suite green while live-widening a delegated reviewer's grant out of a
+        // broken file. A blind reviewer measured that, having measured the source-
+        // text assertion it replaced. One row is corrupted rather than the whole
+        // file, so the `Evidence standard` row is still perfectly readable and the
+        // only thing deciding the answer is that the contract as a whole did not
+        // parse.
+        if row == "measuring" {
+            let contract = home
+                .path()
+                .join(".claude")
+                .join("skills")
+                .join(estigia::skill::DIRECTORY)
+                .join("SKILL.md");
+            let installed = std::fs::read_to_string(&contract).expect("the contract is installed");
+            let broken = installed.replace("| Change size | 800 |", "| Change size | banana |");
+            assert_ne!(
+                broken, installed,
+                "no row was corrupted, so this proves nothing"
+            );
+            std::fs::write(&contract, broken).expect("the contract is rewritten");
+
+            for (door, answer) in [("gate", verb("Bash")), ("hook", hook("Bash"))] {
+                let (said, error, _) = answer;
+                assert!(
+                    format!("{said}{error}").contains("declared"),
+                    "{door}: a contract that would not parse handed the reviewer the wider                      grant: {said}{error}"
+                );
+            }
         }
     }
 }

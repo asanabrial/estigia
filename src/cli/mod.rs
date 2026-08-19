@@ -4444,7 +4444,6 @@ const GUARD_CAVEATS: &[&str] = &[
     "`git push --no-verify` bypasses it \u{2014} a guard rail working as one.",
 ];
 
-/// Everything the gate needs, or nothing if the harness is not installed.
 /// The evidence standard the gate acts on, given whether the contract could be read.
 ///
 /// A function rather than a branch inside `gate_context`, and the reason is a
@@ -4475,6 +4474,7 @@ fn effective_evidence(
     }
 }
 
+/// Everything the gate needs, or nothing if the harness is not installed.
 fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
     let repo_dir = if cwd.trim().is_empty() {
         launch_directory()?

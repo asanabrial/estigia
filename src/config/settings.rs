@@ -925,9 +925,16 @@ impl Setting {
             // is no direction in which one of them is the feature being switched
             // off — `reading` is the narrower grant, not the absent one.
             Self::Evidence => {
+                // The two words the row takes, and no synonyms. A first draft
+                // accepted `read`, `measure` and `mutation`; a reviewer measured
+                // that deleting all three left the whole suite green, and none of
+                // them appears in `accepts`, in `docs/configuration.md`, or in the
+                // picker. An undocumented spelling is one an operator cannot
+                // discover and a maintainer cannot know is load-bearing — unlike
+                // `rdd`, which the row's own `accepts` names.
                 config.evidence = match lower(value).trim() {
-                    "reading" | "read" => Evidence::Reading,
-                    "measuring" | "measure" | "mutation" => Evidence::Measuring,
+                    "reading" => Evidence::Reading,
+                    "measuring" => Evidence::Measuring,
                     _ => return Err(self.reject(value)),
                 }
             }

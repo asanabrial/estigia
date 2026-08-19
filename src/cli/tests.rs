@@ -1807,9 +1807,19 @@ fn a_contract_that_will_not_parse_does_not_hand_out_what_it_could_not_grant() {
         "a zero window still let a write ride an answer the tracker gave earlier"
     );
 
-    // And the wiring, structurally: this process reads the real home, so a test
-    // cannot hand `gate_context` a contract of its own. What it *can* do is
-    // hold the file to the rule.
+    // And the wiring, structurally — which is the weaker half and now says so.
+    //
+    // The reason once written here was that this process reads the real home, so
+    // a test cannot hand `gate_context` a contract of its own. That is **false**,
+    // and issue 83 paid for believing it: the neighbouring `evidence` row carried
+    // the same excuse, three blind reviewers each defeated the source-text guard
+    // it justified while the suite stayed green, and the crossing that replaced it
+    // drives the binary against a throwaway home — which `tests/pipe.rs` already
+    // does for sixteen other tests.
+    //
+    // This row has not been moved yet. Saying so is better than repeating the
+    // excuse, and `the_reserved_reviewer_grant_is_the_same_through_both_doors` is
+    // the shape to copy when somebody does.
     let source = code_of(include_str!("mod.rs"));
     assert!(
         source.contains("window: if unreadable {"),
