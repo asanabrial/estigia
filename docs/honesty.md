@@ -1532,8 +1532,9 @@ suite. Everything else here is prose held by review.
     allowed to differ on.
 
     Bounded, and the bounds are real: it needs a live claim, the widened grant buys `Bash` and nothing
-    else, and a judge with a shell writes inside its own checkout, which is outside every path the
-    claim covers. None of that makes the row unreachable.
+    else, and a judge with a shell writes inside the directory its launch hands it, which the
+    isolation rule requires to be outside the claimed checkout — see the entry above for what that
+    condition rests on. None of that makes the row unreachable.
 
   - Estigia still cannot prove a panel ran, how many contexts it had, or that any two of them were
     given separate directories. This narrows what a judge **can** do and proves nothing about what a

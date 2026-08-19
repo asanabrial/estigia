@@ -35,8 +35,9 @@ order, and this file does not restate it.
 Adversarial review is an analyst run over a bounded change. It is repository-read-only, produces
 findings rather than commits, and MUST NOT be performed by the context that wrote the change. On a
 repository whose `Evidence standard` is `measuring` the reviewer also builds, tests and mutates —
-inside the isolated directory its launch hands it and nowhere else, which is outside every path a
-claim covers, so the repository stays read-only to it.
+inside the isolated directory its launch hands it and nowhere else. What leaves the repository
+read-only to it is `policies/blind-judges.md` requiring that directory to be outside the claimed
+checkout: a rule the launch obeys, not one the gate enforces.
 
 The runtime decides how to obtain the second context: subagent, teammate, or separate session all
 qualify. If the runtime or operator forbids delegation, use a separate session. Inability to spawn a

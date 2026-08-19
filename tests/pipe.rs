@@ -4733,7 +4733,8 @@ fn the_reserved_reviewer_grant_is_the_same_through_both_doors() {
             let (said, error, _) = answer;
             assert!(
                 format!("{said}{error}").contains("declared"),
-                "{row}/{door}: {refused} is outside this row's grant and the {door} door allowed                  it: {said}{error}"
+                "{row}/{door}: {refused} is outside this row's grant and the {door} door allowed it: \
+                 {said}{error}"
             );
         }
 

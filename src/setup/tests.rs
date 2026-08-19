@@ -4994,6 +4994,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
     for clause in [
         "inside the directory this launch hands you and nowhere else",
         "yours alone for the duration",
+        "outside the checkout under claim",
         "Restore every mutation",
         "stop and say so rather than",
         "Still do NOT change tracker state",

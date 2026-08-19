@@ -592,8 +592,9 @@ impl Setting {
                 "a finding here is established by reading the change, so a reviewer needs no shell"
             }
             (Self::Evidence, "measuring") => {
-                "a finding here is established by running something, so a reviewer gets a shell \
-                 and a directory nothing else writes"
+                "a finding here is established by running something, so a reviewer gets a shell. \
+                 The isolated directory that makes a shell safe is the launch's to provide; \
+                 Estigia grants the tool and cannot see the directory"
             }
             (Self::Judges, "single") => "one context reviews the change",
             (Self::Judges, "two blind") => {

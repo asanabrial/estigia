@@ -363,10 +363,10 @@ pub enum Evidence {
     /// A reviewer here gets the capability to build, test and mutate — and with
     /// it the precondition that makes that safe, which is a directory nothing
     /// else writes for the duration. The capability without the isolation is
-    /// concurrent writers with one tree between them, measured live: two judges
-    /// sharing one scratch directory overwrote each other's scripts, ran a
-    /// measurement inside a third judge's checkout, and one read the implementing
-    /// run's own notes.
+    /// concurrent writers with one tree between them, measured live: a five-judge
+    /// panel shared one scratch directory, and one judge's script was overwritten
+    /// by another's and then run inside a third judge's checkout, while a fourth
+    /// read the implementing run's own notes.
     Measuring,
 }
 

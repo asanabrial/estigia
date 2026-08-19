@@ -58,9 +58,10 @@ the workflow, it holds the tools.
   independent readings.
 
   `docs/honesty.md` carries what this does not buy, and the sharp edge is worth repeating here: a
-  judge that measures writes inside a checkout of its own, which is outside every path a claim covers,
-  so giving the role a shell does **not** put its mutations under the gate. What makes them safe is
-  the isolation, not the gate.
+  judge that measures writes inside the directory its launch hands it, and giving the role a shell
+  does **not** put its mutations under the gate. What makes them safe is the isolation rule placing
+  that directory outside the claimed checkout — a rule an orchestrator follows. A judge handed a
+  directory inside it is measured against the launching run's claim and allowed.
 
 
 - **A transition to the state an issue already holds no longer strips its state label, and a

@@ -315,10 +315,12 @@ pub enum ModelCatalogSource {
 
 /// How many adapters take the agent-neutral skills root.
 ///
-/// Derived, because it was not. Three documents and one test each carried the
-/// number by hand and three of them said **eight** while the table held nine —
-/// a reviewer widened a count guard to reach the changelog and the disagreement
-/// fell out. A hand-spelled count agrees with the table only until somebody adds
+/// Derived, because it was not. Two documents and one test each carried the
+/// number by hand and said **eight** while the table held nine — a reviewer
+/// widened a count guard to reach the changelog and the disagreement fell out.
+/// Two, not three: an earlier version of this comment counted `README.md`,
+/// which carries no adapter count at all, and a judge measured that after the
+/// register had already withdrawn the same claim. A hand-spelled count agrees with the table only until somebody adds
 /// a row, and adding a row is the ordinary thing that happens here.
 pub fn adapters_on_the_neutral_root() -> usize {
     AGENTS
@@ -1420,8 +1422,11 @@ pub fn render_reviewer_agent(template: &str, evidence: Evidence) -> String {
             "A finding here is established by running something, so you may build, test and mutate\n\
              — inside the directory this launch hands you and nowhere else. That directory\n\
              is yours alone for the duration: not a sibling judge's, not the orchestrator's,\n\
-             not another run's. Restore every mutation and confirm the tree is clean before\n\
-             you report. If it is already dirty when you arrive, stop and say so rather than\n\
+             not another run's, and outside the checkout under claim. If you find yourself\n\
+             inside one, stop and say so rather than measuring there: a write inside it is\n\
+             judged against the claim of the run that launched you, and allowed.\n\
+             Restore every mutation and confirm the tree is clean before you report.\n\
+ If it is already dirty when you arrive, stop and say so rather than\n\
              restoring it — whatever made it dirty was somebody's measurement, and repairing\n\
              it destroys theirs. Still do NOT change tracker state, record the aggregate\n\
              verdict, or repair a finding. Return findings to the orchestrator with severity,\n\

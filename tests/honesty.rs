@@ -312,27 +312,45 @@ fn no_guard_reading_every_document_blames_the_readme() {
     )
     .expect("this file reads");
 
+    let lines: Vec<&str> = source.lines().collect();
     let mut blaming = Vec::new();
     let mut examined = 0_usize;
-    for function in source.split("\nfn ").skip(1) {
-        let name = function
-            .split('(')
-            .next()
-            .unwrap_or_default()
-            .trim()
-            .to_owned();
+    let mut cursor = 0;
+    while cursor < lines.len() {
+        // A top-level function runs from its `fn` line to the first `}` in
+        // column zero, so a chunk is the body and nothing else. Splitting on
+        // `\nfn ` ran each chunk into the *next* function's doc comment, so a
+        // line could be reported under the name of the function above it, and
+        // the position printed beside it counted from the wrong place. Two
+        // judges on separate panels found the same misreport, in the guard
+        // whose whole subject is a message that sends a reader to the wrong
+        // file.
+        let Some(rest) = lines[cursor].strip_prefix("fn ") else {
+            cursor += 1;
+            continue;
+        };
+        let start = cursor;
+        let mut end = start + 1;
+        while end < lines.len() && lines[end] != "}" {
+            end += 1;
+        }
+        cursor = end + 1;
+        let function = &lines[start..end.min(lines.len())];
+        let name = rest.split('(').next().unwrap_or_default().trim().to_owned();
         // Both readers, and neither spelled with its semicolon. The first
         // version admitted on `documented();`, which excluded the one function
         // this guard was written for: the count guard binds `counted()`, the
         // widest reader of all, and a judge put the removed message back into it
         // with the whole target green. `documented().to_string()` slipped
         // through the same way.
-        let reads = function.contains("documented()") || function.contains("counted()");
+        let reads = function
+            .iter()
+            .any(|line| line.contains("documented()") || line.contains("counted()"));
         if !reads || name == "no_guard_reading_every_document_blames_the_readme" {
             continue;
         }
         examined += 1;
-        for (offset, line) in function.lines().enumerate() {
+        for (offset, line) in function.iter().enumerate() {
             let trimmed = line.trim_start();
             // Comments explain; only the strings a failure prints are the
             // subject, and a comment saying what went wrong here has to be
@@ -363,8 +381,8 @@ fn no_guard_reading_every_document_blames_the_readme() {
             ];
             if line.contains("README") && attributes.iter().any(|verb| line.contains(verb)) {
                 blaming.push(format!(
-                    "{name}, {} lines into the function: {}",
-                    offset,
+                    "tests/honesty.rs:{} in {name}: {}",
+                    start + offset + 1,
                     line.trim()
                 ));
             }
