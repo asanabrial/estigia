@@ -4907,7 +4907,8 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
         if agent == "review-blind" {
             // Rendered with the effective row rather than taken raw: the
             // definition carries a `{{TOOLS}}` placeholder now, and a gate that
-            // parsed the placeholder would enforce an allowlist naming no tool.
+            // parsed the placeholder would enforce an allowlist naming one
+            // tool called `{{TOOLS}}`, which denies everything.
             let reviewer = crate::setup::render_reviewer_agent(
                 crate::skill::REVIEW_AGENT.contents,
                 context.evidence,

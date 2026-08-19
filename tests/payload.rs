@@ -216,12 +216,18 @@ fn the_blind_panel_policy_requires_same_finding_quorum_without_erasing_dissent()
         // five-judge panel that shared one scratch directory lost two verdicts'
         // independence and nothing in the rule said it could not happen.
         "every location a judge writes, not only its checkout",
+        // The precondition the whole safety argument rests on, and the one a
+        // judge measured was never stated: a delegated context is judged against
+        // the launching run's claim, so a directory inside the claimed checkout
+        // is one the gate lets a judge write to.
+        "none of those directories is inside the checkout the claim covers",
         // The scoping half, twice over. Reverting either to the blanket "All
         // judges are read-only" restores the contradiction this policy exists to
         // remove — a guarantee stated for a role no measuring panel could use —
-        // and reverting the second to a blanket permission widens the grant past
-        // the shell, which is the one widening no evidence standard makes
-        // acceptable. What keeps a measuring judge from editing what it is
+        // and reverting the second to a blanket permission promises a grant
+        // wider than the shell, which is the one widening no evidence standard
+        // makes acceptable — the grant itself is decided by
+        // `render_reviewer_agent`, and what this pin holds is the sentence. What keeps a measuring judge from editing what it is
         // judging is the isolation rule, pinned by its own phrases below — not
         // this sentence, which a shell defeats.
         "cannot mutate the target even if its prompt asks it to",

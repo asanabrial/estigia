@@ -62,6 +62,13 @@ artefacts and test output as though they were the target's, so neither verdict i
 bytes that were published and neither can be reproduced. A panel that cannot be given one such
 directory per judge runs fewer judges; it does not share one.
 
+**And none of those directories is inside the checkout the claim covers.** A delegated context's tool
+events carry the launching run's session, so a judge given a directory inside that checkout is
+measured against that run's live claim and allowed to write there — the gate answers *this run may
+write here*, and it is right to. What keeps a measuring judge's mutations out of the delivery target
+is this rule putting its directory somewhere else. Nothing downstream re-checks it, which is why it
+is stated here as a precondition of the launch rather than left as a consequence of the grant.
+
 **That covers every location a judge writes, not only its checkout.** Scripts, intermediate output,
 notes and saved measurements go in a place of that judge's own. Measured live on a five-judge panel
 that shared one scratch directory: one judge's script was overwritten by another's and then executed

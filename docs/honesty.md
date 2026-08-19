@@ -1414,8 +1414,12 @@ suite. Everything else here is prose held by review.
     hand out a capability.
 
   **What it does not buy, and this is the part worth a reader's attention.** A judge that measures
-  writes inside a checkout of its own, which is outside every path the claim covers — so issue #2's
-  stand-aside answers before the tracker is asked. **Giving the role a shell does not put its
+  writes inside the directory its launch hands it, and **when that directory is outside the claimed
+  checkout** issue #2's stand-aside answers before the tracker is asked. That condition is the
+  orchestrator's to meet and nothing here enforces it: a delegated context's tool events carry the
+  launching session's id, so a judge handed a directory *inside* the claimed checkout is measured
+  against the parent run's live claim and **allowed**. The isolation rule is what asks for the
+  separate directory, and it is a rule an orchestrator follows rather than a gate that refuses. **Giving the role a shell does not put its
   mutations under the gate.** What makes them safe is the isolation precondition, and that is why the
   isolation rule moved in the same change: it bound the checkout and said nothing about anywhere else
   a judge writes. Measured on a five-judge panel that shared one scratch directory — one judge's
@@ -1427,8 +1431,7 @@ suite. Everything else here is prose held by review.
   **And the workflow front door is reachable the same way.** `estigia claim` and
   `estigia transition` are CLI entrances onto the operations the tool server runs, and the role
   gate bars tool *names*, not shell commands — so under `measuring` the same shell that reaches
-  the target reaches those. What holds a judge off them is the sentence *"Still do NOT change
-  tracker state, record the aggregate verdict, or repair a finding"* in its own rendered
+  the target reaches those. What holds a judge off them is the sentence *"Still do NOT change tracker state"* in its own rendered
   definition: an instruction, not a gate. The claim gate answers separately and a judge holds no
   claim, so a write against the repository still refuses; what is unguarded is the tracker call
   a judge could make in its own name. Named here rather than implied, because the last acceptance
@@ -1446,9 +1449,12 @@ suite. Everything else here is prose held by review.
   granting one — a measuring judge offered the reading grant, which fails closed.
 
   **A count corrected in the documents and left in the source comments.** This change derives the
-  neutral-root adapter count and corrects `README.md`, `CHANGELOG.md` and `docs/what-it-writes.md`
-  to nine. Source comments across `src/skill/record.rs`, `src/cli/mod.rs` and `src/setup/mod.rs`
-  still say *eight*. Nothing reads them and no shipped document repeats them, so no behaviour is
+  neutral-root adapter count and corrects the two documents that carry it: `CHANGELOG.md` and
+  `docs/what-it-writes.md`, whose sentence the count guard binds. `README.md` states no adapter
+  count and is not among them — an earlier version of this entry said it was, which is the shape
+  this document exists to refuse. Source comments still say *eight*, in `src/skill/record.rs`,
+  `src/cli/mod.rs` and `src/setup/mod.rs` among others; the set is the search below, not this
+  list. Nothing reads them and no shipped document repeats them, so no behaviour is
   wrong; what is wrong is that a reader of the code is told a number the code disagrees with. All
   pre-existing at `fe4ff4b1` and filed as **#93**, which carries the search rather than a list —
   its first version listed fourteen sites by hand where the search answers 31.
@@ -1466,8 +1472,9 @@ suite. Everything else here is prose held by review.
     claimed — which is the half worth having.
 
     **It is not an audit trail, and issue 83’s fifth acceptance criterion asked for one.** That
-    criterion wanted the role recorded "where a later run can read it", so a run "can be audited for
-    it afterwards", and *afterwards* is exactly when this record does not exist. Two judges drove it
+    criterion wanted the role recorded "where a later run can read it". The issue opens by saying a
+    run *cannot be audited for it afterwards*, and *afterwards* is exactly when this record does
+    not exist. Two judges drove it
     through the built binary and it is stated here in their terms rather than softened:
 
     ```
@@ -1487,8 +1494,9 @@ suite. Everything else here is prose held by review.
     run"*. It is corrected here rather than quietly, because a false sentence in the register of what
     is not measured is the one kind this document cannot carry.
 
-    Four narrower limits on the within-run record. The first three are ways the set can be empty
-    while contexts ran; the fourth is a write that did not happen before. A host that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart
+    Four narrower limits on the within-run record. The first two are ways the set can be empty
+    while contexts ran, the third is a way it can be non-empty and still not answer what was
+    asked, and the fourth is a write that did not happen before. A host that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart
     from nothing having been delegated. A context refused at the role gate before any call is not
     recorded, which is deliberate — a refused launch contributes no judge — but it means the record carries
     nothing for a launch the role gate refused. A call the *claim* gate denied is recorded, since

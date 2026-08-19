@@ -33,7 +33,10 @@ order, and this file does not restate it.
 ## Independent review contexts
 
 Adversarial review is an analyst run over a bounded change. It is repository-read-only, produces
-findings rather than commits, and MUST NOT be performed by the context that wrote the change.
+findings rather than commits, and MUST NOT be performed by the context that wrote the change. On a
+repository whose `Evidence standard` is `measuring` the reviewer also builds, tests and mutates —
+inside the isolated directory its launch hands it and nowhere else, which is outside every path a
+claim covers, so the repository stays read-only to it.
 
 The runtime decides how to obtain the second context: subagent, teammate, or separate session all
 qualify. If the runtime or operator forbids delegation, use a separate session. Inability to spawn a
