@@ -940,7 +940,7 @@ pub fn start_branch(
 
     // The path is resolved next. Everything here can refuse, and refusing
     // before the first remote mutation is the whole ordering guarantee.
-    let (scoped, migrated) = worktree::run_scoped_template(template);
+    let (scoped, migrated) = worktree::scoped_template(template);
     let resolved = worktree::worktree_path(
         &scoped,
         what.repo_name,
@@ -973,8 +973,9 @@ pub fn start_branch(
         what.branch,
     )?;
 
-    // A branch-only template whose legacy path still has a checkout is not this
-    // command's to clean up: it may hold unpushed work.
+    // A template that gained a scope, whose legacy path still has a checkout, is
+    // not this command's to clean up: it may hold unpushed work. Either scope
+    // can be the one that was added — see `worktree::scoped_template`.
     if migrated {
         let legacy = worktree::worktree_path(
             template,
@@ -1592,8 +1593,16 @@ pub fn develop_link(
     Ok(serde_json::json!({"linked": false, "outcome": "not-linked", "detail": detail}))
 }
 
-/// The stop a branch-only template earns when its pre-migration checkout is
-/// still there — and only when it is still **there**.
+/// The stop a template that gained a scope earns when its pre-migration checkout
+/// is still there — and only when it is still **there**.
+///
+/// Which scope was added decides whether this can fire. A template naming
+/// `<run-id>` and not `<branch>` moves on upgrade and its raw path is what
+/// earlier builds created — the case this stop is for, and not one this command
+/// may clean up, because that directory may hold unpushed work. A branch-only
+/// template does not move at all, so there is nothing to stop. A template naming
+/// neither moves, but its raw path is one no build created; `docs/honesty.md`
+/// records what happens there.
 ///
 /// Registered *and* on disk, never registered alone. The transport asks
 /// `legacy.exists()` before it looks the path up, and this asked only the
@@ -1614,7 +1623,7 @@ pub fn develop_link(
 /// remote and a clock standing by.
 fn legacy_worktree_block(
     legacy: &std::path::Path,
-    run_scoped: &std::path::Path,
+    scoped: &std::path::Path,
     registered: &std::collections::BTreeMap<String, Option<String>>,
 ) -> Option<Failure> {
     if !legacy.exists() {
@@ -1625,11 +1634,12 @@ fn legacy_worktree_block(
         "ok": false,
         "reason": "legacy-worktree-registered",
         "legacy_path": legacy.display().to_string(),
-        "run_scoped_path": run_scoped.display().to_string(),
+        "scoped_path": scoped.display().to_string(),
         "occupied_by_branch": owner,
-        "action": "your worktree template is branch-only, and a checkout from before \
-                   run-scoping is still registered at the legacy path. It may hold \
-                   unpushed work, so nothing here removes it: push or preserve that \
+        "action": "your worktree template does not name every scope a checkout needs \
+                   (the branch, the run, or both), and a checkout from before the \
+                   missing one was added is still registered at the legacy path. It may \
+                   hold unpushed work, so nothing here removes it: push or preserve that \
                    work, `git worktree remove` it, then re-run this command",
     })))
 }

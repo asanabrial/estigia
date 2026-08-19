@@ -184,7 +184,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `transition` | `SCRIPT transition --issue <n> --to <s> [--from <s>]` | mirrors the board **first**, swaps the label in **one** call, then reads **both** back and repairs a board that disagrees. Omitting `--from` removes whatever stale state labels it finds |
 | `comment` | `SCRIPT comment --issue <n> --body-file <f> [--run-id <id> --kind note\|blocker\|diagnosis]` | file-based body, always; `--run-id` and `--kind` are a pair. Every generic comment gets a non-control marker, and quoted issue-flow markers plus claim-shaped legacy prose are escaped, so generic text cannot become a control event or fall through to the prose parser |
 | `heartbeat` | `SCRIPT heartbeat --issue <n> --run-id <id> --expect-state <s> --body-file <f>` | renewal first, post second; **refuses to post** when the renewal says stop and escapes control-shaped text before appending its own heartbeat marker |
-| branch + worktree | `SCRIPT start-branch --issue <n> --branch <b> --base <base> --run-id <id>` | renews first, then serializes on a branch-scoped lock and reserves the whole local checkout **before any GitHub mutation**, so a lost reservation leaves no remote state. Resumes only a checkout whose durable ownership marker names this run; a branch-only template gains a run-scoped sibling in memory without rewriting `estigia.local.md`. Resolved paths retain native POSIX spelling on Linux and macOS, while Windows' `\\?\` prefix is removed before invoking Git because Git for Windows rejects its slash-normalised `//?/` form. It fetches the named base before recording or branching from its remote-tracking ref. Ref existence is probed so absence and a failed read are different answers, a nonzero or timed-out `gh issue develop` is re-read rather than believed, and the isolated worktree head, published head and recorded remote base must agree before success is reported; the caller's main checkout may diverge without being mistaken for the new branch. It records the base COMMIT and the base TREE, so a later movement check compares against what the base contained rather than resolving it again. The local worktree registry is read NUL-delimited and fails closed: a failed, truncated or contradictory read is a failed read, never an empty registry |
+| branch + worktree | `SCRIPT start-branch --issue <n> --branch <b> --base <base> --run-id <id>` | renews first, then serializes on a branch-scoped lock and reserves the whole local checkout **before any GitHub mutation**, so a lost reservation leaves no remote state. Resumes only a checkout whose durable ownership marker names this run; a template missing `<branch>` or `<run-id>` gains that scope as an in-memory sibling, without rewriting `estigia.local.md`. Resolved paths retain native POSIX spelling on Linux and macOS, while Windows' `\\?\` prefix is removed before invoking Git because Git for Windows rejects its slash-normalised `//?/` form. It fetches the named base before recording or branching from its remote-tracking ref. Ref existence is probed so absence and a failed read are different answers, a nonzero or timed-out `gh issue develop` is re-read rather than believed, and the isolated worktree head, published head and recorded remote base must agree before success is reported; the caller's main checkout may diverge without being mistaken for the new branch. It records the base COMMIT and the base TREE, so a later movement check compares against what the base contained rather than resolving it again. The local worktree registry is read NUL-delimited and fails closed: a failed, truncated or contradictory read is a failed read, never an empty registry |
 | `publish_review` | `SCRIPT publish-review --issue <n> --branch <b> --base <base> --run-id <id> --pr-title <t> --pr-body-file <f> [--worktree <p>]` | requires a clean target. It **reuses** the single open PR or creates one and refuses on more than one. A reused ready PR is converted to draft and draft readback is confirmed **before push**; a new PR is created with `--draft` after its CI-silent topic push. Reused title/body are refreshed. Readback must confirm draft plus exact head/base. The published marker and answer bind a fresh epoch, PR, head, base, and complete path/mode/blob manifest digest; every republish creates a new epoch and invalidates prior evidence. **It then starts the publication lane**: one `gh workflow run ci.yml --ref <branch>` against the head it just pushed, once per publication epoch and never per push, dispatched after the push and before the receipt is recorded so a token that may not dispatch refuses while no epoch exists. Dispatching does not mark the PR ready. A repository with no dispatchable `ci.yml` is reported in `publication_lane` and never refused; only `HTTP 401`/`HTTP 403` refuses, as `publication-lane-forbidden`. The published comment states the lane this epoch got, so a reviewer reading the timeline is told the same thing the call answered, and says the ordinary pull-request-event lane still waits for the PR to be marked ready |
 | `republish_review` | `SCRIPT republish-review --issue <n> --branch <b> --base <base> --run-id <id> --pr-title <t> --pr-body-file <f> [--worktree <p>] [--expect-state <s>]` | the same operation as `publish_review` in everything but the push, for a branch whose history was rewritten — rebased onto a moved base, or amended, where the ordinary push is refused as a non-fast-forward. It reads the **latest `published` marker on the timeline** and pushes `--force-with-lease=<branch>:<that head>`, so the remote is required to still be at the bytes a receipt bound; a remote that moved since refuses the push and nothing is destroyed. The live claim is verified a second time immediately before the push, after the fetch, target derivation, keyword scan, PR listing and draft conversion that separate it from the first. An issue with no recorded publication is refused `published-receipt-missing`: the first publication is `publish_review`'s. There is no plain `--force` and no way to reach this from `publish_review`. It starts the same publication lane, on the same terms |
 | `handoff_review` | `SCRIPT handoff-review --issue <n> --run-id <id> --target-operation <epoch> --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> --blocker <text> --discharger <text>` | one ordered operation: verifies the live `review` claim; validates the globally latest full receipt and exact ownership epoch; records and reads back an immutable `review-handoff` carrying configured authority, internally generated request time and one deadline; invokes the existing idempotent exact-target `unassign`; then confirms the released epoch is no longer authoritative and state remains exactly `review`. Only after this success does the MCP pointer clear |
@@ -379,23 +379,38 @@ directory to the OS and two keys to us. Reserved device names (`con`, `nul`, `co
 **every** substituted component, because they name a device rather than a directory in any case and
 with any extension.
 
-**What the path must guarantee is that no two live runs share a directory.** Every template is now
-made to carry that guarantee: one without `<run-id>` is migrated **in memory** to a run-scoped
-sibling — `…/<branch>` becomes `…/<branch>~<run-id>` — and `estigia.local.md` is never rewritten. A
-transport command that silently edits the operator's own policy file is a worse failure than the one
-it fixes, and that file may be shared across machines where the migration is not wanted. The result
-reports `template_migrated` so the substitution is visible rather than assumed.
+**What the path must guarantee is that no two live checkouts share a directory — across runs and
+across branches.** Those are two dimensions and a template missing either one collides. Without
+`<run-id>` every run of a branch lands in the same directory; without `<branch>` every branch of one
+run does, so a run working a queue meets the checkout it made for its previous issue on its second
+issue, every time.
 
-A sibling and not a child (`…/<branch>/<run-id>`), so that a legacy checkout is neither a parent nor
-a child of the new one — runs colliding inside a directory another run owns is the entire defect.
+Every template is now made to carry both: a missing placeholder is added **in memory** as a sibling —
+`…/<branch>` becomes `…/<branch>~<run-id>`, `…/<run-id>` becomes `…/<run-id>~<branch>`, and a
+template naming neither becomes `…~<branch>~<run-id>`. `estigia.local.md` is never rewritten: a transport
+command that silently edits the operator's own policy file is a worse failure than the one it fixes,
+and that file may be shared across machines where the migration is not wanted. The result reports
+`template_migrated` so the substitution is visible rather than assumed.
+
+This matters most for the template an operator is likeliest to write. The `Worktree location` row
+accepts *"an absolute directory"* and the skill ships it `unset`, so a bare path with no placeholder
+in it is the ordinary answer — and it is the one shape that collides in both dimensions at once.
+
+A sibling and not a child, so that a legacy checkout is neither a parent nor a child of the new one:
+colliding inside a directory somebody else owns is the entire defect. The branch dimension needs that
+more sharply than the run one — a run-scoped legacy path **is** a checkout that run owns, so nesting
+the new one under it would put a worktree inside a worktree.
 
 **The migration joins the two halves with `~`, and that is not cosmetic.** Joining with `-` makes
 the composed name ambiguous even though each half is unambiguous on its own: branch `fix/6` with run
 `a-b` and branch `fix/6-a` with run `b` both spell `fix-6-a-b`. Those are two *different* branches,
 so they take two different branch locks, and nothing downstream would notice them sharing one
 directory. Git rejects `~` in a ref name and the run-ID alphabet rejects it too, so it appears in
-neither half and the split point is unique. If you write your own template, join `<branch>` and
-`<run-id>` with a character that cannot occur in either — `~` is the one this binding uses.
+neither value being joined: a template that gains both scopes composes three parts across two joins,
+and every part still ends where the next begins. Nothing reads the composed name back apart; what the
+property buys is that two different pairs cannot spell one directory. If you write your own template,
+join `<branch>` and `<run-id>` with a character that cannot occur in either — `~` is the one this
+binding uses.
 
 Relying on git to catch the collision instead was tried and does not hold. `worktree add` refuses a
 branch already checked out elsewhere (`fatal: '<branch>' is already used by worktree at …`), but that
@@ -571,17 +586,28 @@ Windows: `git worktree remove` fails while any process holds a handle in the dir
 a terminal, an antivirus scan. Close them rather than forcing. POSIX: a worktree whose path contains
 newline bytes is legal and is handled by the NUL-delimited read below; quote paths in the shell.
 
-### Migrating a branch-only worktree
+### Migrating a worktree template that gained a scope
 
-A branch-only `Worktree location` gets the in-memory run-scoped sibling described above, and that is
-usually the end of it. The one hard case is a checkout from before run-scoping that is **still
-registered to a branch** at the legacy path: it may hold unpushed work, it is not run-scoped so it
-cannot be proven to belong to anybody, and starting a sibling beside it would leave two live
-checkouts of one branch. (Registered *to a branch* — a legacy checkout left detached carries no
-branch in the registry and does not stop this.) `start-branch` stops with `legacy-worktree-registered` and neither removes nor writes into
-it. Push or preserve its work, `git worktree remove` it, then re-run — steps 1, 2 and 4 above. An
-unregistered leftover directory at the legacy path blocks nothing, because the sibling is a
-different directory.
+A `Worktree location` missing `<branch>` or `<run-id>` gets the in-memory sibling described above,
+and that is usually the end of it. The one hard case is a checkout at the legacy path that is
+**still registered to a branch**: it may hold unpushed work, the scope it lacks
+is exactly what would prove who it belongs to, and starting a sibling beside it would leave two live
+checkouts of one branch. (Registered at all: a legacy checkout left detached carries no branch in the
+registry and stops this just the same, reporting `occupied_by_branch: null`. An earlier version of
+this sentence said a detached one does not stop it, which is measurably untrue.) `start-branch` stops
+with `legacy-worktree-registered` and neither removes nor writes into it. Push or preserve its work,
+`git worktree remove` it, then re-run — steps 1, 2 and 4 above. An unregistered leftover directory at
+the legacy path blocks nothing, because the sibling is a different directory.
+
+**Which scope was added decides whether the stop can fire.** A template naming `<run-id>` and not
+`<branch>` moves on upgrade, and its raw path is what earlier builds created — so the stop fires
+there. A branch-only template does not move at all: it composed `…~<run-id>` before and composes it
+still, so there is nothing to stop. For a template naming **neither** — a bare directory — the path
+does move, but the legacy path is the raw template, which no build created: what it created was that directory with
+`~<run-id>` appended. So on upgrade, a run resuming such a branch is not stopped here; `git worktree
+add` refuses it instead, with git's own *"already used by worktree at …"*, before any remote state is
+written. The recovery is the same `git worktree remove`, and it is written here because nothing else
+tells you.
 
 **"Not registered" and "the registry could not be read" are different answers, and only one of them
 is a clearance.** That question is answered by `git worktree list`, so how it is read decides

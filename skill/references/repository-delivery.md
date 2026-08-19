@@ -47,8 +47,10 @@ Place each implementation checkout outside the base working tree and include the
 in its parent path. A shared parent keyed only by branch can collide across repositories, while an
 in-tree worktree pollutes status and ignore behavior for every run.
 
-The worktree strategy MUST prevent two live runs from writing the same directory, and the path is
-made unique per run. Relying instead on the version-control system's registration of one common
+The worktree strategy MUST prevent two live checkouts from writing the same directory, and the path
+is made unique per run **and per branch**. Both are needed and each alone is a collision: one run
+working a queue takes several branches, and one branch may be taken by several runs. Relying instead
+on the version-control system's registration of one common
 issue branch was tried and does not hold: that check is a read followed by a write with no lock
 between them, and two checkout processes have been observed registering one branch concurrently. A
 path that is unique per run does not depend on winning that race.

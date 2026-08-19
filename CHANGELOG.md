@@ -51,6 +51,35 @@ the workflow, it holds the tools.
   branch before it can be dispatched against a topic ref — and what it does not prove is in
   `docs/honesty.md`.
 
+- **A run's second issue no longer collides with its own first checkout.** The worktree template was
+  made to carry `<run-id>` and nothing made it carry `<branch>`, so a template without one gave every
+  branch of a run the same directory: a run working a queue met the checkout it made for its previous
+  issue and was refused `worktree-path-occupied` — correct for what the check could see, wrong that
+  two branches of one run were asked to share a path at all. The workaround was a manual
+  `git worktree remove`, which is the one action that refusal's own guidance says not to take lightly.
+  Both scopes are now added in memory when absent, as siblings and never as nested children:
+  `…/<branch>` becomes `…/<branch>~<run-id>`, `…/<run-id>` becomes `…/<run-id>~<branch>`, and a
+  template naming neither becomes `…~<branch>~<run-id>`. `estigia.local.md` is still never rewritten
+  and `template_migrated` still reports the substitution. The sibling rule matters more in the new
+  dimension than the old one, because a run-scoped legacy path is a checkout that run owns and a
+  nested child would put a worktree inside a worktree. `run_scoped_template` is now
+  `scoped_template`, since it scopes two things.
+
+  Worth stating because it is why this took two attempts: the collision was invisible on the machine
+  that found it, whose operator had since configured a template naming `<branch>`. Four checkouts,
+  one run, no collision — and a configuration difference read as a fix. The composition code had
+  never changed. The tests now use the templates an operator actually writes, including the bare
+  absolute directory the settings table documents and the skill ships `unset`.
+
+  The `legacy-worktree-registered` stop, its payload key and the binding section that is its only
+  written recovery all described one dimension and now describe both. One residual is recorded in
+  `docs/honesty.md` rather than closed: the stop cannot name the legacy path of a template that named
+  no placeholder at all, so on upgrade git refuses that resume instead of Estigia — before any remote
+  write and with nothing lost. The delivery reference, which framed worktree uniqueness as per-run
+  only, the framing that hid this defect, says both dimensions now. And a sentence in the operator's
+  own recovery claimed a detached legacy checkout does not stop `start-branch`; it does, reporting
+  `occupied_by_branch: null`, and there is now a test posing that case rather than a proofread.
+
 - A row about **this machine** now reaches every installed contract, and cannot be given a different
   answer for one agent. `Setting::scope()` has three values and both write paths were written as
   though it had two: the plain `config set` asked `elsewhere()` only for `Scope::Everywhere`, so

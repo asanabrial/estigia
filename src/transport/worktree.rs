@@ -13,12 +13,15 @@ const DEVICE_NAMES: &[&str] = &[
     "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
 ];
 
-/// What joins a branch to a run ID when a branch-only template is migrated.
+/// What joins a scope a template did not name to the template that lacks it.
 ///
 /// Git rejects `~` in a ref name and the run-ID alphabet rejects it too, so it
-/// appears in **neither** half and the composed name has exactly one split
-/// point.
-pub const RUN_SCOPE_JOIN: char = '~';
+/// appears in **neither** value it joins. A template can therefore gain both a
+/// branch and a run ID — two joins, three parts — and every part still ends
+/// where the next begins. Nothing here splits the composed name back apart;
+/// what the property buys is that two different pairs cannot spell one
+/// directory, which is the collision the join exists to prevent.
+pub const SCOPE_JOIN: char = '~';
 
 /// Refuses a path component that does not name a plain directory on every
 /// supported platform.
@@ -76,30 +79,57 @@ pub fn run_component(text: &str) -> Result<String, Failure> {
     Ok(text.to_owned())
 }
 
-/// A template that carries `<run-id>`, and whether one had to be added.
+/// A template that carries both `<branch>` and `<run-id>`, and whether either
+/// had to be added.
 ///
-/// A branch-only template gives every run of a branch the **same** directory.
-/// That is not a stale default to reject: it is persisted operator policy,
-/// already in use, and a run that stops dead on it has lost work to protect
-/// against losing work. So it is migrated **in memory** to a run-scoped sibling
-/// and the operator's own policy file is never rewritten.
+/// **Two dimensions, and a template missing either one collides.** Without
+/// `<run-id>` every run of a branch gets the same directory. Without
+/// `<branch>` every branch of a run gets the same directory — which is the whole
+/// of issue #27: a run working a queue meets the checkout it made for its
+/// previous issue, and the `worktree-path-occupied` it is handed is correct for
+/// what it can see. What is wrong is that two branches of one run were ever
+/// asked to share a path.
 ///
-/// A sibling rather than a nested child, so the legacy directory — if it exists
-/// — is neither a parent of nor a child of the new one. Runs colliding inside a
-/// directory another run owns is the whole defect; making the new path a
-/// descendant of the old one would reproduce it.
+/// Only the first was migrated, and the asymmetry stayed invisible because the
+/// operator who met it had since configured a template naming `<branch>` — so a
+/// later run measured four checkouts, no collision, and read that as a fix. That
+/// is the trap this function is now shaped against. The skill ships
+/// `Worktree location` as `unset`, so every operator invents a template, and an
+/// absolute directory with no placeholder in it is accepted — the ordinary thing
+/// to write, and the one shape that carries **both** collisions at once.
 ///
-/// The join is `~`, and it is not cosmetic: joining with `-` makes the
-/// **composed** name ambiguous even though each half is unambiguous. Branch
+/// Neither is a stale default to reject: both are persisted operator policy,
+/// already in use, and a run that stops dead on one has lost work to protect
+/// against losing work. So both are migrated **in memory**, and the operator's
+/// own policy file is never rewritten.
+///
+/// A sibling rather than a nested child, both times, so the legacy directory —
+/// if it exists — is neither a parent of nor a child of the new one. Colliding
+/// inside a directory somebody else owns is the defect itself, and making the
+/// new path a descendant of the old one would reproduce it. The branch dimension
+/// needs that more sharply than the run one: a run-scoped legacy path **is** a
+/// checkout this run owns, so nesting the new one under it would put a worktree
+/// inside a worktree.
+///
+/// The join is [`SCOPE_JOIN`], and it is not cosmetic: joining with `-` makes
+/// the **composed** name ambiguous even though each half is unambiguous. Branch
 /// `fix/6` with run `a-b` and branch `fix/6-a` with run `b` both spell
 /// `fix-6-a-b`. Those are two different branches, so they take two different
 /// branch locks, and nothing downstream would catch them sharing one directory.
-pub fn run_scoped_template(template: &str) -> (String, bool) {
-    if template.contains("<run-id>") {
-        return (template.to_owned(), false);
+pub fn scoped_template(template: &str) -> (String, bool) {
+    let mut scoped = template.trim_end_matches(['/', '\\']).to_owned();
+    let mut migrated = false;
+    // The branch before the run, so a template naming neither ends
+    // `…~<branch>~<run-id>`: the run is then the outermost scope, and every
+    // directory one run owns shares a suffix rather than a prefix nobody can
+    // read off the end.
+    for placeholder in ["<branch>", "<run-id>"] {
+        if !scoped.contains(placeholder) {
+            scoped = format!("{scoped}{SCOPE_JOIN}{placeholder}");
+            migrated = true;
+        }
     }
-    let trimmed = template.trim_end_matches(['/', '\\']);
-    (format!("{trimmed}{RUN_SCOPE_JOIN}<run-id>"), true)
+    (scoped, migrated)
 }
 
 /// Resolves the configured worktree template.

@@ -2103,6 +2103,16 @@ suite. Everything else here is prose held by review.
   reviewers of receipts `c7e7b821a12455ea6293a321ad4be30a` and `0cfd9a216c02aa82133bb0f992389a85`
   while checking that issue #62 was closed on every write path; the enumeration was every caller of
   `setup::rewrite_configuration`, `write_agent_configuration*` and `write_repository_configuration`.
+- **The legacy-checkout stop cannot name the legacy path of a template that named no placeholder.**
+  A `Worktree location` missing `<branch>` or `<run-id>` gains it in memory, and `start_branch` stops
+  with `legacy-worktree-registered` when the pre-migration checkout is still registered — computed
+  from the raw template. For a template naming `<run-id>` and not `<branch>`, that raw path is
+  exactly what an earlier build created, so the stop fires. For a bare directory naming **neither**,
+  it is a path no build created: what they created was that directory with `~<run-id>` appended. So a run upgrading into this build and resuming such a branch is not stopped by Estigia;
+  `git worktree add` refuses it instead, with git's own *"already used by worktree at …"*, before any
+  remote state is written and with no data lost. The recovery is the same `git worktree remove`, and
+  it is written in the binding rather than enforced here. Measured by the blind reviewer of receipt
+  `6b192e0ee94f11004b621c06c8e8e5dd` across twenty-four template shapes.
 - **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it
@@ -2272,9 +2282,10 @@ suite. Everything else here is prose held by review.
   Absence is `Option` on this side now, the corpus poses all four shapes, and the empty string is
   posed beside them so a fix that folded the two together would fail instead of agreeing.
 
-- **The port stopped a `start-branch` the transport performs.** A branch-only worktree template is
-  migrated to a run-scoped one, and both sides then refuse when the *pre-migration* checkout is still
-  registered — it may hold unpushed work, so neither removes it. The transport asks
+- **The port stopped a `start-branch` the transport performs.** A worktree template missing a scope
+  is migrated to one that has it, and both sides then refuse when the *pre-migration* checkout is
+  still registered — it may hold unpushed work, so neither removes it. (At the time this was
+  measured, only a branch-only template was migrated.) The transport asks
   `legacy.exists()` before it consults the registry and the port asked the registry alone, so they
   parted on the most ordinary state a worktree reaches: a directory removed with `rm -rf` instead of
   `git worktree remove`. Measured on a real repository, git goes on listing it — `prunable gitdir

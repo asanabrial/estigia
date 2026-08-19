@@ -793,6 +793,32 @@ fn a_legacy_worktree_git_lists_but_nobody_left_behind_is_not_a_stop() {
         "the stop lost its reason: {refusal:?}"
     );
 
+    // Registered **detached**: git lists the path with no branch against it. The
+    // binding said for a long time that this does not stop the command; it does,
+    // and reports `occupied_by_branch: null`. `registered.get(…)?` unwraps only
+    // the outer `Option`, so the inner `None` never reaches the `?`. Posed here
+    // because a sentence in the operator's own recovery said otherwise, and the
+    // way a claim like that stops drifting is a test rather than a proofread.
+    let mut detached = std::collections::BTreeMap::new();
+    detached.insert(super::normalise_path(&legacy), None);
+    let refusal = super::legacy_worktree_block(&legacy, &scoped, &detached)
+        .expect("a detached legacy checkout is still a registration");
+    let envelope = refusal.envelope();
+    assert_eq!(
+        envelope.get("reason").and_then(serde_json::Value::as_str),
+        Some("legacy-worktree-registered"),
+        "the stop lost its reason: {envelope}"
+    );
+    // The value, not only the reason. The binding tells an operator this reads
+    // `occupied_by_branch: null` for a detached registration, and until this
+    // assertion existed that half was held by nothing — replacing the field with
+    // a literal left the whole suite green.
+    assert_eq!(
+        envelope.get("occupied_by_branch"),
+        Some(&serde_json::Value::Null),
+        "a detached registration did not report a null branch: {envelope}"
+    );
+
     // Registered and gone: what `rm -rf` leaves behind, and what git goes on
     // listing. The registry entry is untouched, so only existence decides.
     std::fs::remove_dir_all(&legacy).expect("the directory goes");
@@ -808,4 +834,71 @@ fn a_legacy_worktree_git_lists_but_nobody_left_behind_is_not_a_stop() {
             .is_none(),
         "a directory git does not list is not a worktree"
     );
+}
+
+#[test]
+fn a_runs_second_issue_gets_its_own_checkout_from_the_template_an_operator_writes() {
+    // Issue #27: the checkout's directory carried the run and not the branch,
+    // so a run working a queue met the checkout it made for its previous issue
+    // and was refused `worktree-path-occupied` — correct for what the check
+    // could see, wrong that two branches of one run were asked to share a path.
+    //
+    // The first attempt at this test picked `/w/<repo>/<branch>` and proved
+    // nothing: a template that already names the branch is the one shape that
+    // cannot exhibit the defect. So the templates here are the ones an operator
+    // actually writes. The skill ships `Worktree location` as `unset`, so every
+    // operator invents one, and an absolute directory with no placeholder in it
+    // is accepted — the ordinary answer, and the shape that collides in both
+    // dimensions at once.
+    let run = "claude-81d69d3e372497b6";
+    let path_of = |template: &str, branch: &str, issue: u64| {
+        let (scoped, migrated) = crate::transport::worktree::scoped_template(template);
+        assert!(migrated, "{template:?} was left as it was");
+        crate::transport::worktree::worktree_path(&scoped, "estigia", branch, run, issue)
+            .expect("a path is composed")
+    };
+
+    for template in [
+        // The reproduction on issue #27, verbatim.
+        r"H:\REPO\worktree\estigia",
+        "/w/<repo>",
+        // Run-scoped and branch-less: the half that was never migrated, and the
+        // one whose legacy directory is a checkout this run owns.
+        "/w/<repo>~<run-id>",
+    ] {
+        let first = path_of(template, "fix/1-publish-review", 1);
+        let second = path_of(template, "fix/2-closed-issue-gates", 2);
+        assert_ne!(
+            first, second,
+            "{template:?}: a run's second issue was handed the checkout it made for its first"
+        );
+        // Named, not merely different: the branch is what keeps two tasks of one
+        // run apart, and a path differing for any other reason would satisfy the
+        // assertion above while leaving the defect standing.
+        for (path, slug) in [
+            (&first, "fix-1-publish-review"),
+            (&second, "fix-2-closed-issue-gates"),
+        ] {
+            assert!(
+                path.to_string_lossy().contains(slug),
+                "{template:?}: {slug} is not in the path composed for it: {}",
+                path.display()
+            );
+        }
+        // Both still name the run, so two runs of one branch stay apart too —
+        // the dimension that already worked must not be traded for this one.
+        for path in [&first, &second] {
+            assert!(
+                path.to_string_lossy().contains(run),
+                "{template:?}: the run scope was lost: {}",
+                path.display()
+            );
+        }
+    }
+
+    // And a template that names both is left exactly as the operator wrote it.
+    let (scoped, migrated) =
+        crate::transport::worktree::scoped_template("/w/<repo>/<branch>~<run-id>");
+    assert!(!migrated, "a fully scoped template was rewritten");
+    assert_eq!(scoped, "/w/<repo>/<branch>~<run-id>");
 }
