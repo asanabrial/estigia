@@ -35,8 +35,9 @@ the workflow, it holds the tools.
   copy it was written for. It missed the hard-wrapped handoff bullet in the same
   file, which restores byte for byte and passes on its line wrapping alone; it
   could not see a routing table at all, which names one state per row; and joining
-  two lines of ordinary prose reddens it without a word changing, because
-  `already` contains `ready`. That last one decided it: a guard that reddens on
+  two lines of ordinary prose reddens it without a word changing, because the
+  pair that does it enumerates the state vocabulary and enumerating the names is
+  not restating the routing. That last one decided it: a guard that reddens on
   correct prose is aimed at the wrong object, and it measured a line while the
   rule it was written for is about a statement.
   `docs/honesty.md` records what each holds and what neither does.

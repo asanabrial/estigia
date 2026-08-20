@@ -648,17 +648,25 @@ suite. Everything else here is prose held by review.
   those destinations; this paragraph measures the Linear projection, not a second routing table.
 
   **One shape of restatement is held mechanically and the rest is held by review, and four judges
-  measured where the line falls.** Two copies were removed by hand — the incident ledger's I09 protection column and a five-row table in
-  `repository-delivery.md` — and a guard was written to keep them from coming back. It counted how
-  many workflow states a **source line** named, and both judges of that receipt defeated it three
-  ways, and the three are worth keeping apart because a later reader will want to know which test each
-  one belongs to. It **did** catch I09's protection column, which is the copy it was written for. It
+  measured where the line falls.** Four copies were removed by hand — the incident ledger's I09
+  protection column, the hard-wrapped handoff bullet beside it in the same file, a five-row table in
+  `repository-delivery.md`, and the routing tail of `SKILL.md`'s own step 6. A guard was written to
+  keep back the first of those and no other — the table is the *surviving* guard's, and an earlier
+  version of this paragraph credited one guard with both. That guard counted how many workflow states
+  a **source line** named, and both judges of its receipt defeated it three ways, and the three are
+  worth keeping apart because a later reader will want to know which test each one belongs to. It **did** catch I09's protection column, which is the copy it was written for. It
   did **not** catch the hard-wrapped handoff bullet in the same file: that restores byte for byte and
   passes, because no single line of it reaches the threshold. It could not see a routing table at all,
   which names one state per row by construction — what a renamed header evades is the *surviving*
   guard, not this one, and conflating the two was a mistake in an earlier version of this paragraph.
   And joining two hard-wrapped lines of ordinary prose in this very file reddens it without a word
-  changing, because `already` contains `ready` and a vocabulary enumeration is not a restatement. That
+  changing: the pair that does it enumerates the state *vocabulary*, four of those names backticked,
+  and enumerating the names is not restating the routing. The substring effect is real and separate —
+  `already` contains `ready` and `reviewer` contains `review`, which inflates the count on many lines
+  of this file — but it is not what defeated the guard here, and an earlier version of this sentence
+  said it was. Measured at both revisions the guard existed at: exactly one adjacent pair crosses the
+  threshold in each, it is the same vocabulary enumeration both times, and deleting every `already`
+  and `reviewer` from it leaves it over the threshold still. That
   last one is why patching was the wrong move: a guard that reddens on correct prose is not narrow, it
   is aimed at the wrong object. The guard was withdrawn rather than patched: it measured a source line while the rule
   it was written for is about a **statement**, and the distance between those two is where all three
@@ -686,7 +694,8 @@ suite. Everything else here is prose held by review.
   `rg -n 'analysis|ready|in-progress|review|blocked|done' skill/SKILL.md` finds them, and the number of
   them is deliberately not written here, because a count in this paragraph is the class of claim this
   document keeps having to correct. Step 7 gained a pointer to the table and kept its restatement:
-  the copy was removed from the two reference files and not from the contract itself.
+  step 6's routing tail became a pointer in this same change while step 7's restatement stayed, so
+  what left the contract is step 6's copy and what remains is step 7's.
 
   **The projection can still hide it.** Estigia's own
   state is authoritative, so no agent misroutes — but Linear has no native `blocked`, and the binding
