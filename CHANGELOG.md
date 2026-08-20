@@ -22,7 +22,9 @@ the workflow, it holds the tools.
   external waits to blocked, ordinary built delivery waits to review — and
   `repository-delivery.md` carried a five-row table of the same thing. I09 states
   its lesson now and both leave the destinations to the table their own pointers
-  name.
+  name. The contract itself lost a copy too: `SKILL.md`'s step 6 had the same
+  enumeration in its tail and now points at the table instead, while step 7 keeps
+  a restatement whose whole subject is the distinction. Four copies in all.
 
   **One guard holds their return and a second was withdrawn.**
   `the_decision_gate_is_not_restated_as_a_second_table` reddens on the table this

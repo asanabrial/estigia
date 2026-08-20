@@ -1807,9 +1807,13 @@ fn every_named_disposition_uses_a_transport_state() {
 /// hypothetical — the handoff bullet this change removed from
 /// `safety-incidents.md` restores byte for byte and nothing objects. A guard
 /// written to close that gap counted the states each *source line* named and was
-/// withdrawn in this same change: it reddened on correct prose, because `already`
-/// contains `ready`, while a hard-wrapped copy walked past it. `docs/honesty.md`
-/// carries both halves.
+/// withdrawn in this same change: it reddened on correct prose — two hard-wrapped
+/// lines that enumerate the state *vocabulary*, four backticked names between
+/// them, and naming the states is not routing them — while a hard-wrapped copy of
+/// the real thing walked past it. An earlier version of this sentence blamed
+/// `already` containing `ready`; that substring effect is real and is not what
+/// reddened the guard, which two judges measured and `docs/honesty.md` records
+/// with the measurement.
 ///
 /// **Load-bearing strings.** The literal `Decision Gates table in \`skill/SKILL.md\``
 /// in `docs/honesty.md` and the `Decision Gates` pointer in `repository-delivery.md`

@@ -679,7 +679,8 @@ suite. Everything else here is prose held by review.
     `STATES` and proves every state is *reachable* — **not** that any particular condition routes to
     the right one. Swapping two destinations in that table leaves the suite green, measured.
   - `the_decision_gate_is_not_restated_as_a_second_table` holds two spellings: an arrow followed by a
-    backticked state, the Decision Gates table's own notation, in any of the four companion
+    backtick — the assertion is on `-> \``, so it is *stricter* than the Decision Gates table's own
+    notation and catches an arrow into anything backticked at all — in any of the four companion
     documents, and a table in
     `repository-delivery.md` whose header cell reads `| Destination |`. Restoring the five-row table
     this change deleted, byte for byte, reddens it. **Renaming that header and keeping the pointer
