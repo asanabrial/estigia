@@ -114,10 +114,10 @@ fn a_disabled_board_reports_a_skip_rather_than_attempting_anything() {
     // The property the whole module rests on: `transition` mirrors before it
     // moves the label, so this call must never be able to stop what follows.
     let mut board = Board::parse("none", &context(), true);
-    let answer = board.set_status(12, "review");
+    let answer = board.set_status(12, "review", Some("acme/repo"));
     assert_eq!(answer["attempted"], false);
     assert_eq!(answer["skipped"], "no board configured");
-    assert_eq!(board.read_status(12), None);
+    assert_eq!(board.read_status(12, Some("acme/repo")), None);
 }
 
 #[test]
@@ -239,5 +239,152 @@ fn a_mirror_stamped_ahead_of_the_clock_is_not_fresh() {
     assert!(
         !super::mirror_is_fresh(Some(now + 31_536_000.0), Some(now)),
         "a year ahead was fresh for a year"
+    );
+}
+
+#[test]
+fn a_card_from_another_repository_is_not_this_issue() {
+    let foreign = serde_json::json!({"id": "ITEM", "content": {"number": 73, "repository": {"nameWithOwner": "asanabrial/investora"}}});
+    assert_eq!(
+        pick_item(std::slice::from_ref(&foreign), 73, "asanabrial/estigia"),
+        ItemPick::Foreign {
+            belongs_to: "asanabrial/investora".to_owned()
+        }
+    );
+    let ours = serde_json::json!({"id": "OURS", "content": {"number": 73, "repository": {"nameWithOwner": "asanabrial/estigia"}}});
+    assert_eq!(
+        pick_item(&[foreign, ours], 73, "asanabrial/estigia"),
+        ItemPick::Ours {
+            id: "OURS".to_owned()
+        }
+    );
+    assert_eq!(pick_item(&[], 73, "asanabrial/estigia"), ItemPick::Absent);
+}
+
+#[test]
+fn a_foreign_item_report_includes_the_board_key() {
+    let report = foreign_item_report(
+        73,
+        "asanabrial/12",
+        "asanabrial/investora",
+        "asanabrial/estigia",
+    );
+    assert!(
+        report
+            .as_object()
+            .is_some_and(|keys| keys.contains_key("board")),
+        "the report has to name the board that held the foreign card"
+    );
+    assert_eq!(report["board"], "asanabrial/12");
+    // A skip, not a refusal: the mirror runs before the label edit, so failing
+    // outward here kills the authoritative write. Two blind judges measured
+    // both halves of that being wrong — a correct transition aborted, and
+    // `create` answering *nothing was written* over an issue already filed.
+    assert_eq!(report["attempted"], true);
+    assert_eq!(report["foreign"], "asanabrial/investora");
+    assert!(
+        report.get("ok").is_none() && report.get("reason").is_none(),
+        "the foreign report still reads as a refusal: {report}"
+    );
+    assert_eq!(
+        report["action"],
+        "estigia config set --repo \"Project board\" \"none\""
+    );
+    let detail = report["skipped"].as_str().expect("skipped is a sentence");
+    assert!(detail.contains("73"), "{detail}");
+    assert!(detail.contains("asanabrial/12"), "{detail}");
+    assert!(detail.contains("asanabrial/investora"), "{detail}");
+    assert!(detail.contains("asanabrial/estigia"), "{detail}");
+}
+
+/// A card that does not say where it comes from is not this repository's.
+///
+/// The picker was written `belongs.is_empty() || belongs == home`, so a content
+/// node carrying no `repository` — a draft item, or a field the token cannot
+/// read — was taken as ours and mirrored. That is the defect this whole change
+/// exists to stop, surviving in the one case `pick_item`'s own doc comment
+/// calls out: *unknown repository is not clearance*. It also left the
+/// `an unnamed repository` arm unreachable, which is what a dead branch usually
+/// means — the guard above it says the opposite of what it was written for.
+///
+/// Turn the fix off by restoring the `belongs.is_empty() ||` prefix and this
+/// reddens with `Ours`.
+#[test]
+fn a_card_that_names_no_repository_is_not_ours() {
+    let node = serde_json::json!({ "id": "PVTI_unnamed", "content": { "number": 73 } });
+    assert_eq!(
+        pick_item(&[node], 73, "asanabrial/estigia"),
+        ItemPick::Foreign {
+            belongs_to: "an unnamed repository".to_owned()
+        },
+        "a card that does not name its repository was taken as ours"
+    );
+}
+
+/// No identity for this repository means no card can be matched to it.
+///
+/// `board_home` answers through `unwrap_or_default()`, so a failed identity read
+/// arrives as an empty string. Before the guard this test holds, that emptiness
+/// reached the picker, where — under the corrected rule — every card becomes
+/// foreign and the mirror reports a sentence about the *card*. What is true is
+/// that the question could not be asked.
+#[test]
+fn an_unreadable_repository_identity_mirrors_nothing() {
+    let node = serde_json::json!({
+        "id": "PVTI_ours",
+        "content": { "number": 73, "repository": { "nameWithOwner": "asanabrial/estigia" } }
+    });
+    assert_eq!(
+        pick_item(&[node], 73, ""),
+        ItemPick::Foreign {
+            belongs_to: "asanabrial/estigia".to_owned()
+        },
+        "an empty home matched a card, so a failed identity read could still move one"
+    );
+}
+
+/// The listing asks for the field the picker decides by.
+///
+/// Every other test here hands `pick_item` JSON it built itself, so the query
+/// could stop asking for `repository` and each of them would stay green while
+/// the mirror went blind: every card unnamed, every card foreign, and the board
+/// silently mirroring nothing. Two blind judges deleted the field and measured
+/// the suite still passing.
+#[test]
+fn the_listing_asks_which_repository_each_card_belongs_to() {
+    assert!(
+        super::ITEMS_QUERY.contains("repository { nameWithOwner }"),
+        "the items query no longer asks which repository a card belongs to"
+    );
+}
+
+/// The audit's own filter, measured rather than trusted to a loop body.
+///
+/// A judge deleted the three lines this replaced and the whole suite stayed
+/// green — another repository's cards read as this one's drift again, and
+/// `--fix` would move them to agree with labels that were never theirs. Half of
+/// issue #75 reopens there, so it gets a name and a test.
+///
+/// The unnamed case matters as much as the foreign one: the picker on the write
+/// side had exactly that hole, and a filter that disagreed with it would put the
+/// two halves of one rule back out of step.
+#[test]
+fn the_audit_keeps_only_cards_this_repository_owns() {
+    let ours = serde_json::json!({ "issue": 7, "repository": "asanabrial/estigia" });
+    let theirs = serde_json::json!({ "issue": 7, "repository": "asanabrial/investora" });
+    let unnamed = serde_json::json!({ "issue": 7 });
+
+    assert!(card_is_ours(&ours, "asanabrial/estigia"));
+    assert!(
+        !card_is_ours(&theirs, "asanabrial/estigia"),
+        "another repository's card was audited as this repository's"
+    );
+    assert!(
+        !card_is_ours(&unnamed, "asanabrial/estigia"),
+        "a card that names no repository was audited as this repository's"
+    );
+    assert!(
+        !card_is_ours(&ours, ""),
+        "an unreadable identity matched a card, so a failed read could still repair one"
     );
 }

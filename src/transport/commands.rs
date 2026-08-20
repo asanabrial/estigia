@@ -441,6 +441,11 @@ pub(super) fn is_status_label(name: &str) -> bool {
     name.starts_with("status:")
 }
 
+fn board_home(context: &Context) -> Result<String, Failure> {
+    let (owner, name) = super::closing::repo_identity(context)?;
+    Ok(format!("{owner}/{name}"))
+}
+
 /// The `status:*` labels an issue carries, in the order `gh` reported them.
 pub(super) fn status_labels(data: &serde_json::Value) -> Vec<String> {
     data.get("labels")
@@ -584,7 +589,12 @@ pub fn create(
         context,
         use_cache,
     );
-    let mirror = board.set_status(number, state);
+    let home = if board.enabled {
+        board_home(context).ok()
+    } else {
+        None
+    };
+    let mirror = board.set_status(number, state, home.as_deref());
 
     Ok(serde_json::json!({
         "ok": true,
@@ -622,7 +632,16 @@ pub fn transition(
 ) -> Result<serde_json::Value, Failure> {
     let spec = context.get("project board").unwrap_or_default().to_owned();
     let mut board = super::board::Board::parse(&spec, context, use_cache);
-    let mirror = board.set_status(issue, to);
+    // Read once, before anything writes, and hand the same answer to the
+    // writer, the read-back and the repair. Asked again lower down it was a `?`
+    // *below* the label edit, so a `gh repo view` that failed there reported
+    // "nothing was written" over an edit that had landed.
+    let home = if board.enabled {
+        board_home(context).ok()
+    } else {
+        None
+    };
+    let mirror = board.set_status(issue, to, home.as_deref());
 
     let number = issue.to_string();
     let add = format!("status:{to}");
@@ -730,7 +749,7 @@ pub fn transition(
     }
 
     if board.enabled {
-        let column = board.read_status(issue);
+        let column = board.read_status(issue, home.as_deref());
         let expected = board
             .meta()
             .and_then(|meta| super::board::Board::column_for(&meta, to));
@@ -767,8 +786,8 @@ pub fn transition(
                         .join(" ")
                     );
                 } else {
-                    let retried = fresh.set_status(issue, to);
-                    let recheck = fresh.read_status(issue);
+                    let retried = fresh.set_status(issue, to, home.as_deref());
+                    let recheck = fresh.read_status(issue, home.as_deref());
                     result["board_repair"] = serde_json::json!({
                         "retried": retried,
                         "column_now": recheck,
@@ -880,7 +899,15 @@ pub fn audit_board(
     let mut drift = Vec::new();
     let mut missing_column = Vec::new();
     let mut unread_labels = Vec::new();
+    let mut foreign = Vec::new();
+    let home = board_home(context)?;
     for card in &cards {
+        if !super::board::card_is_ours(card, &home) {
+            let mut entry = card.clone();
+            entry["problem"] = serde_json::json!("card belongs to another repository");
+            foreign.push(entry);
+            continue;
+        }
         // An unfinished read is not a verdict. `labels(first: N)` is a window
         // and the state is a label, so a card carrying more labels than arrived
         // can have its `status:` outside it — which read as "no status label"
@@ -933,7 +960,7 @@ pub fn audit_board(
                 && let Some(issue) = card.get("issue").and_then(serde_json::Value::as_u64)
             {
                 let state = labels[0].split_once(':').map_or("", |(_, rest)| rest);
-                let mut entry = board.set_status(issue, state);
+                let mut entry = board.set_status(issue, state, Some(home.as_str()));
                 entry["issue"] = serde_json::json!(issue);
                 repaired.push(entry);
             }
@@ -944,9 +971,17 @@ pub fn audit_board(
         "ok": true,
         "audited": true,
         "cards": cards.len(),
+        // `cards` is how many the board returned; this is how many were this
+        // repository's to compare. A shared board makes the two differ, and an
+        // operator reading only the first was told a pass examined cards it had
+        // set aside. `audited` beside them is a boolean — whether the pass ran
+        // at all — and naming a second field `audited_count` would put two
+        // meanings on one word.
+        "compared": cards.len() - foreign.len(),
         "drift": drift,
         "missing_column": missing_column,
         "unread_labels": unread_labels,
+        "foreign": foreign,
         "repaired": repaired,
     }))
 }

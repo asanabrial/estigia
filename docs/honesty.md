@@ -2827,6 +2827,25 @@ suite. Everything else here is prose held by review.
   directory is gone sends an operator to rescue a tree that is not there. The rule has a name now,
   `legacy_worktree_block`, so it can be measured without a tracker and a remote standing by.
 
+- **Which repository a board card belongs to is read from the API, and nothing here proves the API
+  answers.** Issue #75. The mirror now picks a card by comparing `content.repository.nameWithOwner`
+  against `gh repo view --json owner,name`, and every test of it — the picker's unit tests and four
+  rig tests through the built binary — hands that field to the code itself. **No test reaches the
+  live API**, so whether a token that can see a card can always read its repository is unverified
+  here.
+
+  The direction of that unknown is the whole reason it is written down. If the field is ever absent —
+  a permission the token lacks, a content type that has no repository — the card reads as *an unnamed
+  repository*, which this change deliberately treats as **not ours**. Every card on a correctly
+  configured board would then be foreign: the mirror stops mirroring, silently, one skip per call,
+  while the board and the labels drift apart with nothing raising a failure. That is a fail-closed
+  direction for the defect the change exists to stop and a fail-open one for the mirror's usefulness,
+  and only somebody running it against a real board can tell which of the two they have.
+
+  What is measured is the rest: two blind panels reproduced the write path, the read-back, the audit
+  and `create` through a scripted `gh`, and the mutation for each is named in the pull request. The
+  gap is the wire, not the logic.
+
 - **A board mirror stamped ahead of the clock never went stale, on either side.** The window was
   `now - cached_at < 86400`, and the age of a stamp in the *future* is negative — so a mirror written
   while the machine's clock was a year ahead stayed fresh for a year. What it holds is the board's
