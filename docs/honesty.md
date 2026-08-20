@@ -1989,6 +1989,9 @@ suite. Everything else here is prose held by review.
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
   What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still
   `verify-claim --issue --run-id --expect-state`; the head comparison is local, against that invoking
+  checkout. Both halves of that comparison — whether the invoking directory shares the covered clone,
+  and what HEAD it is at — run through the same unsteered git invocation the fast-forward proof
+  already used, so an exported `GIT_DIR` cannot make an unrelated clone look like the reviewed
   checkout.
 - **A `republish_review` that refuses has already written to the pull request, and names which
   writes.** Its refusals arrive after the reused pull request has been edited — the renewal stands
