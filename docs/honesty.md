@@ -19,7 +19,8 @@ suite. Everything else here is prose held by review.
   successful line is still not proof that a later run accepts or uses the ID. Estigia does not
   validate catalog membership, execute models, or inspect or filter their tool-call capability.
   Only Claude Code currently receives host-routable definitions: the planning phases selected by
-  `Planning`, and one static `review-blind` definition installed in every mode. OpenCode and every
+  `Planning`, and one `review-blind` definition installed in every mode, whose tool grant
+  `Evidence standard` decides. OpenCode and every
   other host keep these values as routing declarations. `orchestrate`, `apply`, `judge`, and a visible
   route or installed definition are likewise not proof that a host executes them.
   Claude's generated matcher now wakes for current `Agent` and legacy `Task` launches of the exact
@@ -589,17 +590,19 @@ suite. Everything else here is prose held by review.
     by one of five judges; it did not reach 3-of-5 quorum. Widening the vocabulary is left to
     its own issue.
 
-  **Judge isolation outside the reserved role is unproved, and the asymmetry is measured.** A judge
-  launched under the reserved `review-blind` type cannot write at all, and that half is checkable: the
-  role gate is fed the *embedded* reviewer definition rather than whatever is on disk
-  (`src/harness/hook.rs:940-946` reads `crate::skill::REVIEW_AGENT.contents`), that definition allows
-  `Read`, `Grep` and `Glob` only, and
-  `src/harness/roles/tests.rs::the_shipped_blind_reviewer_is_read_only_and_cannot_delegate` pins
-  `Write`, `Edit`, `Bash`, `Agent` and `Task` to a denial. For that role the question of two judges
-  writing over each other cannot arise. The other half is not checkable at all. A panel launched under
-  **any other subagent type** — which a repository whose evidence standard is mutation forces, because
-  a judge that measures needs exactly the tools the reserved role refuses — is invisible both to the
-  reserved-role prelaunch check and to that gate. Nothing here records how many such judges ran,
+  **Judge isolation is unproved, and what is checkable about it moved.** The role gate is fed the
+  *embedded* reviewer definition rather than whatever is on disk, rendered with the effective
+  `Evidence standard`, and `the_shipped_blind_reviewer_gets_the_grant_its_standard_decides` pins the
+  shape for both standards: `Write`, `Edit`, `Agent` and `Task` denied under either, `Bash` following
+  the row. So under `reading` the question of two judges writing over each other cannot arise, and
+  under `measuring` it arises by design and the isolation rule is what answers it.
+
+  The sentence that used to stand here — that a mutation-standard repository **forces** a panel under
+  some other subagent type, because a judge that measures needs tools the reserved role refuses — was
+  true and is the defect issue 83 closed. It is gone rather than softened: leaving it would tell a
+  reader to do the exact thing the entry below now says not to. What remains true is that a panel this
+  harness cannot place in the role is invisible both to the reserved-role prelaunch check and to that
+  gate. Nothing here records how many such judges ran,
   whether two of them shared a working directory, or what they wrote into it. The isolation rule in
   `skill/policies/blind-judges.md` is prose an orchestrator follows or does not, on the same footing as
   panel size and blindness above.
@@ -1376,11 +1379,29 @@ suite. Everything else here is prose held by review.
   - A host that reads a directory whole and is declared not to is invisible here, in exactly the way
     the four hand-spelled entries were invisible for the adapters nobody thought of. The declaration
     moved from a distant list onto the adapter; it did not become checkable.
-  - **Only one of the two derived families is compiler-forced.** `instruction_directory_fragment`
-    matches `InstructionFile`, so a twelfth adapter cannot skip it; `skills_root_fragment` matches
-    `SkillsRoot`, whose three variants are all enumerated — but a twelfth adapter picks an existing
-    one, so nothing is forced there. Correct as written and worth knowing before reading the second as
-    carrying the same teeth as the first.
+  - **Flipping the row does not re-render the installed definition, and nothing reports the drift.**
+    `config set` writes the contract table and reads it back; it never writes an agent's files, which
+    is true of every row and stated as a safety property in `docs/configuration.md`. For this row it is
+    also a hazard: measured, `estigia config set "Evidence standard" measuring` answers `Evidence
+    standard is now measuring` with exit 0 while `~/.claude/agents/review-blind.md` still reads
+    `tools: Read, Grep, Glob`, and `doctor` answers `ok canonical — and every configured agent reads
+    the rows it decides by`. Only `setup` or `sync` re-renders. **One** direction of the mismatch fails
+    closed at the gate, which enforces from the embedded definition rendered with the effective row
+    rather than from the file: a host offering a grant the row no longer asks for is refused there.
+    The other direction is not the gate’s doing at all — with the row widened and the file not
+    yet re-rendered, the gate **allows**, and what refuses is the host’s stale `tools:` line, if
+    that host enforces one, which the opening entry of this document says Estigia cannot prove. Either way the judge is told one thing by its own
+    definition and answered another by the hook. An earlier version of this sentence said both
+    directions fail closed at the gate, and contradicted itself one clause later; the repair for that
+    left this fragment behind, which a reviewer then found. Nothing reports it, and `reviewer_is_static` accepts either rendering by design, so
+    the launch check cannot see it either.
+  - **Only one of the two derived families is compiler-forced**, named here only because this row now
+    decides a grant beside them. The measurement is **further down and in a different entry** — the
+    issue-83 entry’s *Still open* list, under the bullet beginning *"Only one of the two derived
+    families"* — and is not repeated here. Two earlier versions of this pointer were wrong in two
+    different ways: the first sent a reader to *the entry above*, where the material is not, and the
+    second fixed the direction and still said *this same entry*, which it is not either. Both were
+    found by reviewers.
   - **The derivation discards one shape without a word.** `instruction_directory_fragment` ends in
     `fragment.rfind('/').map(…)`, so an adapter that answers *this host reads the directory whole* with
     a separator-free fragment gets `None` back, and
@@ -1437,6 +1458,217 @@ suite. Everything else here is prose held by review.
     `gate_spec`'s default is caught behaviourally by
     `the_only_thing_without_a_gate_is_the_thing_that_is_not_an_agent`. None of the eight is closed
     here.
+
+- **Estigia defined roles its own roles could not do the work of.** Issue 83. Six shipped definitions and not one of
+  them able to run anything: `review-blind` carried a fixed `tools: Read, Grep, Glob`, and the five planning
+  phases carried `{{TOOLS}}`, substituted to `Read, Grep, Glob`, `Read, Grep, Glob, Write, Edit` or
+  `Read, Grep, Glob, WebFetch, WebSearch` — three branches, two of them strict supersets of the third, and
+  an earlier draft of this sentence named only the second. **No branch produced a shell.** In a repository whose stated evidence standard is mutation — this one's is, and
+  `CLAUDE.md` makes two sentences load-bearing on it — a reviewer that cannot run the suite cannot
+  check either. So every panel that mattered was launched under a generic type instead, and the
+  read-only guarantee `policies/blind-judges.md` states for a judge governed **none** of them.
+
+  Measured on issue #36 before this closed: three publication epochs, twelve independent judge
+  launches, all generic. The role gate governed zero. The reserved-role prelaunch check governed zero.
+  Every capability bound on those contexts came from prose in a launch prompt written by hand that
+  turn — the failure mode issue #35 closed for the reviewer's *brief* and left open for its
+  *capabilities*.
+
+  **What closes it.** `Evidence standard` — `reading` or `measuring`, defaulting to `reading` — and
+  the reviewer's grant derived from it rather than fixed. Under `measuring` the role gets a shell and
+  nothing else: `Write`, `Edit`, `Agent` and `Task` stay refused, and a test walks `Evidence::all()`
+  asserting exactly that shape for every standard. That withholds four tools and not the
+  capability — a shell writes, and it launches — which is why the paragraph below says the
+  isolation precondition is the only thing making a measuring judge safe.
+  Three shipped sentences drew the opposite conclusion from the same grant and two blind judges
+  caught all three independently; the surviving statement of what a shell does not buy is in
+  `skill/policies/blind-judges.md`. The others state the grant and name that rule; two of them do
+  restate the consequence in the safe direction, `CHANGELOG.md` saying so in the same breath, and
+  a judge measured that this sentence claimed otherwise.
+
+  Two things had to give, and both were deliberate:
+
+  - `reviewer_is_static` meant *one* spelling and now means *one of the spellings Estigia can
+    produce*, enumerated over `Evidence::all()`. The compiler holds the **enumeration** closed — a
+    third standard cannot be added without arriving at that function — and a test holds the
+    **acceptance**. Arriving is not being returned: the arm can be widened with the list left
+    short, and `Evidence::all` says so on itself. So what keeps this a proof rather than a guess
+    is the pair, and the acceptance test walks the same list, so it inherits that limit rather
+    than covering it. The crossing that binds the *installed* bytes —
+    `the_reserved_reviewer_grant_is_the_same_through_both_doors` — walks a hand-written pair of rows
+    rather than `Evidence::all()`, so a third standard would arrive at the rendering and at
+    `reviewer_is_static` and reach that test only if somebody added it there. A judge measured that
+    this was disclosed for the first and not for the second.
+  - The gate had to read the row. It carries it in `GateContext` beside `window`, and narrows the same
+    way for the same sentence: **an unreadable contract answers `reading`**, because a fault must not
+    hand out a capability.
+
+  **What it does not buy, and this is the part worth a reader's attention.** A judge that measures
+  writes inside the directory its launch hands it, and **when that directory is outside the claimed
+  checkout** issue #2's stand-aside answers before the tracker is asked. That condition is the
+  orchestrator's to meet and nothing here enforces it: a delegated context's tool events carry the
+  launching session's id, so a judge handed a directory *inside* the claimed checkout is measured
+  against the parent run's live claim and **allowed**. The isolation rule is what asks for the
+  separate directory, and it is a rule an orchestrator follows rather than a gate that refuses. **Giving the role a shell does not put its
+  mutations under the gate.** What makes them safe is the isolation precondition, and that is why the
+  isolation rule moved in the same change: it bound the checkout and said nothing about anywhere else
+  a judge writes. Measured on a five-judge panel that shared one scratch directory — one judge's
+  script overwritten by another's and executed inside a third judge's checkout, a fourth reading the
+  implementing run's planning notes — two verdicts stopped being independent readings and one had to
+  be discounted. Nothing in the delivery target was touched and no checkout rule was broken, which is
+  precisely why the rule needed the second half.
+
+  **And the workflow front door is reachable the same way.** `estigia claim` and
+  `estigia transition` are CLI entrances onto the operations the tool server runs, and the role
+  gate bars tool *names*, not shell commands — so under `measuring` the same shell that reaches
+  the target reaches those. What holds a judge off them is the sentence *"Still do NOT change tracker state"* in its own rendered
+  definition: an instruction, not a gate. The claim gate answers separately and a judge holds no
+  claim, so a write against the repository still refuses; what is unguarded is the tracker call
+  a judge could make in its own name. Named here rather than implied, because the last acceptance
+  criterion on issue 83 says no delegated context gains orchestration authority, and at the grant
+  that is true while at the shell it is prose.
+
+  **And `setup` and `sync` reach further than a redirected `HOME`.** Named here because a judge
+  measured it while reviewing this very change, not because it was reasoned about. Under `measuring`
+  a judge ran `estigia sync --allow-source-build` with `HOME` and `USERPROFILE` pointed at its own
+  scratch directory — the isolation every launch brief here asks for — and the run walked every
+  adapter. The `gemini-cli` root resolves under `%APPDATA%`, which neither variable governs, so two
+  files in the operator's real profile were rewritten: the skill path repointed at the sandbox, and
+  the MCP command and `BeforeTool` hook repointed at the judge's own `target/debug/estigia.exe` —
+  a binary inside a checkout that gets deleted. The judge disclosed it and restored both files, and
+  the restoration was verified independently before this was written.
+
+  So what a shell reaches is not only the tracker front door above but `setup` and `sync`, which
+  rewrite host agent definitions — the reviewer's own `tools:` line among them — at machine-scoped
+  paths no launch directory encloses. Redirecting the home is what every judge brief on this
+  repository calls isolation, and for this command it is not sufficient. Filed as **#97**, and not
+  fixed here: it is a property of the adapter table, not of the grant this change derives.
+
+  **One row, one file, and a machine can hold two answers.** `Evidence standard` is
+  `Scope::Everywhere`, so it is set per repository, while the artifact it decides is a single
+  user-level `review-blind.md` rendered from whichever checkout last ran `setup` or `sync`. On a
+  machine holding one `reading` repository and one `measuring` repository, the drift
+  `docs/configuration.md` frames as lasting only until `setup` or `sync` next writes the file is
+  permanent for
+  whichever repository was not last written, and no re-render fixes both. The gate answers per
+  repository and narrows on an unreadable contract, so this costs a capability rather than
+  granting one — a measuring judge offered the reading grant, which fails closed.
+
+  **A count corrected in the documents and left in the source comments.** This change derives the
+  neutral-root adapter count and corrects the two documents that carry it: `CHANGELOG.md` and
+  `docs/what-it-writes.md`, whose sentence the count guard binds. `README.md` states no *neutral-root* adapter
+  count and is not among them — it counts the adapters themselves, at eleven — an earlier version of this entry said it was, which is the shape
+  this document exists to refuse. Source comments still say *eight*, in `src/skill/record.rs`,
+  `src/cli/mod.rs` and `src/setup/mod.rs` among others; the set is the search below, not this
+  list. Nothing reads them and no shipped document repeats them, so no behaviour is
+  wrong; what is wrong is that a reader of the code is told a number the code disagrees with. All
+  pre-existing at `fe4ff4b1` and filed as **#93**, which carries the search rather than a list —
+  its first version listed fourteen sites by hand where the search answers 31.
+
+  **Still open, and named rather than implied.**
+
+  - Only one of the two derived families is compiler-forced. `instruction_directory_fragment` matches
+    `InstructionFile`, so a twelfth adapter cannot skip it; `skills_root_fragment` matches
+    `SkillsRoot`, whose variants a twelfth adapter reuses.
+  - The eight `_` arms on the instruction enum are untouched, and the entry above owns them.
+  - **The roles a run’s delegated contexts ran as are recorded, and the record lives only as long
+    as the run.** Since issue 83 the gate writes each distinct `agent_type` it sees into the run
+    pointer, and `SessionStart` reads it back to **that same run** on a resume. That is an
+    **observation** rather than a declaration — what fired on a tool call, not what a launch prompt
+    claimed — which is the half worth having.
+
+    **It is not an audit trail, and issue 83’s fifth acceptance criterion asked for one.** That
+    criterion wanted the role recorded "where a later run can read it". The issue opens by saying a
+    run *cannot be audited for it afterwards*, and *afterwards* is exactly when this record does
+    not exist. Two judges drove it
+    through the built binary and it is stated here in their terms rather than softened:
+
+    ```
+    same session    -> "Delegated contexts this run has already gated ran as: `review-blind`"
+    a different run -> no such line at all
+    session-end     -> the pointer file is gone
+    ```
+
+    `run_id` is derived from `session_id`, so the pointer is per-session, and `Event::SessionEnd`
+    calls `session::forget`, which removes it. The one store that does survive a session is the
+    decision ledger, where no ordinary entry carries an agent at all: the *adapter* slug is on
+    the fault lines only, and `agent_type` is nowhere — and `note` returns
+    early on `Decision::Outside`, which is what a delegated context’s reads produce. So the
+    cross-run half is not merely absent, it has no existing road. It is issue #91.
+
+    This entry claimed the opposite for one publication: *"`SessionStart` reads them back to the next
+    run"*. It is corrected here rather than quietly, because a false sentence in the register of what
+    is not measured is the one kind this document cannot carry.
+
+    Five narrower limits on the within-run record. The first three are ways the set can be empty
+    while contexts ran, the fourth is a way it can be non-empty and still not answer what was
+    asked, and the fifth is a write that did not happen before. A host that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart
+    from nothing having been delegated. A context refused at the role gate before any call is not
+    recorded, which is deliberate — a refused launch contributes no judge — but it means the record carries
+    nothing for a launch the role gate refused. A call the *claim* gate denied is recorded, since
+    the store fires on a new role or an allow — so this is one gate's refusals, not every gate's.
+
+    **And under the default row the reserved reviewer is never recorded at all**, which is the case
+    that governs every installation nobody has changed. Its whole grant is `Read, Grep, Glob`, and
+    none of those three is in the matcher the hook is woken for —
+    `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task` — so no call it is permitted to make
+    ever reaches the record, and every call that would reach it is outside the grant and refused
+    before it. A judge measured both directions through the built binary: under `reading`, a
+    `review-blind` context calling `Bash` is denied and no pointer is written at all; under
+    `measuring`, the same call records `roles: ["review-blind"]`. So the criterion asking which role
+    a delegated context ran as is delivered for a measuring judge and for the planning phases that
+    write, and is **inert for the reserved reviewer on a default install** — the role this change is
+    named after. Recorded rather than fixed: making it non-empty would mean waking the hook for
+    tools no gate has anything to say about. And the field names a role, never a *count*:
+    five contexts under one role and one context under it write the same byte, so nothing here bears
+    on panel size, which the entry below already states this crate cannot see. And the store now
+    fires on a **new role** as well as on an allow, so a call the claim gate denied writes a
+    pointer where only an allowed one did — including under the `<runtime>-unknown` name a blank
+    `session_id` produces, which `SessionEnd` deliberately does not remove. Such a pointer holds
+    no issue, so it cannot loosen the gate, and the allow path could already create it. The wider
+    half is a real run pointer: `gate` takes `&mut run` and calls `mark_verified` once the tracker
+    answers, before the refusals that can follow it, so a **denied** call carrying a role not seen
+    before now persists that watermark where it used to be discarded. What is persisted is true —
+    the tracker did answer — and the next routine write can ride the window without asking again.
+    Recorded because it is a change to the gate's own state that no other sentence names.
+
+    One more, found by a judge rather than by design: the role write goes through `session::store`,
+    which drops a stale write whole when another writer moved the revision first. `session::update`
+    exists for exactly the case of a writer carrying information only it has, and this is not using
+    it — so a role can be lost to a race with a tool write. Nothing another writer set is lost, which
+    is the fail-closed direction.
+
+  - **The row that decides this grant is reachable by an ordinary repository write.** `Evidence
+    standard` is `Scope::Everywhere`, so it can be set per repository, and a repository row lives in
+    `.git/estigia/estigia.local.md` — a path `CONTROL_SURFACE` does not carry and
+    `is_control_surface` does not derive. Measured by asking the gate with a live claim held: that
+    file answers *"verified inside the renewal window"*, exactly as `src/lib.rs` does, while
+    `.estigia/` re-reads the claim instead.
+
+    So a run holding this checkout can widen the grant its own judges receive **where a judge reads
+    the same repository row** — `repository_config_path` resolves under the git common directory,
+    which a linked worktree shares and a separate clone does not, and a judge in a fresh clone is
+    answered `reading` instead. That direction fails closed. Where it does hold, the judges are what
+    decide whether that run’s work ships. Estigia already refuses the rows that decide what one
+    agent may do — `config set --repo "Delivery authorisation"` answers *"is what one agent does,
+    not what this repository is"* — and this row is not among them. The shape is older than this
+    change: `Irreversible commands` is repository-scoped today. What this change adds is the first row
+    on that surface which grants a **capability**. It is issue #94, filed rather than closed here,
+    because narrowing which rows may be repository-scoped is a decision about what a repository is
+    allowed to differ on.
+
+    Bounded, and the bounds are real: it needs a live claim, the widened grant buys `Bash` and nothing
+    else, and a judge with a shell writes inside the directory its launch hands it, which the
+    isolation rule requires to be outside the claimed checkout — see the entry above for what that
+    condition rests on. None of that makes the row unreachable.
+
+  - Estigia still cannot prove a panel ran, how many contexts it had, or that any two of them were
+    given separate directories. This narrows what a judge **can** do and proves nothing about what a
+    judge **did** — the same boundary `policies/blind-judges.md` draws for everything else about
+    panels.
+  - `Evidence standard` is one row for one shipped reviewer definition. It is not per role: the
+    planning phases keep their own derivation from `Planning`, and a repository wanting a measuring
+    `spec` phase has no way to say so.
 
 - **A skip spelled as a pass, in the places issue #22 did not reach.** That issue took the skip out of
   `tracker_rig`'s *type*, so no caller of it can be handed a value meaning *did not run*. Two other
@@ -2306,7 +2538,7 @@ suite. Everything else here is prose held by review.
   `a_checkout_this_process_cannot_resolve_is_still_one_checkout`, whose corpus differs by an
   accented pair rather than an ASCII one, because an ASCII pair cannot tell the two rules apart.
 - **Three settings are read by nobody, and two more were until this change.**
-  An operator sets eighteen rows and `config list` reports all of them. Measured: `context.get` is
+  An operator sets nineteen rows and `config list` reports all of them. Measured: `context.get` is
   called for exactly three labels — `project board`, `worktree location` and, since the review
   handoff, `Review delegation`, which the transport reads to stamp one deadline on a request it
   never waits for. The gate reads `Irreversible commands`, and the payload's prose

@@ -122,6 +122,7 @@ fn every_variant() -> Vec<Setting> {
             | Setting::Window
             | Setting::ReviewProtocol
             | Setting::Judges
+            | Setting::Evidence
             | Setting::ChangeSize
             | Setting::Boundaries
             | Setting::Board
@@ -194,6 +195,7 @@ fn every_setting_is_in_the_table() {
         Setting::Window,
         Setting::ReviewProtocol,
         Setting::Judges,
+        Setting::Evidence,
         Setting::ChangeSize,
         Setting::Boundaries,
         Setting::Board,
@@ -311,6 +313,7 @@ fn a_closed_list_offers_every_value_its_type_can_hold() {
                 setting,
             )),
             Setting::Judges => Some(rendered(Judges::all(), |c, v| c.judges = v, setting)),
+            Setting::Evidence => Some(rendered(Evidence::all(), |c, v| c.evidence = v, setting)),
             // Open vocabularies: a path, a board name, a language, a duration,
             // a count of lines, a list of commands, a tracker this build may not
             // know. There is nothing to enumerate, and the row has somewhere to
@@ -450,6 +453,7 @@ fn a_rendered_table_reads_back_identically() {
         window: std::time::Duration::from_secs(30),
         review_protocol: ReviewProtocol::ReceiptDriven,
         judges: Judges::TwoBlind,
+        evidence: Evidence::Measuring,
         // Not the default, so a round trip that dropped the row would show.
         change_size: 250,
         boundaries: vec!["npm publish".to_owned()],

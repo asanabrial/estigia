@@ -85,6 +85,92 @@ fn configuration() -> String {
     text
 }
 
+/// The documents plus the changelog's unreleased entry, for the counts alone.
+///
+/// Separate from [`documented`], and the separation is the point. Eight guards
+/// read that one, including one asking *does the documentation still name this
+/// mechanism?* — and a changelog is **append-only**, so a name recorded there
+/// answers that question for ever. A reviewer measured exactly that: with the
+/// widening in place, deleting a mechanism from the README and from every file
+/// in `docs/` left that guard green.
+///
+/// A count is different. The unreleased entry describes the crate as it is now,
+/// so a number in it is a claim like any other, and one sat at eighteen settings
+/// while the code held nineteen because nothing reached it.
+///
+/// **Unreleased only, and the filter is real this time.** The first version took
+/// everything before the second `## ` heading and there is only one, so it
+/// pushed the whole file while its own comment, its variable and its failure
+/// message all said otherwise. Now the heading has to say so: a released entry
+/// is a record of what shipped then, and holding it to today's counts would
+/// force a document to lie about history to pass a test about the present.
+fn counted() -> String {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let changelog = std::fs::read_to_string(root.join("CHANGELOG.md"))
+        .expect("CHANGELOG.md ships with the crate");
+    let mut all = documented();
+    let Some(rest) = changelog.split_once("\n## ").map(|(_, rest)| rest) else {
+        return all;
+    };
+    let (heading, body) = match rest.split_once('\n') {
+        Some(pair) => pair,
+        None => return all,
+    };
+    if !heading.to_ascii_lowercase().contains("unreleased") {
+        return all;
+    }
+    all.push_str(body.split("\n## ").next().unwrap_or(body));
+    all
+}
+
+/// The present-tense reader does not carry the changelog.
+///
+/// [`documented`] answers *does the documentation still say this?* and
+/// [`counted`] answers *is this number right?*. Only the second direction was
+/// held: a pair in the count guard keys on a changelog sentence, so narrowing
+/// `counted()` reddens. Re-widening `documented()` reddened **nothing** — every
+/// count in the unreleased entry agrees with the code today, so the guards that
+/// ask a present-tense question would go on passing while being answered from a
+/// record of what shipped. A blind judge measured it against the published head
+/// and this is the assertion that was missing.
+///
+/// Asserted from the same extraction `counted` performs, rather than a phrase
+/// copied out of the changelog: a literal here would be a second place holding
+/// one fact, and it would rot the first time that entry was edited.
+///
+/// **What it does not reach.** The witness is one line of the unreleased entry,
+/// so a widening that carried some *other* slice of the changelog would pass
+/// here. That is not constructible today — the file holds exactly one `## `
+/// heading, which makes the unreleased entry effectively the whole of it — and
+/// it stops being true the moment a second heading lands. A judge measured the
+/// gap; it is recorded rather than closed, because closing it means asserting
+/// against a released entry this guard deliberately does not read.
+#[test]
+fn the_present_tense_reader_does_not_carry_the_changelog() {
+    let carried = counted();
+    let present = documented();
+    let unreleased = carried.strip_prefix(present.as_str()).expect(
+        "counted() is documented() plus a suffix, or this guard is reading the wrong thing",
+    );
+    assert!(
+        !unreleased.trim().is_empty(),
+        "counted() added nothing to documented(), so the unreleased filter has stopped matching \
+         and every count guard reading it is now passing over a document it never sees"
+    );
+    // One line is enough to prove the concatenation, and the first non-empty
+    // one is stable against the entry being reordered below it.
+    let witness = unreleased
+        .lines()
+        .map(str::trim)
+        .find(|line| line.len() > 40)
+        .expect("the unreleased entry has a line long enough to identify it");
+    assert!(
+        !present.contains(witness),
+        "documented() carries the changelog again, so a guard asking whether the documentation \
+         still names a mechanism can be answered out of an append-only history: {witness:?}"
+    );
+}
+
 fn documented() -> String {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut all = readme();
@@ -164,7 +250,10 @@ fn five_blind_keeps_one_enforced_verdict_and_names_every_unproved_panel_property
         "blindness",
         "same-finding identity",
         "quorum",
-        "judge isolation outside the reserved role",
+        // Was "judge isolation outside the reserved role" until issue 83, which
+        // removed the distinction: every judge runs as the role now, and the
+        // isolation is what is unproved whichever standard the role carries.
+        "judge isolation",
         "shared a working directory",
     ] {
         assert!(
@@ -252,6 +341,139 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
     .map(|(_, value)| value)
 }
 
+/// No guard reading the whole documentation set blames the README.
+///
+/// The third sweep of this, and the reason it is a test rather than a fourth.
+/// `documented()` concatenates the README with every file in `docs/`, so a
+/// failure from a guard that reads it may be about any of them — and three
+/// of the phrases those guards key on appear **only** in `docs/honesty.md`. A
+/// reviewer drifted one and was sent to `README.md`, where the sentence does not
+/// exist.
+///
+/// Two sweeps missed it. The first reworded an `assert_eq!` and left the
+/// `panic!` four lines above; the second reworded every `format!` message and
+/// left five `.expect(...)` strings, then shipped a sentence saying every guard
+/// had been corrected. Both were true of what they touched, which is what made
+/// them easy to believe.
+///
+/// So the property is asserted instead of promised — but **only as far as the
+/// admission test reaches**, and saying more than that is how the three sweeps
+/// before it were believed. What it checks: a function whose text carries
+/// `documented()` or `counted()` may not attribute a claim to the README in any
+/// non-comment line. What it does not: a reader reached some other way, a
+/// misdirection phrased without one of the attributing verbs, and any file but
+/// this one.
+///
+/// Two judges wrote past the first version — one restored the removed message
+/// into the count guard, which binds `counted()` and was skipped; the other
+/// wrote `README.md counts` where it had said `the README counts`. A third
+/// renamed the helper and left the guard reporting success over nothing, which
+/// is what the floor below is for. Guards that read `readme()` are untouched:
+/// theirs is the one document, and saying so is correct.
+#[test]
+fn no_guard_reading_every_document_blames_the_readme() {
+    let source = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("honesty.rs"),
+    )
+    .expect("this file reads");
+
+    let lines: Vec<&str> = source.lines().collect();
+    let mut blaming = Vec::new();
+    let mut examined = 0_usize;
+    let mut cursor = 0;
+    while cursor < lines.len() {
+        // A top-level function runs from its `fn` line to the first `}` in
+        // column zero, so a chunk is the body and nothing else. Splitting on
+        // `\nfn ` ran each chunk into the *next* function's doc comment, so a
+        // line could be reported under the name of the function above it, and
+        // the position printed beside it counted from the wrong place. Two
+        // judges on separate panels found the same misreport, in the guard
+        // whose whole subject is a message that sends a reader to the wrong
+        // file.
+        let Some(rest) = lines[cursor].strip_prefix("fn ") else {
+            cursor += 1;
+            continue;
+        };
+        let start = cursor;
+        let mut end = start + 1;
+        while end < lines.len() && lines[end] != "}" {
+            end += 1;
+        }
+        cursor = end + 1;
+        let function = &lines[start..end.min(lines.len())];
+        let name = rest.split('(').next().unwrap_or_default().trim().to_owned();
+        // Both readers, and neither spelled with its semicolon. The first
+        // version admitted on `documented();`, which excluded the one function
+        // this guard was written for: the count guard binds `counted()`, the
+        // widest reader of all, and a judge put the removed message back into it
+        // with the whole target green. `documented().to_string()` slipped
+        // through the same way.
+        let reads = function
+            .iter()
+            .any(|line| line.contains("documented()") || line.contains("counted()"));
+        if !reads || name == "no_guard_reading_every_document_blames_the_readme" {
+            continue;
+        }
+        examined += 1;
+        for (offset, line) in function.iter().enumerate() {
+            let trimmed = line.trim_start();
+            // Comments explain; only the strings a failure prints are the
+            // subject, and a comment saying what went wrong here has to be
+            // able to use the word.
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            // What is refused is **attribution**, not mention. A `what`
+            // description saying *the sentence that opens the README’s
+            // configuration section* is precise and helpful — one of these
+            // sentences really is the README’s. What misleads is a failure
+            // saying the README *claims* or *counts* something that lives
+            // somewhere else.
+            //
+            // Both spellings of the subject, because a judge evaded the first
+            // version by writing `README.md counts the dialects` where it had
+            // said `the README counts` — the same misdirection in different
+            // words.
+            let attributes = [
+                "claims",
+                "says",
+                "counts",
+                "no longer",
+                "makes no",
+                "has no",
+                "tabulates",
+                "ships",
+            ];
+            if line.contains("README") && attributes.iter().any(|verb| line.contains(verb)) {
+                blaming.push(format!(
+                    "tests/honesty.rs:{} in {name}: {}",
+                    start + offset + 1,
+                    line.trim()
+                ));
+            }
+        }
+    }
+
+    // The floor every other reader in this file has, and this one did not.
+    // Renaming the helper left zero functions examined and the guard reporting
+    // success — a read that finds nothing makes every assertion pass by
+    // having nothing to disagree with, which the module docstring names as the
+    // shape to guard against.
+    assert!(
+        examined >= 8,
+        "only {examined} guards were found reading the documentation set, which is fewer than \
+         this file has \u{2014} the admission test has stopped matching and this guard is now \
+         passing by examining nothing"
+    );
+    assert!(
+        blaming.is_empty(),
+        "these guards read every document and blame the README, which sends a reader to a file \
+         that may not carry the sentence at all: {blaming:#?}"
+    );
+}
+
 /// The settings table in the README names the rows this binary has.
 ///
 /// It named nine of eighteen, and one of the nine was `Task body language` — a
@@ -328,7 +550,7 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
 /// what fixed it, and prose is what would have to go stale again.
 #[test]
 fn the_settings_table_names_every_value_a_closed_row_takes() {
-    let readme = documented();
+    let documents = documented();
     let mut silent: Vec<String> = Vec::new();
     for setting in SETTINGS {
         let answers = setting.answers();
@@ -338,11 +560,11 @@ fn the_settings_table_names_every_value_a_closed_row_takes() {
         }
         let label = setting.label();
         // The row as the table holds it: `| Label | values |`.
-        let Some(row) = readme
+        let Some(row) = documents
             .lines()
             .find(|line| line.starts_with(&format!("| {label} |")))
         else {
-            silent.push(format!("{label}: the README has no row at all"));
+            silent.push(format!("{label}: no document carries that row at all"));
             continue;
         };
         let missing: Vec<&str> = answers
@@ -357,7 +579,7 @@ fn the_settings_table_names_every_value_a_closed_row_takes() {
     }
     assert!(
         silent.is_empty(),
-        "the README's settings table names fewer values than the picker offers, so a value an \
+        "the documented settings table names fewer values than the picker offers, so a value an \
          operator can choose is one they cannot discover:\n  {}",
         silent.join("\n  ")
     );
@@ -365,8 +587,8 @@ fn the_settings_table_names_every_value_a_closed_row_takes() {
 
 #[test]
 fn model_catalog_suggestions_keep_their_honesty_boundary() {
-    let readme = documented();
-    let behavior = readme
+    let documents = documented();
+    let behavior = documents
         .split_once("### Model routing suggestions are agent-specific")
         .expect("the Model routing selector is documented")
         .1
@@ -655,22 +877,22 @@ fn every_setting_the_readme_tabulates_is_one_this_binary_has() {
         .collect();
     assert_eq!(
         tabulated, labels,
-        "the README's settings table is not this binary's rows, in its order"
+        "the configuration reference's settings table is not this binary's rows, in its order"
     );
 }
 
 #[test]
 fn the_number_of_gated_agents_is_the_number_the_readme_claims() {
-    let readme = documented();
+    let documents = documented();
     let gated = estigia::setup::AGENTS
         .iter()
         .filter(|adapter| adapter.can_gate_tools())
         .count();
 
-    if let Some(claimed) = number_before(&readme, "agents of seven") {
+    if let Some(claimed) = number_before(&documents, "agents of seven") {
         assert_eq!(
             gated, claimed,
-            "the README claims {claimed} gated agents and {gated} are gated"
+            "the documents claim {claimed} gated agents and {gated} are gated"
         );
         return;
     }
@@ -678,8 +900,8 @@ fn the_number_of_gated_agents_is_the_number_the_readme_claims() {
     // The other form the claim takes. It is only true while every entry that is
     // not gated is not an agent.
     assert!(
-        readme.contains("every agent Estigia knows"),
-        "the README makes no checkable claim about how many agents are gated"
+        documents.contains("every agent Estigia knows"),
+        "no document makes a checkable claim about how many agents are gated"
     );
     let ungated: Vec<&str> = estigia::setup::AGENTS
         .iter()
@@ -689,25 +911,25 @@ fn the_number_of_gated_agents_is_the_number_the_readme_claims() {
     assert_eq!(
         ungated,
         vec!["agents"],
-        "the README claims every agent is gated, and these are not: {ungated:?}"
+        "the documents claim every agent is gated, and these are not: {ungated:?}"
     );
 
     // The hole this used to have. Satisfying the sentence above ended the check,
     // and the rest of the same sentence went on counting out loud: it said "six
     // of them, in three dialects" while ten were gated in five. A claim that is
     // half-checked reads exactly like one that is checked.
-    let counted = number_before(&readme, "of them, in")
-        .expect("the README counts the gated agents beside the claim that all of them are");
+    let counted = number_before(&documents, "of them, in")
+        .expect("no document counts the gated agents beside the claim that all of them are");
     assert_eq!(
         gated, counted,
-        "the README says {counted} agents are gated and {gated} are"
+        "the documents say {counted} agents are gated and {gated} are"
     );
 
     let dialects = estigia::harness::hook::Dialect::all().len();
-    let claimed = number_before(&readme, "dialects").expect("the README counts the dialects");
+    let claimed = number_before(&documents, "dialects").expect("no document counts the dialects");
     assert_eq!(
         dialects, claimed,
-        "the README claims {claimed} dialects and the code has {dialects}"
+        "the documents claim {claimed} dialects and the code has {dialects}"
     );
 }
 
@@ -716,9 +938,9 @@ fn the_number_of_declared_populations_is_the_number_the_readme_claims() {
     // `tests/guards.rs` checks that every declaration is well formed and still
     // affirmed. Nothing checked that the README's count of them was true, so
     // adding `writing-shell` would have left the prose saying two.
-    let readme = documented();
-    let claimed = number_before(&readme, "`guard:population` comments")
-        .expect("the README counts the declared populations");
+    let documents = documented();
+    let claimed = number_before(&documents, "`guard:population` comments")
+        .expect("no document counts the declared populations");
 
     let mut declared = 0;
     let mut pending = vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")];
@@ -748,15 +970,15 @@ fn the_number_of_declared_populations_is_the_number_the_readme_claims() {
 
     assert_eq!(
         declared, claimed,
-        "the README claims {claimed} declared populations and the source has {declared}"
+        "the documents claim {claimed} declared populations and the source has {declared}"
     );
 }
 
 #[test]
 fn the_number_of_things_doctor_checks_is_the_number_the_readme_claims() {
-    let readme = documented();
-    let claimed = number_before(&readme, "things, not everything")
-        .expect("the README counts doctor's checks");
+    let documents = documented();
+    let claimed = number_before(&documents, "things, not everything")
+        .expect("no document counts doctor's checks");
     // The **kinds**, not the rows. Two of the eleven produce one row per
     // configured agent, so a run on a bare machine reports seven rows and a run
     // on a busy one reports twenty — and the README's count was being measured
@@ -767,7 +989,7 @@ fn the_number_of_things_doctor_checks_is_the_number_the_readme_claims() {
 
     assert_eq!(
         actual, claimed,
-        "the README says `doctor` checks {claimed} things and it checks {actual}"
+        "the documents say `doctor` checks {claimed} things and it checks {actual}"
     );
 
     // And the list is the truth about the command, not a second thing to keep
@@ -799,7 +1021,7 @@ fn every_mechanism_the_readme_names_is_one_the_code_still_uses() {
     // A name that has drifted sends a reader to look for something that is not
     // there — and these are the names somebody greps for when a gate did not
     // fire.
-    let readme = documented();
+    let documents = documented();
     for phrase in [
         "PreToolUse",
         "BeforeTool",
@@ -809,8 +1031,8 @@ fn every_mechanism_the_readme_names_is_one_the_code_still_uses() {
         "pre-push",
     ] {
         assert!(
-            readme.contains(phrase),
-            "the README no longer names `{phrase}`, which the code still uses"
+            documents.contains(phrase),
+            "no document names `{phrase}` any more, which the code still uses"
         );
     }
 }
@@ -1617,7 +1839,7 @@ fn every_name_this_list_declares_is_one_doctor_can_report() {
     for name in estigia::harness::doctor::CHECKS {
         assert!(
             reported.contains(name),
-            "the list declares {name:?} and `doctor` never reports it \u{2014} the README counts \
+            "the list declares {name:?} and `doctor` never reports it \u{2014} the honesty contract counts \
              this list, so a name outliving its check is a number that stops being true"
         );
     }
@@ -2064,19 +2286,24 @@ fn every_list_the_audit_answers_with_is_one_the_binding_names() {
 /// held from here, and it is what the defect needed.
 #[test]
 fn the_number_of_doctor_checks_is_the_same_number_everywhere_it_is_claimed() {
-    let readme = documented();
+    // Both phrases live in `docs/honesty.md`, not the README. The sibling guard
+    // below carried the same wrong file in its messages until a reviewer
+    // measured it there and named this one fifteen lines away as the same
+    // defect; fixing the instance and leaving the shape is what this repository
+    // says not to do.
+    let documents = documented();
     let phrases = ["things, not everything", "is about the past"];
     let claimed: Vec<usize> = phrases
         .iter()
         .map(|phrase| {
-            number_before(&readme, phrase).unwrap_or_else(|| {
-                panic!("the README no longer carries a number before {phrase:?}")
+            number_before(&documents, phrase).unwrap_or_else(|| {
+                panic!("no document carries a number before {phrase:?} any more")
             })
         })
         .collect();
     assert_eq!(
         claimed[0], claimed[1],
-        "the README says {} checks in one entry and {} in the next, three lines apart",
+        "the documents say {} checks in one entry and {} in the next, three lines apart",
         claimed[0], claimed[1]
     );
 }
@@ -2176,7 +2403,7 @@ fn the_payload_names_no_implementation_this_crate_retired() {
 /// `the_handoff_counts_what_the_crate_actually_has` opens by saying *"the
 /// README's counts are crossed against the code above"*. They are not, for the
 /// one a reader meets first: the Configuration section said **"Nine settings,
-/// all typed"** and the crate has eighteen, while the handoff's `18 settings`
+/// all typed"** and the crate had eighteen at the time, while the handoff's `18 settings`
 /// was crossed and correct three files away. The sentence claiming the coverage
 /// was the reason nobody looked.
 ///
@@ -2189,32 +2416,114 @@ fn the_payload_names_no_implementation_this_crate_retired() {
 /// what this names.
 #[test]
 fn the_readme_counts_what_the_crate_actually_has() {
-    let readme = documented();
+    // Named for what it is. Calling it `readme` is what made two messages claim
+    // the README carries a count it does not: most of the sentences below live
+    // somewhere else, and the enumeration that used to stand here miscounted
+    // them twice — once when it was written and again when this loop grew.
+    // No census here now; the messages carry `what`, which says where each one
+    // is without anybody having to keep a tally in prose.
+    let documents = counted();
     for (phrase, actual, what) in [
         (
             "settings, all typed",
             estigia::config::SETTINGS.len(),
-            "settings",
+            "settings, in the second sentence of the configuration reference",
         ),
+        // The same count, in the other sentence that states it. A reviewer
+        // measured that this guard keyed on one phrase only: `docs/configuration.md`
+        // opened with **eighteen** and said **nineteen** nine lines later, through a
+        // change that edited the guarded sentence and not the unguarded one, and
+        // `README.md`'s count could be set to anything at all.
+        // Keyed on a phrase unique to `docs/configuration.md`'s opening line.
+        // A first attempt used the bare `"typed settings"`, which `README.md`
+        // also carries — and `number_before` takes the **first** occurrence over
+        // a concatenation that puts the README first, so the pair guarded the
+        // README twice and the sentence that had actually drifted not at all. A
+        // reviewer measured that by changing the opening line and watching the
+        // suite stay green.
         (
-            "adapters share",
-            8_usize,
+            "typed settings, read from one table",
+            estigia::config::SETTINGS.len(),
+            "settings, in the sentence that opens the configuration reference",
+        ),
+        // And the sentence a reader of the README meets first, which neither
+        // pair above reaches. Three reviewers measured that: every phrase this
+        // test keyed on resolves inside `docs/configuration.md` — `settings, all
+        // typed` at its line 11, `typed settings, read from one table` at its
+        // line 3 — while `README.md` says `typed settings, in` and matched
+        // neither. The README could claim **ninety** settings with the whole
+        // suite green, through a change whose own pull request said this guard
+        // "crosses both sentences and bites on `README.md` too". It did not.
+        //
+        // Keyed on `typed settings, in`, which only the README carries: the
+        // configuration reference ends that phrase with `read from one table`
+        // and `all typed`. `number_before` takes the first occurrence over the
+        // concatenation, so a phrase shared between the two files guards
+        // whichever comes first and leaves the other unheld — the trap this
+        // pair exists to stay out of, and the one the previous repair fell into.
+        (
+            "typed settings, in",
+            estigia::config::SETTINGS.len(),
+            "settings, in the sentence that opens the README's configuration section",
+        ),
+        // The fourth statement of the settings count, and the one that says
+        // `rows` rather than `settings` — so none of the three phrases above
+        // reached it and a reviewer changed it to *ninety* with the whole suite
+        // green. Keyed on its own words.
+        (
+            "rows and `config list` reports",
+            estigia::config::SETTINGS.len(),
+            "rows, in the sentence about what `config list` reports",
+        ),
+        // The changelog states the count in its own words, so no phrase above
+        // reached it and it sat at **eighteen** while the crate held nineteen.
+        // Reaching the file was not enough on its own: widening the reader left
+        // the count unheld, because a guard that reaches a document and keys on
+        // no sentence in it measures nothing.
+        (
+            "typed settings. Reading the table",
+            estigia::config::SETTINGS.len(),
+            "settings, in the changelog's unreleased entry",
+        ),
+        // Keyed on the backticked path, which only `docs/what-it-writes.md`
+        // carries. The bare `adapters share` also matches *"nine of the eleven
+        // adapters share the neutral root"*, and `number_before` takes the
+        // number nearest the phrase — so the pair read **eleven**, the total,
+        // against a count of how many share it. Two sentences, one hook.
+        (
+            "adapters share `~/.agents/skills`",
+            estigia::setup::adapters_on_the_neutral_root(),
             "adapters sharing the neutral root",
         ),
     ] {
-        let claimed = number_before(&readme, phrase).unwrap_or_else(|| {
-            panic!("the README no longer carries a number before {phrase:?}, so the {what} count is unchecked again")
+        // Neither message names a file, and neither counts the pairs. The
+        // sentences below live in several documents and *the README claims* was
+        // wrong for most of them, which sent a reviewer to the README to look
+        // for a drift in the configuration reference.
+        //
+        // The rationale is deliberately not an enumeration. Two versions of it
+        // were: the first miscounted which documents the phrases resolve in, and
+        // the second was left untouched when this loop grew, so it described four
+        // phrases in three documents while six sat under it. A census in a
+        // comment goes stale the next time somebody adds a row, and adding a row
+        // is the ordinary thing that happens here. `what` carries the sentence,
+        // so the failure says where it is without anybody keeping a tally.
+        let claimed = number_before(&documents, phrase).unwrap_or_else(|| {
+            panic!(
+                "no document carries a number before {phrase:?} any more, so the {what} count is \
+                 unchecked again"
+            )
         });
         assert_eq!(
             claimed, actual,
-            "the README claims {claimed} {what} and the crate has {actual}"
+            "the documents claim {claimed} {what}, and the crate has {actual}"
         );
     }
 }
 
 /// Every setting is acted on by something, and the something is named.
 ///
-/// An operator sets eighteen rows. `config list` reports them, the contract
+/// An operator sets nineteen rows. `config list` reports them, the contract
 /// carries them, and `doctor` has a row for the ones a *tracker* declares
 /// nothing for. Nothing asked the plainer question: does anything at all read
 /// this row.
@@ -2222,8 +2531,8 @@ fn the_readme_counts_what_the_crate_actually_has() {
 /// Measured, and five did not. `context.get` is called for exactly three labels —
 /// `project board`, `worktree location` and `Review delegation`, which is what
 /// `READ_BY_THE_TRANSPORT`
-/// says — the gate reads `Irreversible commands`, and the payload's prose names
-/// eleven. That left `Delivery authorisation`, `Transition authorisation`,
+/// says — the gate read `Irreversible commands`, and the payload's prose named
+/// eleven of them then. That left `Delivery authorisation`, `Transition authorisation`,
 /// `Delivery route`, `Merge strategy` and `Model routing` read by nobody: not
 /// the gate, not the transport, and no sentence an agent is given.
 ///

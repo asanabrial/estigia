@@ -4444,6 +4444,36 @@ const GUARD_CAVEATS: &[&str] = &[
     "`git push --no-verify` bypasses it \u{2014} a guard rail working as one.",
 ];
 
+/// The evidence standard the gate acts on, given whether the contract could be read.
+///
+/// A function rather than a branch inside `gate_context`, and the reason is a
+/// finding rather than a preference. Inlined, the only thing holding it was an
+/// assertion that read the constructor's **source text** for `if unreadable` —
+/// which three blind reviewers each defeated while leaving the whole suite green,
+/// by keeping the words and inverting the property. A behavioural test needs
+/// something it can call.
+///
+/// The claim that no behavioural test was possible — that one "would have to move
+/// `HOME`" — was written into this file and into the pull request, and it was
+/// simply wrong: a reviewer wrote the twin in forty lines using helpers this crate
+/// already has. Moving `HOME` on this platform really has destroyed a profile
+/// twice, which is what made the excuse sound like a reason. A true danger is not
+/// a licence to skip the work it does not actually require.
+///
+/// The direction is the whole of it: a contract nobody could read narrows the
+/// grant. Widening on a fault is how a delegated context gets a capability out of
+/// a broken file.
+fn effective_evidence(
+    unreadable: bool,
+    installed: crate::config::Evidence,
+) -> crate::config::Evidence {
+    if unreadable {
+        crate::config::Evidence::Reading
+    } else {
+        installed
+    }
+}
+
 /// Everything the gate needs, or nothing if the harness is not installed.
 fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
     let repo_dir = if cwd.trim().is_empty() {
@@ -4511,6 +4541,7 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
         } else {
             installed.window.min(harness::hook::default_window())
         },
+        evidence: effective_evidence(unreadable, installed.evidence),
         tracker,
         boundaries,
     })
@@ -4916,9 +4947,15 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
     // is the door for a caller that names one; nothing in this tree does yet.
     if let Some(agent) = payload_agent(&parsed) {
         if agent == "review-blind" {
-            if let Some(refusal) =
-                harness::roles::gate(Some(agent), tool, Some(crate::skill::REVIEW_AGENT.contents))
-            {
+            // Rendered with the effective row rather than taken raw: the
+            // definition carries a `{{TOOLS}}` placeholder now, and a gate that
+            // parsed the placeholder would enforce an allowlist naming one
+            // tool called `{{TOOLS}}`, which denies everything.
+            let reviewer = crate::setup::render_reviewer_agent(
+                crate::skill::REVIEW_AGENT.contents,
+                context.evidence,
+            );
+            if let Some(refusal) = harness::roles::gate(Some(agent), tool, Some(&reviewer)) {
                 return report_gate(tool, json, harness::Decision::Deny(Box::new(refusal)));
             }
         } else {

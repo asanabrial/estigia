@@ -22,9 +22,12 @@
 //!
 //! # What is written, and what is not
 //!
-//! Only paths, and only created ones outside the skill tree. The static reviewer
-//! is compared directly with its embedded bytes, so its ownership needs no
-//! second generic digest map.
+//! Only paths, and only created ones outside the skill tree. The reviewer needs no
+//! second generic digest map either, but not for the reason this paragraph gave
+//! until reviewers measured it: it is **not** compared with its embedded bytes.
+//! `setup::reviewer_is_static` accepts a file matching any rendering the
+//! `Evidence standard` row can produce, so ownership rests on that set rather
+//! than on one spelling.
 //!
 //! Two sets of them. The relative names under `root` are the skill's own files.
 //! The absolute ones are what an install created *outside* it: instruction files

@@ -64,6 +64,14 @@ other case — a foreign checkout, an orphan directory, an unreadable ownership 
 Tools with per-checkout indexes or caches get a fresh local instance rather than one copied or
 linked from another checkout.
 
+**Isolation covers every location the run writes, not only its checkout.** Scripts, intermediate
+output, notes and saved measurements go somewhere of this run's own. A rule that binds the checkout
+and says nothing about a shared scratch path has a hole the exact size of however many runs share it:
+measured on a five-judge review panel, one judge's script was overwritten by another's under the same
+generic name and then executed inside a third judge's checkout, while a fourth read the implementing
+run's planning notes through a file it had not written. No checkout rule was broken and two verdicts
+still stopped being independent readings.
+
 Confirm isolation before the first edit and whenever the tree changes unexpectedly. Stop writing and
 renew the claim. A losing run leaves the tree untouched and records where its own work is; the winning
 run adopts useful foreign work instead of deleting it. Editing around an unexplained writer creates a

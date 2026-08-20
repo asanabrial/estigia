@@ -33,7 +33,11 @@ order, and this file does not restate it.
 ## Independent review contexts
 
 Adversarial review is an analyst run over a bounded change. It is repository-read-only, produces
-findings rather than commits, and MUST NOT be performed by the context that wrote the change.
+findings rather than commits, and MUST NOT be performed by the context that wrote the change. On a
+repository whose `Evidence standard` is `measuring` the reviewer also builds, tests and mutates —
+inside the isolated directory its launch hands it and nowhere else. What leaves the repository
+read-only to it is `policies/blind-judges.md` requiring that directory to be outside the claimed
+checkout: a rule the launch obeys, not one the gate enforces.
 
 The runtime decides how to obtain the second context: subagent, teammate, or separate session all
 qualify. If the runtime or operator forbids delegation, use a separate session. Inability to spawn a
@@ -43,8 +47,8 @@ For Claude Code, every setup installs one stable `review-blind` definition with 
 in `single` mode. It is inert unless its launch prompt names an active blind mode, the exact publication
 receipt and the review criteria. The orchestrator passes `Model routing`'s effective `judge` model on
 each launch, and starts that same definition twice for `two blind` or five times for `five blind`,
-concurrently, with the identical target and criteria. Each context is denied repository-writing tools
-and must not delegate or inspect sibling output. Config writes do not mutate this definition. A
+concurrently, with the identical target and criteria. Each context runs on the grant `Evidence
+standard` decides, and must not delegate or inspect sibling output. Config writes do not mutate this definition. A
 definition is a host constraint and a contract, not evidence that the panel was actually instantiated.
 
 `review-blind` is reserved to the operator-owned canonical user definition. Claude's current `Agent`
@@ -54,7 +58,8 @@ reserved filename or frontmatter name, fail closed on unreadable or duplicate ca
 the normalized canonical user text to be the only user-scoped definition with that identity. Setup
 performs the same recursive user-tree preflight before writing. The top-level `agent_type` is the caller;
 only nested `tool_input.subagent_type` is the launch target. An already-running reviewer always receives
-the embedded read-only policy. This does not alter ordinary project-first agent resolution and does not
+the embedded policy — read-only, or read-only plus a shell, as `Evidence standard`
+decides — rather than whatever is on disk. This does not alter ordinary project-first agent resolution and does not
 cover OpenCode launches. Absence of that reserved type is not an absent capability: a host without
 `review-blind` launches the configured panel through its own subagent or teammate mechanism — on
 OpenCode, two or five `Task` contexts in one turn, each with its own directory, no sibling output —

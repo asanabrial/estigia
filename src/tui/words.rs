@@ -379,6 +379,15 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Renewal window", "Ventana de renovación"),
     ("Review protocol", "Protocolo de revisión"),
     ("Blind judges", "Jueces a ciegas"),
+    ("Evidence standard", "Estándar de evidencia"),
+    (
+        "what a verdict here has to be backed by, and so what a reviewer may do",
+        "en qué tiene que apoyarse aquí un veredicto, y por tanto qué puede hacer quien revisa",
+    ),
+    (
+        "`reading`, or `measuring`",
+        "`reading`, o `measuring`",
+    ),
     ("Change size", "Tamaño del cambio"),
     (
         "how many changed lines a pull request aims to stay under",

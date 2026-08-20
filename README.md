@@ -123,8 +123,9 @@ estigia doctor                        # skill, transport, gh, remote, guard — 
 always-loaded instruction file, and the lifecycle hooks that make the authority mechanical rather than
 advisory. `--skill-only` stops before the directive. Estigia knows eleven agents; the hooks go into
 every one with an event able to refuse — ten of them, in five dialects. Every Claude Code setup also
-installs one static read-only `review-blind.md` definition with `model: inherit`, including when `Blind
-judges` is `single`. It is inert unless a launch supplies an active blind mode, exact publication
+installs one inert `review-blind.md` definition, including when `Blind judges` is `single`. Its
+`model` is `inherit`, and its tool grant is what `Evidence standard` decides — read-only under
+`reading`, a shell and nothing else added under `measuring`. It is inert unless a launch supplies an active blind mode, exact publication
 receipt and criteria. The orchestrator passes the effective `judge` model and launches that same
 definition twice or five times; setup never creates numbered judge files. Direct `config set` and
 `config edit` writes do not mutate external definitions.
@@ -343,7 +344,7 @@ What that costs is in `UNIMPLEMENTED`: no resources, no prompts, no sampling, no
 
 ## Configuration
 
-Eighteen typed settings, in [`docs/configuration.md`](docs/configuration.md). Reading the table produces a
+Nineteen typed settings, in [`docs/configuration.md`](docs/configuration.md). Reading the table produces a
 valid configuration or a refusal naming what may be written instead.
 
 ## The ratchet

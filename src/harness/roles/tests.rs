@@ -15,7 +15,17 @@ const BUILDER: &str = "---\n\
 fn install_canonical_reviewer(home: &std::path::Path) {
     let file = home.join(".claude/agents/review-blind.md");
     std::fs::create_dir_all(file.parent().expect("a parent")).expect("the user agents directory");
-    std::fs::write(file, crate::skill::REVIEW_AGENT.contents).expect("the canonical reviewer");
+    // The default rendering, because that is what a default install writes. The
+    // grant is derived from the evidence standard since issue 83, so the raw
+    // asset is a template and no installed file ever holds it.
+    std::fs::write(
+        file,
+        crate::setup::render_reviewer_agent(
+            crate::skill::REVIEW_AGENT.contents,
+            crate::config::Evidence::Reading,
+        ),
+    )
+    .expect("the canonical reviewer");
 }
 
 fn project_reviewer(project: &std::path::Path, relative: &str) -> std::path::PathBuf {
@@ -145,8 +155,14 @@ fn canonical_user_reviewer_must_exist_read_and_match() {
         .expect_err("a changed canonical reviewer launched");
     assert_eq!(changed.code, "reviewer-canonical-unavailable");
 
-    std::fs::write(&canonical, crate::skill::REVIEW_AGENT.contents)
-        .expect("the canonical reviewer is restored");
+    std::fs::write(
+        &canonical,
+        crate::setup::render_reviewer_agent(
+            crate::skill::REVIEW_AGENT.contents,
+            crate::config::Evidence::Reading,
+        ),
+    )
+    .expect("the canonical reviewer is restored");
     authorize_review_blind_launch(project.path(), Some(home.path()))
         .expect("the canonical reviewer with no collision proceeds");
 }
@@ -542,7 +558,20 @@ fn both_dialects_directories_are_searched() {
 /// frontmatter written here would keep passing after somebody widened the real
 /// one, which is the failure this whole module exists to refuse.
 #[test]
-fn a_shipped_planning_phase_cannot_write_to_the_repository() {
+fn a_shipped_planning_phase_gets_the_grant_its_own_work_needs() {
+    for openspec in [false, true] {
+        let config = crate::config::Config {
+            planning: crate::config::Planning::Sdd {
+                openspec,
+                lite: false,
+            },
+            ..crate::config::Config::default()
+        };
+        a_shipped_planning_phase_cannot_write(&config, openspec);
+    }
+}
+
+fn a_shipped_planning_phase_cannot_write(config: &crate::config::Config, openspec: bool) {
     let mut checked = 0;
     for file in crate::skill::PHASE_AGENTS {
         let Some(phase) = file
@@ -552,25 +581,71 @@ fn a_shipped_planning_phase_cannot_write_to_the_repository() {
         else {
             continue;
         };
-        // The installed file carries a resolved list; the payload carries the
-        // placeholder. Substituted with the read-only answer this crate writes
-        // when the artifacts live on the issue, which is the default.
-        let definition = file.contents.replace("{{TOOLS}}", "Read, Grep, Glob");
+        // Rendered by the function that ships, under both answers `Planning`
+        // can give. Substituting one literal here crossed the read-only grant
+        // and left the two wider ones crossed by nothing — including
+        // `Read, Grep, Glob, Write, Edit`, which is what an `openspec` install
+        // actually writes, so the rendering most able to do harm was the one
+        // this test never saw. Two blind judges measured that on issue 83.
+        let definition = crate::setup::render_phase_agent(file.contents, phase, config);
         let declared = declared_policy(&definition).unwrap_or_else(|| {
             panic!("agents/sdd-{phase}.md declares no policy, so the gate would enforce nothing")
         });
 
-        // The three the gate can actually judge. `roles.rs` runs inside
-        // `PreToolUse`, so it is only offered what the matcher wakes it for —
-        // this asserts the reachable half rather than the declared one.
-        for tool in ["Write", "Edit", "Bash"] {
+        // A phase that files an artifact on disk needs to write it; one that
+        // only thinks does not, and `explore` reaches outward instead. This
+        // is the same condition `render_phase_agent` decides by, asserted
+        // from the other side: the grant has to match the work.
+        let writes_artifacts = openspec && matches!(phase, "spec" | "design" | "tasks");
+        let artifact = match writes_artifacts {
+            true => Verdict::Allow,
+            false => Verdict::Deny,
+        };
+        for tool in ["Write", "Edit"] {
+            assert_eq!(
+                declared.verdict(tool),
+                artifact,
+                "sdd-{phase} under openspec={openspec} answers the wrong thing for {tool}, so \
+                 either a planning phase writes where it should not or the one that files an \
+                 artifact cannot file it"
+            );
+        }
+        // No answer buys a shell, and none buys the authority to hand the
+        // work on. `roles.rs` runs inside `PreToolUse`, so this asserts the
+        // reachable half rather than the declared one.
+        for tool in ["Bash", "Agent", "Task"] {
             assert_eq!(
                 declared.verdict(tool),
                 Verdict::Deny,
-                "sdd-{phase} would be allowed to run {tool}, and a planning phase that writes is \
-                 the thing the declared list exists to stop"
+                "sdd-{phase} would be allowed to run {tool}, and a planning phase that runs or \
+                 delegates is the thing the declared list exists to stop"
             );
         }
+        // `explore` is the one phase that reaches outward, and the pair that
+        // lets it is what its grant is *for*. This gate never sees either call
+        // — the module note above says so — which makes the declared list the
+        // whole of that boundary, and is exactly why narrowing it has to redden
+        // something here rather than nowhere.
+        let outward = match phase {
+            "explore" => Verdict::Allow,
+            _ => Verdict::Deny,
+        };
+        for tool in ["WebFetch", "WebSearch"] {
+            assert_eq!(
+                declared.verdict(tool),
+                outward,
+                "sdd-{phase} answers the wrong thing for {tool}, so either a planning phase \
+                 reaches outward where it should not or `explore` cannot do the one thing it \
+                 is for"
+            );
+        }
+        // A rendering that left `{{TOOLS}}` in place parses as an allowlist
+        // naming one tool called `{{TOOLS}}`, which denies everything and
+        // reads as a working gate.
+        assert!(
+            !definition.contains("{{"),
+            "sdd-{phase}: a placeholder survived the rendering"
+        );
         // And it is not an empty allowlist: a phase that could do nothing at all
         // would satisfy the loop above and be useless.
         assert_eq!(
@@ -587,18 +662,59 @@ fn a_shipped_planning_phase_cannot_write_to_the_repository() {
 }
 
 #[test]
-fn the_shipped_blind_reviewer_is_read_only_and_cannot_delegate() {
-    let definition = crate::skill::REVIEW_AGENT.contents;
-    let declared = declared_policy(definition).expect("the reviewer declares a gate policy");
-    for tool in ["Read", "Grep", "Glob"] {
-        assert_eq!(declared.verdict(tool), Verdict::Allow);
-        assert!(gate(Some("review-blind"), tool, Some(definition)).is_none());
+fn the_shipped_blind_reviewer_gets_the_grant_its_standard_decides() {
+    // Both renderings, because the grant is derived from the evidence standard
+    // since issue 83 and the raw asset carries a placeholder rather than a tool
+    // list. Walked over `Evidence::all()` so a third standard cannot be added
+    // without deciding here what its reviewer may do.
+    //
+    // The shape this holds is the whole of what `measuring` buys: **a shell and
+    // nothing else**. Reading stays reading in both, and `Write`, `Edit`,
+    // `Agent` and `Task` are denied whichever answer the operator gave.
+    //
+    // What that is worth, stated exactly, because five other places in this
+    // change said it wrong: it holds the *grant* to four refusals and a shell.
+    // It does not stop a measuring judge editing the target — the shell does
+    // that, and `skill/policies/blind-judges.md` says the directory it is
+    // confined to is the only thing answering for it. So a widening past the
+    // shell is refused here because the isolation rule is written for a judge
+    // with a shell and nothing wider, not because this assertion is what keeps
+    // the target safe.
+    for evidence in crate::config::Evidence::all() {
+        let definition =
+            crate::setup::render_reviewer_agent(crate::skill::REVIEW_AGENT.contents, evidence);
+        let declared = declared_policy(&definition).expect("the reviewer declares a gate policy");
+        for tool in ["Read", "Grep", "Glob"] {
+            assert_eq!(
+                declared.verdict(tool),
+                Verdict::Allow,
+                "{evidence:?} {tool}"
+            );
+            assert!(gate(Some("review-blind"), tool, Some(&definition)).is_none());
+        }
+        let shell = match evidence {
+            crate::config::Evidence::Reading => Verdict::Deny,
+            crate::config::Evidence::Measuring => Verdict::Allow,
+        };
+        assert_eq!(declared.verdict("Bash"), shell, "{evidence:?} Bash");
+        assert_eq!(
+            gate(Some("review-blind"), "Bash", Some(&definition)).is_none(),
+            shell == Verdict::Allow,
+            "{evidence:?}: the gate and the declaration disagree about the shell"
+        );
+        for tool in ["Write", "Edit", "Agent", "Task"] {
+            assert_eq!(declared.verdict(tool), Verdict::Deny, "{evidence:?} {tool}");
+            assert!(gate(Some("review-blind"), tool, Some(&definition)).is_some());
+        }
+        assert!(definition.contains("Do NOT delegate"));
+        // And the placeholder is gone. A rendering that left `{{TOOLS}}` in
+        // place would be parsed as an allowlist naming one tool called
+        // `{{TOOLS}}`, which denies everything and reads as a working gate.
+        assert!(
+            !definition.contains("{{"),
+            "{evidence:?}: a placeholder survived"
+        );
     }
-    for tool in ["Write", "Edit", "Bash", "Agent", "Task"] {
-        assert_eq!(declared.verdict(tool), Verdict::Deny);
-        assert!(gate(Some("review-blind"), tool, Some(definition)).is_some());
-    }
-    assert!(definition.contains("Do NOT delegate"));
 }
 
 /// A moved config home does not remove a sub-agent's allowlist.

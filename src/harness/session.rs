@@ -7,6 +7,7 @@
 //! truth. `bindings/github.md` refuses to cache configuration for exactly that
 //! reason, and the same rule applies here.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -132,6 +133,32 @@ pub struct Run {
     /// contract states the reach rather than the rule.
     #[serde(default)]
     pub reviewed_head: Option<String>,
+    /// The roles this run's delegated contexts actually ran as.
+    ///
+    /// **Observed, not declared.** Claude Code sends `agent_type` on every tool
+    /// event fired inside a sub-agent, so this is what the gate *saw* rather than
+    /// what an orchestrator said it launched.
+    ///
+    /// **Within this run only.** The pointer is keyed on a run id derived from the
+    /// session id, and `SessionEnd` removes it, so nothing outside this session
+    /// ever reads this set and nothing reads it afterwards. Issue 83 asked for a
+    /// record a *later* run could read and this is not that; #91 owns it, and
+    /// `docs/honesty.md` states the gap with the measurement that found it rather
+    /// than leaving this field to imply more than it does.
+    ///
+    /// What it does not carry, stated here because the field invites the wider
+    /// reading: a context refused at the role gate before any call is **not**
+    /// here, because the gate returns at the role check before this point — which
+    /// is the honest shape, since a launch that is refused contributes no judge.
+    /// The reason is the early return and **not** the store’s condition; that
+    /// condition is `saw_new_role || Allow`, and keying it on `Allow` alone is the
+    /// version that failed its own test. Nor is a host that does not send
+    /// `agent_type` visible at all.
+    ///
+    /// A set, so re-entering one role does not grow the file, and ordered, so two
+    /// runs that saw the same roles write the same bytes.
+    #[serde(default)]
+    pub roles: BTreeSet<String>,
 }
 
 impl Run {
@@ -149,6 +176,7 @@ impl Run {
             verified_at: None,
             operation_id: None,
             release_id: None,
+            roles: BTreeSet::new(),
             review_receipt: None,
             reviewed_head: None,
         }

@@ -1302,7 +1302,7 @@ directly; Enter or Space chooses, custom IDs are always available, and
 inherit removes only that target. Shared answers borrow no one agent's
 catalog. The CLI still edits the complete persisted key=model route.
 Only Claude Code currently receives host-routable definitions: selected
-planning phases and one static, inert blind reviewer in every mode.
+planning phases and one inert blind reviewer in every mode.
 OpenCode and every other host keep these values as routing declarations;
 orchestrate, apply, judge, and a visible route are not execution proof.
 

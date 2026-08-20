@@ -1,6 +1,6 @@
 # Configuration
 
-Eighteen typed settings, read from one table. Reading it produces a valid configuration or a refusal
+Nineteen typed settings, read from one table. Reading it produces a valid configuration or a refusal
 that names what may be written instead — there is no third outcome where a misspelled value is
 quietly ignored.
 
@@ -8,7 +8,7 @@ quietly ignored.
 the code has, and every value the picker offers is a value named here. A setting that grew a value
 and did not grow a row fails the suite.
 
-Eighteen settings, all typed. Reading the table produces a valid configuration or a refusal that
+Nineteen settings, all typed. Reading the table produces a valid configuration or a refusal that
 names what may be written instead — never a value guessed at and discovered halfway through a
 checkout.
 
@@ -32,6 +32,7 @@ estigia config set "Merge strategy" squash
 | Renewal window | `default`, or a shorter duration such as `30s` or `1m` |
 | Review protocol | `standard`, or `receipt-driven` (also accepted as `rdd`) |
 | Blind judges | `single`, `two blind`, or `five blind`. `two blind` and `five blind` also route [`blind-judges.md`](../skill/policies/blind-judges.md); **`single` routes no policy document at all**, so what it decides is stated in the contract itself and the table there is a restatement. Issue #18 owns that reachability gap |
+| Evidence standard | `reading`, or `measuring` |
 | Change size | a number of lines, such as `800` |
 | Irreversible commands | `none`, or commands separated by commas |
 | Project board | `none`, or a board as `<owner>/<number>` |
@@ -51,7 +52,7 @@ distinct reviewer but does not make Estigia spawn one. If none is available, the
 exact-receipt handoff and releases ownership. `ask <duration>` records one request deadline in that
 handoff; no scheduler, sleep, deadline reset, retained claim, or expiry-as-verdict behavior is implied.
 
-`single` remains the default. Every Claude Code setup installs one static read-only definition at
+`single` remains the default. Every Claude Code setup installs one inert definition at
 `~/.claude/agents/review-blind.md`, including in single mode. Its file says `model: inherit` and is
 inert unless the launch prompt names an active blind mode, exact publication receipt and criteria.
 The orchestrator supplies `Model routing`'s effective `judge` assignment when it instantiates that
@@ -61,7 +62,11 @@ are required to block or authorize automatic repair. One or two remain suspicion
 and suggestions survive, and ambiguous finding identities never aggregate. Estigia records only one
 aggregate exact-receipt verdict and cannot prove panel size, concurrency, independence, blindness,
 same-finding identity or quorum. `config set` and `config edit` write configuration only; changing
-these rows never rewrites that external definition.
+these rows never rewrites that external definition — including `Evidence standard`, which decides that
+definition's tool grant. **The gate takes the new row at once; the file on disk keeps the old grant until `estigia setup` or
+`estigia sync` next writes it**, so until then the host offers the previous grant while the gate
+enforces the new one. The narrowing direction fails closed at the gate; the widening direction is refused only by the host’s stale `tools:` line, if it enforces one. Nothing reports either, and
+`docs/honesty.md` records it as open.
 
 The `review-blind` role is reserved to that operator-owned user file. Claude's generated `PreToolUse`
 matcher wakes for `Agent` and legacy `Task` launches and, before repository classification, checks an
@@ -100,9 +105,12 @@ Which divergence is a **fault** is decided by the scope each row already has —
 question the rest of the crate asks, not a fourth list:
 
 - **Agent** — `Delivery authorisation`, `Review delegation`, `Transition authorisation`, `Planning`,
-  `Model routing`, `Blind judges`. These are *meant* to differ by agent; `config set --agent <slug> …`
-  is how you set one. Named on the row, and the row stays `ok`: calling a machine broken for a
-  supported configuration names a fault with no way out of it.
+  `Model routing`, `Blind judges`. These are *meant* to differ by agent;
+  `config set --agent <slug> …` is how you set one. Named on the row, and the row stays `ok`:
+  calling a machine broken for a supported configuration names a fault with no way out of it.
+  `Evidence standard` is deliberately **not** among them: the gate reads it to render the reserved
+  reviewer's tool grant, and a per-agent answer would be written, read back, and never consulted by
+  the one gate that acts on it.
 - **Everywhere** — a fact about the repository, the same whichever agent asks. Two roots answering
   differently means one agent is being decided for by a file it does not read: `BROKEN`, and the
   resolution names `estigia config set "<row>" "<value>"` with no `--agent`, which writes it into
@@ -176,8 +184,8 @@ changes land only in its own override. Local, repository, and another agent's va
 into the shared contract, and a private-root agent keeps its answer in its contract without a duplicate
 override. Dynamic host artifacts such as Claude SDD definitions use the effective view, so local and
 per-agent Planning/model rows materialize them and retract them when those rows stop selecting the
-phase. The static reviewer is not configuration output: setup installs it unchanged and launch-time
-routing selects its model. A
+phase. The reviewer is configuration output too, since `Evidence standard` decides its tool
+grant; launch-time routing still selects its model. A
 repository save preserves the rows that document already owns and unions only repository-scoped rows
 changed in that session; one explicit row never widens into every repository setting. Direct agent
 writes read the override once and use that same snapshot for ownership and writing; only `NotFound`
