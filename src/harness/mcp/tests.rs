@@ -3006,6 +3006,9 @@ fn reclaiming_review_leaves_the_pointer_reading_review() {
     std::fs::create_dir_all(&repo).expect("the checkout");
     let context = GateContext {
         integration: crate::config::Integration::Branch,
+        // The narrower row. This poses a reclaim's state stamp and says
+        // nothing about what a delegated role is granted.
+        evidence: crate::config::Evidence::Reading,
         flag: None,
         stand_down: None,
         skill_root: root.path().join("skill"),
