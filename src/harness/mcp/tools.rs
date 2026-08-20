@@ -248,6 +248,12 @@ pub const TOOLS: &[Tool] = &[
                 "The state this run believes the issue is in.",
             )
             .of(crate::config::STATES),
+            Argument::optional(
+                "allow_closed_by_pr",
+                "integer",
+                "Optional pin of the PR that closed this issue after this run published it.",
+            )
+            .counting_from(1),
         ],
         effect: PointerEffect::Renew,
         writes: false,

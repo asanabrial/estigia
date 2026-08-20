@@ -12,6 +12,8 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **`verify_claim` treats this run''s own branch-link auto-close as delivery, not as a stand-down.** After merge, the ordinary renewal answers `closed-by-own-delivery` with the delivering SHA and receipt epoch so `transition --to done` is reachable. A close that is not this run''s receipt is still `issue-not-open`. An unreadable closer listing remains a failed read.
+
 - **OpenCode is told to launch Task judges, not to hand off because review-blind is a Claude type.**
   `skill/references/runtime-notes.md` said the reserved role does not cover OpenCode launches and
   that an absent capability uses the durable handoff. Read together, every OpenCode publication
