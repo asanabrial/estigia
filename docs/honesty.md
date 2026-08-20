@@ -2286,12 +2286,9 @@ suite. Everything else here is prose held by review.
   will disagree with itself, and these two now do. Unifying them is a change to the write gate and
   belongs to its own issue.
 
-  What this does **not** do is repair the claim itself. The `claim` that failed this way cannot be
-  retried: its operation id is reused only when the pointer already names the issue, which is the
-  field the failed call did not write, so every retry mints a fresh key and the transport answers
-  `already-owned-by-different-operation` for as long as the claim is live. `release` with the exact
-  epoch and a fresh `claim` is still the only way to re-swear, and both are tracker writes. That is
-  a different defect with a different fix and it is filed separately.
+  The claim retry that this entry used to leave open is closed: a live marker for this same run is
+  adopted rather than refused, so the pointer can be completed without a second comment. A live
+  marker with no adoptable operation id is still `already-owned-by-different-operation`.
 - **Two checkouts are told apart by resolving them, and by case when they will not resolve.**
   `canonicalize` answers with the real spelling on disk, so a live directory spelled two ways is one
   directory whatever the operator typed. A path this process cannot resolve has only its spelling

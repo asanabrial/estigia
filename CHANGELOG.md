@@ -12,6 +12,13 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **A claim whose write lands and whose readback fails can be retried.**
+  The run already holds the issue on the timeline; the retry used to mint a
+  fresh operation id and refuse `already-owned-by-different-operation`. It now
+  adopts the epoch the timeline names, writes no second comment, reports the
+  horizon already on the marker, and lets the pointer record `issue`, `state`
+  and `repo_dir`. A post-write view failure is a Write, not `read-failed`.
+
 - **A cwd no live claim covers can no longer take a write out of the public gate.**
   payload_cwd still reads the key — the hook may name a checkout this process was not
   launched in — but a directory no holder covers is discarded and the call is answered the
