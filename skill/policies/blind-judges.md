@@ -200,7 +200,7 @@ rewrites those markers — so what a re-review owes is the *reference*:
 | Is `severe` and new to this repair | `--origin introduced` if the repair created it, `--origin exposed` if the repair made an existing defect reachable |
 | Is a warning or a suggestion new to this repair | Nothing. Pricing the cheap observation is the defect this whole mechanism repairs |
 
-The **origin** is refused when absent, which is what keeps a full-target resweep that rediscovers
+The **origin** of a new **severe** finding is refused when absent, which is what keeps a full-target resweep that rediscovers
 or rephrases settled work from arriving indistinguishable from a defect the repair caused. The
 parent reference cannot be refused when absent — a finding that silently declines to name what it
 reassesses is indistinguishable from a new one, and nothing here can tell them apart. What Estigia adjudicates

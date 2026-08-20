@@ -880,13 +880,13 @@ pub struct ReviewFinding {
 /// blocker.
 pub const FINDING_CLASSES: &[&str] = &["severe", "warning", "suggestion"];
 
-/// The two ways a repair can be answerable for a defect that is new to it.
+/// The origin words a repair finding may state for a defect that is new to it.
 ///
 /// `introduced` means the repair created it; `exposed` means the repair made
-/// reachable something that was already wrong. Both are the reviewer's claim and
-/// neither is checkable here — what is checkable is that one of them was stated,
-/// which is what keeps a full-target resweep from arriving as a repair finding
-/// with nothing to say for itself.
+/// reachable something that was already wrong. The vocabulary does not cover a
+/// severe defect that was always present, always reachable, and simply missed
+/// by an earlier round; that gap is in `docs/honesty.md`. Both stated words
+/// are the reviewer's claim and neither is checkable here.
 pub const FINDING_ORIGINS: &[&str] = &["introduced", "exposed"];
 
 impl ReviewFinding {
@@ -993,7 +993,9 @@ impl PublicationLineage {
 /// contributes its epoch, which `publication_epoch` mints from that receipt
 /// entire; the child contributes its head and its target digest, not its base,
 /// pull request or epoch. A reviewer measured that the omitted fields are not
-/// independently reachable — a moved base moves the digest — and nothing reads
+/// independently reachable — a judge drove two different bases through the
+/// built binary to a byte-identical digest, because `manifest_digest` hashes
+/// the tree at `HEAD` and never the base — and nothing reads
 /// this value for a decision, so the bound is legibility rather than a gate.
 /// It names *which*
 /// repair this is; it is not an enumeration of the changed paths and nothing

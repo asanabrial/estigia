@@ -530,9 +530,10 @@ suite. Everything else here is prose held by review.
   reads carefully does; what changed is that the claim is now written down where somebody can argue
   with it, not that anybody did.
 
-  Four narrower limits, each worth stating because the words invite the opposite reading. The
-  first two shipped with the mechanism; the last two were added after reviewers found them, and
-  the lead-in still said *two* until they found that as well:
+  Five narrower limits, each worth stating because the words invite the opposite reading. The
+  first two shipped with the mechanism; the next two were added after reviewers found them, and
+  the lead-in still said *two* until they found that as well. The fifth is the origin vocabulary
+  gap measured on epoch `3ac4a576aa80ec96bc42ce4283e94f93`:
 
   - **A finding identity is agreement by spelling.** Two judges "confirming the same finding" means
     two markers carrying the same `id` string. Estigia does not compare evidence, locations or
@@ -562,6 +563,13 @@ suite. Everything else here is prose held by review.
     Re-recording one judge's finding under a panel name would satisfy the rule and inflate the
     same-identity agreement count at once, and the harness cannot tell that apart from two judges
     agreeing.
+  - **`introduced` and `exposed` do not cover a severe defect that was always present, always
+    reachable, and simply missed.** Against a repair publication a reviewer finding one has no
+    honest origin word: `--parent` names nothing the parent receipt recorded, both origin words
+    are false, recording it as a warning means `rejected` is refused, and recording nothing
+    leaves a real defect unable to block. Measured on epoch `3ac4a576aa80ec96bc42ce4283e94f93`
+    by one of five judges; it did not reach 3-of-5 quorum. Widening the vocabulary is left to
+    its own issue.
 
   **Judge isolation outside the reserved role is unproved, and the asymmetry is measured.** A judge
   launched under the reserved `review-blind` type cannot write at all, and that half is checkable: the
@@ -596,9 +604,10 @@ suite. Everything else here is prose held by review.
   requester exclusion (`claim`, `reclaim`, the review queue), the queue's fail-closed candidate read,
   the verdict's distinctness rule on *both* its halves, its live-claim requirement, the receipt's
   exactness on each write path **before** it writes, the CI-release gate, the comment escaping, the
-  read-side requester filter, and every field-shape validator on the three markers — receipt widths,
+  read-side requester filter, and every field-shape validator on the four markers — receipt widths,
   the handoff's authority, target, timestamps and its blocker/discharger, the verdict's two
-  identities and its outcome vocabulary.
+  identities and its outcome vocabulary, and the finding's class, origin, identity, evidence and
+  impact shape.
 
   That sentence used to say "on the write paths" without the qualifier, and it was false: neutering
   both of `handoff_review`'s receipt checks left the suite green, and a handoff recorded against a
