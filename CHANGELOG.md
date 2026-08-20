@@ -12,6 +12,14 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **A cwd no live claim covers can no longer take a write out of the public gate.**
+  payload_cwd still reads the key — the hook may name a checkout this process was not
+  launched in — but a directory no holder covers is discarded and the call is answered the
+  way the identical payload carrying no cwd is answered. Measured on 2026-08-16: cwd of
+  C:\Windows, nested tool_input.cwd of .., and a write carrying cwd of
+  C:\Windows were outside with exit zero. The doc no longer claims the model cannot
+  compose the key.
+
 - **`verify_claim` treats this run''s own branch-link auto-close as delivery, not as a stand-down.** After merge, the ordinary renewal answers `closed-by-own-delivery` with the delivering SHA and receipt epoch so `transition --to done` is reachable. A close that is not this run''s receipt is still `issue-not-open`. An unreadable closer listing remains a failed read.
 
 - **OpenCode is told to launch Task judges, not to hand off because review-blind is a Claude type.**
@@ -744,3 +752,4 @@ Written down rather than discovered — see *What this instrument does not
 measure* in the README. The gate is installed for one agent, the MCP server has
 never met a real client, nothing has been tested against a live tracker, and the
 two-minute renewal window is a cadence and therefore a gap.
+

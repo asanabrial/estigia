@@ -10874,6 +10874,43 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
         "an ambiguous decision attributed the first recomputed holder: {ambiguous_ledger}"
     );
 
+    // Issue 49: a cwd that names nowhere a claim covers must not answer
+    // outside with exit zero. The three rows measured on 2026-08-16 against
+    // the public verb. The answer has to match the identical payload carrying
+    // no cwd — here, the genuine ambiguity at the shared base.
+    let elsewhere = if cfg!(windows) { "C:\\Windows" } else { "/etc" };
+    for (tool, payload) in [
+        (
+            "bash",
+            serde_json::json!({ "command": "git commit", "cwd": elsewhere }),
+        ),
+        (
+            "bash",
+            serde_json::json!({ "tool_input": { "command": "git commit", "cwd": ".." } }),
+        ),
+        (
+            "write",
+            serde_json::json!({
+                "file_path": worktree_a.join("f.txt"),
+                "cwd": elsewhere,
+            }),
+        ),
+    ] {
+        let _ = std::fs::remove_file(&ledger);
+        let body = serde_json::to_string(&payload).expect("a payload serialises");
+        let (out, error, ok) = run_in(
+            home.path(),
+            base.path(),
+            &["gate", tool, "--input", &body],
+            "",
+        );
+        let said = format!("{out}{error}");
+        assert!(
+            !ok && said.contains("several-runs-hold-this-checkout"),
+            "a `{tool}` payload whose cwd names nowhere a claim covers was answered differently from the same call carrying no cwd: {said}"
+        );
+    }
+
     // And the other door of the same branch, which nothing crossed before this
     // change restructured the line it lives on. A host's `cwd` is authoritative
     // and has to keep reaching the decision: discarding it entirely — always
@@ -10904,6 +10941,34 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
         wrote.contains("opencode-bbbb2222") && !wrote.contains("claude-aaaa1111"),
         "the decision was not attributed to the run that owns the checkout the \
          host named: {wrote}"
+    );
+
+    // The hook may run from anywhere, including a directory that is not the
+    // base and not the worktree. A cwd naming the held checkout still has
+    // to reach that holder; clamping it to the launch directory would drop
+    // the name and re-open the ambiguity.
+    let elsewhere_dir = tempfile::tempdir().expect("a directory the process was not launched in");
+    let _ = std::fs::remove_file(&ledger);
+    let payload = serde_json::json!({
+        "cwd": worktree_a,
+        "command": "git commit",
+    });
+    let payload = serde_json::to_string(&payload).expect("a payload serialises");
+    let (out, error, _) = run_in(
+        home.path(),
+        elsewhere_dir.path(),
+        &["gate", "bash", "--input", &payload],
+        "",
+    );
+    let said = format!("{out}{error}");
+    let wrote = std::fs::read_to_string(&ledger).unwrap_or_default();
+    assert!(
+        !said.contains("several-runs-hold-this-checkout"),
+        "a checkout the host named from outside the launch directory was discarded: {said}"
+    );
+    assert!(
+        wrote.contains("claude-aaaa1111") && !wrote.contains("opencode-bbbb2222"),
+        "a hook-route cwd launched from elsewhere did not reach the holder that owns it: {wrote}"
     );
 }
 
