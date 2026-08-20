@@ -850,13 +850,14 @@ the workflow, it holds the tools.
     because sizing a context to a task is one decision. It is read from the right
     and only when the tail is one of those five words, so a provider-qualified ID
     such as `anthropic/claude-opus-4` stays one model. It renders as an `effort:`
-    frontmatter line into every definition `setup` writes, including the planning
-    phases; an unnamed effort writes **no** line, because the absent field is the
+    frontmatter line into the planning phase definitions and the two workers — not
+    into `review-blind`, whose `model: inherit` is literal and byte-pinned; an
+    unnamed effort writes **no** line, because the absent field is the
     host's own default and writing one down would freeze today's into every
     installation.
   - **The effort is chosen from the same list as the model.** A row that names a
-    model offers `effort: low` through `effort: max` and one entry handing it back
-    to the host; an inherited row offers none, because an effort is a property of
+    model offers `effort: low` through `effort: max`, and once one is set, an entry
+    handing it back to the host; an inherited row offers none, because an effort is a property of
     the model the target runs on. Choosing a different model keeps the effort
     already named. One list, not a second stage — this row already retired an
     Advanced one, and a value reachable only by typing a slash into the custom

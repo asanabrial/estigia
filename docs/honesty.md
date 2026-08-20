@@ -2592,9 +2592,8 @@ suite. Everything else here is prose held by review.
   later one sent them to the directive file, where the configuration block is never written at all.
   Nine of the eleven adapters share the neutral skill root — `adapters_on_the_neutral_root()`
   computes it, and `docs/what-it-writes.md` is held to the same number by a test — so they share one
-  installed contract and one rendered sentence rather than each having their own. An earlier draft of
-  this sentence said eight, which is what nineteen comments in the source say and one of them makes
-  worse by saying eight of *ten*; only the two documents crossed against the function were right. It does
+  installed contract and one rendered sentence rather than each having their own. Comments in the
+  source still say eight; that population is #93's, which carries the search rather than a count. It does
   **not** decide whether any of those definitions exist — `Delegated workers` does, and an earlier
   draft of this change gated the install on a `Model routing` key until two blind judges refused it.
   Nothing here starts a model; what changed is that something reads the row. The other two stay open, declared in

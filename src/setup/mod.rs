@@ -667,7 +667,7 @@ impl AgentAdapter {
 /// What a setting is worth for one adapter.
 ///
 /// Not every row means the same thing for every agent, and the difference is
-/// not cosmetic: three of the sixteen are enforced by the gate, and an agent
+/// not cosmetic: three of the twenty are enforced by the gate, and an agent
 /// Estigia cannot gate gets the row written into its contract and nothing
 /// holding it. Saying so is the whole point — a screen that offers `ask` for an
 /// agent that will never be asked has taught the operator something false about

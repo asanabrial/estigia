@@ -149,7 +149,9 @@ choices. Workflow states are no longer keys at all: they named no context to sta
 and a stored cell holding one is refused rather than read past. A table written before that carried
 one is not stranded — `estigia config set "Model routing" unset` reads it through the same
 keep-what-parses path `config set` already uses for a row an older build accepted, and rewrites the
-cell. `estigia setup` and the interactive screen refuse until it does.
+cell. `estigia setup` and the interactive screen refuse until it does. Run it before anything else on
+that machine: every other `config set` takes the same tolerant read and re-renders the whole table,
+so setting an unrelated row clears the cell instead, and says nothing.
 
 Claude Code and Codex offer three reviewed presets: `balanced`, `performance`, and `economy`.
 Choosing one replaces that agent's complete model route; it never merges with stale custom targets.

@@ -107,8 +107,8 @@ una sección separada con orchestrate, las fases activas, apply y los agentes
 delegados. Cada fila abre directamente el catálogo orientativo del anfitrión;
 Intro o Espacio eligen, siempre se puede escribir un ID personalizado y
 heredar elimina solo ese destino. Donde hay un modelo nombrado, la misma
-lista ofrece también el esfuerzo con el que corre, y una entrada para
-devolvérselo al anfitrión. Las respuestas compartidas no toman prestado el
+lista ofrece también el esfuerzo con el que corre, y una vez puesto, una
+entrada para devolvérselo al anfitrión. Las respuestas compartidas no toman prestado el
 catálogo de ningún agente.
 La CLI conserva la edición de la ruta key=model completa, donde el
 esfuerzo sigue a su modelo tras una barra.

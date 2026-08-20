@@ -1300,8 +1300,8 @@ or board row has a field for what no list can hold. Planning is the last
 primary row. The model targets beneath it open their advisory catalog
 directly; Enter or Space chooses, custom IDs are always available, and
 inherit removes only that target. Where a model is named, the same list
-also offers the effort it runs at, and one entry to hand that back to the
-host. Shared answers borrow no one agent's catalog. The CLI still edits
+also offers the effort it runs at, and once one is set, an entry to hand it
+back to the host. Shared answers borrow no one agent's catalog. The CLI still edits
 the complete persisted key=model route, where an effort follows its
 model after a slash.
 Only Claude Code currently receives host-routable definitions: selected
