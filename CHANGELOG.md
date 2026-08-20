@@ -12,6 +12,13 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **Delivery proof no longer inherits a steered Git environment.**
+  `same_git_repository` and `head_of` used to shell out with this process's
+  `GIT_DIR`, so an unrelated clone could spend another checkout's verdict.
+  Both now use the unsteered invocation the fast-forward proof already built.
+  A test with `GIT_DIR` and `GIT_COMMON_DIR` exported goes red against the
+  previous callers.
+
 - **`reclaim` takes the same optional `state` `claim` already publishes.**
   A takeover of a `review` issue used to stamp the pointer `in-progress`, a
   state nobody named, and the gate then refused every write with
