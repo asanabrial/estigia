@@ -22,10 +22,13 @@ Five invariants, and the tests are named after them:
    an overwritten file and a created one both hold Estigia's text. Delete that record and uninstall
    removes nothing, which is the honest reading of no evidence.
 
-   Claude Code's static `review-blind.md` lives outside the skill tree and uses that same path-only
+   Claude Code's `review-blind.md` lives outside the skill tree and uses that same path-only
    ownership record. Setup recursively parses the user agent tree before writing any setup artifact: a
    second file carrying the reserved YAML identity, an unprovable candidate, an unowned canonical file,
-   or an owned canonical file whose bytes differ from the embedded definition is preserved and refused.
+   or an owned canonical file whose bytes differ from **every rendering Estigia can produce** of the
+   embedded definition is preserved and refused. Every rendering, not the embedded bytes themselves:
+   `Evidence standard` decides that file's tool grant, so the embedded copy is a template and the raw
+   template is exactly what a valid install never holds.
    Setup repeats that decision immediately before the reviewer step. A fresh path is recorded as owned
    before its bytes are written, then a complete staged body is linked into place without replacement;
    a file another actor created after either read is preserved, and ownership added by the losing create
@@ -85,7 +88,7 @@ Five invariants, and the tests are named after them:
    `taking_estigia_out_takes_its_own_state_with_it_and_not_before` and
    `a_live_run_pointer_survives_a_plain_reinstall`.
 
-   A third leave is temporary: eight adapters share `~/.agents/skills`, so taking one of them out
+   A third leave is temporary: nine adapters share `~/.agents/skills`, so taking one of them out
    leaves the skill for the agents that remain and it goes with the last of them. The note that
    accounts for the surviving directory names **only the files no line of the run already named** —
    not everything still on disk. Naming everything was measured, and it said sixteen files were the

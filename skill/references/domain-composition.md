@@ -30,7 +30,8 @@ A domain MUST NOT name a transport, command, state, label implementation, issue 
 section. It supplies domain values and evidence; transport decides how to store and move them.
 Issue Flow MUST NOT name a project domain or decide whether a domain finding is valuable.
 
-Analysis is cheap, parallel, and repository-read-only. Implementation is expensive, serial, and
+Analysis is cheap, parallel, and repository-read-only — a judge measuring under `Evidence standard:
+measuring` writes only in the isolated directory its launch hands it, outside the claimed checkout. Implementation is expensive, serial, and
 risky because it needs isolated repository work, verification, and review. This split lets a runtime
 without filesystem write access remain a first-class analyst while keeping implementation isolated.
 

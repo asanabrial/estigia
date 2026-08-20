@@ -210,12 +210,28 @@ fn the_blind_panel_policy_requires_same_finding_quorum_without_erasing_dissent()
         "a refused or unprovable launch contributes no judge",
         "never silently reduce or serialize the panel",
         "a repository whose evidence standard is mutation",
-        "two judges run outside the reserved role are never pointed at one working directory",
+        "no two judges are ever pointed at one directory",
         "a directory nothing else writes for the duration of its review",
-        // The scoping half, which the isolation phrases above do not reach: reverting
-        // this sentence to the blanket "All judges are read-only" it replaced restores
-        // the contradiction this change exists to remove, and left the suite green.
+        // The scratch half, which the checkout phrases above do not reach. A
+        // five-judge panel that shared one scratch directory lost two verdicts'
+        // independence and nothing in the rule said it could not happen.
+        "every location a judge writes, not only its checkout",
+        // The precondition the whole safety argument rests on, and the one a
+        // judge measured was never stated: a delegated context is judged against
+        // the launching run's claim, so a directory inside the claimed checkout
+        // is one the gate lets a judge write to.
+        "none of those directories is inside the checkout the claim covers",
+        // The scoping half, twice over. Reverting either to the blanket "All
+        // judges are read-only" restores the contradiction this policy exists to
+        // remove — a guarantee stated for a role no measuring panel could use —
+        // and reverting the second to a blanket permission promises a grant
+        // wider than the shell, which is the one widening no evidence standard
+        // makes acceptable — the grant itself is decided by
+        // `render_reviewer_agent`, and what this pin holds is the sentence. What keeps a measuring judge from editing what it is
+        // judging is the isolation rule, pinned by its own phrases below — not
+        // this sentence, which a shell defeats.
         "cannot mutate the target even if its prompt asks it to",
+        "the role gets a shell **and nothing else**",
         "stops and reports it rather than restoring it",
     ] {
         assert!(policy.contains(required), "missing {required:?}");
@@ -235,7 +251,25 @@ fn one_stable_blind_reviewer_definition_is_in_the_agent_manifest_not_the_skill()
     for clause in ["model: inherit", "inert unless", "exact publication"] {
         assert!(reviewer.contains(clause));
     }
-    assert!(!reviewer.contains("{{"));
+    // The asset is a **template** since issue 83, and both halves of that are
+    // asserted. It has to carry the placeholders, or somebody has hardcoded a
+    // grant back into it and the evidence standard decides nothing; and every
+    // rendering has to have none left, because a surviving `{{TOOLS}}` parses as
+    // an allowlist naming one tool of that name — which denies everything and
+    // reads exactly like a gate that is working.
+    for placeholder in ["{{TOOLS}}", "{{DISCIPLINE}}"] {
+        assert!(
+            reviewer.contains(placeholder),
+            "the reviewer asset no longer carries {placeholder}, so the evidence standard cannot reach it"
+        );
+    }
+    for evidence in estigia::config::Evidence::all() {
+        let rendered = estigia::setup::render_reviewer_agent(reviewer, evidence);
+        assert!(
+            !rendered.contains("{{"),
+            "{evidence:?} leaves a placeholder in the installed definition"
+        );
+    }
 
     let mut definitions: Vec<String> = std::fs::read_dir(root.join("skill").join("agents"))
         .expect("skill/agents reads")

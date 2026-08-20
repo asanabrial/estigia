@@ -33,6 +33,58 @@ the workflow, it holds the tools.
   report a sentence about the card. What is true is that the question could not
   be asked, and that is what it now says.
 
+- **The gate records which role each delegated context ran as, for the length of the run.** Claude
+  Code sends `agent_type` on every tool event fired inside a sub-agent, so the run pointer now carries
+  what the gate **saw** rather than what a launch prompt declared, and `SessionStart` reads it back on
+  a resume.
+
+  Recording it on the allow path alone recorded nothing for exactly the contexts this is about — a
+  judge measuring in its own directory makes calls the gate answers `Outside`, not `Allow`, and the
+  reads it makes never reach the gate at all — so the store is keyed on the role set having grown as
+  well. `docs/honesty.md` carries what that still leaves empty.
+
+  **It is not an audit trail.** The pointer is keyed on the session and `SessionEnd` removes it, so no
+  later run reads it; issue #83’s criterion asking for one is split out as #91. One publication
+  claimed otherwise and two judges disproved it through the built binary; `docs/honesty.md` carries
+  the measurement rather than a correction made quietly.
+
+- **A delegated role can now do the work its own contract asks of it, and the judges that measure run
+  as that role instead of outside it.** Estigia shipped six role definitions and **not one of them
+  could run anything**: the reviewer carried a fixed `tools: Read, Grep, Glob`, and the planning
+  phases' substitutions were `Read, Grep, Glob`, `Read, Grep, Glob, Write, Edit` and
+  `Read, Grep, Glob, WebFetch, WebSearch` — two of them strict supersets of the third, and one of
+  those two writes. So *read-only* was never the property all six shared; **no branch produced a
+  shell** was. In a repository whose findings are established by running something — building the change, reddening a test, turning the
+  fix off to see the suite go green — that reviewer cannot check anything, so every panel worth having
+  was launched under a generic type, outside the role and outside every guarantee the contract hangs
+  on it. Measured on issue #36 before this landed: twelve independent judge launches, and the
+  read-only guarantee governed **none** of them.
+
+  A new setting, `Evidence standard`, states the one fact only an operator knows — whether a verdict
+  here is backed by reading or by running — and the reviewer's tool grant is derived from it instead
+  of being a constant. `measuring` adds a shell **and nothing else**: `Write`, `Edit`, `Agent` and
+  `Task` stay refused. That withholds four tools and not the capability — a shell writes, and it
+  launches — so what confines a measuring judge is the isolation rule, not the grant. The default is
+  `reading`, which is what every installation already had, so no upgrade widens anything by itself.
+
+  Two consequences, both deliberate. `reviewer_is_static` used to mean one spelling and now means one
+  of the spellings Estigia can produce, enumerated under an exhaustive match so a third standard
+  cannot be added without arriving there. And the gate carries the row in `GateContext` beside the
+  renewal window, narrowed the same way for the same reason: an unreadable contract answers `reading`,
+  because a fault must not hand out a capability.
+
+  The isolation rule moved with the capability rather than after it. It bound a run's checkout and
+  said nothing about anywhere else a delegated context writes; it now covers every location. That was
+  not a precaution — a five-judge panel sharing one scratch directory had one judge's script
+  overwritten by another's and executed inside a third judge's checkout, while a fourth read the
+  implementing run's planning notes. No checkout rule was broken and two verdicts still stopped being
+  independent readings.
+
+  `docs/honesty.md` carries what this does not buy, and the sharp edge is worth repeating here: a
+  judge that measures writes inside the directory its launch hands it, and giving the role a shell
+  does **not** put its mutations under the gate. What makes them safe is the isolation rule placing
+  that directory outside the claimed checkout — a rule an orchestrator follows. A judge handed a
+  directory inside it is measured against the launching run's claim and allowed.
 - **A discharged human decision is not a verdict.** Returning built work from
   `blocked` to `review` still requires the configured panel against the exact
   latest receipt. Step 7 now routes an unresolved choice about what should be
@@ -276,7 +328,7 @@ the workflow, it holds the tools.
   target and criteria; a severe finding blocks or authorizes automatic repair only when 3-of-5
   independently confirm the same finding. One or two confirmations remain suspicions, ambiguous
   identities do not aggregate, and dissent, warnings and suggestions survive. Every Claude Code setup
-  installs one static read-only `review-blind` definition with `model: inherit`; it remains inert unless
+  installs one inert `review-blind` definition with `model: inherit`; it remains inert unless
   a launch names the active blind mode, exact receipt and criteria. The orchestrator supplies the
   effective `judge` model when it launches that definition twice or five times. Config writes never
   mutate it. Setup refuses an unowned or changed copy before writing other artifacts, and uninstall
@@ -588,7 +640,7 @@ the workflow, it holds the tools.
   else, and a file that held nothing but Estigia's block does not survive as an
   empty husk. JSON keeps the operator's key order; markdown comes back byte for
   byte.
-- Eighteen typed settings. Reading the table produces a valid configuration or a
+- Nineteen typed settings. Reading the table produces a valid configuration or a
   refusal that names what may be written instead.
 - **The installed skill directory is `flow`.** It was `issue-flow`, upstream's
   name, kept so the two could be the same directory. Estigia now installs under
@@ -764,7 +816,7 @@ the workflow, it holds the tools.
 - **A row an agent's own file answers is no longer reported as in force.**
   `config set` read its own write back from the shared table, and what a run
   actually reads is that table with the agent's `estigia.<slug>.md` laid over
-  it — eight adapters share the neutral root, so a row answered there is the row
+  it — nine adapters share the neutral root, so a row answered there is the row
   that arrives. Measured on a real machine: the command answered *Planning is
   now direct*, all three shared tables said `direct`, and `config list` one
   command later said `sdd lite`. It now checks each adapter under that root and

@@ -70,8 +70,16 @@ pub struct SkillFile {
 /// rather than a request. Same names, same host routing, and the list is true.
 ///
 /// The five SDD definitions substitute `{{MODEL}}` and `{{TOOLS}}` from planning
-/// configuration. The reviewer is a separate static asset; model selection is
-/// supplied by the orchestrator when it launches a panel instance.
+/// configuration. **The reviewer is a template too**, since the evidence
+/// standard decides its grant: `{{TOOLS}}` and `{{DISCIPLINE}}` are substituted
+/// from the `Evidence standard` row, so what installs is one of the renderings
+/// `Evidence::all()` produces rather than the embedded bytes themselves. Model
+/// selection is still the orchestrator’s when it launches a panel instance.
+///
+/// This paragraph said *a separate static asset* until three reviewers found it.
+/// It is the one place that states which embedded definitions are templates, and
+/// believing it is what produced this branch’s own migration break: a repair
+/// that treats the reviewer as a fixed asset writes bytes no installation has.
 const SDD_EXPLORE: SkillFile = SkillFile {
     path: "agents/sdd-explore.md",
     contents: include_str!("../skill/agents/sdd-explore.md"),
@@ -93,7 +101,13 @@ const SDD_TASKS: SkillFile = SkillFile {
     contents: include_str!("../skill/agents/sdd-tasks.md"),
 };
 
-/// The one static blind-review definition installed for Claude Code.
+/// The blind-review definition installed for Claude Code, as a template.
+///
+/// Rendered through the reviewer renderer before it is written, and accepted on
+/// read when it matches **any** rendering `Evidence::all()` produces — not
+/// these bytes. Called *static* here until reviewers measured otherwise; the word
+/// is kept out deliberately, because it is what a repair reads before deciding
+/// whether comparing against `contents` is sound.
 pub const REVIEW_AGENT: SkillFile = SkillFile {
     path: "agents/review-blind.md",
     contents: include_str!("../skill/agents/review-blind.md"),

@@ -1369,6 +1369,36 @@ fn codes_named_by_a_code_method(source: &str) -> Vec<String> {
     codes
 }
 
+/// A contract nobody could read narrows the reviewer's grant, measured.
+///
+/// This replaces an assertion that read `gate_context`'s **source** for the words
+/// `if unreadable`. Three blind reviewers each defeated that one independently —
+/// `if unreadable && false`, a second guard bound to `false`, and a `let narrow`
+/// that swapped the arms — every time with the whole suite green. A guard that a
+/// reader can satisfy while the property is false is not a guard.
+///
+/// It was written that way on a stated excuse: that a behavioural twin would have
+/// to move `HOME`, and moving `HOME` on this platform has destroyed a profile
+/// twice. The danger is real and the excuse was not — the narrowing is a pure
+/// function of two values, and nothing about testing it touches a home directory.
+#[test]
+fn an_unreadable_contract_narrows_the_reviewers_grant() {
+    use crate::config::Evidence;
+
+    for installed in Evidence::all() {
+        assert_eq!(
+            effective_evidence(true, installed),
+            Evidence::Reading,
+            "{installed:?}: a contract that could not be read handed out the wider grant"
+        );
+        assert_eq!(
+            effective_evidence(false, installed),
+            installed,
+            "{installed:?}: a readable contract was not believed"
+        );
+    }
+}
+
 /// The first string literal after each `Refusal::not_started(` or `code:`.
 fn codes_in(source: &str) -> Vec<String> {
     let mut codes = Vec::new();
@@ -1777,9 +1807,22 @@ fn a_contract_that_will_not_parse_does_not_hand_out_what_it_could_not_grant() {
         "a zero window still let a write ride an answer the tracker gave earlier"
     );
 
-    // And the wiring, structurally: this process reads the real home, so a test
-    // cannot hand `gate_context` a contract of its own. What it *can* do is
-    // hold the file to the rule.
+    // And the wiring, structurally — which is the weaker half and now says so.
+    //
+    // The reason once written here was that this process reads the real home, so
+    // a test cannot hand `gate_context` a contract of its own. That is **false**,
+    // and issue 83 paid for believing it: the neighbouring `evidence` row carried
+    // the same excuse, three blind reviewers each defeated the source-text guard
+    // it justified while the suite stayed green, and the crossing that replaced it
+    // drives the binary against a throwaway home — which `tests/pipe.rs` already
+    // does routinely, in most of its tests. This said *sixteen* until a reviewer
+    // counted, and the correction then said *an order of magnitude* until another
+    // one did. The pattern being ordinary is what carries the argument; a number
+    // is not, and two of them in a row got it wrong.
+    //
+    // This row has not been moved yet. Saying so is better than repeating the
+    // excuse, and `the_reserved_reviewer_grant_is_the_same_through_both_doors` is
+    // the shape to copy when somebody does.
     let source = code_of(include_str!("mod.rs"));
     assert!(
         source.contains("window: if unreadable {"),
@@ -2029,6 +2072,11 @@ fn every_setting_the_gate_reads_is_one_that_cannot_vary_by_agent() {
         Setting::Window,
         Setting::Tracker,
         Setting::Boundaries,
+        // Arrived with issue 83, and this test is what said it had to be here:
+        // the gate reads it to render the reserved reviewer's tool grant, and a
+        // per-agent answer to it would be written, read back, and never
+        // consulted by the one gate that acts on it.
+        Setting::Evidence,
     ] {
         assert!(
             EVERYWHERE_SETTINGS.contains(&setting),
@@ -2049,7 +2097,7 @@ fn every_setting_the_gate_reads_is_one_that_cannot_vary_by_agent() {
     let end = body.find("\n}\n").unwrap_or(body.len());
     assert_eq!(
         body[..end].matches("installed.").count(),
-        4,
+        5,
         "the gate reads a different number of settings than this test names, \
          and every one of them has to be repository-wide"
     );
@@ -3143,12 +3191,12 @@ fn a_row_an_agents_own_file_answers_is_not_reported_as_in_force() {
 }
 
 #[test]
-fn config_writes_never_mutate_the_static_reviewer() {
+fn config_writes_never_mutate_the_installed_reviewer() {
     let (home, options) = sandbox();
     let adapter = crate::setup::find_agent("claude-code").expect("Claude Code is an adapter");
     crate::setup::setup(adapter, &Config::default(), &options).expect("setup runs");
     let reviewer = home.path().join(".claude/agents/review-blind.md");
-    let before = fs::read(&reviewer).expect("the static reviewer reads");
+    let before = fs::read(&reviewer).expect("the installed reviewer reads");
 
     super::config_set(
         "Model routing",

@@ -19,7 +19,8 @@ a reader six months from now will want.
 ## The tool list above is enforced, not requested
 
 Estigia reads this file at the gate and refuses a call outside it — but only for the tools the
-hook is woken for: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Update` and `Bash`. A `Read`, a
+hook is woken for: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Update`, `Bash`, `Agent`
+and `Task`. A `Read`, a
 `Grep` or a `WebFetch` never reaches the gate at all, so for those the list is convention. The
 half that binds is the half that writes, and for a planning phase that is the half that matters.
 

@@ -27,7 +27,7 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::config::{CONFIG_FENCE, Config, ModelRouting};
+use crate::config::{CONFIG_FENCE, Config, Evidence, ModelRouting};
 use crate::fence::Fence;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use crate::paths;
@@ -311,6 +311,24 @@ pub enum ModelCatalogSource {
     OpenCode,
     /// No verified catalog exists; custom IDs remain available.
     None,
+}
+
+/// How many adapters take the agent-neutral skills root.
+///
+/// Derived, because it was not. Two documents and one test each carried the
+/// number by hand and said **eight** while the table held nine — a reviewer
+/// widened a count guard to reach the changelog and the disagreement fell out.
+/// Two, not three: an earlier version of this comment counted `README.md`,
+/// which carries no *neutral-root* count — it counts the adapters themselves,
+/// at eleven — and a judge measured that after the register had already
+/// withdrawn the same claim. A second judge then measured the correction, which
+/// had turned a false inclusion into a false absolute. A hand-spelled count agrees with the table only until somebody adds
+/// a row, and adding a row is the ordinary thing that happens here.
+pub fn adapters_on_the_neutral_root() -> usize {
+    AGENTS
+        .iter()
+        .filter(|adapter| matches!(adapter.skills, SkillsRoot::Neutral))
+        .count()
 }
 
 /// Every agent adapter, in the order `--all` walks them.
@@ -753,7 +771,7 @@ pub enum ActionKind {
     Plugin,
     /// One SDD planning phase, as a sub-agent definition the host routes to.
     PhaseAgent,
-    /// The one static blind-review definition Claude Code routes to.
+    /// The one blind-review definition Claude Code routes to, as a template.
     AgentDefinition,
     /// One adapter's configuration inside a shared skill root.
     AgentConfiguration,
@@ -1316,7 +1334,7 @@ fn paths_in(adapter: &AgentAdapter, environment: &Environment) -> AgentPaths {
 /// artifact behind need to write it, so they get `Write` and `Edit` and the two
 /// that only think do not. A single fixed list would have to be the wider one,
 /// which would hand `explore` a write it never needs.
-fn render_phase_agent(template: &str, phase: &str, config: &Config) -> String {
+pub fn render_phase_agent(template: &str, phase: &str, config: &Config) -> String {
     let model = config.models.for_phase(phase).unwrap_or("inherit");
     let writes_artifacts = matches!(
         config.planning,
@@ -1365,8 +1383,79 @@ fn reviewer_target(paths: &AgentPaths) -> Option<PathBuf> {
     Some(paths.agents_root.as_ref()?.join(name))
 }
 
+/// The reviewer definition with this repository's evidence standard filled in.
+///
+/// The grant is derived rather than fixed, for the reason
+/// [`crate::config::Evidence`] gives: a constant cannot know whether a verdict
+/// here is established by reading the change or by running something against it,
+/// and in a repository whose answer is the second, a read-only judge cannot check
+/// the sentences its own rules make load-bearing.
+///
+/// The discipline paragraph moves with the grant, because a capability handed
+/// over without the rule that bounds it is worse than not handing it over: a
+/// judge that may mutate and has not been told where is two writers of one tree
+/// the moment there is a second judge.
+pub fn render_reviewer_agent(template: &str, evidence: Evidence) -> String {
+    let (tools, discipline) = match evidence {
+        // What ships by default, and the paragraph is reproduced **exactly** as
+        // every build before this one wrote it — same wrapping, same sentence
+        // order, the closing sentence in the same paragraph rather than a new
+        // one. That is not tidiness. `reviewer_is_static` compares bytes, so a
+        // rendering that merely says the same thing differently makes every
+        // installed copy foreign: a blind reviewer of this change measured that
+        // an existing install then refuses every judge launch, `setup` refuses
+        // too, and `uninstall` followed by `setup` leaves the file unowned and
+        // unrecoverable — with the only action that works named by no refusal
+        // and no document. `the_default_rendering_is_the_bytes_already_installed`
+        // pins it.
+        Evidence::Reading => (
+            "Read, Grep, Glob",
+            "Remain read-only. Do NOT edit files, run a shell, change tracker state, record the aggregate verdict,\n\
+             or repair a finding. Return findings to the orchestrator with severity, precise evidence, and a stable\n\
+             identity based on the affected behavior and location.",
+        ),
+        // A shell, because a finding established by running something cannot be
+        // established without running it — and the isolation rule in the same
+        // breath, because the capability alone is the concurrent-writer defect.
+        // The grant does not stop a judge rewriting the target; the directory it
+        // is confined to does, and `docs/honesty.md` says exactly that.
+        Evidence::Measuring => (
+            "Read, Grep, Glob, Bash",
+            "A finding here is established by running something, so you may build, test and mutate\n\
+             — inside the directory this launch hands you and nowhere else. That directory\n\
+             is yours alone for the duration: not a sibling judge's, not the orchestrator's,\n\
+             not another run's, and outside the checkout under claim. If you find yourself\n\
+             inside one, stop and say so rather than measuring there: a write inside it is\n\
+             judged against the claim of the run that launched you, and allowed.\n\
+             Restore every mutation and confirm the tree is clean before you report.\n\
+ If it is already dirty when you arrive, stop and say so rather than\n\
+             restoring it — whatever made it dirty was somebody's measurement, and repairing\n\
+             it destroys theirs. Still do NOT change tracker state, record the aggregate\n\
+             verdict, or repair a finding. Return findings to the orchestrator with severity,\n\
+             precise evidence, and a stable identity based on the affected behavior and\n\
+             location.",
+        ),
+    };
+    template
+        .replace("{{TOOLS}}", tools)
+        .replace("{{DISCIPLINE}}", discipline)
+}
+
+/// Whether the installed reviewer is one Estigia authored.
+///
+/// It used to mean *one* spelling, and could, because the definition was a
+/// constant. With the grant derived it means *one of the spellings Estigia can
+/// produce*, enumerated over [`Evidence::all`] under that type's own exhaustive
+/// match — so a third standard cannot be added without arriving here. Arriving
+/// is not being returned: the arm can be widened with the list left short, and
+/// then this rejects the rendering setup itself writes. What keeps it a proof
+/// rather than a guess is that pairing with the acceptance test, not the
+/// compiler alone.
 pub(crate) fn reviewer_is_static(existing: &str) -> bool {
-    existing == as_the_file_was(Some(existing), skill::REVIEW_AGENT.contents)
+    Evidence::all().into_iter().any(|evidence| {
+        let rendered = render_reviewer_agent(skill::REVIEW_AGENT.contents, evidence);
+        existing == as_the_file_was(Some(existing), &rendered)
+    })
 }
 
 fn validate_reviewer_definition(paths: &AgentPaths) -> Result<()> {
@@ -1409,7 +1498,7 @@ fn validate_reviewer_definition(paths: &AgentPaths) -> Result<()> {
         return Err(reviewer_definition_refusal(
             ReviewerDefinitionCode::Changed,
             &target,
-            "was created by Estigia but no longer matches its static definition",
+            "was created by Estigia but matches no rendering of its definition",
         )
         .into());
     }
@@ -1900,20 +1989,22 @@ fn setup_into_with_skill(
                 });
             }
         }
+        // One rendering, handed to the write and to the record of what that
+        // write will leave behind. This rendered twice from the same row, and
+        // no test crossed the second: narrowing the `pending` copy alone left
+        // the whole suite green, which two blind judges measured independently.
+        // The fix is the one this repository prefers — the copy is gone rather
+        // than guarded, so the two cannot disagree at all.
+        let desired = render_reviewer_agent(skill::REVIEW_AGENT.contents, effective.evidence);
         actions.push(write_step!(write_reviewer_definition(
             &paths.skill_root,
             &target,
             existing.as_deref(),
             options.dry_run,
             ownership_added,
+            &desired,
         )));
-        pending.insert(
-            target,
-            Some(as_the_file_was(
-                existing.as_deref(),
-                skill::REVIEW_AGENT.contents,
-            )),
-        );
+        pending.insert(target, Some(as_the_file_was(existing.as_deref(), &desired)));
     }
 
     // The planning phases, as sub-agent definitions the host routes to.
@@ -2161,7 +2252,7 @@ pub fn uninstall_from(
         None => None,
     };
 
-    // The static reviewer is decided and removed before the skill ledger that
+    // The reviewer is decided and removed before the skill ledger that
     // proves ownership. Changed text is the operator's work: keep it and
     // relinquish the path. Line-ending and final-newline shape are normalized;
     // only a completed deletion permits ownership to be forgotten.
@@ -2598,12 +2689,13 @@ fn write_reviewer_definition(
     existing: Option<&str>,
     dry_run: bool,
     ownership_added: bool,
+    desired: &str,
 ) -> Result<SetupAction> {
     if existing.is_some() || dry_run {
         return write_file(
             path,
             existing,
-            skill::REVIEW_AGENT.contents,
+            desired,
             ActionKind::AgentDefinition,
             dry_run,
         );
@@ -2617,7 +2709,7 @@ fn write_reviewer_definition(
         .parent()
         .with_context(|| format!("{} has no parent directory", path.display()))?;
     fs::create_dir_all(parent).with_context(|| format!("create directory {}", parent.display()))?;
-    match paths::create_atomically(path, skill::REVIEW_AGENT.contents) {
+    match paths::create_atomically(path, desired) {
         Ok(()) => Ok(SetupAction {
             kind: ActionKind::AgentDefinition,
             path: path.to_owned(),
