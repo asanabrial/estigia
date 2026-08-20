@@ -4292,8 +4292,11 @@ pub fn converge_ownership_projection(
 /// What a claim attempt decided, before anything is written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Attempt {
-    /// This operation already wrote its claim; report it rather than write again.
-    AlreadyWritten,
+    /// This run already holds the issue. Adopt that epoch rather than write again.
+    AlreadyWritten {
+        /// The operation id on the live marker.
+        operation_id: String,
+    },
     /// Nothing stands in the way: write the claim.
     Write,
 }
@@ -4307,12 +4310,13 @@ pub enum Attempt {
 ///   expired claim is on the timeline. Claiming over it would erase a takeover
 ///   that should have been declared; `reclaim` is the operation that says so out
 ///   loud.
-/// - **`already-owned-by-different-operation`** — this run already holds it under
-///   another operation id. Writing a second acquisition would make one run
-///   appear twice and give it two epochs to be released from.
+/// - **`already-owned-by-different-operation`** — this run already holds it, but
+///   the live marker has no adoptable operation id. A second acquisition would
+///   make one run appear twice. A live marker that *does* name an epoch is not
+///   this refusal: it is [`Attempt::AlreadyWritten`].
 /// - and when neither applies, the horizon still has to be **ahead of now**,
 ///   because a claim whose deadline has passed is stale the moment it lands.
-pub fn may_claim(before: &ownership::Holding, run_id: &str) -> Result<(), Failure> {
+pub fn may_claim(before: &ownership::Holding, run_id: &str) -> Result<Attempt, Failure> {
     let foreign_stale: Vec<String> = {
         let mut names: Vec<String> = before
             .stale
@@ -4330,13 +4334,25 @@ pub fn may_claim(before: &ownership::Holding, run_id: &str) -> Result<(), Failur
         })));
     }
     if let Some(mine) = before.live.iter().find(|event| event.run_id == run_id) {
+        // A claim that finds this same run already holding this issue is a
+        // renewal whose key was lost, not a conflict. The write landed; the
+        // pointer recorded nothing; the retry minted a fresh key. Measured
+        // 2026-08-17 during a GitHub outage, five times in one session.
+        // Adopting writes no second comment and lets Swear complete the pointer.
+        if let Some(operation_id) = mine
+            .operation_id
+            .clone()
+            .filter(|id| ownership::is_operation_id(id))
+        {
+            return Ok(Attempt::AlreadyWritten { operation_id });
+        }
         return Err(Failure::Stop(serde_json::json!({
             "ok": false,
             "reason": "already-owned-by-different-operation",
             "operation_id": mine.operation_id,
         })));
     }
-    Ok(())
+    Ok(Attempt::Write)
 }
 
 /// How a claim's adjudication ended, once its event is on the timeline.
@@ -4430,7 +4446,7 @@ pub struct Acquisition<'a> {
 /// answer. A claim is not won by posting; it is won by being the earliest live
 /// acquisition once everybody has posted.
 pub fn claim(context: &Context, what: &Acquisition<'_>) -> Result<serde_json::Value, Failure> {
-    let operation_id = require_operation_id(Some(what.operation_id))?;
+    let mut operation_id = require_operation_id(Some(what.operation_id))?;
     require_horizon(what.horizon, None)?;
 
     let read = |fields: &str| -> Result<serde_json::Value, Failure> {
@@ -4453,97 +4469,127 @@ pub fn claim(context: &Context, what: &Acquisition<'_>) -> Result<serde_json::Va
     ];
     let existing = operation_marker(&comments, &operation_id, "claim", &expected)?;
 
+    let mut reused = existing.is_some();
+    let mut wrote = false;
     if existing.is_none() {
-        // Ahead of *now*, not merely well formed: a claim whose deadline has
-        // already passed is stale the moment it lands.
-        require_horizon(what.horizon, Some(what.now))?;
-        may_claim(&holding(&comments, what.now), what.run_id)?;
+        match may_claim(&holding(&comments, what.now), what.run_id)? {
+            Attempt::AlreadyWritten {
+                operation_id: adopted,
+            } => {
+                operation_id = adopted;
+                reused = true;
+                reject_operation_kind_conflict(&comments, &operation_id, &["claim", "standdown"])?;
+                let adopted_expected = [("run-id", what.run_id), ("runtime", what.runtime)];
+                if operation_marker(&comments, &operation_id, "claim", &adopted_expected)?.is_none()
+                {
+                    return Err(Failure::Write(
+                        "claim operation is not visible; retry with the same operation ID"
+                            .to_owned(),
+                    ));
+                }
+            }
+            Attempt::Write => {
+                // Ahead of *now*, not merely well formed: a claim whose deadline has
+                // already passed is stale the moment it lands.
+                require_horizon(what.horizon, Some(what.now))?;
+                wrote = true;
 
-        super::run(
-            &[
-                "gh",
-                "label",
-                "create",
-                &format!("dev:{}", what.runtime),
-                "--color",
-                "bfd4f2",
-                "--force",
-            ],
-            Some(&context.repo_dir),
-            super::How::tolerated(),
-        )?;
+                super::run(
+                    &[
+                        "gh",
+                        "label",
+                        "create",
+                        &format!("dev:{}", what.runtime),
+                        "--color",
+                        "bfd4f2",
+                        "--force",
+                    ],
+                    Some(&context.repo_dir),
+                    super::How::tolerated(),
+                )?;
 
-        let marker = super::markers::render(
-            "claim",
-            &[
-                ("run-id", what.run_id),
-                ("runtime", what.runtime),
-                ("horizon", what.horizon),
-                ("op-id", &operation_id),
-            ],
-        )
-        .ok_or_else(|| {
-            Failure::Stop(serde_json::json!({ "ok": false, "reason": "invalid-marker-attribute" }))
-        })?;
-        let body = format!(
-            "Claimed by {}, expect to report by {}.
+                let marker = super::markers::render(
+                    "claim",
+                    &[
+                        ("run-id", what.run_id),
+                        ("runtime", what.runtime),
+                        ("horizon", what.horizon),
+                        ("op-id", &operation_id),
+                    ],
+                )
+                .ok_or_else(|| {
+                    Failure::Stop(
+                        serde_json::json!({ "ok": false, "reason": "invalid-marker-attribute" }),
+                    )
+                })?;
+                let body = format!(
+                    "Claimed by {}, expect to report by {}.
 
 {marker}
 ",
-            what.run_id, what.horizon
-        );
-        let staged = stage(&body, &format!("claim-{}", what.issue))?;
-        let answer = super::run(
-            &[
-                "gh",
-                "issue",
-                "comment",
-                &what.issue.to_string(),
-                "--body-file",
-                &staged,
-            ],
-            Some(&context.repo_dir),
-            super::How::write(),
-        );
-        let _ = std::fs::remove_file(&staged);
-        answer?;
+                    what.run_id, what.horizon
+                );
+                let staged = stage(&body, &format!("claim-{}", what.issue))?;
+                let answer = super::run(
+                    &[
+                        "gh",
+                        "issue",
+                        "comment",
+                        &what.issue.to_string(),
+                        "--body-file",
+                        &staged,
+                    ],
+                    Some(&context.repo_dir),
+                    super::How::write(),
+                );
+                let _ = std::fs::remove_file(&staged);
+                answer?;
 
-        // Wait for it to become visible **without writing again**: the comment
-        // has landed, and posting a second one because the tracker had not
-        // caught up is how one claim becomes two.
-        let mut seen = Vec::new();
-        for _ in 0..VISIBILITY_ATTEMPTS {
-            let observed = read(FIELDS).ok();
-            let visible = observed.as_ref().is_some_and(|data| {
-                operation_marker(&comments_of(data), &operation_id, "claim", &expected)
-                    .is_ok_and(|found| found.is_some())
-            });
-            seen.push(observed);
-            if visible {
-                break;
+                // Wait for it to become visible **without writing again**: the comment
+                // has landed, and posting a second one because the tracker had not
+                // caught up is how one claim becomes two.
+                let mut seen = Vec::new();
+                for _ in 0..VISIBILITY_ATTEMPTS {
+                    let observed = read(FIELDS).ok();
+                    let visible = observed.as_ref().is_some_and(|data| {
+                        operation_marker(&comments_of(data), &operation_id, "claim", &expected)
+                            .is_ok_and(|found| found.is_some())
+                    });
+                    seen.push(observed);
+                    if visible {
+                        break;
+                    }
+                }
+                if wait_for(
+                    &seen,
+                    |data| {
+                        operation_marker(&comments_of(data), &operation_id, "claim", &expected)
+                            .is_ok_and(|found| found.is_some())
+                    },
+                    1,
+                )
+                .is_none()
+                {
+                    // Ambiguous, never a stop: the comment may well have landed and
+                    // simply not be visible yet.
+                    return Err(Failure::Write(
+                        "claim operation is not visible; retry with the same operation ID"
+                            .to_owned(),
+                    ));
+                }
             }
-        }
-        if wait_for(
-            &seen,
-            |data| {
-                operation_marker(&comments_of(data), &operation_id, "claim", &expected)
-                    .is_ok_and(|found| found.is_some())
-            },
-            1,
-        )
-        .is_none()
-        {
-            // Ambiguous, never a stop: the comment may well have landed and
-            // simply not be visible yet.
-            return Err(Failure::Write(
-                "claim operation is not visible; retry with the same operation ID".to_owned(),
-            ));
         }
     }
 
-    let latest = read(FIELDS)?;
+    let latest = match read(FIELDS) {
+        Ok(data) => data,
+        Err(Failure::Read(detail)) if wrote => {
+            return Err(Failure::Write(detail));
+        }
+        Err(error) => return Err(error),
+    };
     let after = holding(&comments_of(&latest), what.now);
-    let mut answer = adjudicate(&after, &operation_id, what.run_id, existing.is_some())?;
+    let mut answer = adjudicate(&after, &operation_id, what.run_id, reused)?;
 
     // The projection, and not one step earlier: `adjudicate` is what says this
     // run holds the issue, and projecting for a run that lost the race would
