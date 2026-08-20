@@ -685,7 +685,7 @@ pub(crate) fn pick_item(nodes: &[serde_json::Value], issue: u64, home: &str) -> 
             .and_then(|repository| repository.get("nameWithOwner"))
             .and_then(serde_json::Value::as_str)
             .unwrap_or("");
-        if belongs == home {
+        if belongs.is_empty() || belongs == home {
             ours = Some(text(node, "id"));
         } else {
             foreign = Some(if belongs.is_empty() {

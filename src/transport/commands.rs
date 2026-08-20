@@ -594,7 +594,7 @@ pub fn create(
         context,
         use_cache,
     );
-    let mirror = board.set_status(number, state, &board_home(context)?);
+    let mirror = board.set_status(number, state, &if board.enabled { board_home(context).unwrap_or_default() } else { String::new() });
     if foreign_board_item(&mirror) {
         return Err(Failure::Stop(mirror));
     }
@@ -635,7 +635,7 @@ pub fn transition(
 ) -> Result<serde_json::Value, Failure> {
     let spec = context.get("project board").unwrap_or_default().to_owned();
     let mut board = super::board::Board::parse(&spec, context, use_cache);
-    let mirror = board.set_status(issue, to, &board_home(context)?);
+    let mirror = board.set_status(issue, to, &if board.enabled { board_home(context).unwrap_or_default() } else { String::new() });
     if foreign_board_item(&mirror) {
         return Err(Failure::Stop(mirror));
     }
