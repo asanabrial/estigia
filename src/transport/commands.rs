@@ -590,11 +590,11 @@ pub fn create(
         use_cache,
     );
     let home = if board.enabled {
-        board_home(context).unwrap_or_default()
+        board_home(context).ok()
     } else {
-        String::new()
+        None
     };
-    let mirror = board.set_status(number, state, &home);
+    let mirror = board.set_status(number, state, home.as_deref());
 
     Ok(serde_json::json!({
         "ok": true,
@@ -637,11 +637,11 @@ pub fn transition(
     // *below* the label edit, so a `gh repo view` that failed there reported
     // "nothing was written" over an edit that had landed.
     let home = if board.enabled {
-        board_home(context).unwrap_or_default()
+        board_home(context).ok()
     } else {
-        String::new()
+        None
     };
-    let mirror = board.set_status(issue, to, &home);
+    let mirror = board.set_status(issue, to, home.as_deref());
 
     let number = issue.to_string();
     let add = format!("status:{to}");
@@ -749,7 +749,7 @@ pub fn transition(
     }
 
     if board.enabled {
-        let column = board.read_status(issue, &home);
+        let column = board.read_status(issue, home.as_deref());
         let expected = board
             .meta()
             .and_then(|meta| super::board::Board::column_for(&meta, to));
@@ -786,8 +786,8 @@ pub fn transition(
                         .join(" ")
                     );
                 } else {
-                    let retried = fresh.set_status(issue, to, &home);
-                    let recheck = fresh.read_status(issue, &home);
+                    let retried = fresh.set_status(issue, to, home.as_deref());
+                    let recheck = fresh.read_status(issue, home.as_deref());
                     result["board_repair"] = serde_json::json!({
                         "retried": retried,
                         "column_now": recheck,
@@ -960,7 +960,7 @@ pub fn audit_board(
                 && let Some(issue) = card.get("issue").and_then(serde_json::Value::as_u64)
             {
                 let state = labels[0].split_once(':').map_or("", |(_, rest)| rest);
-                let mut entry = board.set_status(issue, state, &home);
+                let mut entry = board.set_status(issue, state, Some(home.as_str()));
                 entry["issue"] = serde_json::json!(issue);
                 repaired.push(entry);
             }
@@ -971,6 +971,13 @@ pub fn audit_board(
         "ok": true,
         "audited": true,
         "cards": cards.len(),
+        // `cards` is how many the board returned; this is how many were this
+        // repository's to compare. A shared board makes the two differ, and an
+        // operator reading only the first was told a pass examined cards it had
+        // set aside. `audited` beside them is a boolean — whether the pass ran
+        // at all — and naming a second field `audited_count` would put two
+        // meanings on one word.
+        "compared": cards.len() - foreign.len(),
         "drift": drift,
         "missing_column": missing_column,
         "unread_labels": unread_labels,

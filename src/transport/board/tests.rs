@@ -114,10 +114,10 @@ fn a_disabled_board_reports_a_skip_rather_than_attempting_anything() {
     // The property the whole module rests on: `transition` mirrors before it
     // moves the label, so this call must never be able to stop what follows.
     let mut board = Board::parse("none", &context(), true);
-    let answer = board.set_status(12, "review", "acme/repo");
+    let answer = board.set_status(12, "review", Some("acme/repo"));
     assert_eq!(answer["attempted"], false);
     assert_eq!(answer["skipped"], "no board configured");
-    assert_eq!(board.read_status(12, "acme/repo"), None);
+    assert_eq!(board.read_status(12, Some("acme/repo")), None);
 }
 
 #[test]

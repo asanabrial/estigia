@@ -523,7 +523,7 @@ impl Board {
     /// so a failure escaping here would kill the authoritative write. Every
     /// genuine defect this hides still surfaces: the transition's read-back
     /// compares the board against the label immediately afterwards.
-    pub fn set_status(&mut self, issue: u64, state: &str, home: &str) -> serde_json::Value {
+    pub fn set_status(&mut self, issue: u64, state: &str, home: Option<&str>) -> serde_json::Value {
         if !self.enabled {
             return serde_json::json!({ "attempted": false, "skipped": "no board configured" });
         }
@@ -533,12 +533,12 @@ impl Board {
         // would be a sentence about the card; what is true is that the question
         // could not be asked. An unreadable control surface permits no write,
         // and this is the mirror's own instance of that rule.
-        if home.is_empty() {
+        let Some(home) = home else {
             return serde_json::json!({
                 "attempted": true,
                 "skipped": "this repository's identity could not be read, so no card can be matched to it",
             });
-        }
+        };
         let Some(meta) = self.meta() else {
             return serde_json::json!({ "attempted": true, "skipped": self.skip_reason });
         };
@@ -594,10 +594,11 @@ impl Board {
     }
 
     /// The column one issue currently sits in.
-    pub fn read_status(&mut self, issue: u64, home: &str) -> Option<String> {
-        if !self.enabled || home.is_empty() {
+    pub fn read_status(&mut self, issue: u64, home: Option<&str>) -> Option<String> {
+        if !self.enabled {
             return None;
         }
+        let home = home?;
         // The same picker the writer uses, and for the same reason. This
         // matched on number alone while `set_status` matched on repository, so
         // on a shared board the two disagreed about which card the transition
@@ -707,11 +708,9 @@ fn foreign_item_report(issue: u64, board: &str, belongs_to: &str, home: &str) ->
 /// An unnamed card is not ours, which is the same answer `pick_item` gives and
 /// for the same reason: unknown repository is not clearance.
 pub(crate) fn card_is_ours(card: &serde_json::Value, home: &str) -> bool {
-    !home.is_empty()
-        && card
-            .get("repository")
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|repo| repo == home)
+    card.get("repository")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|repo| repo == home)
 }
 
 /// Pick this repository's card, not whichever card happens to carry the number.
@@ -736,13 +735,14 @@ pub(crate) fn pick_item(nodes: &[serde_json::Value], issue: u64, home: &str) -> 
             .and_then(|repository| repository.get("nameWithOwner"))
             .and_then(serde_json::Value::as_str)
             .unwrap_or("");
-        // Only an exact match with a repository this run could name is ours.
-        // Written the other way round first — `belongs.is_empty() || belongs
-        // == home` — which handed every card that does not say where it comes
-        // from to the mirror, and left the `an unnamed repository` arm below
-        // unreachable. That is the failure this whole change exists to stop,
-        // surviving in the one case the doc comment above calls out by name.
-        if !home.is_empty() && belongs == home {
+        // Only an exact match is ours. Written the other way round first —
+        // `belongs.is_empty() || belongs == home` — which handed every card that
+        // does not say where it comes from to the mirror, and left the
+        // `an unnamed repository` arm below unreachable. That is the failure
+        // this whole change exists to stop, surviving in the one case the doc
+        // comment above calls out by name. An unreadable identity cannot reach
+        // here at all: the callers hand `None` and the mirror skips before this.
+        if belongs == home {
             ours = Some(text(node, "id"));
         } else {
             foreign = Some(if belongs.is_empty() {

@@ -15123,3 +15123,278 @@ fn the_read_back_reads_our_card_and_not_the_one_sharing_its_number() {
         "the read-back reported another repository's column for our issue: {text}"
     );
 }
+
+/// `create` files the issue and reports it, even when a foreign card shares its number.
+///
+/// The board mirror runs after `gh issue create` has already filed the issue, so
+/// a refusal there answers *nothing was written* about an issue that exists —
+/// and a caller that follows the refusal, fixes the board and retries files a
+/// duplicate. Two blind judges measured that end to end, and two more measured
+/// that removing the refusal left `create`'s board path with no coverage at all:
+/// restoring it, or making the mirror a permanent no-op, kept the suite green.
+///
+/// Turn it off by returning `Failure::Stop` on a foreign mirror in `create` and
+/// this reddens on `isError`; the issue number assertion below is what says the
+/// answer still carries what was filed.
+#[test]
+fn create_reports_the_issue_it_filed_when_the_board_card_is_somebody_elses() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let log = trace.path().join("calls.log");
+    let body = trace.path().join("body.md");
+    std::fs::write(&body, "## Problem\n\nA probe.\n").expect("the issue body is written");
+
+    let (_, refused, ok) = run_in(
+        home,
+        repo,
+        &["config", "set", "Project board", "acme/91"],
+        "",
+    );
+    assert!(ok, "the fixture board could not be configured: {refused}");
+
+    let project = |value: serde_json::Value| {
+        serde_json::json!({ "data": { "user": { "projectV2": value } } }).to_string()
+    };
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue create",
+            "stdout": "https://github.com/o/r/issues/99\n",
+            "status": 0,
+        },
+        {
+            "matches": "fields(first: 100)",
+            "stdout": project(serde_json::json!({
+                "id": "PVT_1",
+                "fields": { "nodes": [{
+                    "id": "PVTSSF_1",
+                    "name": "Status",
+                    "options": [{ "id": "opt_ready", "name": "Ready", "description": "status:ready" }],
+                }] },
+            })),
+            "status": 0,
+        },
+        {
+            "matches": "items(first: 100",
+            "stdout": project(serde_json::json!({
+                "items": {
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                    "nodes": [{
+                        "id": "PVTI_theirs",
+                        "content": {
+                            "number": 99,
+                            "repository": { "nameWithOwner": "somebody/else" },
+                            "labels": { "totalCount": 0, "nodes": [] },
+                        },
+                        "fieldValueByName": { "name": "Ready" },
+                    }],
+                },
+            })),
+            "status": 0,
+        },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "label list", "stdout": "[]", "status": 0 },
+        { "matches": "label create", "stdout": "", "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "create",
+            "arguments": {
+                "identity": "a-probe",
+                "title": "a-probe: the board card belongs to somebody else",
+                "body_file": body.to_string_lossy(),
+                "priority": "priority:low",
+                "domain": "general",
+                "runtime": "claude",
+                "run_id": "claude-abcd1234",
+            },
+        },
+    })
+    .to_string();
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    let calls = std::fs::read_to_string(&log).expect("the call log is readable");
+    assert!(
+        calls.contains("issue create"),
+        "the fixture never reached `gh issue create`, so this proves nothing: {calls}"
+    );
+    assert_eq!(
+        response["result"]["isError"], false,
+        "the issue was filed and the call reported a failure because somebody else's card carried \
+         its number: {text}"
+    );
+    let answer: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or_else(|_| panic!("the answer is JSON: {text}"));
+    assert_eq!(
+        answer["issue"], 99,
+        "the answer does not name the issue that was filed: {text}"
+    );
+    assert_eq!(
+        answer["board"]["foreign"], "somebody/else",
+        "the mirror did not say whose card it left alone: {text}"
+    );
+    assert!(
+        !calls.contains("updateProjectV2ItemFieldValue"),
+        "the mirror moved a card belonging to another repository: {calls}"
+    );
+}
+
+/// The audit sets another repository's cards aside instead of comparing them.
+///
+/// Two panels measured the same hole here: the predicate is held, the caller is
+/// not. Deleting the `continue` in `audit_board`'s loop puts foreign cards back
+/// into the drift comparison — and under `--fix` moves them to agree with labels
+/// that were never theirs — with the whole suite green. That is the half of this
+/// issue about reporting, and until this test nothing executed `audit_board` at
+/// all.
+///
+/// Turn it off by deleting that `continue` and this reddens on `drift`.
+#[test]
+fn the_audit_sets_another_repositorys_cards_aside_instead_of_comparing_them() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let log = trace.path().join("calls.log");
+
+    let (_, refused, ok) = run_in(
+        home,
+        repo,
+        &["config", "set", "Project board", "acme/92"],
+        "",
+    );
+    assert!(ok, "the fixture board could not be configured: {refused}");
+
+    let project = |value: serde_json::Value| {
+        serde_json::json!({ "data": { "user": { "projectV2": value } } }).to_string()
+    };
+    // Their card sits in a column that disagrees with its own label, so it would
+    // be reported as drift — and repaired — the moment it is compared at all.
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "fields(first: 100)",
+            "stdout": project(serde_json::json!({
+                "id": "PVT_1",
+                "fields": { "nodes": [{
+                    "id": "PVTSSF_1",
+                    "name": "Status",
+                    "options": [
+                        { "id": "opt_ready", "name": "Ready", "description": "status:ready" },
+                        { "id": "opt_done", "name": "Done", "description": "status:done" },
+                    ],
+                }] },
+            })),
+            "status": 0,
+        },
+        {
+            "matches": "items(first: 100",
+            "stdout": project(serde_json::json!({
+                "items": {
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                    "nodes": [
+                        {
+                            "id": "PVTI_theirs",
+                            "content": {
+                                "number": 12,
+                                "repository": { "nameWithOwner": "somebody/else" },
+                                "labels": { "totalCount": 1, "nodes": [{ "name": "status:done" }] },
+                            },
+                            "fieldValueByName": { "name": "Ready" },
+                        },
+                        {
+                            "id": "PVTI_ours",
+                            "content": {
+                                "number": 13,
+                                "repository": { "nameWithOwner": "o/r" },
+                                "labels": { "totalCount": 1, "nodes": [{ "name": "status:ready" }] },
+                            },
+                            "fieldValueByName": { "name": "Ready" },
+                        },
+                    ],
+                },
+            })),
+            "status": 0,
+        },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": { "name": "audit_board", "arguments": { "fix": true } },
+    })
+    .to_string();
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let answer: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or_else(|_| panic!("the audit answer is JSON: {text}"));
+
+    assert_eq!(
+        answer["foreign"].as_array().map(Vec::len),
+        Some(1),
+        "the audit did not set another repository's card aside: {text}"
+    );
+    assert_eq!(
+        answer["drift"].as_array().map(Vec::len),
+        Some(0),
+        "another repository's card was compared as this repository's drift: {text}"
+    );
+    assert_eq!(
+        answer["compared"], 1,
+        "the audit counted a card it had set aside as one it compared: {text}"
+    );
+    let calls = std::fs::read_to_string(&log).expect("the call log is readable");
+    assert!(
+        !calls.contains("updateProjectV2ItemFieldValue"),
+        "`--fix` repaired a card belonging to another repository: {calls}"
+    );
+}

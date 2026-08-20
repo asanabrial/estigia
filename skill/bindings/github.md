@@ -257,7 +257,6 @@ and nothing was written — retrying the same call unchanged will produce the sa
 | `new-blocker-without-origin` | A `severe` finding names no parent, against a publication that has one. A repair may raise a new blocker; it has to say whether the repair `introduced` the defect or `exposed` one that was already there — otherwise a full-target resweep that rediscovers settled work arrives indistinguishable from a defect the repair caused. | Name the finding this reassesses with `--parent`, or state `--origin`. Warnings and suggestions need neither. |
 | `review-finding-readback-failed` | The finding comment was posted and could not be read back. The world is `committed`. | Re-run the identical call — the operation ID is idempotent, so the retry reads back the marker it already wrote rather than recording the finding twice. |
 | `publication-lane-red` | The publication lane for the receipt's own head concluded other than green, so a verdict recorded against those bytes would be discarded the moment CI answers. The refusal names the lane, the conclusion and the run URL. | Read the failure at the named run, fix it, and `republish_review` — a new epoch starts a new lane. Do not record the verdict. |
-| `board-item-foreign-repository` | The board card for this issue number belongs to another repository. | Point Project board at this repository, or set it to none with --repo. |
 | `publication-lane-unfinished` | The publication lane for that head is queued or still running. An unfinished lane is not a green one. | Watch the named run to completion, then record the same verdict again. |
 | `worktree-location-not-absolute` | `--worktree-root` names a relative directory, so its destination depends on which checkout invoked Estigia and can place one worktree inside another. | Pass an absolute directory for isolated checkouts. |
 
@@ -749,8 +748,10 @@ card whose state you have not read is writing a state you guessed. Treat a non-e
 the way you treat a zero-card result: the pass ran and did not conclude about those cards. It is the
 same rule as the paragraph above, one field along.
 
-`cards` is how many the board returned and `audited` how many were this repository's, so the two
-differ exactly by `foreign`. With `--fix`, `repaired` names the cards the pass actually moved. A card in `foreign` or in
+`cards` is how many the board returned and `compared` how many were this repository's to check, so
+the two differ exactly by the length of `foreign`. `audited` is not a count — it is `true` when the
+pass ran and `false` when it did not. With `--fix`, `repaired` names the cards the pass actually
+moved. A card in `foreign` or in
 `unread_labels` is never among them: the first is not this repository's to move and the second was
 never read.
 
