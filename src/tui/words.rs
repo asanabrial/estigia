@@ -106,10 +106,12 @@ lista puede contener. Planning es el último ajuste principal. Debajo aparece
 una sección separada con orchestrate, las fases activas, apply y los agentes
 delegados. Cada fila abre directamente el catálogo orientativo del anfitrión;
 Intro o Espacio eligen, siempre se puede escribir un ID personalizado y
-heredar elimina solo ese destino. Las respuestas compartidas no toman
-prestado el catálogo de ningún agente.
-La CLI conserva la edición de la ruta key=model completa, donde un modelo
-puede llevar detrás de una barra el esfuerzo con el que corre.
+heredar elimina solo ese destino. Donde hay un modelo nombrado, la misma
+lista ofrece también el esfuerzo con el que corre, y una entrada para
+devolvérselo al anfitrión. Las respuestas compartidas no toman prestado el
+catálogo de ningún agente.
+La CLI conserva la edición de la ruta key=model completa, donde el
+esfuerzo sigue a su modelo tras una barra.
 
 Solo Claude Code recibe actualmente definiciones enrutables por el anfitrión:
 las fases de planificación seleccionadas, un revisor ciego estático e inerte
@@ -501,6 +503,8 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Models for {target}", "Modelos para {target}"),
     ("MODELS", "MODELOS"),
     ("PHASE MODELS", "MODELOS DE FASE"),
+    ("effort: {effort}", "esfuerzo: {effort}"),
+    ("effort: the host's own default", "esfuerzo: el que el anfitrión decida"),
     ("type a model ID…", "escribe un ID de modelo…"),
     ("inherit", "heredar"),
     ("different values", "valores diferentes"),
@@ -509,8 +513,8 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("model declared for this planning phase", "modelo declarado para esta fase de planificación"),
     ("model declared for applying changes", "modelo declarado para aplicar cambios"),
     ("model declared for this delegated agent", "modelo declarado para este agente delegado"),
-    ("a model ID must fit one key=model entry: no comma, pipe, or line break", "un ID de modelo debe caber en una entrada key=model: sin coma, barra vertical ni salto de línea"),
-    ("accepts: any model ID that fits one key=model entry; no comma, pipe, or line break; catalogs are advisory", "acepta: cualquier ID de modelo que quepa en una entrada key=model; sin coma, barra vertical ni salto de línea; los catálogos son orientativos"),
+    ("a model ID must fit one key=model entry: no comma, pipe, or line break, and an effort after a slash needs a model in front of it", "un ID de modelo debe caber en una entrada key=model: sin coma, barra vertical ni salto de línea, y un esfuerzo tras una barra necesita un modelo delante"),
+    ("accepts: any model ID that fits one key=model entry, optionally followed by /low, /medium, /high, /xhigh or /max; no comma, pipe, or line break; catalogs are advisory", "acepta: cualquier ID de modelo que quepa en una entrada key=model, seguido opcionalmente de /low, /medium, /high, /xhigh o /max; sin coma, barra vertical ni salto de línea; los catálogos son orientativos"),
     ("{agent} model suggestions are advisory; Estigia neither validates nor runs models", "las sugerencias de modelos de {agent} son orientativas; Estigia no valida ni ejecuta modelos"),
     ("loaded from `opencode models` without refresh; advisory only", "cargado desde `opencode models` sin refrescar; solo orientativo"),
     ("loading OpenCode's model catalog…", "cargando el catálogo de modelos de OpenCode…"),

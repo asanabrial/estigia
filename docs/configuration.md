@@ -157,7 +157,13 @@ worker's definition, because on this row naming a key is what asks for the file.
 catalog offer only custom target editing rather than invented defaults. Shared and uniform views also
 offer no profile because they have no single adapter whose model namespace can own it.
 
-Each projected row displays its exact assignment or `inherit` and opens its concrete host's advisory model list directly.
+Where a row names a model, the same list also offers `effort: low` through `effort: max` and one entry
+that hands the effort back to the host; an inherited row offers none of them, because an effort is a
+property of the model the target runs on. Choosing a different model keeps the effort already named.
+There is no second stage for it: the effort was reachable only by typing the slash into the custom
+field, which is a value an operator cannot discover.
+
+Each projected row displays its exact assignment or `inherit` — the whole route, effort included — and opens its concrete host's advisory model list directly.
 A current custom ID remains in that list, custom input is always available, and
 `inherit` removes only that target. Enter and Space both choose a picker entry; Space remains literal inside the custom editor.
 Every per-target update uses one destination set: uniform mode means the

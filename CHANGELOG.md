@@ -795,6 +795,15 @@ the workflow, it holds the tools.
     phases; an unnamed effort writes **no** line, because the absent field is the
     host's own default and writing one down would freeze today's into every
     installation.
+  - **The effort is chosen from the same list as the model.** A row that names a
+    model offers `effort: low` through `effort: max` and one entry handing it back
+    to the host; an inherited row offers none, because an effort is a property of
+    the model the target runs on. Choosing a different model keeps the effort
+    already named. One list, not a second stage — this row already retired an
+    Advanced one, and a value reachable only by typing a slash into the custom
+    field is a value an operator cannot discover. Two smaller faults went with it:
+    a row showed `opus` where `opus/high` was stored, and a change that moved only
+    the effort went unmarked, because both asked for the model half of the route.
   - Estigia still starts nothing. What changed is that `Model routing` is read:
     twice by `setup`, and by a `SKILL.md` sentence that now tells an agent which
     keys are already routed for it and which it must act on itself.

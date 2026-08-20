@@ -1299,9 +1299,11 @@ right. Space opens the list when you would rather see them all, and a path
 or board row has a field for what no list can hold. Planning is the last
 primary row. The model targets beneath it open their advisory catalog
 directly; Enter or Space chooses, custom IDs are always available, and
-inherit removes only that target. Shared answers borrow no one agent's
-catalog. The CLI still edits the complete persisted key=model route,
-where a model may carry the effort it runs at after a slash.
+inherit removes only that target. Where a model is named, the same list
+also offers the effort it runs at, and one entry to hand that back to the
+host. Shared answers borrow no one agent's catalog. The CLI still edits
+the complete persisted key=model route, where an effort follows its
+model after a slash.
 Only Claude Code currently receives host-routable definitions: selected
 planning phases, one inert blind reviewer in every mode, and the
 implementer and analyst workers, which exist because this row names them.
@@ -2457,7 +2459,7 @@ fn detail_of_model_target(app: &App) -> Vec<Line<'static>> {
         lines.push(Line::styled(
             t!(
                 app.tongue,
-                "accepts: any model ID that fits one key=model entry; no comma, pipe, or line break; catalogs are advisory"
+                "accepts: any model ID that fits one key=model entry, optionally followed by /low, /medium, /high, /xhigh or /max; no comma, pipe, or line break; catalogs are advisory"
             )
             .to_owned(),
             muted(),
