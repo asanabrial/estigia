@@ -12,7 +12,7 @@ the workflow, it holds the tools.
 
 ### The harness
 
-- **The board mirror refuses a card that belongs to another repository.**
+- **The board mirror leaves a card that belongs to another repository alone, and says whose it is.**
   Matching on issue number alone moved another project's cards: measured on
   2026-08-19, when a transition on this repository's #83 moved another
   project's #83 out of `Review`. The card is now picked by repository and not
@@ -42,11 +42,17 @@ the workflow, it holds the tools.
   not asking `gh repo view` when the board is off; the first commit had it
   right.
 
-  **A repository whose identity cannot be read now mirrors nothing.** That read
-  reaches the mirror through `unwrap_or_default()`, so a failure arrived as an
-  empty name; under the corrected picker it would make every card foreign and
-  report a sentence about the card. What is true is that the question could not
-  be asked, and that is what it now says.
+  **A repository whose identity cannot be read mirrors nothing**, and cannot be
+  confused with a repository named "". The mirror takes an `Option`, so a failed
+  `gh repo view` arrives as `None` and the answer says the question could not be
+  asked rather than reporting a sentence about the card. The identity is read
+  once, before anything writes: it was asked again through `?` below the label
+  edit, where a failure reported *nothing was written* over an edit that had
+  landed.
+
+  **The audit says how many cards it compared**, beside how many the board
+  returned. The two differ by the foreign ones it set aside, and reading only the
+  first told an operator a pass had examined cards it never looked at.
 
 - **The gate records which role each delegated context ran as, for the length of the run.** Claude
   Code sends `agent_type` on every tool event fired inside a sub-agent, so the run pointer now carries
