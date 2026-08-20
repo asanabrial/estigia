@@ -1583,13 +1583,26 @@ suite. Everything else here is prose held by review.
     run"*. It is corrected here rather than quietly, because a false sentence in the register of what
     is not measured is the one kind this document cannot carry.
 
-    Four narrower limits on the within-run record. The first two are ways the set can be empty
-    while contexts ran, the third is a way it can be non-empty and still not answer what was
-    asked, and the fourth is a write that did not happen before. A host that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart
+    Five narrower limits on the within-run record. The first three are ways the set can be empty
+    while contexts ran, the fourth is a way it can be non-empty and still not answer what was
+    asked, and the fifth is a write that did not happen before. A host that does not send `agent_type` leaves it empty, and Estigia cannot tell that apart
     from nothing having been delegated. A context refused at the role gate before any call is not
     recorded, which is deliberate — a refused launch contributes no judge — but it means the record carries
     nothing for a launch the role gate refused. A call the *claim* gate denied is recorded, since
-    the store fires on a new role or an allow — so this is one gate's refusals, not every gate's. And the field names a role, never a *count*:
+    the store fires on a new role or an allow — so this is one gate's refusals, not every gate's.
+
+    **And under the default row the reserved reviewer is never recorded at all**, which is the case
+    that governs every installation nobody has changed. Its whole grant is `Read, Grep, Glob`, and
+    none of those three is in the matcher the hook is woken for —
+    `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task` — so no call it is permitted to make
+    ever reaches the record, and every call that would reach it is outside the grant and refused
+    before it. A judge measured both directions through the built binary: under `reading`, a
+    `review-blind` context calling `Bash` is denied and no pointer is written at all; under
+    `measuring`, the same call records `roles: ["review-blind"]`. So the criterion asking which role
+    a delegated context ran as is delivered for a measuring judge and for the planning phases that
+    write, and is **inert for the reserved reviewer on a default install** — the role this change is
+    named after. Recorded rather than fixed: making it non-empty would mean waking the hook for
+    tools no gate has anything to say about. And the field names a role, never a *count*:
     five contexts under one role and one context under it write the same byte, so nothing here bears
     on panel size, which the entry below already states this crate cannot see. And the store now
     fires on a **new role** as well as on an allow, so a call the claim gate denied writes a

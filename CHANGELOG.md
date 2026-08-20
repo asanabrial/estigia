@@ -18,8 +18,9 @@ the workflow, it holds the tools.
   a resume.
 
   Recording it on the allow path alone recorded nothing for exactly the contexts this is about — a
-  delegated context reading files makes calls the gate answers `Outside`, not `Allow` — so the
-  store is keyed on the role set having grown as well.
+  judge measuring in its own directory makes calls the gate answers `Outside`, not `Allow`, and the
+  reads it makes never reach the gate at all — so the store is keyed on the role set having grown as
+  well. `docs/honesty.md` carries what that still leaves empty.
 
   **It is not an audit trail.** The pointer is keyed on the session and `SessionEnd` removes it, so no
   later run reads it; issue #83’s criterion asking for one is split out as #91. One publication
