@@ -114,7 +114,7 @@ fn a_disabled_board_reports_a_skip_rather_than_attempting_anything() {
     // The property the whole module rests on: `transition` mirrors before it
     // moves the label, so this call must never be able to stop what follows.
     let mut board = Board::parse("none", &context(), true);
-    let answer = board.set_status(12, "review");
+    let answer = board.set_status(12, "review", "acme/repo");
     assert_eq!(answer["attempted"], false);
     assert_eq!(answer["skipped"], "no board configured");
     assert_eq!(board.read_status(12), None);
@@ -240,4 +240,23 @@ fn a_mirror_stamped_ahead_of_the_clock_is_not_fresh() {
         !super::mirror_is_fresh(Some(now + 31_536_000.0), Some(now)),
         "a year ahead was fresh for a year"
     );
+}
+
+#[test]
+fn a_card_from_another_repository_is_not_this_issue() {
+    let foreign = serde_json::json!({"id": "ITEM", "content": {"number": 73, "repository": {"nameWithOwner": "asanabrial/investora"}}});
+    assert_eq!(
+        pick_item(std::slice::from_ref(&foreign), 73, "asanabrial/estigia"),
+        ItemPick::Foreign {
+            belongs_to: "asanabrial/investora".to_owned()
+        }
+    );
+    let ours = serde_json::json!({"id": "OURS", "content": {"number": 73, "repository": {"nameWithOwner": "asanabrial/estigia"}}});
+    assert_eq!(
+        pick_item(&[foreign, ours], 73, "asanabrial/estigia"),
+        ItemPick::Ours {
+            id: "OURS".to_owned()
+        }
+    );
+    assert_eq!(pick_item(&[], 73, "asanabrial/estigia"), ItemPick::Absent);
 }

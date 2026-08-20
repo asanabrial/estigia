@@ -12,6 +12,10 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The board mirror refuses a card that belongs to another repository.**
+  Matching on issue number alone moved another project's cards. `audit_board`
+  reports those cards and does not repair them.
+
 - **A discharged human decision is not a verdict.** Returning built work from
   `blocked` to `review` still requires the configured panel against the exact
   latest receipt. Step 7 now routes an unresolved choice about what should be

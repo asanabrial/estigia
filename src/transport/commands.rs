@@ -441,6 +441,16 @@ pub(super) fn is_status_label(name: &str) -> bool {
     name.starts_with("status:")
 }
 
+fn board_home(context: &Context) -> Result<String, Failure> {
+    let (owner, name) = super::closing::repo_identity(context)?;
+    Ok(format!("{owner}/{name}"))
+}
+
+fn foreign_board_item(mirror: &serde_json::Value) -> bool {
+    mirror.get("reason").and_then(serde_json::Value::as_str)
+        == Some("board-item-foreign-repository")
+}
+
 /// The `status:*` labels an issue carries, in the order `gh` reported them.
 pub(super) fn status_labels(data: &serde_json::Value) -> Vec<String> {
     data.get("labels")
@@ -584,7 +594,10 @@ pub fn create(
         context,
         use_cache,
     );
-    let mirror = board.set_status(number, state);
+    let mirror = board.set_status(number, state, &board_home(context)?);
+    if foreign_board_item(&mirror) {
+        return Err(Failure::Stop(mirror));
+    }
 
     Ok(serde_json::json!({
         "ok": true,
@@ -622,7 +635,10 @@ pub fn transition(
 ) -> Result<serde_json::Value, Failure> {
     let spec = context.get("project board").unwrap_or_default().to_owned();
     let mut board = super::board::Board::parse(&spec, context, use_cache);
-    let mirror = board.set_status(issue, to);
+    let mirror = board.set_status(issue, to, &board_home(context)?);
+    if foreign_board_item(&mirror) {
+        return Err(Failure::Stop(mirror));
+    }
 
     let number = issue.to_string();
     let add = format!("status:{to}");
@@ -767,7 +783,7 @@ pub fn transition(
                         .join(" ")
                     );
                 } else {
-                    let retried = fresh.set_status(issue, to);
+                    let retried = fresh.set_status(issue, to, &board_home(context)?);
                     let recheck = fresh.read_status(issue);
                     result["board_repair"] = serde_json::json!({
                         "retried": retried,
@@ -880,7 +896,19 @@ pub fn audit_board(
     let mut drift = Vec::new();
     let mut missing_column = Vec::new();
     let mut unread_labels = Vec::new();
+    let mut foreign = Vec::new();
+    let home = board_home(context)?;
     for card in &cards {
+        let repo = card
+            .get("repository")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        if repo != home {
+            let mut entry = card.clone();
+            entry["problem"] = serde_json::json!("card belongs to another repository");
+            foreign.push(entry);
+            continue;
+        }
         // An unfinished read is not a verdict. `labels(first: N)` is a window
         // and the state is a label, so a card carrying more labels than arrived
         // can have its `status:` outside it — which read as "no status label"
@@ -933,7 +961,7 @@ pub fn audit_board(
                 && let Some(issue) = card.get("issue").and_then(serde_json::Value::as_u64)
             {
                 let state = labels[0].split_once(':').map_or("", |(_, rest)| rest);
-                let mut entry = board.set_status(issue, state);
+                let mut entry = board.set_status(issue, state, &home);
                 entry["issue"] = serde_json::json!(issue);
                 repaired.push(entry);
             }
@@ -947,6 +975,7 @@ pub fn audit_board(
         "drift": drift,
         "missing_column": missing_column,
         "unread_labels": unread_labels,
+        "foreign": foreign,
         "repaired": repaired,
     }))
 }

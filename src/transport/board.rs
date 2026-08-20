@@ -44,7 +44,7 @@ query($login: String!, $number: Int!, $cursor: String) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
-          content { ... on Issue { number labels(first: 100) { totalCount nodes { name } } } }
+          content { ... on Issue { number repository { nameWithOwner } labels(first: 100) { totalCount nodes { name } } } }
           fieldValueByName(name: "Status") {
             ... on ProjectV2ItemFieldSingleSelectValue { name }
           }
@@ -110,6 +110,17 @@ pub struct Meta {
     pub field_id: String,
     /// Every column.
     pub columns: Vec<Column>,
+}
+
+/// Which board item, if any, is this repository's issue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ItemPick {
+    /// The card belongs here.
+    Ours { id: String },
+    /// The number matched a card from another repository.
+    Foreign { belongs_to: String },
+    /// No card carries this number.
+    Absent,
 }
 
 /// The mirror.
@@ -501,11 +512,8 @@ impl Board {
     }
 
     /// The board item id for one issue.
-    pub fn item_id(&mut self, issue: u64) -> Option<String> {
-        self.items().into_iter().find_map(|node| {
-            let number = node.get("content")?.get("number")?.as_u64()?;
-            (number == issue).then(|| text(&node, "id"))
-        })
+    pub(crate) fn item_id(&mut self, issue: u64, home: &str) -> ItemPick {
+        pick_item(&self.items(), issue, home)
     }
 
     /// Attempts the mirror. Reports what happened; **never fails outward**.
@@ -515,7 +523,7 @@ impl Board {
     /// so a failure escaping here would kill the authoritative write. Every
     /// genuine defect this hides still surfaces: the transition's read-back
     /// compares the board against the label immediately afterwards.
-    pub fn set_status(&mut self, issue: u64, state: &str) -> serde_json::Value {
+    pub fn set_status(&mut self, issue: u64, state: &str, home: &str) -> serde_json::Value {
         if !self.enabled {
             return serde_json::json!({ "attempted": false, "skipped": "no board configured" });
         }
@@ -528,19 +536,25 @@ impl Board {
                 "skipped": format!("no board column mirrors '{state}'"),
             });
         };
-        let Some(item) = self.item_id(issue) else {
-            // *Not on the board* is a fact about the board, and it may only be
-            // said from a listing that reached the end. When the walk stopped
-            // short — a page claiming a successor with no cursor, or a project
-            // that went invisible mid-walk — what is true is that the issue was
-            // not found, which is a different sentence.
-            return serde_json::json!({
-                "attempted": true,
-                "skipped": match &self.skip_reason {
-                    Some(why) => format!("issue #{issue} was not found on the board, and {why}"),
-                    None => format!("issue #{issue} is not on the board"),
-                },
-            });
+        let item = match self.item_id(issue, home) {
+            ItemPick::Ours { id } => id,
+            ItemPick::Foreign { belongs_to } => {
+                return serde_json::json!({"attempted": true, "ok": false, "reason": "board-item-foreign-repository", "belongs_to": belongs_to, "action": "estigia config set --repo \"Project board\" \"none\""});
+            }
+            ItemPick::Absent => {
+                // *Not on the board* is a fact about the board, and it may only be
+                // said from a listing that reached the end. When the walk stopped
+                // short — a page claiming a successor with no cursor, or a project
+                // that went invisible mid-walk — what is true is that the issue was
+                // not found, which is a different sentence.
+                return serde_json::json!({
+                    "attempted": true,
+                    "skipped": match &self.skip_reason {
+                        Some(why) => format!("issue #{issue} was not found on the board, and {why}"),
+                        None => format!("issue #{issue} is not on the board"),
+                    },
+                });
+            }
         };
         if let Err(failure) = self.graphql(
             SET_MUTATION,
@@ -600,6 +614,7 @@ impl Board {
                     .unwrap_or(0);
                 Some(serde_json::json!({
                     "issue": number,
+                    "repository": content.get("repository").and_then(|r| r.get("nameWithOwner")).cloned().unwrap_or(serde_json::Value::Null),
                     "column": node
                         .get("fieldValueByName")
                         .and_then(|value| value.get("name"))
@@ -619,6 +634,45 @@ fn text(value: &serde_json::Value, key: &str) -> String {
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default()
         .to_owned()
+}
+
+/// Pick this repository's card, not whichever card happens to carry the number.
+///
+/// Matching on number alone is how Estigia moved Investora's #73 when this
+/// repository created its own #73. Unknown repository is not clearance.
+pub(crate) fn pick_item(nodes: &[serde_json::Value], issue: u64, home: &str) -> ItemPick {
+    let mut ours = None;
+    let mut foreign = None;
+    for node in nodes {
+        let Some(content) = node.get("content") else {
+            continue;
+        };
+        let Some(number) = content.get("number").and_then(serde_json::Value::as_u64) else {
+            continue;
+        };
+        if number != issue {
+            continue;
+        }
+        let belongs = content
+            .get("repository")
+            .and_then(|repository| repository.get("nameWithOwner"))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        if belongs == home {
+            ours = Some(text(node, "id"));
+        } else {
+            foreign = Some(if belongs.is_empty() {
+                "an unnamed repository".to_owned()
+            } else {
+                belongs.to_owned()
+            });
+        }
+    }
+    match (ours, foreign) {
+        (Some(id), _) => ItemPick::Ours { id },
+        (None, Some(belongs_to)) => ItemPick::Foreign { belongs_to },
+        (None, None) => ItemPick::Absent,
+    }
 }
 
 fn read_column(value: &serde_json::Value) -> Column {
