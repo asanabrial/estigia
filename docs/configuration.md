@@ -27,7 +27,7 @@ estigia config set "Merge strategy" squash
 | Worktree location | `unset`, or an absolute directory — `<repo>`, `<branch>`, `<run-id>` and `<issue>` are substituted, and a template naming neither `<branch>` nor `<run-id>` gains them both in memory, as siblings of the path you configured, so two checkouts do not share a directory |
 | Tracker | `github`, `github <owner>/<name>`, `linear`, or `trello` — only `github` has an executable |
 | Planning | `direct`, `sdd`, `sdd lite`, `sdd openspec`, or `sdd lite openspec` — `sdd` makes the phases available, and `protocols/sdd.md` engages them per change on ambiguity; `auto` is accepted as a spelling of `sdd` |
-| Model routing | `unset`, or comma-separated `key=model` pairs. A key is a delegated role (`implementer`, `reviewer`, `judge`), a workflow state (`analysis`, `ready`, `in-progress`, `review`, `blocked`, `done`), a phase of thinking (`explore`, `propose`, `spec`, `design`, `tasks`, `apply`, `orchestrate`), or a sub-agent somebody's orchestrator spawns (`strategist`, `analyst`, `builder`, `refactorer`, `validator`, `auditor`) — Estigia spawns none of these and does not run models; this is a declaration the agent reads |
+| Model routing | `unset`, or comma-separated `key=model` pairs, each model optionally followed by `/` and the effort it runs at (`low`, `medium`, `high`, `xhigh`, `max`). A key is a delegated role (`implementer`, `reviewer`, `judge`), a phase of thinking (`explore`, `propose`, `spec`, `design`, `tasks`, `apply`, `orchestrate`), or a sub-agent somebody's orchestrator spawns (`strategist`, `analyst`, `builder`, `refactorer`, `validator`, `auditor`). The effort is read from the right and only when it is one of those five words, so a provider-qualified ID such as `anthropic/claude-opus-4` stays one model. Three of these keys reach a file where the host reads sub-agent definitions — every planning phase the protocol runs, and `implementer` or `analyst`, each of which is installed **because** the row names it; the rest is a declaration the agent reads, and Estigia runs no model either way |
 | Integration | `branch`, or `trunk` |
 | Renewal window | `default`, or a shorter duration such as `30s` or `1m` |
 | Review protocol | `standard`, or `receipt-driven` (also accepted as `rdd`) |
@@ -136,22 +136,24 @@ was not made is not agreement.
 
 ### Model routing suggestions are agent-specific
 
-The stored value remains exactly the one `key=model` cell above, and the CLI remains the place to edit
-that complete route. The TUI does not show a synthetic `Model routing` setting, raw editor, clear-all,
+The stored value remains exactly the one `key=model` cell above — with the optional `/effort` suffix
+that cell now takes — and the CLI remains the place to edit that complete route. The TUI does not show a synthetic `Model routing` setting, raw editor, clear-all,
 or Advanced stage. `Planning` is the last primary row. A separate block beneath it projects
 an adapter-specific model profile, where one is reviewed, followed by `orchestrate`, the active
 `Planning::phases()`, universal `apply`, delegated roles
 `implementer`/`reviewer`/`judge`, and the six external sub-agent names. Direct planning has no planning
 phase rows; full SDD has `explore`, `propose`, `spec`, `design`, `tasks`; lite SDD has only `spec` and
-`tasks`. Inactive phases, workflow-state overrides, and persisted hidden assignments remain valid but
-are not presented as active choices.
+`tasks`. Inactive phases and persisted hidden assignments remain valid but are not presented as active
+choices. Workflow states are no longer keys at all: they named no context to start, reached nothing,
+and a stored cell holding one is refused rather than read past.
 
 Claude Code and Codex offer three reviewed presets: `balanced`, `performance`, and `economy`.
 Choosing one replaces that agent's complete model route; it never merges with stale custom targets.
 The profile row reads `custom` whenever the complete route does not exactly match a preset. Choosing
 `custom` preserves the current route, and the target rows below are its editor. Profiles expand into
 the same persisted `key=model` cell, do not select `Planning`, do not prove model availability, and do
-not make Estigia run a model. OpenCode's catalog is dynamic, and adapters without a stable reviewed
+not make Estigia run a model — though a profile naming `implementer` or `analyst` does install that
+worker's definition, because on this row naming a key is what asks for the file. OpenCode's catalog is dynamic, and adapters without a stable reviewed
 catalog offer only custom target editing rather than invented defaults. Shared and uniform views also
 offer no profile because they have no single adapter whose model namespace can own it.
 

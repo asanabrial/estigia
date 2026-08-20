@@ -771,6 +771,8 @@ pub enum ActionKind {
     Plugin,
     /// One SDD planning phase, as a sub-agent definition the host routes to.
     PhaseAgent,
+    /// One delegated worker definition, installed because the row named it.
+    DelegatedAgent,
     /// The one blind-review definition Claude Code routes to, as a template.
     AgentDefinition,
     /// One adapter's configuration inside a shared skill root.
@@ -1316,9 +1318,12 @@ fn paths_in(adapter: &AgentAdapter, environment: &Environment) -> AgentPaths {
 
 /// One phase definition, with the operator's answers substituted in.
 ///
-/// Two placeholders, and each carries a decision the operator already made
+/// Three placeholders, and each carries a decision the operator already made
 /// somewhere else — which is the whole point of writing these rather than
-/// shipping a fixed pair of files.
+/// shipping a fixed pair of files. The third is `{{EFFORT}}`, and it is the odd
+/// one: an unnamed effort takes the whole line out rather than substituting a
+/// default, because the host's answer to an absent field is the default and
+/// writing one down would freeze today's into every installation.
 ///
 /// `{{MODEL}}` comes from `Model routing`'s phase key. Until now that setting
 /// was, in its own words, *"a declaration the agent reads, not a dispatch this
@@ -1335,7 +1340,7 @@ fn paths_in(adapter: &AgentAdapter, environment: &Environment) -> AgentPaths {
 /// that only think do not. A single fixed list would have to be the wider one,
 /// which would hand `explore` a write it never needs.
 pub fn render_phase_agent(template: &str, phase: &str, config: &Config) -> String {
-    let model = config.models.for_phase(phase).unwrap_or("inherit");
+    let model = config.models.for_target(phase).unwrap_or("inherit");
     let writes_artifacts = matches!(
         config.planning,
         crate::config::Planning::Sdd { openspec: true, .. }
@@ -1347,9 +1352,50 @@ pub fn render_phase_agent(template: &str, phase: &str, config: &Config) -> Strin
         (_, true) => "Read, Grep, Glob, Write, Edit",
         (_, false) => "Read, Grep, Glob",
     };
-    template
-        .replace("{{MODEL}}", model)
-        .replace("{{TOOLS}}", tools)
+    render_effort(
+        &template
+            .replace("{{MODEL}}", model)
+            .replace("{{TOOLS}}", tools),
+        config.models.effort_for(phase),
+    )
+}
+
+/// Writes the `effort:` line, or takes the placeholder line out entirely.
+///
+/// Taking it out is the whole reason this is not a `replace`. An unnamed effort
+/// has to render the bytes that were rendered before the field existed — not
+/// `effort: medium`, which would freeze one host's current default into a file
+/// and change every installation that never asked for one. `model:` can carry
+/// `inherit` because the host defines that word; effort has no such word, so the
+/// absent field is the only way to say nothing.
+///
+/// Line-preserving rather than line-splitting: a checkout that arrived with
+/// CRLF endings must come back out with them, and `lines()` would quietly
+/// rewrite every ending in the file and lose a final newline besides.
+fn render_effort(rendered: &str, effort: Option<crate::config::Effort>) -> String {
+    match effort {
+        Some(effort) => rendered.replace("{{EFFORT}}", &format!("effort: {}", effort.as_str())),
+        None => rendered
+            .split_inclusive('\n')
+            .filter(|line| line.trim() != "{{EFFORT}}")
+            .collect(),
+    }
+}
+
+/// Renders one delegated worker definition.
+///
+/// Narrower than [`render_phase_agent`] by one substitution, and deliberately:
+/// the grant is written literally in each file because it belongs to the role
+/// rather than to a setting. An implementer that cannot run the suite has not
+/// been made safer, and an analyst handed a shell to make one row simpler is the
+/// widening this pair exists to avoid. `Evidence standard` decides the
+/// reviewer's grant and only the reviewer's — issue #83 owns that row.
+pub fn render_delegated_agent(template: &str, target: &str, config: &Config) -> String {
+    let model = config.models.for_target(target).unwrap_or("inherit");
+    render_effort(
+        &template.replace("{{MODEL}}", model),
+        config.models.effort_for(target),
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -2081,6 +2127,61 @@ fn setup_into_with_skill(
                 ));
             }
         }
+
+        // The delegated workers, whose switch is the row rather than `Planning`.
+        //
+        // A bounded piece of work gets handed to a fresh context under every
+        // protocol, `direct` included — which is exactly where no `sdd-*`
+        // definition exists, so until this pass the one arrangement that needed
+        // a shipped definition most was the one arrangement that got none.
+        //
+        // Named or not named, and nothing in between. Writing these whenever an
+        // agents root exists would put a definition carrying `Write`, `Edit` and
+        // `Bash` into somebody's home because they upgraded, and an agent
+        // definition is authority — `guard:population control-surface` says so
+        // in the harness. So the key is the consent, and the retraction below is
+        // what makes withdrawing it mean something.
+        for (target_key, file) in skill::DELEGATED_AGENTS {
+            let Some(name) = file.path.strip_prefix("agents/") else {
+                continue;
+            };
+            let target = agents_root.join(name);
+            let existing = step!(read_pending(&target, pending));
+            if effective.models.route(target_key).is_none() {
+                if existing.is_none() || !skill::record::created_outside(&paths.skill_root, &target)
+                {
+                    continue;
+                }
+                actions.push(write_step!(discard(
+                    &target,
+                    ActionKind::DelegatedAgent,
+                    options.dry_run
+                )));
+                pending.insert(target.clone(), None);
+                if !options.dry_run {
+                    step!(skill::record::forget_outside(&paths.skill_root, &target));
+                }
+                continue;
+            }
+            let desired = render_delegated_agent(file.contents, target_key, effective);
+            actions.push(write_step!(write_file(
+                &target,
+                existing.as_deref(),
+                &desired,
+                ActionKind::DelegatedAgent,
+                options.dry_run,
+            )));
+            pending.insert(
+                target.clone(),
+                Some(as_the_file_was(existing.as_deref(), &desired)),
+            );
+            if existing.is_none() && !options.dry_run {
+                step!(skill::record::note_created_outside(
+                    &paths.skill_root,
+                    &target
+                ));
+            }
+        }
     }
     boundary!(SetupFailureBoundary::AfterPhase);
 
@@ -2301,9 +2402,20 @@ pub fn uninstall_from(
     // than made — and overwriting somebody's file does not make it ours to
     // delete. That one comes back reported as left behind, which is lossy and
     // said out loud rather than discovered.
-    let mut phase_removals: Vec<(PathBuf, Option<String>)> = Vec::new();
+    let mut phase_removals: Vec<(PathBuf, ActionKind)> = Vec::new();
     if let Some(agents_root) = paths.agents_root.as_ref() {
-        for file in skill::PHASE_AGENTS {
+        // The delegated workers come out by the same rule and for the same
+        // reason: `analyst` in particular is a name somebody else's
+        // orchestrator answers to, so ownership decides, never the name.
+        let definitions = skill::PHASE_AGENTS
+            .iter()
+            .map(|file| (file, ActionKind::PhaseAgent))
+            .chain(
+                skill::DELEGATED_AGENTS
+                    .iter()
+                    .map(|(_, file)| (file, ActionKind::DelegatedAgent)),
+            );
+        for (file, kind) in definitions {
             let Some(name) = file.path.strip_prefix("agents/") else {
                 continue;
             };
@@ -2314,10 +2426,11 @@ pub fn uninstall_from(
             if !skill::record::created_outside(&paths.skill_root, &target) {
                 continue;
             }
+            let _ = existing;
             if !options.dry_run {
                 skill::record::forget_outside(&paths.skill_root, &target)?;
             }
-            phase_removals.push((target, Some(existing)));
+            phase_removals.push((target, kind));
         }
     }
 
@@ -2349,8 +2462,8 @@ pub fn uninstall_from(
         pending.insert(own, None);
     }
 
-    for (target, _) in phase_removals {
-        actions.push(discard(&target, ActionKind::PhaseAgent, options.dry_run)?);
+    for (target, kind) in phase_removals {
+        actions.push(discard(&target, kind, options.dry_run)?);
         pending.insert(target, None);
     }
 

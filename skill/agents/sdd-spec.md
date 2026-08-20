@@ -4,6 +4,7 @@ description: >
   Write the acceptance criteria before any code exists. Use when a proposal is agreed and the
   change needs requirements somebody can check the result against.
 model: {{MODEL}}
+{{EFFORT}}
 tools: {{TOOLS}}
 ---
 

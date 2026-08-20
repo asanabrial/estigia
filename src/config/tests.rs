@@ -1233,6 +1233,7 @@ fn direct_work_delegation_thresholds_do_not_select_sdd() {
         "| Reading for a write or broad research | - | Delegate reading that prepares a write, broad research, or context compression |\n",
         "| Writing | One already-understood mechanical file may stay inline | 2+ non-trivial files delegate one writer |\n",
         "Tests, builds, installs, and native review actions may each use a fresh per-action worker without changing the route. Child workers do not gain orchestration authority.\n",
+        "Two definitions ship for exactly this, and `Planning` does not decide them: `implementer`, which writes and runs the suite inside the checkout its launch names, and `analyst`, which is repository-read-only. Handing a bounded piece of work to a fresh context happens under every protocol, `direct` included — which is where no planning phase exists to borrow. Each is installed only where `Model routing` names its key, so a row naming neither means no definition is there to launch and the brief is composed in the prompt, as every launch did before they existed. A delegated context is measured against **this** run's claim, so what the definition tells it not to do is a rule the launch keeps rather than one the gate enforces on it separately.\n",
         "Crossing a threshold selects delegated direct work only. It MUST NOT select `sdd`, create SDD state or artifacts, or invoke an `sdd-*` phase. Size, file count, and risk do not select a planning protocol, and this rule does not change an operator's configured `Planning` mode."
     );
     assert_eq!(
@@ -1355,11 +1356,11 @@ fn a_model_can_be_named_for_each_delegated_role() {
     assert!(routing("unset").expect("unset parses").by_role.is_empty());
 
     let some = routing("implementer=opus, judge=haiku").expect("a routing");
-    assert_eq!(some.get(Role::Implementer), Some("opus"));
-    assert_eq!(some.get(Role::Judge), Some("haiku"));
+    assert_eq!(some.for_target(Role::Implementer.as_str()), Some("opus"));
+    assert_eq!(some.for_target(Role::Judge.as_str()), Some("haiku"));
     // A role nobody named runs on whatever the agent picks, which is what
     // "unset" has to mean per role and not only for the cell as a whole.
-    assert_eq!(some.get(Role::Reviewer), None);
+    assert_eq!(some.for_target(Role::Reviewer.as_str()), None);
 
     // Rendered in role order, not insertion order: a table that reorders
     // itself between two writes shows a diff where nothing changed.
@@ -1405,7 +1406,6 @@ fn model_routing_targets_and_mutations_have_one_canonical_owner() {
     for target in Role::all()
         .into_iter()
         .map(Role::as_str)
-        .chain(crate::config::STATES.iter().copied())
         .chain(crate::config::SDD_PHASES.iter().copied())
         .chain(crate::config::ORCHESTRATED_ROLES.iter().copied())
     {
@@ -1536,47 +1536,20 @@ fn a_model_can_be_named_per_phase_as_well_as_per_role() {
         Config::read(&local, None).map(|config| config.models)
     };
 
-    let mixed = routing("judge=haiku, analysis=opus, in-progress=sonnet").expect("a routing");
-    assert_eq!(mixed.for_state("analysis"), Some("opus"));
-    assert_eq!(mixed.for_state("in-progress"), Some("sonnet"));
-    assert_eq!(mixed.for_state("done"), None);
-    assert_eq!(mixed.get(Role::Judge), Some("haiku"));
+    let mixed = routing("judge=haiku, design=opus, analyst=sonnet").expect("a routing");
+    assert_eq!(mixed.for_target("judge"), Some("haiku"));
+    assert_eq!(mixed.for_target("design"), Some("opus"));
+    assert_eq!(mixed.for_target("analyst"), Some("sonnet"));
+    assert_eq!(mixed.for_target("explore"), None);
 
-    // The role wins over the phase. A judge working while the issue sits in
-    // `review` is still a judge, and letting the phase override it would
-    // silently undo the more specific of the two settings.
-    let both = routing("judge=haiku, review=opus").expect("a routing");
+    // Rendered roles, then phases, then the names another orchestrator spawns,
+    // in a fixed order, so two writes of the same routing produce the same cell
+    // and a diff means something changed.
     assert_eq!(
-        both.resolve(Some(Role::Judge), Some("review")),
-        Some("haiku")
-    );
-    // The phase answers when nothing more specific did.
-    assert_eq!(
-        both.resolve(Some(Role::Reviewer), Some("review")),
-        Some("opus")
-    );
-    assert_eq!(both.resolve(None, Some("review")), Some("opus"));
-    assert_eq!(both.resolve(None, Some("ready")), None);
-
-    // Rendered roles-then-states in a fixed order, so two writes of the same
-    // routing produce the same cell and a diff means something changed.
-    assert_eq!(
-        routing("done=a, judge=b, analysis=c")
+        routing("builder=a, judge=b, spec=c")
             .expect("a routing")
             .as_value(),
-        "judge=b, analysis=c, done=a"
-    );
-
-    // Every state the binding declares is a key, and nothing else is.
-    for state in crate::config::STATES {
-        assert!(
-            routing(&format!("{state}=opus")).is_ok(),
-            "{state} is a workflow state and was refused"
-        );
-    }
-    assert!(
-        routing("shipped=opus").is_err(),
-        "a state nothing produces was accepted"
+        "judge=b, spec=c, builder=a"
     );
 
     // And it survives the table.
@@ -1588,21 +1561,148 @@ fn a_model_can_be_named_per_phase_as_well_as_per_role() {
     assert_eq!(reread.models, mixed);
 }
 
+/// A workflow state is not a routing key, because it never named a context.
+///
+/// The row accepted all six for as long as they reached nothing. `for_state`
+/// was byte-identical to `for_phase`, `resolve_in` ranked it last of three, and
+/// no caller outside this module's own tests ever asked any of them — so an
+/// operator could write `in-progress=opus`, read it back from `config list`,
+/// and have chosen a model for nobody.
+///
+/// Where the issue sits says *what is happening to the work*, not *what is doing
+/// it*. There is no context to start and so nothing to render into, which is why
+/// this family is refused rather than wired up: the other three each reach a
+/// definition on disk.
+#[test]
+fn a_workflow_state_is_no_longer_a_routing_key() {
+    let routing = |cell: &str| {
+        let local = table(&[("Model routing", cell)]);
+        Config::read(&local, None).map(|config| config.models)
+    };
+
+    for state in crate::config::STATES {
+        assert!(
+            routing(&format!("{state}=opus")).is_err(),
+            "`{state}` is a workflow state and the routing still takes it"
+        );
+        assert!(
+            !ModelRouting::targets().contains(state),
+            "`{state}` is still offered as a routing target"
+        );
+        // As a word: `reviewer` is a role and contains `review`, so a
+        // substring test here would fail on a sentence that is telling the
+        // truth.
+        assert!(
+            !Setting::Models
+                .accepted()
+                .split(|character: char| !character.is_ascii_alphanumeric() && character != '-')
+                .any(|word| word == *state),
+            "`{state}` is refused by the parser and still named by the help"
+        );
+    }
+
+    // Refused whole rather than partly read, like every other unknown key: a
+    // cell half-applied would leave one target on whatever the agent picks
+    // while the table says otherwise.
+    assert!(routing("judge=haiku, review=opus").is_err());
+
+    // The three families that survive are the three that reach something.
+    for key in ["implementer", "design", "analyst"] {
+        assert!(routing(&format!("{key}=opus")).is_ok(), "{key} was refused");
+    }
+}
+
+/// An effort travels with the model, because it is the same decision.
+///
+/// Sizing a context to a task picks both at once — a rename wants neither the
+/// model nor the deliberation a design wants — so a second row would be two
+/// spellings of one choice, which is the shape this crate keeps finding and
+/// removing.
+///
+/// The separator is the interesting half. A provider-qualified model ID carries
+/// `/` already, so the effort is read from the right and only when the tail is
+/// one of the five words the host takes. `anthropic/claude-opus-4` is one model;
+/// reading from the left would have made it `anthropic` at an effort nobody
+/// named.
+#[test]
+fn an_effort_is_named_beside_the_model_and_read_from_the_right() {
+    let routing = |cell: &str| {
+        let local = table(&[("Model routing", cell)]);
+        Config::read(&local, None).map(|config| config.models)
+    };
+
+    let sized = routing("apply=sonnet/low, design=opus/high").expect("a routing");
+    assert_eq!(sized.for_target("apply"), Some("sonnet"));
+    assert_eq!(sized.effort_for("apply"), Some(Effort::Low));
+    assert_eq!(sized.for_target("design"), Some("opus"));
+    assert_eq!(sized.effort_for("design"), Some(Effort::High));
+
+    // Named without an effort stays named without one. `medium` is the host's
+    // answer to an absent field and writing it down would freeze today's
+    // default into every installation that never asked for one.
+    let bare = routing("apply=sonnet").expect("a routing");
+    assert_eq!(bare.effort_for("apply"), None);
+    assert_eq!(bare.as_value(), "apply=sonnet");
+    assert_eq!(sized.as_value(), "design=opus/high, apply=sonnet/low");
+
+    // A provider-qualified ID is one model, not a model at an effort.
+    let qualified = routing("apply=anthropic/claude-opus-4").expect("a routing");
+    assert_eq!(
+        qualified.for_target("apply"),
+        Some("anthropic/claude-opus-4")
+    );
+    assert_eq!(qualified.effort_for("apply"), None);
+    // And the same ID with an effort on the end keeps both.
+    let both = routing("apply=anthropic/claude-opus-4/max").expect("a routing");
+    assert_eq!(both.for_target("apply"), Some("anthropic/claude-opus-4"));
+    assert_eq!(both.effort_for("apply"), Some(Effort::Max));
+
+    // Every word the host takes, and nothing else. A sixth would render a field
+    // the host reads as nothing, which is the failure this row is being fixed
+    // for.
+    for effort in Effort::all() {
+        let named = routing(&format!("apply=sonnet/{}", effort.as_str())).expect("a routing");
+        assert_eq!(named.effort_for("apply"), Some(effort));
+    }
+    let invented = routing("apply=sonnet/enormous").expect("a routing");
+    assert_eq!(invented.for_target("apply"), Some("sonnet/enormous"));
+    assert_eq!(invented.effort_for("apply"), None);
+
+    // An effort with no model in front of it is not a route.
+    assert!(routing("apply=/high").is_err());
+
+    // And both halves survive the table they are written into.
+    let reread = Config::read(
+        &Config {
+            models: sized.clone(),
+            ..Config::default()
+        }
+        .render_rows(),
+        None,
+    )
+    .expect("Estigia wrote this");
+    assert_eq!(reread.models, sized);
+}
+
 #[test]
 fn the_states_a_routing_accepts_are_the_ones_the_contract_declares() {
     // Written in two places — here and the contract's own sentence — so they
-    // are crossed rather than trusted. A renamed state would make a routing
-    // match nothing, and a model nobody selected is indistinguishable from one
-    // nobody configured.
+    // are crossed rather than trusted. A renamed state would make a transition
+    // match nothing, and this list is what the transport labels an issue with.
+    //
+    // It stopped being a routing vocabulary when the state family came out of
+    // `Model routing`; the name here is kept because the crossing is the same
+    // one, and `a_workflow_state_is_no_longer_a_routing_key` holds the other
+    // half.
     let contract = include_str!("../../skill/SKILL.md");
     for state in crate::config::STATES {
         assert!(
             contract.contains(&format!("`{state}`")),
-            "`{state}` is a routing key and the contract never names it"
+            "`{state}` is a workflow state and the contract never names it"
         );
     }
     // And the other direction, on the sentence that lists them: a state the
-    // contract declares and this does not is one an operator cannot route.
+    // contract declares and this does not is one no run can be moved to.
     for declared in [
         "analysis",
         "ready",
@@ -1613,7 +1713,7 @@ fn the_states_a_routing_accepts_are_the_ones_the_contract_declares() {
     ] {
         assert!(
             crate::config::STATES.contains(&declared),
-            "the contract declares `{declared}` and no model can be named for it"
+            "the contract declares `{declared}` and this crate does not hold it"
         );
     }
 }
@@ -1688,32 +1788,25 @@ fn a_model_can_be_named_per_sdd_phase_and_the_most_specific_wins() {
     // The shape an operator actually asks for: design thinks with one model,
     // applying writes with a cheaper one, orchestration with a third.
     let sdd = routing("design=opus-5, apply=sonnet-5, orchestrate=fable-5").expect("a routing");
-    assert_eq!(sdd.for_phase("design"), Some("opus-5"));
-    assert_eq!(sdd.for_phase("apply"), Some("sonnet-5"));
-    assert_eq!(sdd.for_phase("orchestrate"), Some("fable-5"));
+    assert_eq!(sdd.for_target("design"), Some("opus-5"));
+    assert_eq!(sdd.for_target("apply"), Some("sonnet-5"));
+    assert_eq!(sdd.for_target("orchestrate"), Some("fable-5"));
 
     // Models are opaque strings on purpose: another agent's list is not this
     // one's, and a hard-coded set would refuse the model somebody has.
     let elsewhere = routing("orchestrate=gpt-5.6, apply=kimi-k3").expect("a routing");
-    assert_eq!(elsewhere.for_phase("orchestrate"), Some("gpt-5.6"));
-    assert_eq!(elsewhere.for_phase("apply"), Some("kimi-k3"));
+    assert_eq!(elsewhere.for_target("orchestrate"), Some("gpt-5.6"));
+    assert_eq!(elsewhere.for_target("apply"), Some("kimi-k3"));
 
-    // Most specific first: phase beats role beats state. Somebody who named a
-    // model for `design` did it to choose what designs.
-    let all = routing("design=opus, implementer=sonnet, in-progress=haiku").expect("a routing");
-    assert_eq!(
-        all.resolve_in(Some(Role::Implementer), Some("in-progress"), Some("design")),
-        Some("opus")
-    );
-    assert_eq!(
-        all.resolve_in(Some(Role::Implementer), Some("in-progress"), None),
-        Some("sonnet")
-    );
-    assert_eq!(
-        all.resolve_in(None, Some("in-progress"), None),
-        Some("haiku")
-    );
-    assert_eq!(all.resolve_in(None, Some("done"), Some("spec")), None);
+    // A phase and a role are two keys and never one fallback for the other.
+    // There used to be a precedence between them — phase, then role, then
+    // state — resolved by a method nothing outside these tests called, over a
+    // state family that no longer exists. What each target runs on is now the
+    // one thing this holds, because it is the one thing anything reads.
+    let all = routing("design=opus, implementer=sonnet").expect("a routing");
+    assert_eq!(all.for_target("design"), Some("opus"));
+    assert_eq!(all.for_target("implementer"), Some("sonnet"));
+    assert_eq!(all.for_target("spec"), None);
 
     // Every phase is a key, and a word that is none of the three kinds is not.
     for phase in crate::config::SDD_PHASES {
@@ -1784,6 +1877,12 @@ fn an_orchestrators_own_vocabulary_is_accepted() {
     // setting that refuses the word they have in front of them is one they
     // conclude does not work — and the cost of accepting a key Estigia never
     // spawns is nothing, because an unread key routes nobody.
+    //
+    // `analyst` is the one that is read: it is this contract's own read-only
+    // role as well as somebody else's sub-agent, and naming it installs a
+    // definition. That is why the install is gated on the key and owned as
+    // created-outside — a file appearing unasked under a name another harness
+    // answers to would shadow theirs.
     let routing = |cell: &str| {
         let local = table(&[("Model routing", cell)]);
         Config::read(&local, None).map(|config| config.models)
@@ -1796,15 +1895,15 @@ fn an_orchestrators_own_vocabulary_is_accepted() {
     }
 
     let forge = routing("strategist=opus-5, builder=sonnet-5, auditor=haiku").expect("a routing");
-    assert_eq!(forge.for_phase("strategist"), Some("opus-5"));
-    assert_eq!(forge.for_phase("builder"), Some("sonnet-5"));
-    assert_eq!(forge.for_phase("auditor"), Some("haiku"));
+    assert_eq!(forge.for_target("strategist"), Some("opus-5"));
+    assert_eq!(forge.for_target("builder"), Some("sonnet-5"));
+    assert_eq!(forge.for_target("auditor"), Some("haiku"));
 
     // Estigia's own three still win where they overlap in meaning, because
     // `reviewer` is a role this configuration really does create.
     let both = routing("reviewer=opus, validator=sonnet").expect("a routing");
-    assert_eq!(both.get(Role::Reviewer), Some("opus"));
-    assert_eq!(both.for_phase("validator"), Some("sonnet"));
+    assert_eq!(both.for_target(Role::Reviewer.as_str()), Some("opus"));
+    assert_eq!(both.for_target("validator"), Some("sonnet"));
 
     // And a word belonging to no vocabulary is still refused.
     assert!(routing("wizard=opus").is_err());
@@ -2171,16 +2270,18 @@ fn every_answer_a_setting_offers_says_what_it_means() {
 
 #[test]
 fn every_key_the_routing_takes_is_a_key_it_names() {
-    // `Model routing` accepts four families of key — a delegated role, a
-    // workflow state, a phase of thinking, and the name of a sub-agent an
-    // orchestration skill spawns — and the sentence an operator reads named
-    // seven examples out of twenty-two. `orchestrate` was one of the fifteen it
-    // left out: the key somebody asks for first, working since the day it was
-    // written, mentioned nowhere.
+    // `Model routing` accepts three families of key — a delegated role, a
+    // phase of thinking, and the name of a sub-agent an orchestration skill
+    // spawns — and the sentence an operator reads once named seven examples
+    // out of twenty-two. `orchestrate` was one of the fifteen it left out: the
+    // key somebody asks for first, working since the day it was written,
+    // mentioned nowhere. A fourth family, the workflow states, was named and
+    // reached nothing; it is refused now and
+    // `a_workflow_state_is_no_longer_a_routing_key` holds that.
     //
     // The ratchet this crate applies to every refusal, applied to the row it
     // matters most on: a value the operator cannot discover is a value they
-    // cannot supply. Read out of the four lists rather than trusting the
+    // cannot supply. Read out of the three lists rather than trusting the
     // sentence, so a key added to any of them lands here.
     let accepted = Setting::Models.accepted();
     let mut unnamed: Vec<&str> = Vec::new();
@@ -2188,7 +2289,6 @@ fn every_key_the_routing_takes_is_a_key_it_names() {
     for key in crate::config::Role::all()
         .into_iter()
         .map(crate::config::Role::as_str)
-        .chain(crate::config::STATES.iter().copied())
         .chain(crate::config::SDD_PHASES.iter().copied())
         .chain(crate::config::ORCHESTRATED_ROLES.iter().copied())
     {
@@ -2206,8 +2306,8 @@ fn every_key_the_routing_takes_is_a_key_it_names() {
     // The floor: the walk found the keys. An empty vocabulary would be named in
     // full by a sentence that said nothing.
     assert!(
-        named + unnamed.len() >= 20,
-        "only {} key(s) were read out of the four lists",
+        named + unnamed.len() >= 16,
+        "only {} key(s) were read out of the three lists",
         named + unnamed.len()
     );
     assert!(
@@ -2217,7 +2317,7 @@ fn every_key_the_routing_takes_is_a_key_it_names() {
 
     // And each one really is taken, so the sentence is not naming words the
     // parser would refuse — the other way this help can lie.
-    for key in ["orchestrate", "builder", "in-progress", "implementer"] {
+    for key in ["orchestrate", "builder", "analyst", "implementer"] {
         let mut config = Config::default();
         Setting::Models
             .apply(&mut config, &format!("{key}=opus"))

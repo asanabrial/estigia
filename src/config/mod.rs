@@ -961,6 +961,123 @@ impl Role {
     }
 }
 
+/// How hard a delegated context is asked to think.
+///
+/// A closed set, and it is the host's closed set rather than one invented here:
+/// these are the five words a Claude Code sub-agent definition's `effort:` field
+/// takes. Inventing a sixth would render a definition the host reads as nothing,
+/// which is the failure this row is being fixed for.
+///
+/// Effort is deliberately not a number. An operator choosing between `low` and
+/// `high` is choosing what the work is worth; a budget would be choosing what it
+/// costs, and Estigia cannot see either.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Effort {
+    /// Mechanical work: a rename, a moved line, a spelling.
+    Low,
+    /// The host's own default when a definition names no effort.
+    Medium,
+    /// Work whose shape is still open.
+    High,
+    /// Above `high`, where the host offers it.
+    XHigh,
+    /// As much as the host will give.
+    Max,
+}
+
+impl Effort {
+    /// Its spelling, in the row and in the rendered definition alike.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::XHigh => "xhigh",
+            Self::Max => "max",
+        }
+    }
+
+    /// Every effort, under an exhaustive match, so a sixth cannot be added
+    /// without arriving here.
+    pub fn all() -> Vec<Self> {
+        let every = vec![Self::Low, Self::Medium, Self::High, Self::XHigh, Self::Max];
+        for effort in &every {
+            match effort {
+                Self::Low | Self::Medium | Self::High | Self::XHigh | Self::Max => {}
+            }
+        }
+        every
+    }
+
+    /// The effort this word names, or nothing.
+    pub fn parse(word: &str) -> Option<Self> {
+        let word = word.trim().to_lowercase();
+        Self::all()
+            .into_iter()
+            .find(|effort| effort.as_str() == word)
+    }
+}
+
+/// One target's model, and how hard it is asked to think.
+///
+/// The two travel together because they are one decision. An operator sizing a
+/// context to a task picks both at once — a rename does not want the model *or*
+/// the deliberation a design wants — and splitting them across two rows would be
+/// two spellings of that one decision, which is the shape this crate has spent
+/// whole rounds removing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Route {
+    /// The opaque model ID, never checked against a catalog.
+    pub model: String,
+    /// The effort, when one was named. `None` renders nothing rather than a
+    /// default: a definition that omits the field gets the host's own answer,
+    /// and writing that answer down would freeze today's default into a file.
+    pub effort: Option<Effort>,
+}
+
+impl Route {
+    /// Reads `opus`, or `opus/high`, or nothing at all.
+    ///
+    /// The effort is read from the **right**, and only when the tail is one of
+    /// [`Effort`]'s words. A provider-qualified ID carries the same separator —
+    /// `anthropic/claude-opus-4` is one model, not `anthropic` at `claude-opus-4`
+    /// effort — so reading from the left would eat the provider and leave a model
+    /// nobody named.
+    pub fn parse(value: &str) -> Option<Self> {
+        let value = value.trim();
+        let (model, effort) = match value.rsplit_once('/') {
+            // An effort with nothing in front of it is refused rather than read
+            // as a model called `/high`. The operator named an effort and no
+            // model; accepting it would route them to a model ID no catalog has
+            // and report the row as set.
+            Some((model, tail)) if Effort::parse(tail).is_some() => {
+                (model.trim(), Effort::parse(tail))
+            }
+            _ => (value, None),
+        };
+        ModelRouting::accepts_model_id(model).then(|| Self {
+            model: model.to_owned(),
+            effort,
+        })
+    }
+
+    /// The half of a `key=value` pair that follows the `=`.
+    pub fn as_value(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl std::fmt::Display for Route {
+    /// One spelling, so what is written, what is read back and what is shown in
+    /// a message cannot drift apart.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.effort {
+            Some(effort) => write!(formatter, "{}/{}", self.model, effort.as_str()),
+            None => formatter.write_str(&self.model),
+        }
+    }
+}
+
 /// The states a newly filed issue may be created in.
 ///
 /// Narrower than [`STATES`], and the narrowing is the transport's: `create`
@@ -988,8 +1105,12 @@ pub const COMMENT_KINDS: &[&str] = &["blocker", "diagnosis", "note"];
 /// Taken from the binding — *"the workflow's states are `analysis`, `ready`,
 /// `in-progress`, `review`, `blocked` and `done`"* — and crossed against that
 /// sentence by a test, for the same reason [`crate::harness`] crosses its
-/// delivery states: a renamed state would make a routing match nothing, and a
-/// model nobody selected is indistinguishable from one nobody configured.
+/// delivery states: a renamed state would make a transition match nothing, and
+/// this list is what the transport labels an issue with.
+///
+/// These were [`ModelRouting`] keys too, until issue #110 measured that nothing
+/// read them. Where the issue sits names no context to start, so there was
+/// never anything for the family to route to.
 pub const STATES: &[&str] = &[
     "analysis",
     "ready",
@@ -1044,8 +1165,9 @@ const SHORT_FORM_PHASES: &[&str] = &["spec", "tasks"];
 /// Sub-agent names an orchestration skill is likely to spawn.
 ///
 /// Taken from a published orchestration lifecycle that runs seven of them with
-/// isolated context windows. Estigia spawns none of these and says so — [`ModelRouting`] is a
-/// declaration the agent reads, not a dispatch this binary performs. They are
+/// isolated context windows. Estigia starts none of them: for five of these six
+/// names [`ModelRouting`] is a declaration the agent reads, not a dispatch this
+/// binary performs. They are
 /// here because an operator running an orchestrator alongside Estigia thinks in
 /// **its** vocabulary, and a setting that refuses the word they have in front
 /// of them is one they conclude does not work.
@@ -1053,6 +1175,13 @@ const SHORT_FORM_PHASES: &[&str] = &["spec", "tasks"];
 /// The asymmetry is what makes this safe: accepting a name Estigia never spawns
 /// costs nothing, because an unread key routes nobody. Refusing one that
 /// somebody's orchestrator does spawn costs them the setting.
+///
+/// `analyst` is the exception and is deliberately not moved out of this list.
+/// It is this contract's own read-only role as well as somebody else's
+/// sub-agent name, and naming it here installs [`crate::skill::DELEGATED_AGENTS`]'s
+/// read-only definition — which is exactly why that install is gated on the key
+/// and tracked as created-outside. A file written unasked under a name another
+/// harness answers to would shadow theirs.
 pub const ORCHESTRATED_ROLES: &[&str] = &[
     "strategist",
     "analyst",
@@ -1088,17 +1217,23 @@ pub struct ModelTarget {
 ///
 /// # What this does and does not do
 ///
-/// Estigia **does not run the model** — it holds the tools. So this is a
-/// declaration the agent reads, not a dispatch this binary performs, and it is
-/// recorded that way: an operator who sets it and finds their harness spawning
-/// nothing has been told something untrue.
+/// Estigia **does not run the model** — it holds the tools. What it does with
+/// this row is narrower and worth stating exactly, because the row's name
+/// promises more than any harness could deliver: where a host reads sub-agent
+/// definitions, `setup` writes the named model and effort into the ones it
+/// installs, and for the two delegated workers the presence of the key is what
+/// decides the file exists at all. Every other key is a declaration the agent
+/// reads. Nothing here starts a process.
+///
+/// A route carries a model and, optionally, the effort it runs at — one
+/// decision, one place. See [`Route`].
 ///
 /// Empty by default. Naming a model for a role nobody delegates to would spend
 /// an operator's attention on a sub-agent their configuration never creates.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ModelRouting {
-    /// Target to opaque model ID; rendered through the canonical target order.
-    pub by_role: std::collections::BTreeMap<String, String>,
+    /// Target to route; rendered through the canonical target order.
+    pub by_role: std::collections::BTreeMap<String, Route>,
 }
 
 impl ModelRouting {
@@ -1106,8 +1241,8 @@ impl ModelRouting {
     ///
     /// Persistence accepts a wider vocabulary so changing `Planning` never
     /// makes an existing table unreadable. This narrower projection excludes
-    /// inactive phases and state overrides because presenting an inert route as
-    /// an ordinary interactive choice would imply that the current run uses it.
+    /// inactive phases because presenting an inert route as an ordinary
+    /// interactive choice would imply that the current run uses it.
     pub fn visible_targets(planning: Planning) -> Vec<ModelTarget> {
         std::iter::once(ModelTarget {
             name: ORCHESTRATE_TARGET,
@@ -1141,7 +1276,6 @@ impl ModelRouting {
     pub fn targets() -> Vec<&'static str> {
         std::iter::once(ORCHESTRATE_TARGET)
             .chain(Role::all().into_iter().map(Role::as_str))
-            .chain(STATES.iter().copied())
             .chain(
                 SDD_PHASES
                     .iter()
@@ -1152,25 +1286,39 @@ impl ModelRouting {
             .collect()
     }
 
-    /// The model assigned to any canonical routing target.
-    pub fn for_target(&self, target: &str) -> Option<&str> {
-        let target = Self::canonical_target(target)?;
-        self.by_role.get(target).map(String::as_str)
+    /// The whole route assigned to any canonical target.
+    ///
+    /// One lookup, because there is one store. The model and the effort were
+    /// two questions here and the second one had no answer at all.
+    pub fn route(&self, target: &str) -> Option<&Route> {
+        self.by_role.get(Self::canonical_target(target)?)
     }
 
-    /// Assigns an opaque model ID to one canonical target.
+    /// The model assigned to any canonical routing target.
+    pub fn for_target(&self, target: &str) -> Option<&str> {
+        self.route(target).map(|route| route.model.as_str())
+    }
+
+    /// The effort named for a target, when one was.
+    pub fn effort_for(&self, target: &str) -> Option<Effort> {
+        self.route(target).and_then(|route| route.effort)
+    }
+
+    /// Assigns one route -- `opus`, or `opus/high` -- to one canonical target.
     ///
     /// Model IDs are deliberately not validated against a catalog. Catalogs are
     /// advisory host snapshots; persisted custom and future IDs remain valid.
+    /// The effort suffix is read by the same [`Route::parse`] the table uses, so
+    /// an operator typing into a picker and an operator editing the row are
+    /// spelling one thing one way.
     pub fn assign(&mut self, target: &str, model: &str) -> bool {
         let Some(target) = Self::canonical_target(target) else {
             return false;
         };
-        let model = model.trim();
-        if !Self::accepts_model_id(model) {
+        let Some(route) = Route::parse(model) else {
             return false;
-        }
-        self.by_role.insert(target.to_owned(), model.to_owned());
+        };
+        self.by_role.insert(target.to_owned(), route);
         true
     }
 
@@ -1201,55 +1349,6 @@ impl ModelRouting {
         Self::targets()
             .into_iter()
             .find(|candidate| candidate.eq_ignore_ascii_case(target))
-    }
-
-    /// The model this role should use, if one was named.
-    pub fn get(&self, role: Role) -> Option<&str> {
-        self.by_role.get(role.as_str()).map(String::as_str)
-    }
-
-    /// The model named for an SDD phase, if any.
-    pub fn for_phase(&self, phase: &str) -> Option<&str> {
-        self.by_role
-            .get(phase.trim().to_lowercase().as_str())
-            .map(String::as_str)
-    }
-
-    /// The model named for a workflow state, if any.
-    pub fn for_state(&self, state: &str) -> Option<&str> {
-        self.by_role
-            .get(state.trim().to_lowercase().as_str())
-            .map(String::as_str)
-    }
-
-    /// The model to run, given both what the sub-agent is and where the run is.
-    ///
-    /// **The role wins.** A judge working while the issue sits in `review` is
-    /// still a judge, and the reason somebody named a model for `judge` was to
-    /// choose the judge's model — letting the phase override it would silently
-    /// undo the more specific of the two settings. The phase answers only when
-    /// nothing more specific did.
-    pub fn resolve(&self, role: Option<Role>, state: Option<&str>) -> Option<&str> {
-        self.resolve_in(role, state, None)
-    }
-
-    /// [`Self::resolve`], plus the SDD phase if one is under way.
-    ///
-    /// Most specific first: the **phase** beats the role, and the role beats the
-    /// state. Somebody who named a model for `design` did it to choose what
-    /// designs — letting `implementer` override that would undo the more
-    /// deliberate of the two. The state answers last, because "where the issue
-    /// sits" is the coarsest of the three.
-    pub fn resolve_in(
-        &self,
-        role: Option<Role>,
-        state: Option<&str>,
-        phase: Option<&str>,
-    ) -> Option<&str> {
-        phase
-            .and_then(|phase| self.for_phase(phase))
-            .or_else(|| role.and_then(|role| self.get(role)))
-            .or_else(|| state.and_then(|state| self.for_state(state)))
     }
 
     /// Keys named here for a phase the planning protocol never runs.
@@ -1285,22 +1384,25 @@ impl ModelRouting {
             return "unset".to_owned();
         }
         // Role order, not insertion order: a table that reorders itself
-        // between two writes shows a diff where nothing changed.
-        // Roles first, then states in workflow order — a fixed order rather
-        // than the map's, so two writes of the same routing produce the same
-        // cell and a diff means something changed.
+        // between two writes shows a diff where nothing changed. Roles first,
+        // then phases, then the names another orchestrator spawns — a fixed
+        // order rather than the map's, so two writes of the same routing
+        // produce the same cell and a diff means something changed.
         Role::all()
             .into_iter()
             .map(|role| role.as_str())
-            .chain(STATES.iter().copied())
             .chain(SDD_PHASES.iter().copied())
             .chain(ORCHESTRATED_ROLES.iter().copied())
-            .filter_map(|key| self.by_role.get(key).map(|model| format!("{key}={model}")))
+            .filter_map(|key| {
+                self.by_role
+                    .get(key)
+                    .map(|route| format!("{key}={}", route.as_value()))
+            })
             .collect::<Vec<_>>()
             .join(", ")
     }
 
-    /// Reads `implementer=opus, reviewer=sonnet` — or nothing.
+    /// Reads `implementer=opus, design=sonnet/high` — or nothing.
     ///
     /// A word that is not `role=model` is refused rather than skipped. Silently
     /// dropping it would leave a role running on whatever the agent picks while
@@ -1316,18 +1418,16 @@ impl ModelRouting {
         }
         let mut by_role = std::collections::BTreeMap::new();
         for piece in value.split(',') {
-            let (key, model) = piece.split_once('=')?;
-            // A role, or a workflow state. Two different questions — *what is
-            // this sub-agent* and *where is the run* — answered in one cell
-            // because an operator thinks of both as "which model runs here".
+            let (key, route) = piece.split_once('=')?;
+            // A delegated role, a phase of thinking, or a name somebody else's
+            // orchestrator spawns. Not a workflow state: where the issue sits
+            // names no context to start, so that family was accepted here for
+            // as long as it reached nothing.
             let key = Self::canonical_target(key)?;
-            let model = model.trim();
-            if !Self::accepts_model_id(model) {
-                return None;
-            }
+            let route = Route::parse(route)?;
             // A role named twice is a contradiction, not a last-one-wins: the
             // operator meant two different things and only one can happen.
-            if by_role.insert(key.to_owned(), model.to_owned()).is_some() {
+            if by_role.insert(key.to_owned(), route).is_some() {
                 return None;
             }
         }

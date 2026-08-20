@@ -44,7 +44,8 @@ qualify. If the runtime or operator forbids delegation, use a separate session. 
 helper changes the mechanism, never the review requirement.
 
 For Claude Code, every setup installs one stable `review-blind` definition with `model: inherit`, even
-in `single` mode. It is inert unless its launch prompt names an active blind mode, the exact publication
+in `single` mode. It also installs `implementer` and `analyst` where `Model routing` names them, which
+is a separate switch from this one and from `Planning`. It is inert unless its launch prompt names an active blind mode, the exact publication
 receipt and the review criteria. The orchestrator passes `Model routing`'s effective `judge` model on
 each launch, and starts that same definition twice for `two blind` or five times for `five blind`,
 concurrently, with the identical target and criteria. Each context runs on the grant `Evidence
@@ -83,7 +84,9 @@ same-finding identity or quorum, and its transport has no per-judge verdict mech
 ## Analyst enforcement and delegation
 
 Where supported, enforce analyst read-only behavior with a tool allowlist that excludes file-writing
-tools. This reduces accidental edits but does not seal the boundary: a shell can write files and is
+tools. On Claude Code with `analyst` named in `Model routing`, that allowlist is already shipped as
+the `analyst` definition and needs no composing; elsewhere it is written into the launch. Either way
+it reduces accidental edits and does not seal the boundary: a shell can write files and is
 still needed for measurements, so the prose prohibition remains authoritative.
 
 Claude Code applies a subagent definition's tool allowlist when that definition runs as a teammate,

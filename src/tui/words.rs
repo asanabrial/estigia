@@ -108,11 +108,13 @@ delegados. Cada fila abre directamente el catálogo orientativo del anfitrión;
 Intro o Espacio eligen, siempre se puede escribir un ID personalizado y
 heredar elimina solo ese destino. Las respuestas compartidas no toman
 prestado el catálogo de ningún agente.
-La CLI conserva la edición de la ruta key=model completa.
+La CLI conserva la edición de la ruta key=model completa, donde un modelo
+puede llevar detrás de una barra el esfuerzo con el que corre.
 
 Solo Claude Code recibe actualmente definiciones enrutables por el anfitrión:
-las fases de planificación seleccionadas y un revisor ciego estático e inerte
-en todos los modos. OpenCode y todos los demás anfitriones conservan estos
+las fases de planificación seleccionadas, un revisor ciego estático e inerte
+en todos los modos, y los trabajadores implementer y analyst, que existen
+porque esta fila los nombra. OpenCode y todos los demás anfitriones conservan estos
 valores como declaraciones de reparto; orchestrate, apply, judge y una ruta
 visible tampoco demuestran ejecución.
 
@@ -516,6 +518,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("no verified model catalog for {agent}; type a model ID", "no hay un catálogo de modelos verificado para {agent}; escribe un ID de modelo"),
     ("shared answers have no single agent model catalog; type a model ID", "las respuestas compartidas no tienen el catálogo de un único agente; escribe un ID de modelo"),
     ("Planning differs across selected agents; unify it or edit each agent to route planning phases", "Planning difiere entre los agentes seleccionados; unifícalo o edita cada agente para enrutar fases de planificación"),
+    ("naming a model here installs this worker's definition where the host reads one; clearing it takes the definition away", "nombrar un modelo aquí instala la definición de este trabajador donde el anfitrión la lee; borrarlo se lleva la definición"),
     ("only Claude Code currently emits planned phase definitions; other hosts keep this as a routing declaration", "solo Claude Code emite actualmente definiciones de fases planificadas; los demás anfitriones conservan esto como declaración de reparto"),
     ("{target} is a routing declaration, not proof that a host executes it", "{target} es una declaración de reparto, no una prueba de que un anfitrión lo ejecute"),
     ("{agent} model catalog unavailable: {why}. Type a model ID instead.", "el catálogo de modelos de {agent} no está disponible: {why}. Escribe un ID de modelo en su lugar."),
@@ -544,7 +547,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("where isolated checkouts are made, when a run needs one", "dónde se hacen los checkouts aislados, cuando una ejecución necesita uno"),
     ("where this repository's issues live — the claim is adjudicated there", "dónde viven los issues de este repositorio — la reclamación se adjudica ahí"),
     ("how much is written down before any code is", "cuánto se escribe antes de escribir nada de código"),
-    ("which model each delegated role and phase runs on, for this agent", "en qué modelo corre cada rol y cada fase delegada, para este agente"),
+    ("which model, and at what effort, each delegated role, phase and sub-agent runs on, for this agent", "en qué modelo, y con qué esfuerzo, corre cada rol, cada fase y cada sub-agente delegado, para este agente"),
     ("whether work integrates through branches or straight onto trunk", "si el trabajo se integra por ramas o directo sobre trunk"),
     ("how long a routine write may ride on the last verification", "cuánto puede una escritura rutinaria apoyarse en la última verificación"),
     ("what a review verdict is bound to (RDD lives here)", "a qué queda atado un veredicto de revisión (RDD vive aquí)"),
@@ -559,7 +562,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("`unset`, or an absolute directory", "`unset`, o un directorio absoluto"),
     ("`github`, `github <owner>/<name>`, `linear`, or `trello`", "`github`, `github <dueño>/<nombre>`, `linear`, o `trello`"),
     ("`direct`, `sdd`, `sdd lite`, `sdd openspec`, or `sdd lite openspec`", "`direct`, `sdd`, `sdd lite`, `sdd openspec`, o `sdd lite openspec`"),
-    ("`unset`, or comma-separated key=model pairs, as in `orchestrate=fable, design=opus, apply=sonnet`. A key is a delegated role (implementer, reviewer, judge), a workflow state (analysis, ready, in-progress, review, blocked, done), a phase of thinking (explore, propose, spec, design, tasks, apply, orchestrate), or a sub-agent (strategist, analyst, builder, refactorer, validator, auditor). A model ID may use any catalog spelling but no comma, pipe, or line break", "`unset`, o pares clave=modelo separados por comas, como `orchestrate=fable, design=opus, apply=sonnet`. Una clave es un rol delegado (implementer, reviewer, judge), un estado del flujo (analysis, ready, in-progress, review, blocked, done), una fase de pensamiento (explore, propose, spec, design, tasks, apply, orchestrate), o un sub-agente (strategist, analyst, builder, refactorer, validator, auditor). Un ID de modelo puede usar cualquier nombre de catálogo, pero no coma, barra vertical ni salto de línea"),
+    ("`unset`, or comma-separated key=model pairs, as in `orchestrate=fable, design=opus, apply=sonnet/low`. A key is a delegated role (implementer, reviewer, judge), a phase of thinking (explore, propose, spec, design, tasks, apply, orchestrate), or a sub-agent (strategist, analyst, builder, refactorer, validator, auditor). A model ID may use any catalog spelling but no comma, pipe, or line break, and may carry the effort it runs at after a slash: low, medium, high, xhigh or max", "`unset`, o pares clave=modelo separados por comas, como `orchestrate=fable, design=opus, apply=sonnet/low`. Una clave es un rol delegado (implementer, reviewer, judge), una fase de pensamiento (explore, propose, spec, design, tasks, apply, orchestrate), o un sub-agente (strategist, analyst, builder, refactorer, validator, auditor). Un ID de modelo puede usar cualquier nombre de catálogo, pero no coma, barra vertical ni salto de línea, y puede llevar detrás de una barra el esfuerzo con el que corre: low, medium, high, xhigh o max"),
     ("`branch`, or `trunk`", "`branch`, o `trunk`"),
     ("`default`, or a shorter duration such as `30s` or `1m`", "`default`, o una duración más corta como `30s` o `1m`"),
     ("`standard`, or `receipt-driven` (also accepted as `rdd`)", "`standard`, o `receipt-driven` (también se acepta `rdd`)"),

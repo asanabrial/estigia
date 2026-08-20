@@ -1300,9 +1300,11 @@ or board row has a field for what no list can hold. Planning is the last
 primary row. The model targets beneath it open their advisory catalog
 directly; Enter or Space chooses, custom IDs are always available, and
 inherit removes only that target. Shared answers borrow no one agent's
-catalog. The CLI still edits the complete persisted key=model route.
+catalog. The CLI still edits the complete persisted key=model route,
+where a model may carry the effort it runs at after a slash.
 Only Claude Code currently receives host-routable definitions: selected
-planning phases and one inert blind reviewer in every mode.
+planning phases, one inert blind reviewer in every mode, and the
+implementer and analyst workers, which exist because this row names them.
 OpenCode and every other host keep these values as routing declarations;
 orchestrate, apply, judge, and a visible route are not execution proof.
 
@@ -2492,6 +2494,19 @@ fn detail_of_model_target(app: &App) -> Vec<Line<'static>> {
             t!(
                 app.tongue,
                 "only Claude Code currently emits planned phase definitions; other hosts keep this as a routing declaration"
+            )
+            .to_owned()
+        } else if crate::skill::DELEGATED_AGENTS
+            .iter()
+            .any(|(key, _)| *key == target.name)
+        {
+            // Not the sentence below, and the difference is the row's whole
+            // effect here: naming a model for this target is what writes the
+            // definition. An operator told it is only a declaration would clear
+            // the row to tidy up and remove the worker without meaning to.
+            t!(
+                app.tongue,
+                "naming a model here installs this worker's definition where the host reads one; clearing it takes the definition away"
             )
             .to_owned()
         } else {

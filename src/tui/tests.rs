@@ -1238,7 +1238,10 @@ fn profile_restore_and_dirty_marker_cover_hidden_route_changes() {
     let mut installed = claude.model_profiles()[0]
         .routing()
         .expect("the balanced profile is valid");
-    assert!(installed.assign("done", "haiku"));
+    // A phase the protocol in force does not run: persisted, and deliberately
+    // absent from the interactive projection, which is what makes it hidden.
+    // The workflow states used to serve this and no longer parse.
+    assert!(installed.assign("explore", "haiku"));
     let mut app = App::one_table(
         Some(claude),
         Config {
@@ -4041,7 +4044,7 @@ fn two_saves_keep_planning_when_a_model_is_saved_second() {
         .find(|adapter| adapter.slug == "claude-code")
         .expect("the Claude Code adapter");
     let initial = Config {
-        models: crate::config::ModelRouting::parse("analysis=hidden/model")
+        models: crate::config::ModelRouting::parse("explore=hidden/model")
             .expect("a hidden assignment"),
         ..Config::default()
     };
@@ -4067,7 +4070,7 @@ fn two_saves_keep_planning_when_a_model_is_saved_second() {
 
     app.set(
         Setting::Models,
-        "analysis=hidden/model, orchestrate=provider/planner",
+        "explore=hidden/model, orchestrate=provider/planner",
     )
     .expect("the visible model is accepted");
     let plan = super::plan_of(&app);
@@ -4087,7 +4090,7 @@ fn two_saves_keep_planning_when_a_model_is_saved_second() {
         Some("provider/planner")
     );
     assert_eq!(
-        final_config.models.for_target("analysis"),
+        final_config.models.for_target("explore"),
         Some("hidden/model"),
         "a hidden assignment was lost while composing the saves"
     );
@@ -4105,7 +4108,7 @@ fn two_saves_keep_the_model_when_planning_is_saved_second() {
         .find(|adapter| adapter.slug == "claude-code")
         .expect("the Claude Code adapter");
     let initial = Config {
-        models: crate::config::ModelRouting::parse("analysis=hidden/model")
+        models: crate::config::ModelRouting::parse("explore=hidden/model")
             .expect("a hidden assignment"),
         ..Config::default()
     };
@@ -4124,7 +4127,7 @@ fn two_saves_keep_the_model_when_planning_is_saved_second() {
 
     app.set(
         Setting::Models,
-        "analysis=hidden/model, orchestrate=provider/planner",
+        "explore=hidden/model, orchestrate=provider/planner",
     )
     .expect("the visible model is accepted");
     let plan = super::plan_of(&app);
@@ -4148,7 +4151,7 @@ fn two_saves_keep_the_model_when_planning_is_saved_second() {
     );
     assert_eq!(Setting::Planning.value_of(&final_config), "sdd lite");
     assert_eq!(
-        final_config.models.for_target("analysis"),
+        final_config.models.for_target("explore"),
         Some("hidden/model"),
         "a hidden assignment was lost while composing the saves"
     );

@@ -2534,7 +2534,9 @@ fn the_readme_counts_what_the_crate_actually_has() {
 /// says — the gate read `Irreversible commands`, and the payload's prose named
 /// eleven of them then. That left `Delivery authorisation`, `Transition authorisation`,
 /// `Delivery route`, `Merge strategy` and `Model routing` read by nobody: not
-/// the gate, not the transport, and no sentence an agent is given.
+/// the gate, not the transport, and no sentence an agent is given. `Model routing`
+/// left that list with issue #110, which made `setup` decide two files by it and
+/// gave the contract a sentence naming what it obliges.
 ///
 /// `setup::Applies::Asked` says of three of them *"the contract asks, and the
 /// agent may still honour it, but nothing checks"* — and for three the contract
@@ -2543,10 +2545,10 @@ fn the_readme_counts_what_the_crate_actually_has() {
 ///
 /// Two are closed by this change: the authorisations, whose meaning is not a
 /// design question — `ask` means ask a person first, which is the shape
-/// `Review delegation` already had in `SKILL.md`. The other three are declared
+/// `Review delegation` already had in `SKILL.md`. The other two are declared
 /// below and named in the README's honesty contract, because deciding what an
-/// agent does about a merge strategy or a model route is a design call and not
-/// a gap to paper over here.
+/// agent does about a merge strategy is a design call and not a gap to paper
+/// over here.
 #[test]
 fn every_setting_is_read_by_the_gate_the_transport_or_the_prose() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

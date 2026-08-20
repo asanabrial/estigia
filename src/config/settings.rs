@@ -360,7 +360,9 @@ impl Setting {
             Self::Worktree => "where isolated checkouts are made, when a run needs one",
             Self::Tracker => "where this repository's issues live — the claim is adjudicated there",
             Self::Planning => "how much is written down before any code is",
-            Self::Models => "which model each delegated role and phase runs on, for this agent",
+            Self::Models => {
+                "which model, and at what effort, each delegated role, phase and sub-agent runs on, for this agent"
+            }
             Self::Integration => "whether work integrates through branches or straight onto trunk",
             Self::Window => "how long a routine write may ride on the last verification",
             Self::ReviewProtocol => "what a review verdict is bound to (RDD lives here)",
@@ -634,25 +636,30 @@ impl Setting {
             Self::Worktree => "`unset`, or an absolute directory",
             Self::Tracker => "`github`, `github <owner>/<name>`, `linear`, or `trello`",
             Self::Planning => "`direct`, `sdd`, `sdd lite`, `sdd openspec`, or `sdd lite openspec`",
-            // Every key, not seven examples of twenty-two. The parser takes a
-            // delegated role, a workflow state, a phase of thinking, or the name
-            // of a sub-agent an orchestration skill spawns — and this named
-            // three of the first, two states and two phases, so `orchestrate`,
-            // the one an operator asks for first, appeared nowhere at all. It
-            // has always worked; nothing said it existed.
+            // Every key, not seven examples of sixteen. The parser takes a
+            // delegated role, a phase of thinking, or the name of a sub-agent an
+            // orchestration skill spawns — and this named three of the first,
+            // two workflow states and two phases, so `orchestrate`, the one an
+            // operator asks for first, appeared nowhere at all. It has always
+            // worked; nothing said it existed. The states it did name are not
+            // keys any more, which is the other half of the same fault: the
+            // sentence and the parser have to be one thing.
             //
             // That is this crate's own ratchet turned on its configuration: *a
             // value the operator cannot discover is a value they cannot supply*.
             // Held complete by `every_key_the_routing_takes_is_a_key_it_names`,
-            // which reads the four lists rather than trusting this sentence.
+            // which reads the three lists rather than trusting this sentence,
+            // and by `a_workflow_state_is_no_longer_a_routing_key` in the other
+            // direction — a word here the parser refuses is the same lie told
+            // the other way round.
             Self::Models => {
                 "`unset`, or comma-separated key=model pairs, as in \
-                 `orchestrate=fable, design=opus, apply=sonnet`. A key is a delegated role \
-                 (implementer, reviewer, judge), a workflow state (analysis, ready, in-progress, \
-                 review, blocked, done), a phase of thinking (explore, propose, spec, design, \
-                 tasks, apply, orchestrate), or a sub-agent (strategist, analyst, builder, \
-                 refactorer, validator, auditor). A model ID may use any catalog spelling but no \
-                 comma, pipe, or line break"
+                 `orchestrate=fable, design=opus, apply=sonnet/low`. A key is a delegated role \
+                 (implementer, reviewer, judge), a phase of thinking (explore, propose, spec, \
+                 design, tasks, apply, orchestrate), or a sub-agent (strategist, analyst, \
+                 builder, refactorer, validator, auditor). A model ID may use any catalog \
+                 spelling but no comma, pipe, or line break, and may carry the effort it runs at \
+                 after a slash: low, medium, high, xhigh or max"
             }
             Self::Integration => "`branch`, or `trunk`",
             // Only values at or below the built-in. A longer one is refused,

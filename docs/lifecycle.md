@@ -20,7 +20,8 @@ Lifecycle evidence lives under `~/.estigia/lifecycle`, separately from each skil
 keyed by the observed pathname-bytes SHA-256; the publisher derives canonical SemVer and a
 deterministically typed/count-framed digest of the two top-level asset collections,
 `skill::FILES` and `AGENT_DEFINITIONS`, from its own build. The latter contains exactly five SDD
-planning phases and the one stable blind-review definition; it is not part of `skill::FILES`. A
+planning phases, the one stable blind-review definition, and the two delegated workers; it is not
+part of `skill::FILES`. A
 record is accepted only when both equal the currently compiled values. Release records are create-once and keyed by canonical SemVer;
 build metadata is rejected, and the greatest readable key is the high-water, so an older cooperating
 writer has no mutable value it can lower. Records reject unknown fields. Existing semantically equal

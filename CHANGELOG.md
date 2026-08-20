@@ -654,8 +654,8 @@ the workflow, it holds the tools.
   compatibility, but it is no longer a visible setting or two-stage target/raw
   picker. `Planning` is the last primary row. Beneath it, exact model rows are
   derived from `orchestrate`, the active planning phases, universal `apply`,
-  delegated roles and external sub-agent names; inactive phases and workflow
-  states stay persisted but hidden. Each row opens advisory models for the concrete host:
+  delegated roles and external sub-agent names; inactive phases stay persisted
+  but hidden, and the workflow states have since stopped being keys at all. Each row opens advisory models for the concrete host:
   curated lists for Claude Code and Codex, and a lazy `opencode models` read
   without `--refresh` for OpenCode. That read closes stdin and returns the TUI
   within 5.6 seconds through one deadline covering PATH resolution, validation,
@@ -769,6 +769,36 @@ the workflow, it holds the tools.
   an existing table invalid. A uniform Planning disagreement exposes only fixed
   rows instead of presenting one selected agent's phases as shared truth.
 
+- **A delegated worker ships for the work no planning phase describes, and a
+  route now carries the effort it runs at.** `Planning: direct` runs no phase and
+  so wrote no definition at all — which is exactly the arrangement where a
+  developer hands a bounded piece of an understood change to a fresh context, and
+  composed that brief in prose at every launch. Two definitions close it:
+  `implementer` (`Read, Grep, Glob, Write, Edit, Bash`) and `analyst`
+  (`Read, Grep, Glob`), two because the grants genuinely differ — this contract's
+  analyst is repository-read-only and its implementer runs the suite.
+  - **The row is the switch, not `Planning`.** Each is written only where
+    `Model routing` names its key, under any protocol, and retracted when the
+    name goes away. With the row `unset`, `setup` writes exactly the bytes it
+    wrote before this existed, on every adapter: a definition carries a tool
+    allowlist, which the `control-surface` population already treats as
+    authority, and an upgrade may not hand out authority nobody asked for. It is
+    also what makes `analyst` safe to write — another harness answers to that
+    name, so the file appears only where it was asked for and is removed only
+    where Estigia created it.
+  - **Effort travels with the model.** `design=opus/high`, one of `low`,
+    `medium`, `high`, `xhigh`, `max`, in the same row rather than a second one,
+    because sizing a context to a task is one decision. It is read from the right
+    and only when the tail is one of those five words, so a provider-qualified ID
+    such as `anthropic/claude-opus-4` stays one model. It renders as an `effort:`
+    frontmatter line into every definition `setup` writes, including the planning
+    phases; an unnamed effort writes **no** line, because the absent field is the
+    host's own default and writing one down would freeze today's into every
+    installation.
+  - Estigia still starts nothing. What changed is that `Model routing` is read:
+    twice by `setup`, and by a `SKILL.md` sentence that now tells an agent which
+    keys are already routed for it and which it must act on itself.
+
 - **Claude Code's SDD planning phases ship as sub-agent definitions, and their
   tool lists are enforced.** `setup` writes `sdd-explore`, `sdd-propose`,
   `sdd-spec`, `sdd-design` and `sdd-tasks` into `~/.claude/agents/`, the verified definition
@@ -811,6 +841,20 @@ the workflow, it holds the tools.
   after: a full `cargo test` now leaves that file's line count unchanged.
 
 ### Removed
+
+- **The six workflow-state keys of `Model routing`, and the four lookups that
+  served them.** `analysis=opus` parsed, round-tripped, and was reported by
+  `config list` as set, while nothing anywhere consulted it: `for_state` was
+  byte-identical to `for_phase`, `resolve_in` ranked it last of three, and no
+  caller outside the configuration module's own tests ever asked any of them.
+  Where the issue sits names no context to start, so there was never anything for
+  the family to route to — and a row that parses and does nothing is worse than
+  an absent row, because it reads as configured. The row now takes sixteen keys
+  in three families and every family reaches a rendered definition. `for_state`,
+  `resolve`, `resolve_in`, `get(Role)` and `for_phase` are gone with it; `route`,
+  `for_target` and `effort_for` are what remain. A stored table naming a state is
+  refused rather than read past, in the same whole-cell way every unknown key
+  already was.
 
 - **The differential suite and its corpus.** `tests/differential.rs` — a hundred
   and eleven crossings — and `tests/transport/oracle.json` — 228 answers recorded

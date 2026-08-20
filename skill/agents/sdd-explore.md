@@ -5,6 +5,7 @@ description: >
   feature, map how something works today, compare approaches, or clarify what is being asked —
   before any proposal or specification exists.
 model: {{MODEL}}
+{{EFFORT}}
 tools: {{TOOLS}}
 ---
 

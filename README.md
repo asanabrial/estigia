@@ -127,7 +127,10 @@ installs one inert `review-blind.md` definition, including when `Blind judges` i
 `model` is `inherit`, and its tool grant is what `Evidence standard` decides — read-only under
 `reading`, a shell and nothing else added under `measuring`. It is inert unless a launch supplies an active blind mode, exact publication
 receipt and criteria. The orchestrator passes the effective `judge` model and launches that same
-definition twice or five times; setup never creates numbered judge files. Direct `config set` and
+definition twice or five times; setup never creates numbered judge files. Two further definitions,
+`implementer.md` and `analyst.md`, are installed only where `Model routing` names their key — under
+any `Planning`, including `direct` — and are retracted when the name goes away, because a definition
+carrying a tool grant is authority and an upgrade may not hand out authority nobody asked for. Direct `config set` and
 `config edit` writes do not mutate external definitions.
 
 `review-blind` is operator-owned and reserved. Before Claude Code's current `Agent` or legacy `Task`
