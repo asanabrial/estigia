@@ -17,18 +17,20 @@ the workflow, it holds the tools.
   `destinations.len() >= STATES.len()`, which a duplicated arrow satisfies while
   a state is unreachable. It is a subset relation now, and that mutation reddens.
 
-  **And a companion document cannot re-issue the routing in prose.** The first
-  guard forbade the literal arrow spelling, which `safety-incidents.md`'s I09
-  evaded by restating the whole thing in plain words — wrong specifications to
-  analysis, unbuilt external waits to blocked, ordinary built delivery waits to
-  review — with no arrows and no backticks. Two blind judges disagreed about
-  whether that counted, and the measurement settled it: across the four companion
-  documents, exactly one line named three or more states, and it was that one.
-  Naming three is re-issuing the table; naming one or two is applying it, which
-  is what `blind-judges.md` does when it sends a contradicting panel to `blocked`.
-  I09 states its lesson now and leaves the routing to the table its own owner
-  column already names.
+  **And two companion documents stopped re-issuing the routing.** The incident
+  ledger's I09 restated it in full — wrong specifications to analysis, unbuilt
+  external waits to blocked, ordinary built delivery waits to review — and
+  `repository-delivery.md` carried a five-row table of the same thing. I09 states
+  its lesson now and both leave the destinations to the table their own pointers
+  name.
 
+  **A guard meant to keep them from coming back was withdrawn**, because four
+  blind judges measured it wrong rather than incomplete: it counted the states a
+  *source line* named, so the deleted prose restores byte-for-byte and passes on
+  its line wrapping alone, a routing table never reaches the threshold because it
+  names one state per row, and joining two lines of ordinary prose reddens it
+  because `already` contains `ready`. `docs/honesty.md` records what that leaves
+  unheld.
 - **The board mirror leaves a card that belongs to another repository alone, and says whose it is.**
   Matching on issue number alone moved another project's cards, measured once per
   write path: creating this repository's #73 on 2026-08-18 moved that project's

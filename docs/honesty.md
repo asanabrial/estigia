@@ -647,12 +647,26 @@ suite. Everything else here is prose held by review.
   when a named person must supply the permission. The Decision Gates table in `skill/SKILL.md` owns
   those destinations; this paragraph measures the Linear projection, not a second routing table.
 
-  **What the crossing does not reach, stated because a judge asked for it.** `SKILL.md`'s own steps 1,
-  6 and 7 restate the routing inside the owner document, outside the `## Decision Gates` section the
-  parse is bounded to. `no_companion_document_re_issues_the_routing` covers the four companion
-  documents and deliberately not that file: step 7's whole subject is the distinction between an
-  ordinary delivery wait and an exceptional adjudication, so removing it would take the rule out of
-  the document that owns it. Those three restatements are held by review, like the rest of this file.
+  **Nothing mechanically stops the routing being restated again, and four judges measured why.** Two
+  copies were removed by hand — the incident ledger's I09 protection column and a five-row table in
+  `repository-delivery.md` — and a guard was written to keep them from coming back. It counted how
+  many workflow states a **source line** named, and both judges of that receipt defeated it three
+  ways: the deleted prose restores byte-for-byte and passes, because it is hard-wrapped and no single
+  line reaches the threshold; the deleted table restores with one header word changed, because a
+  routing table names one state per row by construction; and joining two lines of ordinary prose in
+  this very file reddens it, because `already` contains `ready` and a vocabulary enumeration is not a
+  restatement. The guard was withdrawn rather than patched: it measured a source line while the rule
+  it was written for is about a **statement**, and the distance between those two is where all three
+  defeats live.
+
+  So the copies are gone and their return is held by review. What survives mechanically is narrower
+  than it looks: `every_named_disposition_uses_a_transport_state` crosses the Decision Gates table
+  against `STATES` and proves every state is *reachable* — **not** that any particular condition
+  routes to the right one. Swapping two destinations in that table leaves the suite green, which a
+  judge measured. And `SKILL.md`'s own steps restate the routing outside the section the parse is
+  bounded to; `rg -n 'analysis|ready|in-progress|review|blocked|done' skill/SKILL.md` finds them, and
+  the number of them is deliberately not written here, because a count in this paragraph is the class
+  of claim this document keeps having to correct.
   **The projection can still hide it.** Estigia's own
   state is authoritative, so no agent misroutes — but Linear has no native `blocked`, and the binding
   creates one as a state *named* `Blocked` whose *type* is `unstarted`. Built, published work with an
