@@ -12,6 +12,11 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **A discharged human decision is not a verdict.** Returning built work from
+  `blocked` to `review` still requires the configured panel against the exact
+  latest receipt. Step 7 now routes an unresolved choice about what should be
+  built to `analysis`, the same as a contradiction.
+
 - **Delivery proof no longer inherits a steered Git environment.**
   `same_git_repository` and `head_of` used to shell out with this process's
   `GIT_DIR`, so an unrelated clone could spend another checkout's verdict.

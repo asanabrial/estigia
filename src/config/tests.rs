@@ -1660,6 +1660,18 @@ fn every_named_disposition_uses_a_transport_state() {
         contract.contains("work requiring implementation returns to `ready`"),
         "the contract does not restore discharged implementation work to ready"
     );
+    assert!(
+        contract.contains("re-runs the configured panel against the exact latest receipt"),
+        "the contract does not say a discharged decision still needs a panel, so a run will invent a verdict"
+    );
+    assert!(
+        contract.contains("a person's decision is not a verdict"),
+        "the contract does not forbid recording the person as the missing verdict"
+    );
+    assert!(
+        contract.contains("unresolved choice about what should be built"),
+        "step 7 names only a contradiction and leaves an omission unrouted"
+    );
 }
 
 #[test]
