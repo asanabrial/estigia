@@ -1426,7 +1426,6 @@ const UNDOCUMENTED_REFUSALS: &[&str] = &[
     "invalid-marker-attribute",
     "invalid-operation-id",
     "invalid-unassign-target",
-    "issue-not-open",
     "label-readback-failed",
     "lost-claim-race",
     "lost-reclaim-race",

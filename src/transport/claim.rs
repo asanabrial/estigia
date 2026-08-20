@@ -8,6 +8,8 @@
 
 use super::{Context, Failure, ownership};
 
+mod close;
+
 /// Reads one comment of a tracker payload into the shape the reducer expects.
 ///
 /// Public because it is the *only* place allowed to answer "what did the
@@ -225,18 +227,13 @@ pub fn verify_claim(
     )?
     .ok_or_else(|| Failure::Read(format!("gh issue view {issue} returned nothing")))?;
 
-    let mut closed_by_own_pr = false;
+    let comments = comments_of(&data);
+    let mut own_close = None;
     let state = text(&data, "state");
     if state != "OPEN" {
-        if let Some(pr) = allow_closed_by_pr {
-            closed_by_own_pr =
-                super::closing::closing_refs(context, issue)?
-                    .iter()
-                    .any(|reference| {
-                        reference.get("number").and_then(serde_json::Value::as_u64) == Some(pr)
-                    });
-        }
-        if !closed_by_own_pr {
+        own_close =
+            close::own_delivery_close(context, issue, run_id, &comments, allow_closed_by_pr)?;
+        if own_close.is_none() {
             return Err(stop(
                 "issue-not-open",
                 format!("issue #{issue} is {state} — someone delivered or killed it"),
@@ -259,7 +256,6 @@ pub fn verify_claim(
         ));
     }
 
-    let comments = comments_of(&data);
     let ownership = holding(&comments, now);
     if ownership.holder.as_deref() != Some(run_id) {
         // Two situations shared one sentence, and the advice belonged to the
@@ -320,15 +316,14 @@ pub fn verify_claim(
     // Report what was actually checked. Saying "issue-open" about an issue that
     // is closed — even legitimately, by this run's own merge — is the kind of
     // small untruth that later gets quoted as evidence.
-    let opened = if closed_by_own_pr {
-        format!(
-            "closed-by-own-pr-{}",
-            allow_closed_by_pr.unwrap_or_default()
-        )
-    } else {
-        "issue-open".to_owned()
+    let opened = match &own_close {
+        Some(found) => format!(
+            "closed-by-own-delivery:{}:{}",
+            found.delivering_sha, found.epoch
+        ),
+        None => "issue-open".to_owned(),
     };
-    Ok(serde_json::json!({
+    let mut answer = serde_json::json!({
         "ok": true,
         "issue": issue,
         "run_id": run_id,
@@ -340,7 +335,13 @@ pub fn verify_claim(
             "current-live-holder".to_owned(),
             "no-control-message".to_owned(),
         ],
-    }))
+    });
+    if let Some(found) = own_close {
+        answer["delivering_sha"] = serde_json::json!(found.delivering_sha);
+        answer["epoch"] = serde_json::json!(found.epoch);
+        answer["pr"] = serde_json::json!(found.pr);
+    }
+    Ok(answer)
 }
 
 fn stop(reason: &str, detail: String, action: &str) -> Failure {
@@ -3434,7 +3435,7 @@ fn published(
             "mandatory_follow_up".to_owned(),
             serde_json::json!(
                 "GitHub will auto-close this issue on merge because the branch was linked, not \
-                 because of a keyword. Run `transition --to done` after the merge regardless \u{2014} \
+                 because of a keyword. After the merge, `verify_claim` answers `closed-by-own-delivery` naming the delivering SHA and this receipt, not `issue-not-open`. Then run `transition --to done` \u{2014} \
                  the auto-close is not the workflow's close and moves neither the label nor the board"
             ),
         );
