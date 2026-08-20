@@ -749,7 +749,8 @@ card whose state you have not read is writing a state you guessed. Treat a non-e
 the way you treat a zero-card result: the pass ran and did not conclude about those cards. It is the
 same rule as the paragraph above, one field along.
 
-With `--fix`, `repaired` names the cards the pass actually moved. A card in `foreign` or in
+`cards` is how many the board returned and `audited` how many were this repository's, so the two
+differ exactly by `foreign`. With `--fix`, `repaired` names the cards the pass actually moved. A card in `foreign` or in
 `unread_labels` is never among them: the first is not this repository's to move and the second was
 never read.
 

@@ -695,6 +695,25 @@ fn foreign_item_report(issue: u64, board: &str, belongs_to: &str, home: &str) ->
     })
 }
 
+/// Whether one audit card belongs to the repository asking.
+///
+/// Its own function so it can be measured, the way `pick_item` is. It was three
+/// lines inside `audit_board`'s loop, and a judge measured that deleting them
+/// left the whole suite green: another repository's cards would read as this
+/// one's drift again, and `--fix` would move them to agree with labels that were
+/// never theirs. That is half of what this change exists to stop, and nothing
+/// held it.
+///
+/// An unnamed card is not ours, which is the same answer `pick_item` gives and
+/// for the same reason: unknown repository is not clearance.
+pub(crate) fn card_is_ours(card: &serde_json::Value, home: &str) -> bool {
+    !home.is_empty()
+        && card
+            .get("repository")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|repo| repo == home)
+}
+
 /// Pick this repository's card, not whichever card happens to carry the number.
 ///
 /// Matching on number alone is how Estigia moved Investora's #73 when this

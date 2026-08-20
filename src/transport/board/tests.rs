@@ -357,3 +357,34 @@ fn the_listing_asks_which_repository_each_card_belongs_to() {
         "the items query no longer asks which repository a card belongs to"
     );
 }
+
+/// The audit's own filter, measured rather than trusted to a loop body.
+///
+/// A judge deleted the three lines this replaced and the whole suite stayed
+/// green — another repository's cards read as this one's drift again, and
+/// `--fix` would move them to agree with labels that were never theirs. Half of
+/// issue #75 reopens there, so it gets a name and a test.
+///
+/// The unnamed case matters as much as the foreign one: the picker on the write
+/// side had exactly that hole, and a filter that disagreed with it would put the
+/// two halves of one rule back out of step.
+#[test]
+fn the_audit_keeps_only_cards_this_repository_owns() {
+    let ours = serde_json::json!({ "issue": 7, "repository": "asanabrial/estigia" });
+    let theirs = serde_json::json!({ "issue": 7, "repository": "asanabrial/investora" });
+    let unnamed = serde_json::json!({ "issue": 7 });
+
+    assert!(card_is_ours(&ours, "asanabrial/estigia"));
+    assert!(
+        !card_is_ours(&theirs, "asanabrial/estigia"),
+        "another repository's card was audited as this repository's"
+    );
+    assert!(
+        !card_is_ours(&unnamed, "asanabrial/estigia"),
+        "a card that names no repository was audited as this repository's"
+    );
+    assert!(
+        !card_is_ours(&ours, ""),
+        "an unreadable identity matched a card, so a failed read could still repair one"
+    );
+}

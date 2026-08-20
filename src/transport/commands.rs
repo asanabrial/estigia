@@ -902,11 +902,7 @@ pub fn audit_board(
     let mut foreign = Vec::new();
     let home = board_home(context)?;
     for card in &cards {
-        let repo = card
-            .get("repository")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("");
-        if repo != home {
+        if !super::board::card_is_ours(card, &home) {
             let mut entry = card.clone();
             entry["problem"] = serde_json::json!("card belongs to another repository");
             foreign.push(entry);
