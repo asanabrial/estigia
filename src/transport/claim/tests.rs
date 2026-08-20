@@ -106,8 +106,8 @@ fn a_fresh_claim_refuses_the_two_cases_that_are_not_a_race() {
         "stale-foreign-requires-reclaim"
     );
 
-    // This run already holds it under another operation: a second acquisition
-    // would make one run appear twice.
+    // A live marker with no adoptable operation id still refuses: there is
+    // nothing to resume.
     let mine = ownership::Holding {
         holder: Some("claude-a".to_owned()),
         event: Some(event("claude-a", 0, Some("op1"))),
@@ -117,6 +117,21 @@ fn a_fresh_claim_refuses_the_two_cases_that_are_not_a_race() {
     assert_eq!(
         reason(may_claim(&mine, "claude-a").expect_err("one run, one acquisition")),
         "already-owned-by-different-operation"
+    );
+
+    // The same run, with an adoptable epoch: a lost key, not a conflict.
+    let epoch = "a".repeat(32);
+    let mine_adoptable = ownership::Holding {
+        holder: Some("claude-a".to_owned()),
+        event: Some(event("claude-a", 0, Some(&epoch))),
+        live: vec![event("claude-a", 0, Some(&epoch))],
+        stale: Vec::new(),
+    };
+    assert_eq!(
+        may_claim(&mine_adoptable, "claude-a").expect("the lost key is adoptable"),
+        Attempt::AlreadyWritten {
+            operation_id: epoch,
+        }
     );
 
     // A live foreign holder is an ordinary race, not a refusal before writing:

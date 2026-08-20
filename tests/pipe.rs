@@ -14653,3 +14653,162 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         }
     }
 }
+
+/// A claim whose write lands and whose readback fails can be retried.
+///
+/// The pointer records the minted key and not the issue. The retry mints a
+/// fresh key, finds this run already live, and used to refuse
+/// `already-owned-by-different-operation`. Adopting the timeline epoch writes
+/// no second comment and lets Swear complete the pointer. Revert the
+/// `AlreadyWritten` arm in `may_claim` to restore that refusal.
+#[test]
+fn a_claim_retry_after_a_landed_write_whose_readback_failed_adopts_the_epoch() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let count = tempfile::NamedTempFile::new().expect("a count file");
+    let log = tempfile::NamedTempFile::new().expect("a call log");
+    let run_id = "claude-abcd1234";
+    let empty = serde_json::json!({
+        "state": "OPEN",
+        "assignees": [],
+        "labels": [{"name": "status:ready"}],
+        "comments": [],
+    });
+    let first = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "nth": 1,
+            "stdout": empty.to_string(),
+            "status": 0,
+        },
+        { "matches": "issue view", "stdout": "", "status": 3 },
+        { "matches": "label create", "stdout": "", "status": 0 },
+        { "matches": "issue comment", "stdout": "", "status": 0 },
+    ]))
+    .expect("the first script serialises");
+
+    let mut first_cmd = tracker_command(home, repo, bin, &first);
+    first_cmd.env("ESTIGIA_FAKE_COUNT", count.path());
+    first_cmd.env("ESTIGIA_FAKE_LOG", log.path());
+    let first_out = first_cmd
+        .args([
+            "claim",
+            "12",
+            "--run-id",
+            run_id,
+            "--horizon",
+            "2099-01-01T00:00Z",
+            "--json",
+        ])
+        .output()
+        .expect("the first claim runs");
+    assert!(
+        !first_out.status.success(),
+        "the failed readback was treated as success: {}",
+        String::from_utf8_lossy(&first_out.stderr)
+    );
+
+    let pointer = home
+        .join(".estigia")
+        .join("runs")
+        .join(format!("{run_id}.json"));
+    let recorded: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&pointer).expect("the pointer is there"))
+            .expect("the pointer is JSON");
+    assert!(
+        recorded.get("issue").and_then(|v| v.as_u64()).is_none(),
+        "the failed readback completed the pointer: {recorded}"
+    );
+    let epoch = recorded
+        .get("operation_id")
+        .and_then(|v| v.as_str())
+        .expect("the mint was stored")
+        .to_owned();
+
+    let marker = estigia::transport::markers::render(
+        "claim",
+        &[
+            ("run-id", run_id),
+            ("runtime", "claude"),
+            ("horizon", "2099-01-01T00:00Z"),
+            ("op-id", &epoch),
+        ],
+    )
+    .expect("a claim marker");
+    let held = serde_json::json!({
+        "state": "OPEN",
+        "assignees": [{"login": "fixture"}],
+        "labels": [{"name": "status:ready"}, {"name": "dev:claude"}],
+        "comments": [{
+            "id": "IC_1",
+            "createdAt": "2026-08-17T16:00:00Z",
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": format!("Claimed by {run_id}.\n\n{marker}\n"),
+        }],
+    });
+    let second = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "issue view",
+            "stdout": held.to_string(),
+            "status": 0,
+        },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the second script serialises");
+
+    let before = std::fs::read_to_string(log.path()).unwrap_or_default();
+    let comments_before = before.matches("issue comment").count();
+
+    let mut second_cmd = tracker_command(home, repo, bin, &second);
+    second_cmd.env("ESTIGIA_FAKE_LOG", log.path());
+    let second_out = second_cmd
+        .args([
+            "claim",
+            "12",
+            "--run-id",
+            run_id,
+            "--horizon",
+            "2099-06-01T00:00Z",
+            "--json",
+        ])
+        .output()
+        .expect("the retry runs");
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&second_out.stdout),
+        String::from_utf8_lossy(&second_out.stderr)
+    );
+    assert!(
+        second_out.status.success(),
+        "the retry did not adopt the landed claim: {said}"
+    );
+    assert!(
+        said.contains("reused_existing_claim") && said.contains("true"),
+        "the retry did not say it adopted: {said}"
+    );
+    assert!(
+        said.contains("2099-01-01T00:00Z") && !said.contains("2099-06-01T00:00Z"),
+        "the retry reported the horizon it asked for rather than the one on the timeline: {said}"
+    );
+
+    let after = std::fs::read_to_string(log.path()).unwrap_or_default();
+    assert_eq!(
+        after.matches("issue comment").count(),
+        comments_before,
+        "the retry wrote a second claim comment: {after}"
+    );
+
+    let recorded: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&pointer).expect("the pointer is there"))
+            .expect("the pointer is JSON");
+    assert_eq!(recorded.get("issue").and_then(|v| v.as_u64()), Some(12));
+    assert_eq!(
+        recorded.get("state").and_then(|v| v.as_str()),
+        Some("in-progress")
+    );
+    assert!(
+        recorded.get("repo_dir").and_then(|v| v.as_str()).is_some(),
+        "the retry left repo_dir empty: {recorded}"
+    );
+}
