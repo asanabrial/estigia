@@ -2502,13 +2502,14 @@ fn detail_of_model_target(app: &App) -> Vec<Line<'static>> {
             .iter()
             .any(|(key, _)| *key == target.name)
         {
-            // Not the sentence below, and the difference is the row's whole
-            // effect here: naming a model for this target is what writes the
-            // definition. An operator told it is only a declaration would clear
-            // the row to tidy up and remove the worker without meaning to.
+            // Not the sentence below, and the difference is which row
+            // decides: this one says what the worker runs on, and
+            // `Delegated workers` says whether it exists at all. An operator
+            // told only that this is a declaration would set it and find
+            // nothing installed.
             t!(
                 app.tongue,
-                "naming a model here installs this worker's definition where the host reads one; clearing it takes the definition away"
+                "this reaches a definition only where `Delegated workers` names this worker; that row decides whether it exists, this one what it runs on"
             )
             .to_owned()
         } else {

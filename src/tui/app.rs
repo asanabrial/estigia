@@ -371,6 +371,7 @@ const AGENT_TUI_SETTINGS: &[Setting] = &[
     Setting::Review,
     Setting::Transitions,
     Setting::Judges,
+    Setting::Workers,
     Setting::Planning,
 ];
 
@@ -393,6 +394,7 @@ const TUI_SETTINGS: &[Setting] = &[
     Setting::Board,
     Setting::Summary,
     Setting::Body,
+    Setting::Workers,
     Setting::Planning,
 ];
 
@@ -2490,24 +2492,32 @@ impl App {
                             Err(refusal) => self.message = Some(format!("{refusal}")),
                         }
                     }
-                    ModelEntry::Effort(effort) => {
+                    // Both efforts land on one route write. `Ok(false)` says the
+                    // assignment was refused, which is unreachable while these
+                    // entries are offered only where a model is named — but a
+                    // branch that goes quiet on an outcome it did not expect is
+                    // how a screen comes to report nothing at all, so it says so.
+                    ModelEntry::Effort(_) | ModelEntry::HostEffort => {
                         let Some(model) = self.model_current(target) else {
                             return Action::None;
                         };
-                        let route = format!("{model}/{}", effort.as_str());
+                        let route = match chosen {
+                            ModelEntry::Effort(effort) => {
+                                format!("{model}/{}", effort.as_str())
+                            }
+                            _ => model,
+                        };
                         match self.update_model_route(|routing| routing.assign(target, &route)) {
                             Ok(true) => self.close_model_picker(),
-                            Ok(false) => {}
-                            Err(refusal) => self.message = Some(format!("{refusal}")),
-                        }
-                    }
-                    ModelEntry::HostEffort => {
-                        let Some(model) = self.model_current(target) else {
-                            return Action::None;
-                        };
-                        match self.update_model_route(|routing| routing.assign(target, &model)) {
-                            Ok(true) => self.close_model_picker(),
-                            Ok(false) => {}
+                            Ok(false) => {
+                                self.message = Some(
+                                    t!(
+                                        self.tongue,
+                                        "a model ID must fit one key=model entry: no comma, pipe, or line break, and an effort after a slash needs a model in front of it"
+                                    )
+                                    .to_owned(),
+                                );
+                            }
                             Err(refusal) => self.message = Some(format!("{refusal}")),
                         }
                     }

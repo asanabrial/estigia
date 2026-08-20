@@ -982,6 +982,14 @@ fn after_writing() -> Vec<Refusal> {
             ),
         ),
         Refusal::not_started(
+            "delegated-definition-unowned",
+            "a delegated worker's path belongs to another tool",
+            Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "move that definition aside, or stop naming that worker",
+            ),
+        ),
+        Refusal::not_started(
             "reviewer-definition-changed",
             "the setup-owned reviewer contains different bytes",
             Resolution::no_command(

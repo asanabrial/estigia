@@ -12,7 +12,7 @@ use crate::outcome::{NoCommandReason, Refusal, Resolution};
 
 use super::{
     Authority, BoardRef, Config, DEFAULT_ASK_TIMEOUT, DeliveryRoute, Evidence, Judges, Language,
-    MergeStrategy, Planning, RepoRef, ReviewProtocol, Tracker, WorktreeRoot,
+    MergeStrategy, Planning, RepoRef, ReviewProtocol, Tracker, Workers, WorktreeRoot,
 };
 
 /// One configurable setting.
@@ -36,6 +36,14 @@ pub enum Setting {
     Planning,
     /// Which model each delegated role runs on.
     Models,
+    /// Which delegated workers have a definition installed here.
+    ///
+    /// Beside `Model routing` in every ordered list, because the two answer one
+    /// question between them: whether a worker exists here, and what it runs on.
+    /// They are two rows and not one because a routing key could already be in
+    /// somebody's table, written when it meant nothing — see
+    /// [`crate::config::Workers`].
+    Workers,
     /// Where work integrates.
     Integration,
     /// How long a routine write may ride on the previous verification.
@@ -95,6 +103,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting::Tracker,
     Setting::Planning,
     Setting::Models,
+    Setting::Workers,
     Setting::Integration,
     Setting::Window,
     Setting::ReviewProtocol,
@@ -201,6 +210,7 @@ pub const AGENT_SETTINGS: &[Setting] = &[
     Setting::Transitions,
     Setting::Planning,
     Setting::Models,
+    Setting::Workers,
     Setting::Judges,
 ];
 
@@ -323,7 +333,8 @@ impl Setting {
             | Self::Transitions
             | Self::Planning
             | Self::Models
-            | Self::Judges => Scope::Agent,
+            | Self::Judges
+            | Self::Workers => Scope::Agent,
             Self::ChangeSize
             | Self::Window
             | Self::Route
@@ -367,6 +378,7 @@ impl Setting {
             Self::Window => "how long a routine write may ride on the last verification",
             Self::ReviewProtocol => "what a review verdict is bound to (RDD lives here)",
             Self::Judges => "how many independent contexts look at a change before it lands",
+            Self::Workers => "which delegated workers this agent has a definition for, if any",
             Self::Evidence => {
                 "what a verdict here has to be backed by, and so what a reviewer may do"
             }
@@ -418,6 +430,9 @@ impl Setting {
             Self::Window => Answers::some(&["default", "1m", "30s"]),
             Self::ReviewProtocol => Answers::all(&["standard", "receipt-driven"]),
             Self::Judges => Answers::all(&["single", "two blind", "five blind"]),
+            Self::Workers => {
+                Answers::all(&["none", "implementer", "analyst", "implementer analyst"])
+            }
             Self::Evidence => Answers::all(&["reading", "measuring"]),
             Self::ChangeSize => Answers::some(&["800", "400"]),
             Self::Boundaries => Answers::some(&["none"]),
@@ -442,6 +457,7 @@ impl Setting {
             Self::Window => "Renewal window",
             Self::ReviewProtocol => "Review protocol",
             Self::Judges => "Blind judges",
+            Self::Workers => "Delegated workers",
             Self::Evidence => "Evidence standard",
             Self::ChangeSize => "Change size",
             Self::Boundaries => "Irreversible commands",
@@ -605,6 +621,14 @@ impl Setting {
             (Self::Judges, "five blind") => {
                 "five independent contexts review it blind; 3-of-5 must confirm the same severe finding"
             }
+            (Self::Workers, "none") => "no delegated worker definition is installed here",
+            (Self::Workers, "implementer") => {
+                "one definition that may write and run the suite in the checkout its launch names"
+            }
+            (Self::Workers, "analyst") => {
+                "one repository-read-only definition, for reading that prepares a write"
+            }
+            (Self::Workers, "implementer analyst") => "both definitions",
             (Self::ChangeSize, _) => {
                 "the changed lines a pull request aims to stay under, and splits past unless the \
                  developer records why"
@@ -675,6 +699,7 @@ impl Setting {
             // missing.
             Self::ReviewProtocol => "`standard`, or `receipt-driven` (also accepted as `rdd`)",
             Self::Judges => "`single`, `two blind`, or `five blind`",
+            Self::Workers => "`none`, `implementer`, `analyst`, or `implementer analyst`",
             Self::Evidence => "`reading`, or `measuring`",
             Self::ChangeSize => "a number of lines, such as `800`",
             Self::Boundaries => "`none`, or commands separated by commas such as `npm publish`",
@@ -922,6 +947,12 @@ impl Setting {
                     }
                 }
             }
+            Self::Workers => {
+                config.workers = match Workers::parse(value) {
+                    Some(workers) => workers,
+                    None => return Err(self.reject(value)),
+                };
+            }
             Self::Judges => {
                 config.judges = match lower(value).trim() {
                     "single" | "one" | "off" => Judges::Single,
@@ -997,6 +1028,7 @@ impl Setting {
             }
             Self::ReviewProtocol => config.review_protocol.as_value().to_owned(),
             Self::Judges => config.judges.as_value().to_owned(),
+            Self::Workers => config.workers.as_value(),
             Self::Evidence => config.evidence.as_value().to_owned(),
             Self::Boundaries => {
                 if config.boundaries.is_empty() {

@@ -47,10 +47,11 @@ Two definitions ship for exactly this, and `Planning` does not decide them: `imp
 writes and runs the suite inside the checkout its launch names, and `analyst`, which is
 repository-read-only. Handing a bounded piece of work to a fresh context happens under every
 protocol, `direct` included — which is where no planning phase exists to borrow. Each is installed
-only where `Model routing` names its key, so a row naming neither means no definition is there to
-launch and the brief is composed in the prompt, as every launch did before they existed. A delegated
-context is measured against **this** run's claim, so what the definition tells it not to do is a
-rule the launch keeps rather than one the gate enforces on it separately.
+only where `Delegated workers` names it, so `none` means no definition is there to launch and the
+brief is composed in the prompt, as every launch did before they existed; `Model routing` says what
+a named worker runs on and never whether it exists. A delegated context is measured against **this**
+run's claim, so what the definition tells it not to do is a rule the launch keeps rather than one
+the gate enforces on it separately.
 
 Crossing a threshold selects delegated direct work only. It MUST NOT select `sdd`, create SDD state or artifacts, or invoke an `sdd-*` phase. Size, file count, and risk do not select a planning protocol, and this rule does not change an operator's configured `Planning` mode.
 

@@ -142,20 +142,24 @@ pub const PHASE_AGENTS: &[SkillFile] = &[SDD_EXPLORE, SDD_PROPOSE, SDD_SPEC, SDD
 
 /// The delegated workers, each beside the `Model routing` key that installs it.
 ///
-/// **The key is the switch.** Neither file is written unless the row names its
-/// target, and each is retracted when the name goes away. That is what keeps an
-/// unset row rendering exactly the bytes it rendered before this existed: an
-/// agent definition is an instruction with a tool allowlist, which
+/// **`Delegated workers` is the switch.** Neither file is written unless that
+/// row names it, and each is retracted when the name goes away. An agent
+/// definition is an instruction with a tool allowlist, which
 /// `guard:population control-surface` already treats as authority, and widening
 /// authority on somebody's machine because they upgraded is not a default this
-/// crate is allowed to ship.
+/// crate is allowed to ship — so the row's default is `none`, which is what
+/// every contract written before it reads.
 ///
-/// It is also what makes `analyst` safe to write at all. The name belongs to
-/// somebody else's orchestrator as much as to this contract — see
-/// [`crate::config::ORCHESTRATED_ROLES`] — so a file that appeared unasked
-/// would shadow theirs. Gated on the key and owned through the same
-/// created-outside record every phase definition uses, it appears only where it
-/// was asked for and is removed only where Estigia created it.
+/// It is deliberately **not** the presence of the `Model routing` key those
+/// names also serve as. Two blind judges refused that, for the reason
+/// [`crate::config::Workers`] records: the key was accepted, documented as
+/// inert, and set by six shipped presets long before it could mean this.
+///
+/// Ownership is the other half, and it is what makes `analyst` safe to write at
+/// all. The name belongs to somebody else's orchestrator as much as to this
+/// contract — see [`crate::config::ORCHESTRATED_ROLES`] — so a definition
+/// Estigia did not author is refused in the preflight rather than replaced, and
+/// what it did author is removed on the way back out.
 pub const DELEGATED_AGENTS: &[(&str, SkillFile)] = &[
     ("implementer", IMPLEMENTER_AGENT),
     ("analyst", ANALYST_AGENT),
@@ -542,7 +546,7 @@ fn selected_documents(config: &Config) -> String {
             "Delegated work here runs on named models (`{}`), and a name followed by a slash \
              carries the effort with it. Where this host reads sub-agent definitions, `setup` has \
              already written the model and the effort into the ones it installs — each planning \
-             phase the protocol runs, and `implementer` or `analyst` when the row names them — so \
+             phase the protocol runs, and whichever workers `Delegated workers` names — so \
              launching one of those needs no model named in the prompt. Every other key here is a \
              declaration nothing starts for you: hand the work to the model named for it yourself, \
              and say which one you used. A row naming a model that nobody reads is a choice the \

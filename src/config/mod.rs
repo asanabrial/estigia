@@ -703,6 +703,8 @@ pub struct Config {
     pub window: std::time::Duration,
     /// Which model each delegated role runs on. Empty means "the agent decides".
     pub models: ModelRouting,
+    /// Which delegated workers have a definition installed here.
+    pub workers: Workers,
     /// Commands this repository treats as irreversible, beyond the built-ins.
     ///
     /// Estigia's own list knows git and GitHub. It cannot know that a repository
@@ -726,6 +728,10 @@ impl Default for Config {
             // operator's attention on a sub-agent their configuration never
             // creates.
             models: ModelRouting::default(),
+            // None. A definition is an instruction carrying a tool allowlist,
+            // which the gate already treats as a control surface, so no
+            // installation gains one by being upgraded.
+            workers: Workers::default(),
             // A reviewed branch. Trunk-based trades the review for a flag, and
             // that trade has to be chosen rather than inherited.
             integration: Integration::Branch,
@@ -958,6 +964,108 @@ impl Role {
         Self::all()
             .into_iter()
             .find(|role| role.as_str() == word.trim().to_lowercase())
+    }
+}
+
+/// Which delegated workers this installation has definitions for.
+///
+/// # Why this is a row and not a `Model routing` key
+///
+/// It was a key, for one publication, and two blind judges refused it for the
+/// same reason. `implementer` has been an accepted routing key since the row
+/// existed, offered as its first example, and documented as inert — *"accepting
+/// a name Estigia never spawns costs nothing, because an unread key routes
+/// nobody"*. Three shipped Claude presets and three Codex ones set it. So the
+/// population with that key stored is every installation that ever chose a
+/// profile, and treating its presence as consent would install a definition
+/// carrying `Write`, `Edit` and `Bash` into their home **because they
+/// upgraded**.
+///
+/// A rule invented in one change cannot retroactively turn a value written under
+/// the opposite rule into an answer. This row can: it did not exist before, so
+/// nothing can hold it by accident, and `none` is what every existing contract
+/// reads.
+///
+/// `Model routing` still says what each worker runs on. Two rows, two questions
+/// — *does this worker exist here* and *what does it run on* — which is why
+/// this is not the duplication this crate refuses elsewhere.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Workers {
+    /// The worker that writes and runs the suite.
+    pub implementer: bool,
+    /// The worker that is repository-read-only.
+    pub analyst: bool,
+}
+
+impl Workers {
+    /// The names, in table order, of the workers this row turns on.
+    pub fn names(self) -> Vec<&'static str> {
+        let mut named = Vec::new();
+        if self.implementer {
+            named.push("implementer");
+        }
+        if self.analyst {
+            named.push("analyst");
+        }
+        named
+    }
+
+    /// Whether this row names one particular worker.
+    pub fn contains(self, name: &str) -> bool {
+        self.names().contains(&name)
+    }
+
+    /// The value as it is written in the table.
+    pub fn as_value(self) -> String {
+        let named = self.names();
+        if named.is_empty() {
+            return "none".to_owned();
+        }
+        named.join(" ")
+    }
+
+    /// Every spelling the row takes, in the order it offers them.
+    pub fn all() -> Vec<Self> {
+        vec![
+            Self::default(),
+            Self {
+                implementer: true,
+                analyst: false,
+            },
+            Self {
+                implementer: false,
+                analyst: true,
+            },
+            Self {
+                implementer: true,
+                analyst: true,
+            },
+        ]
+    }
+
+    /// Reads `none`, one name, or both in either order.
+    ///
+    /// An unordered word set, the shape `Planning`'s tail already uses, so
+    /// `analyst implementer` is the same answer as `implementer analyst` rather
+    /// than a refusal an operator has to guess their way out of.
+    pub fn parse(value: &str) -> Option<Self> {
+        let value = value.trim();
+        if value.is_empty()
+            || value.eq_ignore_ascii_case("none")
+            || value.eq_ignore_ascii_case("off")
+            || value.eq_ignore_ascii_case("unset")
+        {
+            return Some(Self::default());
+        }
+        let mut workers = Self::default();
+        for word in value.split_whitespace() {
+            match word.to_lowercase().as_str() {
+                "implementer" => workers.implementer = true,
+                "analyst" => workers.analyst = true,
+                _ => return None,
+            }
+        }
+        Some(workers)
     }
 }
 

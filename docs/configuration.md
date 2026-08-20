@@ -1,6 +1,6 @@
 # Configuration
 
-Nineteen typed settings, read from one table. Reading it produces a valid configuration or a refusal
+Twenty typed settings, read from one table. Reading it produces a valid configuration or a refusal
 that names what may be written instead — there is no third outcome where a misspelled value is
 quietly ignored.
 
@@ -8,7 +8,7 @@ quietly ignored.
 the code has, and every value the picker offers is a value named here. A setting that grew a value
 and did not grow a row fails the suite.
 
-Nineteen settings, all typed. Reading the table produces a valid configuration or a refusal that
+Twenty settings, all typed. Reading the table produces a valid configuration or a refusal that
 names what may be written instead — never a value guessed at and discovered halfway through a
 checkout.
 
@@ -27,7 +27,8 @@ estigia config set "Merge strategy" squash
 | Worktree location | `unset`, or an absolute directory — `<repo>`, `<branch>`, `<run-id>` and `<issue>` are substituted, and a template naming neither `<branch>` nor `<run-id>` gains them both in memory, as siblings of the path you configured, so two checkouts do not share a directory |
 | Tracker | `github`, `github <owner>/<name>`, `linear`, or `trello` — only `github` has an executable |
 | Planning | `direct`, `sdd`, `sdd lite`, `sdd openspec`, or `sdd lite openspec` — `sdd` makes the phases available, and `protocols/sdd.md` engages them per change on ambiguity; `auto` is accepted as a spelling of `sdd` |
-| Model routing | `unset`, or comma-separated `key=model` pairs, each model optionally followed by `/` and the effort it runs at (`low`, `medium`, `high`, `xhigh`, `max`). A key is a delegated role (`implementer`, `reviewer`, `judge`), a phase of thinking (`explore`, `propose`, `spec`, `design`, `tasks`, `apply`, `orchestrate`), or a sub-agent somebody's orchestrator spawns (`strategist`, `analyst`, `builder`, `refactorer`, `validator`, `auditor`). The effort is read from the right and only when it is one of those five words, so a provider-qualified ID such as `anthropic/claude-opus-4` stays one model. Three of these keys reach a file where the host reads sub-agent definitions — every planning phase the protocol runs, and `implementer` or `analyst`, each of which is installed **because** the row names it; the rest is a declaration the agent reads, and Estigia runs no model either way |
+| Model routing | `unset`, or comma-separated `key=model` pairs, each model optionally followed by `/` and the effort it runs at (`low`, `medium`, `high`, `xhigh`, `max`). A key is a delegated role (`implementer`, `reviewer`, `judge`), a phase of thinking (`explore`, `propose`, `spec`, `design`, `tasks`, `apply`, `orchestrate`), or a sub-agent somebody's orchestrator spawns (`strategist`, `analyst`, `builder`, `refactorer`, `validator`, `auditor`). The effort is read from the right and only when it is one of those five words, so a provider-qualified ID such as `anthropic/claude-opus-4` stays one model. Keys in two of the three families reach a file where the host reads sub-agent definitions: every planning phase the protocol runs, and whichever workers `Delegated workers` names. The rest is a declaration the agent reads, and Estigia runs no model either way. A model named for a worker that row does not name reaches nothing, which is the one way these two rows can disagree |
+| Delegated workers | `none`, `implementer`, `analyst`, or `implementer analyst`. Which worker definitions this agent has installed, where the host reads sub-agent definitions. `none` is the default and installs nothing, because a definition carries a tool allowlist and no installation should gain one by being upgraded. `Model routing` says what each named worker runs on; this says whether it exists here |
 | Integration | `branch`, or `trunk` |
 | Renewal window | `default`, or a shorter duration such as `30s` or `1m` |
 | Review protocol | `standard`, or `receipt-driven` (also accepted as `rdd`) |
@@ -145,15 +146,19 @@ an adapter-specific model profile, where one is reviewed, followed by `orchestra
 phase rows; full SDD has `explore`, `propose`, `spec`, `design`, `tasks`; lite SDD has only `spec` and
 `tasks`. Inactive phases and persisted hidden assignments remain valid but are not presented as active
 choices. Workflow states are no longer keys at all: they named no context to start, reached nothing,
-and a stored cell holding one is refused rather than read past.
+and a stored cell holding one is refused rather than read past. A table written before that carried
+one is not stranded — `estigia config set "Model routing" unset` reads it through the same
+keep-what-parses path `config set` already uses for a row an older build accepted, and rewrites the
+cell. `estigia setup` and the interactive screen refuse until it does.
 
 Claude Code and Codex offer three reviewed presets: `balanced`, `performance`, and `economy`.
 Choosing one replaces that agent's complete model route; it never merges with stale custom targets.
 The profile row reads `custom` whenever the complete route does not exactly match a preset. Choosing
 `custom` preserves the current route, and the target rows below are its editor. Profiles expand into
 the same persisted `key=model` cell, do not select `Planning`, do not prove model availability, and do
-not make Estigia run a model — though a profile naming `implementer` or `analyst` does install that
-worker's definition, because on this row naming a key is what asks for the file. OpenCode's catalog is dynamic, and adapters without a stable reviewed
+not make Estigia run a model. They do not install a worker definition either: every shipped preset
+names `implementer`, and `Delegated workers` — not this row — is what decides whether that
+definition exists. OpenCode's catalog is dynamic, and adapters without a stable reviewed
 catalog offer only custom target editing rather than invented defaults. Shared and uniform views also
 offer no profile because they have no single adapter whose model namespace can own it.
 

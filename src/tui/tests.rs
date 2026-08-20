@@ -446,6 +446,7 @@ fn the_per_agent_step_asks_only_what_differs_by_agent() {
             Setting::Review,
             Setting::Transitions,
             Setting::Judges,
+            Setting::Workers,
             Setting::Planning,
         ]
     );

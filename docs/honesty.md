@@ -21,9 +21,14 @@ suite. Everything else here is prose held by review.
   Only Claude Code currently receives host-routable definitions: the planning phases selected by
   `Planning`, one `review-blind` definition installed in every mode, whose tool grant
   `Evidence standard` decides, and the two delegated workers `implementer` and `analyst`, each
-  written only where `Model routing` names its key and retracted when the name goes away. A model
-  and, where one is named, an `effort:` line are rendered into all of them; that a host obeys either
-  field is not measured here, and ten of the eleven adapters have nowhere to put them at all.
+  written only where `Delegated workers` names it and retracted when the name goes away. A model
+  and, where one is named, an `effort:` line are rendered into the planning phases and the two
+  workers — **not** into `review-blind`, whose `model: inherit` is literal and whose bytes are
+  pinned against an earlier release, so a model or effort named for `judge` reaches no file and is
+  carried to the panel by the launch instead. That a host obeys either field is not measured here,
+  and ten of the eleven adapters have nowhere to put them at all. A model ID whose own last segment
+  is one of the five effort words cannot be told from a model at that effort, and the picker will
+  offer such a catalog entry without saying so.
   OpenCode and every
   other host keep these values as routing declarations. `orchestrate`, `apply`, `judge`, and a visible
   route or installed definition are likewise not proof that a host executes them.
@@ -2543,7 +2548,7 @@ suite. Everything else here is prose held by review.
   `a_checkout_this_process_cannot_resolve_is_still_one_checkout`, whose corpus differs by an
   accented pair rather than an ASCII one, because an ASCII pair cannot tell the two rules apart.
 - **Two settings are read by nobody, and three more were.**
-  An operator sets nineteen rows and `config list` reports all of them. Measured: `context.get` is
+  An operator sets twenty rows and `config list` reports all of them. Measured: `context.get` is
   called for exactly three labels — `project board`, `worktree location` and, since the review
   handoff, `Review delegation`, which the transport reads to stamp one deadline on a request it
   never waits for. The gate reads `Irreversible commands`, and the payload's prose

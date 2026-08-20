@@ -619,7 +619,7 @@ the workflow, it holds the tools.
   else, and a file that held nothing but Estigia's block does not survive as an
   empty husk. JSON keeps the operator's key order; markdown comes back byte for
   byte.
-- Nineteen typed settings. Reading the table produces a valid configuration or a
+- Twenty typed settings. Reading the table produces a valid configuration or a
   refusal that names what may be written instead.
 - **The installed skill directory is `flow`.** It was `issue-flow`, upstream's
   name, kept so the two could be the same directory. Estigia now installs under
@@ -777,15 +777,29 @@ the workflow, it holds the tools.
   `implementer` (`Read, Grep, Glob, Write, Edit, Bash`) and `analyst`
   (`Read, Grep, Glob`), two because the grants genuinely differ — this contract's
   analyst is repository-read-only and its implementer runs the suite.
-  - **The row is the switch, not `Planning`.** Each is written only where
-    `Model routing` names its key, under any protocol, and retracted when the
-    name goes away. With the row `unset`, `setup` writes exactly the bytes it
-    wrote before this existed, on every adapter: a definition carries a tool
-    allowlist, which the `control-surface` population already treats as
-    authority, and an upgrade may not hand out authority nobody asked for. It is
-    also what makes `analyst` safe to write — another harness answers to that
-    name, so the file appears only where it was asked for and is removed only
-    where Estigia created it.
+  - **A new row is the switch, not `Planning` and not `Model routing`.**
+    `Delegated workers` takes `none` (the default), `implementer`, `analyst`, or
+    both, and only what it names is written — under any protocol, retracted when
+    the name goes away. A definition carries a tool allowlist, which the
+    `control-surface` population already treats as authority, and an upgrade may
+    not hand out authority nobody asked for; `none` is what every contract
+    written before this reads.
+    - It is deliberately **not** the presence of a `Model routing` key. Two blind
+      judges refused that shape and were right: `implementer` has been an
+      accepted routing key since that row existed, offered as its first example,
+      documented as inert, and set by all six shipped model presets — so the
+      population holding it is every installation that ever chose a profile, and
+      treating that as consent would have installed a `Write`/`Edit`/`Bash`
+      definition into their home because they upgraded. A rule invented in one
+      change cannot turn a value written under the opposite rule into an answer.
+      `Model routing` still says what a named worker runs on.
+    - **A definition Estigia did not author is refused, not replaced.** The write
+      pass used to overwrite whatever was at the path and record no ownership, so
+      the uninstall neither restored it nor reported it. It is now decided in the
+      preflight, beside the reviewer's, so nothing is half-written behind it, and
+      the refusal names both ways out. This matters most for `analyst`, a name
+      another harness's orchestrator answers to — which is the documented reason
+      to name it at all.
   - **Effort travels with the model.** `design=opus/high`, one of `low`,
     `medium`, `high`, `xhigh`, `max`, in the same row rather than a second one,
     because sizing a context to a task is one decision. It is read from the right

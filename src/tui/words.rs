@@ -383,6 +383,9 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Renewal window", "Ventana de renovación"),
     ("Review protocol", "Protocolo de revisión"),
     ("Blind judges", "Jueces a ciegas"),
+    ("Delegated workers", "Trabajadores delegados"),
+    ("`none`, `implementer`, `analyst`, or `implementer analyst`", "`none`, `implementer`, `analyst`, o `implementer analyst`"),
+    ("which delegated workers this agent has a definition for, if any", "para qué trabajadores delegados tiene definición este agente, si es que alguno"),
     ("Evidence standard", "Estándar de evidencia"),
     (
         "what a verdict here has to be backed by, and so what a reviewer may do",
@@ -522,7 +525,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("no verified model catalog for {agent}; type a model ID", "no hay un catálogo de modelos verificado para {agent}; escribe un ID de modelo"),
     ("shared answers have no single agent model catalog; type a model ID", "las respuestas compartidas no tienen el catálogo de un único agente; escribe un ID de modelo"),
     ("Planning differs across selected agents; unify it or edit each agent to route planning phases", "Planning difiere entre los agentes seleccionados; unifícalo o edita cada agente para enrutar fases de planificación"),
-    ("naming a model here installs this worker's definition where the host reads one; clearing it takes the definition away", "nombrar un modelo aquí instala la definición de este trabajador donde el anfitrión la lee; borrarlo se lleva la definición"),
+    ("this reaches a definition only where `Delegated workers` names this worker; that row decides whether it exists, this one what it runs on", "esto llega a una definición solo donde `Delegated workers` nombra a este trabajador; esa fila decide si existe, esta con qué corre"),
     ("only Claude Code currently emits planned phase definitions; other hosts keep this as a routing declaration", "solo Claude Code emite actualmente definiciones de fases planificadas; los demás anfitriones conservan esto como declaración de reparto"),
     ("{target} is a routing declaration, not proof that a host executes it", "{target} es una declaración de reparto, no una prueba de que un anfitrión lo ejecute"),
     ("{agent} model catalog unavailable: {why}. Type a model ID instead.", "el catálogo de modelos de {agent} no está disponible: {why}. Escribe un ID de modelo en su lugar."),

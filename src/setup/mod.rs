@@ -1424,6 +1424,59 @@ fn reviewer_definition_refusal(code: ReviewerDefinitionCode, path: &Path, reason
     )
 }
 
+/// Refuse a delegated worker whose definition somebody else authored.
+///
+/// The same shape as the reviewer's `Unowned` refusal, and for a sharper reason.
+/// `analyst` is a name another harness's orchestrator answers to — that is what
+/// [`crate::config::ORCHESTRATED_ROLES`] exists to accept — so the operator most
+/// likely to turn this worker on is the one whose `analyst.md` already exists.
+/// Writing over it would replace their file, and because ownership is recorded
+/// only for files Estigia created, the uninstall would neither restore it nor
+/// report it: gone in both directions, silently.
+///
+/// In the preflight rather than the write pass, for the reason the reviewer's is:
+/// a name collision must be decided before the skill, the directive or anything
+/// else has been written, so the refusal leaves nothing half-done behind it.
+fn delegated_definition_refusal(worker: &str, path: &Path) -> Refusal {
+    Refusal::not_started(
+        "delegated-definition-unowned",
+        format!(
+            "{} already exists and Estigia has no record of creating it",
+            path.display()
+        ),
+        Resolution::no_command(
+            NoCommandReason::WorldAction,
+            format!(
+                "move {} aside to let Estigia author it, or run `estigia config set \"Delegated \
+                 workers\"` with a value that does not name {worker} to leave the file alone",
+                path.display()
+            ),
+        ),
+    )
+}
+
+fn validate_delegated_definitions(paths: &AgentPaths, effective: &Config) -> Result<()> {
+    let Some(agents_root) = paths.agents_root.as_deref() else {
+        return Ok(());
+    };
+    for (worker, file) in skill::DELEGATED_AGENTS {
+        if !effective.workers.contains(worker) {
+            continue;
+        }
+        let Some(name) = file.path.strip_prefix("agents/") else {
+            continue;
+        };
+        let target = agents_root.join(name);
+        if read_optional(&target)?.is_none()
+            || skill::record::created_outside(&paths.skill_root, &target)
+        {
+            continue;
+        }
+        return Err(delegated_definition_refusal(worker, &target).into());
+    }
+    Ok(())
+}
+
 fn reviewer_target(paths: &AgentPaths) -> Option<PathBuf> {
     let name = skill::REVIEW_AGENT.path.strip_prefix("agents/")?;
     Some(paths.agents_root.as_ref()?.join(name))
@@ -1939,6 +1992,7 @@ fn setup_into_with_skill(
     // ownership and drift before the skill, directive, hooks, or any other
     // setup artifact can move.
     step!(validate_reviewer_definition(&paths));
+    step!(validate_delegated_definitions(&paths, effective));
     boundary!(SetupFailureBoundary::BeforeSkill);
     let mut actions = if install_skill {
         write_step!(skill::install_into(
@@ -2139,15 +2193,20 @@ fn setup_into_with_skill(
         // agents root exists would put a definition carrying `Write`, `Edit` and
         // `Bash` into somebody's home because they upgraded, and an agent
         // definition is authority — `guard:population control-surface` says so
-        // in the harness. So the key is the consent, and the retraction below is
-        // what makes withdrawing it mean something.
+        // in the harness.
+        //
+        // `Delegated workers` is the consent, and it is a row of its own rather
+        // than the presence of a `Model routing` key for the reason
+        // [`crate::config::Workers`] gives at length: that key has been accepted,
+        // documented as inert, and set by three shipped presets since before it
+        // meant anything. `Model routing` still decides what each worker runs on.
         for (target_key, file) in skill::DELEGATED_AGENTS {
             let Some(name) = file.path.strip_prefix("agents/") else {
                 continue;
             };
             let target = agents_root.join(name);
             let existing = step!(read_pending(&target, pending));
-            if effective.models.route(target_key).is_none() {
+            if !effective.workers.contains(target_key) {
                 if existing.is_none() || !skill::record::created_outside(&paths.skill_root, &target)
                 {
                     continue;
@@ -2420,13 +2479,11 @@ pub fn uninstall_from(
                 continue;
             };
             let target = agents_root.join(name);
-            let Some(existing) = read_pending(&target, pending)? else {
-                continue;
-            };
-            if !skill::record::created_outside(&paths.skill_root, &target) {
+            if read_pending(&target, pending)?.is_none()
+                || !skill::record::created_outside(&paths.skill_root, &target)
+            {
                 continue;
             }
-            let _ = existing;
             if !options.dry_run {
                 skill::record::forget_outside(&paths.skill_root, &target)?;
             }

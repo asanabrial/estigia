@@ -118,6 +118,7 @@ fn every_variant() -> Vec<Setting> {
             | Setting::Tracker
             | Setting::Planning
             | Setting::Models
+            | Setting::Workers
             | Setting::Integration
             | Setting::Window
             | Setting::ReviewProtocol
@@ -191,6 +192,7 @@ fn every_setting_is_in_the_table() {
         Setting::Tracker,
         Setting::Planning,
         Setting::Models,
+        Setting::Workers,
         Setting::Integration,
         Setting::Window,
         Setting::ReviewProtocol,
@@ -313,6 +315,7 @@ fn a_closed_list_offers_every_value_its_type_can_hold() {
                 setting,
             )),
             Setting::Judges => Some(rendered(Judges::all(), |c, v| c.judges = v, setting)),
+            Setting::Workers => Some(rendered(Workers::all(), |c, v| c.workers = v, setting)),
             Setting::Evidence => Some(rendered(Evidence::all(), |c, v| c.evidence = v, setting)),
             // Open vocabularies: a path, a board name, a language, a duration,
             // a count of lines, a list of commands, a tracker this build may not
@@ -449,6 +452,10 @@ fn a_rendered_table_reads_back_identically() {
             lite: false,
         },
         models: ModelRouting::parse("implementer=opus, judge=haiku").expect("a routing"),
+        workers: crate::config::Workers {
+            implementer: true,
+            analyst: true,
+        },
         integration: Integration::Trunk,
         window: std::time::Duration::from_secs(30),
         review_protocol: ReviewProtocol::ReceiptDriven,
@@ -1233,7 +1240,7 @@ fn direct_work_delegation_thresholds_do_not_select_sdd() {
         "| Reading for a write or broad research | - | Delegate reading that prepares a write, broad research, or context compression |\n",
         "| Writing | One already-understood mechanical file may stay inline | 2+ non-trivial files delegate one writer |\n",
         "Tests, builds, installs, and native review actions may each use a fresh per-action worker without changing the route. Child workers do not gain orchestration authority.\n",
-        "Two definitions ship for exactly this, and `Planning` does not decide them: `implementer`, which writes and runs the suite inside the checkout its launch names, and `analyst`, which is repository-read-only. Handing a bounded piece of work to a fresh context happens under every protocol, `direct` included — which is where no planning phase exists to borrow. Each is installed only where `Model routing` names its key, so a row naming neither means no definition is there to launch and the brief is composed in the prompt, as every launch did before they existed. A delegated context is measured against **this** run's claim, so what the definition tells it not to do is a rule the launch keeps rather than one the gate enforces on it separately.\n",
+        "Two definitions ship for exactly this, and `Planning` does not decide them: `implementer`, which writes and runs the suite inside the checkout its launch names, and `analyst`, which is repository-read-only. Handing a bounded piece of work to a fresh context happens under every protocol, `direct` included — which is where no planning phase exists to borrow. Each is installed only where `Delegated workers` names it, so `none` means no definition is there to launch and the brief is composed in the prompt, as every launch did before they existed; `Model routing` says what a named worker runs on and never whether it exists. A delegated context is measured against **this** run's claim, so what the definition tells it not to do is a rule the launch keeps rather than one the gate enforces on it separately.\n",
         "Crossing a threshold selects delegated direct work only. It MUST NOT select `sdd`, create SDD state or artifacts, or invoke an `sdd-*` phase. Size, file count, and risk do not select a planning protocol, and this rule does not change an operator's configured `Planning` mode."
     );
     assert_eq!(
