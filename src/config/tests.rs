@@ -1878,6 +1878,84 @@ fn the_renewal_window_can_be_narrowed_and_never_widened() {
     }
 }
 
+/// The row that decides a worker exists reads every spelling it advertises.
+///
+/// Held here because `a_closed_list_offers_every_value_its_type_can_hold`
+/// renders `Workers::all()` and never calls `parse`, so the unordered spelling
+/// the doc comment promises was asserted nowhere — and a row whose promise is
+/// untested is a row that keeps the promise until somebody tidies the parser.
+#[test]
+fn the_delegated_workers_row_reads_every_spelling_it_offers() {
+    let workers = |cell: &str| {
+        let local = table(&[("Delegated workers", cell)]);
+        Config::read(&local, None).map(|config| config.workers)
+    };
+
+    // The default, and the shape of it: nothing named, because a definition
+    // carries a tool allowlist and no installation gains one by upgrading.
+    assert_eq!(Config::default().workers, Workers::default());
+    assert_eq!(Config::default().workers.as_value(), "none");
+    assert_eq!(Config::default().workers.names(), Vec::<&str>::new());
+
+    for spelling in ["none", "None", "off", "unset", "  "] {
+        assert_eq!(
+            workers(spelling).unwrap_or_else(|_| panic!("{spelling:?} was refused")),
+            Workers::default(),
+            "{spelling:?}"
+        );
+    }
+
+    // Either order, and a name said twice, because an operator writing a set
+    // is not writing a sequence. `as_value` normalises to table order, so two
+    // writes of one answer produce one cell.
+    for spelling in [
+        "implementer analyst",
+        "analyst implementer",
+        "analyst  implementer",
+        "implementer analyst implementer",
+    ] {
+        let both = workers(spelling).unwrap_or_else(|_| panic!("{spelling:?} was refused"));
+        assert!(both.implementer && both.analyst, "{spelling:?}");
+        assert_eq!(both.as_value(), "implementer analyst", "{spelling:?}");
+        assert_eq!(both.names(), vec!["implementer", "analyst"], "{spelling:?}");
+    }
+
+    let one = workers("analyst").expect("a worker");
+    assert!(one.contains("analyst") && !one.contains("implementer"));
+    assert_eq!(one.as_value(), "analyst");
+
+    // A name nothing ships is refused whole rather than dropped, like every
+    // other closed row: a worker silently ignored is a definition an operator
+    // believes they installed.
+    for bad in [
+        "reviewer",
+        "judge",
+        "implementer analyst builder",
+        "implementer,analyst",
+    ] {
+        assert!(workers(bad).is_err(), "{bad:?} was accepted");
+    }
+
+    // And every spelling the row offers a person is one it takes back.
+    for value in Workers::all() {
+        assert_eq!(
+            workers(&value.as_value()).expect("a rendered value round-trips"),
+            value
+        );
+    }
+
+    // Through the table it is written into, with the rest of the contract.
+    let config = Config {
+        workers: Workers {
+            implementer: false,
+            analyst: true,
+        },
+        ..Config::default()
+    };
+    let reread = Config::read(&config.render_rows(), None).expect("Estigia wrote this");
+    assert_eq!(reread.workers, config.workers);
+}
+
 #[test]
 fn an_orchestrators_own_vocabulary_is_accepted() {
     // Somebody running an orchestrator alongside Estigia thinks in its names. A
@@ -1885,11 +1963,12 @@ fn an_orchestrators_own_vocabulary_is_accepted() {
     // conclude does not work — and the cost of accepting a key Estigia never
     // spawns is nothing, because an unread key routes nobody.
     //
-    // `analyst` is the one that is read: it is this contract's own read-only
-    // role as well as somebody else's sub-agent, and naming it installs a
-    // definition. That is why the install is gated on the key and owned as
-    // created-outside — a file appearing unasked under a name another harness
-    // answers to would shadow theirs.
+    // `analyst` is the one that also names a shipped definition: it is this
+    // contract's own read-only role as well as somebody else's sub-agent. What
+    // installs that definition is `Delegated workers`, not a model named here,
+    // and only a definition Estigia authored is written or removed — a file
+    // appearing unasked under a name another harness answers to would shadow
+    // theirs.
     let routing = |cell: &str| {
         let local = table(&[("Model routing", cell)]);
         Config::read(&local, None).map(|config| config.models)

@@ -1286,9 +1286,10 @@ const SHORT_FORM_PHASES: &[&str] = &["spec", "tasks"];
 ///
 /// `analyst` is the exception and is deliberately not moved out of this list.
 /// It is this contract's own read-only role as well as somebody else's
-/// sub-agent name, and naming it here installs [`crate::skill::DELEGATED_AGENTS`]'s
-/// read-only definition — which is exactly why that install is gated on the key
-/// and tracked as created-outside. A file written unasked under a name another
+/// sub-agent name, and it also names [`crate::skill::DELEGATED_AGENTS`]'s
+/// read-only definition — which is why a model named for it here installs
+/// nothing. [`Workers`] decides that, and only a definition Estigia authored is
+/// ever written or removed, because a file written unasked under a name another
 /// harness answers to would shadow theirs.
 pub const ORCHESTRATED_ROLES: &[&str] = &[
     "strategist",
@@ -1329,9 +1330,9 @@ pub struct ModelTarget {
 /// this row is narrower and worth stating exactly, because the row's name
 /// promises more than any harness could deliver: where a host reads sub-agent
 /// definitions, `setup` writes the named model and effort into the ones it
-/// installs, and for the two delegated workers the presence of the key is what
-/// decides the file exists at all. Every other key is a declaration the agent
-/// reads. Nothing here starts a process.
+/// installs. Which ones exist is not decided here — [`Workers`] decides that,
+/// and a model named for a worker that row does not name reaches nothing. Every
+/// other key is a declaration the agent reads. Nothing here starts a process.
 ///
 /// A route carries a model and, optionally, the effort it runs at — one
 /// decision, one place. See [`Route`].

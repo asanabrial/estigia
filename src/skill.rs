@@ -140,7 +140,7 @@ const ANALYST_AGENT: SkillFile = SkillFile {
 /// Exactly the five dynamic SDD planning definitions.
 pub const PHASE_AGENTS: &[SkillFile] = &[SDD_EXPLORE, SDD_PROPOSE, SDD_SPEC, SDD_DESIGN, SDD_TASKS];
 
-/// The delegated workers, each beside the `Model routing` key that installs it.
+/// The delegated workers, each beside the name `Delegated workers` installs it by.
 ///
 /// **`Delegated workers` is the switch.** Neither file is written unless that
 /// row names it, and each is retracted when the name goes away. An agent

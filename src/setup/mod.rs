@@ -1447,7 +1447,8 @@ fn delegated_definition_refusal(worker: &str, path: &Path) -> Refusal {
         Resolution::no_command(
             NoCommandReason::WorldAction,
             format!(
-                "move {} aside to let Estigia author it, or run `estigia config set \"Delegated \
+                "move {} aside to let Estigia author it — that always clears this — or, on a \
+                 machine Estigia is already installed on, run `estigia config set \"Delegated \
                  workers\"` with a value that does not name {worker} to leave the file alone",
                 path.display()
             ),
@@ -2198,8 +2199,8 @@ fn setup_into_with_skill(
         // `Delegated workers` is the consent, and it is a row of its own rather
         // than the presence of a `Model routing` key for the reason
         // [`crate::config::Workers`] gives at length: that key has been accepted,
-        // documented as inert, and set by three shipped presets since before it
-        // meant anything. `Model routing` still decides what each worker runs on.
+        // documented as inert, and set by all six shipped presets since before
+        // it meant anything. `Model routing` still decides what each worker runs on.
         for (target_key, file) in skill::DELEGATED_AGENTS {
             let Some(name) = file.path.strip_prefix("agents/") else {
                 continue;
@@ -2221,6 +2222,23 @@ fn setup_into_with_skill(
                     step!(skill::record::forget_outside(&paths.skill_root, &target));
                 }
                 continue;
+            }
+            // Asked again, immediately before the write. The preflight decided
+            // ownership before anything was written, which is what a refusal
+            // needs to leave nothing half-done — but a file appearing at this
+            // path in between would be overwritten with no ownership recorded,
+            // which is the failure the preflight exists to stop, in a narrower
+            // window. `analyst` is a name another harness's orchestrator
+            // answers to, so the colliding writer is a real process rather than
+            // a hypothesis.
+            //
+            // This is not a lock and is not claimed as one, the same as the
+            // reviewer's second look one pass over: two observations cannot
+            // exclude a third writer. It closes the window it can see.
+            if existing.is_some() && !skill::record::created_outside(&paths.skill_root, &target) {
+                step!(Err::<(), _>(delegated_definition_refusal(
+                    target_key, &target
+                )));
             }
             let desired = render_delegated_agent(file.contents, target_key, effective);
             actions.push(write_step!(write_file(

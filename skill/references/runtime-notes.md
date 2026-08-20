@@ -44,13 +44,18 @@ qualify. If the runtime or operator forbids delegation, use a separate session. 
 helper changes the mechanism, never the review requirement.
 
 For Claude Code, every setup installs one stable `review-blind` definition with `model: inherit`, even
-in `single` mode. It also installs `implementer` and `analyst` where `Model routing` names them, which
-is a separate switch from this one and from `Planning`. It is inert unless its launch prompt names an active blind mode, the exact publication
+in `single` mode. It is inert unless its launch prompt names an active blind mode, the exact publication
 receipt and the review criteria. The orchestrator passes `Model routing`'s effective `judge` model on
 each launch, and starts that same definition twice for `two blind` or five times for `five blind`,
 concurrently, with the identical target and criteria. Each context runs on the grant `Evidence
 standard` decides, and must not delegate or inspect sibling output. Config writes do not mutate this definition. A
 definition is a host constraint and a contract, not evidence that the panel was actually instantiated.
+
+Setup also installs the delegated workers `implementer` and `analyst`, on a switch of their own:
+`Delegated workers`, which defaults to `none` and names neither. That row decides whether either
+definition exists, not `Planning` and not `Model routing` — `Model routing` says only what a named
+worker runs on, so a model set for `implementer` or `analyst` with the workers row left at `none`
+installs nothing. Check the row before relying on a definition being there.
 
 `review-blind` is reserved to the operator-owned canonical user definition. Claude's current `Agent`
 and legacy `Task` launch surfaces are preflighted before repository-write classification: recursively
@@ -84,10 +89,13 @@ same-finding identity or quorum, and its transport has no per-judge verdict mech
 ## Analyst enforcement and delegation
 
 Where supported, enforce analyst read-only behavior with a tool allowlist that excludes file-writing
-tools. On Claude Code with `analyst` named in `Model routing`, that allowlist is already shipped as
-the `analyst` definition and needs no composing; elsewhere it is written into the launch. Either way
-it reduces accidental edits and does not seal the boundary: a shell can write files and is
-still needed for measurements, so the prose prohibition remains authoritative.
+tools. On Claude Code with `analyst` named in `Delegated workers`, that allowlist is already shipped
+as the `analyst` definition, so a launch of that role carries it. Check the row rather than assume
+it: it defaults to `none`, and a model named for `analyst` in `Model routing` installs nothing. Where
+the definition is absent — which is every other adapter, and this one until the row says otherwise —
+write the allowlist into the launch. Either way it reduces accidental edits and does not seal the
+boundary: a shell can write files and is still needed for measurements, so the prose prohibition
+remains authoritative.
 
 Claude Code applies a subagent definition's tool allowlist when that definition runs as a teammate,
 but does not apply the definition's `skills` field. Put required domain rule books in the teammate

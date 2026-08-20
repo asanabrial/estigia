@@ -26,7 +26,10 @@ suite. Everything else here is prose held by review.
   workers — **not** into `review-blind`, whose `model: inherit` is literal and whose bytes are
   pinned against an earlier release, so a model or effort named for `judge` reaches no file and is
   carried to the panel by the launch instead. That a host obeys either field is not measured here,
-  and ten of the eleven adapters have nowhere to put them at all. A model ID whose own last segment
+  and ten of the eleven adapters have nowhere to put them at all. `Delegated workers` is reported as
+  held on those ten, where it decides nothing: `Applies` is derived from whether an adapter can gate
+  tool calls, not from whether it has an agents root, and `Model routing` beside it reads the same
+  way. `Applies::Inert` exists for this shape and still has no producer. A model ID whose own last segment
   is one of the five effort words cannot be told from a model at that effort, and the picker will
   offer such a catalog entry without saying so.
   OpenCode and every
@@ -2560,11 +2563,12 @@ suite. Everything else here is prose held by review.
 
   The two authorisations are closed: `SKILL.md` now says, in the steps where a state moves and where
   a change is delivered, that doing it unasked needs the row's permission. `Model routing` is closed
-  too, and by a narrower claim than the row's name suggests: issue #110 made `setup` read it twice
-  — once to decide whether a delegated worker's definition is written at all, and once for the
-  `model:` and `effort:` lines inside it — and `SKILL.md` now carries a sentence telling the agent
-  which keys are already routed for it and which it must act on itself. Nothing here starts a model;
-  what changed is that something reads the row. The other two stay open, declared in
+  too, and by a narrower claim than the row's name suggests: issue #110 made `setup` read it for the
+  `model:` and `effort:` lines of the definitions it writes, and `SKILL.md` now carries a sentence
+  telling the agent which keys are already routed for it and which it must act on itself. It does
+  **not** decide whether any of those definitions exist — `Delegated workers` does, and an earlier
+  draft of this change gated the install on a `Model routing` key until two blind judges refused it.
+  Nothing here starts a model; what changed is that something reads the row. The other two stay open, declared in
   `every_setting_is_read_by_the_gate_the_transport_or_the_prose` and shorter-only: `Delivery route`
   accepts one value, and `Merge strategy` names a topology for a `merge` this crate does not run.
   Acting on those is a design call, not a gap to paper over.

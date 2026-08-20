@@ -5202,12 +5202,14 @@ fn a_delegated_definition_estigia_did_not_author_is_refused_before_any_artifact_
     assert_eq!(refusal.code, "delegated-definition-unowned");
     // Both ways out, and both of them work: move the file, or stop naming the
     // worker. Naming a dead end is what this repository refuses loudest.
+    // Both halves, separately. Written as one `||` these read as two checks
+    // and were one — `contains("Delegated")` subsumed the spelling beside it —
+    // so the row name could have fallen out of the second way with nothing
+    // noticing.
     let resolution = format!("{:?}", refusal.resolution);
     assert!(resolution.contains("move"), "{resolution}");
-    assert!(
-        resolution.contains("Delegated \\\nworkers") || resolution.contains("Delegated"),
-        "{resolution}"
-    );
+    assert!(resolution.contains("Delegated workers"), "{resolution}");
+    assert!(resolution.contains("analyst"), "{resolution}");
 
     let paths = resolve_paths(adapter, &options).expect("paths resolve");
     assert!(!paths.skill_root.exists(), "the skill was written anyway");

@@ -1305,8 +1305,9 @@ host. Shared answers borrow no one agent's catalog. The CLI still edits
 the complete persisted key=model route, where an effort follows its
 model after a slash.
 Only Claude Code currently receives host-routable definitions: selected
-planning phases, one inert blind reviewer in every mode, and the
-implementer and analyst workers, which exist because this row names them.
+planning phases, one inert blind reviewer in every mode, and whichever
+workers the Delegated workers row names — that row decides whether they
+exist, the model rows above only what they run on.
 OpenCode and every other host keep these values as routing declarations;
 orchestrate, apply, judge, and a visible route are not execution proof.
 

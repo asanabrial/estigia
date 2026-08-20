@@ -2536,8 +2536,10 @@ fn the_readme_counts_what_the_crate_actually_has() {
 /// eleven of them then. That left `Delivery authorisation`, `Transition authorisation`,
 /// `Delivery route`, `Merge strategy` and `Model routing` read by nobody: not
 /// the gate, not the transport, and no sentence an agent is given. `Model routing`
-/// left that list with issue #110, which made `setup` decide two files by it and
-/// gave the contract a sentence naming what it obliges.
+/// left that list with issue #110, which made `setup` write the model and the
+/// effort it names into the definitions it installs, and gave the contract a
+/// sentence naming what the row obliges. Which definitions exist is
+/// `Delegated workers`, a row of its own.
 ///
 /// `setup::Applies::Asked` says of three of them *"the contract asks, and the
 /// agent may still honour it, but nothing checks"* — and for three the contract

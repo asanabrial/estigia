@@ -115,8 +115,8 @@ esfuerzo sigue a su modelo tras una barra.
 
 Solo Claude Code recibe actualmente definiciones enrutables por el anfitrión:
 las fases de planificación seleccionadas, un revisor ciego estático e inerte
-en todos los modos, y los trabajadores implementer y analyst, que existen
-porque esta fila los nombra. OpenCode y todos los demás anfitriones conservan estos
+en todos los modos, y los trabajadores que nombre la fila Delegated workers
+— esa fila decide si existen, y las de modelo de arriba solo con qué corren. OpenCode y todos los demás anfitriones conservan estos
 valores como declaraciones de reparto; orchestrate, apply, judge y una ruta
 visible tampoco demuestran ejecución.
 

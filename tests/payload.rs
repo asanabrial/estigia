@@ -305,9 +305,9 @@ fn one_stable_blind_reviewer_definition_is_in_the_agent_manifest_not_the_skill()
         .filter(|name| name.starts_with("sdd-"))
         .collect();
     assert_eq!(phases, expected_phases);
-    // The delegated pair, each beside the routing key that installs it. Held
-    // here because the pairing is what decides whether a file is written at
-    // all: a key renamed on one side and not the other would leave a shipped
+    // The delegated pair, each beside the name `Delegated workers` installs it
+    // by. Held here because that pairing is what makes the row reach a file: a
+    // name renamed on one side and not the other would leave a shipped
     // definition nothing can ever ask for.
     let mut delegated: Vec<_> = estigia::skill::DELEGATED_AGENTS
         .iter()
