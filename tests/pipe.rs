@@ -10879,6 +10879,8 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
     // the public verb. The answer has to match the identical payload carrying
     // no cwd — here, the genuine ambiguity at the shared base.
     let elsewhere = if cfg!(windows) { "C:\\Windows" } else { "/etc" };
+    let through_a = worktree_a.join("..").join("..").join("nope");
+    let through_a = through_a.display().to_string();
     for (tool, payload) in [
         (
             "bash",
@@ -10894,6 +10896,10 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
                 "file_path": worktree_a.join("f.txt"),
                 "cwd": elsewhere,
             }),
+        ),
+        (
+            "bash",
+            serde_json::json!({ "command": "git commit", "cwd": through_a }),
         ),
     ] {
         let _ = std::fs::remove_file(&ledger);
@@ -14495,3 +14501,4 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
         }
     }
 }
+

@@ -4853,7 +4853,21 @@ fn context_the_payload_names(
     if stated.trim().is_empty() {
         return launched_context(parsed, tool);
     }
-    let named = gate_context(stated)?;
+    // Place before asking who covers it. holders_of uses coverage_depth,
+    // which keeps an unresolvable spelling, so wt-a/../../nope still
+    // starts with wt-a and selects that holder. The workdir clamp already
+    // abandoned that comparison for placed. A path that cannot be placed
+    // is dropped, not believed.
+    let named = std::path::PathBuf::from(stated);
+    let named = if named.is_absolute() {
+        named
+    } else {
+        launch_directory()?.join(named)
+    };
+    let Some(placed) = crate::paths::placed(&named) else {
+        return launched_context(parsed, tool);
+    };
+    let named = gate_context(&placed.to_string_lossy())?;
     if harness::guard::holders_of(&named.state_root, &named.repo_dir).is_empty() {
         launched_context(parsed, tool)
     } else {

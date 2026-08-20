@@ -383,8 +383,11 @@ suite. Everything else here is prose held by review.
   outside with exit zero while the command still ran. That is the same widened-gate shape
   workdir had, one key over.
 
-  What remains uncrossed is the other half of the trust: a cwd that names another run's
-  worktree is still believed. Nothing in this tree vendors a host schema, so if an adapter grows
+  The name is placed before anyone is asked who covers it, because holders_of uses
+  coverage_depth, which keeps an unresolvable spelling: wt-a/../../nope still starts
+  with wt-a. That is the comparison the workdir clamp already left. What remains
+  uncrossed is the other half of the trust: a cwd that names another run's
+  existing worktree is still believed. Nothing in this tree vendors a host schema, so if an adapter grows
   a passthrough cwd the model can compose, that steering is still a write attributed to the
   named holder. OpenCode's shell-tool schema has no cwd member — read from the installed
   binary during review of issue 44, not held here.
@@ -2642,4 +2645,5 @@ suite. Everything else here is prose held by review.
   What remains an assumption rather than a check is the inheritance itself — a new agent adopting
   the one configuration in use is a convenience, and an operator who wanted otherwise has to say so
   with `estigia config set`.
+
 
