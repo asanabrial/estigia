@@ -4716,13 +4716,17 @@ fn launch_directory() -> Result<std::path::PathBuf, Refusal> {
     })
 }
 
-/// The checkout the **host** named, or nothing.
+/// The checkout the payload named, or nothing.
 ///
-/// The adapter's own hook writes this: it lifts `cwd` out of a payload that
-/// nests it, and it is authoritative, because the adapter knows which checkout
-/// it is gating and the model does not compose it. It is taken as given, and a
-/// path outside this process's own directory is the ordinary case rather than a
-/// suspicious one — the hook may run from anywhere.
+/// Reads cwd at the top level or under tool_input. Shipped adapters write
+/// this in the hook or the host envelope. That is what is relied on; it is not
+/// a claim that a model cannot compose the key. A public gate caller
+/// can.
+///
+/// Whether that name is used is decided in show_gate: a directory no
+/// live claim covers is discarded so it cannot take a write out of the gate,
+/// and a directory a claim does cover is taken as given — the hook may run
+/// from anywhere, which is why the key exists.
 ///
 /// Deliberately **not** where OpenCode's `workdir` is read. See
 /// [`narrowed_by_the_call`] for why that one cannot be treated as this one is.
@@ -4822,6 +4826,55 @@ fn narrowed_by_the_call(
     crate::paths::placed(&resolved).filter(|placed| crate::paths::covers(launched, placed))
 }
 
+/// The checkout this process was already going to look at: the launch
+/// directory, optionally narrowed by a clamped workdir.
+fn launched_context(
+    parsed: &serde_json::Value,
+    tool: &str,
+) -> Result<harness::GateContext, Refusal> {
+    let launched = launch_directory()?;
+    let looking_at = narrowed_by_the_call(parsed, tool, &launched).unwrap_or(launched);
+    gate_context(&looking_at.to_string_lossy())
+}
+
+/// The checkout the payload named, unless naming it would take the write
+/// out of the gate.
+///
+/// A cwd no live claim covers was answered outside with exit zero.
+/// Measured 2026-08-16. The command still ran. That is a public verb
+/// deciding nothing, and it is why an uncovered name is dropped rather
+/// than believed. A name that does cover a holder is kept, including
+/// from outside this process's directory: that is the hook route.
+fn context_the_payload_names(
+    parsed: &serde_json::Value,
+    tool: &str,
+) -> Result<harness::GateContext, Refusal> {
+    let stated = payload_cwd(parsed);
+    if stated.trim().is_empty() {
+        return launched_context(parsed, tool);
+    }
+    // Place before asking who covers it. holders_of uses coverage_depth,
+    // which keeps an unresolvable spelling, so wt-a/../../nope still
+    // starts with wt-a and selects that holder. The workdir clamp already
+    // abandoned that comparison for placed. A path that cannot be placed
+    // is dropped, not believed.
+    let named = std::path::PathBuf::from(stated);
+    let named = if named.is_absolute() {
+        named
+    } else {
+        launch_directory()?.join(named)
+    };
+    let Some(placed) = crate::paths::placed(&named) else {
+        return launched_context(parsed, tool);
+    };
+    let named = gate_context(&placed.to_string_lossy())?;
+    if harness::guard::holders_of(&named.state_root, &named.repo_dir).is_empty() {
+        launched_context(parsed, tool)
+    } else {
+        Ok(named)
+    }
+}
+
 fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Result<(), Refusal> {
     let parsed: serde_json::Value = serde_json::from_str(input).map_err(|error| {
         Refusal::not_started(
@@ -4846,19 +4899,8 @@ fn show_gate(tool: &str, input: &str, run_id: Option<&str>, json: bool) -> Resul
     // two differ exactly when it matters — concurrent runs in isolated
     // worktrees under one base — and that is the case the fallback got wrong.
     //
-    // Two keys, two levels of trust, and the order says which is which. What the
-    // host named is taken as given. Only when it named nothing does the call's
-    // own `workdir` get a say, and then only to point somewhere inside the
-    // directory this process was already standing in — never to move the
-    // decision elsewhere. `narrowed_by_the_call` carries the measurement.
-    let stated = payload_cwd(&parsed);
-    let context = if stated.trim().is_empty() {
-        let launched = launch_directory()?;
-        let looking_at = narrowed_by_the_call(&parsed, tool, &launched).unwrap_or(launched);
-        gate_context(&looking_at.to_string_lossy())?
-    } else {
-        gate_context(stated)?
-    };
+    // Two keys, two levels of trust, and the order says which is which. A cwd that names a checkout a live claim covers is taken as given — the hook may run from anywhere. A cwd that names nowhere a claim covers is dropped, because believing it answered outside with exit zero while the command still ran. Only when the host named nothing, or named nowhere covered, does the call's own workdir get a say, and then only to point somewhere inside the directory this process was already standing in. narrowed_by_the_call carries that measurement.
+    let context = context_the_payload_names(&parsed, tool)?;
     // Before anything else, in the order the hook asks it: a sub-agent reaching
     // past the tool list its own definition declares. It is the cheapest
     // question and the least conditional — no claim, no state, no window.

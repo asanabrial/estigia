@@ -4734,8 +4734,9 @@ fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
     );
 
     // The host's own key is a separate door and keeps its own contract: it is
-    // taken as given, including from outside this process's directory, because
-    // the hook that writes it may run from anywhere.
+    // still read, including from outside this process's directory, because the
+    // hook that writes it may run from anywhere. Whether an uncovered name is
+    // used is decided in show_gate, not here.
     assert_eq!(
         super::payload_cwd(&serde_json::json!({ "cwd": "/a", "workdir": "/b" })),
         "/a",
