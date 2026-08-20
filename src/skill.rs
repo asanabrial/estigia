@@ -158,8 +158,10 @@ pub const PHASE_AGENTS: &[SkillFile] = &[SDD_EXPLORE, SDD_PROPOSE, SDD_SPEC, SDD
 /// Ownership is the other half, and it is what makes `analyst` safe to write at
 /// all. The name belongs to somebody else's orchestrator as much as to this
 /// contract — see [`crate::config::ORCHESTRATED_ROLES`] — so a definition
-/// Estigia did not author is refused in the preflight rather than replaced, and
-/// what it did author is removed on the way back out.
+/// Estigia did not author is refused rather than replaced — in the preflight,
+/// and again immediately before the write, which is the narrower of the two and
+/// the one that sees a file arriving between them — and what it did author is
+/// removed on the way back out.
 pub const DELEGATED_AGENTS: &[(&str, SkillFile)] = &[
     ("implementer", IMPLEMENTER_AGENT),
     ("analyst", ANALYST_AGENT),
@@ -532,9 +534,10 @@ fn selected_documents(config: &Config) -> String {
     // either — `ModelRouting` had lookups by role, by phase and by state, and
     // no caller outside the configuration module.
     //
-    // Two of the three families reach a file now: a planning phase the protocol
-    // runs, and either delegated worker the row names, are written into
-    // sub-agent definitions carrying the model **and** the effort. The rest is
+    // All three families reach a file now: a planning phase the protocol runs,
+    // `implementer` from the delegated roles, and `analyst` from the names
+    // another orchestrator spawns, each written into a sub-agent definition
+    // carrying the model **and** the effort. The rest is
     // still a declaration, and the sentence below is careful about which is
     // which — an instruction the agent must follow itself, told apart from a
     // route already taken for it. Getting that wrong in either direction is

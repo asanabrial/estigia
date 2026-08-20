@@ -38,10 +38,22 @@ Five invariants, and the tests are named after them:
    and upgrade plans report the resulting `installed.json` ownership mutation exactly once as a skill
    create or update, matching the real action manifest.
 
+   Two more definitions live outside the skill tree under that same record, and their rule is a
+   third one rather than either of the two above. `implementer.md` and `analyst.md` are written only
+   where `Delegated workers` names them — not `Planning`, and not `Model routing`, which says what a
+   named worker runs on and never whether it exists. A definition already at one of those paths that
+   Estigia did not create is **refused**, in the preflight and again immediately before the write,
+   rather than overwritten the way an SDD phase definition is: `analyst` is a name another harness's
+   orchestrator answers to, so replacing it would take somebody's own file with nothing recorded and
+   nothing to give back. They are also the only artifacts a plain `setup` removes rather than
+   uninstall — taking a name out of that row retracts the file on the next run, which is what makes
+   naming it consent rather than a one-way door.
+
    Uninstall deletes a textually unchanged owned reviewer before forgetting it or removing the skill ledger. A
    failed deletion therefore retains the evidence needed by an exact retry. Changed bytes are kept and
    their path is relinquished. This rule is deliberately specific to the reviewer; it does not broaden
-   or repair the older SDD-definition ownership behavior. Configuration writes never touch the file.
+   or repair the older SDD-definition ownership behavior, and the delegated workers'
+   refuse-rather-than-replace is a third rule beside both. Configuration writes never touch the file.
 
    **By name, and by content on the way in — not yet on the way out.** The record used to store the
    paths an install created and nothing about what it wrote there, so *did you change this, or did an

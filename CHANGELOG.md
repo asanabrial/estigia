@@ -838,9 +838,11 @@ the workflow, it holds the tools.
       `Model routing` still says what a named worker runs on.
     - **A definition Estigia did not author is refused, not replaced.** The write
       pass used to overwrite whatever was at the path and record no ownership, so
-      the uninstall neither restored it nor reported it. It is now decided in the
-      preflight, beside the reviewer's, so nothing is half-written behind it, and
-      the refusal names both ways out. This matters most for `analyst`, a name
+      the uninstall neither restored it nor reported it. It is decided in the
+      preflight now, beside the reviewer's, so the ordinary case has nothing
+      half-written behind it, and asked again immediately before the write, which
+      is the narrower guarantee and the one that catches a file arriving between
+      the two reads. The refusal names both ways out. This matters most for `analyst`, a name
       another harness's orchestrator answers to — which is the documented reason
       to name it at all.
   - **Effort travels with the model.** `design=opus/high`, one of `low`,

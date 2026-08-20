@@ -542,7 +542,7 @@ fn no_guard_reading_every_document_blames_the_readme() {
 ///
 /// The open ones — `Model routing`, `Irreversible commands`, the two language
 /// rows — are deliberately not held to their `accepted()` sentence. That
-/// sentence names twenty-two keys for `Model routing` alone, and a table cell
+/// sentence names sixteen keys for `Model routing` alone, and a table cell
 /// carrying it is a table nobody reads. What that leaves unmeasured is real and
 /// worth naming: an open row's README prose can be thinner than the parser's,
 /// and `Model routing`'s was — *"comma-separated `key=model` pairs"*, naming no
@@ -2524,7 +2524,7 @@ fn the_readme_counts_what_the_crate_actually_has() {
 
 /// Every setting is acted on by something, and the something is named.
 ///
-/// An operator sets nineteen rows. `config list` reports them, the contract
+/// An operator sets twenty rows. `config list` reports them, the contract
 /// carries them, and `doctor` has a row for the ones a *tracker* declares
 /// nothing for. Nothing asked the plainer question: does anything at all read
 /// this row.

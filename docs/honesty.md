@@ -32,6 +32,16 @@ suite. Everything else here is prose held by review.
   way. `Applies::Inert` exists for this shape and still has no producer. A model ID whose own last segment
   is one of the five effort words cannot be told from a model at that effort, and the picker will
   offer such a catalog entry without saying so.
+  A delegated definition's ownership is looked at twice and locked neither time: `setup` decides it
+  in the preflight, before anything is written, and asks again immediately before the bytes go down.
+  Two observations are not a lock — a file appearing between the second read and the write is still
+  overwritten, and nothing in this process can hold that path in the meantime. The same is already
+  true of the reviewer's definition one pass over, and its comment says so. What **is** crossed is
+  the branch: `the_second_ownership_look_refuses_what_arrives_after_the_first` reaches it through
+  `pending`, which the write pass reads and the preflight does not. What is **not** crossed is a real
+  interleaving, which cannot be driven from a test in one process. Two blind judges asked for that
+  test and graded its absence a warning; this is the honest half of it rather than a fixture shaped
+  to look like coverage.
   OpenCode and every
   other host keep these values as routing declarations. `orchestrate`, `apply`, `judge`, and a visible
   route or installed definition are likewise not proof that a host executes them.
@@ -2564,8 +2574,11 @@ suite. Everything else here is prose held by review.
   The two authorisations are closed: `SKILL.md` now says, in the steps where a state moves and where
   a change is delivered, that doing it unasked needs the row's permission. `Model routing` is closed
   too, and by a narrower claim than the row's name suggests: issue #110 made `setup` read it for the
-  `model:` and `effort:` lines of the definitions it writes, and `SKILL.md` now carries a sentence
-  telling the agent which keys are already routed for it and which it must act on itself. It does
+  `model:` and `effort:` lines of the definitions it writes, and the managed block in each agent's own
+  directive file now carries a sentence telling it which keys are already routed for it and which it
+  must act on itself — rendered by `selected_documents`, not written into `skill/SKILL.md`, whose own
+  added paragraph says the narrower thing: that the workers row and not this one decides whether a
+  definition exists. It does
   **not** decide whether any of those definitions exist — `Delegated workers` does, and an earlier
   draft of this change gated the install on a `Model routing` key until two blind judges refused it.
   Nothing here starts a model; what changed is that something reads the row. The other two stay open, declared in

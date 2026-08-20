@@ -1434,9 +1434,13 @@ fn reviewer_definition_refusal(code: ReviewerDefinitionCode, path: &Path, reason
 /// only for files Estigia created, the uninstall would neither restore it nor
 /// report it: gone in both directions, silently.
 ///
-/// In the preflight rather than the write pass, for the reason the reviewer's is:
-/// a name collision must be decided before the skill, the directive or anything
-/// else has been written, so the refusal leaves nothing half-done behind it.
+/// Raised twice, and the difference between the two matters to whoever reads a
+/// refusal. The **preflight** one decides a name collision before the skill, the
+/// directive or anything else has been written, for the reason the reviewer's
+/// does: a refusal there leaves nothing half-done behind it. The **write-pass**
+/// one is a second look immediately before the bytes go down, and it fires after
+/// those artifacts exist — so it is the narrower guarantee, and it is what
+/// catches a file that appeared between the two reads rather than before both.
 fn delegated_definition_refusal(worker: &str, path: &Path) -> Refusal {
     Refusal::not_started(
         "delegated-definition-unowned",

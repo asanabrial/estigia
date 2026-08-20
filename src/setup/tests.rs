@@ -4995,8 +4995,10 @@ fn a_model_named_for_a_phase_reaches_that_phases_definition() {
 /// The other half of it is consent. An agent definition is an instruction
 /// carrying a tool allowlist, which `guard:population control-surface` already
 /// treats as authority, so one carrying `Write`, `Edit` and `Bash` may not
-/// appear in somebody's home because they upgraded. The key is what asks for it
-/// and taking the key away is what withdraws it.
+/// appear in somebody's home because they upgraded. `Delegated workers` is what
+/// asks for it and taking that name out of the row is what withdraws it — not a
+/// `Model routing` key, which is the shape two blind judges refused and which
+/// `a_routing_key_is_not_what_installs_a_worker` below holds refused.
 #[test]
 fn a_delegated_worker_is_installed_because_the_row_named_it() {
     let (home, options) = sandbox();
@@ -5085,8 +5087,9 @@ fn a_delegated_worker_is_installed_because_the_row_named_it() {
         );
     }
 
-    // Withdrawn: the key goes, and so does the file this run created. The
-    // retraction is what makes naming it consent rather than a one-way door.
+    // Withdrawn: the name comes out of `Delegated workers`, and so does the
+    // file this run created. The retraction is what makes naming it consent
+    // rather than a one-way door.
     setup(adapter, &named, &options).expect("setup runs");
     assert!(
         !analyst.exists(),
@@ -5224,6 +5227,87 @@ fn a_delegated_definition_estigia_did_not_author_is_refused_before_any_artifact_
     // wall.
     setup(adapter, &Config::default(), &options).expect("setup runs once the row lets it");
     assert_eq!(fs::read_to_string(&theirs).unwrap(), bytes);
+}
+
+/// The second ownership look is crossed where a fixture can reach it.
+///
+/// Two blind judges asked for this and both were right that nothing held it:
+/// the write-pass guard's condition is a strict subset of the preflight's, so
+/// every scenario built by putting a file on disk is refused before the write
+/// pass is reached, and deleting the guard left the suite green.
+///
+/// What makes it reachable is an asymmetry the two reads already have. The
+/// preflight asks the **disk**, through `read_optional`; the write pass asks
+/// **`pending`**, the in-flight view a run carries across its own writes. A
+/// definition present in `pending` and absent from disk therefore walks past the
+/// first observation and arrives at the second, which is the shape of the thing
+/// the guard is for — a file that was not there when ownership was decided and
+/// is there when the bytes go down.
+///
+/// It is not the race itself. A real interleaving cannot be driven from a test
+/// in this process, and `docs/honesty.md` says so rather than letting this stand
+/// in for it. What this holds is the branch: that the second look refuses, that
+/// it refuses with the same code and the same two ways out, and that it does not
+/// fire on a definition Estigia owns.
+#[test]
+fn the_second_ownership_look_refuses_what_arrives_after_the_first() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let agents = home.path().join(".claude").join("agents");
+    let target = agents.join("analyst.md");
+    let config = Config {
+        workers: crate::config::Workers {
+            implementer: false,
+            analyst: true,
+        },
+        ..Config::default()
+    };
+
+    // Nothing on disk, so the preflight has nothing to refuse — and somebody
+    // else's definition already in this run's view of the world.
+    let mut pending = Pending::new();
+    pending.insert(
+        target.clone(),
+        Some("Somebody else's analyst.\n".to_owned()),
+    );
+    assert!(!target.exists(), "the fixture must not plant it on disk");
+
+    let failure = setup_adapter_into(
+        adapter,
+        &Config::default(),
+        &config,
+        &options,
+        &mut pending,
+        false,
+    )
+    .expect_err("the write pass replaced a definition it did not write");
+    let refusal = failure
+        .error
+        .downcast_ref::<crate::outcome::Refusal>()
+        .expect("a refusal, not an io error");
+    assert_eq!(refusal.code, "delegated-definition-unowned");
+    let resolution = format!("{:?}", refusal.resolution);
+    assert!(resolution.contains("move"), "{resolution}");
+    assert!(resolution.contains("Delegated workers"), "{resolution}");
+
+    // And it does not fire on a definition this run created: same view, same
+    // path, ownership recorded. A guard that refused here would make the second
+    // run of `setup` on any machine impossible.
+    let (home, options) = sandbox();
+    let agents = home.path().join(".claude").join("agents");
+    setup(adapter, &config, &options).expect("the first run installs it");
+    let ours = fs::read_to_string(agents.join("analyst.md")).expect("it is installed");
+    let mut pending = Pending::new();
+    pending.insert(agents.join("analyst.md"), Some(ours));
+    setup_adapter_into(
+        adapter,
+        &Config::default(),
+        &config,
+        &options,
+        &mut pending,
+        false,
+    )
+    .expect("the second look refused a definition Estigia owns");
 }
 
 /// A dry run writes nothing and claims no ownership; a second run repeats it.
