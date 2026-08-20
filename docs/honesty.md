@@ -499,7 +499,7 @@ suite. Everything else here is prose held by review.
   it can check it.
 
   None of it proves an independent context existed or establishes panel size, concurrency,
-  independence, blindness, same-finding identity or quorum. It cannot prove one, two or five judges
+  independence, blindness, same-finding identity or quorum. A closed-issue `verify_claim` accepts the follow-up only when this run's publication receipt, the closing PR, and the merge commit's parents (reviewed base, then head) all agree; any other close is still `issue-not-open`, and an unreadable closer listing is a failed read. It cannot prove one, two or five judges
   read those bytes or that their verdicts were honest. An OpenCode run launching Task judges is that
   same instruction, not a proof those Tasks ran or were blind. A marker can still be forged by a collaborator
   acting outside Estigia. `single`, `two blind` and `five blind` remain operator-selected review
