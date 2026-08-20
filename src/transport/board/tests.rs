@@ -260,3 +260,30 @@ fn a_card_from_another_repository_is_not_this_issue() {
     );
     assert_eq!(pick_item(&[], 73, "asanabrial/estigia"), ItemPick::Absent);
 }
+
+#[test]
+fn a_foreign_item_report_includes_the_board_key() {
+    let report = foreign_item_report(
+        73,
+        "asanabrial/12",
+        "asanabrial/investora",
+        "asanabrial/estigia",
+    );
+    assert!(
+        report
+            .as_object()
+            .is_some_and(|keys| keys.contains_key("board")),
+        "the refusal has to name the board that held the foreign card"
+    );
+    assert_eq!(report["board"], "asanabrial/12");
+    assert_eq!(report["reason"], "board-item-foreign-repository");
+    assert_eq!(
+        report["action"],
+        "estigia config set --repo \"Project board\" \"none\""
+    );
+    let detail = report["detail"].as_str().expect("detail is a sentence");
+    assert!(detail.contains("73"), "{detail}");
+    assert!(detail.contains("asanabrial/12"), "{detail}");
+    assert!(detail.contains("asanabrial/investora"), "{detail}");
+    assert!(detail.contains("asanabrial/estigia"), "{detail}");
+}

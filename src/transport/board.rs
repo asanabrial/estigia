@@ -539,7 +539,15 @@ impl Board {
         let item = match self.item_id(issue, home) {
             ItemPick::Ours { id } => id,
             ItemPick::Foreign { belongs_to } => {
-                return serde_json::json!({"attempted": true, "ok": false, "reason": "board-item-foreign-repository", "belongs_to": belongs_to, "action": "estigia config set --repo \"Project board\" \"none\""});
+                let board = format!(
+                    "{}/{}",
+                    self.owner.as_deref().unwrap_or("?"),
+                    self.number
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or("?".to_owned())
+                );
+                return foreign_item_report(issue, &board, &belongs_to, home);
             }
             ItemPick::Absent => {
                 // *Not on the board* is a fact about the board, and it may only be
@@ -634,6 +642,25 @@ fn text(value: &serde_json::Value, key: &str) -> String {
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default()
         .to_owned()
+}
+
+/// The refusal when the card for this number belongs to another repository.
+///
+/// `belongs_to` names the other repo; without `board` the operator cannot tell
+/// which project was asked to move it, and without `detail` the four identities
+/// never sit in one sentence.
+fn foreign_item_report(issue: u64, board: &str, belongs_to: &str, home: &str) -> serde_json::Value {
+    serde_json::json!({
+        "attempted": true,
+        "ok": false,
+        "reason": "board-item-foreign-repository",
+        "belongs_to": belongs_to,
+        "board": board,
+        "detail": format!(
+            "issue #{issue} on board {board} belongs to {belongs_to}, not {home}"
+        ),
+        "action": "estigia config set --repo \"Project board\" \"none\"",
+    })
 }
 
 /// Pick this repository's card, not whichever card happens to carry the number.
