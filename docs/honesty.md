@@ -32,6 +32,16 @@ suite. Everything else here is prose held by review.
   way. `Applies::Inert` exists for this shape and still has no producer. A model ID whose own last segment
   is one of the five effort words cannot be told from a model at that effort, and the picker will
   offer such a catalog entry without saying so.
+  A stored routing cell holding a removed key is cleared by the next `config set`, whichever row it
+  names. Taking the six workflow-state keys out means a cell like `design=opus, in-progress=haiku`
+  no longer parses. `docs/configuration.md` names `estigia config set "Model routing" unset` as the way
+  out and it works — but so does every other `config set` on that machine, and not harmlessly: the
+  strict read fails, `writable_config` falls back to keep-what-parses, the unreadable row is skipped
+  whole, and the whole table is re-rendered. So `estigia config set Planning direct` reports only that
+  `Planning` moved and rewrites `Model routing` to `unset`, taking `design=opus` with it. The read-back
+  succeeds, so nothing says so. The mechanism predates this change — it is the `BoardRef` precedent,
+  and the repository-scoped writer deliberately chose the opposite rule — and what this change adds is
+  a population that reaches it.
   A delegated definition's ownership is looked at twice and locked neither time: `setup` decides it
   in the preflight, before anything is written, and asks again immediately before the bytes go down.
   Two observations are not a lock — a file appearing between the second read and the write is still
@@ -2580,8 +2590,11 @@ suite. Everything else here is prose held by review.
   and `configuration_body` splices it between the markers — so it is in no file in this repository,
   which is why an earlier draft of this entry sent a reader to `skill/SKILL.md` to look for it and a
   later one sent them to the directive file, where the configuration block is never written at all.
-  Eight of the eleven adapters share the neutral skill root, so they share one installed contract and
-  one rendered sentence rather than each having their own. It does
+  Nine of the eleven adapters share the neutral skill root — `adapters_on_the_neutral_root()`
+  computes it, and `docs/what-it-writes.md` is held to the same number by a test — so they share one
+  installed contract and one rendered sentence rather than each having their own. An earlier draft of
+  this sentence said eight, which is what nineteen comments in the source say and one of them makes
+  worse by saying eight of *ten*; only the two documents crossed against the function were right. It does
   **not** decide whether any of those definitions exist — `Delegated workers` does, and an earlier
   draft of this change gated the install on a `Model routing` key until two blind judges refused it.
   Nothing here starts a model; what changed is that something reads the row. The other two stay open, declared in

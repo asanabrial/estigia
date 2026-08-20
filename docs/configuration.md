@@ -162,9 +162,10 @@ definition exists. OpenCode's catalog is dynamic, and adapters without a stable 
 catalog offer only custom target editing rather than invented defaults. Shared and uniform views also
 offer no profile because they have no single adapter whose model namespace can own it.
 
-Where a row names a model, the same list also offers `effort: low` through `effort: max` and one entry
-that hands the effort back to the host; an inherited row offers none of them, because an effort is a
-property of the model the target runs on. Choosing a different model keeps the effort already named.
+Where a row names a model, the same list also offers `effort: low` through `effort: max`, and once one
+is set, an entry that hands it back to the host. An inherited row offers none of them, because an
+effort is a property of the model the target runs on, and a row with a model and no effort offers no
+way to unset what is not set. Choosing a different model keeps the effort already named.
 There is no second stage for it: the effort was reachable only by typing the slash into the custom
 field, which is a value an operator cannot discover.
 
