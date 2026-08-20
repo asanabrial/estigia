@@ -2954,3 +2954,43 @@ fn the_transport_reads_the_settings_this_crate_says_it_does() {
         "the transport's `context.get` labels and `READ_BY_THE_TRANSPORT` disagree"
     );
 }
+
+#[test]
+fn opencode_is_not_told_to_handoff_because_review_blind_is_claude_only() {
+    // Measured on issue #46: those two sentences, read together, made every
+    // OpenCode publication call handoff_review. The reserved type is Claude's
+    // launch mechanism, not the capability. Restoring the old pair must go red.
+    let notes = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("skill/references/runtime-notes.md"),
+    )
+    .expect("runtime-notes ships");
+    let contract =
+        std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("skill/SKILL.md"))
+            .expect("the contract ships");
+
+    assert!(
+        !notes.contains("When the capability is absent, use the binding's durable review handoff"),
+        "runtime-notes again names handoff as the answer to an absent capability, \
+         which is how a missing Claude type became an ordinary OpenCode stop"
+    );
+    assert!(
+        notes.contains("cover OpenCode launches"),
+        "the Claude-only bound was deleted rather than followed by the launch path"
+    );
+    assert!(
+        notes.contains("Absence of that reserved type is not an absent capability"),
+        "OpenCode is no longer told what to do instead of handoff"
+    );
+    assert!(
+        notes.contains("Task") && notes.contains("only when that launch failed"),
+        "the OpenCode mechanism or the failed-launch bound is gone: {notes}"
+    );
+    assert!(
+        contract.contains("A host that can spawn a subagent already has the capability"),
+        "SKILL.md step 5 no longer says a subagent is the capability"
+    );
+    assert!(
+        contract.contains("the launch failed, or the runtime cannot spawn a helper"),
+        "SKILL.md step 5 no longer bounds handoff to a failed launch"
+    );
+}

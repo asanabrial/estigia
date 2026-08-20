@@ -501,7 +501,8 @@ suite. Everything else here is prose held by review.
 
   None of it proves an independent context existed or establishes panel size, concurrency,
   independence, blindness, same-finding identity or quorum. It cannot prove one, two or five judges
-  read those bytes or that their verdicts were honest. A marker can still be forged by a collaborator
+  read those bytes or that their verdicts were honest. An OpenCode run launching Task judges is that
+  same instruction, not a proof those Tasks ran or were blind. A marker can still be forged by a collaborator
   acting outside Estigia. `single`, `two blind` and `five blind` remain operator-selected review
   contracts, not observations the harness can make. The enforced floor remains
   one aggregate exact-receipt verdict: the transport has no per-judge **verdict** marker and does not

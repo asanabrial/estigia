@@ -3144,7 +3144,7 @@ pub fn write_repository_configuration_into(
 
 /// The whole file, for an adapter that had none.
 fn fresh_agent_file(slug: &str, config: &Config, speaks_for: &[crate::config::Setting]) -> String {
-    [
+    let mut body = [
         format!("# Estigia configuration for `{slug}`"),
         String::new(),
         [
@@ -3156,10 +3156,19 @@ fn fresh_agent_file(slug: &str, config: &Config, speaks_for: &[crate::config::Se
         String::new(),
         block(config, speaks_for),
     ]
-    .join(
-        "
-",
-    )
+    .join("\n");
+    // OpenCode has no reserved review-blind type. The next clone reads this
+    // file, not a machine-local note, so the ordinary path cannot stay "handoff".
+    if slug == "opencode" {
+        body.push_str(
+            "\n## Review on this host\n\n\
+             `review-blind` is a Claude launch type. It is not a missing capability here.\n\
+             Launch the configured panel with `Task` in one turn — two or five contexts,\n\
+             same receipt, no sibling output, each in its own directory — then record one\n\
+             aggregate `review_verdict`. Call `handoff_review` only if that launch failed.\n",
+        );
+    }
+    body
 }
 
 /// The marked block of an adapter's own file, alone.

@@ -60,13 +60,17 @@ performs the same recursive user-tree preflight before writing. The top-level `a
 only nested `tool_input.subagent_type` is the launch target. An already-running reviewer always receives
 the embedded policy — read-only, or read-only plus a shell, as `Evidence standard`
 decides — rather than whatever is on disk. This does not alter ordinary project-first agent resolution and does not
-cover OpenCode launches. A refused or unprovable launch contributes no judge; use a separate session or
-durable handoff, never a smaller or serialized panel.
+cover OpenCode launches. Absence of that reserved type is not an absent capability: a host without
+`review-blind` launches the configured panel through its own subagent or teammate mechanism — on
+OpenCode, two or five `Task` contexts in one turn, each with its own directory, no sibling output —
+and records one aggregate exact-receipt verdict itself. A refused or unprovable launch contributes no
+judge; use a separate session or durable handoff only when that launch failed, never a smaller or
+serialized panel.
 
 `Review delegation: auto` is permission, not capability. It lets a run acquire a reviewer when its
 runtime can provide one; it does not make Estigia spawn a model, open a session, or prove a context is
-independent. When the capability is absent, use the binding's durable review handoff so another run
-can discover the exact receipt. An `ask` timeout records one server-visible deadline in that handoff.
+independent. When the host cannot spawn a helper at all, or every launch of the panel failed, use the
+binding's durable review handoff so another run can discover the exact receipt. An `ask` timeout records one server-visible deadline in that handoff.
 Estigia does not sleep, schedule a wake-up, reset the deadline on retry, keep ownership until it
 expires, or treat expiry as a verdict.
 

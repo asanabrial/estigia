@@ -63,6 +63,12 @@ the workflow, it holds the tools.
   does **not** put its mutations under the gate. What makes them safe is the isolation rule placing
   that directory outside the claimed checkout — a rule an orchestrator follows. A judge handed a
   directory inside it is measured against the launching run's claim and allowed.
+- **OpenCode is told to launch Task judges, not to hand off because review-blind is a Claude type.**
+  `skill/references/runtime-notes.md` said the reserved role does not cover OpenCode launches and
+  that an absent capability uses the durable handoff. Read together, every OpenCode publication
+  handed off. The reserved type is a launch mechanism; a host that can spawn a subagent already has
+  the capability. The installed `estigia.opencode.md` now states the Task path. Handoff remains for
+  a launch that failed. Estigia still cannot prove the panel ran.
 
 - **A run pointer that is there and cannot be opened now stops the write and names the file.**
   `session::load` collapsed every `read_to_string` failure into a fresh unsworn run, so a pointer the
