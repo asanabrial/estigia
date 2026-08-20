@@ -3004,6 +3004,16 @@ fn reclaiming_review_leaves_the_pointer_reading_review() {
             .any(|argument| argument.name == "state"),
         "reclaim has no state argument, so a takeover cannot name the state it is taking"
     );
+    let state = reclaim
+        .arguments
+        .iter()
+        .find(|argument| argument.name == "state")
+        .expect("state");
+    assert_eq!(
+        state.choices,
+        Some(crate::config::STATES),
+        "reclaim.state is not the workflow vocabulary"
+    );
 
     let fresh = crate::harness::session::Run::new("claude-abcd1234".to_owned());
     crate::harness::session::store(&context.state_root, &fresh).expect("the pointer writes");
