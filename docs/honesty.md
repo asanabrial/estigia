@@ -2574,11 +2574,14 @@ suite. Everything else here is prose held by review.
   The two authorisations are closed: `SKILL.md` now says, in the steps where a state moves and where
   a change is delivered, that doing it unasked needs the row's permission. `Model routing` is closed
   too, and by a narrower claim than the row's name suggests: issue #110 made `setup` read it for the
-  `model:` and `effort:` lines of the definitions it writes, and the managed block in each agent's own
-  directive file now carries a sentence telling it which keys are already routed for it and which it
-  must act on itself — rendered by `selected_documents`, not written into `skill/SKILL.md`, whose own
-  added paragraph says the narrower thing: that the workers row and not this one decides whether a
-  definition exists. It does
+  `model:` and `effort:` lines of the definitions it writes, and the managed block of the **installed**
+  `SKILL.md` now carries a sentence telling the agent which keys are already routed for it and which
+  it must act on itself. It is generated rather than payload text — `selected_documents` builds it
+  and `configuration_body` splices it between the markers — so it is in no file in this repository,
+  which is why an earlier draft of this entry sent a reader to `skill/SKILL.md` to look for it and a
+  later one sent them to the directive file, where the configuration block is never written at all.
+  Eight of the eleven adapters share the neutral skill root, so they share one installed contract and
+  one rendered sentence rather than each having their own. It does
   **not** decide whether any of those definitions exist — `Delegated workers` does, and an earlier
   draft of this change gated the install on a `Model routing` key until two blind judges refused it.
   Nothing here starts a model; what changed is that something reads the row. The other two stay open, declared in

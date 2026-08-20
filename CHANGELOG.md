@@ -864,8 +864,9 @@ the workflow, it holds the tools.
     a row showed `opus` where `opus/high` was stored, and a change that moved only
     the effort went unmarked, because both asked for the model half of the route.
   - Estigia still starts nothing. What changed is that `Model routing` is read:
-    twice by `setup`, and by a `SKILL.md` sentence that now tells an agent which
-    keys are already routed for it and which it must act on itself.
+    twice by `setup`, and by a sentence generated into the installed
+    contract's managed block, telling an agent which keys are already routed for it and which it
+    must act on itself.
 
 - **Claude Code's SDD planning phases ship as sub-agent definitions, and their
   tool lists are enforced.** `setup` writes `sdd-explore`, `sdd-propose`,

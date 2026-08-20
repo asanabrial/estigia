@@ -106,7 +106,7 @@ Which divergence is a **fault** is decided by the scope each row already has —
 question the rest of the crate asks, not a fourth list:
 
 - **Agent** — `Delivery authorisation`, `Review delegation`, `Transition authorisation`, `Planning`,
-  `Model routing`, `Blind judges`. These are *meant* to differ by agent;
+  `Model routing`, `Delegated workers`, `Blind judges`. These are *meant* to differ by agent;
   `config set --agent <slug> …` is how you set one. Named on the row, and the row stays `ok`:
   calling a machine broken for a supported configuration names a fault with no way out of it.
   `Evidence standard` is deliberately **not** among them: the gate reads it to render the reserved

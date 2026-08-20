@@ -534,10 +534,14 @@ fn selected_documents(config: &Config) -> String {
     // either — `ModelRouting` had lookups by role, by phase and by state, and
     // no caller outside the configuration module.
     //
-    // All three families reach a file now: a planning phase the protocol runs,
-    // `implementer` from the delegated roles, and `analyst` from the names
+    // All three families can reach a file now: a planning phase the protocol
+    // runs, `implementer` from the delegated roles, and `analyst` from the names
     // another orchestrator spawns, each written into a sub-agent definition
-    // carrying the model **and** the effort. The rest is
+    // carrying the model **and** the effort. *Can*, not *does* — the two workers
+    // reach one only where `Delegated workers` names them, and that row defaults
+    // to `none`, so on an installation that has not asked, the phase family is
+    // the only one that arrives anywhere. The sentence rendered below is
+    // conditional for that reason and this comment has to be too. The rest is
     // still a declaration, and the sentence below is careful about which is
     // which — an instruction the agent must follow itself, told apart from a
     // route already taken for it. Getting that wrong in either direction is

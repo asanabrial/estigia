@@ -45,9 +45,11 @@ Five invariants, and the tests are named after them:
    Estigia did not create is **refused**, in the preflight and again immediately before the write,
    rather than overwritten the way an SDD phase definition is: `analyst` is a name another harness's
    orchestrator answers to, so replacing it would take somebody's own file with nothing recorded and
-   nothing to give back. They are also the only artifacts a plain `setup` removes rather than
-   uninstall — taking a name out of that row retracts the file on the next run, which is what makes
-   naming it consent rather than a one-way door.
+   nothing to give back. Taking a name out of that row retracts the file on the next run,
+   which is what makes naming it consent rather than a one-way door. They are not alone in that: a
+   plain `setup` also retracts an SDD phase definition once `Planning` stops running its phase, and
+   drops a retired skill file. What is particular to these two is that a **configuration row** and
+   not a protocol decides it.
 
    Uninstall deletes a textually unchanged owned reviewer before forgetting it or removing the skill ledger. A
    failed deletion therefore retains the evidence needed by an exact retry. Changed bytes are kept and
