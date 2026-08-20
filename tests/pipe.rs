@@ -14676,11 +14676,10 @@ fn a_reclaim_of_review_admits_a_gated_command_afterwards() {
     run.issue = Some(12);
     run.state = Some("review".to_owned());
     run.repo_dir = Some(repo.to_path_buf());
-    run.mark_verified();
     estigia::harness::session::store(&home.join(".estigia"), &run).expect("the pointer writes");
 
     let payload = serde_json::json!({
-        "command": format!("{}{}{}", "git", " ", "commit -m fixture"),
+        "command": format!("{}{}{}", "gh", " ", "pr merge 12 --merge"),
     });
     let payload = serde_json::to_string(&payload).expect("payload");
     let (out, error, _) = run_with_tracker(

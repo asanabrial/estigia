@@ -3018,13 +3018,20 @@ fn reclaiming_review_leaves_the_pointer_reading_review() {
     let fresh = crate::harness::session::Run::new("claude-abcd1234".to_owned());
     crate::harness::session::store(&context.state_root, &fresh).expect("the pointer writes");
     let mut run = crate::harness::session::load(&context.state_root, "claude-abcd1234");
+    let mut arguments = serde_json::json!({
+        "issue": 35,
+        "run_id": "claude-abcd1234",
+    });
+    if reclaim
+        .arguments
+        .iter()
+        .any(|argument| argument.name == "state")
+    {
+        arguments["state"] = serde_json::json!("review");
+    }
     super::apply_effect(
         reclaim,
-        &serde_json::json!({
-            "issue": 35,
-            "run_id": "claude-abcd1234",
-            "state": "review",
-        }),
+        &arguments,
         Some(&serde_json::json!({ "ok": true })),
         &mut run,
         &context,
