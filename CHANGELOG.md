@@ -13,9 +13,21 @@ the workflow, it holds the tools.
 ### The harness
 
 - **The decision-gate crossing holds a subset, not a count of arrows.**
-  Rewriting `done` as `review` used to leave the suite green. Destinations must
-  now include every named state. Companion documents link to the Decision Gates
-  table rather than restating it.
+  Rewriting `done` as `review` used to leave the suite green: the assertion was
+  `destinations.len() >= STATES.len()`, which a duplicated arrow satisfies while
+  a state is unreachable. It is a subset relation now, and that mutation reddens.
+
+  **And a companion document cannot re-issue the routing in prose.** The first
+  guard forbade the literal arrow spelling, which `safety-incidents.md`'s I09
+  evaded by restating the whole thing in plain words — wrong specifications to
+  analysis, unbuilt external waits to blocked, ordinary built delivery waits to
+  review — with no arrows and no backticks. Two blind judges disagreed about
+  whether that counted, and the measurement settled it: across the four companion
+  documents, exactly one line named three or more states, and it was that one.
+  Naming three is re-issuing the table; naming one or two is applying it, which
+  is what `blind-judges.md` does when it sends a contradicting panel to `blocked`.
+  I09 states its lesson now and leaves the routing to the table its own owner
+  column already names.
 
 - **The board mirror leaves a card that belongs to another repository alone, and says whose it is.**
   Matching on issue number alone moved another project's cards, measured once per

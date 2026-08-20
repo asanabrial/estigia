@@ -646,6 +646,13 @@ suite. Everything else here is prose held by review.
   current-head/base evidence, or delivery permission stays in `review` with its exact blocker, even
   when a named person must supply the permission. The Decision Gates table in `skill/SKILL.md` owns
   those destinations; this paragraph measures the Linear projection, not a second routing table.
+
+  **What the crossing does not reach, stated because a judge asked for it.** `SKILL.md`'s own steps 1,
+  6 and 7 restate the routing inside the owner document, outside the `## Decision Gates` section the
+  parse is bounded to. `no_companion_document_re_issues_the_routing` covers the four companion
+  documents and deliberately not that file: step 7's whole subject is the distinction between an
+  ordinary delivery wait and an exceptional adjudication, so removing it would take the rule out of
+  the document that owns it. Those three restatements are held by review, like the rest of this file.
   **The projection can still hide it.** Estigia's own
   state is authoritative, so no agent misroutes — but Linear has no native `blocked`, and the binding
   creates one as a state *named* `Blocked` whose *type* is `unstarted`. Built, published work with an

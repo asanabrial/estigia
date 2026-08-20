@@ -1830,6 +1830,89 @@ fn the_decision_gate_is_not_restated_as_a_second_table() {
     }
 }
 
+/// No companion document re-issues the routing the Decision Gates table owns.
+///
+/// The first version of this guard forbade the literal `-> \`` spelling, and a
+/// blind judge measured what that misses: `safety-incidents.md`'s I09 restated
+/// the whole routing — wrong specifications to analysis, unbuilt external waits
+/// to blocked, ordinary built delivery waits to review — in plain prose, with no
+/// arrows and no backticks, so neither the arrow check nor a backtick-based one
+/// could see it. The two judges of that receipt disagreed about whether it
+/// counted, which is what sent the issue to `blocked`.
+///
+/// The rule this asserts is the one that separates the two answers they gave.
+/// **Naming three or more workflow states in one statement is re-issuing the
+/// table**; naming one or two is applying it. `blind-judges.md` saying a panel
+/// that contradicts itself stops in `blocked`, or that a third fix round goes
+/// there, is application — it says when this policy reaches a state, not what
+/// each state means. I09's protection column said what each state means.
+///
+/// **Measured before it was written**: across the four companion documents,
+/// exactly one line named three or more states, and it was I09's. Restore that
+/// enumeration and this reddens.
+///
+/// A ledger row's *failure* column is history — "external outages went to
+/// analysis, incoherent specifications to blocked" is what happened, and it has
+/// to stay. So a table row is judged on its **protection** cell, which is where
+/// a rule would be re-issued, and everything else on the whole line.
+///
+/// What this does not reach: `SKILL.md`'s own steps 1, 6 and 7 restate the
+/// routing inside the owner document, outside the section the crossing parses.
+/// That is recorded in `docs/honesty.md` rather than repaired here — step 7's
+/// whole subject is the distinction, so removing it would take the rule out of
+/// the file that owns it.
+#[test]
+fn no_companion_document_re_issues_the_routing() {
+    const STATE_WORDS: [&str; 6] = [
+        "analysis",
+        "ready",
+        "in-progress",
+        "review",
+        "blocked",
+        "done",
+    ];
+
+    for (path, text) in [
+        (
+            "skill/policies/blind-judges.md",
+            include_str!("../../skill/policies/blind-judges.md"),
+        ),
+        (
+            "skill/references/safety-incidents.md",
+            include_str!("../../skill/references/safety-incidents.md"),
+        ),
+        (
+            "skill/references/repository-delivery.md",
+            include_str!("../../skill/references/repository-delivery.md"),
+        ),
+        ("docs/honesty.md", include_str!("../../docs/honesty.md")),
+    ] {
+        for (number, line) in text.lines().enumerate() {
+            // A ledger row is judged on its protection cell; the failure cell
+            // beside it is the incident, and an incident is allowed to say which
+            // states the work was wrongly sent to.
+            let judged = if line.starts_with('|') {
+                match line.split('|').nth(3) {
+                    Some(protection) => protection,
+                    None => continue,
+                }
+            } else {
+                line
+            };
+            let named = STATE_WORDS
+                .iter()
+                .filter(|state| judged.contains(**state))
+                .count();
+            assert!(
+                named < 3,
+                "{path}:{} re-issues the routing the Decision Gates table owns, naming {named} \
+                 states in one statement: {judged}",
+                number + 1
+            );
+        }
+    }
+}
+
 #[test]
 fn a_model_can_be_named_per_sdd_phase_and_the_most_specific_wins() {
     let routing = |cell: &str| {
