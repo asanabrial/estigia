@@ -5508,3 +5508,31 @@ console.log(JSON.stringify(seen));
         "the fixture stopped distinguishing the two directories, so it proves nothing"
     );
 }
+
+#[test]
+fn a_fresh_opencode_adapter_file_names_task_judges_not_handoff() {
+    // The machine-local estigia.opencode.md is not installed by setup. The
+    // next clone only has what fresh_agent_file writes. If that file still
+    // says nothing, the next OpenCode run repeats issue #46's handoff.
+    let dir = tempfile::tempdir().expect("a temporary skill root");
+    let opencode = dir.path().join("estigia.opencode.md");
+    let other = dir.path().join("estigia.qwen.md");
+    write_agent_configuration_wholly(&opencode, "opencode", &Config::default())
+        .expect("opencode's file writes");
+    write_agent_configuration_wholly(&other, "qwen", &Config::default())
+        .expect("qwen's file writes");
+    let text = fs::read_to_string(&opencode).expect("opencode's file reads");
+    assert!(
+        text.contains("Call `handoff_review` only if that launch failed."),
+        "a fresh OpenCode adapter no longer bounds handoff to a failed launch: {text}"
+    );
+    assert!(
+        text.contains("Launch the configured panel with `Task`"),
+        "a fresh OpenCode adapter no longer names Task: {text}"
+    );
+    let other = fs::read_to_string(&other).expect("qwen's file reads");
+    assert!(
+        !other.contains("## Review on this host"),
+        "the OpenCode review section leaked onto another adapter: {other}"
+    );
+}
