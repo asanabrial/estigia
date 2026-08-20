@@ -1462,14 +1462,17 @@ pub(crate) fn is_delivery(action: &Action) -> bool {
 }
 
 /// Whether two checkouts belong to one clone and share its worktree registry.
+///
+/// Unsteered: inherit `GIT_DIR` and every pair of directories answers as one
+/// clone, so `stale_verdict` would authorise a delivery from an unrelated tree.
 fn same_git_repository(left: &std::path::Path, right: &std::path::Path) -> bool {
     let common = |directory: &std::path::Path| {
-        let answer = std::process::Command::new("git")
-            .arg("-C")
-            .arg(directory)
-            .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
-            .output()
-            .ok()?;
+        let answer = proof_git_command(
+            directory,
+            &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+        )
+        .output()
+        .ok()?;
         if !answer.status.success() {
             return None;
         }
@@ -1490,12 +1493,11 @@ fn short(sha: &str) -> String {
 /// This checkout's head, when git will say.
 ///
 /// `None` rather than a guess: a head nobody can read leaves the decision to
-/// the adjudication that already ran.
+/// the adjudication that already ran. Unsteered for the same reason as
+/// `same_git_repository`: inherit `GIT_DIR` and the steered repository's HEAD
+/// is spent as this checkout's.
 fn head_of(directory: &std::path::Path) -> Option<String> {
-    let answer = std::process::Command::new("git")
-        .arg("-C")
-        .arg(directory)
-        .args(["rev-parse", "HEAD"])
+    let answer = proof_git_command(directory, &["rev-parse", "HEAD"])
         .output()
         .ok()?;
     if !answer.status.success() {

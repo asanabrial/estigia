@@ -64,6 +64,18 @@ the workflow, it holds the tools.
   does **not** put its mutations under the gate. What makes them safe is the isolation rule placing
   that directory outside the claimed checkout — a rule an orchestrator follows. A judge handed a
   directory inside it is measured against the launching run's claim and allowed.
+- **A discharged human decision is not a verdict.** Returning built work from
+  `blocked` to `review` still requires the configured panel against the exact
+  latest receipt. Step 7 now routes an unresolved choice about what should be
+  built to `analysis`, the same as a contradiction.
+
+- **Delivery proof no longer inherits a steered Git environment.**
+  `same_git_repository` and `head_of` used to shell out with this process's
+  `GIT_DIR`, so an unrelated clone could spend another checkout's verdict.
+  Both now use the unsteered invocation the fast-forward proof already built.
+  A test with `GIT_DIR` and `GIT_COMMON_DIR` exported goes red against the
+  previous callers.
+
 - **`reclaim` takes the same optional `state` `claim` already publishes.**
   A takeover of a `review` issue used to stamp the pointer `in-progress`, a
   state nobody named, and the gate then refused every write with

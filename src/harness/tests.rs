@@ -3025,6 +3025,116 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
 }
 
 #[test]
+fn a_steered_environment_cannot_spend_another_checkout_s_verdict() {
+    if std::env::var_os("ESTIGIA_STEERED_DELIVERY_CHILD").is_some() {
+        assert_steered_delivery_child();
+        return;
+    }
+    let repo = tempfile::tempdir().expect("a temporary repository");
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .args(args)
+            .output()
+            .expect("git runs")
+    };
+    git(&["init", "-q"]);
+    git(&["config", "user.email", "t@example.invalid"]);
+    git(&["config", "user.name", "t"]);
+    std::fs::write(repo.path().join("a.txt"), "one").expect("a file");
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "one"]);
+    let reviewed = String::from_utf8_lossy(&git(&["rev-parse", "HEAD"]).stdout)
+        .trim()
+        .to_owned();
+    assert!(!reviewed.is_empty(), "the fixture has no head");
+
+    let elsewhere = tempfile::tempdir().expect("a parent for an unrelated clone");
+    let unrelated = elsewhere.path().join("unrelated");
+    let cloned = std::process::Command::new("git")
+        .args(["clone", "-q"])
+        .arg(repo.path())
+        .arg(&unrelated)
+        .output()
+        .expect("git clones the fixture");
+    assert!(
+        cloned.status.success(),
+        "the unrelated clone was not created"
+    );
+    let checked_out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&unrelated)
+        .args(["checkout", "-q", &reviewed])
+        .output()
+        .expect("git checks out the reviewed SHA elsewhere");
+    assert!(
+        checked_out.status.success(),
+        "the unrelated clone did not reach the reviewed SHA"
+    );
+
+    // A child process, not this one: exporting `GIT_DIR` here would steer every
+    // other unit test that shells out to git. The defect is inheritance, so the
+    // child is born with the variable and this process never holds it.
+    let executable = std::env::current_exe().expect("the test executable");
+    let git_dir = repo.path().join(".git");
+    for name in ["GIT_DIR", "GIT_COMMON_DIR"] {
+        let output = std::process::Command::new(&executable)
+            .args([
+                "--exact",
+                "harness::tests::a_steered_environment_cannot_spend_another_checkout_s_verdict",
+                "--nocapture",
+            ])
+            .env("ESTIGIA_STEERED_DELIVERY_CHILD", "1")
+            .env(name, &git_dir)
+            .env("ESTIGIA_STEERED_REPO", repo.path())
+            .env("ESTIGIA_STEERED_UNRELATED", &unrelated)
+            .env("ESTIGIA_STEERED_REVIEWED", &reviewed)
+            .output()
+            .unwrap_or_else(|error| panic!("{name} child did not start: {error}"));
+        assert!(
+            output.status.success(),
+            "{name} child failed: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+fn assert_steered_delivery_child() {
+    let repo = std::path::PathBuf::from(
+        std::env::var_os("ESTIGIA_STEERED_REPO").expect("the parent names the reviewed checkout"),
+    );
+    let unrelated = std::path::PathBuf::from(
+        std::env::var_os("ESTIGIA_STEERED_UNRELATED")
+            .expect("the parent names the unrelated clone"),
+    );
+    let reviewed = std::env::var("ESTIGIA_STEERED_REVIEWED").expect("the parent names the head");
+    let mut run = Run::new("claude-abcd1234".to_owned());
+    run.repo_dir = Some(repo.clone());
+    run.review_receipt = Some(crate::transport::claim::ReviewReceipt {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head: reviewed,
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    });
+    let delivery = Action::Boundary {
+        command: "gh pr merge".to_owned(),
+        pr: Some(54),
+        local_fast_forward_target: None,
+    };
+    assert!(
+        stale_verdict(&delivery, &run, &repo).is_none(),
+        "a steered environment refused a delivery on the checkout that was reviewed"
+    );
+    let refusal = stale_verdict(&delivery, &run, &unrelated)
+        .expect("a steered environment let an unrelated clone spend this run's verdict");
+    assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
+    assert!(refusal.message.contains(&unrelated.display().to_string()));
+}
+
+#[test]
 fn what_a_push_is_aimed_at_is_recorded_and_not_adjudicated() {
     // The gap, measured rather than asserted, because it sits at the boundary
     // the product is named for.
