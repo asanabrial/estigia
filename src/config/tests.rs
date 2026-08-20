@@ -1793,6 +1793,29 @@ fn every_named_disposition_uses_a_transport_state() {
     );
 }
 
+/// A companion document points at the Decision Gates table rather than carrying
+/// its own copy of it.
+///
+/// **What it prevents**, in the two spellings it can see: `repository-delivery.md`
+/// carrying a routing table of its own — it held a five-row one until this change
+/// — and any of the four companion documents writing an arrow in the table's own
+/// notation. Restoring the deleted table byte for byte reddens this.
+///
+/// **What it does not.** Rename that header cell and keep a pointer sentence and
+/// the whole table comes back green: a judge measured it. A restatement in prose
+/// that uses no arrow passes in every one of these files, which is not
+/// hypothetical — the handoff bullet this change removed from
+/// `safety-incidents.md` restores byte for byte and nothing objects. A guard
+/// written to close that gap counted the states each *source line* named and was
+/// withdrawn in this same change: it reddened on correct prose, because `already`
+/// contains `ready`, while a hard-wrapped copy walked past it. `docs/honesty.md`
+/// carries both halves.
+///
+/// **Load-bearing strings.** The literal `Decision Gates table in \`skill/SKILL.md\``
+/// in `docs/honesty.md` and the `Decision Gates` pointer in `repository-delivery.md`
+/// are asserted here, so rewording either reddens this test. That is the point —
+/// a pointer nobody is required to keep is a pointer that quietly leaves — but it
+/// is stated because a reader who trips it deserves to know it was deliberate.
 #[test]
 fn the_decision_gate_is_not_restated_as_a_second_table() {
     let delivery = include_str!("../../skill/references/repository-delivery.md");

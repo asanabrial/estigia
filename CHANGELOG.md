@@ -31,11 +31,14 @@ the workflow, it holds the tools.
   its header cell renamed, which a judge measured.
 
   The withdrawn one counted how many states a *source line* named, and four blind
-  judges measured it wrong rather than incomplete: the deleted prose restores
-  byte-for-byte and passes on its line wrapping alone, a routing table never
-  reaches the threshold because it names one state per row, and joining two lines
-  of ordinary prose reddens it because `already` contains `ready`. It measured a
-  line while the rule it was written for is about a statement.
+  judges measured it wrong rather than incomplete. It did catch I09's column, the
+  copy it was written for. It missed the hard-wrapped handoff bullet in the same
+  file, which restores byte for byte and passes on its line wrapping alone; it
+  could not see a routing table at all, which names one state per row; and joining
+  two lines of ordinary prose reddens it without a word changing, because
+  `already` contains `ready`. That last one decided it: a guard that reddens on
+  correct prose is aimed at the wrong object, and it measured a line while the
+  rule it was written for is about a statement.
   `docs/honesty.md` records what each holds and what neither does.
 - **The board mirror leaves a card that belongs to another repository alone, and says whose it is.**
   Matching on issue number alone moved another project's cards, measured once per

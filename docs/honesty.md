@@ -651,11 +651,16 @@ suite. Everything else here is prose held by review.
   measured where the line falls.** Two copies were removed by hand — the incident ledger's I09 protection column and a five-row table in
   `repository-delivery.md` — and a guard was written to keep them from coming back. It counted how
   many workflow states a **source line** named, and both judges of that receipt defeated it three
-  ways: the deleted prose restores byte-for-byte and passes, because it is hard-wrapped and no single
-  line reaches the threshold; the deleted table restores with one header word changed, because a
-  routing table names one state per row by construction; and joining two lines of ordinary prose in
-  this very file reddens it, because `already` contains `ready` and a vocabulary enumeration is not a
-  restatement. The guard was withdrawn rather than patched: it measured a source line while the rule
+  ways, and the three are worth keeping apart because a later reader will want to know which test each
+  one belongs to. It **did** catch I09's protection column, which is the copy it was written for. It
+  did **not** catch the hard-wrapped handoff bullet in the same file: that restores byte for byte and
+  passes, because no single line of it reaches the threshold. It could not see a routing table at all,
+  which names one state per row by construction — what a renamed header evades is the *surviving*
+  guard, not this one, and conflating the two was a mistake in an earlier version of this paragraph.
+  And joining two hard-wrapped lines of ordinary prose in this very file reddens it without a word
+  changing, because `already` contains `ready` and a vocabulary enumeration is not a restatement. That
+  last one is why patching was the wrong move: a guard that reddens on correct prose is not narrow, it
+  is aimed at the wrong object. The guard was withdrawn rather than patched: it measured a source line while the rule
   it was written for is about a **statement**, and the distance between those two is where all three
   defeats live.
 
@@ -682,6 +687,7 @@ suite. Everything else here is prose held by review.
   them is deliberately not written here, because a count in this paragraph is the class of claim this
   document keeps having to correct. Step 7 gained a pointer to the table and kept its restatement:
   the copy was removed from the two reference files and not from the contract itself.
+
   **The projection can still hide it.** Estigia's own
   state is authoritative, so no agent misroutes — but Linear has no native `blocked`, and the binding
   creates one as a state *named* `Blocked` whose *type* is `unstarted`. Built, published work with an
