@@ -39,6 +39,17 @@ pub(crate) fn own_delivery_close(
     comments: &[ownership::Comment],
     pin: Option<u64>,
 ) -> Result<Option<OwnClose>, Failure> {
+    let has_own = comments.iter().any(|c| {
+        c.viewer_did_author
+            && !c.includes_created_edit
+            && super::super::markers::parse(&c.body).iter().any(|m| {
+                m.get("kind").map(String::as_str) == Some("published")
+                    && m.get("run-id").map(String::as_str) == Some(run_id)
+            })
+    });
+    if !has_own {
+        return Ok(None);
+    }
     let closing = super::super::closing::closing_refs(context, issue)?;
     let closing_prs: Vec<u64> = closing
         .iter()
