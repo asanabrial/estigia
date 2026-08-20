@@ -14660,3 +14660,39 @@ fn a_claim_retry_after_a_landed_write_whose_readback_failed_adopts_the_epoch() {
         "the retry left repo_dir empty: {recorded}"
     );
 }
+
+/// After a reclaim that named review, the gate must admit a write.
+///
+/// The gate sends `pointer.state` as expect-state (`harness::decide`). The
+/// reclaim write is `reclaiming_review_leaves_the_pointer_reading_review`.
+/// Together they go red if reclaim stamps in-progress again: this fixture
+/// uses that stamp, and a review issue then refuses unexpected-state.
+#[test]
+fn a_reclaim_of_review_admits_a_gated_command_afterwards() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let run_id = "claude-abcd1234";
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.issue = Some(12);
+    run.state = Some("review".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    estigia::harness::session::store(&home.join(".estigia"), &run).expect("the pointer writes");
+
+    let payload = serde_json::json!({
+        "command": format!("{}{}{}", "gh", " ", "pr merge 12 --merge"),
+    });
+    let payload = serde_json::to_string(&payload).expect("payload");
+    let (out, error, _) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        &issue_answer("review"),
+        &["gate", "bash", "--input", &payload, "--run-id", run_id],
+        "",
+    );
+    let said = format!("{out}{error}");
+    assert!(
+        !said.contains("unexpected-state"),
+        "the gate refused a write after a review reclaim stamp: {said}"
+    );
+}
