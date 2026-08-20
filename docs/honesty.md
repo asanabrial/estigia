@@ -644,7 +644,9 @@ suite. Everything else here is prose held by review.
   durable record is not a scheduler, notification guarantee, or decision; only the named person can
   discharge it. An ordinary delivery-evidence wait is not this case: missing review, CI,
   current-head/base evidence, or delivery permission stays in `review` with its exact blocker, even
-  when a named person must supply the permission. **The projection can still hide it.** Estigia's own
+  when a named person must supply the permission. The Decision Gates table in `skill/SKILL.md` owns
+  those destinations; this paragraph measures the Linear projection, not a second routing table.
+  **The projection can still hide it.** Estigia's own
   state is authoritative, so no agent misroutes — but Linear has no native `blocked`, and the binding
   creates one as a state *named* `Blocked` whose *type* is `unstarted`. Built, published work with an
   open pull request therefore projects into the type Linear's own grouping and velocity views read as

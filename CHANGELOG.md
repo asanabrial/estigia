@@ -12,6 +12,11 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The decision-gate crossing holds a subset, not a count of arrows.**
+  Rewriting `done` as `review` used to leave the suite green. Destinations must
+  now include every named state. Companion documents link to the Decision Gates
+  table rather than restating it.
+
 - **The board mirror leaves a card that belongs to another repository alone, and says whose it is.**
   Matching on issue number alone moved another project's cards, measured once per
   write path: creating this repository's #73 on 2026-08-18 moved that project's

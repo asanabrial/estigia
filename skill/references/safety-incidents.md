@@ -71,13 +71,7 @@ the surviving executable or document owner changes.
 
 ### Handoff and incomplete-work procedure
 
-- Choose from evidence, not frustration: a wrong or contradictory specification returns to
-  `analysis`; an unbuilt external wait goes to `blocked` with its exact exit condition and
-  discharger; ordinary built-but-undeliverable work, including a named person's routine delivery
-  permission, stays in `review`; built work awaiting exceptional human adjudication outside those
-  gates goes to `blocked` only after its branch, PR, receipt, checks, evidence, exact decision or exit
-  condition, and discharger are recorded; a useful partial diagnosis returns to
-  `ready`. Never silently reinterpret the issue.
+- Choose from evidence, not frustration: the destination is the one the Decision Gates table in `SKILL.md` names. Never silently reinterpret the issue.
 - Persist ruled-out hypotheses, confirmed evidence, methodological errors, branch/worktree location,
   and the next action on the issue. Preserve an out-of-scope discovery as a separate finding. Chat
   and in-session task state are not durable handoff stores.

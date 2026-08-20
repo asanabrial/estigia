@@ -1749,9 +1749,17 @@ fn every_named_disposition_uses_a_transport_state() {
         destinations.push(destination);
     }
 
+    // A count of arrows is not coverage. Rewriting `merged and verified -> \`done\``
+    // as `-> \`review\`` left six destinations and the library suite green, with
+    // `done` unreachable from any decision gate.
+    let missing: Vec<_> = crate::config::STATES
+        .iter()
+        .copied()
+        .filter(|state| !destinations.iter().any(|destination| destination == state))
+        .collect();
     assert!(
-        destinations.len() >= crate::config::STATES.len(),
-        "the disposition crossing found too few destinations"
+        missing.is_empty(),
+        "a named state is not a disposition destination: {missing:?}",
     );
     assert!(
         gates.contains("ordinary delivery permission -> `review`"),
@@ -1783,6 +1791,43 @@ fn every_named_disposition_uses_a_transport_state() {
         contract.contains("unresolved choice about what should be built"),
         "step 7 names only a contradiction and leaves an omission unrouted"
     );
+}
+
+#[test]
+fn the_decision_gate_is_not_restated_as_a_second_table() {
+    let delivery = include_str!("../../skill/references/repository-delivery.md");
+    assert!(
+        !delivery.contains("| Destination |"),
+        "repository-delivery restates the decision gate as its own table"
+    );
+    assert!(
+        delivery.contains("Decision Gates"),
+        "repository-delivery does not send a reader to the owner"
+    );
+
+    let honesty = include_str!("../../docs/honesty.md");
+    assert!(
+        honesty.contains("Decision Gates table in `skill/SKILL.md`"),
+        "the honesty contract does not name the owner of the routing"
+    );
+
+    for (path, text) in [
+        (
+            "skill/policies/blind-judges.md",
+            include_str!("../../skill/policies/blind-judges.md"),
+        ),
+        (
+            "skill/references/safety-incidents.md",
+            include_str!("../../skill/references/safety-incidents.md"),
+        ),
+        ("docs/honesty.md", honesty),
+        ("skill/references/repository-delivery.md", delivery),
+    ] {
+        assert!(
+            !text.contains("-> `"),
+            "{path} restates a disposition arrow the Decision Gates table owns"
+        );
+    }
 }
 
 #[test]
