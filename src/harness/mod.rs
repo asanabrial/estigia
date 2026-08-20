@@ -2283,15 +2283,27 @@ fn decide(context: &GateContext, run: &mut Run, action: &Action, how: Sensitivit
     // existed; it does not say what it swore. The directive tells every agent
     // that an unknown result is not clearance, and standing aside here would be
     // the code saying the opposite — most visibly right after an upgrade, when
-    // every pointer the previous release wrote may be unreadable at once.
+    // every pointer the previous release wrote may be unreadable at once. The
+    // refusal names the path and the underlying error when the read carried
+    // them: an unreadable pointer that names no file is one an operator cannot
+    // find to read or take away, and the resolution sends them to do exactly
+    // that.
     if run.unreadable {
-        return Decision::Deny(Box::new(Refusal::not_started(
-            "run-pointer-unreadable",
-            format!(
+        let what = match run.unreadable_reason.as_deref() {
+            Some(reason) => format!(
+                "{}: this run's record exists and cannot be read, so whether it holds an issue \
+                 is unknown \u{2014} {reason}",
+                run.run_id
+            ),
+            None => format!(
                 "{}: this run's record exists and cannot be read, so whether it holds an issue \
                  is unknown",
                 run.run_id
             ),
+        };
+        return Decision::Deny(Box::new(Refusal::not_started(
+            "run-pointer-unreadable",
+            what,
             // Not `estigia release`. It was named here and never discharged
             // this: with an unreadable pointer that command cannot say what to
             // put down either, so it refuses with this same code — a message

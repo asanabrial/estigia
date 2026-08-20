@@ -747,6 +747,44 @@ fn taking_estigia_out_takes_its_own_state_with_it_and_not_before() {
 }
 
 #[test]
+fn a_live_run_pointer_survives_a_plain_reinstall() {
+    // Issue #38's installer question, posed as a measurement rather than a
+    // reading of the call graph: `forget_state` runs only on the take-out path,
+    // and a plain `setup --all` over an existing install must leave a live run
+    // pointer exactly where it was. The incident the issue records ran a
+    // reinstall while a run held a claim; the pointer vanishing under a plain
+    // setup would be that incident without the uninstall.
+    let (_home, options) = sandbox();
+    for adapter in AGENTS {
+        setup(adapter, &Config::default(), &options).expect("setup runs");
+    }
+    let runs =
+        crate::harness::session::state_root(options.home_dir.as_deref()).expect("a state root");
+    fs::create_dir_all(&runs).expect("the state directory");
+    let mut mine = crate::harness::session::Run::new("claude-abcd1234".to_owned());
+    mine.issue = Some(12);
+    crate::harness::session::store(&runs, &mine).expect("a run pointer");
+    let pointer = crate::harness::session::pointer_path(&runs, "claude-abcd1234");
+    let before = fs::read_to_string(&pointer).expect("the pointer reads");
+
+    // The reinstall: every agent set up again over the existing install.
+    for adapter in AGENTS {
+        setup(adapter, &Config::default(), &options).expect("setup runs again");
+    }
+    let after = crate::harness::session::load(&runs, "claude-abcd1234");
+    assert_eq!(
+        after.issue,
+        Some(12),
+        "a plain reinstall took the run's pointer, and with it the gate's reading of the claim"
+    );
+    assert_eq!(
+        fs::read_to_string(&pointer).expect("the pointer still reads"),
+        before,
+        "the pointer bytes moved under a plain reinstall"
+    );
+}
+
+#[test]
 fn uninstalling_what_was_never_installed_creates_nothing() {
     let (home, options) = sandbox();
     let adapter = agent("qwen");
