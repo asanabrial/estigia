@@ -647,8 +647,8 @@ suite. Everything else here is prose held by review.
   when a named person must supply the permission. The Decision Gates table in `skill/SKILL.md` owns
   those destinations; this paragraph measures the Linear projection, not a second routing table.
 
-  **Nothing mechanically stops the routing being restated again, and four judges measured why.** Two
-  copies were removed by hand — the incident ledger's I09 protection column and a five-row table in
+  **One shape of restatement is held mechanically and the rest is held by review, and four judges
+  measured where the line falls.** Two copies were removed by hand — the incident ledger's I09 protection column and a five-row table in
   `repository-delivery.md` — and a guard was written to keep them from coming back. It counted how
   many workflow states a **source line** named, and both judges of that receipt defeated it three
   ways: the deleted prose restores byte-for-byte and passes, because it is hard-wrapped and no single
@@ -659,14 +659,29 @@ suite. Everything else here is prose held by review.
   it was written for is about a **statement**, and the distance between those two is where all three
   defeats live.
 
-  So the copies are gone and their return is held by review. What survives mechanically is narrower
-  than it looks: `every_named_disposition_uses_a_transport_state` crosses the Decision Gates table
-  against `STATES` and proves every state is *reachable* — **not** that any particular condition
-  routes to the right one. Swapping two destinations in that table leaves the suite green, which a
-  judge measured. And `SKILL.md`'s own steps restate the routing outside the section the parse is
-  bounded to; `rg -n 'analysis|ready|in-progress|review|blocked|done' skill/SKILL.md` finds them, and
-  the number of them is deliberately not written here, because a count in this paragraph is the class
-  of claim this document keeps having to correct.
+  So what is left, exactly. **Two tests hold something**, and an earlier version of this paragraph
+  named only the first, which a judge measured as understating the guard shipped beside it:
+
+  - `every_named_disposition_uses_a_transport_state` crosses the Decision Gates table against
+    `STATES` and proves every state is *reachable* — **not** that any particular condition routes to
+    the right one. Swapping two destinations in that table leaves the suite green, measured.
+  - `the_decision_gate_is_not_restated_as_a_second_table` holds two spellings: an arrow followed by a
+    backticked state, the Decision Gates table's own notation, in any of the four companion
+    documents, and a table in
+    `repository-delivery.md` whose header cell reads `| Destination |`. Restoring the five-row table
+    this change deleted, byte for byte, reddens it. **Renaming that header and keeping the pointer
+    sentence restores the whole table with the suite green** — measured by a judge, and the hole is
+    named here because the guard cannot name it itself.
+
+  Everything else is held by review: a restatement in prose that uses no arrow, in any of those files,
+  passes. That is not a hypothetical — the handoff bullet this change removed restores byte for byte
+  and nothing objects.
+
+  And `SKILL.md`'s own steps restate the routing outside the section the parse is bounded to;
+  `rg -n 'analysis|ready|in-progress|review|blocked|done' skill/SKILL.md` finds them, and the number of
+  them is deliberately not written here, because a count in this paragraph is the class of claim this
+  document keeps having to correct. Step 7 gained a pointer to the table and kept its restatement:
+  the copy was removed from the two reference files and not from the contract itself.
   **The projection can still hide it.** Estigia's own
   state is authoritative, so no agent misroutes — but Linear has no native `blocked`, and the binding
   creates one as a state *named* `Blocked` whose *type* is `unstarted`. Built, published work with an

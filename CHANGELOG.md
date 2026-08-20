@@ -24,13 +24,19 @@ the workflow, it holds the tools.
   its lesson now and both leave the destinations to the table their own pointers
   name.
 
-  **A guard meant to keep them from coming back was withdrawn**, because four
-  blind judges measured it wrong rather than incomplete: it counted the states a
-  *source line* named, so the deleted prose restores byte-for-byte and passes on
-  its line wrapping alone, a routing table never reaches the threshold because it
-  names one state per row, and joining two lines of ordinary prose reddens it
-  because `already` contains `ready`. `docs/honesty.md` records what that leaves
-  unheld.
+  **One guard holds their return and a second was withdrawn.**
+  `the_decision_gate_is_not_restated_as_a_second_table` reddens on the table this
+  change deleted, restored byte for byte, and on an arrow of the table's own form
+  in any of the four companion documents — and it is blind to that same table with
+  its header cell renamed, which a judge measured.
+
+  The withdrawn one counted how many states a *source line* named, and four blind
+  judges measured it wrong rather than incomplete: the deleted prose restores
+  byte-for-byte and passes on its line wrapping alone, a routing table never
+  reaches the threshold because it names one state per row, and joining two lines
+  of ordinary prose reddens it because `already` contains `ready`. It measured a
+  line while the rule it was written for is about a statement.
+  `docs/honesty.md` records what each holds and what neither does.
 - **The board mirror leaves a card that belongs to another repository alone, and says whose it is.**
   Matching on issue number alone moved another project's cards, measured once per
   write path: creating this repository's #73 on 2026-08-18 moved that project's
