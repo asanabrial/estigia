@@ -1299,10 +1299,15 @@ right. Space opens the list when you would rather see them all, and a path
 or board row has a field for what no list can hold. Planning is the last
 primary row. The model targets beneath it open their advisory catalog
 directly; Enter or Space chooses, custom IDs are always available, and
-inherit removes only that target. Shared answers borrow no one agent's
-catalog. The CLI still edits the complete persisted key=model route.
+inherit removes only that target. Where a model is named, the same list
+also offers the effort it runs at, and once one is set, an entry to hand it
+back to the host. Shared answers borrow no one agent's catalog. The CLI still edits
+the complete persisted key=model route, where an effort follows its
+model after a slash.
 Only Claude Code currently receives host-routable definitions: selected
-planning phases and one inert blind reviewer in every mode.
+planning phases, one inert blind reviewer in every mode, and whichever
+workers the Delegated workers row names — that row decides whether they
+exist, the model rows above only what they run on.
 OpenCode and every other host keep these values as routing declarations;
 orchestrate, apply, judge, and a visible route are not execution proof.
 
@@ -2455,7 +2460,7 @@ fn detail_of_model_target(app: &App) -> Vec<Line<'static>> {
         lines.push(Line::styled(
             t!(
                 app.tongue,
-                "accepts: any model ID that fits one key=model entry; no comma, pipe, or line break; catalogs are advisory"
+                "accepts: any model ID that fits one key=model entry, optionally followed by /low, /medium, /high, /xhigh or /max; no comma, pipe, or line break; catalogs are advisory"
             )
             .to_owned(),
             muted(),
@@ -2492,6 +2497,20 @@ fn detail_of_model_target(app: &App) -> Vec<Line<'static>> {
             t!(
                 app.tongue,
                 "only Claude Code currently emits planned phase definitions; other hosts keep this as a routing declaration"
+            )
+            .to_owned()
+        } else if crate::skill::DELEGATED_AGENTS
+            .iter()
+            .any(|(key, _)| *key == target.name)
+        {
+            // Not the sentence below, and the difference is which row
+            // decides: this one says what the worker runs on, and
+            // `Delegated workers` says whether it exists at all. An operator
+            // told only that this is a declaration would set it and find
+            // nothing installed.
+            t!(
+                app.tongue,
+                "this reaches a definition only where `Delegated workers` names this worker; that row decides whether it exists, this one what it runs on"
             )
             .to_owned()
         } else {

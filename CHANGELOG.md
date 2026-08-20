@@ -662,7 +662,7 @@ the workflow, it holds the tools.
   else, and a file that held nothing but Estigia's block does not survive as an
   empty husk. JSON keeps the operator's key order; markdown comes back byte for
   byte.
-- Nineteen typed settings. Reading the table produces a valid configuration or a
+- Twenty typed settings. Reading the table produces a valid configuration or a
   refusal that names what may be written instead.
 - **The installed skill directory is `flow`.** It was `issue-flow`, upstream's
   name, kept so the two could be the same directory. Estigia now installs under
@@ -697,8 +697,8 @@ the workflow, it holds the tools.
   compatibility, but it is no longer a visible setting or two-stage target/raw
   picker. `Planning` is the last primary row. Beneath it, exact model rows are
   derived from `orchestrate`, the active planning phases, universal `apply`,
-  delegated roles and external sub-agent names; inactive phases and workflow
-  states stay persisted but hidden. Each row opens advisory models for the concrete host:
+  delegated roles and external sub-agent names; inactive phases stay persisted
+  but hidden, and the workflow states have since stopped being keys at all. Each row opens advisory models for the concrete host:
   curated lists for Claude Code and Codex, and a lazy `opencode models` read
   without `--refresh` for OpenCode. That read closes stdin and returns the TUI
   within 5.6 seconds through one deadline covering PATH resolution, validation,
@@ -812,6 +812,63 @@ the workflow, it holds the tools.
   an existing table invalid. A uniform Planning disagreement exposes only fixed
   rows instead of presenting one selected agent's phases as shared truth.
 
+- **A delegated worker ships for the work no planning phase describes, and a
+  route now carries the effort it runs at.** `Planning: direct` runs no phase and
+  so wrote no definition at all — which is exactly the arrangement where a
+  developer hands a bounded piece of an understood change to a fresh context, and
+  composed that brief in prose at every launch. Two definitions close it:
+  `implementer` (`Read, Grep, Glob, Write, Edit, Bash`) and `analyst`
+  (`Read, Grep, Glob`), two because the grants genuinely differ — this contract's
+  analyst is repository-read-only and its implementer runs the suite.
+  - **A new row is the switch, not `Planning` and not `Model routing`.**
+    `Delegated workers` takes `none` (the default), `implementer`, `analyst`, or
+    both, and only what it names is written — under any protocol, retracted when
+    the name goes away. A definition carries a tool allowlist, which the
+    `control-surface` population already treats as authority, and an upgrade may
+    not hand out authority nobody asked for; `none` is what every contract
+    written before this reads.
+    - It is deliberately **not** the presence of a `Model routing` key. Two blind
+      judges refused that shape and were right: `implementer` has been an
+      accepted routing key since that row existed, offered as its first example,
+      documented as inert, and set by all six shipped model presets — so the
+      population holding it is every installation that ever chose a profile, and
+      treating that as consent would have installed a `Write`/`Edit`/`Bash`
+      definition into their home because they upgraded. A rule invented in one
+      change cannot turn a value written under the opposite rule into an answer.
+      `Model routing` still says what a named worker runs on.
+    - **A definition Estigia did not author is refused, not replaced.** The write
+      pass used to overwrite whatever was at the path and record no ownership, so
+      the uninstall neither restored it nor reported it. It is decided in the
+      preflight now, beside the reviewer's, so the ordinary case has nothing
+      half-written behind it, and asked again immediately before the write, which
+      is the narrower guarantee and the one that catches a file arriving between
+      the two reads. The refusal names both ways out. This matters most for `analyst`, a name
+      another harness's orchestrator answers to — which is the documented reason
+      to name it at all.
+  - **Effort travels with the model.** `design=opus/high`, one of `low`,
+    `medium`, `high`, `xhigh`, `max`, in the same row rather than a second one,
+    because sizing a context to a task is one decision. It is read from the right
+    and only when the tail is one of those five words, so a provider-qualified ID
+    such as `anthropic/claude-opus-4` stays one model. It renders as an `effort:`
+    frontmatter line into the planning phase definitions and the two workers — not
+    into `review-blind`, whose `model: inherit` is literal and byte-pinned; an
+    unnamed effort writes **no** line, because the absent field is the
+    host's own default and writing one down would freeze today's into every
+    installation.
+  - **The effort is chosen from the same list as the model.** A row that names a
+    model offers `effort: low` through `effort: max`, and once one is set, an entry
+    handing it back to the host; an inherited row offers none, because an effort is a property of
+    the model the target runs on. Choosing a different model keeps the effort
+    already named. One list, not a second stage — this row already retired an
+    Advanced one, and a value reachable only by typing a slash into the custom
+    field is a value an operator cannot discover. Two smaller faults went with it:
+    a row showed `opus` where `opus/high` was stored, and a change that moved only
+    the effort went unmarked, because both asked for the model half of the route.
+  - Estigia still starts nothing. What changed is that `Model routing` is read:
+    twice by `setup`, and by a sentence generated into the installed
+    contract's managed block, telling an agent which keys are already routed for it and which it
+    must act on itself.
+
 - **Claude Code's SDD planning phases ship as sub-agent definitions, and their
   tool lists are enforced.** `setup` writes `sdd-explore`, `sdd-propose`,
   `sdd-spec`, `sdd-design` and `sdd-tasks` into `~/.claude/agents/`, the verified definition
@@ -854,6 +911,20 @@ the workflow, it holds the tools.
   after: a full `cargo test` now leaves that file's line count unchanged.
 
 ### Removed
+
+- **The six workflow-state keys of `Model routing`, and the four lookups that
+  served them.** `analysis=opus` parsed, round-tripped, and was reported by
+  `config list` as set, while nothing anywhere consulted it: `for_state` was
+  byte-identical to `for_phase`, `resolve_in` ranked it last of three, and no
+  caller outside the configuration module's own tests ever asked any of them.
+  Where the issue sits names no context to start, so there was never anything for
+  the family to route to — and a row that parses and does nothing is worse than
+  an absent row, because it reads as configured. The row now takes sixteen keys
+  in three families and every family reaches a rendered definition. `for_state`,
+  `resolve`, `resolve_in`, `get(Role)` and `for_phase` are gone with it; `route`,
+  `for_target` and `effort_for` are what remain. A stored table naming a state is
+  refused rather than read past, in the same whole-cell way every unknown key
+  already was.
 
 - **The differential suite and its corpus.** `tests/differential.rs` — a hundred
   and eleven crossings — and `tests/transport/oracle.json` — 228 answers recorded

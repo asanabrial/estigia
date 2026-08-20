@@ -127,7 +127,15 @@ installs one inert `review-blind.md` definition, including when `Blind judges` i
 `model` is `inherit`, and its tool grant is what `Evidence standard` decides — read-only under
 `reading`, a shell and nothing else added under `measuring`. It is inert unless a launch supplies an active blind mode, exact publication
 receipt and criteria. The orchestrator passes the effective `judge` model and launches that same
-definition twice or five times; setup never creates numbered judge files. Direct `config set` and
+definition twice or five times; setup never creates numbered judge files. Two further definitions,
+`implementer.md` and `analyst.md`, are installed only where `Delegated workers` names them — under
+any `Planning`, including `direct` — and are retracted when the name goes away, because a definition
+carrying a tool grant is authority and an upgrade may not hand out authority nobody asked for. That
+row defaults to `none`; `Model routing` says what a named worker runs on and never whether it exists.
+A definition at one of those paths that Estigia did not author is refused rather than replaced:
+in the preflight, before anything at all is written, and again immediately before the bytes go
+down, which catches one that arrived in between and by then has the skill and the directive already
+written behind it. Direct `config set` and
 `config edit` writes do not mutate external definitions.
 
 `review-blind` is operator-owned and reserved. Before Claude Code's current `Agent` or legacy `Task`
@@ -344,7 +352,7 @@ What that costs is in `UNIMPLEMENTED`: no resources, no prompts, no sampling, no
 
 ## Configuration
 
-Nineteen typed settings, in [`docs/configuration.md`](docs/configuration.md). Reading the table produces a
+Twenty typed settings, in [`docs/configuration.md`](docs/configuration.md). Reading the table produces a
 valid configuration or a refusal naming what may be written instead.
 
 ## The ratchet

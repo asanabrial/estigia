@@ -446,6 +446,7 @@ fn the_per_agent_step_asks_only_what_differs_by_agent() {
             Setting::Review,
             Setting::Transitions,
             Setting::Judges,
+            Setting::Workers,
             Setting::Planning,
         ]
     );
@@ -1238,7 +1239,10 @@ fn profile_restore_and_dirty_marker_cover_hidden_route_changes() {
     let mut installed = claude.model_profiles()[0]
         .routing()
         .expect("the balanced profile is valid");
-    assert!(installed.assign("done", "haiku"));
+    // A phase the protocol in force does not run: persisted, and deliberately
+    // absent from the interactive projection, which is what makes it hidden.
+    // The workflow states used to serve this and no longer parse.
+    assert!(installed.assign("explore", "haiku"));
     let mut app = App::one_table(
         Some(claude),
         Config {
@@ -1335,6 +1339,175 @@ fn a_custom_current_model_is_shown_and_custom_input_updates_only_its_target() {
         app.shown_value(Setting::Models),
         "reviewer=keep, orchestrate=future/model"
     );
+}
+
+/// The effort is chosen from the same list as the model.
+///
+/// It was expressible in the persisted cell and in the custom field from the
+/// moment the route carried one, and nowhere else — so the only way to reach
+/// the second half of this row was to know the slash was there and type it.
+/// That is the ratchet this crate applies to its own refusals turned on its own
+/// screen: *a value the operator cannot discover is a value they cannot
+/// supply.*
+///
+/// One list, not a second stage. A stage is where a value goes to be
+/// undiscovered, and this row already retired an Advanced one.
+#[test]
+fn an_effort_is_chosen_from_the_same_list_as_the_model() {
+    let claude = crate::setup::find_agent("claude-code").expect("the Claude adapter");
+    let mut app = App::one_table(
+        Some(claude),
+        Config {
+            planning: crate::config::Planning::Sdd {
+                openspec: false,
+                lite: true,
+            },
+            ..Config::default()
+        },
+    );
+
+    // An inherited target offers no effort: there is no model for one to be a
+    // property of, and five entries that would all be refused teach the
+    // operator that the row half-works.
+    walk_to_model_target(&mut app, "spec");
+    app.press(Key::Char(' '));
+    assert!(
+        !app.picker()
+            .iter()
+            .any(|entry| entry.starts_with("effort:")),
+        "an inherited target offered an effort with no model to hang it from: {:?}",
+        app.picker()
+    );
+    choose_picker_entry(&mut app, "opus");
+    assert_eq!(app.shown_value(Setting::Models), "spec=opus");
+
+    // Named, and the same list now carries the second half of the row.
+    app.press(Key::Char(' '));
+    let entries = app.picker();
+    for effort in ["low", "medium", "high", "xhigh", "max"] {
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry == &format!("effort: {effort}")),
+            "the picker does not offer {effort:?}: {entries:?}"
+        );
+    }
+    // And no way to clear one that was never set.
+    assert!(
+        !entries
+            .iter()
+            .any(|entry| entry == "effort: the host's own default"),
+        "an unset effort offered a way to unset it: {entries:?}"
+    );
+
+    choose_picker_entry(&mut app, "effort: high");
+    assert_eq!(app.focus, Focus::List, "the picker did not close");
+    assert_eq!(app.shown_value(Setting::Models), "spec=opus/high");
+    // The row shows the whole route, not the model half. It showed `opus` for
+    // `opus/high` while this asked `for_target`.
+    assert_eq!(app.model_value("spec"), "opus/high");
+    assert!(
+        app.model_changed("spec"),
+        "an effort was set and the row was not marked as moved"
+    );
+
+    // Choosing a different model keeps it: choosing a cheaper model is not
+    // choosing to stop thinking hard about this target.
+    app.press(Key::Char(' '));
+    choose_picker_entry(&mut app, "sonnet");
+    assert_eq!(app.shown_value(Setting::Models), "spec=sonnet/high");
+
+    // And one entry hands the effort back to the host, without touching the
+    // model. `inherit` is the other row's word and removes the target whole.
+    app.press(Key::Char(' '));
+    choose_picker_entry(&mut app, "effort: the host's own default");
+    assert_eq!(app.shown_value(Setting::Models), "spec=sonnet");
+    assert_eq!(app.model_value("spec"), "sonnet");
+}
+
+/// An effort survives the custom field, and an effort with no model does not.
+///
+/// The field validated with `accepts_model_id`, which says yes to `/high`
+/// because a slash is not one of the four persisted delimiters — so the field
+/// accepted a string the write then refused, and the message named a grammar
+/// that was not the one broken.
+#[test]
+fn the_custom_field_carries_an_effort_and_refuses_one_with_no_model() {
+    let claude = crate::setup::find_agent("claude-code").expect("the Claude adapter");
+    let mut app = App::one_table(Some(claude), Config::default());
+
+    walk_to_model_target(&mut app, "orchestrate");
+    app.press(Key::Char(' '));
+    choose_picker_entry(&mut app, "type a model ID…");
+    type_in(&mut app, "anthropic/claude-opus-4/max");
+    app.press(Key::Enter);
+    assert_eq!(app.focus, Focus::List);
+    assert_eq!(
+        app.shown_value(Setting::Models),
+        "orchestrate=anthropic/claude-opus-4/max",
+        "a provider-qualified ID with an effort did not survive the field"
+    );
+
+    // Reopening prefills the whole route, so editing it is editing what is
+    // there rather than retyping the half the field remembered.
+    app.press(Key::Char(' '));
+    choose_picker_entry(&mut app, "type a model ID…");
+    assert_eq!(app.draft, "anthropic/claude-opus-4/max");
+    app.press(Key::Esc);
+    app.press(Key::Esc);
+
+    // An effort with nothing in front of it is refused where it is typed, and
+    // the refusal names the half that is missing.
+    let mut app = App::one_table(Some(claude), Config::default());
+    walk_to_model_target(&mut app, "orchestrate");
+    app.press(Key::Char(' '));
+    choose_picker_entry(&mut app, "type a model ID…");
+    type_in(&mut app, "/high");
+    app.press(Key::Enter);
+    assert_eq!(
+        app.focus,
+        Focus::Editing,
+        "accepted an effort with no model"
+    );
+    assert_eq!(app.shown_value(Setting::Models), "unset");
+    assert!(
+        app.message
+            .as_deref()
+            .is_some_and(|message| message.contains("needs a model in front of it")),
+        "the refusal did not name the missing half: {:?}",
+        app.message
+    );
+}
+
+/// Restoring a row brings its effort back with it.
+#[test]
+fn an_effort_only_change_is_marked_and_restored() {
+    let claude = crate::setup::find_agent("claude-code").expect("the Claude adapter");
+    let installed = Config {
+        models: crate::config::ModelRouting::parse("orchestrate=opus/max").expect("a model route"),
+        ..Config::default()
+    };
+    let mut app = App::one_table(Some(claude), installed);
+
+    walk_to_model_target(&mut app, "orchestrate");
+    assert_eq!(app.model_value("orchestrate"), "opus/max");
+    assert!(!app.model_changed("orchestrate"));
+
+    app.press(Key::Char(' '));
+    choose_picker_entry(&mut app, "effort: low");
+    assert_eq!(app.shown_value(Setting::Models), "orchestrate=opus/low");
+    assert!(
+        app.model_changed("orchestrate"),
+        "only the effort moved and the row reported no change"
+    );
+
+    app.press(Key::Char('r'));
+    assert_eq!(
+        app.shown_value(Setting::Models),
+        "orchestrate=opus/max",
+        "restore brought back the model and dropped the effort"
+    );
+    assert!(!app.model_changed("orchestrate"));
 }
 
 #[test]
@@ -4041,7 +4214,7 @@ fn two_saves_keep_planning_when_a_model_is_saved_second() {
         .find(|adapter| adapter.slug == "claude-code")
         .expect("the Claude Code adapter");
     let initial = Config {
-        models: crate::config::ModelRouting::parse("analysis=hidden/model")
+        models: crate::config::ModelRouting::parse("explore=hidden/model")
             .expect("a hidden assignment"),
         ..Config::default()
     };
@@ -4067,7 +4240,7 @@ fn two_saves_keep_planning_when_a_model_is_saved_second() {
 
     app.set(
         Setting::Models,
-        "analysis=hidden/model, orchestrate=provider/planner",
+        "explore=hidden/model, orchestrate=provider/planner",
     )
     .expect("the visible model is accepted");
     let plan = super::plan_of(&app);
@@ -4087,7 +4260,7 @@ fn two_saves_keep_planning_when_a_model_is_saved_second() {
         Some("provider/planner")
     );
     assert_eq!(
-        final_config.models.for_target("analysis"),
+        final_config.models.for_target("explore"),
         Some("hidden/model"),
         "a hidden assignment was lost while composing the saves"
     );
@@ -4105,7 +4278,7 @@ fn two_saves_keep_the_model_when_planning_is_saved_second() {
         .find(|adapter| adapter.slug == "claude-code")
         .expect("the Claude Code adapter");
     let initial = Config {
-        models: crate::config::ModelRouting::parse("analysis=hidden/model")
+        models: crate::config::ModelRouting::parse("explore=hidden/model")
             .expect("a hidden assignment"),
         ..Config::default()
     };
@@ -4124,7 +4297,7 @@ fn two_saves_keep_the_model_when_planning_is_saved_second() {
 
     app.set(
         Setting::Models,
-        "analysis=hidden/model, orchestrate=provider/planner",
+        "explore=hidden/model, orchestrate=provider/planner",
     )
     .expect("the visible model is accepted");
     let plan = super::plan_of(&app);
@@ -4148,7 +4321,7 @@ fn two_saves_keep_the_model_when_planning_is_saved_second() {
     );
     assert_eq!(Setting::Planning.value_of(&final_config), "sdd lite");
     assert_eq!(
-        final_config.models.for_target("analysis"),
+        final_config.models.for_target("explore"),
         Some("hidden/model"),
         "a hidden assignment was lost while composing the saves"
     );

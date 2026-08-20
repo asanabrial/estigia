@@ -4,6 +4,7 @@ description: >
   Propose a change and name the alternative not taken. Use once exploration has bounded the
   question and somebody has to agree on what is being built before requirements are written.
 model: {{MODEL}}
+{{EFFORT}}
 tools: {{TOOLS}}
 ---
 

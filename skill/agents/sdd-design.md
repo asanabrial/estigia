@@ -4,6 +4,7 @@ description: >
   Work out the shape of a change and the decisions inside it. Use when the criteria are agreed and
   how to build it is still open.
 model: {{MODEL}}
+{{EFFORT}}
 tools: {{TOOLS}}
 ---
 

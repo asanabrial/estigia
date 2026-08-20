@@ -542,7 +542,7 @@ fn no_guard_reading_every_document_blames_the_readme() {
 ///
 /// The open ones — `Model routing`, `Irreversible commands`, the two language
 /// rows — are deliberately not held to their `accepted()` sentence. That
-/// sentence names twenty-two keys for `Model routing` alone, and a table cell
+/// sentence names sixteen keys for `Model routing` alone, and a table cell
 /// carrying it is a table nobody reads. What that leaves unmeasured is real and
 /// worth naming: an open row's README prose can be thinner than the parser's,
 /// and `Model routing`'s was — *"comma-separated `key=model` pairs"*, naming no
@@ -2524,7 +2524,7 @@ fn the_readme_counts_what_the_crate_actually_has() {
 
 /// Every setting is acted on by something, and the something is named.
 ///
-/// An operator sets nineteen rows. `config list` reports them, the contract
+/// An operator sets twenty rows. `config list` reports them, the contract
 /// carries them, and `doctor` has a row for the ones a *tracker* declares
 /// nothing for. Nothing asked the plainer question: does anything at all read
 /// this row.
@@ -2535,7 +2535,11 @@ fn the_readme_counts_what_the_crate_actually_has() {
 /// says — the gate read `Irreversible commands`, and the payload's prose named
 /// eleven of them then. That left `Delivery authorisation`, `Transition authorisation`,
 /// `Delivery route`, `Merge strategy` and `Model routing` read by nobody: not
-/// the gate, not the transport, and no sentence an agent is given.
+/// the gate, not the transport, and no sentence an agent is given. `Model routing`
+/// left that list with issue #110, which made `setup` write the model and the
+/// effort it names into the definitions it installs, and gave the contract a
+/// sentence naming what the row obliges. Which definitions exist is
+/// `Delegated workers`, a row of its own.
 ///
 /// `setup::Applies::Asked` says of three of them *"the contract asks, and the
 /// agent may still honour it, but nothing checks"* — and for three the contract
@@ -2544,10 +2548,10 @@ fn the_readme_counts_what_the_crate_actually_has() {
 ///
 /// Two are closed by this change: the authorisations, whose meaning is not a
 /// design question — `ask` means ask a person first, which is the shape
-/// `Review delegation` already had in `SKILL.md`. The other three are declared
+/// `Review delegation` already had in `SKILL.md`. The other two are declared
 /// below and named in the README's honesty contract, because deciding what an
-/// agent does about a merge strategy or a model route is a design call and not
-/// a gap to paper over here.
+/// agent does about a merge strategy is a design call and not a gap to paper
+/// over here.
 #[test]
 fn every_setting_is_read_by_the_gate_the_transport_or_the_prose() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

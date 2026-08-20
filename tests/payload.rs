@@ -278,6 +278,8 @@ fn one_stable_blind_reviewer_definition_is_in_the_agent_manifest_not_the_skill()
         .collect();
     definitions.sort();
     let expected = [
+        "analyst.md",
+        "implementer.md",
         "review-blind.md",
         "sdd-design.md",
         "sdd-explore.md",
@@ -303,6 +305,30 @@ fn one_stable_blind_reviewer_definition_is_in_the_agent_manifest_not_the_skill()
         .filter(|name| name.starts_with("sdd-"))
         .collect();
     assert_eq!(phases, expected_phases);
+    // The delegated pair, each beside the name `Delegated workers` installs it
+    // by. Held here because that pairing is what makes the row reach a file: a
+    // name renamed on one side and not the other would leave a shipped
+    // definition nothing can ever ask for.
+    let mut delegated: Vec<_> = estigia::skill::DELEGATED_AGENTS
+        .iter()
+        .map(|(target, file)| {
+            (
+                *target,
+                file.path.strip_prefix("agents/").expect("an agent path"),
+            )
+        })
+        .collect();
+    delegated.sort();
+    assert_eq!(
+        delegated,
+        vec![("analyst", "analyst.md"), ("implementer", "implementer.md")]
+    );
+    for (target, _) in estigia::skill::DELEGATED_AGENTS {
+        assert!(
+            estigia::config::ModelRouting::targets().contains(target),
+            "`{target}` installs a definition and the routing refuses the key"
+        );
+    }
     for file in estigia::skill::AGENT_DEFINITIONS {
         assert_eq!(
             std::fs::read_to_string(root.join("skill").join(file.path)).expect("an agent reads"),

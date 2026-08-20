@@ -51,6 +51,12 @@ concurrently, with the identical target and criteria. Each context runs on the g
 standard` decides, and must not delegate or inspect sibling output. Config writes do not mutate this definition. A
 definition is a host constraint and a contract, not evidence that the panel was actually instantiated.
 
+Setup also installs the delegated workers `implementer` and `analyst`, on a switch of their own:
+`Delegated workers`, which defaults to `none` and names neither. That row decides whether either
+definition exists, not `Planning` and not `Model routing` — `Model routing` says only what a named
+worker runs on, so a model set for `implementer` or `analyst` with the workers row left at `none`
+installs nothing. Check the row before relying on a definition being there.
+
 `review-blind` is reserved to the operator-owned canonical user definition. Claude's current `Agent`
 and legacy `Task` launch surfaces are preflighted before repository-write classification: recursively
 parse project `.claude/agents` YAML from the launch cwd through the first `.git` repository root for the
@@ -83,8 +89,13 @@ same-finding identity or quorum, and its transport has no per-judge verdict mech
 ## Analyst enforcement and delegation
 
 Where supported, enforce analyst read-only behavior with a tool allowlist that excludes file-writing
-tools. This reduces accidental edits but does not seal the boundary: a shell can write files and is
-still needed for measurements, so the prose prohibition remains authoritative.
+tools. On Claude Code with `analyst` named in `Delegated workers`, that allowlist is already shipped
+as the `analyst` definition, so a launch of that role carries it. Check the row rather than assume
+it: it defaults to `none`, and a model named for `analyst` in `Model routing` installs nothing. Where
+the definition is absent — which is every other adapter, and this one until the row says otherwise —
+write the allowlist into the launch. Either way it reduces accidental edits and does not seal the
+boundary: a shell can write files and is still needed for measurements, so the prose prohibition
+remains authoritative.
 
 Claude Code applies a subagent definition's tool allowlist when that definition runs as a teammate,
 but does not apply the definition's `skills` field. Put required domain rule books in the teammate

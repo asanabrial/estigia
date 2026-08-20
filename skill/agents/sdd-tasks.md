@@ -4,6 +4,7 @@ description: >
   Break an agreed design into ordered work, each item independently checkable. Use as the last
   phase before implementation begins.
 model: {{MODEL}}
+{{EFFORT}}
 tools: {{TOOLS}}
 ---
 

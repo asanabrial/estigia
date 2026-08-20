@@ -113,8 +113,59 @@ pub const REVIEW_AGENT: SkillFile = SkillFile {
     contents: include_str!("../skill/agents/review-blind.md"),
 };
 
+/// The worker a run hands a bounded piece of an understood change to.
+///
+/// Not a planning phase, and that is the whole point of it: `Planning: direct`
+/// installs no `sdd-*` definition at all, so until this existed a developer
+/// delegating an ordinary piece of work composed the launch in prose, by hand,
+/// every time — which is the arrangement issue #35 closed for the reviewer's
+/// brief and #83 closed for its capabilities, still open for the ordinary
+/// worker.
+const IMPLEMENTER_AGENT: SkillFile = SkillFile {
+    path: "agents/implementer.md",
+    contents: include_str!("../skill/agents/implementer.md"),
+};
+
+/// The read-only half of the same pair.
+///
+/// Two definitions rather than one because the grants genuinely differ: this
+/// contract's analyst is repository-read-only and the implementer writes, so a
+/// single definition would have to carry the wider of the two grants and hand a
+/// shell to every context that was only ever asked to read.
+const ANALYST_AGENT: SkillFile = SkillFile {
+    path: "agents/analyst.md",
+    contents: include_str!("../skill/agents/analyst.md"),
+};
+
 /// Exactly the five dynamic SDD planning definitions.
 pub const PHASE_AGENTS: &[SkillFile] = &[SDD_EXPLORE, SDD_PROPOSE, SDD_SPEC, SDD_DESIGN, SDD_TASKS];
+
+/// The delegated workers, each beside the name `Delegated workers` installs it by.
+///
+/// **`Delegated workers` is the switch.** Neither file is written unless that
+/// row names it, and each is retracted when the name goes away. An agent
+/// definition is an instruction with a tool allowlist, which
+/// `guard:population control-surface` already treats as authority, and widening
+/// authority on somebody's machine because they upgraded is not a default this
+/// crate is allowed to ship — so the row's default is `none`, which is what
+/// every contract written before it reads.
+///
+/// It is deliberately **not** the presence of the `Model routing` key those
+/// names also serve as. Two blind judges refused that, for the reason
+/// [`crate::config::Workers`] records: the key was accepted, documented as
+/// inert, and set by six shipped presets long before it could mean this.
+///
+/// Ownership is the other half, and it is what makes `analyst` safe to write at
+/// all. The name belongs to somebody else's orchestrator as much as to this
+/// contract — see [`crate::config::ORCHESTRATED_ROLES`] — so a definition
+/// Estigia did not author is refused rather than replaced — in the preflight,
+/// and again immediately before the write, which is the narrower of the two and
+/// the one that sees a file arriving between them — and what it did author is
+/// removed on the way back out.
+pub const DELEGATED_AGENTS: &[(&str, SkillFile)] = &[
+    ("implementer", IMPLEMENTER_AGENT),
+    ("analyst", ANALYST_AGENT),
+];
 
 /// All host definitions, as one lifecycle-hashed asset collection.
 pub const AGENT_DEFINITIONS: &[SkillFile] = &[
@@ -124,6 +175,8 @@ pub const AGENT_DEFINITIONS: &[SkillFile] = &[
     SDD_DESIGN,
     SDD_TASKS,
     REVIEW_AGENT,
+    IMPLEMENTER_AGENT,
+    ANALYST_AGENT,
 ];
 
 /// Every file the skill is made of.
@@ -477,15 +530,34 @@ fn selected_documents(config: &Config) -> String {
     //
     // The same rule, one row over, and this one was further gone. `ask` at
     // least carries an obvious plain meaning; `analyst=opus` means nothing to
-    // an agent that was never told the row exists. Nothing in Estigia reads it
-    // either — `ModelRouting` has lookups by role, by phase and by state, and
+    // an agent that was never told the row exists. Nothing in Estigia read it
+    // either — `ModelRouting` had lookups by role, by phase and by state, and
     // no caller outside the configuration module.
+    //
+    // All three families can reach a file now: a planning phase the protocol
+    // runs, `implementer` from the delegated roles, and `analyst` from the names
+    // another orchestrator spawns, each written into a sub-agent definition
+    // carrying the model **and** the effort. *Can*, not *does* — the two workers
+    // reach one only where `Delegated workers` names them, and that row defaults
+    // to `none`, so on an installation that has not asked, the phase family is
+    // the only one that arrives anywhere. The sentence rendered below is
+    // conditional for that reason and this comment has to be too. The rest is
+    // still a declaration, and the sentence below is careful about which is
+    // which — an instruction the agent must follow itself, told apart from a
+    // route already taken for it. Getting that wrong in either direction is
+    // worse than saying nothing: an agent that believes a launch is already
+    // routed stops naming the model, and one that believes nothing is routed
+    // renames what setup already wrote.
     if !config.models.by_role.is_empty() {
         lines.push_str(&format!(
-            "Delegated work here runs on named models (`{}`): when you hand a role, a phase or a \
-             state to another context, start it on the model named for it and say which one you \
-             used. A row naming a model that nobody reads is a choice the operator made and \
-             nothing followed.
+            "Delegated work here runs on named models (`{}`), and a name followed by a slash \
+             carries the effort with it. Where this host reads sub-agent definitions, `setup` has \
+             already written the model and the effort into the ones it installs — each planning \
+             phase the protocol runs, and whichever workers `Delegated workers` names — so \
+             launching one of those needs no model named in the prompt. Every other key here is a \
+             declaration nothing starts for you: hand the work to the model named for it yourself, \
+             and say which one you used. A row naming a model that nobody reads is a choice the \
+             operator made and nothing followed.
 
 ",
             config.models.as_value()
@@ -2634,7 +2706,7 @@ mod tests {
         // on". Only the agent can honour that, and the skill it reads mentioned
         // models four times — all of them incidental ("continuation model",
         // "state model", an incident narrative). Nothing in Estigia reads it
-        // either: `ModelRouting` offers lookups by role, by phase and by state
+        // either: `ModelRouting` offered lookups by role, by phase and by state
         // and has no caller outside the configuration module.
         //
         // So an operator could set `implementer=opus`, watch the table record

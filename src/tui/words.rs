@@ -106,13 +106,17 @@ lista puede contener. Planning es el último ajuste principal. Debajo aparece
 una sección separada con orchestrate, las fases activas, apply y los agentes
 delegados. Cada fila abre directamente el catálogo orientativo del anfitrión;
 Intro o Espacio eligen, siempre se puede escribir un ID personalizado y
-heredar elimina solo ese destino. Las respuestas compartidas no toman
-prestado el catálogo de ningún agente.
-La CLI conserva la edición de la ruta key=model completa.
+heredar elimina solo ese destino. Donde hay un modelo nombrado, la misma
+lista ofrece también el esfuerzo con el que corre, y una vez puesto, una
+entrada para devolvérselo al anfitrión. Las respuestas compartidas no toman prestado el
+catálogo de ningún agente.
+La CLI conserva la edición de la ruta key=model completa, donde el
+esfuerzo sigue a su modelo tras una barra.
 
 Solo Claude Code recibe actualmente definiciones enrutables por el anfitrión:
-las fases de planificación seleccionadas y un revisor ciego estático e inerte
-en todos los modos. OpenCode y todos los demás anfitriones conservan estos
+las fases de planificación seleccionadas, un revisor ciego estático e inerte
+en todos los modos, y los trabajadores que nombre la fila Delegated workers
+— esa fila decide si existen, y las de modelo de arriba solo con qué corren. OpenCode y todos los demás anfitriones conservan estos
 valores como declaraciones de reparto; orchestrate, apply, judge y una ruta
 visible tampoco demuestran ejecución.
 
@@ -379,6 +383,9 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Renewal window", "Ventana de renovación"),
     ("Review protocol", "Protocolo de revisión"),
     ("Blind judges", "Jueces a ciegas"),
+    ("Delegated workers", "Trabajadores delegados"),
+    ("`none`, `implementer`, `analyst`, or `implementer analyst`", "`none`, `implementer`, `analyst`, o `implementer analyst`"),
+    ("which delegated workers this agent has a definition for, if any", "para qué trabajadores delegados tiene definición este agente, si es que alguno"),
     ("Evidence standard", "Estándar de evidencia"),
     (
         "what a verdict here has to be backed by, and so what a reviewer may do",
@@ -499,6 +506,8 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Models for {target}", "Modelos para {target}"),
     ("MODELS", "MODELOS"),
     ("PHASE MODELS", "MODELOS DE FASE"),
+    ("effort: {effort}", "esfuerzo: {effort}"),
+    ("effort: the host's own default", "esfuerzo: el que el anfitrión decida"),
     ("type a model ID…", "escribe un ID de modelo…"),
     ("inherit", "heredar"),
     ("different values", "valores diferentes"),
@@ -507,8 +516,8 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("model declared for this planning phase", "modelo declarado para esta fase de planificación"),
     ("model declared for applying changes", "modelo declarado para aplicar cambios"),
     ("model declared for this delegated agent", "modelo declarado para este agente delegado"),
-    ("a model ID must fit one key=model entry: no comma, pipe, or line break", "un ID de modelo debe caber en una entrada key=model: sin coma, barra vertical ni salto de línea"),
-    ("accepts: any model ID that fits one key=model entry; no comma, pipe, or line break; catalogs are advisory", "acepta: cualquier ID de modelo que quepa en una entrada key=model; sin coma, barra vertical ni salto de línea; los catálogos son orientativos"),
+    ("a model ID must fit one key=model entry: no comma, pipe, or line break, and an effort after a slash needs a model in front of it", "un ID de modelo debe caber en una entrada key=model: sin coma, barra vertical ni salto de línea, y un esfuerzo tras una barra necesita un modelo delante"),
+    ("accepts: any model ID that fits one key=model entry, optionally followed by /low, /medium, /high, /xhigh or /max; no comma, pipe, or line break; catalogs are advisory", "acepta: cualquier ID de modelo que quepa en una entrada key=model, seguido opcionalmente de /low, /medium, /high, /xhigh o /max; sin coma, barra vertical ni salto de línea; los catálogos son orientativos"),
     ("{agent} model suggestions are advisory; Estigia neither validates nor runs models", "las sugerencias de modelos de {agent} son orientativas; Estigia no valida ni ejecuta modelos"),
     ("loaded from `opencode models` without refresh; advisory only", "cargado desde `opencode models` sin refrescar; solo orientativo"),
     ("loading OpenCode's model catalog…", "cargando el catálogo de modelos de OpenCode…"),
@@ -516,6 +525,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("no verified model catalog for {agent}; type a model ID", "no hay un catálogo de modelos verificado para {agent}; escribe un ID de modelo"),
     ("shared answers have no single agent model catalog; type a model ID", "las respuestas compartidas no tienen el catálogo de un único agente; escribe un ID de modelo"),
     ("Planning differs across selected agents; unify it or edit each agent to route planning phases", "Planning difiere entre los agentes seleccionados; unifícalo o edita cada agente para enrutar fases de planificación"),
+    ("this reaches a definition only where `Delegated workers` names this worker; that row decides whether it exists, this one what it runs on", "esto llega a una definición solo donde `Delegated workers` nombra a este trabajador; esa fila decide si existe, esta con qué corre"),
     ("only Claude Code currently emits planned phase definitions; other hosts keep this as a routing declaration", "solo Claude Code emite actualmente definiciones de fases planificadas; los demás anfitriones conservan esto como declaración de reparto"),
     ("{target} is a routing declaration, not proof that a host executes it", "{target} es una declaración de reparto, no una prueba de que un anfitrión lo ejecute"),
     ("{agent} model catalog unavailable: {why}. Type a model ID instead.", "el catálogo de modelos de {agent} no está disponible: {why}. Escribe un ID de modelo en su lugar."),
@@ -544,7 +554,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("where isolated checkouts are made, when a run needs one", "dónde se hacen los checkouts aislados, cuando una ejecución necesita uno"),
     ("where this repository's issues live — the claim is adjudicated there", "dónde viven los issues de este repositorio — la reclamación se adjudica ahí"),
     ("how much is written down before any code is", "cuánto se escribe antes de escribir nada de código"),
-    ("which model each delegated role and phase runs on, for this agent", "en qué modelo corre cada rol y cada fase delegada, para este agente"),
+    ("which model, and at what effort, each delegated role, phase and sub-agent runs on, for this agent", "en qué modelo, y con qué esfuerzo, corre cada rol, cada fase y cada sub-agente delegado, para este agente"),
     ("whether work integrates through branches or straight onto trunk", "si el trabajo se integra por ramas o directo sobre trunk"),
     ("how long a routine write may ride on the last verification", "cuánto puede una escritura rutinaria apoyarse en la última verificación"),
     ("what a review verdict is bound to (RDD lives here)", "a qué queda atado un veredicto de revisión (RDD vive aquí)"),
@@ -559,7 +569,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("`unset`, or an absolute directory", "`unset`, o un directorio absoluto"),
     ("`github`, `github <owner>/<name>`, `linear`, or `trello`", "`github`, `github <dueño>/<nombre>`, `linear`, o `trello`"),
     ("`direct`, `sdd`, `sdd lite`, `sdd openspec`, or `sdd lite openspec`", "`direct`, `sdd`, `sdd lite`, `sdd openspec`, o `sdd lite openspec`"),
-    ("`unset`, or comma-separated key=model pairs, as in `orchestrate=fable, design=opus, apply=sonnet`. A key is a delegated role (implementer, reviewer, judge), a workflow state (analysis, ready, in-progress, review, blocked, done), a phase of thinking (explore, propose, spec, design, tasks, apply, orchestrate), or a sub-agent (strategist, analyst, builder, refactorer, validator, auditor). A model ID may use any catalog spelling but no comma, pipe, or line break", "`unset`, o pares clave=modelo separados por comas, como `orchestrate=fable, design=opus, apply=sonnet`. Una clave es un rol delegado (implementer, reviewer, judge), un estado del flujo (analysis, ready, in-progress, review, blocked, done), una fase de pensamiento (explore, propose, spec, design, tasks, apply, orchestrate), o un sub-agente (strategist, analyst, builder, refactorer, validator, auditor). Un ID de modelo puede usar cualquier nombre de catálogo, pero no coma, barra vertical ni salto de línea"),
+    ("`unset`, or comma-separated key=model pairs, as in `orchestrate=fable, design=opus, apply=sonnet/low`. A key is a delegated role (implementer, reviewer, judge), a phase of thinking (explore, propose, spec, design, tasks, apply, orchestrate), or a sub-agent (strategist, analyst, builder, refactorer, validator, auditor). A model ID may use any catalog spelling but no comma, pipe, or line break, and may carry the effort it runs at after a slash: low, medium, high, xhigh or max", "`unset`, o pares clave=modelo separados por comas, como `orchestrate=fable, design=opus, apply=sonnet/low`. Una clave es un rol delegado (implementer, reviewer, judge), una fase de pensamiento (explore, propose, spec, design, tasks, apply, orchestrate), o un sub-agente (strategist, analyst, builder, refactorer, validator, auditor). Un ID de modelo puede usar cualquier nombre de catálogo, pero no coma, barra vertical ni salto de línea, y puede llevar detrás de una barra el esfuerzo con el que corre: low, medium, high, xhigh o max"),
     ("`branch`, or `trunk`", "`branch`, o `trunk`"),
     ("`default`, or a shorter duration such as `30s` or `1m`", "`default`, o una duración más corta como `30s` o `1m`"),
     ("`standard`, or `receipt-driven` (also accepted as `rdd`)", "`standard`, o `receipt-driven` (también se acepta `rdd`)"),

@@ -168,15 +168,15 @@ fn default_model_profiles_belong_only_to_adapters_with_stable_catalogs() {
             panic!("profiled adapters must have stable catalogs");
         };
         for profile in adapter.model_profiles() {
-            for model in profile
+            for route in profile
                 .routing()
                 .expect("a valid built-in profile")
                 .by_role
                 .values()
             {
                 assert!(
-                    catalog.contains(&model.as_str()),
-                    "{} profile {} uses uncatalogued model {model}",
+                    catalog.contains(&route.model.as_str()),
+                    "{} profile {} uses uncatalogued model {route}",
                     adapter.slug,
                     profile.name
                 );
@@ -2314,14 +2314,14 @@ fn two_agents_sharing_one_root_can_run_different_models() {
     let opencode = crate::skill::installed_config_for(root.path(), Some("opencode"))
         .expect("opencode reads its own");
 
-    assert_eq!(claude.models.for_phase("apply"), Some("sonnet-5"));
-    assert_eq!(opencode.models.for_phase("apply"), Some("kimi-k3"));
-    assert_eq!(claude.models.for_phase("design"), Some("opus-5"));
+    assert_eq!(claude.models.for_target("apply"), Some("sonnet-5"));
+    assert_eq!(opencode.models.for_target("apply"), Some("kimi-k3"));
+    assert_eq!(claude.models.for_target("design"), Some("opus-5"));
     // Neither one's file leaks into the other's answer, which is the failure
     // this exists to prevent.
-    assert_eq!(opencode.models.for_phase("design"), None);
-    assert_eq!(claude.models.for_phase("orchestrate"), Some("fable-5"));
-    assert_eq!(opencode.models.for_phase("orchestrate"), Some("gpt-5.6"));
+    assert_eq!(opencode.models.for_target("design"), None);
+    assert_eq!(claude.models.for_target("orchestrate"), Some("fable-5"));
+    assert_eq!(opencode.models.for_target("orchestrate"), Some("gpt-5.6"));
 
     // An adapter with no file of its own still reads the shared table rather
     // than nothing — sharing a directory is the default, not a broken state.
@@ -2342,7 +2342,7 @@ fn two_agents_sharing_one_root_can_run_different_models() {
         crate::skill::installed_config_for(root.path(), Some("opencode"))
             .expect("read back")
             .models
-            .for_phase("apply"),
+            .for_target("apply"),
         Some("deepseek-v4")
     );
 }
@@ -4981,6 +4981,455 @@ fn a_model_named_for_a_phase_reaches_that_phases_definition() {
     assert!(
         !declared.contains("Write") && !declared.contains("Edit"),
         "`explore` was handed a write it never needs: {declared}"
+    );
+}
+
+/// A delegated worker is installed because the row named it, not because of `Planning`.
+///
+/// This is the gap issue #110 was filed for. `Planning: direct` runs no phase,
+/// so it wrote no definition at all — and `direct` is exactly where a developer
+/// hands a bounded piece of work to a fresh context, composing the brief in
+/// prose at every launch. Turn the pass below off and this goes red for that
+/// reason: a configuration naming `implementer` writes nothing.
+///
+/// The other half of it is consent. An agent definition is an instruction
+/// carrying a tool allowlist, which `guard:population control-surface` already
+/// treats as authority, so one carrying `Write`, `Edit` and `Bash` may not
+/// appear in somebody's home because they upgraded. `Delegated workers` is what
+/// asks for it and taking that name out of the row is what withdraws it — not a
+/// `Model routing` key, which is the shape two blind judges refused and which
+/// `a_routing_key_is_not_what_installs_a_worker` below holds refused.
+#[test]
+fn a_delegated_worker_is_installed_because_the_row_named_it() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let agents = home.path().join(".claude").join("agents");
+    let implementer = agents.join("implementer.md");
+    let analyst = agents.join("analyst.md");
+
+    // `direct`, and no row: nothing is written, and that is the compatibility
+    // constraint rather than an accident. An installation that never asked for
+    // a delegated worker gets exactly the bytes it got before one existed.
+    setup(adapter, &Config::default(), &options).expect("setup runs");
+    assert!(installed_phases(&agents).is_empty());
+    assert!(
+        !implementer.exists(),
+        "an unnamed worker was installed anyway"
+    );
+    assert!(!analyst.exists(), "an unnamed worker was installed anyway");
+
+    // Named, still under `direct`: the definition appears, on the named model.
+    let named = Config {
+        workers: crate::config::Workers {
+            implementer: true,
+            analyst: false,
+        },
+        models: crate::config::ModelRouting::parse("implementer=sonnet").expect("a routing"),
+        ..Config::default()
+    };
+    setup(adapter, &named, &options).expect("setup runs");
+    let written = fs::read_to_string(&implementer).expect("the worker is installed");
+    assert!(
+        written.contains("model: sonnet"),
+        "the model named for `implementer` did not reach its definition:\n{written}"
+    );
+    assert!(
+        !written.contains("{{"),
+        "a placeholder reached the disk:\n{written}"
+    );
+    assert!(
+        !analyst.exists(),
+        "naming one worker installed the other as well"
+    );
+    // No planning phase came with it: the two switches are separate, which is
+    // the whole point of this pass.
+    assert!(installed_phases(&agents).is_empty());
+
+    // The grant is the role's, and the gate reads it off the installed file.
+    let policy = crate::harness::roles::declared_policy(&written)
+        .expect("an installed worker declares a policy the gate can read");
+    assert_eq!(
+        policy.verdict("Write"),
+        crate::harness::roles::Verdict::Allow,
+        "an implementer that cannot write has not been made safer"
+    );
+    assert_eq!(
+        policy.verdict("Bash"),
+        crate::harness::roles::Verdict::Allow,
+        "an implementer that cannot run the suite cannot check its own work"
+    );
+    assert_eq!(
+        policy.verdict("Task"),
+        crate::harness::roles::Verdict::Deny,
+        "the instruction not to delegate is refused rather than trusted"
+    );
+
+    // The read-only half, named beside it.
+    let both = Config {
+        workers: crate::config::Workers {
+            implementer: true,
+            analyst: true,
+        },
+        models: crate::config::ModelRouting::parse("implementer=sonnet, analyst=haiku")
+            .expect("a routing"),
+        ..Config::default()
+    };
+    setup(adapter, &both, &options).expect("setup runs");
+    let reader = fs::read_to_string(&analyst).expect("the analyst is installed");
+    assert!(reader.contains("model: haiku"), "{reader}");
+    let reading = crate::harness::roles::declared_policy(&reader)
+        .expect("an installed worker declares a policy the gate can read");
+    for withheld in ["Write", "Edit", "Bash"] {
+        assert_eq!(
+            reading.verdict(withheld),
+            crate::harness::roles::Verdict::Deny,
+            "the analyst is repository-read-only and was handed {withheld}"
+        );
+    }
+
+    // Withdrawn: the name comes out of `Delegated workers`, and so does the
+    // file this run created. The retraction is what makes naming it consent
+    // rather than a one-way door.
+    setup(adapter, &named, &options).expect("setup runs");
+    assert!(
+        !analyst.exists(),
+        "a worker outlived the row that installed it"
+    );
+    assert!(implementer.exists(), "the named worker was retracted too");
+
+    // And the uninstall takes back exactly what it wrote.
+    uninstall(adapter, &options).expect("uninstall runs");
+    assert!(
+        !implementer.exists(),
+        "a worker this run created outlived the uninstall"
+    );
+}
+
+/// A routing key is not consent, and this is the test that says so.
+///
+/// The first publication of this change gated the install on the presence of a
+/// `Model routing` key, and two blind judges refused it for the same reason:
+/// `implementer` has been an accepted key since that row existed, offered as its
+/// first example, documented as inert, and set by **all six** shipped presets.
+/// So the population holding it is every installation that ever chose a profile,
+/// and their next `setup` would have written a `Write`/`Edit`/`Bash` definition
+/// into their home because they upgraded.
+///
+/// Both directions are held here, because either alone is satisfiable by the
+/// wrong code: a key with no row writes nothing, and a row with no key writes the
+/// definition on `inherit`.
+#[test]
+fn a_routing_key_is_not_what_installs_a_worker() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let agents = home.path().join(".claude").join("agents");
+    let claude = find_agent("claude-code").expect("the Claude adapter");
+
+    // Every shipped preset names the key. None of them installs anything.
+    for profile in claude.model_profiles() {
+        let routing = profile.routing().expect("a valid built-in profile");
+        assert!(
+            routing.route("implementer").is_some(),
+            "the {} preset stopped naming `implementer`, which is what makes this test the \
+             regression it is",
+            profile.name
+        );
+        setup(
+            adapter,
+            &Config {
+                models: routing,
+                ..Config::default()
+            },
+            &options,
+        )
+        .expect("setup runs");
+        assert!(
+            !agents.join("implementer.md").exists(),
+            "the {} preset installed a worker definition by naming a model for it",
+            profile.name
+        );
+    }
+
+    // And the row alone installs it, with no model named anywhere: the two rows
+    // answer two questions, and only one of them is about existing.
+    setup(
+        adapter,
+        &Config {
+            workers: crate::config::Workers {
+                implementer: true,
+                analyst: false,
+            },
+            ..Config::default()
+        },
+        &options,
+    )
+    .expect("setup runs");
+    let written = fs::read_to_string(agents.join("implementer.md")).expect("the worker installs");
+    assert!(
+        written.contains("model: inherit"),
+        "a worker named with no model did not inherit:\n{written}"
+    );
+}
+
+/// A definition Estigia did not author is refused, not replaced.
+///
+/// The write pass overwrote whatever was at the path and recorded no ownership,
+/// so the uninstall neither restored it nor reported it — gone in both
+/// directions, silently. `analyst` is the case that makes it matter: the name
+/// belongs to another harness's orchestrator, which is the documented reason an
+/// operator names it at all.
+///
+/// In the preflight, beside the reviewer's, so the refusal leaves nothing
+/// half-written behind it.
+#[test]
+fn a_delegated_definition_estigia_did_not_author_is_refused_before_any_artifact_is_written() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let theirs = home.path().join(".claude/agents/analyst.md");
+    fs::create_dir_all(theirs.parent().unwrap()).expect("the agent directory exists");
+    let bytes = "---\nname: analyst\n---\n\nSomebody else's analyst.\n";
+    fs::write(&theirs, bytes).expect("their analyst exists");
+
+    let config = Config {
+        workers: crate::config::Workers {
+            implementer: false,
+            analyst: true,
+        },
+        ..Config::default()
+    };
+    let failure = setup(adapter, &config, &options)
+        .expect_err("setup replaced a definition it did not write");
+    let refusal = failure
+        .downcast_ref::<crate::outcome::Refusal>()
+        .expect("a refusal, not an io error");
+    assert_eq!(refusal.code, "delegated-definition-unowned");
+    // Both ways out, and both of them work: move the file, or stop naming the
+    // worker. Naming a dead end is what this repository refuses loudest.
+    // Both halves, separately. Written as one `||` these read as two checks
+    // and were one — `contains("Delegated")` subsumed the spelling beside it —
+    // so the row name could have fallen out of the second way with nothing
+    // noticing.
+    let resolution = format!("{:?}", refusal.resolution);
+    assert!(resolution.contains("move"), "{resolution}");
+    assert!(resolution.contains("Delegated workers"), "{resolution}");
+    assert!(resolution.contains("analyst"), "{resolution}");
+
+    let paths = resolve_paths(adapter, &options).expect("paths resolve");
+    assert!(!paths.skill_root.exists(), "the skill was written anyway");
+    assert!(
+        !paths.instructions.exists(),
+        "the directive was written anyway"
+    );
+    assert_eq!(fs::read_to_string(&theirs).unwrap(), bytes);
+
+    // Stop naming it and the same machine installs cleanly, leaving their file
+    // alone. That is the half a refusal has to have to be a refusal and not a
+    // wall.
+    setup(adapter, &Config::default(), &options).expect("setup runs once the row lets it");
+    assert_eq!(fs::read_to_string(&theirs).unwrap(), bytes);
+}
+
+/// The second ownership look is crossed where a fixture can reach it.
+///
+/// Two blind judges asked for this and both were right that nothing held it:
+/// the write-pass guard's condition is a strict subset of the preflight's, so
+/// every scenario built by putting a file on disk is refused before the write
+/// pass is reached, and deleting the guard left the suite green.
+///
+/// What makes it reachable is an asymmetry the two reads already have. The
+/// preflight asks the **disk**, through `read_optional`; the write pass asks
+/// **`pending`**, the in-flight view a run carries across its own writes. A
+/// definition present in `pending` and absent from disk therefore walks past the
+/// first observation and arrives at the second, which is the shape of the thing
+/// the guard is for — a file that was not there when ownership was decided and
+/// is there when the bytes go down.
+///
+/// It is not the race itself. A real interleaving cannot be driven from a test
+/// in this process, and `docs/honesty.md` says so rather than letting this stand
+/// in for it. What this holds is the branch: that the second look refuses, that
+/// it refuses with the same code and the same two ways out, and that it does not
+/// fire on a definition Estigia owns.
+#[test]
+fn the_second_ownership_look_refuses_what_arrives_after_the_first() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let agents = home.path().join(".claude").join("agents");
+    let target = agents.join("analyst.md");
+    let config = Config {
+        workers: crate::config::Workers {
+            implementer: false,
+            analyst: true,
+        },
+        ..Config::default()
+    };
+
+    // Nothing on disk, so the preflight has nothing to refuse — and somebody
+    // else's definition already in this run's view of the world.
+    let mut pending = Pending::new();
+    pending.insert(
+        target.clone(),
+        Some("Somebody else's analyst.\n".to_owned()),
+    );
+    assert!(!target.exists(), "the fixture must not plant it on disk");
+
+    let failure = setup_adapter_into(
+        adapter,
+        &Config::default(),
+        &config,
+        &options,
+        &mut pending,
+        false,
+    )
+    .expect_err("the write pass replaced a definition it did not write");
+    let refusal = failure
+        .error
+        .downcast_ref::<crate::outcome::Refusal>()
+        .expect("a refusal, not an io error");
+    assert_eq!(refusal.code, "delegated-definition-unowned");
+    let resolution = format!("{:?}", refusal.resolution);
+    assert!(resolution.contains("move"), "{resolution}");
+    assert!(resolution.contains("Delegated workers"), "{resolution}");
+
+    // And it does not fire on a definition this run created: same view, same
+    // path, ownership recorded. A guard that refused here would make the second
+    // run of `setup` on any machine impossible.
+    let (home, options) = sandbox();
+    let agents = home.path().join(".claude").join("agents");
+    setup(adapter, &config, &options).expect("the first run installs it");
+    let ours = fs::read_to_string(agents.join("analyst.md")).expect("it is installed");
+    let mut pending = Pending::new();
+    pending.insert(agents.join("analyst.md"), Some(ours));
+    setup_adapter_into(
+        adapter,
+        &Config::default(),
+        &config,
+        &options,
+        &mut pending,
+        false,
+    )
+    .expect("the second look refused a definition Estigia owns");
+}
+
+/// A dry run writes nothing and claims no ownership; a second run repeats it.
+#[test]
+fn a_delegated_worker_is_planned_before_it_is_written_and_settles_after() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let agents = home.path().join(".claude").join("agents");
+    let config = Config {
+        workers: crate::config::Workers {
+            implementer: true,
+            analyst: false,
+        },
+        ..Config::default()
+    };
+
+    let planned = setup(
+        adapter,
+        &config,
+        &SetupOptions {
+            dry_run: true,
+            ..options.clone()
+        },
+    )
+    .expect("the dry run plans");
+    assert!(
+        planned
+            .actions
+            .iter()
+            .any(|action| action.kind == ActionKind::DelegatedAgent
+                && action.change == Change::Create),
+        "the dry run did not plan the worker: {:?}",
+        planned.actions
+    );
+    assert!(
+        !agents.join("implementer.md").exists(),
+        "a dry run wrote the definition"
+    );
+
+    let first = setup(adapter, &config, &options).expect("setup runs");
+    assert!(
+        first
+            .actions
+            .iter()
+            .any(|action| action.kind == ActionKind::DelegatedAgent
+                && action.change == Change::Create)
+    );
+
+    // Idempotent: the second run has nothing to do, which is what lets `setup`
+    // be re-run to repair one artifact without disturbing the rest.
+    let again = setup(adapter, &config, &options).expect("setup runs again");
+    assert!(
+        again
+            .actions
+            .iter()
+            .any(|action| action.kind == ActionKind::DelegatedAgent
+                && action.change == Change::Unchanged),
+        "a second identical run rewrote the worker: {:?}",
+        again.actions
+    );
+}
+
+/// An effort reaches the definition, and an unnamed one writes no field at all.
+///
+/// The absent field is the load-bearing half. `medium` is the host's answer to a
+/// definition that names no effort, so rendering it would freeze one host's
+/// current default into every installation that never asked for one — and it
+/// would change the bytes of every phase definition already on disk. `model:`
+/// can carry `inherit` because the host defines that word; effort has no such
+/// word, so saying nothing is the only way to say nothing.
+#[test]
+fn an_effort_named_beside_a_model_reaches_the_definition() {
+    let (home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let agents = home.path().join(".claude").join("agents");
+    let config = Config {
+        planning: crate::config::Planning::Sdd {
+            openspec: false,
+            lite: true,
+        },
+        workers: crate::config::Workers {
+            implementer: true,
+            analyst: false,
+        },
+        models: crate::config::ModelRouting::parse("spec=opus/high, implementer=sonnet/low")
+            .expect("a routing"),
+        ..Config::default()
+    };
+
+    setup(adapter, &config, &options).expect("setup runs");
+
+    let spec = fs::read_to_string(agents.join("sdd-spec.md")).expect("the phase is installed");
+    assert!(spec.contains("model: opus"), "{spec}");
+    assert!(
+        spec.contains("effort: high"),
+        "the effort named for `spec` did not reach its definition:\n{spec}"
+    );
+    assert!(
+        !spec.contains("opus/high"),
+        "the effort was left on the model line:\n{spec}"
+    );
+
+    let worker =
+        fs::read_to_string(agents.join("implementer.md")).expect("the worker is installed");
+    assert!(worker.contains("model: sonnet"), "{worker}");
+    assert!(worker.contains("effort: low"), "{worker}");
+
+    // A definition nobody named an effort for carries no such line, and no
+    // blank one where the placeholder was: the frontmatter is what it was
+    // before the field existed.
+    let tasks = fs::read_to_string(agents.join("sdd-tasks.md")).expect("the phase is installed");
+    assert!(
+        !tasks.contains("effort:"),
+        "an unnamed effort wrote a field anyway:\n{tasks}"
+    );
+    assert!(
+        tasks.contains("model: inherit\ntools:"),
+        "the placeholder left a blank line behind:\n{tasks}"
+    );
+    assert!(
+        !tasks.contains("{{"),
+        "a placeholder reached the disk:\n{tasks}"
     );
 }
 

@@ -19,8 +19,40 @@ suite. Everything else here is prose held by review.
   successful line is still not proof that a later run accepts or uses the ID. Estigia does not
   validate catalog membership, execute models, or inspect or filter their tool-call capability.
   Only Claude Code currently receives host-routable definitions: the planning phases selected by
-  `Planning`, and one `review-blind` definition installed in every mode, whose tool grant
-  `Evidence standard` decides. OpenCode and every
+  `Planning`, one `review-blind` definition installed in every mode, whose tool grant
+  `Evidence standard` decides, and the two delegated workers `implementer` and `analyst`, each
+  written only where `Delegated workers` names it and retracted when the name goes away. A model
+  and, where one is named, an `effort:` line are rendered into the planning phases and the two
+  workers — **not** into `review-blind`, whose `model: inherit` is literal and whose bytes are
+  pinned against an earlier release, so a model or effort named for `judge` reaches no file and is
+  carried to the panel by the launch instead. That a host obeys either field is not measured here,
+  and ten of the eleven adapters have nowhere to put them at all. `Delegated workers` is reported as
+  held on those ten, where it decides nothing: `Applies` is derived from whether an adapter can gate
+  tool calls, not from whether it has an agents root, and `Model routing` beside it reads the same
+  way. `Applies::Inert` exists for this shape and still has no producer. A model ID whose own last segment
+  is one of the five effort words cannot be told from a model at that effort, and the picker will
+  offer such a catalog entry without saying so.
+  A stored routing cell holding a removed key is cleared by the next `config set`, whichever row it
+  names. Taking the six workflow-state keys out means a cell like `design=opus, in-progress=haiku`
+  no longer parses. `docs/configuration.md` names `estigia config set "Model routing" unset` as the way
+  out and it works — but so does every other `config set` on that machine, and not harmlessly: the
+  strict read fails, `writable_config` falls back to keep-what-parses, the unreadable row is skipped
+  whole, and the whole table is re-rendered. So `estigia config set Planning direct` reports only that
+  `Planning` moved and rewrites `Model routing` to `unset`, taking `design=opus` with it. The read-back
+  succeeds, so nothing says so. The mechanism predates this change — it is the `BoardRef` precedent,
+  and the repository-scoped writer deliberately chose the opposite rule — and what this change adds is
+  a population that reaches it.
+  A delegated definition's ownership is looked at twice and locked neither time: `setup` decides it
+  in the preflight, before anything is written, and asks again immediately before the bytes go down.
+  Two observations are not a lock — a file appearing between the second read and the write is still
+  overwritten, and nothing in this process can hold that path in the meantime. The same is already
+  true of the reviewer's definition one pass over, and its comment says so. What **is** crossed is
+  the branch: `the_second_ownership_look_refuses_what_arrives_after_the_first` reaches it through
+  `pending`, which the write pass reads and the preflight does not. What is **not** crossed is a real
+  interleaving, which cannot be driven from a test in one process. Two blind judges asked for that
+  test and graded its absence a warning; this is the honest half of it rather than a fixture shaped
+  to look like coverage.
+  OpenCode and every
   other host keep these values as routing declarations. `orchestrate`, `apply`, `judge`, and a visible
   route or installed definition are likewise not proof that a host executes them.
   Claude's generated matcher now wakes for current `Agent` and legacy `Task` launches of the exact
@@ -1460,7 +1492,8 @@ suite. Everything else here is prose held by review.
     here.
 
 - **Estigia defined roles its own roles could not do the work of.** Issue 83. Six shipped definitions and not one of
-  them able to run anything: `review-blind` carried a fixed `tools: Read, Grep, Glob`, and the five planning
+  them able to run anything — eight ship now, and the two issue #110 added are measured further
+  down rather than folded into this count: `review-blind` carried a fixed `tools: Read, Grep, Glob`, and the five planning
   phases carried `{{TOOLS}}`, substituted to `Read, Grep, Glob`, `Read, Grep, Glob, Write, Edit` or
   `Read, Grep, Glob, WebFetch, WebSearch` — three branches, two of them strict supersets of the third, and
   an earlier draft of this sentence named only the second. **No branch produced a shell.** In a repository whose stated evidence standard is mutation — this one's is, and
@@ -2537,8 +2570,8 @@ suite. Everything else here is prose held by review.
   Measured by
   `a_checkout_this_process_cannot_resolve_is_still_one_checkout`, whose corpus differs by an
   accented pair rather than an ASCII one, because an ASCII pair cannot tell the two rules apart.
-- **Three settings are read by nobody, and two more were until this change.**
-  An operator sets nineteen rows and `config list` reports all of them. Measured: `context.get` is
+- **Two settings are read by nobody, and three more were.**
+  An operator sets twenty rows and `config list` reports all of them. Measured: `context.get` is
   called for exactly three labels — `project board`, `worktree location` and, since the review
   handoff, `Review delegation`, which the transport reads to stamp one deadline on a request it
   never waits for. The gate reads `Irreversible commands`, and the payload's prose
@@ -2549,11 +2582,24 @@ suite. Everything else here is prose held by review.
   it carries its own sentence now, because what it asks of a runtime is a reviewer, not a decision.
 
   The two authorisations are closed: `SKILL.md` now says, in the steps where a state moves and where
-  a change is delivered, that doing it unasked needs the row's permission. The other three stay
-  open, declared in `every_setting_is_read_by_the_gate_the_transport_or_the_prose` and shorter-only:
-  `Delivery route` accepts one value, `Merge strategy` names a topology for a `merge` this crate
-  does not run, and nothing here starts a model. Acting on those is a design call, not a gap to
-  paper over.
+  a change is delivered, that doing it unasked needs the row's permission. `Model routing` is closed
+  too, and by a narrower claim than the row's name suggests: issue #110 made `setup` read it for the
+  `model:` and `effort:` lines of the definitions it writes, and the managed block of the **installed**
+  `SKILL.md` now carries a sentence telling the agent which keys are already routed for it and which
+  it must act on itself. It is generated rather than payload text — `selected_documents` builds it
+  and `configuration_body` splices it between the markers — so it is in no file in this repository,
+  which is why an earlier draft of this entry sent a reader to `skill/SKILL.md` to look for it and a
+  later one sent them to the directive file, where the configuration block is never written at all.
+  Nine of the eleven adapters share the neutral skill root — `adapters_on_the_neutral_root()`
+  computes it, and `docs/what-it-writes.md` is held to the same number by a test — so they share one
+  installed contract and one rendered sentence rather than each having their own. Comments in the
+  source still say eight; that population is #93's, which carries the search rather than a count. It does
+  **not** decide whether any of those definitions exist — `Delegated workers` does, and an earlier
+  draft of this change gated the install on a `Model routing` key until two blind judges refused it.
+  Nothing here starts a model; what changed is that something reads the row. The other two stay open, declared in
+  `every_setting_is_read_by_the_gate_the_transport_or_the_prose` and shorter-only: `Delivery route`
+  accepts one value, and `Merge strategy` names a topology for a `merge` this crate does not run.
+  Acting on those is a design call, not a gap to paper over.
 - **`doctor`'s rows were measured as builders and not as report — closed, with the measurement.**
   Each row's own function was tested. The **assembly** was not: downgrading every `Broken` of one
   row family on its way out of `doctor::full` left the whole suite green for ten of the eleven. A row

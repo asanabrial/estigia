@@ -371,6 +371,7 @@ const AGENT_TUI_SETTINGS: &[Setting] = &[
     Setting::Review,
     Setting::Transitions,
     Setting::Judges,
+    Setting::Workers,
     Setting::Planning,
 ];
 
@@ -393,13 +394,24 @@ const TUI_SETTINGS: &[Setting] = &[
     Setting::Board,
     Setting::Summary,
     Setting::Body,
+    Setting::Workers,
     Setting::Planning,
 ];
 
 /// One typed action in a derived model row's picker.
+///
+/// The efforts are here rather than behind a second stage because a stage is
+/// where a value goes to be undiscovered. `Model routing` takes an effort beside
+/// the model, and a row where the only way to say so is to type the slash
+/// yourself is the row this crate's own ratchet refuses: *a value the operator
+/// cannot discover is a value they cannot supply.*
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ModelEntry {
     Model(String),
+    /// Run this target's model at one named effort.
+    Effort(crate::config::Effort),
+    /// Take the effort off again, leaving the host's own answer.
+    HostEffort,
     TypeModel,
     Inherit,
 }
@@ -1119,8 +1131,20 @@ impl App {
         let Some(first) = destinations.next() else {
             return ModelAssignment::Divergent;
         };
-        let shared = configs[first].models.for_target(target).map(str::to_owned);
-        if destinations.all(|slug| configs[slug].models.for_target(target) == shared.as_deref()) {
+        // The whole route, not the model half. Comparing models alone made an
+        // effort invisible twice over: the row showed `opus` for `opus/high`,
+        // and two agents differing only in effort answered `Shared`.
+        let shared = configs[first]
+            .models
+            .route(target)
+            .map(crate::config::Route::as_value);
+        if destinations.all(|slug| {
+            configs[slug]
+                .models
+                .route(target)
+                .map(crate::config::Route::as_value)
+                == shared
+        }) {
             ModelAssignment::Shared(shared)
         } else {
             ModelAssignment::Divergent
@@ -1158,9 +1182,11 @@ impl App {
 
     /// Whether one derived target differs from what is installed.
     pub fn model_changed(&self, target: &str) -> bool {
+        // Routes, for the reason `model_assignment_in` compares them: a row
+        // whose effort moved and whose model did not is a row that changed, and
+        // it went unmarked while this asked about the model alone.
         self.model_destinations().into_iter().any(|slug| {
-            self.configs[slug].models.for_target(target)
-                != self.installed[slug].models.for_target(target)
+            self.configs[slug].models.route(target) != self.installed[slug].models.route(target)
         })
     }
 
@@ -1888,11 +1914,26 @@ impl App {
         }
     }
 
-    fn model_current(&self, target: &str) -> Option<String> {
+    /// The whole route on this row, when every destination agrees.
+    fn model_route(&self, target: &str) -> Option<String> {
         match self.model_assignment(target) {
-            ModelAssignment::Shared(model) => model,
+            ModelAssignment::Shared(route) => route,
             ModelAssignment::Divergent => None,
         }
+    }
+
+    /// Its model half, which is what the catalog and the cursor are about.
+    fn model_current(&self, target: &str) -> Option<String> {
+        self.model_route(target)
+            .and_then(|route| crate::config::Route::parse(&route))
+            .map(|route| route.model)
+    }
+
+    /// Its effort half, when one is named.
+    fn model_effort(&self, target: &str) -> Option<crate::config::Effort> {
+        self.model_route(target)
+            .and_then(|route| crate::config::Route::parse(&route))
+            .and_then(|route| route.effort)
     }
 
     fn model_suggestions(&self, target: &str) -> Vec<String> {
@@ -1916,9 +1957,24 @@ impl App {
     }
 
     fn model_entries(&self, target: &str) -> Vec<ModelEntry> {
+        // Only where a model is named, because an effort is a property of the
+        // model this target runs on and there is nothing to hang it from
+        // otherwise. Offering five entries that would all be refused teaches
+        // the operator that the row half-works.
+        let efforts = self
+            .model_current(target)
+            .map(|_| {
+                crate::config::Effort::all()
+                    .into_iter()
+                    .map(ModelEntry::Effort)
+                    .chain(self.model_effort(target).map(|_| ModelEntry::HostEffort))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         self.model_suggestions(target)
             .into_iter()
             .map(ModelEntry::Model)
+            .chain(efforts)
             .chain([ModelEntry::TypeModel, ModelEntry::Inherit])
             .collect()
     }
@@ -1926,6 +1982,10 @@ impl App {
     fn model_entry_label(&self, entry: &ModelEntry) -> String {
         match entry {
             ModelEntry::Model(model) => model.clone(),
+            ModelEntry::Effort(effort) => {
+                fill!(self.tongue, "effort: {effort}", "effort" => effort.as_str())
+            }
+            ModelEntry::HostEffort => t!(self.tongue, "effort: the host's own default").to_owned(),
             ModelEntry::TypeModel => t!(self.tongue, "type a model ID…").to_owned(),
             ModelEntry::Inherit => t!(self.tongue, "inherit").to_owned(),
         }
@@ -2349,9 +2409,9 @@ impl App {
         let installed = self.installed.clone();
         self.apply_to_model_destinations(|slug, config| {
             let mut routing = config.models.clone();
-            match installed[slug].models.for_target(target) {
-                Some(model) => {
-                    let _ = routing.assign(target, model);
+            match installed[slug].models.route(target) {
+                Some(route) => {
+                    let _ = routing.assign(target, &route.as_value());
                 }
                 None => {
                     let _ = routing.remove(target);
@@ -2407,6 +2467,15 @@ impl App {
                 let chosen = entries[self.pick.min(count - 1)].clone();
                 match chosen {
                     ModelEntry::Model(model) => {
+                        // Carrying the effort across, because choosing a
+                        // different model is not choosing to stop thinking
+                        // hard about this target — and `assign` replaces the
+                        // whole route, so saying nothing here would silently
+                        // drop the half the operator set first.
+                        let model = match self.model_effort(target) {
+                            Some(effort) => format!("{model}/{}", effort.as_str()),
+                            None => model,
+                        };
                         match self.update_model_route(|routing| routing.assign(target, &model)) {
                             Ok(true) => {
                                 self.close_model_picker();
@@ -2415,7 +2484,36 @@ impl App {
                                 self.message = Some(
                                     t!(
                                         self.tongue,
-                                        "a model ID must fit one key=model entry: no comma, pipe, or line break"
+                                        "a model ID must fit one key=model entry: no comma, pipe, or line break, and an effort after a slash needs a model in front of it"
+                                    )
+                                    .to_owned(),
+                                );
+                            }
+                            Err(refusal) => self.message = Some(format!("{refusal}")),
+                        }
+                    }
+                    // Both efforts land on one route write. `Ok(false)` says the
+                    // assignment was refused, which is unreachable while these
+                    // entries are offered only where a model is named — but a
+                    // branch that goes quiet on an outcome it did not expect is
+                    // how a screen comes to report nothing at all, so it says so.
+                    ModelEntry::Effort(_) | ModelEntry::HostEffort => {
+                        let Some(model) = self.model_current(target) else {
+                            return Action::None;
+                        };
+                        let route = match chosen {
+                            ModelEntry::Effort(effort) => {
+                                format!("{model}/{}", effort.as_str())
+                            }
+                            _ => model,
+                        };
+                        match self.update_model_route(|routing| routing.assign(target, &route)) {
+                            Ok(true) => self.close_model_picker(),
+                            Ok(false) => {
+                                self.message = Some(
+                                    t!(
+                                        self.tongue,
+                                        "a model ID must fit one key=model entry: no comma, pipe, or line break, and an effort after a slash needs a model in front of it"
                                     )
                                     .to_owned(),
                                 );
@@ -2424,7 +2522,9 @@ impl App {
                         }
                     }
                     ModelEntry::TypeModel => {
-                        self.draft = self.model_current(target).unwrap_or_default();
+                        // The whole route, so an effort already set is there to
+                        // be edited rather than quietly lost by retyping.
+                        self.draft = self.model_route(target).unwrap_or_default();
                         self.model_edit = Some(target);
                         self.focus = Focus::Editing;
                         self.message = None;
@@ -2654,11 +2754,15 @@ impl App {
             }
             Key::Enter => {
                 let value = self.draft.trim().to_owned();
-                if !ModelRouting::accepts_model_id(&value) {
+                // The route's own parser, not the model half's. `sonnet/low` is
+                // a route this field must take, and `/high` is one it must
+                // refuse — `accepts_model_id` says yes to both, so the refusal
+                // and the write disagreed about the same string.
+                if crate::config::Route::parse(&value).is_none() {
                     self.message = Some(
                         t!(
                             self.tongue,
-                            "a model ID must fit one key=model entry: no comma, pipe, or line break"
+                            "a model ID must fit one key=model entry: no comma, pipe, or line break, and an effort after a slash needs a model in front of it"
                         )
                         .to_owned(),
                     );
@@ -2672,7 +2776,7 @@ impl App {
                         self.message = Some(
                             t!(
                                 self.tongue,
-                                "a model ID must fit one key=model entry: no comma, pipe, or line break"
+                                "a model ID must fit one key=model entry: no comma, pipe, or line break, and an effort after a slash needs a model in front of it"
                             )
                             .to_owned(),
                         );
