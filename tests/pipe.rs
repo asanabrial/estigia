@@ -14660,3 +14660,66 @@ fn a_claim_retry_after_a_landed_write_whose_readback_failed_adopts_the_epoch() {
         "the retry left repo_dir empty: {recorded}"
     );
 }
+
+/// A reclaim of `review` must not make the gate refuse the next write.
+///
+/// The pointer write is `Swear` with the named state — the same effect
+/// `reclaim` applies after the tracker agrees. Against the code as it stood,
+/// that stamp was `in-progress` and `verify_claim` answered `unexpected-state`.
+#[test]
+fn a_reclaim_of_review_admits_a_gated_command_afterwards() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let run_id = "claude-abcd1234";
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.issue = Some(12);
+    run.state = Some("review".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    run.mark_verified();
+    estigia::harness::session::store(&home.join(".estigia"), &run).expect("the pointer writes");
+
+    let answers = issue_answer("review");
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "verify_claim",
+            "arguments": {
+                "issue": 12,
+                "run_id": run_id,
+                "expect_state": "review",
+            },
+        },
+    })
+    .to_string();
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let said = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert_eq!(
+        response["result"]["isError"], false,
+        "a reclaim that left the pointer in review still refused the next check: {said}"
+    );
+    assert!(
+        !said.contains("unexpected-state"),
+        "a reclaim that left the pointer in review still refused the next check: {said}"
+    );
+}

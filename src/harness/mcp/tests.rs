@@ -2970,6 +2970,83 @@ fn discovering_a_takeover_does_not_make_the_run_its_holder() {
     );
 }
 
+/// A reclaim names the state it takes over into, or it stamps one nobody named.
+///
+/// `Swear` defaults `state` to `in-progress` when the tool sends none. `claim`
+/// publishes that default; `reclaim` did not, so every takeover of a `review`
+/// issue left the pointer reading a state the tracker contradicted, and the
+/// gate refused every write with `unexpected-state`. Revert the `state`
+/// argument on `reclaim` to restore that stamp.
+#[test]
+fn reclaiming_review_leaves_the_pointer_reading_review() {
+    let root = tempfile::tempdir().expect("a state root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("the checkout");
+    let context = GateContext {
+        integration: crate::config::Integration::Branch,
+        flag: None,
+        stand_down: None,
+        skill_root: root.path().join("skill"),
+        repo_dir: repo,
+        state_root: root.path().join("state"),
+        window: super::super::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        boundaries: Vec::new(),
+    };
+    let reclaim = super::tools::TOOLS
+        .iter()
+        .find(|tool| tool.name == "reclaim")
+        .expect("the tool is listed");
+    assert!(
+        reclaim
+            .arguments
+            .iter()
+            .any(|argument| argument.name == "state"),
+        "reclaim has no state argument, so a takeover cannot name the state it is taking"
+    );
+
+    let fresh = crate::harness::session::Run::new("claude-abcd1234".to_owned());
+    crate::harness::session::store(&context.state_root, &fresh).expect("the pointer writes");
+    let mut run = crate::harness::session::load(&context.state_root, "claude-abcd1234");
+    super::apply_effect(
+        reclaim,
+        &serde_json::json!({
+            "issue": 35,
+            "run_id": "claude-abcd1234",
+            "state": "review",
+        }),
+        Some(&serde_json::json!({ "ok": true })),
+        &mut run,
+        &context,
+    );
+    let after = crate::harness::session::load(&context.state_root, "claude-abcd1234");
+    assert_eq!(
+        after.state.as_deref(),
+        Some("review"),
+        "a reclaim of review stamped a state nobody named: {:?}",
+        after.state
+    );
+    assert_eq!(after.issue, Some(35));
+
+    // The default still belongs to the caller, as `claim` documents it.
+    let mut again = crate::harness::session::Run::new("claude-efef5678".to_owned());
+    crate::harness::session::store(&context.state_root, &again).expect("the pointer writes");
+    again = crate::harness::session::load(&context.state_root, "claude-efef5678");
+    super::apply_effect(
+        reclaim,
+        &serde_json::json!({ "issue": 35, "run_id": "claude-efef5678" }),
+        Some(&serde_json::json!({ "ok": true })),
+        &mut again,
+        &context,
+    );
+    let defaulted = crate::harness::session::load(&context.state_root, "claude-efef5678");
+    assert_eq!(
+        defaulted.state.as_deref(),
+        Some("in-progress"),
+        "reclaim without state did not keep claim's documented default"
+    );
+}
+
 #[test]
 fn no_tool_bound_to_a_run_accepts_the_name_that_names_none() {
     // `<runtime>-unknown` is what a session with no identity is called, and it

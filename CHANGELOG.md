@@ -12,6 +12,12 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **`reclaim` takes the same optional `state` `claim` already publishes.**
+  A takeover of a `review` issue used to stamp the pointer `in-progress`, a
+  state nobody named, and the gate then refused every write with
+  `unexpected-state`. The default remains `in-progress` and belongs to the
+  caller. `Renew` still fills a missing state and never overwrites one.
+
 - **A claim whose write lands and whose readback fails can be retried.**
   The run already holds the issue on the timeline; the retry used to mint a
   fresh operation id and refuse `already-owned-by-different-operation`. It now

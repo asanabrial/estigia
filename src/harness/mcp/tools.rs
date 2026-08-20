@@ -338,6 +338,12 @@ pub const TOOLS: &[Tool] = &[
             RUN_ID,
             Argument::required("horizon", "string", "When this run expects to report."),
             Argument::optional(
+                "state",
+                "string",
+                "The workflow state this takeover is taking the issue in. Defaults to in-progress.",
+            )
+            .of(crate::config::STATES),
+            Argument::optional(
                 "target_operation",
                 // A **string**, as `release` one entry below already says. An
                 // operation epoch is the holder's 32 hex characters, or
@@ -844,7 +850,11 @@ pub const NOT_EXPOSED: &[(&str, &str)] = &[
 /// Passing one through would make the transport reject the whole call for an
 /// unknown option. They exist because the run pointer has to follow what became
 /// true, and the transport has no reason to care whose run asked.
-pub const POINTER_ONLY: &[(&str, &str)] = &[("claim", "state"), ("transition", "run_id")];
+pub const POINTER_ONLY: &[(&str, &str)] = &[
+    ("claim", "state"),
+    ("reclaim", "state"),
+    ("transition", "run_id"),
+];
 
 /// Whether an argument is bookkeeping rather than a flag.
 pub fn is_pointer_only(tool: &str, argument: &str) -> bool {
