@@ -136,6 +136,25 @@ fn five_blind_keeps_one_enforced_verdict_and_names_every_unproved_panel_property
         if path == "protocols/rdd.md" {
             assert!(contract.contains("per-lens or per-judge verdicts"));
             assert!(contract.contains("remains future design"));
+            // And the half that went stale under this guard rather than around
+            // it. The two lines above pinned the sentence "structured lens and
+            // judge evidence remains future design" — which stopped being true
+            // when the finding ledger landed, while both assertions stayed
+            // green because the substrings survived the falsehood. A reviewer
+            // found the document still saying it. So the pin is narrowed to the
+            // claim that is still true, and this line holds the one that is not:
+            // whatever `rdd.md` calls future design, it may not be the finding
+            // evidence, and it has to name the ledger that replaced it.
+            assert!(
+                contract.contains("one marker per finding"),
+                "protocols/rdd.md does not name the finding ledger, so its `future design` \
+                 sentence is describing a protocol that no longer exists"
+            );
+            assert!(
+                !contract.contains("structured lens and judge evidence remains future design"),
+                "protocols/rdd.md still says structured judge evidence is future design; it \
+                 shipped in the change that added `record_review_finding`"
+            );
         }
     }
     for unproved in [
@@ -558,6 +577,7 @@ fn every_tool_the_readme_lists_is_one_this_server_exposes() {
                 18 => "Eighteen",
                 20 => "Twenty",
                 21 => "Twenty-one",
+                22 => "Twenty-two",
                 other => panic!("{other} tools, and this test has no word for that"),
             }
         )),

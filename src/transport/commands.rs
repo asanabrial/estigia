@@ -36,6 +36,7 @@ pub(super) const SCRIPTED: &[&str] = &[
     "publish-review",
     "republish-review",
     "handoff-review",
+    "review-finding",
     "review-verdict",
     "release-ci",
     "unassign",

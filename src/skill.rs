@@ -2189,13 +2189,13 @@ mod tests {
     /// Operations the contract requires that a binding does not map.
     ///
     /// Frozen, and it may only shrink. `SKILL.md` says every binding **MUST**
-    /// map the nineteen operations it lists, and adds that *"bindings MUST
+    /// map the twenty operations it lists, and adds that *"bindings MUST
     /// declare unsupported capabilities and fail closed"* — so a gap here is
     /// either a missing row or an undeclared capability, and both are upstream's
     /// to settle. What is settled here is that the number cannot grow.
     ///
-    /// - `bindings/github.md` / `label` — the GitHub binding maps eighteen of
-    ///   the nineteen and never names `label`, neither as a row nor as a
+    /// - `bindings/github.md` / `label` — the GitHub binding maps nineteen of
+    ///   the twenty and never names `label`, neither as a row nor as a
     ///   declared gap. Linear and Trello both map it.
     const UNMAPPED_BASELINE: &[(&str, &str)] = &[("bindings/github.md", "label")];
 
@@ -2206,7 +2206,7 @@ mod tests {
         let required = super::required_operations();
         assert_eq!(
             required.len(),
-            19,
+            20,
             "the contract's MUST-map line changed shape: {required:?}"
         );
         assert!(required.contains(&"verify_claim".to_owned()));

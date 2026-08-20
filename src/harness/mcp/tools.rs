@@ -193,6 +193,11 @@ const RUN_ID: Argument = Argument::required(
 const ISSUE: Argument =
     Argument::required("issue", "integer", "The issue number.").counting_from(1);
 const REVIEW_OUTCOMES: &[&str] = &["accepted", "rejected"];
+/// The finding vocabulary, from the transport that adjudicates it rather than
+/// spelled a second time here — a value written twice is a value that will
+/// disagree with itself, and the recorder is what refuses an unknown one.
+const FINDING_CLASSES: &[&str] = crate::transport::claim::FINDING_CLASSES;
+const FINDING_ORIGINS: &[&str] = crate::transport::claim::FINDING_ORIGINS;
 
 /// Every operation Estigia exposes.
 pub const TOOLS: &[Tool] = &[
@@ -420,6 +425,78 @@ pub const TOOLS: &[Tool] = &[
             ),
         ],
         effect: PointerEffect::Forget,
+        writes: true,
+    },
+    Tool {
+        name: "record_review_finding",
+        contract_name: "review_finding",
+        description: "Record one immutable finding against an exact publication receipt, with \
+                      its own lineage identity, evidence, material impact and one of `severe`, \
+                      `warning` or `suggestion`. Only a severe finding can produce a rejection; \
+                      warnings and suggestions are preserved beside an accepted verdict and \
+                      never withdraw it.",
+        operation: "review-finding",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::required(
+                "reviewer",
+                "string",
+                "The context credited with finding it. A rejection rests on this \
+                 context's own severe findings, so two contexts each holding one \
+                 suspicion is not one confirmed defect.",
+            ),
+            Argument::required(
+                "epoch",
+                "string",
+                "The publication epoch this finding judges.",
+            ),
+            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
+            Argument::required("head", "string", "The full published head SHA."),
+            Argument::required("base", "string", "The full published base SHA."),
+            Argument::required("digest", "string", "The complete-target manifest digest."),
+            Argument::required(
+                "id",
+                "string",
+                "The finding's identity within this lineage. Derived from the \
+                 affected behaviour and location, never from the run or the wording, \
+                 so two judges reporting the same defect agree rather than counting \
+                 twice, and a repair can name what it answers.",
+            ),
+            Argument::required(
+                "class",
+                "string",
+                "`severe` is a reproducible correctness, security, reliability or \
+                 contract defect with concrete impact. `warning` is a bounded risk \
+                 with no demonstrated incorrectness. `suggestion` covers optional \
+                 improvement, cosmetic wording and preference.",
+            )
+            .of(FINDING_CLASSES),
+            Argument::required(
+                "evidence",
+                "string",
+                "What was observed, concretely enough for somebody else to re-run it.",
+            ),
+            Argument::required("impact", "string", "What it costs if left alone."),
+            Argument::optional(
+                "parent",
+                "string",
+                "The identity of the finding in the parent publication that this \
+                 one reassesses. Naming one the parent **receipt** never recorded \
+                 is refused \u{2014} an epoch alone would let a marker written after \
+                 the repair claim to be settled work.",
+            ),
+            Argument::optional(
+                "origin",
+                "string",
+                "Why a repair is answerable for a defect that is new to it: \
+                 `introduced` if the repair created it, `exposed` if the repair \
+                 made an existing one reachable. Required of a severe finding \
+                 that names no parent against a publication that has one.",
+            )
+            .of(FINDING_ORIGINS),
+        ],
+        effect: PointerEffect::Renew,
         writes: true,
     },
     Tool {

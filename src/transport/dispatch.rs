@@ -294,6 +294,32 @@ pub fn dispatch(
                 now,
             },
         ),
+        "review-finding" => super::claim::record_review_finding(
+            context,
+            &super::claim::FindingReview {
+                issue: issue()?,
+                run_id: run_id()?,
+                reviewer: f.need("reviewer", operation)?,
+                operation_id: f.need("operation-id", operation)?,
+                epoch: f.need("epoch", operation)?,
+                pr: f.number("pr", operation)?,
+                head: f.need("head", operation)?,
+                base: f.need("base", operation)?,
+                digest: f.need("digest", operation)?,
+                id: f.need("id", operation)?,
+                class: f.need("class", operation)?,
+                evidence: f.need("evidence", operation)?,
+                impact: f.need("impact", operation)?,
+                // Optional, and empty is the meaningful value rather than a
+                // missing one: a first publication has no parent ledger to
+                // continue, and most findings are not new blockers against a
+                // repair. `need` refuses an empty string for exactly the flags
+                // where empty names nothing.
+                parent: f.get("parent").unwrap_or_default(),
+                origin: f.get("origin").unwrap_or_default(),
+                now,
+            },
+        ),
         "review-verdict" => super::claim::record_review_verdict(
             context,
             &super::claim::VerdictReview {
