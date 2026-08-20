@@ -446,11 +446,6 @@ fn board_home(context: &Context) -> Result<String, Failure> {
     Ok(format!("{owner}/{name}"))
 }
 
-fn foreign_board_item(mirror: &serde_json::Value) -> bool {
-    mirror.get("reason").and_then(serde_json::Value::as_str)
-        == Some("board-item-foreign-repository")
-}
-
 /// The `status:*` labels an issue carries, in the order `gh` reported them.
 pub(super) fn status_labels(data: &serde_json::Value) -> Vec<String> {
     data.get("labels")
@@ -594,18 +589,12 @@ pub fn create(
         context,
         use_cache,
     );
-    let mirror = board.set_status(
-        number,
-        state,
-        &if board.enabled {
-            board_home(context).unwrap_or_default()
-        } else {
-            String::new()
-        },
-    );
-    if foreign_board_item(&mirror) {
-        return Err(Failure::Stop(mirror));
-    }
+    let home = if board.enabled {
+        board_home(context).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let mirror = board.set_status(number, state, &home);
 
     Ok(serde_json::json!({
         "ok": true,
@@ -643,18 +632,16 @@ pub fn transition(
 ) -> Result<serde_json::Value, Failure> {
     let spec = context.get("project board").unwrap_or_default().to_owned();
     let mut board = super::board::Board::parse(&spec, context, use_cache);
-    let mirror = board.set_status(
-        issue,
-        to,
-        &if board.enabled {
-            board_home(context).unwrap_or_default()
-        } else {
-            String::new()
-        },
-    );
-    if foreign_board_item(&mirror) {
-        return Err(Failure::Stop(mirror));
-    }
+    // Read once, before anything writes, and hand the same answer to the
+    // writer, the read-back and the repair. Asked again lower down it was a `?`
+    // *below* the label edit, so a `gh repo view` that failed there reported
+    // "nothing was written" over an edit that had landed.
+    let home = if board.enabled {
+        board_home(context).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let mirror = board.set_status(issue, to, &home);
 
     let number = issue.to_string();
     let add = format!("status:{to}");
@@ -762,7 +749,7 @@ pub fn transition(
     }
 
     if board.enabled {
-        let column = board.read_status(issue);
+        let column = board.read_status(issue, &home);
         let expected = board
             .meta()
             .and_then(|meta| super::board::Board::column_for(&meta, to));
@@ -799,8 +786,8 @@ pub fn transition(
                         .join(" ")
                     );
                 } else {
-                    let retried = fresh.set_status(issue, to, &board_home(context)?);
-                    let recheck = fresh.read_status(issue);
+                    let retried = fresh.set_status(issue, to, &home);
+                    let recheck = fresh.read_status(issue, &home);
                     result["board_repair"] = serde_json::json!({
                         "retried": retried,
                         "column_now": recheck,

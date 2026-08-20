@@ -594,13 +594,23 @@ impl Board {
     }
 
     /// The column one issue currently sits in.
-    pub fn read_status(&mut self, issue: u64) -> Option<String> {
-        if !self.enabled {
+    pub fn read_status(&mut self, issue: u64, home: &str) -> Option<String> {
+        if !self.enabled || home.is_empty() {
             return None;
         }
-        self.items().into_iter().find_map(|node| {
-            let number = node.get("content")?.get("number")?.as_u64()?;
-            (number == issue).then(|| {
+        // The same picker the writer uses, and for the same reason. This
+        // matched on number alone while `set_status` matched on repository, so
+        // on a shared board the two disagreed about which card the transition
+        // had just moved: the label edit landed, the read-back read somebody
+        // else's card, and the call died reporting that nothing was written
+        // over a label that had been. Which of the two answers you got depended
+        // on the order the API listed the cards in.
+        let items = self.items();
+        let ItemPick::Ours { id } = pick_item(&items, issue, home) else {
+            return None;
+        };
+        items.into_iter().find_map(|node| {
+            (text(&node, "id") == id).then(|| {
                 node.get("fieldValueByName")
                     .and_then(|value| value.get("name"))
                     .and_then(serde_json::Value::as_str)
@@ -656,7 +666,19 @@ fn text(value: &serde_json::Value, key: &str) -> String {
         .to_owned()
 }
 
-/// The refusal when the card for this number belongs to another repository.
+/// What the mirror reports when the card for this number is somebody else's.
+///
+/// A skip and not a refusal. The mirror runs before the label edit and is
+/// best-effort by construction — `set_status`'s own contract is that a failure
+/// escaping here would kill the authoritative write — so refusing the whole
+/// call was the wrong shape twice over: it aborted a correct `transition` whose
+/// label had every right to move, and in `create` it answered *nothing was
+/// written* over an issue `gh` had already filed, which is the one sentence
+/// this crate refuses above all others. Two blind judges measured both.
+///
+/// What survives is the report: all four identities in one sentence, so an
+/// operator reading the mirror's answer can see whose card was left alone and
+/// on which board.
 ///
 /// `belongs_to` names the other repo; without `board` the operator cannot tell
 /// which project was asked to move it, and without `detail` the four identities
@@ -664,12 +686,10 @@ fn text(value: &serde_json::Value, key: &str) -> String {
 fn foreign_item_report(issue: u64, board: &str, belongs_to: &str, home: &str) -> serde_json::Value {
     serde_json::json!({
         "attempted": true,
-        "ok": false,
-        "reason": "board-item-foreign-repository",
-        "belongs_to": belongs_to,
+        "foreign": belongs_to,
         "board": board,
-        "detail": format!(
-            "issue #{issue} on board {board} belongs to {belongs_to}, not {home}"
+        "skipped": format!(
+            "the card for #{issue} on board {board} belongs to {belongs_to}, not {home}, so it was left alone"
         ),
         "action": "estigia config set --repo \"Project board\" \"none\"",
     })

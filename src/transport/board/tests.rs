@@ -117,7 +117,7 @@ fn a_disabled_board_reports_a_skip_rather_than_attempting_anything() {
     let answer = board.set_status(12, "review", "acme/repo");
     assert_eq!(answer["attempted"], false);
     assert_eq!(answer["skipped"], "no board configured");
-    assert_eq!(board.read_status(12), None);
+    assert_eq!(board.read_status(12, "acme/repo"), None);
 }
 
 #[test]
@@ -273,15 +273,24 @@ fn a_foreign_item_report_includes_the_board_key() {
         report
             .as_object()
             .is_some_and(|keys| keys.contains_key("board")),
-        "the refusal has to name the board that held the foreign card"
+        "the report has to name the board that held the foreign card"
     );
     assert_eq!(report["board"], "asanabrial/12");
-    assert_eq!(report["reason"], "board-item-foreign-repository");
+    // A skip, not a refusal: the mirror runs before the label edit, so failing
+    // outward here kills the authoritative write. Two blind judges measured
+    // both halves of that being wrong — a correct transition aborted, and
+    // `create` answering *nothing was written* over an issue already filed.
+    assert_eq!(report["attempted"], true);
+    assert_eq!(report["foreign"], "asanabrial/investora");
+    assert!(
+        report.get("ok").is_none() && report.get("reason").is_none(),
+        "the foreign report still reads as a refusal: {report}"
+    );
     assert_eq!(
         report["action"],
         "estigia config set --repo \"Project board\" \"none\""
     );
-    let detail = report["detail"].as_str().expect("detail is a sentence");
+    let detail = report["skipped"].as_str().expect("skipped is a sentence");
     assert!(detail.contains("73"), "{detail}");
     assert!(detail.contains("asanabrial/12"), "{detail}");
     assert!(detail.contains("asanabrial/investora"), "{detail}");
@@ -331,5 +340,20 @@ fn an_unreadable_repository_identity_mirrors_nothing() {
             belongs_to: "asanabrial/estigia".to_owned()
         },
         "an empty home matched a card, so a failed identity read could still move one"
+    );
+}
+
+/// The listing asks for the field the picker decides by.
+///
+/// Every other test here hands `pick_item` JSON it built itself, so the query
+/// could stop asking for `repository` and each of them would stay green while
+/// the mirror went blind: every card unnamed, every card foreign, and the board
+/// silently mirroring nothing. Two blind judges deleted the field and measured
+/// the suite still passing.
+#[test]
+fn the_listing_asks_which_repository_each_card_belongs_to() {
+    assert!(
+        super::ITEMS_QUERY.contains("repository { nameWithOwner }"),
+        "the items query no longer asks which repository a card belongs to"
     );
 }

@@ -14851,3 +14851,275 @@ fn a_reclaim_of_review_admits_a_gated_command_afterwards() {
         "the gate refused a write after a review reclaim stamp: {said}"
     );
 }
+
+/// A card belonging to another repository is left alone, and the label still moves.
+///
+/// The whole shape of issue #75, and the shape of its first repair being wrong.
+/// Matching by number moved somebody else's card; refusing the call instead
+/// killed a transition whose label had every right to move, on a board where a
+/// number collision is the normal case rather than a misconfiguration. The
+/// mirror runs before the label edit and is best-effort by construction, so the
+/// only correct answer is to leave the foreign card alone, say so, and let the
+/// authoritative write proceed.
+///
+/// Turn it off by restoring the `Failure::Stop` on a foreign card and the label
+/// assertion below reddens; match on number alone and the `updateProjectV2`
+/// assertion reddens.
+#[test]
+fn a_card_from_another_repository_is_left_alone_and_the_label_still_moves() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let labels = trace.path().join("labels.json");
+    let log = trace.path().join("calls.log");
+    std::fs::write(&labels, serde_json::json!(["status:ready"]).to_string())
+        .expect("the issue's labels are written");
+
+    let (_, refused, ok) = run_in(
+        home,
+        repo,
+        &["config", "set", "Project board", "acme/7"],
+        "",
+    );
+    assert!(ok, "the fixture board could not be configured: {refused}");
+
+    let project = |body: serde_json::Value| {
+        serde_json::json!({ "data": { "user": { "projectV2": body } } }).to_string()
+    };
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "updateProjectV2ItemFieldValue",
+            "stdout": serde_json::json!({
+                "data": { "updateProjectV2ItemFieldValue": { "projectV2Item": { "id": "PVTI_theirs" } } }
+            }).to_string(),
+            "status": 0,
+        },
+        {
+            "matches": "fields(first: 100)",
+            "stdout": project(serde_json::json!({
+                "id": "PVT_1",
+                "fields": { "nodes": [{
+                    "id": "PVTSSF_1",
+                    "name": "Status",
+                    "options": [{ "id": "opt_done", "name": "Done", "description": "status:done" }],
+                }] },
+            })),
+            "status": 0,
+        },
+        {
+            "matches": "items(first: 100",
+            "stdout": project(serde_json::json!({
+                "items": {
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                    "nodes": [{
+                        "id": "PVTI_theirs",
+                        "content": {
+                            "number": 12,
+                            "repository": { "nameWithOwner": "somebody/else" },
+                            "labels": { "totalCount": 0, "nodes": [] },
+                        },
+                        "fieldValueByName": { "name": "Ready" },
+                    }],
+                },
+            })),
+            "status": 0,
+        },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "issue view", "labels": true, "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "transition",
+            "arguments": { "issue": 12, "to": "done", "run_id": "claude-abcd1234" },
+        },
+    })
+    .to_string();
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_LABELS", &labels)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    assert_eq!(
+        response["result"]["isError"], false,
+        "a card belonging to another repository refused the whole transition: {text}"
+    );
+    let held: Vec<String> = serde_json::from_str(
+        &std::fs::read_to_string(&labels).expect("the label store is readable"),
+    )
+    .expect("the label store is a list of names");
+    assert!(
+        held.iter().any(|name| name == "status:done"),
+        "the authoritative label was not written because somebody else's card carried the number, \
+         leaving {held:?}: {text}"
+    );
+
+    let calls = std::fs::read_to_string(&log).expect("the call log is readable");
+    assert!(
+        !calls.contains("updateProjectV2ItemFieldValue"),
+        "the mirror moved a card belonging to another repository: {calls}"
+    );
+
+    let answer: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or_else(|_| panic!("the answer is JSON: {text}"));
+    assert_eq!(
+        answer["board"]["foreign"], "somebody/else",
+        "the mirror did not say whose card it left alone: {text}"
+    );
+}
+
+/// The read-back reads our card, not the one that shares its number.
+///
+/// The writer picked by repository and the read-back still picked by number, so
+/// on a shared board a correct transition passed or hard-failed depending on the
+/// order the API listed the cards in: the label landed, the read-back read
+/// somebody else's column, and the call reported that nothing was written. The
+/// foreign card is listed **first** here for exactly that reason.
+///
+/// Turn it off by matching on number alone in `read_status` and this reddens
+/// with the foreign card's column.
+#[test]
+fn the_read_back_reads_our_card_and_not_the_one_sharing_its_number() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let labels = trace.path().join("labels.json");
+    let log = trace.path().join("calls.log");
+    std::fs::write(&labels, serde_json::json!(["status:ready"]).to_string())
+        .expect("the issue's labels are written");
+
+    let (_, refused, ok) = run_in(
+        home,
+        repo,
+        &["config", "set", "Project board", "acme/7"],
+        "",
+    );
+    assert!(ok, "the fixture board could not be configured: {refused}");
+
+    let project = |body: serde_json::Value| {
+        serde_json::json!({ "data": { "user": { "projectV2": body } } }).to_string()
+    };
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "updateProjectV2ItemFieldValue",
+            "stdout": serde_json::json!({
+                "data": { "updateProjectV2ItemFieldValue": { "projectV2Item": { "id": "PVTI_ours" } } }
+            }).to_string(),
+            "status": 0,
+        },
+        {
+            "matches": "fields(first: 100)",
+            "stdout": project(serde_json::json!({
+                "id": "PVT_1",
+                "fields": { "nodes": [{
+                    "id": "PVTSSF_1",
+                    "name": "Status",
+                    "options": [{ "id": "opt_done", "name": "Done", "description": "status:done" }],
+                }] },
+            })),
+            "status": 0,
+        },
+        {
+            "matches": "items(first: 100",
+            "stdout": project(serde_json::json!({
+                "items": {
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                    "nodes": [
+                        {
+                            "id": "PVTI_theirs",
+                            "content": {
+                                "number": 12,
+                                "repository": { "nameWithOwner": "somebody/else" },
+                                "labels": { "totalCount": 0, "nodes": [] },
+                            },
+                            "fieldValueByName": { "name": "Ready" },
+                        },
+                        {
+                            "id": "PVTI_ours",
+                            "content": {
+                                "number": 12,
+                                "repository": { "nameWithOwner": "o/r" },
+                                "labels": { "totalCount": 0, "nodes": [] },
+                            },
+                            "fieldValueByName": { "name": "Done" },
+                        },
+                    ],
+                },
+            })),
+            "status": 0,
+        },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
+        { "matches": "issue view", "labels": true, "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "transition",
+            "arguments": { "issue": 12, "to": "done", "run_id": "claude-abcd1234" },
+        },
+    })
+    .to_string();
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_LABELS", &labels)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    assert_eq!(
+        response["result"]["isError"], false,
+        "the read-back read a card that is not ours and called a landed write a failure: {text}"
+    );
+    let answer: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or_else(|_| panic!("the answer is JSON: {text}"));
+    assert_eq!(
+        answer["board_column_after"], "Done",
+        "the read-back reported another repository's column for our issue: {text}"
+    );
+}

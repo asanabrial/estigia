@@ -2234,18 +2234,19 @@ fn every_list_the_audit_answers_with_is_one_the_binding_names() {
         .find("\n/// ")
         .or_else(|| body.find("\npub fn "))
         .unwrap_or(body.len());
+    // Read from the declarations, not from what the names end in. The first
+    // version matched `drift`, `_column` and `_labels` as suffixes, and a fourth
+    // list called `foreign` slipped past all three — added to the answer, absent
+    // from the binding, and this guard green throughout. A convention about
+    // spelling is not a rule about the answer.
     let mut keys: Vec<&str> = Vec::new();
-    for (start, _) in body[..end].match_indices("\"") {
-        let rest = &body[start + 1..];
-        let Some(close) = rest.find('"') else {
+    for (start, _) in body[..end].match_indices("let mut ") {
+        let rest = &body[start + "let mut ".len()..];
+        let Some(close) = rest.find(" = Vec::new();") else {
             continue;
         };
         let key = &rest[..close];
-        // The lists the verdict is made of, and only those: they are the ones an
-        // agent has to know exist before it can say a board is in order.
-        let is_a_verdict_list =
-            key.ends_with("drift") || key.ends_with("_column") || key.ends_with("_labels");
-        if is_a_verdict_list && !keys.contains(&key) {
+        if key.chars().all(|c| c.is_ascii_lowercase() || c == '_') && !keys.contains(&key) {
             keys.push(key);
         }
     }
@@ -2253,7 +2254,7 @@ fn every_list_the_audit_answers_with_is_one_the_binding_names() {
     // The floor: the scan found the answer's lists. An empty set would agree
     // with any binding at all.
     assert!(
-        keys.len() >= 3,
+        keys.len() >= 4,
         "the scan read {keys:?} out of `audit_board`, so it is not reading the answer"
     );
 

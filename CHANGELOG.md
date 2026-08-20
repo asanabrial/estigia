@@ -19,13 +19,28 @@ the workflow, it holds the tools.
   by number, and `audit_board` reports foreign cards rather than repairing
   them.
 
+  **A foreign card is left alone, and the transition it collided with still
+  runs.** The first shape of this refused the whole call, which was wrong twice
+  over: it aborted a `transition` whose label had every right to move — on a
+  shared board a number collision is the normal case, not a misconfiguration —
+  and in `create` it answered *nothing was written* over an issue `gh` had
+  already filed, leaving a caller who retries to file a duplicate. The mirror
+  runs before the label edit and is best-effort by construction, so what it does
+  with somebody else's card is leave it and say so.
+
+  **The read-back picks the same card the writer picked.** It matched on number
+  while the writer matched on repository, so a correct transition passed or
+  hard-failed depending on the order the API listed the cards in: the label
+  landed, the read-back read another repository's column, and the call reported
+  that nothing was written. That was a third spelling of one rule, contradicting
+  the two that agreed.
+
   **And a card that does not say where it comes from is not this repository's.**
-  The picker was written `belongs.is_empty() || belongs == home`, so a content
-  node carrying no `repository` — a draft item, or a field a token cannot read —
-  was taken as ours and mirrored, leaving the `an unnamed repository` arm
-  unreachable. The same rule was already written the other way one file over:
-  `audit_board` sends an unnamed card to its foreign bucket. Two spellings of
-  one rule, disagreeing, and the wrong one was on the path that writes.
+  `belongs.is_empty() || belongs == home` took a content node carrying no
+  `repository` as ours and mirrored it, leaving the `an unnamed repository` arm
+  unreachable. That spelling arrived mid-change, in a commit whose subject was
+  not asking `gh repo view` when the board is off; the first commit had it
+  right.
 
   **A repository whose identity cannot be read now mirrors nothing.** That read
   reaches the mirror through `unwrap_or_default()`, so a failure arrived as an

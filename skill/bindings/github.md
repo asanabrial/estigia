@@ -738,14 +738,20 @@ not systemic. **A zero-card result is reported as a failed read, not a clean boa
 board is never empty, and reporting an empty read as a pass would reproduce the exact failure this
 whole file exists to remove.
 
-The answer carries three lists and **an empty `drift` is not the whole verdict**. `drift` is a card
-whose column disagrees with its label; `missing_column` is a card with a label and no column; and
-`unread_labels` is a card the pass **did not finish reading** — the labels connection reported more
+The answer carries four lists and **an empty `drift` is not the whole verdict**. `drift` is a card
+whose column disagrees with its label; `missing_column` is a card with a label and no column;
+`foreign` is a card belonging to **another repository** that happens to share the number — the pass
+neither compares nor repairs it, and a board carrying them is a board this repository does not own
+alone; and `unread_labels` is a card the pass **did not finish reading** — the labels connection reported more
 labels than it returned, and the workflow state is a label, so its `status:*` may be outside the
 window. Those cards are compared against nothing and `--fix` leaves them alone, because repairing a
 card whose state you have not read is writing a state you guessed. Treat a non-empty `unread_labels`
 the way you treat a zero-card result: the pass ran and did not conclude about those cards. It is the
 same rule as the paragraph above, one field along.
+
+With `--fix`, `repaired` names the cards the pass actually moved. A card in `foreign` or in
+`unread_labels` is never among them: the first is not this repository's to move and the second was
+never read.
 
 ### Why a mirror is needed at all
 
