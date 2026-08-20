@@ -15398,3 +15398,145 @@ fn the_audit_sets_another_repositorys_cards_aside_instead_of_comparing_them() {
         "`--fix` repaired a card belonging to another repository: {calls}"
     );
 }
+
+/// A `gh repo view` that fails mirrors nothing, and the label still moves.
+///
+/// This is one gap seen from two ends, and a judge measured both. Replacing the
+/// `let Some(home) = home else` arm in `set_status` with `unwrap_or_default()`
+/// left the whole suite green — the `Option` is compiler-enforced at the call
+/// sites and its *handling* was covered by nothing — and with it gone every card
+/// on an ordinary board reads as foreign, so Estigia tells an operator their own
+/// repository is somebody else's while the mirror quietly stops mirroring. From
+/// the other end, re-asking the identity through `?` below the label edit was
+/// equally green, and that shape reports *nothing was written* over an edit that
+/// landed.
+///
+/// So the fixture fails `gh repo view` with a board configured — the one failure
+/// mode nothing scripted — and asserts the three things that must hold: the
+/// label lands, the mirror says the question could not be asked rather than
+/// naming somebody else's repository, and the call does not report a failure
+/// over the write it just made.
+#[test]
+fn an_unreadable_repository_identity_mirrors_nothing_and_the_label_still_moves() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let trace = tempfile::tempdir().expect("a trace directory");
+    let labels = trace.path().join("labels.json");
+    let log = trace.path().join("calls.log");
+    std::fs::write(&labels, serde_json::json!(["status:ready"]).to_string())
+        .expect("the issue's labels are written");
+
+    let (_, refused, ok) = run_in(
+        home,
+        repo,
+        &["config", "set", "Project board", "acme/93"],
+        "",
+    );
+    assert!(ok, "the fixture board could not be configured: {refused}");
+
+    let project = |value: serde_json::Value| {
+        serde_json::json!({ "data": { "user": { "projectV2": value } } }).to_string()
+    };
+    let answers = serde_json::to_string(&serde_json::json!([
+        {
+            "matches": "fields(first: 100)",
+            "stdout": project(serde_json::json!({
+                "id": "PVT_1",
+                "fields": { "nodes": [{
+                    "id": "PVTSSF_1",
+                    "name": "Status",
+                    "options": [{ "id": "opt_done", "name": "Done", "description": "status:done" }],
+                }] },
+            })),
+            "status": 0,
+        },
+        {
+            "matches": "items(first: 100",
+            "stdout": project(serde_json::json!({
+                "items": {
+                    "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
+                    "nodes": [{
+                        "id": "PVTI_ours",
+                        "content": {
+                            "number": 12,
+                            "repository": { "nameWithOwner": "o/r" },
+                            "labels": { "totalCount": 0, "nodes": [] },
+                        },
+                        "fieldValueByName": { "name": "Ready" },
+                    }],
+                },
+            })),
+            "status": 0,
+        },
+        // The whole point of the fixture: the identity read fails.
+        { "matches": "repo view", "stdout": "", "stderr": "gh: could not read the repository", "status": 1 },
+        { "matches": "issue view", "labels": true, "status": 0 },
+        { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
+    ]))
+    .expect("the fake tracker script serialises");
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "transition",
+            "arguments": { "issue": 12, "to": "done", "run_id": "claude-abcd1234" },
+        },
+    })
+    .to_string();
+    let mut child = tracker_command(home, repo, bin, &answers)
+        .arg("mcp")
+        .env("ESTIGIA_FAKE_LABELS", &labels)
+        .env("ESTIGIA_FAKE_LOG", &log)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the MCP server runs");
+    use std::io::Write;
+    writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("the MCP server exits");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|_| {
+        panic!(
+            "the MCP response is not JSON: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    assert_eq!(
+        response["result"]["isError"], false,
+        "an identity read that failed reported a failure over a label edit that landed: {text}"
+    );
+    let held: Vec<String> = serde_json::from_str(
+        &std::fs::read_to_string(&labels).expect("the label store is readable"),
+    )
+    .expect("the label store is a list of names");
+    assert!(
+        held.iter().any(|name| name == "status:done"),
+        "the authoritative label was not written because the identity read failed, leaving \
+         {held:?}: {text}"
+    );
+
+    let answer: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or_else(|_| panic!("the answer is JSON: {text}"));
+    let skipped = answer["board"]["skipped"].as_str().unwrap_or_default();
+    assert!(
+        skipped.contains("identity could not be read"),
+        "the mirror did not say the question could not be asked: {text}"
+    );
+    assert!(
+        answer["board"]["foreign"].is_null(),
+        "an unreadable identity was reported as somebody else's card: {text}"
+    );
+    let calls = std::fs::read_to_string(&log).expect("the call log is readable");
+    assert!(
+        !calls.contains("updateProjectV2ItemFieldValue"),
+        "the mirror moved a card without knowing which repository it belongs to: {calls}"
+    );
+}

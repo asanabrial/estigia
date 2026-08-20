@@ -13,11 +13,11 @@ the workflow, it holds the tools.
 ### The harness
 
 - **The board mirror leaves a card that belongs to another repository alone, and says whose it is.**
-  Matching on issue number alone moved another project's cards: measured on
-  2026-08-19, when a transition on this repository's #83 moved another
-  project's #83 out of `Review`. The card is now picked by repository and not
-  by number, and `audit_board` reports foreign cards rather than repairing
-  them.
+  Matching on issue number alone moved another project's cards, measured once per
+  write path: creating this repository's #73 on 2026-08-18 moved that project's
+  #73 to `Ready`, and transitioning this repository's #83 a day later moved its
+  #83 out of `Review`. The card is picked by repository now, and `audit_board`
+  reports foreign cards rather than repairing them.
 
   **A foreign card is left alone, and the transition it collided with still
   runs.** The first shape of this refused the whole call, which was wrong twice
@@ -50,9 +50,10 @@ the workflow, it holds the tools.
   edit, where a failure reported *nothing was written* over an edit that had
   landed.
 
-  **The audit says how many cards it compared**, beside how many the board
-  returned. The two differ by the foreign ones it set aside, and reading only the
-  first told an operator a pass had examined cards it never looked at.
+  **The audit says how many cards were this repository's to check**, beside how
+  many the board returned: `compared` is the total less the foreign ones set
+  aside. Reading only the total told an operator a pass had examined cards it
+  never looked at.
 
 - **The gate records which role each delegated context ran as, for the length of the run.** Claude
   Code sends `agent_type` on every tool event fired inside a sub-agent, so the run pointer now carries

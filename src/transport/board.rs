@@ -681,9 +681,9 @@ fn text(value: &serde_json::Value, key: &str) -> String {
 /// operator reading the mirror's answer can see whose card was left alone and
 /// on which board.
 ///
-/// `belongs_to` names the other repo; without `board` the operator cannot tell
-/// which project was asked to move it, and without `detail` the four identities
-/// never sit in one sentence.
+/// `belongs_to` names the other repository and `board` the project that was asked
+/// to move its card; without both, an operator reading the answer cannot tell
+/// which of their boards is shared, or with whom.
 fn foreign_item_report(issue: u64, board: &str, belongs_to: &str, home: &str) -> serde_json::Value {
     serde_json::json!({
         "attempted": true,
@@ -716,7 +716,9 @@ pub(crate) fn card_is_ours(card: &serde_json::Value, home: &str) -> bool {
 /// Pick this repository's card, not whichever card happens to carry the number.
 ///
 /// Matching on number alone is how Estigia moved Investora's #73 when this
-/// repository created its own #73. Unknown repository is not clearance.
+/// repository created its own #73, and its #83 a day later when this repository
+/// transitioned its own — one incident per write path. Unknown repository is not
+/// clearance.
 pub(crate) fn pick_item(nodes: &[serde_json::Value], issue: u64, home: &str) -> ItemPick {
     let mut ours = None;
     let mut foreign = None;
