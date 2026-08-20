@@ -490,6 +490,22 @@ pub const OPERATION_FIELDS: &[(&str, &[&str])] = &[
             "run-id", "reviewer", "epoch", "pr", "head", "base", "digest", "outcome",
         ],
     ),
+    // The finding's **identity**, and deliberately not its body. `evidence` and
+    // `impact` are what the finding says; `id` and `class` with the receipt are
+    // what it *is*, and they are what the operation id is minted from. So two
+    // recordings of one finding whose wording differs are one operation and the
+    // first body stands, while a different `id` or a different `class` is a
+    // different finding rather than an edit of this one.
+    //
+    // Nothing is lost by leaving the body out: `first_operation_markers` already
+    // refuses an edited comment, so the words cannot be changed after the fact
+    // either way.
+    (
+        "review-finding",
+        &[
+            "run-id", "reviewer", "epoch", "pr", "head", "base", "digest", "id", "class",
+        ],
+    ),
 ];
 
 /// Whether this kind is one an operation id may reserve.

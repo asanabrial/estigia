@@ -504,8 +504,73 @@ suite. Everything else here is prose held by review.
   read those bytes or that their verdicts were honest. A marker can still be forged by a collaborator
   acting outside Estigia. `single`, `two blind` and `five blind` remain operator-selected review
   contracts, not observations the harness can make. The enforced floor remains
-  one aggregate exact-receipt verdict: the transport has no per-judge marker and does not implement structured
-  multi-verdict adjudication.
+  one aggregate exact-receipt verdict: the transport has no per-judge **verdict** marker and does not
+  implement multi-verdict adjudication. Since issue #46 it does have a per-finding marker, credited to
+  a named reviewer and bound to the exact receipt — so the *evidence* a panel produced can be recorded
+  separately even though the *verdict* it reduces to cannot. Counting those findings into a quorum is
+  still the orchestrator's, and the entry below says what that record does and does not carry.
+
+- **A structured finding is a legible claim, not a checked one.** `record_review_finding` refuses a
+  class outside `severe`/`warning`/`suggestion`, a finding missing its identity, evidence or impact, a
+  receipt that is not the current one, and — across a repair — a parent identity the parent receipt
+  never recorded or a new severe finding that states no origin. `record_review_verdict` refuses
+  `rejected` unless that reviewer already recorded a `severe` finding against that exact receipt.
+
+  The receipt-currency clause in that sentence was **false when it was first written**, and it is
+  recorded here rather than quietly corrected. The operation validated the receipt's shape and never
+  asked whether it named the publication under review; four reviewers found the mismatch and two
+  drove it through the real surface, recording severe findings against a superseded epoch and against
+  one no publication ever had. Three costs followed, and the third is the one worth remembering: the
+  verdict's refusal named `record_review_finding` as the way out, which is a command that had already
+  succeeded. A false sentence in this document produced a dead-end refusal loop in the product.
+
+  Every one of those is a check on **shape and reference**. Nothing here can check that a `severe`
+  finding is severe, that a `suggestion` is not a defect in disguise, that the stated evidence
+  reproduces, that the impact is real, or that a repair `introduced` what its reviewer says it did. A
+  reviewer that classifies every preference as `severe` clears the rule exactly as a reviewer that
+  reads carefully does; what changed is that the claim is now written down where somebody can argue
+  with it, not that anybody did.
+
+  Five narrower limits, each worth stating because the words invite the opposite reading. The
+  first two shipped with the mechanism; the next two were added after reviewers found them, and
+  the lead-in still said *two* until they found that as well. The fifth is the origin vocabulary
+  gap measured on epoch `3ac4a576aa80ec96bc42ce4283e94f93`:
+
+  - **A finding identity is agreement by spelling.** Two judges "confirming the same finding" means
+    two markers carrying the same `id` string. Estigia does not compare evidence, locations or
+    behaviour, so two judges that describe one defect differently do not aggregate, and two that reuse
+    one identity for different defects do. The policy asks reviewers to derive the identity from the
+    affected behaviour and location; nothing measures whether they did.
+  - **The fix-delta digest names a repair; it does not scope a review.** A publication over an earlier
+    one records the whole parent receipt and a digest covering both ends, derived from the timeline
+    rather than supplied by the run being reviewed — that half is real, and a caller cannot name a
+    parent it prefers. But Estigia does not compute the diff between those heads, does not hand
+    it to a judge, does not restrict what a judge reads, and cannot tell a delta-scoped re-review from
+    a full-target resweep. `parent_head..head` is a pair of SHAs a reviewer can act on. Whether one did
+    is unmeasured, and issue #46's acceptance criterion about delta-scoped judgement is met by the
+    *record*, not by an enforcement.
+  - **A lineage is silently absent when the parent publication came from another account.**
+    `latest_publication` keeps only comments `viewerDidAuthor` vouches for, because a marker this
+    identity did not write is one anybody could have forged. `republish_review` turns that into a
+    refusal (`published-receipt-missing`); `publish_review` does not, so an ordinary continuation
+    after a cross-account reclaim publishes as a **first** publication and neither lineage rule
+    applies to its findings. The direction is permissive rather than a wrong delivery, and it is the
+    same account filter this document records for `republish_review` further down, under the entry about leasing against a receipt published from a different account — but the consequence for the
+    parent ledger is new and is stated here rather than left to be rediscovered.
+  - **Which reviewer an aggregate panel verdict credits is a contract, not a check.** The severity
+    rule reads *that reviewer's* findings while a panel records one aggregate verdict, so
+    `policies/blind-judges.md` prescribes recording each judge's findings under that judge's identity
+    and crediting the verdict to a judge whose severe finding it rests on. Nothing enforces it.
+    Re-recording one judge's finding under a panel name would satisfy the rule and inflate the
+    same-identity agreement count at once, and the harness cannot tell that apart from two judges
+    agreeing.
+  - **`introduced` and `exposed` do not cover a severe defect that was always present, always
+    reachable, and simply missed.** Against a repair publication a reviewer finding one has no
+    honest origin word: `--parent` names nothing the parent receipt recorded, both origin words
+    are false, recording it as a warning means `rejected` is refused, and recording nothing
+    leaves a real defect unable to block. Measured on epoch `3ac4a576aa80ec96bc42ce4283e94f93`
+    by one of five judges; it did not reach 3-of-5 quorum. Widening the vocabulary is left to
+    its own issue.
 
   **Judge isolation is unproved, and what is checkable about it moved.** The role gate is fed the
   *embedded* reviewer definition rather than whatever is on disk, rendered with the effective
@@ -542,9 +607,10 @@ suite. Everything else here is prose held by review.
   requester exclusion (`claim`, `reclaim`, the review queue), the queue's fail-closed candidate read,
   the verdict's distinctness rule on *both* its halves, its live-claim requirement, the receipt's
   exactness on each write path **before** it writes, the CI-release gate, the comment escaping, the
-  read-side requester filter, and every field-shape validator on the three markers — receipt widths,
+  read-side requester filter, and every field-shape validator on the four markers — receipt widths,
   the handoff's authority, target, timestamps and its blocker/discharger, the verdict's two
-  identities and its outcome vocabulary.
+  identities and its outcome vocabulary, and the finding's class, origin, identity, evidence and
+  impact shape.
 
   That sentence used to say "on the write paths" without the qualifier, and it was false: neutering
   both of `handoff_review`'s receipt checks left the suite green, and a handoff recorded against a

@@ -31,7 +31,7 @@ estigia config set "Merge strategy" squash
 | Integration | `branch`, or `trunk` |
 | Renewal window | `default`, or a shorter duration such as `30s` or `1m` |
 | Review protocol | `standard`, or `receipt-driven` (also accepted as `rdd`) |
-| Blind judges | `single`, `two blind`, or `five blind` |
+| Blind judges | `single`, `two blind`, or `five blind`. `two blind` and `five blind` also route [`blind-judges.md`](../skill/policies/blind-judges.md); **`single` routes no policy document at all**, so what it decides is stated in the contract itself and the table there is a restatement. Issue #18 owns that reachability gap |
 | Evidence standard | `reading`, or `measuring` |
 | Change size | a number of lines, such as `800` |
 | Irreversible commands | `none`, or commands separated by commas |

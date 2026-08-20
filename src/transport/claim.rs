@@ -815,10 +815,208 @@ impl ReviewReceipt {
     }
 }
 
+/// What a reviewer found, as its own durable record.
+///
+/// One marker per finding rather than a ledger serialised into the verdict, and
+/// the reason is that the transport already knows how to read markers: each one
+/// is separately attributable, separately provable-unedited by
+/// `first_operation_markers`, and separately addressable by the lineage that has
+/// to reference it after a repair. A blob inside one field of the verdict
+/// inherits none of that and adds a parser nothing else here needs.
+///
+/// The verdict then *references* this ledger rather than containing it, which is
+/// what makes the rule enforceable at all: a `rejected` outcome can be refused
+/// when no `severe` finding stands against the exact receipt it names.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ReviewFinding {
+    /// The operation that wrote this marker.
+    pub operation_id: String,
+    /// The run that recorded it.
+    pub attester: String,
+    /// The context credited with finding it.
+    pub reviewer: String,
+    /// The publication this finding judges.
+    pub receipt: ReviewReceipt,
+    /// Stable within a lineage, so a repair can say which finding it answers and
+    /// two judges reporting the same defect can be counted as agreeing rather
+    /// than as two defects. Chosen by the reviewer from the affected behaviour
+    /// and location, never from the run or the wording — the same rule the
+    /// analyst contract already states for issue identity.
+    pub id: String,
+    /// Exactly one of `severe`, `warning` or `suggestion`.
+    pub class: String,
+    /// What was observed, concretely enough for somebody else to re-run.
+    pub evidence: String,
+    /// What it costs if left alone.
+    pub impact: String,
+    /// The parent ledger's finding this one continues, when it continues one.
+    ///
+    /// Present means *this was already found against the bytes this repair
+    /// descends from and is being reassessed*; absent means it is new to this
+    /// epoch. Nothing else in the protocol can tell those two apart, and telling
+    /// them apart is what stops a re-review rediscovering settled work.
+    pub parent: Option<String>,
+    /// Why a **new** severe finding is being raised against a repair.
+    ///
+    /// `introduced` or `exposed`. Required of a severe finding that names no
+    /// parent in a publication that has one, and meaningless anywhere else. What
+    /// is adjudicated is that the declaration is present and is one of those two
+    /// words; whether it is true is a reviewer's claim, like every other field
+    /// here.
+    pub origin: Option<String>,
+}
+
+/// The three classifications a finding may carry.
+///
+/// `severe` is the only one that can produce a rejection, and the definition is
+/// deliberately narrow: a reproducible correctness, security, reliability or
+/// contract defect with concrete user or delivery impact. `warning` is a bounded
+/// risk with no demonstrated incorrectness. `suggestion` covers optional
+/// improvement, cosmetic and style wording, and reviewer preference.
+///
+/// Anything unclassifiable defaults to `suggestion` by the recorder's own
+/// refusal rather than by a silent fallback: an unrecognised word is rejected,
+/// because a classification nobody chose is exactly how a preference becomes a
+/// blocker.
+pub const FINDING_CLASSES: &[&str] = &["severe", "warning", "suggestion"];
+
+/// The origin words a repair finding may state for a defect that is new to it.
+///
+/// `introduced` means the repair created it; `exposed` means the repair made
+/// reachable something that was already wrong. The vocabulary does not cover a
+/// severe defect that was always present, always reachable, and simply missed
+/// by an earlier round; that gap is in `docs/honesty.md`. Both stated words
+/// are the reviewer's claim and neither is checkable here.
+pub const FINDING_ORIGINS: &[&str] = &["introduced", "exposed"];
+
+impl ReviewFinding {
+    fn from_marker(marker: &super::markers::Marker) -> Option<Self> {
+        let operation_id = marker.get("op-id")?.clone();
+        let attester = marker.get("run-id")?.clone();
+        let reviewer = marker.get("reviewer")?.clone();
+        let id = marker.get("id")?.clone();
+        let class = marker.get("class")?.clone();
+        let evidence = marker.get("evidence")?.clone();
+        let impact = marker.get("impact")?.clone();
+        if !ownership::is_operation_id(&operation_id)
+            || attester.is_empty()
+            || reviewer.is_empty()
+            || id.is_empty()
+            || evidence.is_empty()
+            || impact.is_empty()
+            || !FINDING_CLASSES.contains(&class.as_str())
+        {
+            return None;
+        }
+        Some(Self {
+            operation_id,
+            attester,
+            reviewer,
+            receipt: ReviewReceipt::from_marker(marker)?,
+            id,
+            class,
+            evidence,
+            impact,
+            parent: marker
+                .get("parent")
+                .filter(|value| !value.is_empty())
+                .cloned(),
+            origin: marker
+                .get("origin")
+                .filter(|value| !value.is_empty())
+                .cloned(),
+        })
+    }
+
+    /// Whether this finding is the kind that can block a delivery.
+    pub fn is_severe(&self) -> bool {
+        self.class == "severe"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LatestPublication {
     publisher: String,
     receipt: ReviewReceipt,
+    lineage: Option<PublicationLineage>,
+}
+
+/// What a repair publication descends from.
+///
+/// Derived from the timeline at publish time and never passed in, so a caller
+/// cannot name a parent it prefers and a repair cannot be recorded as a first
+/// publication. Absent on a first publication, which is the only shape that has
+/// nothing to descend from.
+///
+/// **The whole parent receipt, not its epoch.** The first version of this
+/// carried the epoch and the head, and the reader that used it matched findings
+/// on the epoch alone — which is a looser identity than it looks, because
+/// `publication_epoch` mixes a clock into its hash and a finding's epoch field
+/// is whatever the finding says it is. Two reviewers demonstrated the cost: a
+/// `review-finding` backfilled after the repair, carrying the parent epoch and
+/// the repair's own bytes, satisfied the parent-existence rule and let a new
+/// severe finding through with no origin. Carrying the receipt lets the parent
+/// ledger be read by the same receipt-exact reader every other ledger here uses, and deletes the looser
+/// reader rather than guarding it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublicationLineage {
+    /// The complete receipt of the publication this one repairs.
+    pub parent: ReviewReceipt,
+    /// One immutable name for this exact repair. See [`fix_delta_digest`].
+    pub delta: String,
+}
+
+impl PublicationLineage {
+    fn from_marker(marker: &super::markers::Marker) -> Option<Self> {
+        // All of it or none. A marker carrying part of a lineage is a marker
+        // whose lineage cannot be acted on, and treating it as a partial answer
+        // would let a repair look like a first publication in one reader and a
+        // repair in the next.
+        let parent = ReviewReceipt {
+            epoch: marker.get("parent")?.clone(),
+            pr: marker.get("parent-pr")?.parse().ok()?,
+            head: marker.get("parent-head")?.clone(),
+            base: marker.get("parent-base")?.clone(),
+            digest: marker.get("parent-digest")?.clone(),
+        };
+        let delta = marker.get("delta")?.clone();
+        // The same completeness the live receipt is held to. A parent of the
+        // wrong shape is one no finding could ever match, so admitting it would
+        // reopen by the back door what the shape check closes at the front.
+        (parent.is_complete() && !delta.is_empty()).then_some(Self { parent, delta })
+    }
+}
+
+/// One immutable name for the transition between two publications.
+///
+/// The parent whole, and the child by the two fields a repair moves. The parent
+/// contributes its epoch, which `publication_epoch` mints from that receipt
+/// entire; the child contributes its head and its target digest, not its base,
+/// pull request or epoch. A reviewer measured that the omitted fields are not
+/// independently reachable — a judge drove two different bases through the
+/// built binary to a byte-identical digest, because `manifest_digest` hashes
+/// the tree at `HEAD` and never the base — and nothing reads
+/// this value for a decision, so the bound is legibility rather than a gate.
+/// It names *which*
+/// repair this is; it is not an enumeration of the changed paths and nothing
+/// here claims it is. The delta a reviewer reads is `parent_head..head`, which
+/// this records the ends of — `docs/honesty.md` carries what that does and does
+/// not buy.
+pub fn fix_delta_digest(parent: &ReviewReceipt, head: &str, digest: &str) -> String {
+    super::ownership::sha256_hex(
+        [
+            parent.epoch.as_str(),
+            parent.head.as_str(),
+            parent.digest.as_str(),
+            head,
+            digest,
+        ]
+        .join(
+            "
+",
+        )
+        .as_bytes(),
+    )
 }
 
 fn latest_publication(comments: &[ownership::Comment]) -> Option<LatestPublication> {
@@ -831,6 +1029,7 @@ fn latest_publication(comments: &[ownership::Comment]) -> Option<LatestPublicati
             let publication = LatestPublication {
                 publisher: marker.get("run-id")?.clone(),
                 receipt: ReviewReceipt::from_marker(&marker)?,
+                lineage: PublicationLineage::from_marker(&marker),
             };
             (!publication.publisher.is_empty()).then_some(publication)
         })
@@ -972,6 +1171,37 @@ fn first_protocol_markers(
             .collect();
     markers.sort_by_key(|(position, index, _)| (*position, *index));
     markers.into_iter().map(|(_, _, marker)| marker).collect()
+}
+
+/// Every finding standing against one exact publication.
+///
+/// Bound to the receipt, so a republish leaves the parent ledger readable and
+/// does not carry it forward: the findings of one epoch judge that epoch's bytes
+/// and nothing else. What a repair inherits is decided by the lineage, which
+/// names its parent, rather than by a ledger that quietly followed the work.
+fn findings_for(comments: &[ownership::Comment], receipt: &ReviewReceipt) -> Vec<ReviewFinding> {
+    first_protocol_markers(comments, "review-finding")
+        .iter()
+        .filter_map(ReviewFinding::from_marker)
+        .filter(|finding| finding.receipt == *receipt)
+        .collect()
+}
+
+/// The severe findings one context recorded against this publication.
+///
+/// Credited to the reviewer rather than to any reviewer, because a rejection has
+/// to rest on what *that* context found. Two judges each holding one suspicion is
+/// not one confirmed defect, and reading the ledger as a pool would make it look
+/// like one.
+fn severe_findings_by(
+    comments: &[ownership::Comment],
+    receipt: &ReviewReceipt,
+    reviewer: &str,
+) -> Vec<ReviewFinding> {
+    findings_for(comments, receipt)
+        .into_iter()
+        .filter(|finding| finding.is_severe() && finding.reviewer == reviewer)
+        .collect()
 }
 
 fn handoffs_for(comments: &[ownership::Comment], receipt: &ReviewReceipt) -> Vec<ReviewHandoff> {
@@ -1537,6 +1767,317 @@ pub struct VerdictReview<'a> {
     pub now: &'a str,
 }
 
+/// What one reviewer found, and what it is worth.
+pub struct FindingReview<'a> {
+    /// The issue whose receipt was reviewed.
+    pub issue: u64,
+    /// The run recording it, which must hold the live `review` claim.
+    pub run_id: &'a str,
+    /// The context credited with finding it.
+    pub reviewer: &'a str,
+    /// Stable across every retry of this finding.
+    pub operation_id: &'a str,
+    /// The publication epoch this finding judges.
+    pub epoch: &'a str,
+    /// The pull request number.
+    pub pr: u64,
+    /// The full published head SHA.
+    pub head: &'a str,
+    /// The full published base SHA.
+    pub base: &'a str,
+    /// The complete-target digest.
+    pub digest: &'a str,
+    /// The finding's identity within this lineage.
+    pub id: &'a str,
+    /// `severe`, `warning` or `suggestion`.
+    pub class: &'a str,
+    /// What was observed, concretely enough to re-run.
+    pub evidence: &'a str,
+    /// What it costs if left alone.
+    pub impact: &'a str,
+    /// The parent ledger's finding this one continues, or empty when it is new
+    /// to this epoch.
+    pub parent: &'a str,
+    /// `introduced` or `exposed` for a new severe finding against a repair, or
+    /// empty. See [`ReviewFinding::origin`].
+    pub origin: &'a str,
+    /// The moment the live review claim is judged.
+    ///
+    /// Read from the machine, never from the run being judged. A test may pass
+    /// a chosen value; production obtains it from the MCP server's clock.
+    pub now: &'a str,
+}
+
+/// Records one finding against an exact publication receipt.
+///
+/// Separate from the verdict on purpose. A verdict is one decision about a
+/// publication; a finding is one observation about it, and a review makes several
+/// of different weights. Folding them together is what produced the defect this
+/// operation exists to end — the observation and the decision reduced to a single
+/// bit, so a suggestion cost a rejection.
+///
+/// Idempotent on `operation_id` in the same shape as every other durable write
+/// here: a replay reads back the marker it already wrote rather than adding a
+/// second one, so a retry after an unreadable answer cannot double-count a
+/// finding into a quorum.
+pub fn record_review_finding(
+    context: &Context,
+    finding: &FindingReview<'_>,
+) -> Result<serde_json::Value, Failure> {
+    let operation_id = require_operation_id(Some(finding.operation_id))?;
+    if !FINDING_CLASSES.contains(&finding.class) {
+        return Err(Failure::ConfigDefect(serde_json::json!({
+            "ok": false, "reason": "invalid-finding-class", "value": finding.class,
+            "expected": FINDING_CLASSES,
+        })));
+    }
+    if !finding.origin.is_empty() && !FINDING_ORIGINS.contains(&finding.origin) {
+        return Err(Failure::ConfigDefect(serde_json::json!({
+            "ok": false, "reason": "invalid-finding-origin", "value": finding.origin,
+            "expected": FINDING_ORIGINS,
+        })));
+    }
+    // Every field a later reader needs in order to act on this without asking
+    // the author. A finding with no evidence cannot be re-run and a finding with
+    // no impact cannot be weighed, and either one is a preference wearing a
+    // classification. The reviewer's contract states the same precision gate in
+    // words; this is where it is refused.
+    for (name, value) in [
+        ("id", finding.id),
+        ("evidence", finding.evidence),
+        ("impact", finding.impact),
+    ] {
+        if value.trim().is_empty() {
+            return Err(Failure::ConfigDefect(serde_json::json!({
+                "ok": false, "reason": "incomplete-review-finding", "missing": name,
+            })));
+        }
+    }
+    // The shape first: `review_receipt` refuses an epoch, head, base or digest
+    // that could not name anything. Whether it names the publication actually
+    // under review is asked below, once the timeline has been read.
+    let receipt = review_receipt(
+        finding.epoch,
+        finding.pr,
+        finding.head,
+        finding.base,
+        finding.digest,
+    )?;
+    let read = || -> Result<serde_json::Value, Failure> {
+        super::gh_json(
+            &[
+                "issue",
+                "view",
+                &finding.issue.to_string(),
+                "--json",
+                "labels,comments",
+            ],
+            Some(&context.repo_dir),
+        )?
+        .ok_or_else(|| Failure::Read(format!("gh issue view {} returned nothing", finding.issue)))
+    };
+    let pr_field = finding.pr.to_string();
+    let expected = [
+        ("run-id", finding.run_id),
+        ("reviewer", finding.reviewer),
+        ("epoch", finding.epoch),
+        ("pr", &pr_field),
+        ("head", finding.head),
+        ("base", finding.base),
+        ("digest", finding.digest),
+        ("id", finding.id),
+        ("class", finding.class),
+    ];
+    let data = read()?;
+    let comments = comments_of(&data);
+    reject_operation_kind_conflict(&comments, &operation_id, &["review-finding"])?;
+    // The receipt has to be the one under review, and this operation did not ask.
+    //
+    // Four reviewers found the same hole and two drove it: a finding against a
+    // superseded epoch — or against an epoch **no publication ever had** —
+    // recorded `ok: true, blocking: true` and sat on the timeline looking like
+    // evidence. Two shipped sentences said it was refused, which is how it was
+    // found. Three separate costs, and each one is why the check is here rather
+    // than the sentences being deleted:
+    //
+    // - The ledger a verdict reads is receipt-bound, so those findings counted
+    //   for nothing while reading as though they counted.
+    // - `ancestry` below resolves through the live publication, so against any
+    //   other epoch **both** lineage rules silently disengaged: no origin was
+    //   required and the parent rule could not run.
+    // - One mistyped hex character recorded a finding that satisfied nothing,
+    //   and the verdict's refusal then named `record_review_finding` as the way
+    //   out — a command that had already succeeded and would succeed again
+    //   without clearing the block. `CLAUDE.md`: naming a dead end is worse than
+    //   naming nothing.
+    //
+    // On the replay branch too, which is where `record_review_verdict` puts its
+    // own copy of this. A retry whose receipt has been superseded since is not a
+    // retry of anything that is still under review.
+    require_latest_receipt(&comments, &receipt)?;
+    if let Some(marker) = operation_marker(&comments, &operation_id, "review-finding", &expected)? {
+        let persisted = ReviewFinding::from_marker(&marker).ok_or_else(|| {
+            Failure::Stop(serde_json::json!({
+                "ok": false, "reason": "review-finding-operation-conflict",
+            }))
+        })?;
+        return Ok(serde_json::json!({
+            "ok": true,
+            "issue": finding.issue,
+            "reviewer": persisted.reviewer,
+            "id": persisted.id,
+            "class": persisted.class,
+            "blocking": persisted.is_severe(),
+            // What stands, not what was asked for. A replay reports the marker
+            // already on the timeline, and a caller retrying with a different
+            // parent or origin needs to see which one it actually has.
+            "parent": persisted.parent,
+            "origin": persisted.origin,
+            "reused_existing_finding": true,
+        }));
+    }
+
+    // What this publication descends from, and therefore which of the two
+    // lineage rules apply. Read off the timeline; a caller does not get to say.
+    //
+    // No epoch filter any more, and its removal is the point: the receipt was
+    // checked against the live publication above, so this *is* that publication.
+    // The filter it replaces was what made both rules disengage silently on any
+    // other epoch.
+    let ancestry = latest_publication(&comments).and_then(|publication| publication.lineage);
+
+    // A finding that says it continues an earlier one must name one that exists.
+    // Otherwise `parent` is free text that makes a fresh observation look
+    // settled, and *settled* is exactly the reading a re-review acts on.
+    if !finding.parent.is_empty() {
+        let Some(lineage) = &ancestry else {
+            return Err(Failure::Stop(serde_json::json!({
+                "ok": false,
+                "reason": "finding-parent-without-lineage",
+                "parent": finding.parent,
+                "action": "this publication descends from nothing, so there is no earlier ledger \
+                           for that identity to have come from",
+            })));
+        };
+        // The parent ledger by the parent **receipt**, not by its epoch. An
+        // epoch is not a function of the receipt — `publication_epoch` mixes a
+        // clock into its hash — and a finding's epoch field is whatever the
+        // finding says it is, so matching on it alone made `--parent` satisfiable
+        // by backfilling one marker that named the parent epoch and carried the
+        // repair's own bytes. Two reviewers drove exactly that.
+        let known: Vec<String> = findings_for(&comments, &lineage.parent)
+            .into_iter()
+            .map(|earlier| earlier.id)
+            .collect();
+        if !known.iter().any(|id| id == finding.parent) {
+            return Err(Failure::Stop(serde_json::json!({
+                "ok": false,
+                "reason": "finding-parent-unknown",
+                "parent": finding.parent,
+                "parent_epoch": lineage.parent.epoch,
+                "recorded": known,
+                "action": "name a finding recorded against the parent receipt \u{2014} the \
+                           identities it holds are listed above \u{2014} or record this as new \
+                           to this publication and state its origin",
+            })));
+        }
+    // And the other half: a **new** blocker against a repair has to say why the
+    // repair is answerable for it. Without this, a full-target resweep that
+    // rediscovers or rephrases a settled observation arrives indistinguishable
+    // from a defect the repair caused — which is how a convergence budget gets
+    // spent on work that was already agreed.
+    //
+    // Severe only. A warning or a suggestion new to a repair costs nothing, and
+    // asking it to justify itself would price the cheap observation out again —
+    // the defect the other half of this change exists to fix.
+    } else if finding.class == "severe"
+        && ancestry.is_some()
+        && !FINDING_ORIGINS.contains(&finding.origin)
+    {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "new-blocker-without-origin",
+            "expected": FINDING_ORIGINS,
+            "action": "name the finding this reassesses, or state whether the repair introduced \
+                       this defect or exposed one that was already there",
+        })));
+    }
+
+    verify_claim(
+        context,
+        finding.issue,
+        finding.run_id,
+        "review",
+        finding.now,
+        None,
+    )?;
+
+    let mut written: Vec<(&str, &str)> = vec![
+        ("run-id", finding.run_id),
+        ("reviewer", finding.reviewer),
+        ("op-id", &operation_id),
+        ("epoch", finding.epoch),
+        ("pr", &pr_field),
+        ("head", finding.head),
+        ("base", finding.base),
+        ("digest", finding.digest),
+        ("id", finding.id),
+        ("class", finding.class),
+        ("evidence", finding.evidence),
+        ("impact", finding.impact),
+    ];
+    if !finding.parent.is_empty() {
+        written.push(("parent", finding.parent));
+    }
+    if !finding.origin.is_empty() {
+        written.push(("origin", finding.origin));
+    }
+    let marker = super::markers::render("review-finding", &written).ok_or_else(|| {
+        Failure::Stop(serde_json::json!({"ok": false, "reason": "invalid-marker-attribute"}))
+    })?;
+    let body = protocol_body(
+        &format!(
+            "Review finding `{}` classified `{}` by `{}` for publication epoch `{}`.",
+            finding.id, finding.class, finding.reviewer, finding.epoch
+        ),
+        &marker,
+    );
+    super::commands::comment_with_body(context, finding.issue, &body)?;
+
+    let mut seen = Vec::new();
+    for _ in 0..VISIBILITY_ATTEMPTS {
+        let observed = read().ok();
+        let visible = observed.as_ref().is_some_and(|data| {
+            operation_marker(
+                &comments_of(data),
+                &operation_id,
+                "review-finding",
+                &expected,
+            )
+            .ok()
+            .flatten()
+            .is_some()
+        });
+        if visible {
+            return Ok(serde_json::json!({
+                "ok": true,
+                "issue": finding.issue,
+                "reviewer": finding.reviewer,
+                "id": finding.id,
+                "class": finding.class,
+                "blocking": finding.class == "severe",
+                "parent": (!finding.parent.is_empty()).then_some(finding.parent),
+                "origin": (!finding.origin.is_empty()).then_some(finding.origin),
+                "reused_existing_finding": false,
+            }));
+        }
+        seen.push(observed);
+    }
+    Err(Failure::Stop(serde_json::json!({
+        "ok": false, "reason": "review-finding-readback-failed", "world": "committed",
+    })))
+}
+
 /// The one rule a verdict must satisfy, whichever route produced it.
 ///
 /// Written once because it had been written twice, and the two copies had
@@ -1662,6 +2203,40 @@ pub fn record_review_verdict(
     // about CI.
     if verdict.outcome == "accepted" {
         require_cleared_publication_lane(context, verdict.pr, verdict.head)?;
+    }
+
+    // And the other outcome's own precondition, which is the whole of what this
+    // operation could not say before: **a rejection has to rest on a severe
+    // finding.**
+    //
+    // Without it the durable record reduces every observation to one bit, so a
+    // reviewer's preference about a word costs exactly what a reproducible
+    // correctness defect costs — a rejection, a republish, a new epoch, and a
+    // full re-review of work that was already settled. Measured on this
+    // repository's own deliveries before this existed: rounds spent on a
+    // locational phrase and a loose word count, each one a complete cycle.
+    //
+    // The reviewer's own severe findings, not the pool. Two contexts each
+    // holding one suspicion is not one confirmed defect, and counting the pool
+    // would make it look like one.
+    //
+    // Operational failures are deliberately not routed through here. A missing
+    // reviewer, an unreadable target or a stale receipt is not a review finding
+    // and keeps its existing fail-closed refusal, because calling an outage a
+    // cosmetic acceptance is the mislabelling this rule exists to stop.
+    if verdict.outcome == "rejected"
+        && severe_findings_by(&comments, &receipt, verdict.reviewer).is_empty()
+    {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "rejection-without-severe-finding",
+            "reviewer": verdict.reviewer,
+            "epoch": verdict.epoch,
+            "resolution": "record the severe finding first with `record_review_finding`, or \
+                           record this verdict as `accepted` and keep the observation as a \
+                           warning or a suggestion — those are preserved and do not withdraw \
+                           an acceptance",
+        })));
     }
 
     let marker = super::markers::render(
@@ -2749,6 +3324,68 @@ fn published(
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
     let epoch = publication_epoch(run_id, number, head, base_oid, digest);
+    // The lineage, read off the timeline rather than taken from the caller.
+    //
+    // Whatever publication this issue last recorded is the parent, and there is
+    // no argument by which it could be another one — which is the point. A
+    // repair that could name its own parent could name the epoch whose findings
+    // were mildest, and the ledger a re-review reads would be chosen by the run
+    // being reviewed.
+    //
+    // A failed read here is a failed read: the parent is not *absent*, it is
+    // unknown, and recording a repair as a first publication would erase a
+    // lineage rather than report that it could not be seen.
+    let previous = super::gh_json(
+        &["issue", "view", &issue.to_string(), "--json", "comments"],
+        Some(&context.repo_dir),
+    )
+    // Named, because a refusal that does not say what it was doing sends a
+    // reader looking in the wrong place. This read happens after the push and
+    // after the pull request, so a bare `gh issue view failed` arrives beside
+    // `a write may have landed` and reads as though the *publication* failed.
+    .map_err(|failure| match failure {
+        Failure::Read(message) => Failure::Read(format!(
+            "{message} \u{2014} reading the publication lineage"
+        )),
+        Failure::Write(message) => Failure::Write(format!(
+            "{message} \u{2014} reading the publication lineage"
+        )),
+        other => other,
+    })?
+    .ok_or_else(|| {
+        Failure::Read(format!(
+            "gh issue view {issue} returned nothing while reading the publication lineage"
+        ))
+    })?;
+    let lineage = latest_publication(&comments_of(&previous)).map(|parent| PublicationLineage {
+        delta: fix_delta_digest(&parent.receipt, head, digest),
+        parent: parent.receipt,
+    });
+    let pr_number = number.to_string();
+    let parent_pr = lineage
+        .as_ref()
+        .map(|lineage| lineage.parent.pr.to_string())
+        .unwrap_or_default();
+    let mut fields: Vec<(&str, &str)> = vec![
+        ("run-id", run_id),
+        ("pr", &pr_number),
+        ("head", head),
+        ("base", base_oid),
+        ("digest", digest),
+        ("epoch", &epoch),
+    ];
+    if let Some(lineage) = &lineage {
+        // The parent receipt whole, so the ledger it names can be read the way
+        // every other ledger here is read — by the exact receipt. Recording only
+        // the epoch made the parent a name rather than an identity, and a name
+        // is what a backfilled marker can claim.
+        fields.push(("parent", &lineage.parent.epoch));
+        fields.push(("parent-pr", &parent_pr));
+        fields.push(("parent-head", &lineage.parent.head));
+        fields.push(("parent-base", &lineage.parent.base));
+        fields.push(("parent-digest", &lineage.parent.digest));
+        fields.push(("delta", &lineage.delta));
+    }
     let note = publication_note(
         url,
         &epoch,
@@ -2759,18 +3396,9 @@ fn published(
         // A marker that will not render is a comment that carries no evidence,
         // and posting the prose without it would leave a note nobody can read
         // back as a fact. Refused rather than posted half.
-        &super::markers::render(
-            "published",
-            &[
-                ("run-id", run_id),
-                ("pr", &number.to_string()),
-                ("head", head),
-                ("base", base_oid),
-                ("digest", digest),
-                ("epoch", &epoch),
-            ],
-        )
-        .ok_or_else(|| Failure::Write("the published marker could not be rendered".to_owned()))?,
+        &super::markers::render("published", &fields).ok_or_else(|| {
+            Failure::Write("the published marker could not be rendered".to_owned())
+        })?,
     );
     super::commands::comment_with_body(context, issue, &note)?;
 
@@ -2785,6 +3413,14 @@ fn published(
         "head": published.get("headRefOid"),
         "base": published.get("baseRefOid"),
         "digest": digest,
+        // Absent on a first publication, and that absence is the answer rather
+        // than a missing field: there is nothing to descend from.
+        "parent": lineage.as_ref().map(|lineage| &lineage.parent.epoch),
+        "parent_pr": lineage.as_ref().map(|lineage| lineage.parent.pr),
+        "parent_head": lineage.as_ref().map(|lineage| &lineage.parent.head),
+        "parent_base": lineage.as_ref().map(|lineage| &lineage.parent.base),
+        "parent_digest": lineage.as_ref().map(|lineage| &lineage.parent.digest),
+        "delta": lineage.as_ref().map(|lineage| &lineage.delta),
         "autoclose": verdict,
         "next": "transition --to review, obtain the configured blind verdicts, then release_ci with this exact receipt",
     });

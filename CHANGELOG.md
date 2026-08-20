@@ -103,7 +103,46 @@ the workflow, it holds the tools.
   `a_pointer_that_could_not_be_written_says_so` was posing a write failure, and the same bytes are now
   refused one step earlier, at the read — the remaining write failures are environmental, no std-only
   fixture poses them on every platform, and the test says so rather than claiming the coverage.
+- **A rejection now rests on a severe finding, and a repair records what it repairs.** Durable review
+  evidence reduced every observation a reviewer could make to one bit. A preference about a word cost
+  exactly what a reproducible correctness defect cost: a rejection, a republish, a new epoch and a full
+  re-review of work that was already settled. This repository paid that on its own deliveries, and
+  afterwards the tracker could not tell the two apart.
 
+  `record_review_finding` is a new operation — the twenty-second — writing one immutable marker per
+  finding, bound to the exact publication receipt, carrying an identity, concrete evidence, stated
+  material impact and one of `severe`, `warning` or `suggestion`. It refuses a finding missing any of
+  the three, because a classification that cannot be re-run cannot be checked and one with no stated
+  impact cannot be weighed. `record_review_verdict` then refuses `rejected` unless **that reviewer**
+  has recorded a `severe` finding against that exact receipt — the reviewer's own findings, not the
+  panel's pool, since two contexts each holding one suspicion is not one confirmed defect. An
+  acceptance carrying warnings and suggestions is still an acceptance and still releases CI.
+
+  Operational failures deliberately keep their existing fail-closed refusals. A missing reviewer, an
+  unreadable target or a stale receipt is not a review finding, and recording an outage as a cosmetic
+  acceptance is the mislabelling this rule exists to stop.
+
+  The second half is lineage. A publication over an earlier one records the **whole parent receipt**
+  and a delta digest covering both ends — **derived from the timeline, never supplied by the run being
+  reviewed**, because a run that could name its own parent could name the epoch whose findings were
+  mildest. The receipt rather than its epoch: an epoch is not a function of the bytes it names, and a
+  finding's epoch field is whatever the finding says it is, so a parent ledger matched on the epoch
+  alone could be written into after the fact by recording a finding that named the parent epoch and
+  carried the repair's own bytes. The parent's findings stay where they are; nothing rewrites them. What a re-review owes
+  is the reference: a finding that reassesses one names it, and the name must exist against the parent
+  receipt — an epoch alone is claimable by a marker written after the repair; a `severe` finding new to the repair states whether the repair `introduced` the defect or
+  `exposed` one already there. A warning or a suggestion new to a repair owes nothing, because pricing
+  the cheap observation is the defect this whole change repairs.
+
+  Every finding must also name the publication **under review**, not merely a well-formed receipt.
+  That check was documented before it existed: the first version of this change shipped two sentences
+  saying a stale receipt was refused while the operation only validated the receipt's shape. Four
+  reviewers found it, two drove it, and the repair is the check rather than the retraction —
+  `docs/honesty.md` records that history beside the limit.
+
+  What is checked is shape and reference. Nothing here can tell whether a `severe` finding is severe
+  or whether a repair introduced what its reviewer says it did, and the delta digest names a repair
+  rather than scoping a review — `docs/honesty.md` carries both limits in those words.
 - **A transition to the state an issue already holds no longer strips its state label, and a
   read-back that disagrees no longer says nothing was written.** `transition` appended the removal
   whichever state `--from` named, so `--from done --to done` built

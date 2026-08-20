@@ -19,7 +19,7 @@ Receipt-driven review makes the subject explicit and freezes it first:
 |---|---|---|
 | freeze | `review` | `expected-target` emits the complete intended target — the recorded base through `HEAD`, plus the uncommitted worktree — as a path/mode/blob manifest with **one digest** over it |
 | classify | `review` | name the risk this change carries and which lenses the review must apply; a lens nobody named is a lens nobody applied |
-| capture | `review` | one aggregate exact-receipt verdict over epoch, PR, head, base and **that digest** |
+| capture | `review` | each finding recorded against that receipt with its own identity, evidence, material impact and one of `severe`/`warning`/`suggestion`, then one aggregate exact-receipt verdict over epoch, PR, head, base and **that digest** |
 | validate | every gate | re-derive the digest and compare; a difference stops the gate |
 
 The digest is the receipt. It is not a file Estigia writes — it is what `expected-target` returns,
@@ -78,9 +78,26 @@ surface that cannot be read permits no write, and an unknown result is not clear
 
 **Enforced, mechanically:** the claim; the renewal before repository writes and at every irreversible
 boundary; one run holding one task; the state the tracker reports; a push that no live claim
-authorises, refused under git; and one aggregate exact-receipt verdict bound to the latest publication.
+authorises, refused under git; one aggregate exact-receipt verdict bound to the latest publication;
+and, since the finding ledger exists, that a `rejected` verdict rests on a `severe` finding that
+reviewer recorded against that same receipt, that every finding names the publication under review
+rather than merely a well-formed one, and that a repair's **severe** finding either names a parent
+its parent receipt recorded or states whether the repair `introduced` or `exposed` the defect. A
+warning or a suggestion new to a repair is asked for neither, which is deliberate and pinned:
+requiring an origin of every class reddens the lineage test.
 
 **Not enforced:** per-lens or per-judge verdicts, whether the lenses named were the right ones, or
-whether the aggregate verdict was honest. Structured lens and judge evidence remains future design;
-the current marker is not a panel transcript. Estigia cannot see whether a reviewer actually read the
-receipt. A tool claiming otherwise would be the false comfort this contract is written against.
+whether the aggregate verdict was honest. A per-judge verdict marker remains
+future design, and so does the panel transcript it would build; the aggregate marker is neither, and
+nothing here counts findings into a quorum.
+Structured *finding* evidence, which used to be on that list, is not any more — there is one marker
+per finding now, credited to a named reviewer and bound to the exact receipt. What is adjudicated is
+shape and reference: that a class is one of three words, that evidence and impact were stated, and
+that a receipt or a parent is the one it claims to be. Whether a `severe` finding is severe, whether
+the evidence reproduces, and whether a repair introduced what its reviewer says it did are the
+reviewer's claims. Estigia cannot see whether a reviewer actually read the receipt. A tool claiming
+otherwise would be the false comfort this contract is written against.
+
+The decision tables those classes are read by are in
+[`policies/blind-judges.md`](../policies/blind-judges.md); this protocol decides what identifies the
+target, not how many contexts read it.
