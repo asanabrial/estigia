@@ -527,6 +527,18 @@ impl Board {
         if !self.enabled {
             return serde_json::json!({ "attempted": false, "skipped": "no board configured" });
         }
+        // Without an identity for this repository nothing can be matched, and
+        // the caller reaches here with an empty string when that read failed —
+        // `board_home(context).unwrap_or_default()`. Saying a card is foreign
+        // would be a sentence about the card; what is true is that the question
+        // could not be asked. An unreadable control surface permits no write,
+        // and this is the mirror's own instance of that rule.
+        if home.is_empty() {
+            return serde_json::json!({
+                "attempted": true,
+                "skipped": "this repository's identity could not be read, so no card can be matched to it",
+            });
+        }
         let Some(meta) = self.meta() else {
             return serde_json::json!({ "attempted": true, "skipped": self.skip_reason });
         };
@@ -685,7 +697,13 @@ pub(crate) fn pick_item(nodes: &[serde_json::Value], issue: u64, home: &str) -> 
             .and_then(|repository| repository.get("nameWithOwner"))
             .and_then(serde_json::Value::as_str)
             .unwrap_or("");
-        if belongs.is_empty() || belongs == home {
+        // Only an exact match with a repository this run could name is ours.
+        // Written the other way round first — `belongs.is_empty() || belongs
+        // == home` — which handed every card that does not say where it comes
+        // from to the mirror, and left the `an unnamed repository` arm below
+        // unreachable. That is the failure this whole change exists to stop,
+        // surviving in the one case the doc comment above calls out by name.
+        if !home.is_empty() && belongs == home {
             ours = Some(text(node, "id"));
         } else {
             foreign = Some(if belongs.is_empty() {

@@ -13,8 +13,25 @@ the workflow, it holds the tools.
 ### The harness
 
 - **The board mirror refuses a card that belongs to another repository.**
-  Matching on issue number alone moved another project's cards. `audit_board`
-  reports those cards and does not repair them.
+  Matching on issue number alone moved another project's cards: measured on
+  2026-08-19, when a transition on this repository's #83 moved another
+  project's #83 out of `Review`. The card is now picked by repository and not
+  by number, and `audit_board` reports foreign cards rather than repairing
+  them.
+
+  **And a card that does not say where it comes from is not this repository's.**
+  The picker was written `belongs.is_empty() || belongs == home`, so a content
+  node carrying no `repository` — a draft item, or a field a token cannot read —
+  was taken as ours and mirrored, leaving the `an unnamed repository` arm
+  unreachable. The same rule was already written the other way one file over:
+  `audit_board` sends an unnamed card to its foreign bucket. Two spellings of
+  one rule, disagreeing, and the wrong one was on the path that writes.
+
+  **A repository whose identity cannot be read now mirrors nothing.** That read
+  reaches the mirror through `unwrap_or_default()`, so a failure arrived as an
+  empty name; under the corrected picker it would make every card foreign and
+  report a sentence about the card. What is true is that the question could not
+  be asked, and that is what it now says.
 
 - **A discharged human decision is not a verdict.** Returning built work from
   `blocked` to `review` still requires the configured panel against the exact

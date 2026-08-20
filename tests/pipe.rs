@@ -12616,13 +12616,14 @@ fn a_transition_to_the_state_an_issue_already_holds_keeps_its_label() {
                     "pageInfo": { "hasNextPage": false, "endCursor": serde_json::Value::Null },
                     "nodes": [{
                         "id": "PVTI_1",
-                        "content": { "number": 12, "labels": { "totalCount": 0, "nodes": [] } },
+                        "content": { "number": 12, "repository": { "nameWithOwner": "o/r" }, "labels": { "totalCount": 0, "nodes": [] } },
                         "fieldValueByName": { "name": "Done" },
                     }],
                 },
             })),
             "status": 0,
         },
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
         { "matches": "issue view", "labels": true, "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
@@ -12741,6 +12742,7 @@ fn a_label_readback_that_fails_after_the_edit_landed_reports_the_write_and_names
     .expect("the issue's labels are written");
 
     let answers = serde_json::to_string(&serde_json::json!([
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
         { "matches": "issue view", "labels": true, "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))
@@ -12854,6 +12856,7 @@ fn the_repair_a_failed_read_back_names_clears_the_item_it_was_named_over() {
     .expect("the issue's labels are written");
 
     let answers = serde_json::to_string(&serde_json::json!([
+        { "matches": "repo view", "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}", "status": 0 },
         { "matches": "issue view", "labels": true, "status": 0 },
         { "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 },
     ]))

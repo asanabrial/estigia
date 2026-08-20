@@ -287,3 +287,49 @@ fn a_foreign_item_report_includes_the_board_key() {
     assert!(detail.contains("asanabrial/investora"), "{detail}");
     assert!(detail.contains("asanabrial/estigia"), "{detail}");
 }
+
+/// A card that does not say where it comes from is not this repository's.
+///
+/// The picker was written `belongs.is_empty() || belongs == home`, so a content
+/// node carrying no `repository` — a draft item, or a field the token cannot
+/// read — was taken as ours and mirrored. That is the defect this whole change
+/// exists to stop, surviving in the one case `pick_item`'s own doc comment
+/// calls out: *unknown repository is not clearance*. It also left the
+/// `an unnamed repository` arm unreachable, which is what a dead branch usually
+/// means — the guard above it says the opposite of what it was written for.
+///
+/// Turn the fix off by restoring the `belongs.is_empty() ||` prefix and this
+/// reddens with `Ours`.
+#[test]
+fn a_card_that_names_no_repository_is_not_ours() {
+    let node = serde_json::json!({ "id": "PVTI_unnamed", "content": { "number": 73 } });
+    assert_eq!(
+        pick_item(&[node], 73, "asanabrial/estigia"),
+        ItemPick::Foreign {
+            belongs_to: "an unnamed repository".to_owned()
+        },
+        "a card that does not name its repository was taken as ours"
+    );
+}
+
+/// No identity for this repository means no card can be matched to it.
+///
+/// `board_home` answers through `unwrap_or_default()`, so a failed identity read
+/// arrives as an empty string. Before the guard this test holds, that emptiness
+/// reached the picker, where — under the corrected rule — every card becomes
+/// foreign and the mirror reports a sentence about the *card*. What is true is
+/// that the question could not be asked.
+#[test]
+fn an_unreadable_repository_identity_mirrors_nothing() {
+    let node = serde_json::json!({
+        "id": "PVTI_ours",
+        "content": { "number": 73, "repository": { "nameWithOwner": "asanabrial/estigia" } }
+    });
+    assert_eq!(
+        pick_item(&[node], 73, ""),
+        ItemPick::Foreign {
+            belongs_to: "asanabrial/estigia".to_owned()
+        },
+        "an empty home matched a card, so a failed identity read could still move one"
+    );
+}
