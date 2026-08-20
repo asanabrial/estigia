@@ -375,8 +375,25 @@ suite. Everything else here is prose held by review.
   them even if a payload contains it — an argument no host documents sending is not evidence, and
   reading it there was measured to be an escape rather than an improvement.
 
-  **What that key may and may not do is the part worth stating plainly.** `cwd` is written by an
-  adapter's hook, which knows what it is gating, and is taken as given. `workdir` is a tool
+  **What that key may and may not do is the part worth stating plainly.** `cwd` is the host's key: shipped adapters write it in the hook or the host envelope, not as a model-composed tool
+  argument. A value that names a checkout a live claim covers is taken as given — the hook may
+  run from anywhere, and that is why the key exists. A value that names a directory no live
+  claim covers is discarded, and the call is answered the way the identical payload carrying no
+  cwd is answered. Measured on 2026-08-16, before that discard: cwd of C:\Windows, nested
+  tool_input.cwd of .., and a write carrying cwd of C:\Windows were all answered
+  outside with exit zero while the command still ran. That is the same widened-gate shape
+  workdir had, one key over.
+
+  The name is placed before anyone is asked who covers it, because holders_of uses
+  coverage_depth, which keeps an unresolvable spelling: wt-a/../../nope still starts
+  with wt-a. That is the comparison the workdir clamp already left. What remains
+  uncrossed is the other half of the trust: a cwd that names another run's
+  existing worktree is still believed. Nothing in this tree vendors a host schema, so if an adapter grows
+  a passthrough cwd the model can compose, that steering is still a write attributed to the
+  named holder. OpenCode's shell-tool schema has no cwd member — read from the installed
+  binary during review of issue 44, not held here.
+
+  workdir is a tool
   *argument*, so whatever composed the call wrote it — a model, on every runtime here. It may
   therefore only **narrow**: a relative value is resolved against the directory this process was
   launched in, the result is **placed** — the spelling collapsed the way this platform collapses it,
@@ -2860,3 +2877,5 @@ suite. Everything else here is prose held by review.
   What remains an assumption rather than a check is the inheritance itself — a new agent adopting
   the one configuration in use is a convenience, and an operator who wanted otherwise has to say so
   with `estigia config set`.
+
+
