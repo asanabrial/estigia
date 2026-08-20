@@ -196,7 +196,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `changelog-notes` | `SCRIPT changelog-notes --version <x.y.z> --file <changelog> [--out <f>]` | reads the changelog; **`--out` writes that file**. Extracts the version's entry for its tag and Release, anchored on the version **opening** the heading. Fails closed on a missing or empty entry — a tag is immutable, so notes invented at tag time are permanent |
 | `check closing keywords` | `SCRIPT check-closing-keywords --issue <n>` | run again before merging: the branch's commit messages can introduce one after the body is already clean. Historical merged closers and open PRs for another named branch/base are excluded from the current-delivery verdict |
 | `unassign` | `SCRIPT unassign --issue <n> --runtime <rt> --run-id <id> --operation-id <32-hex> [--target-operation <epoch>] [--held-by-other]` | target discovery is read-only; retries cannot release a later acquisition |
-| board audit | `SCRIPT audit-board [--fix]` | compares every card's column against its own `status:*` label. **Zero cards is reported as a failed read, not a clean board**, and a card whose labels did not all arrive lands in `unread_labels` rather than in `drift` |
+| board audit | `SCRIPT audit-board [--fix]` | compares the column of every card **this repository owns** against its own `status:*` label; a card belonging to another repository lands in `foreign`, uncompared and unrepaired, and `compared` says how many were left to check. **Zero cards is reported as a failed read, not a clean board**, and a card whose labels did not all arrive lands in `unread_labels` rather than in `drift` |
 | `review_status` | *(agent judgement, recorded by `review_verdict`)* | The reviewer or panel judges the change; the tool records only one aggregate outcome and exact publication identity. Use one independent context for `Blind judges: single`, the unanimity policy for `two blind`, or the same-finding 3-of-5 policy for `five blind`. Estigia cannot prove panel size, concurrency, independence, blindness, same-finding identity or quorum. Reject a verdict naming any earlier epoch |
 | `ci_status` | *(agent, not scripted)* | see *CI, merge and delivery* below |
 | `merge` | *(agent, not scripted)* | see *CI, merge and delivery* below |
@@ -737,14 +737,24 @@ not systemic. **A zero-card result is reported as a failed read, not a clean boa
 board is never empty, and reporting an empty read as a pass would reproduce the exact failure this
 whole file exists to remove.
 
-The answer carries three lists and **an empty `drift` is not the whole verdict**. `drift` is a card
-whose column disagrees with its label; `missing_column` is a card with a label and no column; and
-`unread_labels` is a card the pass **did not finish reading** — the labels connection reported more
+The answer carries four lists and **an empty `drift` is not the whole verdict**. `drift` is a card
+whose column disagrees with its label; `missing_column` is a card with a label and no column;
+`foreign` is a card belonging to **another repository** that happens to share the number — the pass
+neither compares nor repairs it, and a board carrying them is a board this repository does not own
+alone; and `unread_labels` is a card the pass **did not finish reading** — the labels connection reported more
 labels than it returned, and the workflow state is a label, so its `status:*` may be outside the
 window. Those cards are compared against nothing and `--fix` leaves them alone, because repairing a
 card whose state you have not read is writing a state you guessed. Treat a non-empty `unread_labels`
 the way you treat a zero-card result: the pass ran and did not conclude about those cards. It is the
 same rule as the paragraph above, one field along.
+
+`cards` is how many the board returned and `compared` how many were this repository's to check, so
+the two differ exactly by the length of `foreign`. `audited` is not a count — it is `true` when the
+pass ran and `false` when it did not. With `--fix`, `repaired` names the cards the pass
+**attempted** to move, and each entry carries the mirror's own answer — a card whose state has no
+column on this board lands there saying exactly that, having moved nothing. Read the entry, not the
+length. A card in `foreign` or in `unread_labels` is never among them: the first is not this
+repository's to move and the second was never read.
 
 ### Why a mirror is needed at all
 

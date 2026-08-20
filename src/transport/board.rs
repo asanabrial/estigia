@@ -44,7 +44,7 @@ query($login: String!, $number: Int!, $cursor: String) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
-          content { ... on Issue { number labels(first: 100) { totalCount nodes { name } } } }
+          content { ... on Issue { number repository { nameWithOwner } labels(first: 100) { totalCount nodes { name } } } }
           fieldValueByName(name: "Status") {
             ... on ProjectV2ItemFieldSingleSelectValue { name }
           }
@@ -110,6 +110,17 @@ pub struct Meta {
     pub field_id: String,
     /// Every column.
     pub columns: Vec<Column>,
+}
+
+/// Which board item, if any, is this repository's issue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ItemPick {
+    /// The card belongs here.
+    Ours { id: String },
+    /// The number matched a card from another repository.
+    Foreign { belongs_to: String },
+    /// No card carries this number.
+    Absent,
 }
 
 /// The mirror.
@@ -501,11 +512,8 @@ impl Board {
     }
 
     /// The board item id for one issue.
-    pub fn item_id(&mut self, issue: u64) -> Option<String> {
-        self.items().into_iter().find_map(|node| {
-            let number = node.get("content")?.get("number")?.as_u64()?;
-            (number == issue).then(|| text(&node, "id"))
-        })
+    pub(crate) fn item_id(&mut self, issue: u64, home: &str) -> ItemPick {
+        pick_item(&self.items(), issue, home)
     }
 
     /// Attempts the mirror. Reports what happened; **never fails outward**.
@@ -515,10 +523,22 @@ impl Board {
     /// so a failure escaping here would kill the authoritative write. Every
     /// genuine defect this hides still surfaces: the transition's read-back
     /// compares the board against the label immediately afterwards.
-    pub fn set_status(&mut self, issue: u64, state: &str) -> serde_json::Value {
+    pub fn set_status(&mut self, issue: u64, state: &str, home: Option<&str>) -> serde_json::Value {
         if !self.enabled {
             return serde_json::json!({ "attempted": false, "skipped": "no board configured" });
         }
+        // Without an identity for this repository nothing can be matched, and
+        // the caller reaches here with an empty string when that read failed —
+        // `board_home(context).unwrap_or_default()`. Saying a card is foreign
+        // would be a sentence about the card; what is true is that the question
+        // could not be asked. An unreadable control surface permits no write,
+        // and this is the mirror's own instance of that rule.
+        let Some(home) = home else {
+            return serde_json::json!({
+                "attempted": true,
+                "skipped": "this repository's identity could not be read, so no card can be matched to it",
+            });
+        };
         let Some(meta) = self.meta() else {
             return serde_json::json!({ "attempted": true, "skipped": self.skip_reason });
         };
@@ -528,19 +548,33 @@ impl Board {
                 "skipped": format!("no board column mirrors '{state}'"),
             });
         };
-        let Some(item) = self.item_id(issue) else {
-            // *Not on the board* is a fact about the board, and it may only be
-            // said from a listing that reached the end. When the walk stopped
-            // short — a page claiming a successor with no cursor, or a project
-            // that went invisible mid-walk — what is true is that the issue was
-            // not found, which is a different sentence.
-            return serde_json::json!({
-                "attempted": true,
-                "skipped": match &self.skip_reason {
-                    Some(why) => format!("issue #{issue} was not found on the board, and {why}"),
-                    None => format!("issue #{issue} is not on the board"),
-                },
-            });
+        let item = match self.item_id(issue, home) {
+            ItemPick::Ours { id } => id,
+            ItemPick::Foreign { belongs_to } => {
+                let board = format!(
+                    "{}/{}",
+                    self.owner.as_deref().unwrap_or("?"),
+                    self.number
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or("?".to_owned())
+                );
+                return foreign_item_report(issue, &board, &belongs_to, home);
+            }
+            ItemPick::Absent => {
+                // *Not on the board* is a fact about the board, and it may only be
+                // said from a listing that reached the end. When the walk stopped
+                // short — a page claiming a successor with no cursor, or a project
+                // that went invisible mid-walk — what is true is that the issue was
+                // not found, which is a different sentence.
+                return serde_json::json!({
+                    "attempted": true,
+                    "skipped": match &self.skip_reason {
+                        Some(why) => format!("issue #{issue} was not found on the board, and {why}"),
+                        None => format!("issue #{issue} is not on the board"),
+                    },
+                });
+            }
         };
         if let Err(failure) = self.graphql(
             SET_MUTATION,
@@ -560,13 +594,24 @@ impl Board {
     }
 
     /// The column one issue currently sits in.
-    pub fn read_status(&mut self, issue: u64) -> Option<String> {
+    pub fn read_status(&mut self, issue: u64, home: Option<&str>) -> Option<String> {
         if !self.enabled {
             return None;
         }
-        self.items().into_iter().find_map(|node| {
-            let number = node.get("content")?.get("number")?.as_u64()?;
-            (number == issue).then(|| {
+        let home = home?;
+        // The same picker the writer uses, and for the same reason. This
+        // matched on number alone while `set_status` matched on repository, so
+        // on a shared board the two disagreed about which card the transition
+        // had just moved: the label edit landed, the read-back read somebody
+        // else's card, and the call died reporting that nothing was written
+        // over a label that had been. Which of the two answers you got depended
+        // on the order the API listed the cards in.
+        let items = self.items();
+        let ItemPick::Ours { id } = pick_item(&items, issue, home) else {
+            return None;
+        };
+        items.into_iter().find_map(|node| {
+            (text(&node, "id") == id).then(|| {
                 node.get("fieldValueByName")
                     .and_then(|value| value.get("name"))
                     .and_then(serde_json::Value::as_str)
@@ -600,6 +645,7 @@ impl Board {
                     .unwrap_or(0);
                 Some(serde_json::json!({
                     "issue": number,
+                    "repository": content.get("repository").and_then(|r| r.get("nameWithOwner")).cloned().unwrap_or(serde_json::Value::Null),
                     "column": node
                         .get("fieldValueByName")
                         .and_then(|value| value.get("name"))
@@ -619,6 +665,100 @@ fn text(value: &serde_json::Value, key: &str) -> String {
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default()
         .to_owned()
+}
+
+/// What the mirror reports when the card for this number is somebody else's.
+///
+/// A skip and not a refusal. The mirror runs before the label edit and is
+/// best-effort by construction — `set_status`'s own contract is that a failure
+/// escaping here would kill the authoritative write — so refusing the whole
+/// call was the wrong shape twice over: it aborted a correct `transition` whose
+/// label had every right to move, and in `create` it answered *nothing was
+/// written* over an issue `gh` had already filed, which is the one sentence
+/// this crate refuses above all others. Two blind judges measured both.
+///
+/// What survives is the report: all four identities in one sentence, so an
+/// operator reading the mirror's answer can see whose card was left alone and
+/// on which board.
+///
+/// `belongs_to` names the other repository and `board` the project that was asked
+/// to move its card; without both, an operator reading the answer cannot tell
+/// which of their boards is shared, or with whom.
+fn foreign_item_report(issue: u64, board: &str, belongs_to: &str, home: &str) -> serde_json::Value {
+    serde_json::json!({
+        "attempted": true,
+        "foreign": belongs_to,
+        "board": board,
+        "skipped": format!(
+            "the card for #{issue} on board {board} belongs to {belongs_to}, not {home}, so it was left alone"
+        ),
+        "action": "estigia config set --repo \"Project board\" \"none\"",
+    })
+}
+
+/// Whether one audit card belongs to the repository asking.
+///
+/// Its own function so it can be measured, the way `pick_item` is. It was three
+/// lines inside `audit_board`'s loop, and a judge measured that deleting them
+/// left the whole suite green: another repository's cards would read as this
+/// one's drift again, and `--fix` would move them to agree with labels that were
+/// never theirs. That is half of what this change exists to stop, and nothing
+/// held it.
+///
+/// An unnamed card is not ours, which is the same answer `pick_item` gives and
+/// for the same reason: unknown repository is not clearance.
+pub(crate) fn card_is_ours(card: &serde_json::Value, home: &str) -> bool {
+    card.get("repository")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|repo| repo == home)
+}
+
+/// Pick this repository's card, not whichever card happens to carry the number.
+///
+/// Matching on number alone is how Estigia moved Investora's #73 when this
+/// repository created its own #73, and its #83 a day later when this repository
+/// transitioned its own — one incident per write path. Unknown repository is not
+/// clearance.
+pub(crate) fn pick_item(nodes: &[serde_json::Value], issue: u64, home: &str) -> ItemPick {
+    let mut ours = None;
+    let mut foreign = None;
+    for node in nodes {
+        let Some(content) = node.get("content") else {
+            continue;
+        };
+        let Some(number) = content.get("number").and_then(serde_json::Value::as_u64) else {
+            continue;
+        };
+        if number != issue {
+            continue;
+        }
+        let belongs = content
+            .get("repository")
+            .and_then(|repository| repository.get("nameWithOwner"))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        // Only an exact match is ours. Written the other way round first —
+        // `belongs.is_empty() || belongs == home` — which handed every card that
+        // does not say where it comes from to the mirror, and left the
+        // `an unnamed repository` arm below unreachable. That is the failure
+        // this whole change exists to stop, surviving in the one case the doc
+        // comment above calls out by name. An unreadable identity cannot reach
+        // here at all: the callers hand `None` and the mirror skips before this.
+        if belongs == home {
+            ours = Some(text(node, "id"));
+        } else {
+            foreign = Some(if belongs.is_empty() {
+                "an unnamed repository".to_owned()
+            } else {
+                belongs.to_owned()
+            });
+        }
+    }
+    match (ours, foreign) {
+        (Some(id), _) => ItemPick::Ours { id },
+        (None, Some(belongs_to)) => ItemPick::Foreign { belongs_to },
+        (None, None) => ItemPick::Absent,
+    }
 }
 
 fn read_column(value: &serde_json::Value) -> Column {
