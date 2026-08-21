@@ -1758,7 +1758,20 @@ fn sibling_selection_binds_pr_before_head_and_attributes_no_ambiguous_holder() {
     let root = tempfile::tempdir().expect("a gate root");
     let mut gate_context = context(root.path(), &sibling);
     gate_context.state_root = state.path().to_path_buf();
-    let adjudication = adjudicate_action(&gate_context, &sibling, &action, Sensitivity::Boundary);
+    // Two receipt-matched siblings now reconcile the same as two ordinary
+    // holders: `holders.len() >= 2` dispatches `holder_standing` once per
+    // name, both asking about issue #54. `context()` above builds a
+    // `Tracker::Github { repo: None }`, whose `transport()` is `Some`, so an
+    // unscripted call here would spawn the machine's real `gh` twice — wrapped
+    // the same way its sibling reconciliation tests are, with an answer that
+    // fails to land, matching the fail-closed standing an unauthenticated `gh`
+    // in this environment would actually reach: an unknown result keeps both
+    // holders counted rather than dropping either.
+    let bin = scripted_gh();
+    let script = answers(&[unreachable_tracker_answer()]);
+    let adjudication = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        adjudicate_action(&gate_context, &sibling, &action, Sensitivity::Boundary)
+    });
     assert!(adjudication.decision.denies());
     assert_eq!(adjudication.holder, None);
 }

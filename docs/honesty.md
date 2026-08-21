@@ -2676,9 +2676,12 @@ suite. Everything else here is prose held by review.
   says why inline rather than leaving the gap silent. Forcing it needs a `gh` that answers
   `issue-not-open` for one specific issue number rather than the blanket absence the `gh` row's own
   forcing step already uses — a different fixture shape than every other row on this list needs, and
-  one this file already builds through a scripted `gh` twice over: `harness::guard::tests` and
-  `harness::doctor`'s own module drive it directly, with `stale-run-pointer` reported both `Broken`
-  (a stale pointer, and separately an unread one) and `Fine`.
+  one `harness::doctor`'s own module already builds through a scripted `gh`:
+  `a_readable_stale_pointer_is_reported_and_names_the_release_command`,
+  `a_readable_live_pointer_is_reported_fine` and `a_tracker_read_that_fails_is_reported_as_unread_
+  not_stale` drive `stale_run_pointers` directly, with `stale-run-pointer` reported `Broken` (a
+  stale pointer, and separately an unread one) and `Fine`. `harness::guard::tests` scripts `gh` for
+  its own reconciliation tests but constructs no `doctor::Check` and never touches this row.
 
   A row added later fails the same test until somebody forces it or says why they cannot.
 
@@ -2743,9 +2746,12 @@ suite. Everything else here is prose held by review.
   if the pointer itself will not parse; a pointer that parses fine and names a checkout `git
   rev-parse` can no longer find is invisible to both rows.
 
-  Also deliberate, and the sharper edge: **two dead pointers reconcile all the way to zero, and the
-  gate stands aside, while one dead pointer still refuses.** `holders.len() == 0` after reconciliation
-  answers `Outside(NothingSworn)` — the ordinary shape of a checkout nobody claims — so a machine
+  Also deliberate, and the sharper edge: **two dead pointers with nothing live covering the same
+  checkout reconcile all the way to zero, and the gate stands aside, while one dead pointer still
+  refuses.** A live holder covering that checkout survives reconciliation regardless of how many
+  dead pointers sit alongside it, so this is the all-dead case specifically, not "two or more stale
+  pointers" on its own. `holders.len() == 0` after reconciliation answers `Outside(NothingSworn)` —
+  the ordinary shape of a checkout nobody claims — so a machine
   carrying two phantom pointers for one checkout is *more* permissive than one carrying a single
   live-looking one. That is a consequence of the guard stated above, not a second gap: a lone
   `issue-not-open` pointer refuses through `gate`'s own single-holder path rather than through this
@@ -2796,18 +2802,28 @@ suite. Everything else here is prose held by review.
 
   **The cost this buys**: once two or more pointers cover one checkout, every gated action pays one
   tracker round trip per named holder before the filter runs, plus the survivor's own `gate` call once
-  it has — two holders reduced to one costs three tracker reads, not one. The spawn happens above
+  it has — two holders reduced to one costs at most three tracker reads, not one. The survivor's own
+  `gate` call is the one that can skip its read: `Sensitivity::Routine` inside the renewal window
+  (`harness::gate`, `how == Sensitivity::Routine && run.within_window(context.window)`) answers
+  `Allow` from the cached verification without dispatching at all, so the true floor is the two reads
+  reconciliation itself spent and the ceiling is three. The spawn happens above
   `standdown::over`, not below it, so a `gh` that hangs is not a door `estigia stand-down` can open
   past — the reconciliation blocks before the stand-down is even consulted. Unmeasured beyond that: no
   fixture drives this cost.
 
-  Nor does one drive the *other* holder list this same reconciliation reads over: `holders_for_action`
-  builds one for a `gh pr merge` with no ordinary holder in this checkout, filtered to siblings whose
-  own complete review receipt names the pull request being merged — a `map`/`filter`/`collect` this
-  reconciliation runs exactly as it does for an ordinary holder list, with no fixture giving it two or
-  more receipt-matched siblings to reconcile between. `linked_siblings` is a different list entirely:
-  it feeds `linked`, consulted only in the `0 =>` arm to tell "no ordinary holder and no sibling either"
-  apart from "a sibling exists but has not finished reviewing," and reconciliation never touches it.
+  The *other* holder list this same reconciliation reads over is driven, not left untouched:
+  `holders_for_action` builds one for a `gh pr merge` with no ordinary holder in this checkout,
+  filtered to siblings whose own complete review receipt names the pull request being merged — a
+  `map`/`filter`/`collect` this reconciliation runs exactly as it does for an ordinary holder list —
+  and `guard::tests::sibling_selection_binds_pr_before_head_and_attributes_no_ambiguous_holder` gives
+  it two receipt-matched siblings naming the same pull request to reconcile between, scripted to both
+  answer as live, which denies. Undriven beyond that two-holder floor: no fixture takes a sibling list
+  past two, or reconciles a sibling list where one is dropped as `ClosedIssue` while another survives —
+  every ordinary-holder test that shape has (`a_stale_holder_is_dropped_…`,
+  `a_stale_holder_dropped_to_one_live_holder_lets_gate_allow`) has no sibling-list counterpart.
+  `linked_siblings` is a different list entirely: it feeds `linked`, consulted only in the `0 =>` arm
+  to tell "no ordinary holder and no sibling either" apart from "a sibling exists but has not finished
+  reviewing," and reconciliation never touches it.
 
   **Reconciliation made `tests/pipe.rs` non-hermetic once, and that is now measured rather than
   believed fixed.** `run_with_path`, the fixture every `run`/`run_in` call in that file goes through,
@@ -2820,15 +2836,21 @@ suite. Everything else here is prose held by review.
   instead of the fixture's, deciding the test's outcome by whatever issues happened to exist there.
   `run_with_path` now clears `GH_REPO`, `GH_HOST` and `GH_TOKEN` before spawning.
 
-  What this closes and what it does not: hermetic with respect to those three variables specifically,
-  checked by reading `run_with_path`'s own removal and by the full suite passing unchanged with them
-  cleared. Not verified as a live before/after difference — `gh` is authenticated on the machine this
-  was written on, so reproducing the original defect would mean pointing a real `GH_REPO` at a real
-  repository and letting `a_per_call_working_directory_selects_the_holder_that_owns_it` make an actual
-  network call to it, which was not done. Not audited for every other variable a real `gh` process
-  might read to steer itself — `GH_REPO`, `GH_HOST` and `GH_TOKEN` are the three this crate's own
-  transport and `gh`'s own manual name as authority- and repository-steering; others may exist and are
-  unmeasured, the same way the round-trip cost above is unmeasured rather than assumed zero.
+  What this closes and what it does not: `an_operators_gh_repo_never_reaches_a_spawned_gh`
+  (`tests/pipe.rs`) puts `GH_REPO` on the test process, spawns `estigia doctor` through
+  `run_with_path` with a scripted `gh` on `PATH` — `doctor`'s own unconditional `gh auth status`
+  call is the trigger, not reconciliation, so this needs no two-holder fixture — and reads back what
+  that `gh` actually saw through a file `examples/fake_process.rs` writes on request. That is a live
+  before/after on the mechanism itself: disabling `run_with_path`'s `env_remove` loop with
+  `if false { … }` turned this test red, reporting the operator's own `GH_REPO` back out of the
+  child. What it is not is a reproduction of the *original* defect end to end — no test here points a
+  real `GH_REPO` at a real repository and lets `a_per_call_working_directory_selects_the_holder_
+  that_owns_it` make an actual network call to it, and none needs to now that the removal is
+  mutation-tested directly against a scripted `gh` rather than inferred from the suite passing
+  unchanged. Not audited for every other variable a real `gh` process might read to steer itself —
+  `GH_REPO`, `GH_HOST` and `GH_TOKEN` are the three this crate's own transport and `gh`'s own manual
+  name as authority- and repository-steering; others may exist and are unmeasured, the same way the
+  round-trip cost above is unmeasured rather than assumed zero.
 - **`config edit` writes one contract, and `config set` writes them all.** The plain `config set`
   propagates a row that is not per-agent — about the repository or about this machine — into every
   installed contract. The guided screen behind `config edit` writes only the target it was opened on:

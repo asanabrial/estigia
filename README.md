@@ -264,8 +264,9 @@ against each other, and a run that dies leaves no *authority* behind: whatever t
 says a checkout is bound by is the whole of what governs it, whether or not the run that wrote it is
 still there to be asked. The **local** run pointer a dead session leaves behind is a different
 question — a machine-readable note, never authority — and `estigia doctor`'s `stale-run-pointer` row
-and `estigia guard`'s own reconciliation against the tracker exist for exactly the phantom pointer a
-dead run does leave.
+and the reconciliation against the tracker that the pre-push hook `estigia guard` installs runs —
+and that `estigia gate` reaches equally — exist for exactly the phantom pointer a dead run does
+leave.
 
 ### The gate no agent can route around
 

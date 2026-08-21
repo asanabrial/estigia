@@ -979,12 +979,13 @@ fn the_number_of_things_doctor_checks_is_the_number_the_readme_claims() {
     let documents = documented();
     let claimed = number_before(&documents, "things, not everything")
         .expect("no document counts doctor's checks");
-    // The **kinds**, not the rows. Two of the thirteen produce one row per
-    // configured agent, so a run on a bare machine reports eight rows and a run
-    // on a busy one reports twenty-one — and the README's count was being measured
-    // against `examine`, which answers six while the command prints eight. A
-    // claim checked at the wrong scope, in the file that exists to catch
-    // exactly that.
+    // The **kinds**, not the rows. Three of the thirteen (`contract`, `gate`,
+    // `tools`) produce one row per configured agent, so a run with no adapter
+    // configured reports eleven rows and a run with every adapter this crate
+    // knows about configured reports forty-three — and the README's count was
+    // once being measured against `examine`, which answered six checks at the
+    // time while the command printed eight. A claim checked at the wrong
+    // scope, in the file that exists to catch exactly that.
     let actual = estigia::harness::doctor::CHECKS.len();
 
     assert_eq!(
@@ -2277,10 +2278,11 @@ fn every_list_the_audit_answers_with_is_one_the_binding_names() {
 /// **What this does not do** is check either number against the code, and the
 /// reason is worth writing down rather than leaving as an omission: how many
 /// checks `doctor::full` produces depends on the machine it is asked about. It
-/// answers six kinds on a machine with nothing installed and twelve with one
-/// adapter configured — measured, because the two numbers that stood here
-/// before were each carried forward by hand and neither was ever true — and the
-/// rows
+/// answers eleven kinds on a machine with nothing installed and thirteen with one
+/// adapter configured — measured against `doctor::full` itself, with a fresh
+/// home and no adapter present for the first and one `setup claude-code` run
+/// for the second, because the two numbers that stood here before were each
+/// carried forward by hand and neither was ever true — and the rows
 /// themselves are more again — the contract, gate and tools checks are emitted
 /// once per configured agent, so counting rows answers *how many agents does
 /// this machine have*. Holding the two spellings to each other is what can be

@@ -40,6 +40,16 @@
 //! issue #31, which the whole suite was green over. With this, `--add-label` and
 //! `--remove-label` change what the next `issue view --json labels` reports, so
 //! a test can measure the label rather than the answer.
+//!
+//! `ESTIGIA_FAKE_ENV_LOG` names a file this process appends `GH_REPO=…`,
+//! `GH_HOST=…` and `GH_TOKEN=…` lines to, one per invocation, `(absent)` where
+//! a name is not set. Opt-in and a separate file from `ESTIGIA_FAKE_LOG`, so
+//! every fixture that never asks for it is untouched. It exists to answer a
+//! question `ESTIGIA_FAKE_LOG` cannot: not *what was this process asked*, but
+//! *what did the environment carrying that call actually hold* — the question
+//! `tests/pipe.rs`'s own `run_with_path` clears three names against, with
+//! nothing before this reading them back out of a child to say the clearing
+//! landed.
 
 /// One issue's labels, after whatever this invocation did to them.
 ///
@@ -115,6 +125,25 @@ fn main() {
                 Ok(here) => writeln!(file, "{line}\t{}", here.display()),
                 Err(_) => writeln!(file, "{line}"),
             };
+        }
+    }
+
+    // Opt-in, and a different file: what this call's environment actually
+    // held for the three names `gh` itself steers by. `ESTIGIA_FAKE_LOG`
+    // above answers *what was this process asked*; this answers *what did the
+    // world asking it look like*, which is the half a fixture that only reads
+    // stdout can never see.
+    if let Ok(path) = std::env::var("ESTIGIA_FAKE_ENV_LOG") {
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            for name in ["GH_REPO", "GH_HOST", "GH_TOKEN"] {
+                let value = std::env::var(name).unwrap_or_else(|_| "(absent)".to_owned());
+                let _ = writeln!(file, "{name}={value}");
+            }
         }
     }
     let script = std::env::var("ESTIGIA_FAKE_ANSWERS").unwrap_or_else(|_| "[]".to_owned());

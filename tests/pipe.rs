@@ -98,9 +98,12 @@ fn help_and_version_exit_zero() {
 /// trunk delivery would pass or fail by who ran it.
 ///
 /// The whole namespace rather than the one name, so the next variable this crate
-/// reads does not put the trap back. Nothing else is cleared: `USER`,
-/// `COMPUTERNAME` and their kind end up in a record's prose and decide nothing,
-/// and `PATH` has to stay real or the child finds no interpreter.
+/// reads does not put the trap back. `run_in`, which this calls through, goes
+/// on to `run_with_path`, which clears three more — `GH_REPO`, `GH_HOST`,
+/// `GH_TOKEN` — for a different reason spelled where that clearing happens.
+/// Past those two clearings, everything left real decides nothing here: `USER`,
+/// `COMPUTERNAME` and their kind end up in a record's prose, and `PATH` has to
+/// stay real or the child finds no interpreter.
 fn run(home: &std::path::Path, arguments: &[&str], stdin: &str) -> (String, String, bool) {
     run_in(home, home, arguments, stdin)
 }
@@ -126,7 +129,7 @@ fn run_in(
     arguments: &[&str],
     stdin: &str,
 ) -> (String, String, bool) {
-    run_with_path(home, here, arguments, stdin, None)
+    run_with_path(home, here, arguments, stdin, None, &[])
 }
 
 /// The same, with the search path replaced.
@@ -135,12 +138,21 @@ fn run_in(
 /// state is *this machine has no authenticated GitHub CLI*. It was the last row
 /// measured as a builder and unmeasured as report, and the reason given was
 /// that forcing it takes a path with no `gh` on it. This is that path.
+///
+/// `extra_env` is applied last, after the `ESTIGIA_*` and `GH_REPO`/`GH_HOST`/
+/// `GH_TOKEN` clearing above — so a caller naming one of those three would
+/// override the clearing rather than test it, which is deliberate: it is how
+/// `an_operators_gh_repo_never_reaches_a_spawned_gh` hands the child
+/// `ESTIGIA_FAKE_ENV_LOG`, a name this loop would otherwise strip along with
+/// every other inherited `ESTIGIA_*` variable before this function's own
+/// caller ever gets a say.
 fn run_with_path(
     home: &std::path::Path,
     here: &std::path::Path,
     arguments: &[&str],
     stdin: &str,
     search_path: Option<&std::path::Path>,
+    extra_env: &[(&str, &str)],
 ) -> (String, String, bool) {
     let inherited: Vec<String> = std::env::vars()
         .map(|(name, _)| name)
@@ -160,7 +172,7 @@ fn run_with_path(
     // binary spawns a repository that is not the fixture's, and reconciliation
     // (`guard::adjudicate_action`, when two or more pointers cover one
     // checkout) is what first made a several-holder decision consult the
-    // tracker at all, where none of these tests intend one. Measured: without
+    // tracker at all, where none of these tests intend one. Checked: without
     // this, `a_per_call_working_directory_selects_the_holder_that_owns_it`
     // asks a real `gh` about issues #12 and #34 in whatever repository
     // `GH_REPO` names, and its answer would decide what the test asserts.
@@ -171,6 +183,9 @@ fn run_with_path(
     }
     if let Some(only) = search_path {
         command.env("PATH", only);
+    }
+    for (name, value) in extra_env {
+        command.env(name, value);
     }
     let mut effective = arguments.to_vec();
     if matches!(effective.first(), Some(&"setup" | &"install" | &"sync"))
@@ -204,6 +219,138 @@ fn run_with_path(
         String::from_utf8_lossy(&output.stderr).into_owned(),
         output.status.success(),
     )
+}
+
+/// The one variable in `CLEARED` this file can hold to an actual assertion
+/// rather than to a comment: an ambient `GH_REPO`, exactly as an operator's
+/// own shell would export it, does not reach a `gh` a gated command spawns.
+///
+/// `no_variable_the_crate_decides_on_escapes_the_fixture` cannot fail if
+/// `run_with_path`'s three-line `env_remove` loop is deleted outright: the
+/// `CLEARED` bucket is built from `var("...")`/`var_os("...")` call sites
+/// under `src/`, and `GH_REPO`, `GH_HOST` and `GH_TOKEN` are only ever
+/// `set_var`'d there, so removing the loop leaves that scan with nothing to
+/// see and the suite green. This is the test that would go red instead: it
+/// puts `GH_REPO` on *this* process — standing in for the operator's shell,
+/// since `Command` inherits an unset-or-removed variable from exactly there —
+/// spawns `estigia doctor` through `run_with_path` with a scripted `gh` ahead
+/// of the real one on `PATH`, and reads back what that `gh` actually saw
+/// through `ESTIGIA_FAKE_ENV_LOG`, a file `examples/fake_process.rs` writes
+/// to on request rather than a claim this file makes about it.
+///
+/// `doctor`'s own `gh` row is the trigger, not reconciliation: `examine`
+/// calls `gh auth status` unconditionally once a skill is installed, so no
+/// two-holder fixture is needed to make some `gh` run at all — the property
+/// under test, that `GH_REPO` never reaches *any* `gh` this binary spawns
+/// through this fixture, does not depend on which call does.
+///
+/// Setting `GH_REPO` on the test binary's own process rather than on a
+/// throwaway child is what makes this a fair test of ambient inheritance —
+/// `Command` only omits a variable it was told to omit, never one merely
+/// absent from a builder — and it is safe against the rest of this suite
+/// specifically because nothing else here reads `GH_REPO` from its own
+/// process: every `run`/`run_in` call clears it in the *child* regardless of
+/// what this process holds (that clearing is what this test measures), and
+/// `tracker_command`'s fixture answers from `ESTIGIA_FAKE_ANSWERS` by
+/// argument matching alone, never consulting the repository a real `gh`
+/// would have resolved. The variable is restored, and restored before this
+/// function's own assertions run, so a failed assertion here cannot leave it
+/// set for whatever the suite schedules next.
+#[test]
+fn an_operators_gh_repo_never_reaches_a_spawned_gh() {
+    let here = std::env::current_exe().expect("the test binary knows where it is");
+    let built = here
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("the test binary is under a profile directory")
+        .join("examples")
+        .join(if cfg!(windows) {
+            "fake_process.exe"
+        } else {
+            "fake_process"
+        });
+    assert!(
+        built.is_file(),
+        "the process fixture is not built, so this test would measure nothing: run `cargo \
+         build --examples` ({})",
+        built.display()
+    );
+    let fake_bin = tempfile::tempdir().expect("a directory for the fake gh");
+    std::fs::copy(
+        &built,
+        fake_bin
+            .path()
+            .join(if cfg!(windows) { "gh.exe" } else { "gh" }),
+    )
+    .expect("the fake gh is copied onto the path");
+
+    let mut joined = std::ffi::OsString::from(fake_bin.path());
+    joined.push(if cfg!(windows) { ";" } else { ":" });
+    joined.push(std::env::var_os("PATH").unwrap_or_default());
+
+    let home = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    let (_, stderr, ok) = run(home.path(), &["setup", "claude-code"], "");
+    assert!(ok, "setup failed: {stderr}");
+
+    let env_log = tempfile::NamedTempFile::new().expect("a file for the fake `gh` to answer into");
+
+    // The marker this process holds only for the width of the one spawn below
+    // — see the module doc for why this is the operator-shell stand-in and
+    // why it is safe here.
+    // SAFETY: no other test in this binary reads `GH_REPO` from its own
+    // process — every `run`/`run_in` call clears it in the child it spawns
+    // regardless of this process's value, and `tracker_command`'s fixture
+    // answers by argument matching alone — and the value is restored before
+    // this function's own assertions run, below.
+    let marker = "operators-own-org/operators-own-repo";
+    let before = std::env::var_os("GH_REPO");
+    unsafe {
+        std::env::set_var("GH_REPO", marker);
+    }
+    // The actual function under test: the same `run_with_path` every other
+    // `run`/`run_in` call in this file goes through, not a second copy of its
+    // clearing logic — a duplicate here would keep passing after somebody
+    // deleted the real one, which is the exact failure this test exists to
+    // rule out.
+    let (_, stderr, ok) = run_with_path(
+        home.path(),
+        home.path(),
+        &["doctor"],
+        "",
+        Some(std::path::Path::new(&joined)),
+        &[(
+            "ESTIGIA_FAKE_ENV_LOG",
+            &env_log.path().display().to_string(),
+        )],
+    );
+    unsafe {
+        match before {
+            Some(previous) => std::env::set_var("GH_REPO", previous),
+            None => std::env::remove_var("GH_REPO"),
+        }
+    }
+
+    // This asserts the fixture actually did what it was built for, before
+    // trusting an empty log to mean the same thing as a clean one — an
+    // unbuilt or unreached `gh` would leave `env_log` empty too, and that
+    // must not read as "GH_REPO was cleared".
+    assert!(ok, "estigia doctor did not run cleanly: {stderr}");
+    let seen = std::fs::read_to_string(env_log.path()).unwrap_or_default();
+    assert!(
+        !seen.is_empty(),
+        "the scripted `gh` was never invoked, so this measures nothing — `doctor`'s own `gh` \
+         row is expected to call it unconditionally"
+    );
+    assert!(
+        !seen.contains(marker),
+        "the scripted `gh` saw the operator's own `GH_REPO`, which `run_with_path`'s clearing \
+         exists to prevent: {seen}"
+    );
+    assert!(
+        seen.contains("GH_REPO=(absent)"),
+        "the scripted `gh` did not report `GH_REPO` absent at all: {seen}"
+    );
 }
 
 #[test]
@@ -1988,6 +2135,7 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         &["doctor"],
         "",
         Some(nowhere.path()),
+        &[],
     );
     assert!(
         out.contains("BROKEN   gh"),
@@ -2031,8 +2179,9 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         // stale run pointer at this point in the fixture, and forcing one
         // needs a `gh` that answers `issue-not-open` for a specific issue
         // rather than the blanket absence step 8 already forces — measured
-        // directly, with a scripted `gh`, in `harness::guard::tests` and
-        // `harness::doctor`'s own module instead.
+        // directly, with a scripted `gh`, in `harness::doctor`'s own module
+        // instead (`a_readable_stale_pointer_is_reported_and_names_the_
+        // release_command`).
         "stale-run-pointer",
     ];
     let unforced: Vec<&String> = printed
@@ -2139,6 +2288,7 @@ fn what_the_companion_verb_prints_is_crossed() {
         &["setup", "--companion", "leteo"],
         "",
         Some(nowhere.path()),
+        &[],
     );
     assert!(ok, "the companion verb refused: {out}");
     assert!(
@@ -4252,7 +4402,7 @@ fn an_instruction_file_kept_on_an_upgrade_is_named_in_the_report() {
 /// started asking the tracker at all — a several-holder decision this suite
 /// drives against a fixture repository now makes a real `gh issue view` call,
 /// and an inherited `GH_REPO` answers it against whatever repository the
-/// operator's shell names instead of the fixture's. Measured:
+/// operator's shell names instead of the fixture's. Checked:
 /// `a_per_call_working_directory_selects_the_holder_that_owns_it` is the one
 /// test in this file that reconciliation reaches through `run_in` rather than
 /// through a scripted `tracker_command`, and it is the one this would have
@@ -4327,6 +4477,20 @@ fn no_variable_the_crate_decides_on_escapes_the_fixture() {
     // shape that stopped being safe to leave to whatever the developer's shell
     // happened to hold — and not `ANSWERED` either: nothing here substitutes a
     // value, `run_with_path` removes them outright.
+    //
+    // This bucket, on its own, is documentation rather than an assertion:
+    // these three names are only ever `set_var`'d under `src/`, never
+    // `var`/`var_os`'d there, so nothing in the scan above can ever place one
+    // of them here to be checked — deleting `run_with_path`'s own
+    // `env_remove` loop would leave this whole test green. What actually
+    // rules that mutation out is a different, narrower test:
+    // `an_operators_gh_repo_never_reaches_a_spawned_gh`, above `run_with_path`
+    // in this file, puts `GH_REPO` on this process, spawns through
+    // `run_with_path` with a scripted `gh` on `PATH`, and reads back what
+    // that `gh` actually saw — measured directly, by disabling the loop with
+    // `if false { … }` while this comment was written: that test failed, and
+    // reporting `GH_REPO=operators-own-org/operators-own-repo` back out of
+    // the child it spawned.
     const CLEARED: &[&str] = &["GH_REPO", "GH_HOST", "GH_TOKEN"];
     for name in &read {
         if ANSWERED.contains(&name.as_str())

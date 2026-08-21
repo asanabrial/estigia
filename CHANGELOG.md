@@ -62,12 +62,13 @@ the workflow, it holds the tools.
   covering pointer whose issue the tracker reports closed, not only one — a
   single such pointer still refuses the checkout it names, which is the case
   reconciliation deliberately leaves alone; two or more covering the same
-  checkout is the case reconciliation reconciles away instead, to
-  `Outside(NothingSworn)`. Filtered to pointers covering this repository
-  first: `session::holdings` is machine-wide, and asking every pointer using
-  this checkout's own `repo_dir` let a live pointer for another project's issue
-  collide with this one's numbering and be reported as this project's own
-  stale claim. A tracker read that fails is reported as unread rather than
+  checkout, with nothing live covering it besides, is the case reconciliation
+  reconciles away instead, to `Outside(NothingSworn)`. Filtered to pointers
+  covering this repository first: `session::holdings` is machine-wide, and
+  asking every pointer using this checkout's own `repo_dir` let a live
+  pointer for another project's issue collide with this one's numbering and
+  be reported as this project's own stale claim. A tracker read that fails
+  is reported as unread rather than
   folded into either verdict, and the row joins `silence` as one that reports
   on the past rather than blocking a fresh claim's readiness. `docs/honesty.md`
   states the gap reconciliation still does not close and why: `GateContext`

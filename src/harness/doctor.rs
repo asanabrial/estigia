@@ -981,11 +981,15 @@ pub fn gates(
 /// Everything `doctor` looks at, by the name it reports under.
 ///
 /// The README counts these, and a count is the wrong shape for what `full`
-/// returns: two of the thirteen produce **one row per configured agent**, so a
-/// run on a bare machine reports eight rows and a run on a busy one reports
-/// twenty-one. What a reader means by "doctor checks eight things" is the
-/// concerns, and this is them — crossed against what `full` actually emits,
-/// both ways, by `the_number_of_things_doctor_checks_is_the_number_the_readme_claims`
+/// returns: three of the thirteen (`contract`, `gate`, `tools`) produce **one
+/// row per configured agent**, so a run with no adapter configured reports
+/// eleven rows and a run with every one of the eleven adapters this crate
+/// knows about configured reports forty-three — measured, not carried forward
+/// by hand: `estigia setup --all` in a fresh home, then `full` against the
+/// skill root it wrote. What a reader means by "doctor checks eleven things"
+/// — the bare-machine row count — is the concerns, and this is them — crossed
+/// against what `full` actually emits, both ways, by
+/// `the_number_of_things_doctor_checks_is_the_number_the_readme_claims`
 /// and `every_name_this_list_declares_is_one_doctor_can_report`.
 pub const CHECKS: &[&str] = &[
     "skill",
@@ -1244,7 +1248,7 @@ pub fn tracker_in_force(skill_root: Option<&Path>, repo_dir: &Path) -> crate::co
 
 /// Every check `estigia doctor` runs, assembled.
 ///
-/// [`examine`] is the six that need nothing but a skill root; the rest need to
+/// [`examine`] is the five that need nothing but a skill root; the rest need to
 /// know which agents are configured, and used to be stitched together inside the
 /// command. That put half of what `doctor` reports somewhere no test could
 /// reach — and the README's own count was then checked against a function that
@@ -1533,13 +1537,18 @@ pub fn run_pointers(unreadable: &[String]) -> Check {
 /// fine and names an issue nobody holds any more, left on disk with nothing
 /// to expire it once the issue closed. This row names **every** readable
 /// covering pointer whose issue reads closed, not only one, and what that
-/// means for the gate depends on how many: `estigia guard` reconciles the
-/// same question away for a checkout **two or more** of them name
-/// (`guard::adjudicate_action` drops them all and the gate stands aside), so
-/// what is left for a person to act on here is the case reconciliation
-/// deliberately leaves alone — a checkout exactly **one** stale pointer
-/// covers, which still refuses every write it names — see `docs/honesty.md`
-/// for why that residue is not closed by this row either.
+/// means for the gate depends on the whole set of pointers covering that
+/// checkout, not only the stale ones listed here: `estigia guard` drops a
+/// checkout's stale pointers only when nothing live also covers it —
+/// **two or more** stale and nothing live reconciles them all away
+/// (`guard::adjudicate_action` drops the whole set and the gate stands
+/// aside), while a live holder covering the same checkout survives that
+/// reconciliation and keeps gating it regardless of how many stale pointers
+/// sit alongside it. Either way, what is left for a person to act on here is
+/// the case reconciliation deliberately leaves alone — a checkout exactly
+/// **one** stale pointer covers, which still refuses every write it names —
+/// see `docs/honesty.md` for why that residue is not closed by this row
+/// either.
 ///
 /// **Filtered to this repository before anything is asked.** `holdings` is
 /// machine-wide (`session::holdings` reads one directory, not one repository)
@@ -1634,7 +1643,8 @@ pub fn stale_run_pointers(
                 format!(
                     "{} run pointer(s) here are readable and name an issue the tracker reports \
                      closed \u{2014} one still refuses every write in the checkout it names, and \
-                     two or more covering the same checkout reconcile away to unclaimed instead: \
+                     two or more covering the same checkout, with nothing live also covering it, \
+                     reconcile away to unclaimed instead: \
                      {}",
                     stale.len(),
                     stale.join(", ")
