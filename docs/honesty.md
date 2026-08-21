@@ -2312,6 +2312,29 @@ suite. Everything else here is prose held by review.
   and what HEAD it is at — run through the same unsteered git invocation the fast-forward proof
   already used, so an exported `GIT_DIR` cannot make an unrelated clone look like the reviewed
   checkout.
+- **A delivery can still merge onto a base the reviewed receipt did not name, and this repository
+  now answers it with a GitHub setting that Estigia neither sets nor reads back.** Issue #81 measured
+  the gap: `release_ci` re-verifies every byte of the reviewed head, and nothing asked whether `main`
+  was still the receipt's base when the merge happened — GitHub's own protection reported
+  `required_status_checks.strict: false`, so a stale branch merged cleanly onto whatever `main` had
+  become. The chosen remedy is that one setting: with `strict: true`, GitHub requires the topic branch
+  to be up to date with the base before merging, and an update is a push, which invalidates the
+  receipt — so a moved base forces a fresh publish/review round rather than a silent merge. What that
+  does **not** guarantee is written here because it is the boundary of the fix:
+  - **Estigia does not read the setting back.** Nothing in the gate queries branch protection at
+    delivery time; the guarantee holds only while a collaborator leaves `strict: true` on. A setting
+    removed between publication and merge is a delivery with the same exposure as before, and no
+    local check would say so.
+  - **The delivered SHA's first parent is guaranteed by GitHub's strict check, not by Estigia.** The
+    gate's merge-identity checks (`stale_verdict`, `pr_merge_target`) still compare the reviewed
+    head, not the base; the base's constancy is the repository setting's promise, taken on trust.
+  - **A strict setting does not make concurrent delivery converge.** The 2026-08-20 diagnosis
+    measured `main` moving seven times under one branch while the mandatory CI floor (14 minutes)
+    already exceeded the delivery interval (15–25 minutes); each base move now costs an
+    integrate-and-republish round that invalidates the accepted verdict. The window the contract
+    needs — publish, review, CI, merge with the base unchanged — is still longer than the observed
+    interval, so a run delivering beside another may wait many rounds. That is the honest price of
+    the guarantee, stated rather than hidden.
 - **A `republish_review` that refuses has already written to the pull request, and names which
   writes.** Its refusals arrive after the reused pull request has been edited — the renewal stands
   immediately before the push, and the lease is evaluated by git at the push itself — so a remote
