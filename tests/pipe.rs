@@ -24,6 +24,24 @@ fn estigia() -> &'static str {
     env!("CARGO_BIN_EXE_estigia")
 }
 
+/// Guards `std::env::vars()` inside [`run_with_path_locked`] against the one
+/// test in this binary that mutates the process environment, without which
+/// `an_operators_gh_repo_never_reaches_a_spawned_gh`'s `set_var`/`remove_var`
+/// around `GH_REPO` race every other concurrently-scheduled `run`/`run_in`
+/// call's read of the same table — the exact premise `src/test_env.rs`'s
+/// `ENVIRONMENT` mutex exists to rule out for `cargo test --lib`, and cannot
+/// reach this binary since it is `pub(crate)` there.
+///
+/// [`run_with_path`] takes the read side for the duration of its call into
+/// [`run_with_path_locked`] — any number of them run concurrently, matching
+/// this suite's existing parallelism.
+/// `an_operators_gh_repo_never_reaches_a_spawned_gh` takes the write side
+/// instead, across `set_var`, the spawn and the restore, and calls
+/// `run_with_path_locked` directly rather than through `run_with_path`,
+/// because a read-side attempt on the same thread that already holds the
+/// write side is not something `std::sync::RwLock` promises to resolve.
+static ENV_LOCK: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
 #[test]
 fn a_reader_that_stops_reading_does_not_produce_a_backtrace() {
     // `status` prints more than one line for any installation, so dropping the
@@ -101,9 +119,6 @@ fn help_and_version_exit_zero() {
 /// reads does not put the trap back. `run_in`, which this calls through, goes
 /// on to `run_with_path`, which clears three more — `GH_REPO`, `GH_HOST`,
 /// `GH_TOKEN` — for a different reason spelled where that clearing happens.
-/// Past those two clearings, everything left real decides nothing here: `USER`,
-/// `COMPUTERNAME` and their kind end up in a record's prose, and `PATH` has to
-/// stay real or the child finds no interpreter.
 fn run(home: &std::path::Path, arguments: &[&str], stdin: &str) -> (String, String, bool) {
     run_in(home, home, arguments, stdin)
 }
@@ -139,14 +154,32 @@ fn run_in(
 /// measured as a builder and unmeasured as report, and the reason given was
 /// that forcing it takes a path with no `gh` on it. This is that path.
 ///
-/// `extra_env` is applied last, after the `ESTIGIA_*` and `GH_REPO`/`GH_HOST`/
-/// `GH_TOKEN` clearing above — so a caller naming one of those three would
-/// override the clearing rather than test it, which is deliberate: it is how
-/// `an_operators_gh_repo_never_reaches_a_spawned_gh` hands the child
-/// `ESTIGIA_FAKE_ENV_LOG`, a name this loop would otherwise strip along with
-/// every other inherited `ESTIGIA_*` variable before this function's own
-/// caller ever gets a say.
+/// `extra_env` is applied last, after both the `ESTIGIA_*` loop and the
+/// `GH_REPO`/`GH_HOST`/`GH_TOKEN` clearing above — so a caller naming one of
+/// those three GH_* names overrides the clearing rather than testing it,
+/// which is deliberate. What `an_operators_gh_repo_never_reaches_a_spawned_gh`
+/// actually depends on is the other half of that ordering, the `ESTIGIA_*`
+/// loop: it hands the child `ESTIGIA_FAKE_ENV_LOG`, a name that loop would
+/// otherwise strip along with every other inherited `ESTIGIA_*` variable
+/// before this function's own caller ever gets a say.
 fn run_with_path(
+    home: &std::path::Path,
+    here: &std::path::Path,
+    arguments: &[&str],
+    stdin: &str,
+    search_path: Option<&std::path::Path>,
+    extra_env: &[(&str, &str)],
+) -> (String, String, bool) {
+    let _guard = ENV_LOCK.read().expect("the env lock is not poisoned");
+    run_with_path_locked(home, here, arguments, stdin, search_path, extra_env)
+}
+
+/// The body of [`run_with_path`], reading `std::env::vars()` without taking
+/// `ENV_LOCK` itself — see that lock's own doc for why
+/// `an_operators_gh_repo_never_reaches_a_spawned_gh` calls this directly,
+/// under its own already-held write lock, instead of going through
+/// `run_with_path`.
+fn run_with_path_locked(
     home: &std::path::Path,
     here: &std::path::Path,
     arguments: &[&str],
@@ -241,21 +274,24 @@ fn run_with_path(
 /// `doctor`'s own `gh` row is the trigger, not reconciliation: `examine`
 /// calls `gh auth status` unconditionally once a skill is installed, so no
 /// two-holder fixture is needed to make some `gh` run at all — the property
-/// under test, that `GH_REPO` never reaches *any* `gh` this binary spawns
-/// through this fixture, does not depend on which call does.
+/// under test, that the operator's own `GH_REPO` never reaches any `gh` this
+/// binary spawns through this fixture, does not depend on which call does.
 ///
 /// Setting `GH_REPO` on the test binary's own process rather than on a
 /// throwaway child is what makes this a fair test of ambient inheritance —
 /// `Command` only omits a variable it was told to omit, never one merely
-/// absent from a builder — and it is safe against the rest of this suite
-/// specifically because nothing else here reads `GH_REPO` from its own
-/// process: every `run`/`run_in` call clears it in the *child* regardless of
-/// what this process holds (that clearing is what this test measures), and
-/// `tracker_command`'s fixture answers from `ESTIGIA_FAKE_ANSWERS` by
-/// argument matching alone, never consulting the repository a real `gh`
-/// would have resolved. The variable is restored, and restored before this
-/// function's own assertions run, so a failed assertion here cannot leave it
-/// set for whatever the suite schedules next.
+/// absent from a builder — and no concurrently-scheduled test reads `GH_REPO`
+/// by name from its own process: every `run`/`run_in` call clears it in the
+/// *child* regardless of what this process holds (that clearing is what this
+/// test measures), and `tracker_command`'s fixture answers from
+/// `ESTIGIA_FAKE_ANSWERS` by argument matching alone, never consulting the
+/// repository a real `gh` would have resolved. That leaves the raw table:
+/// `run_with_path`'s own `std::env::vars()` iterates every name at once, so
+/// `ENV_LOCK`'s write side, held for the whole `set_var`-to-restore span, is
+/// what keeps that iteration from running mid-mutation — see the lock's own
+/// doc. The variable is restored, and restored before this function's own
+/// assertions run, so a failed assertion here cannot leave it set for
+/// whatever the suite schedules next.
 #[test]
 fn an_operators_gh_repo_never_reaches_a_spawned_gh() {
     let here = std::env::current_exe().expect("the test binary knows where it is");
@@ -302,18 +338,25 @@ fn an_operators_gh_repo_never_reaches_a_spawned_gh() {
     // process — every `run`/`run_in` call clears it in the child it spawns
     // regardless of this process's value, and `tracker_command`'s fixture
     // answers by argument matching alone — and the value is restored before
-    // this function's own assertions run, below.
+    // this function's own assertions run, below. `ENV_LOCK`'s write side,
+    // held for this whole block, is what keeps a concurrently-scheduled
+    // `run`/`run_in` call's `std::env::vars()` from reading the process
+    // environment while `set_var`/`remove_var` here are between one value
+    // and the next — see that lock's own doc.
+    let _env_guard = ENV_LOCK.write().expect("the env lock is not poisoned");
     let marker = "operators-own-org/operators-own-repo";
     let before = std::env::var_os("GH_REPO");
     unsafe {
         std::env::set_var("GH_REPO", marker);
     }
-    // The actual function under test: the same `run_with_path` every other
-    // `run`/`run_in` call in this file goes through, not a second copy of its
-    // clearing logic — a duplicate here would keep passing after somebody
-    // deleted the real one, which is the exact failure this test exists to
-    // rule out.
-    let (_, stderr, ok) = run_with_path(
+    // The actual function under test: the same `run_with_path_locked` every
+    // other `run`/`run_in` call in this file reaches through `run_with_path`,
+    // not a second copy of its clearing logic — a duplicate here would keep
+    // passing after somebody deleted the real one, which is the exact failure
+    // this test exists to rule out. Called directly, without going through
+    // `run_with_path`, because this thread already holds `ENV_LOCK`'s write
+    // side above.
+    let (_, stderr, ok) = run_with_path_locked(
         home.path(),
         home.path(),
         &["doctor"],
@@ -330,6 +373,7 @@ fn an_operators_gh_repo_never_reaches_a_spawned_gh() {
             None => std::env::remove_var("GH_REPO"),
         }
     }
+    drop(_env_guard);
 
     // This asserts the fixture actually did what it was built for, before
     // trusting an empty log to mean the same thing as a clean one — an

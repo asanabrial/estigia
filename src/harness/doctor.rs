@@ -538,13 +538,13 @@ pub struct Contract {
 /// Only two adapters have a skill directory of their own, because a directory
 /// is only claimed once somebody has checked a **real installation** — see
 /// `setup::tests::only_the_two_verified_adapters_have_a_skill_root_of_their_own`.
-/// The other eight write to the shared neutral root, which works, and the
+/// The other nine write to the shared neutral root, which works, and the
 /// directive names the path.
 ///
 /// The gap was never the code: it is that nobody could tell, on their own
 /// machine, whether their agent is reading what Estigia wrote. Promoting an
 /// adapter by reading its documentation would be exactly the unchecked claim
-/// that test forbids. So instead of verifying eight installations here, this
+/// that test forbids. So instead of verifying nine installations here, this
 /// ships the thing that verifies one **wherever it is** — and reports the file
 /// by its full path, so an operator can hand back an answer nobody had to
 /// guess at.
@@ -986,8 +986,8 @@ pub fn gates(
 /// eleven rows and a run with every one of the eleven adapters this crate
 /// knows about configured reports forty-three — measured, not carried forward
 /// by hand: `estigia setup --all` in a fresh home, then `full` against the
-/// skill root it wrote. What a reader means by "doctor checks eleven things"
-/// — the bare-machine row count — is the concerns, and this is them — crossed
+/// skill root it wrote. Eleven is that bare-machine row count, not the number
+/// of concerns — the concerns are this list, thirteen of them — crossed
 /// against what `full` actually emits, both ways, by
 /// `the_number_of_things_doctor_checks_is_the_number_the_readme_claims`
 /// and `every_name_this_list_declares_is_one_doctor_can_report`.
@@ -1264,7 +1264,7 @@ pub fn full(
 ) -> Vec<Check> {
     let mut checks = examine(skill_root, repo_dir, tracker);
 
-    // Where each configured agent actually reads from. Eight of the eleven
+    // Where each configured agent actually reads from. Nine of the eleven
     // adapters share a neutral root because nobody has checked a real
     // installation for them, and reading their documentation instead would be
     // the unchecked claim `setup::tests` forbids. This does not verify them —
@@ -1538,9 +1538,9 @@ pub fn run_pointers(unreadable: &[String]) -> Check {
 /// to expire it once the issue closed. This row names **every** readable
 /// covering pointer whose issue reads closed, not only one, and what that
 /// means for the gate depends on the whole set of pointers covering that
-/// checkout, not only the stale ones listed here: `estigia guard` drops a
-/// checkout's stale pointers only when nothing live also covers it —
-/// **two or more** stale and nothing live reconciles them all away
+/// checkout, not only the stale ones listed here: reconciliation drops a
+/// checkout's stale pointers from the count only when nothing live also
+/// covers it — **two or more** stale and nothing live reconciles them all away
 /// (`guard::adjudicate_action` drops the whole set and the gate stands
 /// aside), while a live holder covering the same checkout survives that
 /// reconciliation and keeps gating it regardless of how many stale pointers

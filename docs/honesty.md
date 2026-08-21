@@ -2751,9 +2751,12 @@ suite. Everything else here is prose held by review.
   refuses.** A live holder covering that checkout survives reconciliation regardless of how many
   dead pointers sit alongside it, so this is the all-dead case specifically, not "two or more stale
   pointers" on its own. `holders.len() == 0` after reconciliation answers `Outside(NothingSworn)` —
-  the ordinary shape of a checkout nobody claims — so a machine
-  carrying two phantom pointers for one checkout is *more* permissive than one carrying a single
-  live-looking one. That is a consequence of the guard stated above, not a second gap: a lone
+  the ordinary shape of a checkout nobody claims — when `session::unreadable_holdings` is also empty;
+  an unreadable pointer anywhere on the machine denies `run-pointers-unreadable` instead
+  (`guard.rs`'s `0 =>` arm), and an unfinished sibling review denies through its own arm ahead of
+  either. So a machine carrying two phantom pointers for one checkout, and nothing else unreadable,
+  is *more* permissive than one carrying a single live-looking one. That is a consequence of the
+  guard stated above, not a second gap: a lone
   `issue-not-open` pointer refuses through `gate`'s own single-holder path rather than through this
   reconciliation, so `N == 1` was never touched, and nothing here decided that two phantoms are safer
   than one legitimate refusal — it decided that a checkout two closed claims both left behind is a
@@ -2816,9 +2819,14 @@ suite. Everything else here is prose held by review.
   filtered to siblings whose own complete review receipt names the pull request being merged — a
   `map`/`filter`/`collect` this reconciliation runs exactly as it does for an ordinary holder list —
   and `guard::tests::sibling_selection_binds_pr_before_head_and_attributes_no_ambiguous_holder` gives
-  it two receipt-matched siblings naming the same pull request to reconcile between, scripted to both
-  answer as live, which denies. Undriven beyond that two-holder floor: no fixture takes a sibling list
-  past two, or reconciles a sibling list where one is dropped as `ClosedIssue` while another survives —
+  it two receipt-matched siblings naming the same pull request to reconcile between, scripted with
+  `unreachable_tracker_answer()` — a `gh` that exits 1 — so both answer as unknown, not as live, and
+  denial follows the same fail-closed rule an unauthenticated `gh` in this environment would actually
+  reach: an unknown result keeps a holder counted rather than dropping it (`guard.rs`'s own comment on
+  the `_` arm is explicit that this is not the same thing as "live"). This sibling path has never been
+  crossed against a *successful* tracker read. Undriven beyond that two-holder floor: no fixture
+  takes a sibling list past two, or reconciles a sibling list where one is dropped as `ClosedIssue`
+  while another survives —
   every ordinary-holder test that shape has (`a_stale_holder_is_dropped_…`,
   `a_stale_holder_dropped_to_one_live_holder_lets_gate_allow`) has no sibling-list counterpart.
   `linked_siblings` is a different list entirely: it feeds `linked`, consulted only in the `0 =>` arm

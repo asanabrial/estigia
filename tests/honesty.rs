@@ -1804,15 +1804,16 @@ fn every_setting_the_gate_reads_is_one_that_does_not_differ_by_agent() {
 /// The way back. Its neighbour walks the rows `full` emits and proves the list
 /// declares each one; this walks the list and proves `doctor` can produce it.
 /// Only one of the two was written, and the unwritten one is the direction the
-/// README leans on: the count in *"`doctor` checks eleven things"* comes from
-/// this list, so a name left here after its check was taken out of `full`
-/// inflates a number the honesty contract exists to keep true — and the
-/// neighbour goes on passing, because it only ever looks at rows that exist.
+/// README leans on: the count in *"`doctor` checks thirteen things, not
+/// everything"* comes from this list, so a name left here after its check was
+/// taken out of `full` inflates a number the honesty contract exists to keep
+/// true — and the neighbour goes on passing, because it only ever looks at
+/// rows that exist.
 ///
 /// With an agent configured, and that is the whole reason this is a separate
-/// test: two of the eleven produce one row per configured agent and appear in
-/// nothing on a bare machine. Crossing this direction against an empty home
-/// would report `gate` and `tools` as phantoms every time.
+/// test: two of the thirteen produce one row per configured agent and appear
+/// in nothing on a bare machine. Crossing this direction against an empty
+/// home would report `gate` and `tools` as phantoms every time.
 #[test]
 fn every_name_this_list_declares_is_one_doctor_can_report() {
     let root = tempfile::tempdir().expect("a temporary directory");
