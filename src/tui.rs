@@ -180,7 +180,8 @@ impl InstallReceipt {
 /// What performs the write, and says what it did.
 ///
 /// Held as a callback so the screen can install without owning the code that
-/// installs: `guided` is still the only place that writes an agent's files.
+/// installs: `guided_install` is still the only place that writes an agent's
+/// files, and it is where the lifecycle gate sits.
 pub type Installer<'a> = dyn FnMut(&Plan) -> Result<InstallReceipt, InstallFailure> + 'a;
 
 /// What the screen decided.

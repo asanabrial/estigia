@@ -415,9 +415,9 @@ fn guided(options: &SetupOptions, json: bool, allow_source_build: bool) -> Resul
 ///
 /// Not the same as the screen being read-only, and the distinction is load
 /// bearing: its guard, language and folder keys each write before any plan is
-/// confirmed. `docs/lifecycle.md` names all three. None is an adapter asset and
-/// none is newly reachable — `estigia guard` never had a preflight either — but
-/// a reader who takes *deploys no asset* for *writes nothing* will be wrong.
+/// confirmed, and this gate covers none of them. `docs/lifecycle.md` names all
+/// three. A reader who takes *deploys no adapter asset* for *writes nothing*
+/// will be wrong.
 ///
 /// A refusal raised here is not swallowed by the alternate buffer: `tui::setup`
 /// shows it in the box and keeps it, so it still leaves as the process's exit

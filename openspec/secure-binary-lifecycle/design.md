@@ -28,8 +28,8 @@ slice deliberately has no network client.
 CLI dispatch performs preflight after argument-only validation and target selection but before
 configuration reads that lead into adapter mutation. Guided setup checked before opening the screen
 when this change was written; #118 moved that check to the screen's install, because opening the
-screen deploys no asset and the door withheld nothing the flag would not grant one command later,
-while costing the operator the rows the screen exists to show. The check is global rather than
+screen deploys no adapter asset and the door withheld nothing the flag would not grant one command
+later, while costing the operator the rows the screen exists to show. The check is global rather than
 per-adapter because setup batches intentionally continue after an adapter failure. Dry-run returns
 before lifecycle inspection because it cannot deploy assets.
 

@@ -79,9 +79,8 @@ which agents it knows.
 **The screen is not read-only before that install**, and this paragraph is not a claim that it is.
 Three keys write before any plan is confirmed: the guard key installs a `pre-push` hook into the
 current repository, the language key writes the remembered tongue under the home, and the folder
-picker creates a directory. None is an adapter asset, and none is newly *possible* — `estigia guard`
-from the shell has never had a preflight either — but they are reachable through this screen on a
-source build where the door refusal previously stopped them.
+picker creates a directory. None is an adapter asset, and the gate at the install covers none of
+them. The door refusal used to stop all three.
 
 Then swear to an issue:
 

@@ -2682,7 +2682,7 @@ suite. Everything else here is prose held by review.
   preflight put back in front of the screen would take it away again with the whole suite green.
   **The flag.** Nothing asserts that the `allow_source_build` the operator typed is the one
   `guided_install` reads. Both tests pass it as a literal, and the value travels
-  `dispatch` → `guided` → `guided_install` through three signatures no test drives; hardcoding `true`
+  `dispatch` → `guided` → `guided_install` through two links no test drives; hardcoding `true`
   at the first of them disarms the gate for the whole route, also with the suite green. That is the
   worse mutation of the two, because a gate that is present and always permissive reads as working.
 
