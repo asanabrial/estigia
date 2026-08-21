@@ -809,8 +809,19 @@ fn the_gate_never_writes_to_the_tracker() {
         0,
         "the gate spawns the transport again"
     );
+    // Two now, and both reads. The second is
+    // `tracker_answer_for_pointer` — the one question
+    // `guard::adjudicate_action`'s reconciliation and `doctor`'s
+    // `stale-run-pointer` row both ask, held to `gate`'s own shape rather than
+    // written a third time: same `Context::live`, same `GH_REPO`, same
+    // `verify-claim`. A third call site would be the copy this file's own
+    // history keeps finding; this test still holds the count to exactly the
+    // ones this module owns.
     let calls = source.matches("dispatch::dispatch(").count();
-    assert_eq!(calls, 1, "the gate grew a second transport call");
+    assert_eq!(
+        calls, 2,
+        "the gate grew a transport call this test does not know about"
+    );
     assert!(
         source.contains("\"verify-claim\""),
         "the one call the gate makes is no longer the read it is allowed to make"

@@ -2008,6 +2008,13 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         "silence",
         // No broken state at all, measured: `Health::Fine` or `Health::Skipped`.
         "transport",
+        // Not forced broken here for the same reason: this machine holds no
+        // stale run pointer at this point in the fixture, and forcing one
+        // needs a `gh` that answers `issue-not-open` for a specific issue
+        // rather than the blanket absence step 8 already forces — measured
+        // directly, with a scripted `gh`, in `harness::guard::tests` and
+        // `harness::doctor`'s own module instead.
+        "stale-run-pointer",
     ];
     let unforced: Vec<&String> = printed
         .iter()
@@ -8848,6 +8855,139 @@ fn release_does_not_report_a_release_the_transport_did_not_perform() {
     assert!(
         after.contains("\"issue\":12") || after.contains("\"issue\": 12"),
         "the pointer stopped holding the issue nobody released:\n{after}"
+    );
+}
+
+/// An issue the timeline carries no acquisition event for, whatever a local
+/// pointer says: open, and never claimed by anybody the transport can see.
+///
+/// `unassign` reads `assignees,labels,comments`, not `state,labels,comments` —
+/// [`issue_answer`] is the wrong fixture for this by one field, and `state`
+/// costs nothing extra to carry since a reader that does not ask for it does
+/// not mind it being there.
+fn issue_answer_nobody_claimed() -> String {
+    let issue = serde_json::json!({
+        "state": "OPEN",
+        "assignees": [],
+        "labels": [{"name": "status:in-progress"}],
+        "comments": [],
+    });
+    serde_json::to_string(&serde_json::json!([{
+        "matches": "issue view",
+        "stdout": issue.to_string(),
+        "status": 0,
+    }]))
+    .expect("the script serialises")
+}
+
+/// The phantom pointer issue #90 was filed against, cleared end to end: a run
+/// pointer on disk naming an issue the tracker's own timeline has no
+/// acquisition event for — the shape `several-runs-hold-this-checkout` names
+/// `estigia release --run-id <run-id>` to clear, and the one D4(b) actually
+/// had to reach.
+///
+/// `plan_release` raises `nothing-to-unassign` for exactly this timeline —
+/// this run appears in neither `ownership.live` nor `ownership.stale` — and
+/// that refusal used to propagate out of `release` unhandled: the pointer
+/// stayed on disk, and the command the several-holder refusal names did not
+/// clear the state it described. `release`'s discovery call now recognises
+/// that one code and forgets the pointer instead of repeating the refusal.
+#[test]
+fn releasing_a_phantom_pointer_forgets_it_and_says_so() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let pointer = home
+        .join(".estigia")
+        .join("runs")
+        .join("claude-phantom0.json");
+    std::fs::write(
+        &pointer,
+        serde_json::to_string(&serde_json::json!({
+            "run_id": "claude-phantom0",
+            "issue": 12,
+            "revision": 1,
+            "state": "in-progress",
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+        }))
+        .expect("the pointer serialises"),
+    )
+    .expect("the pointer is written");
+
+    let (said, err, ok) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        &issue_answer_nobody_claimed(),
+        &["release", "--run-id", "claude-phantom0"],
+        "",
+    );
+    let told = format!("{said}{err}");
+    assert!(ok, "clearing a phantom pointer was refused:\n{told}");
+    assert!(
+        told.contains("no epoch") && told.contains("forgotten"),
+        "the command did not say what it did to the pointer:\n{told}"
+    );
+    assert!(
+        !pointer.exists(),
+        "the pointer the tracker holds no epoch for is still on disk after release"
+    );
+}
+
+/// The negative half: a tracker read that fails must leave the pointer alone.
+///
+/// `nothing-to-unassign` is one specific, successful answer from the
+/// timeline — not the shape of every refusal `unassign` can raise. A `gh`
+/// that will not run answers `read-failed` instead, which `release` returns
+/// untouched, and the local pointer — the one piece of state a person can
+/// still read when the tracker cannot be reached at all — has to survive
+/// that exactly as it did before D4(b).
+#[test]
+fn a_release_the_tracker_could_not_be_asked_about_forgets_nothing() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let pointer = home
+        .join(".estigia")
+        .join("runs")
+        .join("claude-phantom1.json");
+    std::fs::write(
+        &pointer,
+        serde_json::to_string(&serde_json::json!({
+            "run_id": "claude-phantom1",
+            "issue": 34,
+            "revision": 1,
+            "state": "in-progress",
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+        }))
+        .expect("the pointer serialises"),
+    )
+    .expect("the pointer is written");
+
+    // The fake process's own catch-all: no entry matches, so `gh` exits `0`
+    // with nothing on stdout, and `gh issue view` returning nothing is itself
+    // a read failure — `gh_json` refuses `None` bodies as unparseable rather
+    // than reading absence as an answer.
+    let (said, err, ok) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        "[]",
+        &["release", "--run-id", "claude-phantom1"],
+        "",
+    );
+    let told = format!("{said}{err}");
+    assert!(
+        !ok,
+        "a release over an unreachable tracker was not refused:\n{told}"
+    );
+    assert!(
+        !told.contains("forgotten") && !told.contains("no longer holds"),
+        "a failed read was reported as though something had been cleared:\n{told}"
+    );
+    assert!(
+        pointer.exists(),
+        "a read that failed still took the pointer away:\n{told}"
     );
 }
 

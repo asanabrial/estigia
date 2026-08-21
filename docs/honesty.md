@@ -2699,14 +2699,43 @@ suite. Everything else here is prose held by review.
 - **The harness holds tools for GitHub only.** `linear` and `trello` ship a binding the agent reads
   and no executable, so the tools refuse (`tracker-has-no-transport`) and the gate stands aside.
   Estigia can install and configure those trackers; it cannot enforce anything for them.
-- **`doctor` checks twelve things, not everything.** Skill, transport, `gh`
+- **`doctor` checks thirteen things, not everything.** Skill, transport, `gh`
   authentication, a git remote, this repository's push guard, the contract each configured agent
   reads, whether the root the gate decides in carries the rows those agents read, whether the gate
   each of them registers would actually run, whether the tool server each
   of them registers would actually start, whether the operator has the gate standing down right
-  now, whether every run pointer on the machine can still say what it holds, and whether any call
-  has reached that gate and gone undecided. It does not check the tracker's labels, the board, or
-  whether the repository it found is the one the issues live in.
+  now, whether every run pointer on the machine can still say what it holds, whether a pointer that
+  *does* parse still names an issue the tracker holds open, and whether any call has reached that
+  gate and gone undecided. It does not check the tracker's labels, the board, or whether the
+  repository it found is the one the issues live in.
+
+- **A phantom holder is reconciled against the tracker only where the ambiguity is real.**
+  `guard::adjudicate_action` used to refuse `several-runs-hold-this-checkout` for two or more run
+  pointers naming one checkout without ever asking whether either was still true, naming *runs that
+  no longer exist* and a resolution its reader could not perform. It now asks the tracker about each
+  named holder before building that refusal, and drops one only on an explicit `issue-not-open` —
+  every other answer, including a failed read, keeps it counted, because an unknown result is not
+  clearance in this direction either.
+
+  What it deliberately does not close: a **single** holder whose issue is closed still refuses every
+  write in the checkout it names, with the same `issue-not-open` reason it always has. Reconciliation
+  is guarded to two or more holders on purpose. `GateContext` carries no caller identity, so the gate
+  cannot tell the run that just delivered — closing behind its own merge — from a dead stranger's
+  pointer left over from some other checkout; making that call turn on a self-asserted run id would
+  be widening the gate on an unverified assertion, which is the failure this crate exists to refuse.
+  `doctor`'s new `stale-run-pointer` row reports that residue instead of closing it: it names the
+  pointer and the release command, and leaves putting it down to the operator or the run itself.
+
+  Two or more holders that reconciliation cannot separate — because the tracker genuinely says both
+  issues are open — are the common case rather than the rare one: `start_branch` gives each run its
+  own isolated worktree without narrowing what the pointer's claim covers, so two healthy runs both
+  still cover the shared base checkout. The refusal's resolution tells them apart by the one fact
+  already on the pointer rather than by guessing at a run's health: a holder that names a `worktree`
+  is a live run with somewhere else to work, and `estigia release --run-id <run-id>` is offered only
+  for a holder that names none. And that command had to be made to actually clear a phantom pointer's
+  refusal — a run whose acquisition the tracker's timeline holds no event for at all answers
+  `nothing-to-unassign`, which `release` recognises and forgets the pointer for; every other refusal,
+  including a failed read, leaves the pointer exactly where it was.
 - **`config edit` writes one contract, and `config set` writes them all.** The plain `config set`
   propagates a row that is not per-agent — about the repository or about this machine — into every
   installed contract. The guided screen behind `config edit` writes only the target it was opened on:
@@ -2754,7 +2783,7 @@ suite. Everything else here is prose held by review.
   remote state is written and with no data lost. The recovery is the same `git worktree remove`, and
   it is written in the binding rather than enforced here. Measured by the blind reviewer of receipt
   `6b192e0ee94f11004b621c06c8e8e5dd` across twenty-four template shapes.
-- **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
+- **One of the thirteen is about the past.** A call the gate cannot decide on — a payload it cannot
   parse, or one that never arrived — is waved through, and that is the right answer: a schema this
   build does not know could be wrapping a read as easily as a write. What is wrong is doing it
   quietly. Both leave a ledger line, and `doctor` is what reads those lines back, because an

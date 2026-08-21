@@ -750,6 +750,49 @@ pub fn adjudicate_action(
         holders.clear();
     }
 
+    // Reconciled against the tracker — and only when there is more than one
+    // name to reconcile between. Two or more pointers naming one checkout used
+    // to reach the `_ =>` arm below unchanged, and that arm refused naming
+    // *runs that no longer exist* whenever one of them had since been closed
+    // out from under it: an issue delivered by a third checkout, or simply
+    // closed, leaves its pointer on disk with nothing left to expire it.
+    //
+    // Guarded to `len() >= 2` on purpose. A **single** holder whose issue is
+    // closed already refuses through the `1 =>` arm's own call into `gate`,
+    // with the same `issue-not-open` reason this reconciliation is built on —
+    // and that refusal is deliberate: it is the gate closing behind a run's own
+    // delivery, still holding the checkout it just wrote from. Reconciling here
+    // too would make this function decide that refusal on an answer of its own
+    // rather than `gate`'s, a second reading of one question with a second
+    // chance to disagree with the first. `N == 1` is untouched.
+    //
+    // A holder is dropped only when the tracker names its issue
+    // `issue-not-open` through `issue_is_closed_per_tracker` — see that
+    // function's own doc for why every other answer, including one this call
+    // could not get at all, keeps the holder counted: an unknown result is not
+    // clearance, and dropping on one would reopen the phantom-pointer defect in
+    // the other direction, a live claim discounted because the tracker went
+    // quiet for a moment.
+    //
+    // Read-only, like the rest of this reconciliation: nothing here writes,
+    // deletes or rewrites a pointer file. Putting one down is `estigia
+    // release`'s job, and the refusal below now names it.
+    //
+    // Dropping to one or to zero both fall through to the arms already below —
+    // restructured here rather than duplicated inside the `_ =>` arm, so a
+    // pointer reconciled away is decided exactly as if it had never been
+    // written, through the one path that already handles that count.
+    if holders.len() >= 2 {
+        holders.retain(|run| {
+            !super::issue_is_closed_per_tracker(
+                &context.skill_root,
+                &context.repo_dir,
+                &context.tracker,
+                run,
+            )
+        });
+    }
+
     // Through the stand-down, like every other decision. `gate` states the rule
     // where it wraps its own: *a stand-down honoured on some paths and not
     // others is worse than none — an operator would learn it works and be
@@ -825,6 +868,10 @@ pub fn adjudicate_action(
             }
             decision
         }
+        // Every name still here answered the tracker with something other than
+        // `issue-not-open`, so this is not a refusal a run can outlive by
+        // waiting: it names the command that clears it, for whichever of the
+        // holders below turns out not to own this work.
         _ => Decision::Deny(Box::new(Refusal::not_started(
             "several-runs-hold-this-checkout",
             format!(
@@ -832,13 +879,44 @@ pub fn adjudicate_action(
                 holders.len(),
                 holders
                     .iter()
-                    .map(|run| format!("{} (#{})", run.run_id, run.issue.unwrap_or_default()))
+                    .map(|run| match &run.worktree {
+                        Some(worktree) => format!(
+                            "{} (#{}) working in {}",
+                            run.run_id,
+                            run.issue.unwrap_or_default(),
+                            worktree.display()
+                        ),
+                        None => format!(
+                            "{} (#{}, no isolated checkout)",
+                            run.run_id,
+                            run.issue.unwrap_or_default()
+                        ),
+                    })
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            Resolution::no_command(
-                NoCommandReason::OperatorKnowledge,
-                "which claim this work belongs to — release the runs that do not, then retry",
+            // Naming the release command alone was advice that destroys work in
+            // the case this refusal is *most* often raised by: two healthy runs,
+            // each isolated in its own worktree, whose pointers both still cover
+            // the shared base checkout because `start_branch` adds a worktree
+            // without narrowing what the claim covers. Telling that reader to
+            // release one of the two would put down a live claim mid-change.
+            //
+            // Measured on this machine while the fix was being written:
+            // `opencode-19772` on #81 and `claude-9fb7c0d45951bb14` on #90, both
+            // claims live, both correct, every write from a session rooted at
+            // the base checkout refused and pointed at `release`.
+            //
+            // Reconciliation above has already dropped the holders the tracker
+            // says are closed, so everything named here is live as far as the
+            // tracker knows. What separates the two remaining shapes is on the
+            // pointer itself and needs no guess about a run's health: a holder
+            // with a worktree is a run with somewhere else to work, and a holder
+            // without one is the leftover the command clears.
+            Resolution::run(
+                "estigia release --run-id <run-id>   # only for a holder above with no isolated \
+                 checkout; a holder that names one is a live run, so work from its worktree \
+                 rather than releasing it",
             ),
         ))),
     };

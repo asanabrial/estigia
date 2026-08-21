@@ -2600,6 +2600,114 @@ fn prefixed(refusal: Refusal, subject: &str) -> Refusal {
     }
 }
 
+/// Asks the tracker about one run pointer's issue, the way [`gate`] asks for a
+/// renewal: the same [`crate::transport::Context::live`], the same `GH_REPO`
+/// set before dispatching, the same `--expect-state` — the run's own recorded
+/// [`Run::state`] where it has one, `in-progress` where it does not, exactly as
+/// [`gate`] defaults it.
+///
+/// `None` when nothing was asked at all: no issue recorded (unreachable
+/// through [`session::holdings`], which already filters those out, but not
+/// through every caller of this function), no executable transport for this
+/// tracker, or a clock this machine could not read. `Some` otherwise, whatever
+/// the tracker said — including a failed read, carried as the [`tracker::Answer`]
+/// [`translate`] would have built a refusal from. Callers that only care
+/// whether the issue closed collapse that into a bool; [`doctor`] cannot,
+/// because *a call that failed* and *a call that answered "still open"* are
+/// two different things to tell an operator, and folding them together would
+/// let a `gh` that would not spawn report a stale pointer as a live one just
+/// as easily as the reverse.
+fn tracker_answer_for_pointer(
+    skill_root: &Path,
+    repo_dir: &Path,
+    tracker: &crate::config::Tracker,
+    run: &Run,
+) -> Option<tracker::Answer> {
+    let issue = run.issue?;
+    tracker.transport()?;
+    let seconds = session::now_seconds()?;
+    if let Some(named) = tracker.named_repo() {
+        // SAFETY: see `gate`, above — the same write, made for the same reason:
+        // `gh` reads `GH_REPO` from the environment, not from an argument this
+        // call can pass, and this function answers one call at a time on the
+        // thread that made it.
+        unsafe { std::env::set_var("GH_REPO", named) };
+    }
+    let transport = crate::transport::Context::live(
+        skill_root.to_path_buf(),
+        repo_dir.to_path_buf(),
+        tracker.named_repo(),
+    );
+    let state = run
+        .state
+        .clone()
+        .unwrap_or_else(|| "in-progress".to_owned());
+    let flags: Vec<String> = [
+        "--issue",
+        &issue.to_string(),
+        "--run-id",
+        &run.run_id,
+        "--expect-state",
+        &state,
+    ]
+    .iter()
+    .map(|part| (*part).to_owned())
+    .collect();
+    let answer = crate::transport::dispatch::dispatch(
+        &transport,
+        "verify-claim",
+        &flags,
+        &session::stamp_of(seconds),
+    )
+    .map(|value| tracker::Answer {
+        code: 0,
+        body: Some(value),
+    })
+    .unwrap_or_else(|failure| tracker::Answer {
+        code: failure.code(),
+        body: Some(failure.envelope()),
+    });
+    Some(answer)
+}
+
+/// Whether the tracker says a run pointer's issue is closed.
+///
+/// The one question [`guard::adjudicate_action`] needs to tell a phantom
+/// holder from a live one. A state disagreement answers `unexpected-state`,
+/// not `issue-not-open`, so it falls through to `false` here precisely as it
+/// must: a run whose issue moved without it is not a run whose issue closed.
+///
+/// **`true` only for an explicit `issue-not-open`.** Every other answer —
+/// another refusal reason, a read that failed, a `gh` that would not spawn, a
+/// clock this machine could not read — returns `false`. That is not caution
+/// for its own sake: *an unknown result is not clearance* is the directive's
+/// own rule, and a holder dropped on a read that could not be trusted would
+/// reopen the defect a phantom pointer already is, in the other direction — a
+/// live claim discounted because the tracker went quiet for a moment.
+///
+/// Read-only. Nothing here writes a pointer, marks a run verified, or stores
+/// anything — [`guard::adjudicate_action`] reconciles a *list*, and a caller
+/// that wants the single-holder path's own bookkeeping still goes through
+/// [`gate`] for that, as it always did.
+///
+/// Takes the three pieces [`gate`] reads out of a [`GateContext`] rather than
+/// the context itself: `guard::adjudicate_action` already holds one and can
+/// pass its fields, and [`doctor::full`](doctor::full) holds no [`GateContext`]
+/// at all — only the skill root, the repository and the configured tracker,
+/// which is everything either caller needs and nothing either would otherwise
+/// have to invent. `doctor` calls [`tracker_answer_for_pointer`] directly
+/// rather than this: see that function's own doc for why a bool cannot answer
+/// what it has to tell an operator.
+pub(crate) fn issue_is_closed_per_tracker(
+    skill_root: &Path,
+    repo_dir: &Path,
+    tracker: &crate::config::Tracker,
+    run: &Run,
+) -> bool {
+    tracker_answer_for_pointer(skill_root, repo_dir, tracker, run)
+        .is_some_and(|answer| answer.reason() == Some("issue-not-open"))
+}
+
 /// Where the transport lives, or where it would live.
 ///
 /// [`discover_skill_root`] answers "which installed skill can be asked", and

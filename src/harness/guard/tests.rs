@@ -61,6 +61,25 @@ fn context(root: &Path, repo: &Path) -> GateContext {
     }
 }
 
+/// The contract, on disk. `gate` refuses `control-surface-not-installed`
+/// before it ever reaches the tracker — see
+/// `a_verification_through_the_checkout_path_is_written_down`'s own note —
+/// so a test that means to watch reconciliation reach the tracker has to
+/// clear that first, or every assertion below would be about a refusal this
+/// file did not come here to test.
+fn install_contract(context: &GateContext) {
+    std::fs::create_dir_all(&context.skill_root).expect("a skill root");
+    std::fs::write(
+        context.skill_root.join(crate::skill::CONTRACT),
+        "the contract this gate reads\n",
+    )
+    .expect("the contract is installed");
+}
+
+use crate::test_env::{
+    answers, closed_issue, open_but_unmatched_issue, scripted_gh, unreachable_tracker_answer,
+};
+
 /// A stand-down reaches the push path's own refusals too.
 ///
 /// `gate` wraps its decision and says why: *a stand-down honoured on some paths
@@ -508,6 +527,13 @@ fn a_push_the_worktree_of_a_claim_is_covered_by_it() {
 fn two_runs_holding_one_checkout_are_refused_rather_than_guessed_between() {
     // Picking one would be guessing which claim a push belongs to, and a wrong
     // guess authorises the wrong delivery.
+    //
+    // Reconciliation asks the tracker about both before this refusal is built
+    // — see the `_ =>` arm's own note — so this now drives a `gh` that
+    // answers `OPEN` for both issues, un-matched to whatever state each run
+    // recorded. That is a real, successful read, and not the one answer this
+    // reconciliation drops a holder on: two genuinely live holders stay two,
+    // and the refusal still names both.
     let root = tempfile::tempdir().expect("a temporary root");
     let repo = root.path().join("repo");
     std::fs::create_dir_all(&repo).expect("create the checkout");
@@ -520,13 +546,214 @@ fn two_runs_holding_one_checkout_are_refused_rather_than_guessed_between() {
         session::store(&context.state_root, &run).expect("the pointer writes");
     }
 
-    match decide(&context, &repo) {
+    let bin = scripted_gh();
+    let script = answers(&[open_but_unmatched_issue(12), open_but_unmatched_issue(34)]);
+    let decision =
+        crate::test_env::with_scripted_gh(bin.path(), &script, || decide(&context, &repo));
+    match decision {
+        Decision::Deny(refusal) => {
+            assert_eq!(refusal.code, "several-runs-hold-this-checkout");
+            assert!(refusal.message.contains("#12"));
+            assert!(refusal.message.contains("#34"));
+            assert!(
+                refusal
+                    .resolution
+                    .to_string()
+                    .contains("estigia release --run-id"),
+                "the refusal no longer names a command that clears it: {}",
+                refusal.resolution
+            );
+        }
+        other => panic!("two live claims were guessed between: {other:?}"),
+    }
+}
+
+/// Two healthy runs, each isolated, are not told to release one another.
+///
+/// The shape this refusal is raised by most often, and the one its advice used
+/// to be wrong for. `start_branch` adds a worktree to a pointer without
+/// narrowing what the claim covers, so two runs working correctly in their own
+/// checkouts **both** still cover the shared base — and a write from a session
+/// rooted there is refused with both of them named. Sending that reader to
+/// `estigia release` would put down a live claim in the middle of its change.
+///
+/// Measured on a real machine while this was written: `opencode-19772` on #81
+/// and `claude-9fb7c0d45951bb14` on #90, both live, both correct, every write
+/// from the base checkout refused and pointed at `release`.
+///
+/// Reconciliation cannot separate these two — the tracker says both issues are
+/// open, which is true — so what the message has to carry is the thing already
+/// on the pointer: where each run has to work instead.
+#[test]
+fn two_isolated_runs_are_told_where_to_work_rather_than_to_release_each_other() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("create the checkout");
+    let context = context(root.path(), &repo);
+
+    for (id, issue, leaf) in [
+        ("claude-first000", 12, "wt-twelve"),
+        ("claude-second00", 34, "wt-thirty4"),
+    ] {
+        let worktree = root.path().join(leaf);
+        std::fs::create_dir_all(&worktree).expect("create the worktree");
+        let mut run = session::Run::new(id.to_owned());
+        run.issue = Some(issue);
+        run.repo_dir = Some(repo.clone());
+        run.worktree = Some(worktree);
+        session::store(&context.state_root, &run).expect("the pointer writes");
+    }
+
+    let bin = scripted_gh();
+    let script = answers(&[open_but_unmatched_issue(12), open_but_unmatched_issue(34)]);
+    let decision =
+        crate::test_env::with_scripted_gh(bin.path(), &script, || decide(&context, &repo));
+    match decision {
+        Decision::Deny(refusal) => {
+            assert_eq!(refusal.code, "several-runs-hold-this-checkout");
+            for leaf in ["wt-twelve", "wt-thirty4"] {
+                assert!(
+                    refusal.message.contains(leaf),
+                    "the reader is not told where {leaf}'s run has to work: {}",
+                    refusal.message
+                );
+            }
+            let resolution = refusal.resolution.to_string();
+            assert!(
+                resolution.contains("work from its worktree"),
+                "a live holder's reader is not sent to its own checkout: {resolution}"
+            );
+            assert!(
+                resolution.contains("no isolated checkout"),
+                "the release command is offered without the condition that makes it safe: \
+                 {resolution}"
+            );
+        }
+        other => panic!("two isolated live claims were guessed between: {other:?}"),
+    }
+}
+
+/// One holder's issue is closed, the other's is genuinely open: the closed
+/// one is dropped by reconciliation and the survivor's decision runs through
+/// the *ordinary* single-holder path — `gate`, verified against the tracker
+/// on its own terms, not the several-holder refusal.
+#[test]
+fn a_stale_holder_is_dropped_and_the_live_one_s_single_holder_path_runs() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("create the checkout");
+    let context = context(root.path(), &repo);
+    install_contract(&context);
+
+    for (id, issue) in [("claude-stale0000", 12), ("claude-live00000", 34)] {
+        let mut run = session::Run::new(id.to_owned());
+        run.issue = Some(issue);
+        run.repo_dir = Some(repo.clone());
+        session::store(&context.state_root, &run).expect("the pointer writes");
+    }
+
+    let bin = scripted_gh();
+    let script = answers(&[closed_issue(12), open_but_unmatched_issue(34)]);
+    let decision =
+        crate::test_env::with_scripted_gh(bin.path(), &script, || decide(&context, &repo));
+    match decision {
+        Decision::Deny(refusal) => {
+            assert_ne!(
+                refusal.code, "several-runs-hold-this-checkout",
+                "a stale holder was not dropped, so the survivor never reached its own path: \
+                 {refusal:?}"
+            );
+            // The survivor's own path, through `gate`: read, and answered
+            // `unexpected-state` rather than the several-holder refusal — the
+            // proof this is `1 =>`'s call into `gate`, not `_ =>`'s.
+            assert_eq!(refusal.code, "unexpected-state");
+        }
+        other => panic!("the live holder's own path did not run: {other:?}"),
+    }
+}
+
+/// Both holders' issues are closed: reconciliation drops both, and nothing
+/// left holding the checkout is `Outside`, not a refusal naming two runs that
+/// no longer exist.
+#[test]
+fn both_holders_stale_leaves_nothing_holding_the_checkout() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("create the checkout");
+    let context = context(root.path(), &repo);
+
+    for (id, issue) in [("claude-stale0001", 12), ("claude-stale0002", 34)] {
+        let mut run = session::Run::new(id.to_owned());
+        run.issue = Some(issue);
+        run.repo_dir = Some(repo.clone());
+        session::store(&context.state_root, &run).expect("the pointer writes");
+    }
+
+    let bin = scripted_gh();
+    let script = answers(&[closed_issue(12), closed_issue(34)]);
+    let decision =
+        crate::test_env::with_scripted_gh(bin.path(), &script, || decide(&context, &repo));
+    assert_eq!(
+        decision,
+        Decision::Outside(crate::harness::Aside::NothingSworn),
+        "two pointers whose issues are both closed still refused by name: {decision:?}"
+    );
+}
+
+/// A tracker that cannot be reached answers nothing about staleness, so every
+/// holder stays counted — fail closed, the same direction the phantom-pointer
+/// defect runs the other way.
+#[test]
+fn a_tracker_read_that_fails_keeps_every_holder_counted() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("create the checkout");
+    let context = context(root.path(), &repo);
+
+    for (id, issue) in [("claude-first000", 12), ("claude-second00", 34)] {
+        let mut run = session::Run::new(id.to_owned());
+        run.issue = Some(issue);
+        run.repo_dir = Some(repo.clone());
+        session::store(&context.state_root, &run).expect("the pointer writes");
+    }
+
+    let bin = scripted_gh();
+    let script = answers(&[unreachable_tracker_answer()]);
+    let decision =
+        crate::test_env::with_scripted_gh(bin.path(), &script, || decide(&context, &repo));
+    match decision {
         Decision::Deny(refusal) => {
             assert_eq!(refusal.code, "several-runs-hold-this-checkout");
             assert!(refusal.message.contains("#12"));
             assert!(refusal.message.contains("#34"));
         }
-        other => panic!("two claims were guessed between: {other:?}"),
+        other => panic!("a read that failed dropped a holder instead of keeping it: {other:?}"),
+    }
+}
+
+/// A **single** holder whose issue is closed refuses exactly as it always
+/// has — reconciliation is guarded to two or more names, and must not leak
+/// into the count this one proves untouched.
+#[test]
+fn a_single_stale_holder_still_refuses_through_its_own_issue_not_open() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).expect("create the checkout");
+    let context = context(root.path(), &repo);
+    install_contract(&context);
+
+    let mut run = session::Run::new("claude-alone0000".to_owned());
+    run.issue = Some(99);
+    run.repo_dir = Some(repo.clone());
+    session::store(&context.state_root, &run).expect("the pointer writes");
+
+    let bin = scripted_gh();
+    let script = answers(&[closed_issue(99)]);
+    let decision =
+        crate::test_env::with_scripted_gh(bin.path(), &script, || decide(&context, &repo));
+    match decision {
+        Decision::Deny(refusal) => assert_eq!(refusal.code, "issue-not-open"),
+        other => panic!("a single stale holder no longer refuses on its own answer: {other:?}"),
     }
 }
 

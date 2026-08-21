@@ -979,9 +979,9 @@ fn the_number_of_things_doctor_checks_is_the_number_the_readme_claims() {
     let documents = documented();
     let claimed = number_before(&documents, "things, not everything")
         .expect("no document counts doctor's checks");
-    // The **kinds**, not the rows. Two of the eleven produce one row per
-    // configured agent, so a run on a bare machine reports seven rows and a run
-    // on a busy one reports twenty — and the README's count was being measured
+    // The **kinds**, not the rows. Two of the thirteen produce one row per
+    // configured agent, so a run on a bare machine reports eight rows and a run
+    // on a busy one reports twenty-one — and the README's count was being measured
     // against `examine`, which answers six while the command prints eight. A
     // claim checked at the wrong scope, in the file that exists to catch
     // exactly that.

@@ -389,16 +389,6 @@ fn inventory() -> Vec<Refusal> {
             "claude-abcd1234 holds no issue",
             Resolution::run("estigia status"),
         ),
-        // The discovery half of `release` answering that it found nothing of
-        // its own to put down. Not a release, and this used to be printed as
-        // one: `released: <run> no longer holds #<issue>` over a pointer that
-        // still held it.
-        Refusal::not_started(
-            "release-not-performed",
-            "claude-abcd1234 still holds #12: the release read the timeline and found no epoch \
-             of its own to put down",
-            Resolution::run("estigia status"),
-        ),
         Refusal::not_started(
             "hook-event-unknown",
             "\"on-tuesday\" is not a lifecycle event",
@@ -584,9 +574,10 @@ fn inventory() -> Vec<Refusal> {
         Refusal::not_started(
             "several-runs-hold-this-checkout",
             "2 runs on this machine hold this checkout",
-            Resolution::no_command(
-                NoCommandReason::OperatorKnowledge,
-                "which claim this work belongs to — release the runs that do not, then retry",
+            Resolution::run(
+                "estigia release --run-id <run-id>   # only for a holder above with no isolated \
+                 checkout; a holder that names one is a live run, so work from its worktree \
+                 rather than releasing it",
             ),
         ),
         Refusal::not_started(
@@ -4928,5 +4919,45 @@ fn a_row_that_reads_back_wrong_with_no_override_beside_it_blames_no_file() {
         refusal.message.contains("estigia.local.md"),
         "the override was there and went unnamed: {}",
         refusal.message
+    );
+}
+
+/// The discovery half of `release` finding no epoch of its own to put down
+/// forgets the local pointer, so `estigia release --run-id <run-id>` —
+/// `several-runs-hold-this-checkout`'s own resolution — actually clears the
+/// block it names rather than repeating it.
+///
+/// Isolated from `release` itself, which reaches a real `gh` through `tool`:
+/// this pins the one write the discovery answer causes, given the answer
+/// already parsed. A tracker read that fails or cannot be parsed never
+/// reaches this function at all — `release`'s `tool(…)?` returns before it —
+/// so there is nothing to pin about the "removes nothing" half beyond that
+/// early return already existing, which
+/// `a_run_pointer_nobody_can_read_is_not_a_run_that_holds_nothing` in
+/// `tests/pipe.rs` already measures for the two refusals above this one.
+#[test]
+fn forgetting_a_pointer_the_tracker_says_holds_no_epoch_removes_it() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let mut run = harness::session::Run::new("claude-phantom0".to_owned());
+    run.issue = Some(12);
+    run.repo_dir = Some(root.path().to_path_buf());
+    assert!(
+        harness::session::store(root.path(), &run).expect("the pointer writes"),
+        "the fixture pointer was not stored"
+    );
+    assert_eq!(
+        harness::session::load(root.path(), "claude-phantom0").issue,
+        Some(12),
+        "the fixture did not leave a pointer to forget"
+    );
+
+    forget_since_nothing_to_release(root.path(), "claude-phantom0", 12, false)
+        .expect("forgetting a pointer with nothing to release is not itself a refusal");
+
+    let after = harness::session::load(root.path(), "claude-phantom0");
+    assert_eq!(
+        after.issue, None,
+        "the pointer is still on disk after the tracker said there was nothing of this run's \
+         left to release: {after:?}"
     );
 }
