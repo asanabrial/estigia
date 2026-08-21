@@ -2749,24 +2749,41 @@ suite. Everything else here is prose held by review.
   are still live — are the common case rather than the rare one: `start_branch` gives each run its
   own isolated worktree without narrowing what the pointer's claim covers, so two healthy runs both
   still cover the shared base checkout. What tells them apart is the tracker's own answer for each
-  survivor, not the pointer: `not-current-live-holder` — the timeline saying nobody, or somebody
-  else, currently holds that issue under this run's name — is the only standing `estigia release
-  --run-id <run-id>` is offered for. A pointer's `worktree` field was tried first and was wrong in
-  both directions, measured against this crate's own `mcp::run_tool`: `PointerEffect::Swear`, what
-  `claim` runs, writes `issue`, `state` and `repo_dir` and never `worktree` — only
-  `PointerEffect::Isolated`, what `start_branch` runs *after* the claim, writes it — so a live run
-  between the two names no worktree and was offered for release, and a session that died right after
-  `start_branch` names one nobody works in any more and was read as live. When nothing among the
-  survivors is `not-current-live-holder` — two or more claims the tracker itself calls live — the
-  resolution names no command: there is no CLI verb for isolating a checkout the way `start_branch`
-  does (that tool is MCP-only), so nothing exists that would actually discharge the block for a reader
-  holding one of the live claims, and naming one anyway would be exactly the dead end this repository's
-  own rule forbids. And `estigia release` had to be made to actually clear a phantom pointer's refusal
-  — a run whose acquisition the tracker's timeline holds no event for at all answers
-  `nothing-to-unassign`, which `release` recognises and forgets the pointer for, and only once that
+  survivor, not the pointer: `not-current-live-holder` is the only standing `estigia release
+  --run-id <run-id>` is offered for, and it is **three** different timelines, not one —
+  `verify_claim` answers it whenever `holding().holder` is not this run, which covers no
+  acquisition for this run at all; an acquisition of this run's own that has gone stale, past its
+  horizon and still on the timeline (`ownership::holding` moves a lapsed one into `stale` rather
+  than dropping it); and a live acquisition of this run's own that lost a claim race to a different,
+  earlier holder. A pointer's `worktree` field was tried first and was wrong in both directions,
+  measured against this crate's own `mcp::run_tool`: `PointerEffect::Swear`, what `claim` runs,
+  writes `issue`, `state` and `repo_dir` and never `worktree` — only `PointerEffect::Isolated`, what
+  `start_branch` runs *after* the claim, writes it — so a live run between the two names no worktree
+  and was offered for release, and a session that died right after `start_branch` names one nobody
+  works in any more and was read as live. When nothing among the survivors is
+  `not-current-live-holder` — two or more claims the tracker itself calls live — the resolution
+  names no command: there is no CLI verb for isolating a checkout the way `start_branch` does (that
+  tool is MCP-only), so nothing exists that would actually discharge the block for a reader holding
+  one of the live claims, and naming one anyway would be exactly the dead end this repository's own
+  rule forbids.
+
+  `estigia release` had to be made to actually clear a phantom pointer's refusal, and what it does
+  differs by which of the three timelines this is: `plan_release` searches `ownership.live` chained
+  with `ownership.stale` for this run's own acquisition. Not found — no acquisition ever existed —
+  answers `nothing-to-unassign`, and only the local pointer goes. Found — a stale acquisition, or a
+  live one that lost the race — the acquisition is really there on the timeline, only lapsed or
+  losing, and `release` ends it: a genuine write to the tracker under the operator's own identity,
+  not the no-op "clears it harmlessly" first read as. Both shapes are recognised, and only once that
   pointer's own recorded repository is the one `release` was run against, so a successful read of an
   unrelated project's timeline forgets nothing; every other refusal, including a failed read, leaves
   the pointer exactly where it was.
+
+  **One case the named command does not clear, disclosed rather than fixed here.** A found
+  acquisition — stale or losing-live — recorded a runtime, and `estigia release` always sends
+  `session::DEFAULT_RUNTIME` (`claude`) as its own. When they differ, `plan_release` answers
+  `unassign-metadata-mismatch` and nothing is released: the command
+  `several-runs-hold-this-checkout` names for exactly this holder does not discharge the block for
+  it. Filed as its own defect rather than repaired in this change.
 
   **The cost this buys**: once two or more pointers cover one checkout, every gated action pays one
   tracker round trip per surviving holder rather than the one call `gate` alone would have made — a
@@ -2774,9 +2791,15 @@ suite. Everything else here is prose held by review.
   plugin does, since `decide_action` cannot tell a routine edit from a boundary before it has reconciled
   the list it is deciding over. The spawn happens above `standdown::over`, not below it, so a `gh` that
   hangs is not a door `estigia stand-down` can open past — the reconciliation blocks before the
-  stand-down is even consulted. Unmeasured beyond that: no fixture drives this cost, and none drives
-  the delivery-sibling list `linked_siblings` builds for a `gh pr merge` with no ordinary holder,
-  which falls into the same `retain` and has no test of its own.
+  stand-down is even consulted. Unmeasured beyond that: no fixture drives this cost.
+
+  Nor does one drive the *other* holder list this same reconciliation reads over: `holders_for_action`
+  builds one for a `gh pr merge` with no ordinary holder in this checkout, filtered to siblings whose
+  own complete review receipt names the pull request being merged — a `map`/`filter`/`collect` this
+  reconciliation runs exactly as it does for an ordinary holder list, with no fixture giving it two or
+  more receipt-matched siblings to reconcile between. `linked_siblings` is a different list entirely:
+  it feeds `linked`, consulted only in the `0 =>` arm to tell "no ordinary holder and no sibling either"
+  apart from "a sibling exists but has not finished reviewing," and reconciliation never touches it.
 - **`config edit` writes one contract, and `config set` writes them all.** The plain `config set`
   propagates a row that is not per-agent — about the repository or about this machine — into every
   installed contract. The guided screen behind `config edit` writes only the target it was opened on:
@@ -2824,11 +2847,15 @@ suite. Everything else here is prose held by review.
   remote state is written and with no data lost. The recovery is the same `git worktree remove`, and
   it is written in the binding rather than enforced here. Measured by the blind reviewer of receipt
   `6b192e0ee94f11004b621c06c8e8e5dd` across twenty-four template shapes.
-- **One of the thirteen is about the past.** A call the gate cannot decide on — a payload it cannot
-  parse, or one that never arrived — is waved through, and that is the right answer: a schema this
-  build does not know could be wrapping a read as easily as a write. What is wrong is doing it
-  quietly. Both leave a ledger line, and `doctor` is what reads those lines back, because an
-  operator opens the ledger after being stopped and this is the case where they never were.
+- **Two of the thirteen are about the past.** `silence`: a call the gate cannot decide on — a
+  payload it cannot parse, or one that never arrived — is waved through, and that is the right
+  answer: a schema this build does not know could be wrapping a read as easily as a write. What is
+  wrong is doing it quietly. Both leave a ledger line, and `doctor` is what reads those lines back,
+  because an operator opens the ledger after being stopped and this is the case where they never
+  were. `stale-run-pointer` joined it in `LOOKS_BACK` for a narrower reason: filtered to this
+  repository, everything it can name is a pointer some *other* run wrote, so a stale or unread
+  answer for that pointer says nothing about whether a fresh claim by a different run could swear
+  right now — `doctor`'s own `LOOKS_BACK` declaration states this in full.
 - **A run that swore nothing is never gated, including when Estigia is broken.** Failing closed on
   everybody would be a lock rather than authority, and would teach people to remove the hook. So a
   missing transport denies a sworn run's write and lets an unsworn one through — the oath is what

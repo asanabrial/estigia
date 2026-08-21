@@ -394,10 +394,15 @@ fn inventory() -> Vec<Refusal> {
             "claude-abcd1234 recorded its claim against a different repository than the one \
              this release was run against, so a successful read here says nothing about that \
              pointer's own timeline \u{2014} its local record is left exactly as it was",
+            // True for a checkout that still exists and true for the
+            // removed-worktree phantom this whole change is named for, which
+            // does not: `same_git_repository` cannot tell the two apart, so
+            // the resolution has to cover both without presuming which.
             Resolution::no_command(
                 NoCommandReason::OperatorKnowledge,
                 "run `estigia release --run-id <run-id>` from the checkout that pointer's own \
-                 claim actually covers",
+                 claim covers, if it still exists \u{2014} and if it does not, its pointer is \
+                 Estigia's own local state and no claim of anybody's, removable by hand",
             ),
         ),
         Refusal::not_started(

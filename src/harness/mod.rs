@@ -2702,11 +2702,36 @@ pub(crate) enum HolderStanding {
     /// `issue-not-open`. The caller drops this holder before deciding
     /// anything else about it.
     ClosedIssue,
-    /// `not-current-live-holder`: the timeline says nobody, or somebody
-    /// other than this run, currently holds this issue. A pointer projecting
-    /// a claim that is not there — exactly what `nothing-to-unassign` clears
-    /// harmlessly, through `estigia release`'s own discovery call. The only
-    /// standing a several-holder refusal may name that command for.
+    /// `not-current-live-holder`: `verify_claim` answers this whenever
+    /// `holding().holder` is not this run (`ownership.holder.as_deref() !=
+    /// Some(run_id)`) — which is **three** different timelines, not one, and
+    /// this classification cannot and does not tell them apart:
+    ///
+    /// - no acquisition for this run at all, ever;
+    /// - an acquisition of this run's own that has gone stale — past its
+    ///   horizon, and still on the timeline: `ownership::holding` moves a
+    ///   lapsed acquisition into `stale` rather than dropping it;
+    /// - a live acquisition of this run's own that lost a claim race to a
+    ///   different, earlier live holder.
+    ///
+    /// `estigia release --run-id <run-id>` is the only command a
+    /// several-holder refusal may name for this standing, and what it does
+    /// differs by which of the three this is — `plan_release` searches
+    /// `ownership.live` **chained with** `ownership.stale` for this run's own
+    /// acquisition. Found — the stale case, and the losing-live case alike —
+    /// it ends that run's claim on the tracker and removes the local
+    /// pointer, a real write under the operator's own identity, not a no-op:
+    /// a stale claim is a claim that is really there, only lapsed, not a
+    /// claim that "is not there". Not found — no acquisition ever existed —
+    /// only the local pointer goes (`nothing-to-unassign`), because there is
+    /// nothing on the tracker to end.
+    ///
+    /// One more limit the command itself has, not this classification: a
+    /// found acquisition recorded under a runtime other than
+    /// `session::DEFAULT_RUNTIME` answers `unassign-metadata-mismatch` and
+    /// clears nothing at all — `docs/honesty.md` states this as a limit of
+    /// the advice `several-runs-hold-this-checkout` gives, filed separately
+    /// rather than fixed here.
     NotCurrentHolder,
     /// Every other answer, including a read that failed to land at all: an
     /// unknown result is not clearance, so this counts as live and no

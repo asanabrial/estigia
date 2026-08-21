@@ -772,6 +772,13 @@ fn a_tracker_read_that_fails_keeps_every_holder_counted() {
             assert_eq!(refusal.code, "several-runs-hold-this-checkout");
             assert!(refusal.message.contains("#12"));
             assert!(refusal.message.contains("#34"));
+            // Nothing here was ever read, let alone confirmed live — the
+            // resolution must not claim otherwise.
+            assert!(
+                !refusal.resolution.to_string().contains("live"),
+                "a read that failed was described as though it had confirmed a claim live: {}",
+                refusal.resolution
+            );
         }
         other => panic!("a read that failed dropped a holder instead of keeping it: {other:?}"),
     }

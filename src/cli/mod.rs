@@ -4771,6 +4771,17 @@ fn forget_since_nothing_to_release(
         .as_deref()
         .is_some_and(|recorded| harness::same_git_repository(recorded, &context.repo_dir));
     if !same_repository {
+        // Not "run it from the checkout that pointer covers" alone — for the
+        // removed-worktree phantom this whole change exists for, that
+        // checkout is gone, and naming a command that assumes it still
+        // exists is the dead end the ratchet forbids. `same_git_repository`
+        // cannot tell "a different, live repository" from "no repository
+        // there any more" — both fail its `git rev-parse` the same way — so
+        // the resolution has to be honest about both without presuming
+        // which one this is: try the checkout the pointer recorded, if it
+        // still exists, and take the file away by hand if it does not,
+        // naming the one this run actually wrote.
+        let pointer = harness::session::pointer_path(&context.state_root, run_id);
         return Err(Refusal::not_started(
             "release-repository-mismatch",
             format!(
@@ -4780,8 +4791,13 @@ fn forget_since_nothing_to_release(
             ),
             Resolution::no_command(
                 crate::outcome::NoCommandReason::OperatorKnowledge,
-                "run `estigia release --run-id <run-id>` from the checkout that pointer's own \
-                 claim actually covers",
+                format!(
+                    "run `estigia release --run-id {run_id}` from the checkout that pointer's \
+                     own claim covers, if it still exists \u{2014} and if it does not, its \
+                     pointer is Estigia's own local state and no claim of anybody's, removable \
+                     by hand: {}",
+                    pointer.display()
+                ),
             ),
         ));
     }

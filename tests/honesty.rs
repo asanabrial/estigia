@@ -2267,9 +2267,9 @@ fn every_list_the_audit_answers_with_is_one_the_binding_names() {
 
 /// The README says how many checks `doctor` runs twice, and the two agree.
 ///
-/// Two adjacent entries carried it: *`doctor` checks twelve things, not
-/// everything* and, three lines later, *one of the eleven is about the past*.
-/// One of them was wrong and neither was read by anything — the count guard
+/// Two adjacent entries carried it: *`doctor` checks thirteen things, not
+/// everything* and, a few lines later, *two of the thirteen are about the
+/// past*. One of them was wrong and neither was read by anything — the count guard
 /// above covers the agent totals and stopped there. A number in prose that
 /// nothing reads is a number that drifts, which is the whole reason this file
 /// exists.
@@ -2293,7 +2293,7 @@ fn the_number_of_doctor_checks_is_the_same_number_everywhere_it_is_claimed() {
     // defect; fixing the instance and leaving the shape is what this repository
     // says not to do.
     let documents = documented();
-    let phrases = ["things, not everything", "is about the past"];
+    let phrases = ["things, not everything", "are about the past"];
     let claimed: Vec<usize> = phrases
         .iter()
         .map(|phrase| {

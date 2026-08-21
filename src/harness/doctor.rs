@@ -1550,6 +1550,15 @@ pub fn run_pointers(unreadable: &[String]) -> Check {
 /// already owns, so a pointer this repository does not cover is never asked
 /// about at all.
 ///
+/// **`same_git_repository` fails closed to `false`.** A pointer whose
+/// recorded `repo_dir` no longer resolves as a git checkout at all — deleted,
+/// moved, the removed-worktree phantom this row exists for — answers `false`
+/// on both sides of that comparison, the same way it would for two unrelated
+/// repositories, and is silently excluded from this row entirely: not stale,
+/// not unread, not named. It is still reported by `run_pointers` if the
+/// pointer itself will not parse, but a pointer that parses fine and names a
+/// checkout `git rev-parse` can no longer find is invisible to this one.
+///
 /// A tracker read that fails answers nothing about staleness — the same rule
 /// `holder_standing` is built on — so a pointer this could not ask about is
 /// never folded into either verdict; it is its own count, named separately,
@@ -1562,7 +1571,8 @@ pub fn stale_run_pointers(
     tracker: &crate::config::Tracker,
     holdings: &[super::session::Run],
 ) -> Check {
-    let about = "whether a readable run pointer still names an issue the tracker holds open";
+    let about = "whether a readable run pointer covering this repository still names an issue the \
+         tracker holds open";
     if tracker.transport().is_none() {
         return Check {
             name: "stale-run-pointer",
@@ -1661,7 +1671,8 @@ pub fn stale_run_pointers(
         name: "stale-run-pointer",
         about,
         health: Health::Fine {
-            detail: "every readable run pointer still names an issue the tracker holds open"
+            detail: "every readable run pointer covering this repository still names an issue \
+                     the tracker holds open"
                 .to_owned(),
         },
     }
@@ -2112,12 +2123,12 @@ pub fn tool_servers(
 
 /// Whether the gate has been letting calls through without deciding on them.
 ///
-/// The one check about the past rather than the present. Everything else here
-/// asks whether a run *could* work; this asks whether the runs that already
-/// happened were gated at all — because the two ways they are not are both
-/// silent by construction. Nothing is denied, nothing is printed, and the only
-/// trace is a ledger line nobody has a reason to open: an operator only reads
-/// it after being stopped, and this is the case where they never were.
+/// One of two checks about the past rather than the present — `stale-run-pointer` joined it in
+/// `LOOKS_BACK`, and that constant's own doc says why. Everything else here asks whether a run
+/// *could* work; this asks whether the runs that already happened were gated at all — because the
+/// two ways they are not are both silent by construction. Nothing is denied, nothing is printed,
+/// and the only trace is a ledger line nobody has a reason to open: an operator only reads it after
+/// being stopped, and this is the case where they never were.
 pub fn silence(found: &Ungated) -> Check {
     let about = "whether any call reached the gate and went undecided";
     // A file that will not open answers nothing, and saying "every call was

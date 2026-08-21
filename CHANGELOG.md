@@ -36,18 +36,26 @@ the workflow, it holds the tools.
   more, read as live because it named one. A pointer's own fields are not a
   liveness signal in either direction. The tracker's own answer is: reconciling
   now classifies every surviving holder as the issue closing under it
-  (dropped, as before), `not-current-live-holder` — the timeline saying nobody
-  holds it under that run's name, which `estigia release` clears harmlessly —
-  or live. Only a `not-current-live-holder` is ever named for release; two or
-  more genuinely live holders is real ambiguity, and the resolution names no
-  command rather than guess, because no CLI verb exists for isolating a
-  checkout the way `start_branch` does. And `estigia release` was changed to
-  make the offered command true: a run whose timeline carries no acquisition
-  event for it at all answers `nothing-to-unassign`, which used to propagate
-  unhandled and leave the pointer on disk; `release` now recognises that
-  refusal and forgets the local pointer instead of repeating it, and only once
+  (dropped, as before), `not-current-live-holder`, or live. Only a
+  `not-current-live-holder` is ever named for release; two or more genuinely
+  live holders is real ambiguity, and the resolution names no command rather
+  than guess, because no CLI verb exists for isolating a checkout the way
+  `start_branch` does.
+
+  `not-current-live-holder` is three timelines, not one, and the command does
+  not clear all three the same way. No acquisition for this run ever existed —
+  `nothing-to-unassign` — and only the local pointer goes. A stale acquisition
+  of this run's own, or a live one that lost a claim race, is found on the
+  tracker's timeline and actually ended there under the operator's own
+  identity, a real write and not a no-op: a stale claim is a claim that is
+  really there, only lapsed, not a claim that "is not there". `release` now
+  recognises `nothing-to-unassign` and forgets the local pointer instead of
+  leaving it to answer the same refusal again, in both shapes, and only once
   the pointer's own recorded repository is the one `release` was actually run
-  against — a successful read of the wrong project's timeline forgets nothing.
+  against — a successful read of the wrong project's timeline forgets
+  nothing. `docs/honesty.md` discloses the one case the command does not
+  clear: a stale acquisition recorded under a runtime other than the one
+  `estigia release` always sends answers `unassign-metadata-mismatch`.
 
   **`doctor` reports the residue reconciliation leaves alone, asked about the
   right repository.** A new `stale-run-pointer` row names a *single* readable
@@ -684,7 +692,10 @@ the workflow, it holds the tools.
   replace a `pre-push` somebody else wrote.
 - **The tracker's timeline is the only source of truth.** No local database of
   claims, so two runs on two machines still adjudicate against each other and a
-  run that dies leaves no phantom state.
+  run that dies leaves no *authority* behind — whatever the timeline says still
+  governs, whoever wrote it. The local run pointer a dead session leaves is a
+  different question, never authority, and is what issue #90's own fix
+  reconciles against the tracker rather than trusting on its own.
 - `estigia doctor` checks, read-only, that everything a run needs before it
   swears actually works: the skill, the transport, a Python that runs, an
   authenticated `gh`, and a git remote. Every failure names a resolution.

@@ -795,12 +795,14 @@ pub fn adjudicate_action(
         let judged: Vec<(session::Run, super::HolderStanding)> = holders
             .into_iter()
             .map(|run| {
-                let standing = super::holder_standing(
-                    &context.skill_root,
-                    &context.repo_dir,
-                    &context.tracker,
-                    &run,
-                );
+                // `repo_dir`, the argument this function was actually called
+                // with — not `context.repo_dir`. The two agree at every call
+                // site today, but `adjudicate_action` is `pub`, and a caller
+                // that ever let them diverge would reconcile one checkout's
+                // holders against a different repository's timeline, which
+                // is the exact shape of the finding `doctor` was fixed for.
+                let standing =
+                    super::holder_standing(&context.skill_root, repo_dir, &context.tracker, &run);
                 (run, standing)
             })
             .filter(|(_, standing)| !matches!(standing, super::HolderStanding::ClosedIssue))
@@ -892,18 +894,21 @@ pub fn adjudicate_action(
         // the narrower true thing this says about it: not "live as far as the
         // tracker knows", which a failed read is not an instance of.
         _ => {
-            // Which of the survivors the tracker itself said may safely be
-            // put down. `not-current-live-holder` is the timeline saying
-            // nobody, or somebody else, holds this issue under that run's
-            // name — a pointer projecting a claim that is not there, which
-            // `estigia release`'s own discovery clears harmlessly through
-            // `nothing-to-unassign`. Nothing else may be offered that
-            // command: a pointer's `worktree` field used to stand in for
-            // this and got both directions wrong — `PointerEffect::Swear`
-            // (`claim`) never writes it, so a live run between `claim` and
-            // `start_branch` has none, and a session that died right after
-            // `start_branch` leaves one naming a checkout nobody is working
-            // in any more. Only the tracker's own answer is authoritative.
+            // Which of the survivors the tracker itself said `estigia
+            // release` may be named for. `not-current-live-holder` covers
+            // three different timelines, not one — see `HolderStanding`'s
+            // own doc — and the command clears each differently: no
+            // acquisition ever existed, and only the pointer goes
+            // (`nothing-to-unassign`); a stale or a losing-live acquisition
+            // is found on the timeline and actually ended there, a real
+            // write under the operator's own identity. Nothing else may be
+            // offered that command: a pointer's `worktree` field used to
+            // stand in for this and got both directions wrong —
+            // `PointerEffect::Swear` (`claim`) never writes it, so a live run
+            // between `claim` and `start_branch` has none, and a session
+            // that died right after `start_branch` leaves one naming a
+            // checkout nobody is working in any more. Only the tracker's own
+            // answer is authoritative.
             let releasable: Vec<&session::Run> = holders
                 .iter()
                 .zip(standings.iter())
@@ -926,11 +931,17 @@ pub fn adjudicate_action(
             // so nothing exists here that would actually discharge the
             // block for a reader holding one of two genuinely live claims.
             let resolution = if releasable.is_empty() {
+                // Not "these live claims": a read that failed answers nothing
+                // about liveness, and this arm is reached by that too — see
+                // `HolderStanding::Live`'s own doc. What is true of every
+                // holder still named here is narrower and still enough to act
+                // on: none of them is a pointer the tracker itself called
+                // `not-current-live-holder`, so none may be guessed away.
                 Resolution::no_command(
                     NoCommandReason::OperatorKnowledge,
-                    "which of these live claims this work belongs to \u{2014} each names its \
-                     own claim; work from the checkout that run's own claim covers rather than \
-                     guessing between them",
+                    "which of these claims this work belongs to \u{2014} the tracker named none \
+                     of them a leftover, so work from the checkout that run's own claim covers \
+                     rather than guessing between them",
                 )
             } else {
                 Resolution::run(format!(
