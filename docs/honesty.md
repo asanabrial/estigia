@@ -2329,7 +2329,8 @@ suite. Everything else here is prose held by review.
     gate's merge-identity checks (`stale_verdict`, `pr_merge_target`) still compare the reviewed
     head, not the base; the base's constancy is the repository setting's promise, taken on trust.
   - **A strict setting does not make concurrent delivery converge.** The 2026-08-20 diagnosis
-    measured `main` moving seven times under one branch while the mandatory CI floor (14 minutes)
+    measured `main` moving seven times under one branch while the full delivery floor — integrate
+    (~4 min) + `ready_for_review` CI (14 min) + merge, over 18 minutes even at zero review time —
     already exceeded the delivery interval (15–25 minutes); each base move now costs an
     integrate-and-republish round that invalidates the accepted verdict. The window the contract
     needs — publish, review, CI, merge with the base unchanged — is still longer than the observed
