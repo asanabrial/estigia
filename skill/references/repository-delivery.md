@@ -200,15 +200,8 @@ already-verified tag.
 
 ## Handoff and cleanup
 
-Choose handoff state from evidence:
-
-| Evidence at handoff | Destination |
-|---|---|
-| The issue premise or acceptance criteria are wrong | Analysis, with the contradiction and evidence |
-| Nothing is built and an external condition must change | Blocked, with the condition and discharger |
-| Work is built or published but cannot ship on ordinary delivery evidence | Review, with branch/review target, checks, and blocker |
-| Built work awaits exceptional human adjudication outside ordinary delivery gates | Blocked, with the preserved delivery record, exact decision or exit condition, and discharger |
-| Diagnosis is useful but no fix exists | Ready, with hypotheses tested and the narrowed next step |
+Choose the destination the Decision Gates table in `SKILL.md` names. This file does not
+own a second table of those rows.
 
 Do not discard another run's branch, diagnosis, measurements, or ruled-out hypotheses. Record all of
 them on the durable work item so the next run resumes rather than reconstructs.

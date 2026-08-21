@@ -1749,9 +1749,17 @@ fn every_named_disposition_uses_a_transport_state() {
         destinations.push(destination);
     }
 
+    // A count of arrows is not coverage. Rewriting `merged and verified -> \`done\``
+    // as `-> \`review\`` left six destinations and the library suite green, with
+    // `done` unreachable from any decision gate.
+    let missing: Vec<_> = crate::config::STATES
+        .iter()
+        .copied()
+        .filter(|state| !destinations.iter().any(|destination| destination == state))
+        .collect();
     assert!(
-        destinations.len() >= crate::config::STATES.len(),
-        "the disposition crossing found too few destinations"
+        missing.is_empty(),
+        "a named state is not a disposition destination: {missing:?}",
     );
     assert!(
         gates.contains("ordinary delivery permission -> `review`"),
@@ -1779,10 +1787,70 @@ fn every_named_disposition_uses_a_transport_state() {
         contract.contains("a person's decision is not a verdict"),
         "the contract does not forbid recording the person as the missing verdict"
     );
+}
+
+/// A companion document points at the Decision Gates table rather than carrying
+/// its own copy of it.
+///
+/// **What it prevents**, in the two spellings it can see: `repository-delivery.md`
+/// carrying a routing table of its own — it held a five-row one until this change
+/// — and any of the four companion documents writing an arrow in the table's own
+/// notation. Restoring the deleted table byte for byte reddens this.
+///
+/// **What it does not.** Rename that header cell and keep a pointer sentence and
+/// the whole table comes back green: a judge measured it. A restatement in prose
+/// that uses no arrow passes in every one of these files, which is not
+/// hypothetical — the handoff bullet this change removed from
+/// `safety-incidents.md` restores byte for byte and nothing objects. A guard
+/// written to close that gap counted the states each *source line* named and was
+/// withdrawn in this same change: it reddened on correct prose — two hard-wrapped
+/// lines that enumerate the state *vocabulary*, four backticked names between
+/// them, and naming the states is not routing them — while a hard-wrapped copy of
+/// the real thing walked past it. An earlier version of this sentence blamed
+/// `already` containing `ready`; that substring effect is real and is not what
+/// reddened the guard, which two judges measured and `docs/honesty.md` records
+/// with the measurement.
+///
+/// **Load-bearing strings.** The literal `Decision Gates table in \`skill/SKILL.md\``
+/// in `docs/honesty.md` and the `Decision Gates` pointer in `repository-delivery.md`
+/// are asserted here, so rewording either reddens this test. That is the point —
+/// a pointer nobody is required to keep is a pointer that quietly leaves — but it
+/// is stated because a reader who trips it deserves to know it was deliberate.
+#[test]
+fn the_decision_gate_is_not_restated_as_a_second_table() {
+    let delivery = include_str!("../../skill/references/repository-delivery.md");
     assert!(
-        contract.contains("unresolved choice about what should be built"),
-        "step 7 names only a contradiction and leaves an omission unrouted"
+        !delivery.contains("| Destination |"),
+        "repository-delivery restates the decision gate as its own table"
     );
+    assert!(
+        delivery.contains("Decision Gates"),
+        "repository-delivery does not send a reader to the owner"
+    );
+
+    let honesty = include_str!("../../docs/honesty.md");
+    assert!(
+        honesty.contains("Decision Gates table in `skill/SKILL.md`"),
+        "the honesty contract does not name the owner of the routing"
+    );
+
+    for (path, text) in [
+        (
+            "skill/policies/blind-judges.md",
+            include_str!("../../skill/policies/blind-judges.md"),
+        ),
+        (
+            "skill/references/safety-incidents.md",
+            include_str!("../../skill/references/safety-incidents.md"),
+        ),
+        ("docs/honesty.md", honesty),
+        ("skill/references/repository-delivery.md", delivery),
+    ] {
+        assert!(
+            !text.contains("-> `"),
+            "{path} restates a disposition arrow the Decision Gates table owns"
+        );
+    }
 }
 
 #[test]

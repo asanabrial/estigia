@@ -12,6 +12,37 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The decision-gate crossing holds a subset, not a count of arrows.**
+  Rewriting `done` as `review` used to leave the suite green: the assertion was
+  `destinations.len() >= STATES.len()`, which a duplicated arrow satisfies while
+  a state is unreachable. It is a subset relation now, and that mutation reddens.
+
+  **And two companion documents stopped re-issuing the routing.** The incident
+  ledger's I09 restated it in full — wrong specifications to analysis, unbuilt
+  external waits to blocked, ordinary built delivery waits to review — and
+  `repository-delivery.md` carried a five-row table of the same thing. I09 states
+  its lesson now and both leave the destinations to the table their own pointers
+  name. The contract itself lost a copy too: `SKILL.md`'s step 6 had the same
+  enumeration in its tail and now points at the table instead, while step 7 keeps
+  a restatement whose whole subject is the distinction. Four copies in all.
+
+  **One guard holds their return and a second was withdrawn.**
+  `the_decision_gate_is_not_restated_as_a_second_table` reddens on the table this
+  change deleted, restored byte for byte, and on an arrow of the table's own form
+  in any of the four companion documents — and it is blind to that same table with
+  its header cell renamed, which a judge measured.
+
+  The withdrawn one counted how many states a *source line* named, and four blind
+  judges measured it wrong rather than incomplete. It did catch I09's column, the
+  copy it was written for. It missed the hard-wrapped handoff bullet in the same
+  file, which restores byte for byte and passes on its line wrapping alone; it
+  could not see a routing table at all, which names one state per row; and joining
+  two lines of ordinary prose reddens it without a word changing, because the
+  pair that does it enumerates the state vocabulary and enumerating the names is
+  not restating the routing. That last one decided it: a guard that reddens on
+  correct prose is aimed at the wrong object, and it measured a line while the
+  rule it was written for is about a statement.
+  `docs/honesty.md` records what each holds and what neither does.
 - **The board mirror leaves a card that belongs to another repository alone, and says whose it is.**
   Matching on issue number alone moved another project's cards, measured once per
   write path: creating this repository's #73 on 2026-08-18 moved that project's
