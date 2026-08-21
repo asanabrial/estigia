@@ -729,10 +729,10 @@ pub fn adjudicate_action(
     // watched, and this run holds no issue" about a tool that is not watched at
     // all. And the decision: the branch below **denies** when a run pointer
     // somewhere on this machine will not parse, which is right for a write and
-    // is a denied `Read` for OpenCode, whose plugin sends every tool call
-    // through here. This file's neighbour already states the rule — *a schema
-    // this build does not know could be wrapping `Read` as easily as `Write`,
-    // and denying it would deny reads*.
+    // is a denied `Read` for any caller asking `estigia gate` about a tool this
+    // build does not watch at all. This file's neighbour already states the
+    // rule — *a schema this build does not know could be wrapping `Read` as
+    // easily as `Write`, and denying it would deny reads*.
     if matches!(action, Action::Untouched) {
         return Adjudication {
             decision: Decision::Outside(super::Aside::NotWatched),

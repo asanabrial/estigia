@@ -1240,12 +1240,13 @@ fn a_pointer_nothing_can_read_does_not_make_a_checkout_nobody_holds() {
         refusal.message
     );
 
-    // But only for something the harness watches. This function is the whole
-    // gate for OpenCode — its plugin shells out to `estigia gate` on every tool
-    // call — so with the torn pointer still there, denying whatever it did not
-    // recognise denied that agent's every `Read` and `Grep` until somebody
-    // found the file. The rule is stated next door, about a payload rather than
-    // a pointer: *denying it would deny reads*.
+    // But only for something the harness watches. `estigia gate <tool>` reaches
+    // this same function for whatever tool a caller names — a person or a
+    // script, not only an agent's own plugin — so with the torn pointer still
+    // there, denying whatever it did not recognise denied `estigia gate Read`
+    // and every other unwatched tool until somebody found the file. The rule
+    // is stated next door, about a payload rather than a pointer: *denying it
+    // would deny reads*.
     assert_eq!(
         decide_action(
             &context,

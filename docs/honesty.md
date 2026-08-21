@@ -2735,6 +2735,14 @@ suite. Everything else here is prose held by review.
   `doctor`'s new `stale-run-pointer` row reports that residue instead of closing it: it names the
   pointer and the release command, and leaves putting it down to the operator or the run itself.
 
+  The row has a blind spot of its own, and it is plausibly the commonest dead-pointer shape:
+  `same_git_repository` fails closed to `false`, so a pointer whose recorded checkout no longer
+  resolves as a git repository at all — deleted, moved, the removed-worktree phantom this row
+  exists for — compares `false` against every repository, this one included, and is silently
+  excluded from the row entirely: not stale, not unread, not named. `run_pointers` still reports it
+  if the pointer itself will not parse; a pointer that parses fine and names a checkout `git
+  rev-parse` can no longer find is invisible to both rows.
+
   Also deliberate, and the sharper edge: **two dead pointers reconcile all the way to zero, and the
   gate stands aside, while one dead pointer still refuses.** `holders.len() == 0` after reconciliation
   answers `Outside(NothingSworn)` — the ordinary shape of a checkout nobody claims — so a machine
@@ -2750,8 +2758,9 @@ suite. Everything else here is prose held by review.
   own isolated worktree without narrowing what the pointer's claim covers, so two healthy runs both
   still cover the shared base checkout. What tells them apart is the tracker's own answer for each
   survivor, not the pointer: `not-current-live-holder` is the only standing `estigia release
-  --run-id <run-id>` is offered for, and it is **three** different timelines, not one —
-  `verify_claim` answers it whenever `holding().holder` is not this run, which covers no
+  --run-id <run-id>` is offered for, and it is **three** different timelines, not one — once a
+  state label already matches (a disagreement answers `unexpected-state` first, and classifies
+  live), `verify_claim` answers it whenever `holding().holder` is not this run, which covers no
   acquisition for this run at all; an acquisition of this run's own that has gone stale, past its
   horizon and still on the timeline (`ownership::holding` moves a lapsed one into `stale` rather
   than dropping it); and a live acquisition of this run's own that lost a claim race to a different,
@@ -2786,12 +2795,11 @@ suite. Everything else here is prose held by review.
   it. Filed as its own defect rather than repaired in this change.
 
   **The cost this buys**: once two or more pointers cover one checkout, every gated action pays one
-  tracker round trip per surviving holder rather than the one call `gate` alone would have made — a
-  `Read` tool call included, on a host that routes every tool through the gate the way OpenCode's
-  plugin does, since `decide_action` cannot tell a routine edit from a boundary before it has reconciled
-  the list it is deciding over. The spawn happens above `standdown::over`, not below it, so a `gh` that
-  hangs is not a door `estigia stand-down` can open past — the reconciliation blocks before the
-  stand-down is even consulted. Unmeasured beyond that: no fixture drives this cost.
+  tracker round trip per named holder before the filter runs, plus the survivor's own `gate` call once
+  it has — two holders reduced to one costs three tracker reads, not one. The spawn happens above
+  `standdown::over`, not below it, so a `gh` that hangs is not a door `estigia stand-down` can open
+  past — the reconciliation blocks before the stand-down is even consulted. Unmeasured beyond that: no
+  fixture drives this cost.
 
   Nor does one drive the *other* holder list this same reconciliation reads over: `holders_for_action`
   builds one for a `gh pr merge` with no ordinary holder in this checkout, filtered to siblings whose
@@ -2800,6 +2808,27 @@ suite. Everything else here is prose held by review.
   more receipt-matched siblings to reconcile between. `linked_siblings` is a different list entirely:
   it feeds `linked`, consulted only in the `0 =>` arm to tell "no ordinary holder and no sibling either"
   apart from "a sibling exists but has not finished reviewing," and reconciliation never touches it.
+
+  **Reconciliation made `tests/pipe.rs` non-hermetic once, and that is now measured rather than
+  believed fixed.** `run_with_path`, the fixture every `run`/`run_in` call in that file goes through,
+  spawns the real binary and inherited the developer's whole environment beyond a handful of named
+  variables — which cost nothing while a several-holder refusal never asked the tracker at all.
+  Reconciliation is what first made it ask, and `a_per_call_working_directory_selects_the_holder_
+  that_owns_it` is the one test in that file that reaches reconciliation through `run_in` rather than
+  through a scripted `tracker_command`, so it is the one an inherited `GH_REPO` — the variable this
+  crate's own transport uses to steer `gh`'s repository resolution — could point at a real repository
+  instead of the fixture's, deciding the test's outcome by whatever issues happened to exist there.
+  `run_with_path` now clears `GH_REPO`, `GH_HOST` and `GH_TOKEN` before spawning.
+
+  What this closes and what it does not: hermetic with respect to those three variables specifically,
+  checked by reading `run_with_path`'s own removal and by the full suite passing unchanged with them
+  cleared. Not verified as a live before/after difference — `gh` is authenticated on the machine this
+  was written on, so reproducing the original defect would mean pointing a real `GH_REPO` at a real
+  repository and letting `a_per_call_working_directory_selects_the_holder_that_owns_it` make an actual
+  network call to it, which was not done. Not audited for every other variable a real `gh` process
+  might read to steer itself — `GH_REPO`, `GH_HOST` and `GH_TOKEN` are the three this crate's own
+  transport and `gh`'s own manual name as authority- and repository-steering; others may exist and are
+  unmeasured, the same way the round-trip cost above is unmeasured rather than assumed zero.
 - **`config edit` writes one contract, and `config set` writes them all.** The plain `config set`
   propagates a row that is not per-agent — about the repository or about this machine — into every
   installed contract. The guided screen behind `config edit` writes only the target it was opened on:

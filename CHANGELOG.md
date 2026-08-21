@@ -58,9 +58,12 @@ the workflow, it holds the tools.
   `estigia release` always sends answers `unassign-metadata-mismatch`.
 
   **`doctor` reports the residue reconciliation leaves alone, asked about the
-  right repository.** A new `stale-run-pointer` row names a *single* readable
-  pointer whose issue the tracker reports closed — the case reconciliation
-  deliberately does not touch — filtered to pointers covering this repository
+  right repository.** A new `stale-run-pointer` row names every readable
+  covering pointer whose issue the tracker reports closed, not only one — a
+  single such pointer still refuses the checkout it names, which is the case
+  reconciliation deliberately leaves alone; two or more covering the same
+  checkout is the case reconciliation reconciles away instead, to
+  `Outside(NothingSworn)`. Filtered to pointers covering this repository
   first: `session::holdings` is machine-wide, and asking every pointer using
   this checkout's own `repo_dir` let a live pointer for another project's issue
   collide with this one's numbering and be reported as this project's own

@@ -1531,12 +1531,15 @@ pub fn run_pointers(unreadable: &[String]) -> Check {
 /// [`run_pointers`] answers *which pointers cannot be read at all*; this
 /// answers the shape issue #90 was filed against — a pointer that reads back
 /// fine and names an issue nobody holds any more, left on disk with nothing
-/// to expire it once the issue closed. `estigia guard` already reconciles
-/// this same question away when **two or more** pointers name one checkout
-/// (`guard::adjudicate_action`), so what is left for a person to act on here
-/// is the case that reconciliation deliberately leaves alone: a single stale
-/// pointer, which still gates every write in the checkout it names — see
-/// `docs/honesty.md` for why that residue is not closed by this row either.
+/// to expire it once the issue closed. This row names **every** readable
+/// covering pointer whose issue reads closed, not only one, and what that
+/// means for the gate depends on how many: `estigia guard` reconciles the
+/// same question away for a checkout **two or more** of them name
+/// (`guard::adjudicate_action` drops them all and the gate stands aside), so
+/// what is left for a person to act on here is the case reconciliation
+/// deliberately leaves alone — a checkout exactly **one** stale pointer
+/// covers, which still refuses every write it names — see `docs/honesty.md`
+/// for why that residue is not closed by this row either.
 ///
 /// **Filtered to this repository before anything is asked.** `holdings` is
 /// machine-wide (`session::holdings` reads one directory, not one repository)
@@ -1630,7 +1633,9 @@ pub fn stale_run_pointers(
             health: Health::broken(
                 format!(
                     "{} run pointer(s) here are readable and name an issue the tracker reports \
-                     closed \u{2014} the checkout each names is still gated by it: {}",
+                     closed \u{2014} one still refuses every write in the checkout it names, and \
+                     two or more covering the same checkout reconcile away to unclaimed instead: \
+                     {}",
                     stale.len(),
                     stale.join(", ")
                 ),

@@ -2702,10 +2702,13 @@ pub(crate) enum HolderStanding {
     /// `issue-not-open`. The caller drops this holder before deciding
     /// anything else about it.
     ClosedIssue,
-    /// `not-current-live-holder`: `verify_claim` answers this whenever
-    /// `holding().holder` is not this run (`ownership.holder.as_deref() !=
-    /// Some(run_id)`) — which is **three** different timelines, not one, and
-    /// this classification cannot and does not tell them apart:
+    /// `not-current-live-holder`: once the state label already matches what
+    /// was expected, `verify_claim` answers this whenever `holding().holder`
+    /// is not this run (`ownership.holder.as_deref() != Some(run_id)`) — a
+    /// label that disagrees answers `unexpected-state` first and classifies
+    /// `Live` instead, checked before ownership at all. This one is **three**
+    /// different timelines, not one, and this classification cannot and does
+    /// not tell them apart:
     ///
     /// - no acquisition for this run at all, ever;
     /// - an acquisition of this run's own that has gone stale — past its

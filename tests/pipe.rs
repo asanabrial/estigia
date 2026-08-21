@@ -150,6 +150,25 @@ fn run_with_path(
     for name in &inherited {
         command.env_remove(name);
     }
+    // This spawns the real binary and inherits the operator's environment —
+    // unlike a `tracker_command` fixture, which puts a scripted `gh` first on
+    // `PATH` and answers from `ESTIGIA_FAKE_ANSWERS`, ignoring these three
+    // entirely. `GH_REPO` is precisely the variable this crate's own transport
+    // sets to steer `gh`'s repository resolution when a checkout's remote is
+    // not the one to ask (`harness::mod::gate`, `holder_standing`) — so an
+    // operator who has it exported for their own work hands every `gh` this
+    // binary spawns a repository that is not the fixture's, and reconciliation
+    // (`guard::adjudicate_action`, when two or more pointers cover one
+    // checkout) is what first made a several-holder decision consult the
+    // tracker at all, where none of these tests intend one. Measured: without
+    // this, `a_per_call_working_directory_selects_the_holder_that_owns_it`
+    // asks a real `gh` about issues #12 and #34 in whatever repository
+    // `GH_REPO` names, and its answer would decide what the test asserts.
+    // `GH_HOST` and `GH_TOKEN` are the same class of steering, cleared for the
+    // same reason before either is ever read.
+    for name in ["GH_REPO", "GH_HOST", "GH_TOKEN"] {
+        command.env_remove(name);
+    }
     if let Some(only) = search_path {
         command.env("PATH", only);
     }
@@ -4216,13 +4235,31 @@ fn an_instruction_file_kept_on_an_upgrade_is_named_in_the_report() {
 
 /// No variable this crate decides on reaches a child from the developer's shell.
 ///
-/// `run` points four variables at the fixture's home and clears everything named
-/// `ESTIGIA_*`. The second half is the one worth holding: `ESTIGIA_FLAG` is read
-/// straight from the environment and decides whether `unflagged-on-trunk` fires,
-/// so a child that inherits it answers a question about whoever ran the suite.
-/// Nothing here reaches a trunk delivery today, so the suite passes either way —
-/// which is exactly why this is a source crossing rather than a behaviour one.
-/// There is no surface that reports the flag back without a live tracker.
+/// `run` points four variables at the fixture's home, clears everything named
+/// `ESTIGIA_*`, and clears `GH_REPO`, `GH_HOST` and `GH_TOKEN`. The second half
+/// is the one worth holding: `ESTIGIA_FLAG` is read straight from the
+/// environment and decides whether `unflagged-on-trunk` fires, so a child that
+/// inherits it answers a question about whoever ran the suite. Nothing here
+/// reaches a trunk delivery today, so the suite passes either way — which is
+/// exactly why this is a source crossing rather than a behaviour one. There is
+/// no surface that reports the flag back without a live tracker.
+///
+/// `GH_REPO` used to be `LEFT_REAL` here, on purpose: Estigia only ever writes
+/// it, and only when the operator's own table names a repository, so an
+/// operator who had it exported for their own work was meant to keep meaning
+/// it. That stopped being safe to leave real once reconciliation
+/// (`guard::adjudicate_action`, two or more pointers covering one checkout)
+/// started asking the tracker at all — a several-holder decision this suite
+/// drives against a fixture repository now makes a real `gh issue view` call,
+/// and an inherited `GH_REPO` answers it against whatever repository the
+/// operator's shell names instead of the fixture's. Measured:
+/// `a_per_call_working_directory_selects_the_holder_that_owns_it` is the one
+/// test in this file that reconciliation reaches through `run_in` rather than
+/// through a scripted `tracker_command`, and it is the one this would have
+/// made non-hermetic. `GH_HOST` and `GH_TOKEN` are cleared alongside it as the
+/// same class of steering, on no evidence any test needs them real — nothing
+/// in this crate writes either, so neither carried the same argument `GH_REPO`
+/// did.
 ///
 /// What it catches is the next one: a variable this crate reads to decide
 /// something, named outside the namespace the fixture clears.
@@ -4282,17 +4319,19 @@ fn no_variable_the_crate_decides_on_escapes_the_fixture() {
         // and the fixture sets both.
         "HOMEDRIVE",
         "HOMEPATH",
-        // **Written**, not read, and only inside the MCP server process: it is
-        // how `gh` is told which repository the operator named, and the spawned
-        // transport set it on the child for the same reason. Left real because
-        // an operator who exported it in their own shell meant it — Estigia
-        // overwrites it only when the table names a repository, and a fixture
-        // that cleared it would hide the one case where the two disagree.
-        "GH_REPO",
     ];
+    // Written, not read, and only inside the MCP server process or a gate
+    // renewal: how `gh` is told which repository the operator named, or which
+    // this fixture's own reconciliation just asked about. Not `LEFT_REAL` —
+    // this file's own module doc says why the two disagreeing is exactly the
+    // shape that stopped being safe to leave to whatever the developer's shell
+    // happened to hold — and not `ANSWERED` either: nothing here substitutes a
+    // value, `run_with_path` removes them outright.
+    const CLEARED: &[&str] = &["GH_REPO", "GH_HOST", "GH_TOKEN"];
     for name in &read {
         if ANSWERED.contains(&name.as_str())
             || LEFT_REAL.contains(&name.as_str())
+            || CLEARED.contains(&name.as_str())
             || name.starts_with("ESTIGIA_")
         {
             continue;
