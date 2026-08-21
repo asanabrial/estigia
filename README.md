@@ -260,7 +260,13 @@ when it tries to work around them.
 
 Estigia does not run the model and holds no authority of its own. **The tracker's timeline is the
 only source of truth** — no local database of claims, so two runs on two machines still adjudicate
-against each other and a run that dies leaves no phantom state behind.
+against each other, and a run that dies leaves no *authority* behind: whatever the tracker's timeline
+says a checkout is bound by is the whole of what governs it, whether or not the run that wrote it is
+still there to be asked. The **local** run pointer a dead session leaves behind is a different
+question — a machine-readable note, never authority — and `estigia doctor`'s `stale-run-pointer` row
+and the reconciliation against the tracker that the pre-push hook `estigia guard` installs runs —
+and that `estigia gate` reaches equally — exist for exactly the phantom pointer a dead run does
+leave.
 
 ### The gate no agent can route around
 

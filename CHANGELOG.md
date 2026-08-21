@@ -12,6 +12,68 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **A phantom run pointer is reconciled against the tracker before it is refused by name.**
+  Two or more run pointers naming one checkout refused
+  `several-runs-hold-this-checkout` unconditionally, naming *runs that no longer
+  exist* whenever one of them had since been closed out from under it — an issue
+  delivered or closed by a third checkout leaves its pointer on disk with
+  nothing to expire it. `guard::adjudicate_action` now asks the tracker about
+  each named holder first, through the same call `gate` already makes for a
+  renewal, and drops one only on an explicit `issue-not-open`; every other
+  answer, including a failed read, keeps it counted. Guarded to two or more
+  holders — a **single** stale pointer still refuses through its own
+  `issue-not-open`, unchanged, because that refusal is the gate closing behind
+  a run's own delivery and this reconciliation must not decide it twice.
+
+  **The refusal now names a command that clears it — for the holder the tracker
+  itself says it clears.** It listed "release the runs that do not" with no way
+  to act on it. The first fix offered `estigia release` for a holder whose
+  pointer named no worktree, which is wrong in both directions: `claim` writes
+  `issue`, `state` and `repo_dir` and never `worktree` — only `start_branch`,
+  *after* the claim, does — so a live run between the two has no worktree and
+  the message offered to release its live claim; and a session that died right
+  after `start_branch` leaves a pointer naming a worktree nobody works in any
+  more, read as live because it named one. A pointer's own fields are not a
+  liveness signal in either direction. The tracker's own answer is: reconciling
+  now classifies every surviving holder as the issue closing under it
+  (dropped, as before), `not-current-live-holder`, or live. Only a
+  `not-current-live-holder` is ever named for release; two or more genuinely
+  live holders is real ambiguity, and the resolution names no command rather
+  than guess, because no CLI verb exists for isolating a checkout the way
+  `start_branch` does.
+
+  `not-current-live-holder` is three timelines, not one, and the command does
+  not clear all three the same way. No acquisition for this run ever existed —
+  `nothing-to-unassign` — and only the local pointer goes. A stale acquisition
+  of this run's own, or a live one that lost a claim race, is found on the
+  tracker's timeline and actually ended there under the operator's own
+  identity, a real write and not a no-op: a stale claim is a claim that is
+  really there, only lapsed, not a claim that "is not there". `release` now
+  recognises `nothing-to-unassign` and forgets the local pointer instead of
+  leaving it to answer the same refusal again, in both shapes, and only once
+  the pointer's own recorded repository is the one `release` was actually run
+  against — a successful read of the wrong project's timeline forgets
+  nothing. `docs/honesty.md` discloses the one case the command does not
+  clear: a stale acquisition recorded under a runtime other than the one
+  `estigia release` always sends answers `unassign-metadata-mismatch`.
+
+  **`doctor` reports the residue reconciliation leaves alone, asked about the
+  right repository.** A new `stale-run-pointer` row names every readable
+  covering pointer whose issue the tracker reports closed, not only one — a
+  single such pointer still refuses the checkout it names, which is the case
+  reconciliation deliberately leaves alone; two or more covering the same
+  checkout, with nothing live covering it besides, is the case reconciliation
+  reconciles away instead, to `Outside(NothingSworn)`. Filtered to pointers
+  covering this repository first: `session::holdings` is machine-wide, and
+  asking every pointer using this checkout's own `repo_dir` let a live
+  pointer for another project's issue collide with this one's numbering and
+  be reported as this project's own stale claim. A tracker read that fails
+  is reported as unread rather than
+  folded into either verdict, and the row joins `silence` as one that reports
+  on the past rather than blocking a fresh claim's readiness. `docs/honesty.md`
+  states the gap reconciliation still does not close and why: `GateContext`
+  carries no caller identity, so the gate cannot tell a run's own delivery
+  from a dead stranger's pointer by the id alone.
 - **The decision-gate crossing holds a subset, not a count of arrows.**
   Rewriting `done` as `review` used to leave the suite green: the assertion was
   `destinations.len() >= STATES.len()`, which a duplicated arrow satisfies while
@@ -634,7 +696,10 @@ the workflow, it holds the tools.
   replace a `pre-push` somebody else wrote.
 - **The tracker's timeline is the only source of truth.** No local database of
   claims, so two runs on two machines still adjudicate against each other and a
-  run that dies leaves no phantom state.
+  run that dies leaves no *authority* behind — whatever the timeline says still
+  governs, whoever wrote it. The local run pointer a dead session leaves is a
+  different question, never authority, and is what issue #90's own fix
+  reconciles against the tracker rather than trusting on its own.
 - `estigia doctor` checks, read-only, that everything a run needs before it
   swears actually works: the skill, the transport, a Python that runs, an
   authenticated `gh`, and a git remote. Every failure names a resolution.

@@ -979,12 +979,13 @@ fn the_number_of_things_doctor_checks_is_the_number_the_readme_claims() {
     let documents = documented();
     let claimed = number_before(&documents, "things, not everything")
         .expect("no document counts doctor's checks");
-    // The **kinds**, not the rows. Two of the eleven produce one row per
-    // configured agent, so a run on a bare machine reports seven rows and a run
-    // on a busy one reports twenty — and the README's count was being measured
-    // against `examine`, which answers six while the command prints eight. A
-    // claim checked at the wrong scope, in the file that exists to catch
-    // exactly that.
+    // The **kinds**, not the rows. Three of the thirteen (`contract`, `gate`,
+    // `tools`) produce one row per configured agent, so a run with no adapter
+    // configured reports eleven rows and a run with every adapter this crate
+    // knows about configured reports forty-three — and the README's count was
+    // once being measured against `examine`, which answered six checks at the
+    // time while the command printed eight. A claim checked at the wrong
+    // scope, in the file that exists to catch exactly that.
     let actual = estigia::harness::doctor::CHECKS.len();
 
     assert_eq!(
@@ -1803,15 +1804,16 @@ fn every_setting_the_gate_reads_is_one_that_does_not_differ_by_agent() {
 /// The way back. Its neighbour walks the rows `full` emits and proves the list
 /// declares each one; this walks the list and proves `doctor` can produce it.
 /// Only one of the two was written, and the unwritten one is the direction the
-/// README leans on: the count in *"`doctor` checks eleven things"* comes from
-/// this list, so a name left here after its check was taken out of `full`
-/// inflates a number the honesty contract exists to keep true — and the
-/// neighbour goes on passing, because it only ever looks at rows that exist.
+/// README leans on: the count in *"`doctor` checks thirteen things, not
+/// everything"* comes from this list, so a name left here after its check was
+/// taken out of `full` inflates a number the honesty contract exists to keep
+/// true — and the neighbour goes on passing, because it only ever looks at
+/// rows that exist.
 ///
 /// With an agent configured, and that is the whole reason this is a separate
-/// test: two of the eleven produce one row per configured agent and appear in
-/// nothing on a bare machine. Crossing this direction against an empty home
-/// would report `gate` and `tools` as phantoms every time.
+/// test: two of the thirteen produce one row per configured agent and appear
+/// in nothing on a bare machine. Crossing this direction against an empty
+/// home would report `gate` and `tools` as phantoms every time.
 #[test]
 fn every_name_this_list_declares_is_one_doctor_can_report() {
     let root = tempfile::tempdir().expect("a temporary directory");
@@ -2267,9 +2269,9 @@ fn every_list_the_audit_answers_with_is_one_the_binding_names() {
 
 /// The README says how many checks `doctor` runs twice, and the two agree.
 ///
-/// Two adjacent entries carried it: *`doctor` checks twelve things, not
-/// everything* and, three lines later, *one of the eleven is about the past*.
-/// One of them was wrong and neither was read by anything — the count guard
+/// Two adjacent entries carried it: *`doctor` checks thirteen things, not
+/// everything* and, a few lines later, *two of the thirteen are about the
+/// past*. One of them was wrong and neither was read by anything — the count guard
 /// above covers the agent totals and stopped there. A number in prose that
 /// nothing reads is a number that drifts, which is the whole reason this file
 /// exists.
@@ -2277,10 +2279,11 @@ fn every_list_the_audit_answers_with_is_one_the_binding_names() {
 /// **What this does not do** is check either number against the code, and the
 /// reason is worth writing down rather than leaving as an omission: how many
 /// checks `doctor::full` produces depends on the machine it is asked about. It
-/// answers six kinds on a machine with nothing installed and twelve with one
-/// adapter configured — measured, because the two numbers that stood here
-/// before were each carried forward by hand and neither was ever true — and the
-/// rows
+/// answers eleven kinds on a machine with nothing installed and thirteen with one
+/// adapter configured — measured against `doctor::full` itself, with a fresh
+/// home and no adapter present for the first and one `setup claude-code` run
+/// for the second, because the two numbers that stood here before were each
+/// carried forward by hand and neither was ever true — and the rows
 /// themselves are more again — the contract, gate and tools checks are emitted
 /// once per configured agent, so counting rows answers *how many agents does
 /// this machine have*. Holding the two spellings to each other is what can be
@@ -2293,7 +2296,7 @@ fn the_number_of_doctor_checks_is_the_same_number_everywhere_it_is_claimed() {
     // defect; fixing the instance and leaving the shape is what this repository
     // says not to do.
     let documents = documented();
-    let phrases = ["things, not everything", "is about the past"];
+    let phrases = ["things, not everything", "are about the past"];
     let claimed: Vec<usize> = phrases
         .iter()
         .map(|phrase| {

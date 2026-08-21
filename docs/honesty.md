@@ -2662,14 +2662,26 @@ suite. Everything else here is prose held by review.
   once failed to pass the home directory to `state_root`, and the push-guard row vanished entirely
   under a tracker with no transport.
 
-  All eleven rows that **can** break are now forced through the binary, on states any machine can be
-  put into: no skill; a contract taken from under a registered agent; two installed roots whose
-  machine-wide rows disagree; a gate and a tool server whose
-  settings name a binary that is not there; a checkout with no remote; a `pre-push` hook that is not
-  text; an unreadable stand-down; an unreadable run pointer; a ledger line saying a call went through
-  ungated; and, for the one row that is about the machine rather than the installation, a search path
-  with no `gh` on it. The twelfth, `transport`, has no broken state: it answers `ok`, or `skipped`
-  for a tracker with no executable.
+  Twelve rows can break now, not eleven — `stale-run-pointer` joined them. Eleven of the twelve are
+  forced through the binary, on states any machine can be put into: no skill; a contract taken from
+  under a registered agent; two installed roots whose machine-wide rows disagree; a gate and a tool
+  server whose settings name a binary that is not there; a checkout with no remote; a `pre-push` hook
+  that is not text; an unreadable stand-down; an unreadable run pointer; a ledger line saying a call
+  went through ungated; and, for the one row that is about the machine rather than the installation, a
+  search path with no `gh` on it. The thirteenth row, `transport`, has no broken state at all: it
+  answers `ok`, or `skipped` for a tracker with no executable.
+
+  `stale-run-pointer` is the twelfth and the one exemption: `a_row_that_is_broken_comes_out_of_the_
+  report_broken` names it in `tests/pipe.rs`'s own `FORCED` list without forcing it broken there, and
+  says why inline rather than leaving the gap silent. Forcing it needs a `gh` that answers
+  `issue-not-open` for one specific issue number rather than the blanket absence the `gh` row's own
+  forcing step already uses — a different fixture shape than every other row on this list needs, and
+  one `harness::doctor`'s own module already builds through a scripted `gh`:
+  `a_readable_stale_pointer_is_reported_and_names_the_release_command`,
+  `a_readable_live_pointer_is_reported_fine` and `a_tracker_read_that_fails_is_reported_as_unread_
+  not_stale` drive `stale_run_pointers` directly, with `stale-run-pointer` reported `Broken` (a
+  stale pointer, and separately an unread one) and `Fine`. `harness::guard::tests` scripts `gh` for
+  its own reconciliation tests but constructs no `doctor::Check` and never touches this row.
 
   A row added later fails the same test until somebody forces it or says why they cannot.
 
@@ -2699,14 +2711,154 @@ suite. Everything else here is prose held by review.
 - **The harness holds tools for GitHub only.** `linear` and `trello` ship a binding the agent reads
   and no executable, so the tools refuse (`tracker-has-no-transport`) and the gate stands aside.
   Estigia can install and configure those trackers; it cannot enforce anything for them.
-- **`doctor` checks twelve things, not everything.** Skill, transport, `gh`
+- **`doctor` checks thirteen things, not everything.** Skill, transport, `gh`
   authentication, a git remote, this repository's push guard, the contract each configured agent
   reads, whether the root the gate decides in carries the rows those agents read, whether the gate
   each of them registers would actually run, whether the tool server each
   of them registers would actually start, whether the operator has the gate standing down right
-  now, whether every run pointer on the machine can still say what it holds, and whether any call
-  has reached that gate and gone undecided. It does not check the tracker's labels, the board, or
-  whether the repository it found is the one the issues live in.
+  now, whether every run pointer on the machine can still say what it holds, whether a pointer that
+  *does* parse still names an issue the tracker holds open, and whether any call has reached that
+  gate and gone undecided. It does not check the tracker's labels, the board, or whether the
+  repository it found is the one the issues live in.
+
+- **A phantom holder is reconciled against the tracker only where the ambiguity is real.**
+  `guard::adjudicate_action` used to refuse `several-runs-hold-this-checkout` for two or more run
+  pointers naming one checkout without ever asking whether either was still true, naming *runs that
+  no longer exist* and a resolution its reader could not perform. It now asks the tracker about each
+  named holder before building that refusal, and drops one only on an explicit `issue-not-open` —
+  every other answer, including a failed read, keeps it counted, because an unknown result is not
+  clearance in this direction either.
+
+  What it deliberately does not close: a **single** holder whose issue is closed still refuses every
+  write in the checkout it names, with the same `issue-not-open` reason it always has. Reconciliation
+  is guarded to two or more holders on purpose. `GateContext` carries no caller identity, so the gate
+  cannot tell the run that just delivered — closing behind its own merge — from a dead stranger's
+  pointer left over from some other checkout; making that call turn on a self-asserted run id would
+  be widening the gate on an unverified assertion, which is the failure this crate exists to refuse.
+  `doctor`'s new `stale-run-pointer` row reports that residue instead of closing it: it names the
+  pointer and the release command, and leaves putting it down to the operator or the run itself.
+
+  The row has a blind spot of its own, and it is plausibly the commonest dead-pointer shape:
+  `same_git_repository` fails closed to `false`, so a pointer whose recorded checkout no longer
+  resolves as a git repository at all — deleted, moved, the removed-worktree phantom this row
+  exists for — compares `false` against every repository, this one included, and is silently
+  excluded from the row entirely: not stale, not unread, not named. `run_pointers` still reports it
+  if the pointer itself will not parse; a pointer that parses fine and names a checkout `git
+  rev-parse` can no longer find is invisible to both rows.
+
+  Also deliberate, and the sharper edge: **two dead pointers with nothing live covering the same
+  checkout reconcile all the way to zero, and the gate stands aside, while one dead pointer still
+  refuses.** A live holder covering that checkout survives reconciliation regardless of how many
+  dead pointers sit alongside it, so this is the all-dead case specifically, not "two or more stale
+  pointers" on its own. `holders.len() == 0` after reconciliation answers `Outside(NothingSworn)` —
+  the ordinary shape of a checkout nobody claims — when `session::unreadable_holdings` is also empty;
+  an unreadable pointer anywhere on the machine denies `run-pointers-unreadable` instead
+  (`guard.rs`'s `0 =>` arm), and an unfinished sibling review denies through its own arm ahead of
+  either. So a machine carrying two phantom pointers for one checkout, and nothing else unreadable,
+  is *more* permissive than one carrying a single live-looking one. That is a consequence of the
+  guard stated above, not a second gap: a lone
+  `issue-not-open` pointer refuses through `gate`'s own single-holder path rather than through this
+  reconciliation, so `N == 1` was never touched, and nothing here decided that two phantoms are safer
+  than one legitimate refusal — it decided that a checkout two closed claims both left behind is a
+  checkout nobody currently holds, which is true.
+
+  Two or more holders that reconciliation cannot separate — because the tracker genuinely says both
+  are still live — are the common case rather than the rare one: `start_branch` gives each run its
+  own isolated worktree without narrowing what the pointer's claim covers, so two healthy runs both
+  still cover the shared base checkout. What tells them apart is the tracker's own answer for each
+  survivor, not the pointer: `not-current-live-holder` is the only standing `estigia release
+  --run-id <run-id>` is offered for, and it is **three** different timelines, not one — once a
+  state label already matches (a disagreement answers `unexpected-state` first, and classifies
+  live), `verify_claim` answers it whenever `holding().holder` is not this run, which covers no
+  acquisition for this run at all; an acquisition of this run's own that has gone stale, past its
+  horizon and still on the timeline (`ownership::holding` moves a lapsed one into `stale` rather
+  than dropping it); and a live acquisition of this run's own that lost a claim race to a different,
+  earlier holder. A pointer's `worktree` field was tried first and was wrong in both directions,
+  measured against this crate's own `mcp::run_tool`: `PointerEffect::Swear`, what `claim` runs,
+  writes `issue`, `state` and `repo_dir` and never `worktree` — only `PointerEffect::Isolated`, what
+  `start_branch` runs *after* the claim, writes it — so a live run between the two names no worktree
+  and was offered for release, and a session that died right after `start_branch` names one nobody
+  works in any more and was read as live. When nothing among the survivors is
+  `not-current-live-holder` — two or more claims the tracker itself calls live — the resolution
+  names no command: there is no CLI verb for isolating a checkout the way `start_branch` does (that
+  tool is MCP-only), so nothing exists that would actually discharge the block for a reader holding
+  one of the live claims, and naming one anyway would be exactly the dead end this repository's own
+  rule forbids.
+
+  `estigia release` had to be made to actually clear a phantom pointer's refusal, and what it does
+  differs by which of the three timelines this is: `plan_release` searches `ownership.live` chained
+  with `ownership.stale` for this run's own acquisition. Not found — no acquisition ever existed —
+  answers `nothing-to-unassign`, and only the local pointer goes. Found — a stale acquisition, or a
+  live one that lost the race — the acquisition is really there on the timeline, only lapsed or
+  losing, and `release` ends it: a genuine write to the tracker under the operator's own identity,
+  not the no-op "clears it harmlessly" first read as. Both shapes are recognised, and only once that
+  pointer's own recorded repository is the one `release` was run against, so a successful read of an
+  unrelated project's timeline forgets nothing; every other refusal, including a failed read, leaves
+  the pointer exactly where it was.
+
+  **One case the named command does not clear, disclosed rather than fixed here.** A found
+  acquisition — stale or losing-live — recorded a runtime, and `estigia release` always sends
+  `session::DEFAULT_RUNTIME` (`claude`) as its own. When they differ, `plan_release` answers
+  `unassign-metadata-mismatch` and nothing is released: the command
+  `several-runs-hold-this-checkout` names for exactly this holder does not discharge the block for
+  it. Filed as its own defect rather than repaired in this change.
+
+  **The cost this buys**: once two or more pointers cover one checkout, every gated action pays one
+  tracker round trip per named holder before the filter runs, plus the survivor's own `gate` call once
+  it has — two holders reduced to one costs at most three tracker reads, not one. The survivor's own
+  `gate` call is the one that can skip its read: `Sensitivity::Routine` inside the renewal window
+  (`harness::gate`, `how == Sensitivity::Routine && run.within_window(context.window)`) answers
+  `Allow` from the cached verification without dispatching at all, so the true floor is the two reads
+  reconciliation itself spent and the ceiling is three. The spawn happens above
+  `standdown::over`, not below it, so a `gh` that hangs is not a door `estigia stand-down` can open
+  past — the reconciliation blocks before the stand-down is even consulted. Unmeasured beyond that: no
+  fixture drives this cost.
+
+  The *other* holder list this same reconciliation reads over is driven, not left untouched:
+  `holders_for_action` builds one for a `gh pr merge` with no ordinary holder in this checkout,
+  filtered to siblings whose own complete review receipt names the pull request being merged — a
+  `map`/`filter`/`collect` this reconciliation runs exactly as it does for an ordinary holder list —
+  and `guard::tests::sibling_selection_binds_pr_before_head_and_attributes_no_ambiguous_holder` gives
+  it two receipt-matched siblings naming the same pull request to reconcile between, scripted with
+  `unreachable_tracker_answer()` — a `gh` that exits 1 — so both answer as unknown, not as live, and
+  denial follows the same fail-closed rule an unauthenticated `gh` in this environment would actually
+  reach: an unknown result keeps a holder counted rather than dropping it (`guard.rs`'s own comment on
+  the `_` arm is explicit that this is not the same thing as "live"). This sibling path has never been
+  crossed against a *successful* tracker read. Undriven beyond that two-holder floor: no fixture
+  takes a sibling list past two, or reconciles a sibling list where one is dropped as `ClosedIssue`
+  while another survives —
+  every ordinary-holder test that shape has (`a_stale_holder_is_dropped_…`,
+  `a_stale_holder_dropped_to_one_live_holder_lets_gate_allow`) has no sibling-list counterpart.
+  `linked_siblings` is a different list entirely: it feeds `linked`, consulted only in the `0 =>` arm
+  to tell "no ordinary holder and no sibling either" apart from "a sibling exists but has not finished
+  reviewing," and reconciliation never touches it.
+
+  **Reconciliation made `tests/pipe.rs` non-hermetic once, and that is now measured rather than
+  believed fixed.** `run_with_path`, the fixture every `run`/`run_in` call in that file goes through,
+  spawns the real binary and inherited the developer's whole environment beyond a handful of named
+  variables — which cost nothing while a several-holder refusal never asked the tracker at all.
+  Reconciliation is what first made it ask, and `a_per_call_working_directory_selects_the_holder_
+  that_owns_it` is the one test in that file that reaches reconciliation through `run_in` rather than
+  through a scripted `tracker_command`, so it is the one an inherited `GH_REPO` — the variable this
+  crate's own transport uses to steer `gh`'s repository resolution — could point at a real repository
+  instead of the fixture's, deciding the test's outcome by whatever issues happened to exist there.
+  `run_with_path` now clears `GH_REPO`, `GH_HOST` and `GH_TOKEN` before spawning.
+
+  What this closes and what it does not: `an_operators_gh_repo_never_reaches_a_spawned_gh`
+  (`tests/pipe.rs`) puts `GH_REPO` on the test process, spawns `estigia doctor` through
+  `run_with_path` with a scripted `gh` on `PATH` — `doctor`'s own unconditional `gh auth status`
+  call is the trigger, not reconciliation, so this needs no two-holder fixture — and reads back what
+  that `gh` actually saw through a file `examples/fake_process.rs` writes on request. That is a live
+  before/after on the mechanism itself: disabling `run_with_path`'s `env_remove` loop with
+  `if false { … }` turned this test red, reporting the operator's own `GH_REPO` back out of the
+  child. What it is not is a reproduction of the *original* defect end to end — no test here points a
+  real `GH_REPO` at a real repository and lets `a_per_call_working_directory_selects_the_holder_
+  that_owns_it` make an actual network call to it, and none needs to now that the removal is
+  mutation-tested directly against a scripted `gh` rather than inferred from the suite passing
+  unchanged. Not audited for every other variable a real `gh` process might read to steer itself —
+  `GH_REPO`, `GH_HOST` and `GH_TOKEN` are the three this crate's own transport and `gh`'s own manual
+  name as authority- and repository-steering; others may exist and are unmeasured, the same way the
+  round-trip cost above is unmeasured rather than assumed zero.
 - **`config edit` writes one contract, and `config set` writes them all.** The plain `config set`
   propagates a row that is not per-agent — about the repository or about this machine — into every
   installed contract. The guided screen behind `config edit` writes only the target it was opened on:
@@ -2754,11 +2906,15 @@ suite. Everything else here is prose held by review.
   remote state is written and with no data lost. The recovery is the same `git worktree remove`, and
   it is written in the binding rather than enforced here. Measured by the blind reviewer of receipt
   `6b192e0ee94f11004b621c06c8e8e5dd` across twenty-four template shapes.
-- **One of the twelve is about the past.** A call the gate cannot decide on — a payload it cannot
-  parse, or one that never arrived — is waved through, and that is the right answer: a schema this
-  build does not know could be wrapping a read as easily as a write. What is wrong is doing it
-  quietly. Both leave a ledger line, and `doctor` is what reads those lines back, because an
-  operator opens the ledger after being stopped and this is the case where they never were.
+- **Two of the thirteen are about the past.** `silence`: a call the gate cannot decide on — a
+  payload it cannot parse, or one that never arrived — is waved through, and that is the right
+  answer: a schema this build does not know could be wrapping a read as easily as a write. What is
+  wrong is doing it quietly. Both leave a ledger line, and `doctor` is what reads those lines back,
+  because an operator opens the ledger after being stopped and this is the case where they never
+  were. `stale-run-pointer` joined it in `LOOKS_BACK` for a narrower reason: filtered to this
+  repository, everything it can name is a pointer some *other* run wrote, so a stale or unread
+  answer for that pointer says nothing about whether a fresh claim by a different run could swear
+  right now — `doctor`'s own `LOOKS_BACK` declaration states this in full.
 - **A run that swore nothing is never gated, including when Estigia is broken.** Failing closed on
   everybody would be a lock rather than authority, and would teach people to remove the hook. So a
   missing transport denies a sworn run's write and lets an unsworn one through — the oath is what

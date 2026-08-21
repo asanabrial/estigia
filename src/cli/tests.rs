@@ -389,15 +389,21 @@ fn inventory() -> Vec<Refusal> {
             "claude-abcd1234 holds no issue",
             Resolution::run("estigia status"),
         ),
-        // The discovery half of `release` answering that it found nothing of
-        // its own to put down. Not a release, and this used to be printed as
-        // one: `released: <run> no longer holds #<issue>` over a pointer that
-        // still held it.
         Refusal::not_started(
-            "release-not-performed",
-            "claude-abcd1234 still holds #12: the release read the timeline and found no epoch \
-             of its own to put down",
-            Resolution::run("estigia status"),
+            "release-repository-mismatch",
+            "claude-abcd1234 recorded its claim against a different repository than the one \
+             this release was run against, so a successful read here says nothing about that \
+             pointer's own timeline \u{2014} its local record is left exactly as it was",
+            // True for a checkout that still exists and true for the
+            // removed-worktree phantom this whole change is named for, which
+            // does not: `same_git_repository` cannot tell the two apart, so
+            // the resolution has to cover both without presuming which.
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "run `estigia release --run-id <run-id>` from the checkout that pointer's own \
+                 claim covers, if it still exists \u{2014} and if it does not, its pointer is \
+                 Estigia's own local state and no claim of anybody's, removable by hand",
+            ),
         ),
         Refusal::not_started(
             "hook-event-unknown",
@@ -584,10 +590,13 @@ fn inventory() -> Vec<Refusal> {
         Refusal::not_started(
             "several-runs-hold-this-checkout",
             "2 runs on this machine hold this checkout",
-            Resolution::no_command(
-                NoCommandReason::OperatorKnowledge,
-                "which claim this work belongs to — release the runs that do not, then retry",
-            ),
+            // The shape when at least one survivor is `not-current-live-holder` —
+            // the only standing this refusal may ever offer `estigia release`
+            // for. Two genuinely live claims name no command at all instead
+            // (`Resolution::no_command`), which is why this entry is not the
+            // whole population: a several-runs refusal is one code with two
+            // resolution shapes, and only the runnable one belongs in this list.
+            Resolution::run("estigia release --run-id <run-id>   # for: claude-abcd1234"),
         ),
         Refusal::not_started(
             "executable-not-resolvable",
@@ -4928,5 +4937,126 @@ fn a_row_that_reads_back_wrong_with_no_override_beside_it_blames_no_file() {
         refusal.message.contains("estigia.local.md"),
         "the override was there and went unnamed: {}",
         refusal.message
+    );
+}
+
+/// A bare-bones context this file's own `forget_since_nothing_to_release`
+/// tests share, standing in one repository.
+fn release_context(
+    repo_dir: &std::path::Path,
+    state_root: &std::path::Path,
+) -> harness::GateContext {
+    harness::GateContext {
+        stand_down: None,
+        integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
+        flag: None,
+        skill_root: state_root.join("skill"),
+        repo_dir: repo_dir.to_path_buf(),
+        state_root: state_root.to_path_buf(),
+        window: std::time::Duration::from_secs(120),
+        tracker: crate::config::Tracker::Github { repo: None },
+        boundaries: Vec::new(),
+    }
+}
+
+/// A repository `same_git_repository` — what the mismatch guard is built on
+/// — can actually answer about: it runs `git rev-parse`, and a bare directory
+/// answers neither side of that comparison.
+fn release_repo() -> Option<tempfile::TempDir> {
+    let directory = tempfile::tempdir().ok()?;
+    let status = std::process::Command::new("git")
+        .arg("-C")
+        .arg(directory.path())
+        .args(["init", "--quiet"])
+        .status();
+    matches!(status, Ok(status) if status.success()).then_some(directory)
+}
+
+/// The discovery half of `release` finding no epoch of its own to put down
+/// forgets the local pointer, so `estigia release --run-id <run-id>` —
+/// `several-runs-hold-this-checkout`'s own resolution — actually clears the
+/// block it names rather than repeating it.
+///
+/// Isolated from `release` itself, which reaches a real `gh` through `tool`:
+/// this pins the one write the discovery answer causes, given the answer
+/// already parsed. A tracker read that fails or cannot be parsed never
+/// reaches this function at all — `release`'s `tool(…)?` returns before it —
+/// so there is nothing to pin about the "removes nothing" half beyond that
+/// early return already existing, which
+/// `a_run_pointer_nobody_can_read_is_not_a_run_that_holds_nothing` in
+/// `tests/pipe.rs` already measures for the two refusals above this one.
+#[test]
+fn forgetting_a_pointer_the_tracker_says_holds_no_epoch_removes_it() {
+    let Some(repo) = release_repo() else {
+        eprintln!("SKIPPED: git is not usable here.");
+        return;
+    };
+    let state = tempfile::tempdir().expect("a temporary state root");
+    let mut run = harness::session::Run::new("claude-phantom0".to_owned());
+    run.issue = Some(12);
+    run.repo_dir = Some(repo.path().to_path_buf());
+    assert!(
+        harness::session::store(state.path(), &run).expect("the pointer writes"),
+        "the fixture pointer was not stored"
+    );
+    assert_eq!(
+        harness::session::load(state.path(), "claude-phantom0").issue,
+        Some(12),
+        "the fixture did not leave a pointer to forget"
+    );
+
+    let context = release_context(repo.path(), state.path());
+    forget_since_nothing_to_release(&context, &run, "claude-phantom0", 12, false)
+        .expect("forgetting a pointer with nothing to release is not itself a refusal");
+
+    let after = harness::session::load(state.path(), "claude-phantom0");
+    assert_eq!(
+        after.issue, None,
+        "the pointer is still on disk after the tracker said there was nothing of this run's \
+         left to release: {after:?}"
+    );
+}
+
+/// A discovery read that succeeded against the **wrong** repository must not
+/// forget a pointer that names a different one.
+///
+/// `tool` reaches the tracker through `context.repo_dir` — whichever
+/// checkout `release` was launched in — so a successful read there is a
+/// successful read of *that* repository's timeline. Without this guard,
+/// running `estigia release --run-id <run-id>` from a checkout the pointer
+/// has nothing to do with would answer `nothing-to-unassign` about an
+/// unrelated project and forget a live run's local record on the strength
+/// of it.
+#[test]
+fn a_read_against_the_wrong_repository_forgets_nothing() {
+    let Some(claimed_in) = release_repo() else {
+        eprintln!("SKIPPED: git is not usable here.");
+        return;
+    };
+    let Some(run_from) = release_repo() else {
+        eprintln!("SKIPPED: git is not usable here.");
+        return;
+    };
+    let state = tempfile::tempdir().expect("a temporary state root");
+    let mut run = harness::session::Run::new("claude-phantom1".to_owned());
+    run.issue = Some(34);
+    run.repo_dir = Some(claimed_in.path().to_path_buf());
+    assert!(
+        harness::session::store(state.path(), &run).expect("the pointer writes"),
+        "the fixture pointer was not stored"
+    );
+
+    // `release` launched from a *different* repository than the pointer names.
+    let context = release_context(run_from.path(), state.path());
+    let refusal = forget_since_nothing_to_release(&context, &run, "claude-phantom1", 34, false)
+        .expect_err("a read against the wrong repository was not refused");
+    assert_eq!(refusal.code, "release-repository-mismatch");
+
+    let after = harness::session::load(state.path(), "claude-phantom1");
+    assert_eq!(
+        after.issue,
+        Some(34),
+        "the pointer was forgotten on a read of a repository it does not name: {after:?}"
     );
 }

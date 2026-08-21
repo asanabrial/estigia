@@ -88,6 +88,14 @@ that will disagree.
    clears it. This matters because a filtered run is how mutation is measured here, which is what
    `docs/honesty.md` is made of.
 
+   The same example now reaches `cargo test --lib` too, not only `tests/pipe.rs`: `src/test_env.rs`'s
+   `scripted_gh` copies it onto `PATH` for unit tests in `harness::guard::tests` and
+   `harness::doctor`'s own module that need a `gh` answering a scripted `issue view`, the same way
+   `tests/pipe.rs`'s own `tracker_rig` does for the binary. `cargo test --lib guard` or `cargo test
+   --lib doctor` on a cold worktree fails the same way a filtered `cargo test --test pipe` does, and
+   for the same reason — the fixture is not built, and the failure names `cargo build --examples`
+   rather than reporting a pass that measured nothing.
+
 ## What not to do
 
 - Do not widen a gate to make a test pass. A gate that decides nothing is the failure this crate

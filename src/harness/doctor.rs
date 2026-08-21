@@ -93,7 +93,7 @@ pub struct Check {
 
 /// The checks that report on runs that **already happened**.
 ///
-/// One, and [`silence`]'s own note says why it is the only one: *everything
+/// Two, and [`silence`]'s own note says why the first one is here: *everything
 /// else here asks whether a run could work; this asks whether the runs that
 /// already happened were gated at all*.
 ///
@@ -105,9 +105,22 @@ pub struct Check {
 /// perfectly well. A readiness probe with a permanent false negative is a
 /// readiness probe somebody switches off.
 ///
+/// `stale-run-pointer` joins it for the same shape of reason, decided rather
+/// than assumed. Filtered to this repository, everything the row can name is
+/// a pointer some **other** run wrote — the check has no way to know whether
+/// the run about to ask "can I swear" is the one a stale or unreadable-answer
+/// pointer belongs to, and a fresh claim by a different run is not blocked by
+/// a stranger's stale one the way `run-pointer`'s unparseable bytes poison
+/// every reconciliation in the directory. The `unread` half is weaker still:
+/// it means one issue number failed to resolve — deleted, transferred,
+/// renumbered — which says nothing about whether `gh` itself works, and the
+/// `gh` and `transport` rows already cover that question. Reporting either as
+/// `environment-not-ready` would be the same false negative `silence` was
+/// filed against, for a person whose own claim is perfectly workable.
+///
 /// Declared here rather than asked of each check, beside [`CHECKS`], which is
 /// already the one place the names live.
-const LOOKS_BACK: &[&str] = &["silence"];
+const LOOKS_BACK: &[&str] = &["silence", "stale-run-pointer"];
 
 impl Check {
     /// Whether this check answers *could a run work now*.
@@ -525,13 +538,13 @@ pub struct Contract {
 /// Only two adapters have a skill directory of their own, because a directory
 /// is only claimed once somebody has checked a **real installation** — see
 /// `setup::tests::only_the_two_verified_adapters_have_a_skill_root_of_their_own`.
-/// The other eight write to the shared neutral root, which works, and the
+/// The other nine write to the shared neutral root, which works, and the
 /// directive names the path.
 ///
 /// The gap was never the code: it is that nobody could tell, on their own
 /// machine, whether their agent is reading what Estigia wrote. Promoting an
 /// adapter by reading its documentation would be exactly the unchecked claim
-/// that test forbids. So instead of verifying eight installations here, this
+/// that test forbids. So instead of verifying nine installations here, this
 /// ships the thing that verifies one **wherever it is** — and reports the file
 /// by its full path, so an operator can hand back an answer nobody had to
 /// guess at.
@@ -968,12 +981,16 @@ pub fn gates(
 /// Everything `doctor` looks at, by the name it reports under.
 ///
 /// The README counts these, and a count is the wrong shape for what `full`
-/// returns: two of the twelve produce **one row per configured agent**, so a run
-/// on a bare machine reports seven rows and a run on a busy one reports twenty.
-/// What a reader means by "doctor checks eight things" is the concerns, and this
-/// is them — crossed against what `full` actually emits, both ways, by
-/// `the_number_of_things_doctor_checks_is_the_number_the_readme_claims` and
-/// `every_name_this_list_declares_is_one_doctor_can_report`.
+/// returns: three of the thirteen (`contract`, `gate`, `tools`) produce **one
+/// row per configured agent**, so a run with no adapter configured reports
+/// eleven rows and a run with every one of the eleven adapters this crate
+/// knows about configured reports forty-three — measured, not carried forward
+/// by hand: `estigia setup --all` in a fresh home, then `full` against the
+/// skill root it wrote. Eleven is that bare-machine row count, not the number
+/// of concerns — the concerns are this list, thirteen of them — crossed
+/// against what `full` actually emits, both ways, by
+/// `the_number_of_things_doctor_checks_is_the_number_the_readme_claims`
+/// and `every_name_this_list_declares_is_one_doctor_can_report`.
 pub const CHECKS: &[&str] = &[
     "skill",
     "transport",
@@ -985,6 +1002,7 @@ pub const CHECKS: &[&str] = &[
     "gate",
     "tools",
     "run-pointer",
+    "stale-run-pointer",
     "stand-down",
     "silence",
 ];
@@ -1230,7 +1248,7 @@ pub fn tracker_in_force(skill_root: Option<&Path>, repo_dir: &Path) -> crate::co
 
 /// Every check `estigia doctor` runs, assembled.
 ///
-/// [`examine`] is the six that need nothing but a skill root; the rest need to
+/// [`examine`] is the five that need nothing but a skill root; the rest need to
 /// know which agents are configured, and used to be stitched together inside the
 /// command. That put half of what `doctor` reports somewhere no test could
 /// reach — and the README's own count was then checked against a function that
@@ -1246,7 +1264,7 @@ pub fn full(
 ) -> Vec<Check> {
     let mut checks = examine(skill_root, repo_dir, tracker);
 
-    // Where each configured agent actually reads from. Eight of the eleven
+    // Where each configured agent actually reads from. Nine of the eleven
     // adapters share a neutral root because nobody has checked a real
     // installation for them, and reading their documentation instead would be
     // the unchecked claim `setup::tests` forbids. This does not verify them —
@@ -1449,6 +1467,14 @@ pub fn full(
             .map(|root| crate::harness::session::unreadable_holdings(&root))
             .unwrap_or_default(),
     ));
+    checks.push(stale_run_pointers(
+        skill_root,
+        repo_dir,
+        tracker,
+        &crate::harness::session::state_root(home)
+            .map(|root| crate::harness::session::holdings(&root))
+            .unwrap_or_default(),
+    ));
     checks.push(silence(&ledger_state(crate::harness::session::state_root(
         home,
     ))));
@@ -1500,6 +1526,170 @@ pub fn run_pointers(unreadable: &[String]) -> Check {
                  their pointers taken away",
             ),
         ),
+    }
+}
+
+/// Run pointers that parse cleanly and name an issue the tracker reports
+/// closed.
+///
+/// [`run_pointers`] answers *which pointers cannot be read at all*; this
+/// answers the shape issue #90 was filed against — a pointer that reads back
+/// fine and names an issue nobody holds any more, left on disk with nothing
+/// to expire it once the issue closed. This row names **every** readable
+/// covering pointer whose issue reads closed, not only one, and what that
+/// means for the gate depends on the whole set of pointers covering that
+/// checkout, not only the stale ones listed here: reconciliation drops a
+/// checkout's stale pointers from the count only when nothing live also
+/// covers it — **two or more** stale and nothing live reconciles them all away
+/// (`guard::adjudicate_action` drops the whole set and the gate stands
+/// aside), while a live holder covering the same checkout survives that
+/// reconciliation and keeps gating it regardless of how many stale pointers
+/// sit alongside it. Either way, what is left for a person to act on here is
+/// the case reconciliation deliberately leaves alone — a checkout exactly
+/// **one** stale pointer covers, which still refuses every write it names —
+/// see `docs/honesty.md` for why that residue is not closed by this row
+/// either.
+///
+/// **Filtered to this repository before anything is asked.** `holdings` is
+/// machine-wide (`session::holdings` reads one directory, not one repository)
+/// and a pointer is asked about using *this* checkout's `repo_dir` and
+/// `tracker` regardless of which project it actually names. Measured: on a
+/// machine with two projects, a live pointer for project A's issue #12 was
+/// asked as project B's #12 — low issue numbers collide constantly and most
+/// of them are closed — and the row reported a live pointer as a closed one,
+/// in shipped output, naming a command that would have deleted it. Filtered
+/// through `same_git_repository`, the same predicate `holders_for_action`
+/// already owns, so a pointer this repository does not cover is never asked
+/// about at all.
+///
+/// **`same_git_repository` fails closed to `false`.** A pointer whose
+/// recorded `repo_dir` no longer resolves as a git checkout at all — deleted,
+/// moved, the removed-worktree phantom this row exists for — answers `false`
+/// on both sides of that comparison, the same way it would for two unrelated
+/// repositories, and is silently excluded from this row entirely: not stale,
+/// not unread, not named. It is still reported by `run_pointers` if the
+/// pointer itself will not parse, but a pointer that parses fine and names a
+/// checkout `git rev-parse` can no longer find is invisible to this one.
+///
+/// A tracker read that fails answers nothing about staleness — the same rule
+/// `holder_standing` is built on — so a pointer this could not ask about is
+/// never folded into either verdict; it is its own count, named separately,
+/// because reporting it as "fine" would hide the exact machine an operator
+/// most needs this row on, and reporting it as "stale" would tell them to
+/// release a claim that may still be live.
+pub fn stale_run_pointers(
+    skill_root: Option<&Path>,
+    repo_dir: &Path,
+    tracker: &crate::config::Tracker,
+    holdings: &[super::session::Run],
+) -> Check {
+    let about = "whether a readable run pointer covering this repository still names an issue the \
+         tracker holds open";
+    if tracker.transport().is_none() {
+        return Check {
+            name: "stale-run-pointer",
+            about,
+            health: Health::Fine {
+                detail: "skipped: this tracker has no executable transport to ask".to_owned(),
+            },
+        };
+    }
+    let Some(skill_root) = skill_root else {
+        return Check {
+            name: "stale-run-pointer",
+            about,
+            health: Health::Fine {
+                detail: "skipped: no skill root is installed to ask the tracker through".to_owned(),
+            },
+        };
+    };
+    let covering: Vec<&super::session::Run> = holdings
+        .iter()
+        .filter(|run| {
+            run.covered()
+                .any(|covered| super::same_git_repository(covered, repo_dir))
+        })
+        .collect();
+    let mut stale = Vec::new();
+    let mut unread = Vec::new();
+    for run in covering {
+        match super::tracker_answer_for_pointer(skill_root, repo_dir, tracker, run)
+            .as_ref()
+            .and_then(super::tracker::Answer::stopped_reason)
+        {
+            Some("issue-not-open") => {
+                stale.push(format!(
+                    "{} (#{})",
+                    run.run_id,
+                    run.issue.unwrap_or_default()
+                ));
+            }
+            // Read, and answered — with anything else. `unexpected-state`,
+            // `not-current-live-holder`, or a plain pass: the tracker was
+            // reached and this is not the one answer that means "closed".
+            Some(_) => {}
+            // Nothing was read: a call that failed, a clock this machine
+            // could not answer, a `gh` that would not spawn, or one that ran
+            // and answered something `stopped_reason` does not count as a
+            // read landing at all. Not stale, and not fine either.
+            None => unread.push(run.run_id.clone()),
+        }
+    }
+    if !stale.is_empty() {
+        return Check {
+            name: "stale-run-pointer",
+            about,
+            health: Health::broken(
+                format!(
+                    "{} run pointer(s) here are readable and name an issue the tracker reports \
+                     closed \u{2014} one still refuses every write in the checkout it names, and \
+                     two or more covering the same checkout, with nothing live also covering it, \
+                     reconcile away to unclaimed instead: \
+                     {}",
+                    stale.len(),
+                    stale.join(", ")
+                ),
+                Resolution::run(format!(
+                    "estigia release --run-id <run-id>   # once for each of: {}",
+                    stale.join(", ")
+                )),
+            ),
+        };
+    }
+    if !unread.is_empty() {
+        return Check {
+            name: "stale-run-pointer",
+            about,
+            health: Health::broken(
+                format!(
+                    "{} run pointer(s) could not be checked against the tracker, so whether \
+                     they are stale is unknown: {}",
+                    unread.len(),
+                    unread.join(", ")
+                ),
+                // Not "the `gh` row above says what stopped this one" — that
+                // row can read `ok` while one issue among many fails to read
+                // for a reason of its own, an issue number that no longer
+                // resolves rather than a `gh` nobody can reach. Nothing named
+                // here would discharge the block for that reader, so nothing
+                // is named.
+                Resolution::no_command(
+                    crate::outcome::NoCommandReason::OperatorKnowledge,
+                    "why `gh issue view` failed for the pointer(s) named above \u{2014} read \
+                     from the tracker directly, since a machine-wide row cannot say which of \
+                     several possible causes this one was",
+                ),
+            ),
+        };
+    }
+    Check {
+        name: "stale-run-pointer",
+        about,
+        health: Health::Fine {
+            detail: "every readable run pointer covering this repository still names an issue \
+                     the tracker holds open"
+                .to_owned(),
+        },
     }
 }
 
@@ -1948,12 +2138,12 @@ pub fn tool_servers(
 
 /// Whether the gate has been letting calls through without deciding on them.
 ///
-/// The one check about the past rather than the present. Everything else here
-/// asks whether a run *could* work; this asks whether the runs that already
-/// happened were gated at all — because the two ways they are not are both
-/// silent by construction. Nothing is denied, nothing is printed, and the only
-/// trace is a ledger line nobody has a reason to open: an operator only reads
-/// it after being stopped, and this is the case where they never were.
+/// One of two checks about the past rather than the present — `stale-run-pointer` joined it in
+/// `LOOKS_BACK`, and that constant's own doc says why. Everything else here asks whether a run
+/// *could* work; this asks whether the runs that already happened were gated at all — because the
+/// two ways they are not are both silent by construction. Nothing is denied, nothing is printed,
+/// and the only trace is a ledger line nobody has a reason to open: an operator only reads it after
+/// being stopped, and this is the case where they never were.
 pub fn silence(found: &Ungated) -> Check {
     let about = "whether any call reached the gate and went undecided";
     // A file that will not open answers nothing, and saying "every call was
@@ -3382,6 +3572,202 @@ mod tests {
         assert!(
             !format!("{resolution:?}").is_empty(),
             "a broken check with nothing to do about it"
+        );
+    }
+
+    fn install_contract(skill_root: &Path) {
+        std::fs::create_dir_all(skill_root).expect("a skill root");
+        std::fs::write(
+            skill_root.join(crate::skill::CONTRACT),
+            "the contract this row reads\n",
+        )
+        .expect("the contract is installed");
+    }
+
+    fn holder(run_id: &str, issue: u64, repo_dir: &Path) -> super::super::session::Run {
+        let mut run = super::super::session::Run::new(run_id.to_owned());
+        run.issue = Some(issue);
+        run.repo_dir = Some(repo_dir.to_path_buf());
+        run
+    }
+
+    /// A real repository, because [`same_git_repository`](super::super::same_git_repository)
+    /// — what this row's filter is built on — runs `git rev-parse` and a bare
+    /// directory answers neither side of that comparison.
+    ///
+    /// `None` when git is not usable here, the same shape
+    /// `full_reports_the_home_it_was_given_and_softens_the_push_guard_there`
+    /// already uses: asserting about the row under test would be measuring
+    /// the absence of git instead.
+    fn git_repo() -> Option<tempfile::TempDir> {
+        let directory = tempfile::tempdir().ok()?;
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(directory.path())
+            .args(["init", "--quiet"])
+            .status();
+        matches!(status, Ok(status) if status.success()).then_some(directory)
+    }
+
+    /// No pointers at all: nothing stale, nothing unread.
+    #[test]
+    fn no_holdings_is_reported_fine() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let check = stale_run_pointers(Some(root.path()), root.path(), &github(), &[]);
+        assert_eq!(check.name, "stale-run-pointer");
+        assert!(
+            matches!(check.health, Health::Fine { .. }),
+            "a machine holding nothing was reported as something else: {:?}",
+            check.health
+        );
+    }
+
+    /// A pointer that parses cleanly and names an issue the tracker reports
+    /// closed is the shape issue #90 was filed against: readable, and still
+    /// gating a checkout nobody holds any more.
+    #[test]
+    fn a_readable_stale_pointer_is_reported_and_names_the_release_command() {
+        let Some(repo) = git_repo() else {
+            eprintln!("SKIPPED: git is not usable here.");
+            return;
+        };
+        install_contract(repo.path());
+        let run = holder("claude-stale0000", 12, repo.path());
+
+        let bin = crate::test_env::scripted_gh();
+        let script = crate::test_env::answers(&[crate::test_env::closed_issue(12)]);
+        let check = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            stale_run_pointers(Some(repo.path()), repo.path(), &github(), &[run])
+        });
+
+        let Health::Broken { detail, resolution } = &check.health else {
+            panic!(
+                "a stale pointer was not reported broken: {:?}",
+                check.health
+            );
+        };
+        assert!(
+            detail.contains("claude-stale0000") && detail.contains("#12"),
+            "the row does not name the stale pointer: {detail}"
+        );
+        assert!(
+            resolution.to_string().contains("estigia release --run-id"),
+            "the row does not name the command that clears it: {resolution}"
+        );
+    }
+
+    /// An issue that is open, whatever else it disagrees about, is not
+    /// reported as stale.
+    #[test]
+    fn a_readable_live_pointer_is_reported_fine() {
+        let Some(repo) = git_repo() else {
+            eprintln!("SKIPPED: git is not usable here.");
+            return;
+        };
+        install_contract(repo.path());
+        let run = holder("claude-live00000", 34, repo.path());
+
+        let bin = crate::test_env::scripted_gh();
+        let script = crate::test_env::answers(&[crate::test_env::open_but_unmatched_issue(34)]);
+        let check = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            stale_run_pointers(Some(repo.path()), repo.path(), &github(), &[run])
+        });
+
+        assert!(
+            matches!(check.health, Health::Fine { .. }),
+            "a pointer whose issue is open was reported stale: {:?}",
+            check.health
+        );
+    }
+
+    /// A tracker read that fails answers nothing about staleness — reported
+    /// separately from both a stale pointer and a clean one, never folded into
+    /// either.
+    #[test]
+    fn a_tracker_read_that_fails_is_reported_as_unread_not_stale() {
+        let Some(repo) = git_repo() else {
+            eprintln!("SKIPPED: git is not usable here.");
+            return;
+        };
+        install_contract(repo.path());
+        let run = holder("claude-unknown00", 56, repo.path());
+
+        let bin = crate::test_env::scripted_gh();
+        let script = crate::test_env::answers(&[crate::test_env::unreachable_tracker_answer()]);
+        let check = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            stale_run_pointers(Some(repo.path()), repo.path(), &github(), &[run])
+        });
+
+        let Health::Broken { detail, .. } = &check.health else {
+            panic!(
+                "a pointer this could not ask about was reported fine, which reads a read that \
+                 failed as an issue that is open: {:?}",
+                check.health
+            );
+        };
+        assert!(
+            !detail.contains("closed"),
+            "a read that failed was reported as though the tracker said the issue was closed: \
+             {detail}"
+        );
+        assert!(
+            detail.contains("could not be checked"),
+            "a read that failed does not say so: {detail}"
+        );
+    }
+
+    /// A tracker with no executable transport is skipped rather than asked
+    /// once per pointer — the same distinction `transport`'s own row draws.
+    #[test]
+    fn a_tracker_with_no_executable_is_skipped_for_stale_pointers_too() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let run = holder("claude-anything0", 1, root.path());
+        let check = stale_run_pointers(
+            Some(root.path()),
+            root.path(),
+            &crate::config::Tracker::Linear,
+            &[run],
+        );
+        assert!(
+            matches!(check.health, Health::Fine { .. }),
+            "a tracker Estigia holds no tools for was asked about a pointer's issue: {:?}",
+            check.health
+        );
+    }
+
+    /// A pointer naming a *different* repository is never asked about, let
+    /// alone named — the defect issue #90's own review found: `holdings` is
+    /// machine-wide, and asking every pointer using **this** checkout's
+    /// `repo_dir` let a live pointer for another project's issue #12 be read
+    /// as this project's #12, low numbers colliding constantly and most of
+    /// them closed.
+    #[test]
+    fn a_pointer_for_another_repository_is_not_named() {
+        let Some(repo) = git_repo() else {
+            eprintln!("SKIPPED: git is not usable here.");
+            return;
+        };
+        let Some(elsewhere) = git_repo() else {
+            eprintln!("SKIPPED: git is not usable here.");
+            return;
+        };
+        install_contract(repo.path());
+        // Closed, if it were ever asked about — the shape most likely to be
+        // silently believed rather than caught, since a false "stale" here
+        // reads as an ordinary broken row rather than as an obviously wrong
+        // machine-wide answer.
+        let foreign = holder("claude-foreign00", 12, elsewhere.path());
+
+        let bin = crate::test_env::scripted_gh();
+        let script = crate::test_env::answers(&[crate::test_env::closed_issue(12)]);
+        let check = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            stale_run_pointers(Some(repo.path()), repo.path(), &github(), &[foreign])
+        });
+
+        assert!(
+            matches!(check.health, Health::Fine { .. }),
+            "a pointer for a different repository was asked about and reported: {:?}",
+            check.health
         );
     }
 

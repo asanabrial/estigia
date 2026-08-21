@@ -53,6 +53,27 @@ impl Answer {
         self.body.as_ref()?.get("reason")?.as_str()
     }
 
+    /// The `reason` the tracker gave, but **only** when it was actually read
+    /// and answered stop — `code == 1`, the one code that means *the control
+    /// surface was read and it said stop*. Every other code is a read that
+    /// did not land (`2`, `3`) or a write whose fate nobody observed (`4`,
+    /// `5`), and `reason()` alone cannot tell those apart from a genuine
+    /// answer: a body carrying a `reason` field by coincidence, or one left
+    /// over from a different call, would read as a stop this machine never
+    /// actually heard.
+    ///
+    /// One spelling of "the tracker was read and said X" rather than two:
+    /// `harness::holder_standing` and `doctor::stale_run_pointers` each held
+    /// their own copy of `code == 1 && reason() == Some(...)`, which is the
+    /// shape this repository's own rule says to close by removing one
+    /// rather than by adding a third.
+    pub fn stopped_reason(&self) -> Option<&str> {
+        if self.code != 1 {
+            return None;
+        }
+        self.reason()
+    }
+
     /// The `detail` field, when present.
     pub fn detail(&self) -> Option<&str> {
         self.body.as_ref()?.get("detail")?.as_str()

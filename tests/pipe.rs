@@ -24,6 +24,24 @@ fn estigia() -> &'static str {
     env!("CARGO_BIN_EXE_estigia")
 }
 
+/// Guards `std::env::vars()` inside [`run_with_path_locked`] against the one
+/// test in this binary that mutates the process environment, without which
+/// `an_operators_gh_repo_never_reaches_a_spawned_gh`'s `set_var`/`remove_var`
+/// around `GH_REPO` race every other concurrently-scheduled `run`/`run_in`
+/// call's read of the same table — the exact premise `src/test_env.rs`'s
+/// `ENVIRONMENT` mutex exists to rule out for `cargo test --lib`, and cannot
+/// reach this binary since it is `pub(crate)` there.
+///
+/// [`run_with_path`] takes the read side for the duration of its call into
+/// [`run_with_path_locked`] — any number of them run concurrently, matching
+/// this suite's existing parallelism.
+/// `an_operators_gh_repo_never_reaches_a_spawned_gh` takes the write side
+/// instead, across `set_var`, the spawn and the restore, and calls
+/// `run_with_path_locked` directly rather than through `run_with_path`,
+/// because a read-side attempt on the same thread that already holds the
+/// write side is not something `std::sync::RwLock` promises to resolve.
+static ENV_LOCK: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
 #[test]
 fn a_reader_that_stops_reading_does_not_produce_a_backtrace() {
     // `status` prints more than one line for any installation, so dropping the
@@ -98,9 +116,9 @@ fn help_and_version_exit_zero() {
 /// trunk delivery would pass or fail by who ran it.
 ///
 /// The whole namespace rather than the one name, so the next variable this crate
-/// reads does not put the trap back. Nothing else is cleared: `USER`,
-/// `COMPUTERNAME` and their kind end up in a record's prose and decide nothing,
-/// and `PATH` has to stay real or the child finds no interpreter.
+/// reads does not put the trap back. `run_in`, which this calls through, goes
+/// on to `run_with_path`, which clears three more — `GH_REPO`, `GH_HOST`,
+/// `GH_TOKEN` — for a different reason spelled where that clearing happens.
 fn run(home: &std::path::Path, arguments: &[&str], stdin: &str) -> (String, String, bool) {
     run_in(home, home, arguments, stdin)
 }
@@ -126,7 +144,7 @@ fn run_in(
     arguments: &[&str],
     stdin: &str,
 ) -> (String, String, bool) {
-    run_with_path(home, here, arguments, stdin, None)
+    run_with_path(home, here, arguments, stdin, None, &[])
 }
 
 /// The same, with the search path replaced.
@@ -135,12 +153,39 @@ fn run_in(
 /// state is *this machine has no authenticated GitHub CLI*. It was the last row
 /// measured as a builder and unmeasured as report, and the reason given was
 /// that forcing it takes a path with no `gh` on it. This is that path.
+///
+/// `extra_env` is applied last, after both the `ESTIGIA_*` loop and the
+/// `GH_REPO`/`GH_HOST`/`GH_TOKEN` clearing above — so a caller naming one of
+/// those three GH_* names overrides the clearing rather than testing it,
+/// which is deliberate. What `an_operators_gh_repo_never_reaches_a_spawned_gh`
+/// actually depends on is the other half of that ordering, the `ESTIGIA_*`
+/// loop: it hands the child `ESTIGIA_FAKE_ENV_LOG`, a name that loop would
+/// otherwise strip along with every other inherited `ESTIGIA_*` variable
+/// before this function's own caller ever gets a say.
 fn run_with_path(
     home: &std::path::Path,
     here: &std::path::Path,
     arguments: &[&str],
     stdin: &str,
     search_path: Option<&std::path::Path>,
+    extra_env: &[(&str, &str)],
+) -> (String, String, bool) {
+    let _guard = ENV_LOCK.read().expect("the env lock is not poisoned");
+    run_with_path_locked(home, here, arguments, stdin, search_path, extra_env)
+}
+
+/// The body of [`run_with_path`], reading `std::env::vars()` without taking
+/// `ENV_LOCK` itself — see that lock's own doc for why
+/// `an_operators_gh_repo_never_reaches_a_spawned_gh` calls this directly,
+/// under its own already-held write lock, instead of going through
+/// `run_with_path`.
+fn run_with_path_locked(
+    home: &std::path::Path,
+    here: &std::path::Path,
+    arguments: &[&str],
+    stdin: &str,
+    search_path: Option<&std::path::Path>,
+    extra_env: &[(&str, &str)],
 ) -> (String, String, bool) {
     let inherited: Vec<String> = std::env::vars()
         .map(|(name, _)| name)
@@ -150,8 +195,30 @@ fn run_with_path(
     for name in &inherited {
         command.env_remove(name);
     }
+    // This spawns the real binary and inherits the operator's environment —
+    // unlike a `tracker_command` fixture, which puts a scripted `gh` first on
+    // `PATH` and answers from `ESTIGIA_FAKE_ANSWERS`, ignoring these three
+    // entirely. `GH_REPO` is precisely the variable this crate's own transport
+    // sets to steer `gh`'s repository resolution when a checkout's remote is
+    // not the one to ask (`harness::mod::gate`, `holder_standing`) — so an
+    // operator who has it exported for their own work hands every `gh` this
+    // binary spawns a repository that is not the fixture's, and reconciliation
+    // (`guard::adjudicate_action`, when two or more pointers cover one
+    // checkout) is what first made a several-holder decision consult the
+    // tracker at all, where none of these tests intend one. Checked: without
+    // this, `a_per_call_working_directory_selects_the_holder_that_owns_it`
+    // asks a real `gh` about issues #12 and #34 in whatever repository
+    // `GH_REPO` names, and its answer would decide what the test asserts.
+    // `GH_HOST` and `GH_TOKEN` are the same class of steering, cleared for the
+    // same reason before either is ever read.
+    for name in ["GH_REPO", "GH_HOST", "GH_TOKEN"] {
+        command.env_remove(name);
+    }
     if let Some(only) = search_path {
         command.env("PATH", only);
+    }
+    for (name, value) in extra_env {
+        command.env(name, value);
     }
     let mut effective = arguments.to_vec();
     if matches!(effective.first(), Some(&"setup" | &"install" | &"sync"))
@@ -185,6 +252,149 @@ fn run_with_path(
         String::from_utf8_lossy(&output.stderr).into_owned(),
         output.status.success(),
     )
+}
+
+/// The one variable in `CLEARED` this file can hold to an actual assertion
+/// rather than to a comment: an ambient `GH_REPO`, exactly as an operator's
+/// own shell would export it, does not reach a `gh` a gated command spawns.
+///
+/// `no_variable_the_crate_decides_on_escapes_the_fixture` cannot fail if
+/// `run_with_path`'s three-line `env_remove` loop is deleted outright: the
+/// `CLEARED` bucket is built from `var("...")`/`var_os("...")` call sites
+/// under `src/`, and `GH_REPO`, `GH_HOST` and `GH_TOKEN` are only ever
+/// `set_var`'d there, so removing the loop leaves that scan with nothing to
+/// see and the suite green. This is the test that would go red instead: it
+/// puts `GH_REPO` on *this* process — standing in for the operator's shell,
+/// since `Command` inherits an unset-or-removed variable from exactly there —
+/// spawns `estigia doctor` through `run_with_path` with a scripted `gh` ahead
+/// of the real one on `PATH`, and reads back what that `gh` actually saw
+/// through `ESTIGIA_FAKE_ENV_LOG`, a file `examples/fake_process.rs` writes
+/// to on request rather than a claim this file makes about it.
+///
+/// `doctor`'s own `gh` row is the trigger, not reconciliation: `examine`
+/// calls `gh auth status` unconditionally once a skill is installed, so no
+/// two-holder fixture is needed to make some `gh` run at all — the property
+/// under test, that the operator's own `GH_REPO` never reaches any `gh` this
+/// binary spawns through this fixture, does not depend on which call does.
+///
+/// Setting `GH_REPO` on the test binary's own process rather than on a
+/// throwaway child is what makes this a fair test of ambient inheritance —
+/// `Command` only omits a variable it was told to omit, never one merely
+/// absent from a builder — and no concurrently-scheduled test reads `GH_REPO`
+/// by name from its own process: every `run`/`run_in` call clears it in the
+/// *child* regardless of what this process holds (that clearing is what this
+/// test measures), and `tracker_command`'s fixture answers from
+/// `ESTIGIA_FAKE_ANSWERS` by argument matching alone, never consulting the
+/// repository a real `gh` would have resolved. That leaves the raw table:
+/// `run_with_path`'s own `std::env::vars()` iterates every name at once, so
+/// `ENV_LOCK`'s write side, held for the whole `set_var`-to-restore span, is
+/// what keeps that iteration from running mid-mutation — see the lock's own
+/// doc. The variable is restored, and restored before this function's own
+/// assertions run, so a failed assertion here cannot leave it set for
+/// whatever the suite schedules next.
+#[test]
+fn an_operators_gh_repo_never_reaches_a_spawned_gh() {
+    let here = std::env::current_exe().expect("the test binary knows where it is");
+    let built = here
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("the test binary is under a profile directory")
+        .join("examples")
+        .join(if cfg!(windows) {
+            "fake_process.exe"
+        } else {
+            "fake_process"
+        });
+    assert!(
+        built.is_file(),
+        "the process fixture is not built, so this test would measure nothing: run `cargo \
+         build --examples` ({})",
+        built.display()
+    );
+    let fake_bin = tempfile::tempdir().expect("a directory for the fake gh");
+    std::fs::copy(
+        &built,
+        fake_bin
+            .path()
+            .join(if cfg!(windows) { "gh.exe" } else { "gh" }),
+    )
+    .expect("the fake gh is copied onto the path");
+
+    let mut joined = std::ffi::OsString::from(fake_bin.path());
+    joined.push(if cfg!(windows) { ";" } else { ":" });
+    joined.push(std::env::var_os("PATH").unwrap_or_default());
+
+    let home = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(home.path().join("AppData").join("Roaming")).expect("a roaming dir");
+    let (_, stderr, ok) = run(home.path(), &["setup", "claude-code"], "");
+    assert!(ok, "setup failed: {stderr}");
+
+    let env_log = tempfile::NamedTempFile::new().expect("a file for the fake `gh` to answer into");
+
+    // The marker this process holds only for the width of the one spawn below
+    // — see the module doc for why this is the operator-shell stand-in and
+    // why it is safe here.
+    // SAFETY: no other test in this binary reads `GH_REPO` from its own
+    // process — every `run`/`run_in` call clears it in the child it spawns
+    // regardless of this process's value, and `tracker_command`'s fixture
+    // answers by argument matching alone — and the value is restored before
+    // this function's own assertions run, below. `ENV_LOCK`'s write side,
+    // held for this whole block, is what keeps a concurrently-scheduled
+    // `run`/`run_in` call's `std::env::vars()` from reading the process
+    // environment while `set_var`/`remove_var` here are between one value
+    // and the next — see that lock's own doc.
+    let _env_guard = ENV_LOCK.write().expect("the env lock is not poisoned");
+    let marker = "operators-own-org/operators-own-repo";
+    let before = std::env::var_os("GH_REPO");
+    unsafe {
+        std::env::set_var("GH_REPO", marker);
+    }
+    // The actual function under test: the same `run_with_path_locked` every
+    // other `run`/`run_in` call in this file reaches through `run_with_path`,
+    // not a second copy of its clearing logic — a duplicate here would keep
+    // passing after somebody deleted the real one, which is the exact failure
+    // this test exists to rule out. Called directly, without going through
+    // `run_with_path`, because this thread already holds `ENV_LOCK`'s write
+    // side above.
+    let (_, stderr, ok) = run_with_path_locked(
+        home.path(),
+        home.path(),
+        &["doctor"],
+        "",
+        Some(std::path::Path::new(&joined)),
+        &[(
+            "ESTIGIA_FAKE_ENV_LOG",
+            &env_log.path().display().to_string(),
+        )],
+    );
+    unsafe {
+        match before {
+            Some(previous) => std::env::set_var("GH_REPO", previous),
+            None => std::env::remove_var("GH_REPO"),
+        }
+    }
+    drop(_env_guard);
+
+    // This asserts the fixture actually did what it was built for, before
+    // trusting an empty log to mean the same thing as a clean one — an
+    // unbuilt or unreached `gh` would leave `env_log` empty too, and that
+    // must not read as "GH_REPO was cleared".
+    assert!(ok, "estigia doctor did not run cleanly: {stderr}");
+    let seen = std::fs::read_to_string(env_log.path()).unwrap_or_default();
+    assert!(
+        !seen.is_empty(),
+        "the scripted `gh` was never invoked, so this measures nothing — `doctor`'s own `gh` \
+         row is expected to call it unconditionally"
+    );
+    assert!(
+        !seen.contains(marker),
+        "the scripted `gh` saw the operator's own `GH_REPO`, which `run_with_path`'s clearing \
+         exists to prevent: {seen}"
+    );
+    assert!(
+        seen.contains("GH_REPO=(absent)"),
+        "the scripted `gh` did not report `GH_REPO` absent at all: {seen}"
+    );
 }
 
 #[test]
@@ -1969,6 +2179,7 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         &["doctor"],
         "",
         Some(nowhere.path()),
+        &[],
     );
     assert!(
         out.contains("BROKEN   gh"),
@@ -2008,6 +2219,14 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         "silence",
         // No broken state at all, measured: `Health::Fine` or `Health::Skipped`.
         "transport",
+        // Not forced broken here for the same reason: this machine holds no
+        // stale run pointer at this point in the fixture, and forcing one
+        // needs a `gh` that answers `issue-not-open` for a specific issue
+        // rather than the blanket absence step 8 already forces — measured
+        // directly, with a scripted `gh`, in `harness::doctor`'s own module
+        // instead (`a_readable_stale_pointer_is_reported_and_names_the_
+        // release_command`).
+        "stale-run-pointer",
     ];
     let unforced: Vec<&String> = printed
         .iter()
@@ -2113,6 +2332,7 @@ fn what_the_companion_verb_prints_is_crossed() {
         &["setup", "--companion", "leteo"],
         "",
         Some(nowhere.path()),
+        &[],
     );
     assert!(ok, "the companion verb refused: {out}");
     assert!(
@@ -4209,13 +4429,31 @@ fn an_instruction_file_kept_on_an_upgrade_is_named_in_the_report() {
 
 /// No variable this crate decides on reaches a child from the developer's shell.
 ///
-/// `run` points four variables at the fixture's home and clears everything named
-/// `ESTIGIA_*`. The second half is the one worth holding: `ESTIGIA_FLAG` is read
-/// straight from the environment and decides whether `unflagged-on-trunk` fires,
-/// so a child that inherits it answers a question about whoever ran the suite.
-/// Nothing here reaches a trunk delivery today, so the suite passes either way —
-/// which is exactly why this is a source crossing rather than a behaviour one.
-/// There is no surface that reports the flag back without a live tracker.
+/// `run` points four variables at the fixture's home, clears everything named
+/// `ESTIGIA_*`, and clears `GH_REPO`, `GH_HOST` and `GH_TOKEN`. The second half
+/// is the one worth holding: `ESTIGIA_FLAG` is read straight from the
+/// environment and decides whether `unflagged-on-trunk` fires, so a child that
+/// inherits it answers a question about whoever ran the suite. Nothing here
+/// reaches a trunk delivery today, so the suite passes either way — which is
+/// exactly why this is a source crossing rather than a behaviour one. There is
+/// no surface that reports the flag back without a live tracker.
+///
+/// `GH_REPO` used to be `LEFT_REAL` here, on purpose: Estigia only ever writes
+/// it, and only when the operator's own table names a repository, so an
+/// operator who had it exported for their own work was meant to keep meaning
+/// it. That stopped being safe to leave real once reconciliation
+/// (`guard::adjudicate_action`, two or more pointers covering one checkout)
+/// started asking the tracker at all — a several-holder decision this suite
+/// drives against a fixture repository now makes a real `gh issue view` call,
+/// and an inherited `GH_REPO` answers it against whatever repository the
+/// operator's shell names instead of the fixture's. Checked:
+/// `a_per_call_working_directory_selects_the_holder_that_owns_it` is the one
+/// test in this file that reconciliation reaches through `run_in` rather than
+/// through a scripted `tracker_command`, and it is the one this would have
+/// made non-hermetic. `GH_HOST` and `GH_TOKEN` are cleared alongside it as the
+/// same class of steering, on no evidence any test needs them real — nothing
+/// in this crate writes either, so neither carried the same argument `GH_REPO`
+/// did.
 ///
 /// What it catches is the next one: a variable this crate reads to decide
 /// something, named outside the namespace the fixture clears.
@@ -4275,17 +4513,33 @@ fn no_variable_the_crate_decides_on_escapes_the_fixture() {
         // and the fixture sets both.
         "HOMEDRIVE",
         "HOMEPATH",
-        // **Written**, not read, and only inside the MCP server process: it is
-        // how `gh` is told which repository the operator named, and the spawned
-        // transport set it on the child for the same reason. Left real because
-        // an operator who exported it in their own shell meant it — Estigia
-        // overwrites it only when the table names a repository, and a fixture
-        // that cleared it would hide the one case where the two disagree.
-        "GH_REPO",
     ];
+    // Written, not read, and only inside the MCP server process or a gate
+    // renewal: how `gh` is told which repository the operator named, or which
+    // this fixture's own reconciliation just asked about. Not `LEFT_REAL` —
+    // this file's own module doc says why the two disagreeing is exactly the
+    // shape that stopped being safe to leave to whatever the developer's shell
+    // happened to hold — and not `ANSWERED` either: nothing here substitutes a
+    // value, `run_with_path` removes them outright.
+    //
+    // This bucket, on its own, is documentation rather than an assertion:
+    // these three names are only ever `set_var`'d under `src/`, never
+    // `var`/`var_os`'d there, so nothing in the scan above can ever place one
+    // of them here to be checked — deleting `run_with_path`'s own
+    // `env_remove` loop would leave this whole test green. What actually
+    // rules that mutation out is a different, narrower test:
+    // `an_operators_gh_repo_never_reaches_a_spawned_gh`, above `run_with_path`
+    // in this file, puts `GH_REPO` on this process, spawns through
+    // `run_with_path` with a scripted `gh` on `PATH`, and reads back what
+    // that `gh` actually saw — measured directly, by disabling the loop with
+    // `if false { … }` while this comment was written: that test failed, and
+    // reporting `GH_REPO=operators-own-org/operators-own-repo` back out of
+    // the child it spawned.
+    const CLEARED: &[&str] = &["GH_REPO", "GH_HOST", "GH_TOKEN"];
     for name in &read {
         if ANSWERED.contains(&name.as_str())
             || LEFT_REAL.contains(&name.as_str())
+            || CLEARED.contains(&name.as_str())
             || name.starts_with("ESTIGIA_")
         {
             continue;
@@ -8848,6 +9102,139 @@ fn release_does_not_report_a_release_the_transport_did_not_perform() {
     assert!(
         after.contains("\"issue\":12") || after.contains("\"issue\": 12"),
         "the pointer stopped holding the issue nobody released:\n{after}"
+    );
+}
+
+/// An issue the timeline carries no acquisition event for, whatever a local
+/// pointer says: open, and never claimed by anybody the transport can see.
+///
+/// `unassign` reads `assignees,labels,comments`, not `state,labels,comments` —
+/// [`issue_answer`] is the wrong fixture for this by one field, and `state`
+/// costs nothing extra to carry since a reader that does not ask for it does
+/// not mind it being there.
+fn issue_answer_nobody_claimed() -> String {
+    let issue = serde_json::json!({
+        "state": "OPEN",
+        "assignees": [],
+        "labels": [{"name": "status:in-progress"}],
+        "comments": [],
+    });
+    serde_json::to_string(&serde_json::json!([{
+        "matches": "issue view",
+        "stdout": issue.to_string(),
+        "status": 0,
+    }]))
+    .expect("the script serialises")
+}
+
+/// The phantom pointer issue #90 was filed against, cleared end to end: a run
+/// pointer on disk naming an issue the tracker's own timeline has no
+/// acquisition event for — the shape `several-runs-hold-this-checkout` names
+/// `estigia release --run-id <run-id>` to clear, and the one D4(b) actually
+/// had to reach.
+///
+/// `plan_release` raises `nothing-to-unassign` for exactly this timeline —
+/// this run appears in neither `ownership.live` nor `ownership.stale` — and
+/// that refusal used to propagate out of `release` unhandled: the pointer
+/// stayed on disk, and the command the several-holder refusal names did not
+/// clear the state it described. `release`'s discovery call now recognises
+/// that one code and forgets the pointer instead of repeating the refusal.
+#[test]
+fn releasing_a_phantom_pointer_forgets_it_and_says_so() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let pointer = home
+        .join(".estigia")
+        .join("runs")
+        .join("claude-phantom0.json");
+    std::fs::write(
+        &pointer,
+        serde_json::to_string(&serde_json::json!({
+            "run_id": "claude-phantom0",
+            "issue": 12,
+            "revision": 1,
+            "state": "in-progress",
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+        }))
+        .expect("the pointer serialises"),
+    )
+    .expect("the pointer is written");
+
+    let (said, err, ok) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        &issue_answer_nobody_claimed(),
+        &["release", "--run-id", "claude-phantom0"],
+        "",
+    );
+    let told = format!("{said}{err}");
+    assert!(ok, "clearing a phantom pointer was refused:\n{told}");
+    assert!(
+        told.contains("no epoch") && told.contains("forgotten"),
+        "the command did not say what it did to the pointer:\n{told}"
+    );
+    assert!(
+        !pointer.exists(),
+        "the pointer the tracker holds no epoch for is still on disk after release"
+    );
+}
+
+/// The negative half: a tracker read that fails must leave the pointer alone.
+///
+/// `nothing-to-unassign` is one specific, successful answer from the
+/// timeline — not the shape of every refusal `unassign` can raise. A `gh`
+/// that will not run answers `read-failed` instead, which `release` returns
+/// untouched, and the local pointer — the one piece of state a person can
+/// still read when the tracker cannot be reached at all — has to survive
+/// that exactly as it did before D4(b).
+#[test]
+fn a_release_the_tracker_could_not_be_asked_about_forgets_nothing() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let pointer = home
+        .join(".estigia")
+        .join("runs")
+        .join("claude-phantom1.json");
+    std::fs::write(
+        &pointer,
+        serde_json::to_string(&serde_json::json!({
+            "run_id": "claude-phantom1",
+            "issue": 34,
+            "revision": 1,
+            "state": "in-progress",
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+        }))
+        .expect("the pointer serialises"),
+    )
+    .expect("the pointer is written");
+
+    // The fake process's own catch-all: no entry matches, so `gh` exits `0`
+    // with nothing on stdout, and `gh issue view` returning nothing is itself
+    // a read failure — `gh_json` refuses `None` bodies as unparseable rather
+    // than reading absence as an answer.
+    let (said, err, ok) = run_with_tracker(
+        home,
+        repo,
+        bin,
+        "[]",
+        &["release", "--run-id", "claude-phantom1"],
+        "",
+    );
+    let told = format!("{said}{err}");
+    assert!(
+        !ok,
+        "a release over an unreachable tracker was not refused:\n{told}"
+    );
+    assert!(
+        !told.contains("forgotten") && !told.contains("no longer holds"),
+        "a failed read was reported as though something had been cleared:\n{told}"
+    );
+    assert!(
+        pointer.exists(),
+        "a read that failed still took the pointer away:\n{told}"
     );
 }
 

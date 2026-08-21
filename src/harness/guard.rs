@@ -729,10 +729,10 @@ pub fn adjudicate_action(
     // watched, and this run holds no issue" about a tool that is not watched at
     // all. And the decision: the branch below **denies** when a run pointer
     // somewhere on this machine will not parse, which is right for a write and
-    // is a denied `Read` for OpenCode, whose plugin sends every tool call
-    // through here. This file's neighbour already states the rule — *a schema
-    // this build does not know could be wrapping `Read` as easily as `Write`,
-    // and denying it would deny reads*.
+    // is a denied `Read` for any caller asking `estigia gate` about a tool this
+    // build does not watch at all. This file's neighbour already states the
+    // rule — *a schema this build does not know could be wrapping `Read` as
+    // easily as `Write`, and denying it would deny reads*.
     if matches!(action, Action::Untouched) {
         return Adjudication {
             decision: Decision::Outside(super::Aside::NotWatched),
@@ -748,6 +748,67 @@ pub fn adjudicate_action(
         // A sibling is not path-owned by the readable pointer, so an unreadable
         // pointer could be its actual holder. Fall into the fail-closed arm.
         holders.clear();
+    }
+
+    // Reconciled against the tracker — and only when there is more than one
+    // name to reconcile between. Two or more pointers naming one checkout used
+    // to reach the `_ =>` arm below unchanged, and that arm refused naming
+    // *runs that no longer exist* whenever one of them had since been closed
+    // out from under it: an issue delivered by a third checkout, or simply
+    // closed, leaves its pointer on disk with nothing left to expire it.
+    //
+    // Guarded to `len() >= 2` on purpose. A **single** holder whose issue is
+    // closed already refuses through the `1 =>` arm's own call into `gate`,
+    // with the same `issue-not-open` reason this reconciliation is built on —
+    // and that refusal is deliberate: it is the gate closing behind a run's own
+    // delivery, still holding the checkout it just wrote from. Reconciling here
+    // too would make this function decide that refusal on an answer of its own
+    // rather than `gate`'s, a second reading of one question with a second
+    // chance to disagree with the first. `N == 1` is untouched.
+    //
+    // Every surviving holder is classified once, through
+    // `super::holder_standing` — the same tracker answer this loop reads to
+    // decide who is dropped is the answer the `_ =>` arm below reads to decide
+    // who `estigia release` may be offered for, so the two questions cost one
+    // round trip and can never disagree with each other. A pointer's own
+    // fields cannot stand in for either question: `holder_standing`'s own doc
+    // says why a `worktree` is not a liveness signal in either direction.
+    //
+    // A holder is dropped only when the tracker names its issue
+    // `issue-not-open` — `HolderStanding::ClosedIssue`. Every other answer,
+    // including one this call could not get at all, keeps the holder counted:
+    // an unknown result is not clearance, and dropping on one would reopen the
+    // phantom-pointer defect in the other direction, a live claim discounted
+    // because the tracker went quiet for a moment.
+    //
+    // Read-only, like the rest of this reconciliation: nothing here writes,
+    // deletes or rewrites a pointer file. Putting one down is `estigia
+    // release`'s job, and the refusal below now names it — for the holders the
+    // tracker itself says that command would clear, and no others.
+    //
+    // Dropping to one or to zero both fall through to the arms already below —
+    // restructured here rather than duplicated inside the `_ =>` arm, so a
+    // pointer reconciled away is decided exactly as if it had never been
+    // written, through the one path that already handles that count.
+    let mut standings: Vec<super::HolderStanding> = Vec::new();
+    if holders.len() >= 2 {
+        let judged: Vec<(session::Run, super::HolderStanding)> = holders
+            .into_iter()
+            .map(|run| {
+                // `repo_dir`, the argument this function was actually called
+                // with — not `context.repo_dir`. The two agree at every call
+                // site today, but `adjudicate_action` is `pub`, and a caller
+                // that ever let them diverge would reconcile one checkout's
+                // holders against a different repository's timeline, which
+                // is the exact shape of the finding `doctor` was fixed for.
+                let standing =
+                    super::holder_standing(&context.skill_root, repo_dir, &context.tracker, &run);
+                (run, standing)
+            })
+            .filter(|(_, standing)| !matches!(standing, super::HolderStanding::ClosedIssue))
+            .collect();
+        holders = judged.iter().map(|(run, _)| run.clone()).collect();
+        standings = judged.into_iter().map(|(_, standing)| standing).collect();
     }
 
     // Through the stand-down, like every other decision. `gate` states the rule
@@ -825,22 +886,95 @@ pub fn adjudicate_action(
             }
             decision
         }
-        _ => Decision::Deny(Box::new(Refusal::not_started(
-            "several-runs-hold-this-checkout",
-            format!(
-                "{} runs on this machine hold this checkout: {}",
-                holders.len(),
-                holders
-                    .iter()
-                    .map(|run| format!("{} (#{})", run.run_id, run.issue.unwrap_or_default()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Resolution::no_command(
-                NoCommandReason::OperatorKnowledge,
-                "which claim this work belongs to — release the runs that do not, then retry",
-            ),
-        ))),
+        // Every name still here answered the tracker with something other
+        // than `issue-not-open`, so this is not a refusal a run can outlive
+        // by waiting. Some of what remains is a call that never landed — a
+        // read that failed, a clock this machine could not answer — and an
+        // unknown result is not clearance to offer a command over, so that is
+        // the narrower true thing this says about it: not "live as far as the
+        // tracker knows", which a failed read is not an instance of.
+        _ => {
+            // Which of the survivors the tracker itself said `estigia
+            // release` may be named for. `not-current-live-holder` covers
+            // three different timelines, not one — see `HolderStanding`'s
+            // own doc — and the command clears each differently: no
+            // acquisition ever existed, and only the pointer goes
+            // (`nothing-to-unassign`); a stale or a losing-live acquisition
+            // is found on the timeline and actually ended there, a real
+            // write under the operator's own identity. Nothing else may be
+            // offered that command: a pointer's `worktree` field used to
+            // stand in for this and got both directions wrong —
+            // `PointerEffect::Swear` (`claim`) never writes it, so a live run
+            // between `claim` and `start_branch` has none, and a session
+            // that died right after `start_branch` leaves one naming a
+            // checkout nobody is working in any more. Only the tracker's own
+            // answer is authoritative.
+            let releasable: Vec<&session::Run> = holders
+                .iter()
+                .zip(standings.iter())
+                .filter(|(_, standing)| matches!(standing, super::HolderStanding::NotCurrentHolder))
+                .map(|(run, _)| run)
+                .collect();
+            // Naming the release command for every survivor was advice that
+            // destroys work in the shape this refusal is raised by most
+            // often: two healthy runs, each isolated in its own worktree,
+            // whose pointers both still cover the shared base checkout
+            // because `start_branch` adds a worktree without narrowing what
+            // the claim covers. Measured on this machine while this was
+            // written: `opencode-19772` on #81 and this run on #90, both
+            // live, both `not-current-live-holder`-free, and the first
+            // repair still told the reader to release one of them.
+            //
+            // When nothing here is safe to release, no command is named
+            // instead of a guess: there is no CLI verb for isolating a
+            // checkout the way `start_branch` does — that tool is MCP-only —
+            // so nothing exists here that would actually discharge the
+            // block for a reader holding one of two genuinely live claims.
+            let resolution = if releasable.is_empty() {
+                // Not "these live claims": a read that failed answers nothing
+                // about liveness, and this arm is reached by that too — see
+                // `HolderStanding::Live`'s own doc. What is true of every
+                // holder still named here is narrower and still enough to act
+                // on: none of them is a pointer the tracker itself called
+                // `not-current-live-holder`, so none may be guessed away.
+                Resolution::no_command(
+                    NoCommandReason::OperatorKnowledge,
+                    "which of these claims this work belongs to \u{2014} the tracker named none \
+                     of them a leftover, so work from the checkout that run's own claim covers \
+                     rather than guessing between them",
+                )
+            } else {
+                Resolution::run(format!(
+                    "estigia release --run-id <run-id>   # for: {}",
+                    releasable
+                        .iter()
+                        .map(|run| run.run_id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+            };
+            Decision::Deny(Box::new(Refusal::not_started(
+                "several-runs-hold-this-checkout",
+                format!(
+                    "{} runs on this machine hold this checkout: {}",
+                    holders.len(),
+                    holders
+                        .iter()
+                        .zip(standings.iter())
+                        .map(|(run, standing)| match standing {
+                            super::HolderStanding::NotCurrentHolder => format!(
+                                "{} (#{}, not the tracker's current holder)",
+                                run.run_id,
+                                run.issue.unwrap_or_default()
+                            ),
+                            _ => format!("{} (#{})", run.run_id, run.issue.unwrap_or_default()),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                resolution,
+            )))
+        }
     };
     Adjudication {
         decision: super::standdown::over(

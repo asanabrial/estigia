@@ -4670,27 +4670,49 @@ fn release(run_id: &str, json: bool) -> Result<(), Refusal> {
     // The split exists so the *caller* names what the discovery found, and here
     // the caller is a person who typed `estigia release`. Naming it back is
     // this function's to do; deciding whether to release is not.
-    let answer = tool(
+    let answer = match tool(
         "release",
         &serde_json::json!({ "issue": issue, "run_id": run_id }),
-    )?;
+    ) {
+        Ok(answer) => answer,
+        // The phantom pointer's actual answer, and it arrives as a refusal
+        // rather than as the discovery below. `plan_release` looks for this run
+        // among the timeline's live and stale acquisitions and raises
+        // `nothing-to-unassign` when it finds neither — which is precisely the
+        // pointer this command is named to clear: a local file projecting a
+        // claim the tracker does not hold.
+        //
+        // Measured before this arm existed: the refusal propagated, the pointer
+        // stayed, and the operator was left deleting the JSON by hand while
+        // `several-runs-hold-this-checkout` went on naming a command that could
+        // not clear it. The branch below is the *other* shape — a discovery that
+        // succeeded — and it is not the one a phantom reaches.
+        //
+        // Still the tracker's answer and never a failed read: any other refusal,
+        // including one from a `gh` that could not be run, returns untouched and
+        // removes nothing.
+        Err(refusal) if refusal.code == "nothing-to-unassign" => {
+            return forget_since_nothing_to_release(&context, &run, run_id, issue, json);
+        }
+        Err(refusal) => return Err(refusal),
+    };
     let found: serde_json::Value = serde_json::from_str(&answer).unwrap_or_default();
     if found.get("write_performed") == Some(&serde_json::json!(false)) {
         let Some(target) = found
             .get("target_operation")
             .and_then(|value| value.as_str())
         else {
-            // Discovery that found nothing to name is not a release, and saying
-            // so is the whole of this fix: a state nobody reached must never be
-            // reported as reached.
-            return Err(Refusal::not_started(
-                "release-not-performed",
-                format!(
-                    "{run_id} still holds #{issue}: the release read the timeline and found no \
-                     epoch of its own to put down"
-                ),
-                Resolution::run("estigia status"),
-            ));
+            // The tracker read, not guessed at: `tool` above already returned
+            // whatever `?` would have propagated, so reaching here means the
+            // read succeeded and *this is its answer* — no epoch of this run's
+            // left on the timeline to name. That used to be reported as a
+            // refusal with nothing changed, which left the local pointer
+            // sitting there to answer the same way again: `several-runs-hold-
+            // this-checkout` names `estigia release --run-id <run-id>` as the
+            // way past it, and a release that reads the tracker correctly and
+            // then leaves the pointer exactly as it found it is a command that
+            // does not clear the block it is named for.
+            return forget_since_nothing_to_release(&context, &run, run_id, issue, json);
         };
         tool(
             "release",
@@ -4710,6 +4732,86 @@ fn release(run_id: &str, json: bool) -> Result<(), Refusal> {
         return Ok(());
     }
     say!("released: {run_id} no longer holds #{issue}");
+    Ok(())
+}
+
+/// Puts down a pointer the tracker has just said holds no epoch of its own.
+///
+/// Split out of [`release`] so the one write this makes — a single `forget`,
+/// reached only once the tracker's own read has already succeeded — can be
+/// pinned without a live tracker: `release` is what reaches a real `gh`
+/// through [`tool`], and this is only the part that decides what its answer
+/// means for the pointer left on disk. A failed or unreadable tracker read
+/// never reaches this function at all — `release`'s `tool(…)?` returns before
+/// it, and nothing here is called to remove anything on that path.
+///
+/// **Guarded to the pointer's own recorded repository first.** `tool` reads
+/// the tracker through `context.repo_dir` — whichever checkout `release`
+/// happened to be launched in — so a successful read there is a successful
+/// read of *that* repository's timeline, not proof that it is the one this
+/// pointer's own claim was made in. Without this, running `estigia release
+/// --run-id <run-id>` from the wrong checkout would answer `nothing-to-
+/// unassign` about a repository the pointer has nothing to do with, and
+/// forget a live run's local record on the strength of it.
+///
+/// Not a refusal otherwise: the tracker answered, about the repository this
+/// pointer actually names, the run holds nothing there, and forgetting a
+/// pointer that already says nothing true is not a stop — it is what makes
+/// `estigia release --run-id <run-id>`, the command `several-runs-hold-this-
+/// checkout` now names, actually clear the block rather than repeat it.
+fn forget_since_nothing_to_release(
+    context: &harness::GateContext,
+    run: &harness::session::Run,
+    run_id: &str,
+    issue: u64,
+    json: bool,
+) -> Result<(), Refusal> {
+    let same_repository = run
+        .repo_dir
+        .as_deref()
+        .is_some_and(|recorded| harness::same_git_repository(recorded, &context.repo_dir));
+    if !same_repository {
+        // Not "run it from the checkout that pointer covers" alone — for the
+        // removed-worktree phantom this whole change exists for, that
+        // checkout is gone, and naming a command that assumes it still
+        // exists is the dead end the ratchet forbids. `same_git_repository`
+        // cannot tell "a different, live repository" from "no repository
+        // there any more" — both fail its `git rev-parse` the same way — so
+        // the resolution has to be honest about both without presuming
+        // which one this is: try the checkout the pointer recorded, if it
+        // still exists, and take the file away by hand if it does not,
+        // naming the one this run actually wrote.
+        let pointer = harness::session::pointer_path(&context.state_root, run_id);
+        return Err(Refusal::not_started(
+            "release-repository-mismatch",
+            format!(
+                "{run_id} recorded its claim against a different repository than the one this \
+                 release was run against, so a successful read here says nothing about that \
+                 pointer's own timeline \u{2014} its local record is left exactly as it was"
+            ),
+            Resolution::no_command(
+                crate::outcome::NoCommandReason::OperatorKnowledge,
+                format!(
+                    "run `estigia release --run-id {run_id}` from the checkout that pointer's \
+                     own claim covers, if it still exists \u{2014} and if it does not, its \
+                     pointer is Estigia's own local state and no claim of anybody's, removable \
+                     by hand: {}",
+                    pointer.display()
+                ),
+            ),
+        ));
+    }
+    harness::session::forget(&context.state_root, run_id);
+    if json {
+        print_json(&serde_json::json!({
+            "released": false,
+            "forgotten": true,
+            "issue": issue,
+            "run_id": run_id,
+        }));
+        return Ok(());
+    }
+    say!("{run_id} holds no epoch of #{issue} on the tracker; its local pointer is forgotten");
     Ok(())
 }
 

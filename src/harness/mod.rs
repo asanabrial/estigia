@@ -1465,7 +1465,13 @@ pub(crate) fn is_delivery(action: &Action) -> bool {
 ///
 /// Unsteered: inherit `GIT_DIR` and every pair of directories answers as one
 /// clone, so `stale_verdict` would authorise a delivery from an unrelated tree.
-fn same_git_repository(left: &std::path::Path, right: &std::path::Path) -> bool {
+///
+/// `pub(crate)` rather than private: `cli::release` reads it too, to refuse
+/// forgetting a pointer on a timeline read of a repository that pointer never
+/// named — `cli` is a sibling of this module, not a descendant, so the
+/// visibility every other reader here gets for free has to be asked for
+/// explicitly the one time a caller outside `harness` needs the same answer.
+pub(crate) fn same_git_repository(left: &std::path::Path, right: &std::path::Path) -> bool {
     let common = |directory: &std::path::Path| {
         let answer = proof_git_command(
             directory,
@@ -2597,6 +2603,158 @@ fn prefixed(refusal: Refusal, subject: &str) -> Refusal {
     Refusal {
         message: format!("{subject}: {}", refusal.message),
         ..refusal
+    }
+}
+
+/// Asks the tracker about one run pointer's issue, the way [`gate`] asks for a
+/// renewal: the same [`crate::transport::Context::live`], the same `GH_REPO`
+/// set before dispatching, the same `--expect-state` — the run's own recorded
+/// [`Run::state`] where it has one, `in-progress` where it does not, exactly as
+/// [`gate`] defaults it.
+///
+/// `None` when nothing was asked at all: no issue recorded (unreachable
+/// through [`session::holdings`], which already filters those out, but not
+/// through every caller of this function), no executable transport for this
+/// tracker, or a clock this machine could not read. `Some` otherwise, whatever
+/// the tracker said — including a failed read, carried as the [`tracker::Answer`]
+/// [`translate`] would have built a refusal from. Callers that only care
+/// whether the issue closed collapse that into a bool; [`doctor`] cannot,
+/// because *a call that failed* and *a call that answered "still open"* are
+/// two different things to tell an operator, and folding them together would
+/// let a `gh` that would not spawn report a stale pointer as a live one just
+/// as easily as the reverse.
+fn tracker_answer_for_pointer(
+    skill_root: &Path,
+    repo_dir: &Path,
+    tracker: &crate::config::Tracker,
+    run: &Run,
+) -> Option<tracker::Answer> {
+    let issue = run.issue?;
+    tracker.transport()?;
+    let seconds = session::now_seconds()?;
+    if let Some(named) = tracker.named_repo() {
+        // SAFETY: see `gate`, above — the same write, made for the same reason:
+        // `gh` reads `GH_REPO` from the environment, not from an argument this
+        // call can pass, and this function answers one call at a time on the
+        // thread that made it.
+        unsafe { std::env::set_var("GH_REPO", named) };
+    }
+    let transport = crate::transport::Context::live(
+        skill_root.to_path_buf(),
+        repo_dir.to_path_buf(),
+        tracker.named_repo(),
+    );
+    let state = run
+        .state
+        .clone()
+        .unwrap_or_else(|| "in-progress".to_owned());
+    let flags: Vec<String> = [
+        "--issue",
+        &issue.to_string(),
+        "--run-id",
+        &run.run_id,
+        "--expect-state",
+        &state,
+    ]
+    .iter()
+    .map(|part| (*part).to_owned())
+    .collect();
+    let answer = crate::transport::dispatch::dispatch(
+        &transport,
+        "verify-claim",
+        &flags,
+        &session::stamp_of(seconds),
+    )
+    .map(|value| tracker::Answer {
+        code: 0,
+        body: Some(value),
+    })
+    .unwrap_or_else(|failure| tracker::Answer {
+        code: failure.code(),
+        body: Some(failure.envelope()),
+    });
+    Some(answer)
+}
+
+/// What the tracker's own timeline says about one surviving holder.
+///
+/// Three answers, and only one of them may ever be offered `estigia release`
+/// for — a pointer's own fields cannot be trusted to draw this line.
+/// `PointerEffect::Swear` (`mcp::run_tool`, the write `claim` makes) records
+/// `issue`, `state` and `repo_dir` and never `worktree`; only
+/// `PointerEffect::Isolated` — what `start_branch` runs, after the claim —
+/// writes it. So a run between `claim` and `start_branch` is a live holder
+/// with **no** worktree, and a session that died right after `start_branch`
+/// leaves a pointer naming one that is not live at all. Neither field is a
+/// liveness signal; the tracker's own answer is the only one that is.
+///
+/// Read-only, like [`tracker_answer_for_pointer`] it is built on: nothing
+/// here writes a pointer, marks a run verified, or stores anything.
+/// `guard::adjudicate_action` reconciles a *list* against this and a caller
+/// that wants the single-holder path's own bookkeeping still goes through
+/// [`gate`] for that, as it always did. `doctor::stale_run_pointers` needs a
+/// fourth distinction this collapses on purpose — a read that failed and a
+/// confirmed-live answer are both simply not `estigia release`'s to touch —
+/// so it calls [`tracker_answer_for_pointer`] directly instead, rather than
+/// this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HolderStanding {
+    /// `issue-not-open`. The caller drops this holder before deciding
+    /// anything else about it.
+    ClosedIssue,
+    /// `not-current-live-holder`: once the state label already matches what
+    /// was expected, `verify_claim` answers this whenever `holding().holder`
+    /// is not this run (`ownership.holder.as_deref() != Some(run_id)`) — a
+    /// label that disagrees answers `unexpected-state` first and classifies
+    /// `Live` instead, checked before ownership at all. This one is **three**
+    /// different timelines, not one, and this classification cannot and does
+    /// not tell them apart:
+    ///
+    /// - no acquisition for this run at all, ever;
+    /// - an acquisition of this run's own that has gone stale — past its
+    ///   horizon, and still on the timeline: `ownership::holding` moves a
+    ///   lapsed acquisition into `stale` rather than dropping it;
+    /// - a live acquisition of this run's own that lost a claim race to a
+    ///   different, earlier live holder.
+    ///
+    /// `estigia release --run-id <run-id>` is the only command a
+    /// several-holder refusal may name for this standing, and what it does
+    /// differs by which of the three this is — `plan_release` searches
+    /// `ownership.live` **chained with** `ownership.stale` for this run's own
+    /// acquisition. Found — the stale case, and the losing-live case alike —
+    /// it ends that run's claim on the tracker and removes the local
+    /// pointer, a real write under the operator's own identity, not a no-op:
+    /// a stale claim is a claim that is really there, only lapsed, not a
+    /// claim that "is not there". Not found — no acquisition ever existed —
+    /// only the local pointer goes (`nothing-to-unassign`), because there is
+    /// nothing on the tracker to end.
+    ///
+    /// One more limit the command itself has, not this classification: a
+    /// found acquisition recorded under a runtime other than
+    /// `session::DEFAULT_RUNTIME` answers `unassign-metadata-mismatch` and
+    /// clears nothing at all — `docs/honesty.md` states this as a limit of
+    /// the advice `several-runs-hold-this-checkout` gives, filed separately
+    /// rather than fixed here.
+    NotCurrentHolder,
+    /// Every other answer, including a read that failed to land at all: an
+    /// unknown result is not clearance, so this counts as live and no
+    /// command may be offered for it.
+    Live,
+}
+
+pub(crate) fn holder_standing(
+    skill_root: &Path,
+    repo_dir: &Path,
+    tracker: &crate::config::Tracker,
+    run: &Run,
+) -> HolderStanding {
+    match tracker_answer_for_pointer(skill_root, repo_dir, tracker, run)
+        .as_ref()
+        .and_then(tracker::Answer::stopped_reason)
+    {
+        Some("issue-not-open") => HolderStanding::ClosedIssue,
+        Some("not-current-live-holder") => HolderStanding::NotCurrentHolder,
+        _ => HolderStanding::Live,
     }
 }
 
