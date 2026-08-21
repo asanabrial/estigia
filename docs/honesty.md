@@ -2673,6 +2673,15 @@ suite. Everything else here is prose held by review.
   reviewers of receipts `c7e7b821a12455ea6293a321ad4be30a` and `0cfd9a216c02aa82133bb0f992389a85`
   while checking that issue #62 was closed on every write path; the enumeration was every caller of
   `setup::rewrite_configuration`, `write_agent_configuration*` and `write_repository_configuration`.
+- **Nothing measures that the setup screen is entered.** The lifecycle gate for the guided route sits
+  at the screen's install rather than at the command that opens it, and the write half is crossed
+  both ways: `the_screens_install_refuses_a_source_build_and_writes_nothing` was measured by taking
+  the gate out and watching an unrecorded build deploy eighteen files into a temporary home. The half
+  nothing checks is the door. `dispatch` reaches the screen through `tui::setup`, which needs a
+  terminal, and no test here can hold one — so a preflight put back in front of `guided` would take
+  the screen away again with the whole suite still green. What stands in for the check is that the
+  route has exactly one lifecycle caller and it is `guided_install`. The comment over `plan_of` states
+  the same limit for the same reason: nothing that needs a terminal can be measured.
 - **The legacy-checkout stop cannot name the legacy path of a template that named no placeholder.**
   A `Worktree location` missing `<branch>` or `<run-id>` gains it in memory, and `start_branch` stops
   with `legacy-worktree-registered` when the pre-migration checkout is still registered — computed

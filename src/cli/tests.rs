@@ -24,22 +24,85 @@ use super::*;
 use crate::config::Config;
 use crate::outcome::{MutationOutcome, NoCommandReason};
 
+/// The screen's **install** is what refuses a source build, not the command
+/// that opens the screen.
+///
+/// Measured on a binary built from this checkout: `estigia tui` — a visible
+/// alias of `setup`, so the same verb — answered `source-build-not-allowed` and
+/// never drew anything. The way out its own resolution named was `estigia setup
+/// --interactive --allow-source-build`: the same screen, one flag later. The
+/// door therefore withheld nothing it would not permit, and took with it the
+/// read-only half of the screen, which is where an operator who has just built
+/// the binary finds out what the agent slugs are.
+///
+/// Moving the gate back to the door turns this red: the refusal would arrive
+/// before `guided_install` was reached, and this call would return a receipt.
+///
+/// What it cannot see is the door itself. `dispatch` reaches the screen through
+/// `tui::setup`, which needs a terminal, and the same comment stands over
+/// `plan_of`: nothing that needs a terminal can be measured. The seam is the
+/// function boundary, and it is the reason the preflight has one.
 #[test]
-fn guided_entry_is_not_called_when_lifecycle_preflight_refuses() {
-    let entered = std::cell::Cell::new(false);
-    let refusal = Refusal::not_started(
-        "source-build-not-allowed",
-        "preflight refused",
+fn the_screens_install_refuses_a_source_build_and_writes_nothing() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    let options = SetupOptions {
+        home_dir: Some(home.path().to_path_buf()),
+        ..SetupOptions::default()
+    };
+
+    let failure = super::guided_install(&screen_plan(), &options, false, false)
+        .expect_err("the screen installed from an unrecorded build with no override");
+
+    assert_eq!(failure.refusal.code, "source-build-not-allowed");
+    assert_eq!(
+        failure.refusal.resolution,
         Resolution::run("estigia setup --interactive --allow-source-build"),
+        "the refusal does not name the command that clears it"
     );
+    assert_eq!(failure.refusal.outcome, MutationOutcome::NotStarted);
+    // The whole home, not one adapter's directory: a preflight that refused
+    // after deploying something else would satisfy a narrower assertion.
+    assert_eq!(
+        fs::read_dir(home.path())
+            .expect("the temporary home reads")
+            .count(),
+        0,
+        "a refused screen install wrote under the home"
+    );
+}
 
-    let result = after_lifecycle_preflight(Err(refusal), || {
-        entered.set(true);
-        Ok(())
-    });
+/// And the override still installs, so the test above is not satisfied by a
+/// gate that refuses everything — which is how a moved gate usually passes.
+#[test]
+fn the_screens_install_proceeds_under_the_source_override() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    let options = SetupOptions {
+        home_dir: Some(home.path().to_path_buf()),
+        ..SetupOptions::default()
+    };
 
-    assert!(result.is_err());
-    assert!(!entered.get());
+    let (receipt, _report) = super::guided_install(&screen_plan(), &options, false, true)
+        .expect("the source override did not reach the screen's install");
+
+    assert!(
+        receipt.completed.contains("claude-code"),
+        "the override was accepted and the adapter was still not installed"
+    );
+}
+
+/// One agent, default rows: what the two tests above are about is the gate in
+/// front of the write, not the rows going through it.
+fn screen_plan() -> crate::tui::Plan {
+    let adapter = crate::setup::AGENTS
+        .iter()
+        .find(|adapter| adapter.slug == "claude-code")
+        .expect("claude-code is an agent this build knows");
+    crate::tui::Plan {
+        agents: vec![adapter],
+        opened: [("claude-code", Config::default())].into_iter().collect(),
+        rows: [("claude-code", Config::default())].into_iter().collect(),
+        repository: std::path::PathBuf::new(),
+    }
 }
 
 /// Every refusal this crate can construct without touching the filesystem.

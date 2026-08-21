@@ -626,6 +626,16 @@ the workflow, it holds the tools.
 
 ### Setup
 
+- The setup screen opens on a source build, and the refusal arrives when an install is confirmed from
+  it. `estigia tui` — a visible alias of `setup`, so the same verb — answered
+  `source-build-not-allowed` and drew nothing, on the one command somebody who has just built the
+  binary types before they know any agent slug. The way out its own resolution named was `estigia
+  setup --interactive --allow-source-build`: the same screen, one flag later. The door therefore
+  withheld nothing the flag would not grant, and took the read-only rows with it. The gate is the
+  screen's install now, where a refusal is shown in the box and still leaves as the process's exit
+  code. Non-interactive `setup` and `sync` keep refusing before they start, because they write
+  immediately; recorded downgrade and unknown lifecycle state still refuse on every route, the screen
+  included.
 - Added `scripts/build-install.ps1` for a complete Windows source reinstall. It installs Rust 1.97 when
   needed, compiles and force-installs the locked release build, runs all-agent setup with explicit
   source-build consent, and verifies the result with lifecycle status, installation status, and

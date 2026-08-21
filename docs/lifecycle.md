@@ -53,7 +53,7 @@ The typed digest and renamed record fields use lifecycle schema 3. Earlier schem
 closed as unsupported rather than being reinterpreted under this narrower model.
 
 Before a real `setup` or `sync` changes any adapter, one global preflight applies to the whole batch,
-including guided setup. An unrecorded or source-built running binary refuses by default and requires
+guided setup included. An unrecorded or source-built running binary refuses by default and requires
 that command's explicit `--allow-source-build`. The flag does not create recorded provenance or advance,
 erase, or lower high-water. An installer-recorded release below high-water refuses even with the flag; unknown
 lifecycle state fails closed. `--dry-run` performs no lifecycle read or write, and uninstall remains
@@ -63,6 +63,14 @@ Installer publication followed by executable replacement is fail-closed but not 
 can advance high-water while leaving the old binary installed. Concurrent installers are not
 serialized. Re-reading per adapter would still race and would permit partial-batch behavior, so this
 slice does not pretend it closes that concurrency boundary.
+
+Where guided setup applies it is the screen's **install**, not the command that opens the screen.
+`estigia setup` with no arguments — and its `install` and `tui` aliases — draws the screen on a
+source build, and the refusal arrives when a plan is confirmed, carrying the same code and the same
+way out as the shell's. It is shown over the screen and still leaves as the process's exit code.
+Refusing at the door was the earlier behaviour and it protected nothing: opening the screen deploys
+no asset, and the way out the refusal named was that same screen one flag later. What it cost was the
+read-only half — the rows a person who has just built the binary opens it to read.
 
 Then swear to an issue:
 
