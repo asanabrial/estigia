@@ -169,6 +169,50 @@ pub(crate) fn open_but_unmatched_issue(issue: u64) -> serde_json::Value {
     )
 }
 
+/// What `gh issue view` answers for an issue that is open, whose label
+/// matches the default expected state (`status:in-progress`) so the check
+/// ahead of ownership passes, and whose comments carry no acquisition for
+/// anybody at all — `verify_claim`'s `holding` reduces that to "current live
+/// holder is none", the `not-current-live-holder` reason a pointer projecting
+/// a claim nobody holds answers with.
+pub(crate) fn not_current_live_holder_issue(issue: u64) -> serde_json::Value {
+    issue_view_answer(
+        issue,
+        serde_json::json!({
+            "state": "OPEN",
+            "labels": [{ "name": "status:in-progress" }],
+            "comments": [],
+        }),
+    )
+}
+
+/// What `gh issue view` answers for an issue this exact run genuinely,
+/// currently holds — the shape `verify_claim` answers `ok` to, and the one
+/// that lets `gate` reach `Decision::Allow`. The same marker shape
+/// `tests/pipe.rs`'s own `issue_answer` uses, so a horizon `2099-01-01T00:00Z`
+/// ahead of any clock this suite runs on.
+pub(crate) fn live_holder_issue(run_id: &str, issue: u64, state: &str) -> serde_json::Value {
+    let marker = format!(
+        "<!-- issue-flow: claim run-id={run_id} runtime=claude horizon=2099-01-01T00:00Z \
+         op-id={} -->",
+        "a".repeat(32)
+    );
+    issue_view_answer(
+        issue,
+        serde_json::json!({
+            "state": "OPEN",
+            "labels": [{ "name": format!("status:{state}") }],
+            "comments": [{
+                "id": "IC_1",
+                "createdAt": "2026-01-01T00:00Z",
+                "viewerDidAuthor": true,
+                "includesCreatedEdit": false,
+                "body": format!("Claimed by {run_id}.\n\n{marker}\n"),
+            }],
+        }),
+    )
+}
+
 /// A `gh` that cannot answer at all, for whatever `issue view` it is asked.
 pub(crate) fn unreachable_tracker_answer() -> serde_json::Value {
     serde_json::json!({

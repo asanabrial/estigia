@@ -25,29 +25,43 @@ the workflow, it holds the tools.
   `issue-not-open`, unchanged, because that refusal is the gate closing behind
   a run's own delivery and this reconciliation must not decide it twice.
 
-  **The refusal now names a command that clears it — for the holder it actually
-  applies to.** It listed "release the runs that do not" with no way to act on
-  it, and the first fix pointed every holder at `estigia release --run-id
-  <run-id>` unconditionally — which is wrong for the shape this refusal is
-  raised by most often: two healthy runs, each in its own isolated worktree,
-  whose pointers both still cover the shared base checkout. The message now
-  lists each holder with the worktree its own claim covers when it has one,
-  and the resolution offers `estigia release` only for a holder with none;
-  a holder that names a worktree is a live run, and the reader is sent to work
-  from it rather than release it. And `estigia release` was changed to make
-  that command true: a run whose timeline carries no acquisition event for it
-  at all answers `nothing-to-unassign`, which used to propagate unhandled and
-  leave the pointer on disk; `release` now recognises that refusal and forgets
-  the local pointer instead of repeating it. A failed or unreadable tracker
-  read still leaves the pointer untouched.
+  **The refusal now names a command that clears it — for the holder the tracker
+  itself says it clears.** It listed "release the runs that do not" with no way
+  to act on it. The first fix offered `estigia release` for a holder whose
+  pointer named no worktree, which is wrong in both directions: `claim` writes
+  `issue`, `state` and `repo_dir` and never `worktree` — only `start_branch`,
+  *after* the claim, does — so a live run between the two has no worktree and
+  the message offered to release its live claim; and a session that died right
+  after `start_branch` leaves a pointer naming a worktree nobody works in any
+  more, read as live because it named one. A pointer's own fields are not a
+  liveness signal in either direction. The tracker's own answer is: reconciling
+  now classifies every surviving holder as the issue closing under it
+  (dropped, as before), `not-current-live-holder` — the timeline saying nobody
+  holds it under that run's name, which `estigia release` clears harmlessly —
+  or live. Only a `not-current-live-holder` is ever named for release; two or
+  more genuinely live holders is real ambiguity, and the resolution names no
+  command rather than guess, because no CLI verb exists for isolating a
+  checkout the way `start_branch` does. And `estigia release` was changed to
+  make the offered command true: a run whose timeline carries no acquisition
+  event for it at all answers `nothing-to-unassign`, which used to propagate
+  unhandled and leave the pointer on disk; `release` now recognises that
+  refusal and forgets the local pointer instead of repeating it, and only once
+  the pointer's own recorded repository is the one `release` was actually run
+  against — a successful read of the wrong project's timeline forgets nothing.
 
-  **`doctor` reports the residue reconciliation leaves alone.** A new
-  `stale-run-pointer` row names a *single* readable pointer whose issue the
-  tracker reports closed — the case reconciliation deliberately does not touch
-  — and a tracker read that fails is reported as unread rather than folded into
-  either verdict. `docs/honesty.md` states the gap this does not close and why:
-  `GateContext` carries no caller identity, so the gate cannot tell a run's own
-  delivery from a dead stranger's pointer by the id alone.
+  **`doctor` reports the residue reconciliation leaves alone, asked about the
+  right repository.** A new `stale-run-pointer` row names a *single* readable
+  pointer whose issue the tracker reports closed — the case reconciliation
+  deliberately does not touch — filtered to pointers covering this repository
+  first: `session::holdings` is machine-wide, and asking every pointer using
+  this checkout's own `repo_dir` let a live pointer for another project's issue
+  collide with this one's numbering and be reported as this project's own
+  stale claim. A tracker read that fails is reported as unread rather than
+  folded into either verdict, and the row joins `silence` as one that reports
+  on the past rather than blocking a fresh claim's readiness. `docs/honesty.md`
+  states the gap reconciliation still does not close and why: `GateContext`
+  carries no caller identity, so the gate cannot tell a run's own delivery
+  from a dead stranger's pointer by the id alone.
 - **The decision-gate crossing holds a subset, not a count of arrows.**
   Rewriting `done` as `review` used to leave the suite green: the assertion was
   `destinations.len() >= STATES.len()`, which a duplicated arrow satisfies while

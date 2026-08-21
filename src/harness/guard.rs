@@ -766,31 +766,47 @@ pub fn adjudicate_action(
     // rather than `gate`'s, a second reading of one question with a second
     // chance to disagree with the first. `N == 1` is untouched.
     //
+    // Every surviving holder is classified once, through
+    // `super::holder_standing` — the same tracker answer this loop reads to
+    // decide who is dropped is the answer the `_ =>` arm below reads to decide
+    // who `estigia release` may be offered for, so the two questions cost one
+    // round trip and can never disagree with each other. A pointer's own
+    // fields cannot stand in for either question: `holder_standing`'s own doc
+    // says why a `worktree` is not a liveness signal in either direction.
+    //
     // A holder is dropped only when the tracker names its issue
-    // `issue-not-open` through `issue_is_closed_per_tracker` — see that
-    // function's own doc for why every other answer, including one this call
-    // could not get at all, keeps the holder counted: an unknown result is not
-    // clearance, and dropping on one would reopen the phantom-pointer defect in
-    // the other direction, a live claim discounted because the tracker went
-    // quiet for a moment.
+    // `issue-not-open` — `HolderStanding::ClosedIssue`. Every other answer,
+    // including one this call could not get at all, keeps the holder counted:
+    // an unknown result is not clearance, and dropping on one would reopen the
+    // phantom-pointer defect in the other direction, a live claim discounted
+    // because the tracker went quiet for a moment.
     //
     // Read-only, like the rest of this reconciliation: nothing here writes,
     // deletes or rewrites a pointer file. Putting one down is `estigia
-    // release`'s job, and the refusal below now names it.
+    // release`'s job, and the refusal below now names it — for the holders the
+    // tracker itself says that command would clear, and no others.
     //
     // Dropping to one or to zero both fall through to the arms already below —
     // restructured here rather than duplicated inside the `_ =>` arm, so a
     // pointer reconciled away is decided exactly as if it had never been
     // written, through the one path that already handles that count.
+    let mut standings: Vec<super::HolderStanding> = Vec::new();
     if holders.len() >= 2 {
-        holders.retain(|run| {
-            !super::issue_is_closed_per_tracker(
-                &context.skill_root,
-                &context.repo_dir,
-                &context.tracker,
-                run,
-            )
-        });
+        let judged: Vec<(session::Run, super::HolderStanding)> = holders
+            .into_iter()
+            .map(|run| {
+                let standing = super::holder_standing(
+                    &context.skill_root,
+                    &context.repo_dir,
+                    &context.tracker,
+                    &run,
+                );
+                (run, standing)
+            })
+            .filter(|(_, standing)| !matches!(standing, super::HolderStanding::ClosedIssue))
+            .collect();
+        holders = judged.iter().map(|(run, _)| run.clone()).collect();
+        standings = judged.into_iter().map(|(_, standing)| standing).collect();
     }
 
     // Through the stand-down, like every other decision. `gate` states the rule
@@ -868,57 +884,86 @@ pub fn adjudicate_action(
             }
             decision
         }
-        // Every name still here answered the tracker with something other than
-        // `issue-not-open`, so this is not a refusal a run can outlive by
-        // waiting: it names the command that clears it, for whichever of the
-        // holders below turns out not to own this work.
-        _ => Decision::Deny(Box::new(Refusal::not_started(
-            "several-runs-hold-this-checkout",
-            format!(
-                "{} runs on this machine hold this checkout: {}",
-                holders.len(),
-                holders
-                    .iter()
-                    .map(|run| match &run.worktree {
-                        Some(worktree) => format!(
-                            "{} (#{}) working in {}",
-                            run.run_id,
-                            run.issue.unwrap_or_default(),
-                            worktree.display()
-                        ),
-                        None => format!(
-                            "{} (#{}, no isolated checkout)",
-                            run.run_id,
-                            run.issue.unwrap_or_default()
-                        ),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            // Naming the release command alone was advice that destroys work in
-            // the case this refusal is *most* often raised by: two healthy runs,
-            // each isolated in its own worktree, whose pointers both still cover
-            // the shared base checkout because `start_branch` adds a worktree
-            // without narrowing what the claim covers. Telling that reader to
-            // release one of the two would put down a live claim mid-change.
+        // Every name still here answered the tracker with something other
+        // than `issue-not-open`, so this is not a refusal a run can outlive
+        // by waiting. Some of what remains is a call that never landed — a
+        // read that failed, a clock this machine could not answer — and an
+        // unknown result is not clearance to offer a command over, so that is
+        // the narrower true thing this says about it: not "live as far as the
+        // tracker knows", which a failed read is not an instance of.
+        _ => {
+            // Which of the survivors the tracker itself said may safely be
+            // put down. `not-current-live-holder` is the timeline saying
+            // nobody, or somebody else, holds this issue under that run's
+            // name — a pointer projecting a claim that is not there, which
+            // `estigia release`'s own discovery clears harmlessly through
+            // `nothing-to-unassign`. Nothing else may be offered that
+            // command: a pointer's `worktree` field used to stand in for
+            // this and got both directions wrong — `PointerEffect::Swear`
+            // (`claim`) never writes it, so a live run between `claim` and
+            // `start_branch` has none, and a session that died right after
+            // `start_branch` leaves one naming a checkout nobody is working
+            // in any more. Only the tracker's own answer is authoritative.
+            let releasable: Vec<&session::Run> = holders
+                .iter()
+                .zip(standings.iter())
+                .filter(|(_, standing)| matches!(standing, super::HolderStanding::NotCurrentHolder))
+                .map(|(run, _)| run)
+                .collect();
+            // Naming the release command for every survivor was advice that
+            // destroys work in the shape this refusal is raised by most
+            // often: two healthy runs, each isolated in its own worktree,
+            // whose pointers both still cover the shared base checkout
+            // because `start_branch` adds a worktree without narrowing what
+            // the claim covers. Measured on this machine while this was
+            // written: `opencode-19772` on #81 and this run on #90, both
+            // live, both `not-current-live-holder`-free, and the first
+            // repair still told the reader to release one of them.
             //
-            // Measured on this machine while the fix was being written:
-            // `opencode-19772` on #81 and `claude-9fb7c0d45951bb14` on #90, both
-            // claims live, both correct, every write from a session rooted at
-            // the base checkout refused and pointed at `release`.
-            //
-            // Reconciliation above has already dropped the holders the tracker
-            // says are closed, so everything named here is live as far as the
-            // tracker knows. What separates the two remaining shapes is on the
-            // pointer itself and needs no guess about a run's health: a holder
-            // with a worktree is a run with somewhere else to work, and a holder
-            // without one is the leftover the command clears.
-            Resolution::run(
-                "estigia release --run-id <run-id>   # only for a holder above with no isolated \
-                 checkout; a holder that names one is a live run, so work from its worktree \
-                 rather than releasing it",
-            ),
-        ))),
+            // When nothing here is safe to release, no command is named
+            // instead of a guess: there is no CLI verb for isolating a
+            // checkout the way `start_branch` does — that tool is MCP-only —
+            // so nothing exists here that would actually discharge the
+            // block for a reader holding one of two genuinely live claims.
+            let resolution = if releasable.is_empty() {
+                Resolution::no_command(
+                    NoCommandReason::OperatorKnowledge,
+                    "which of these live claims this work belongs to \u{2014} each names its \
+                     own claim; work from the checkout that run's own claim covers rather than \
+                     guessing between them",
+                )
+            } else {
+                Resolution::run(format!(
+                    "estigia release --run-id <run-id>   # for: {}",
+                    releasable
+                        .iter()
+                        .map(|run| run.run_id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+            };
+            Decision::Deny(Box::new(Refusal::not_started(
+                "several-runs-hold-this-checkout",
+                format!(
+                    "{} runs on this machine hold this checkout: {}",
+                    holders.len(),
+                    holders
+                        .iter()
+                        .zip(standings.iter())
+                        .map(|(run, standing)| match standing {
+                            super::HolderStanding::NotCurrentHolder => format!(
+                                "{} (#{}, not the tracker's current holder)",
+                                run.run_id,
+                                run.issue.unwrap_or_default()
+                            ),
+                            _ => format!("{} (#{})", run.run_id, run.issue.unwrap_or_default()),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                resolution,
+            )))
+        }
     };
     Adjudication {
         decision: super::standdown::over(

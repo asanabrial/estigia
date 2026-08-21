@@ -2662,14 +2662,23 @@ suite. Everything else here is prose held by review.
   once failed to pass the home directory to `state_root`, and the push-guard row vanished entirely
   under a tracker with no transport.
 
-  All eleven rows that **can** break are now forced through the binary, on states any machine can be
-  put into: no skill; a contract taken from under a registered agent; two installed roots whose
-  machine-wide rows disagree; a gate and a tool server whose
-  settings name a binary that is not there; a checkout with no remote; a `pre-push` hook that is not
-  text; an unreadable stand-down; an unreadable run pointer; a ledger line saying a call went through
-  ungated; and, for the one row that is about the machine rather than the installation, a search path
-  with no `gh` on it. The twelfth, `transport`, has no broken state: it answers `ok`, or `skipped`
-  for a tracker with no executable.
+  Twelve rows can break now, not eleven — `stale-run-pointer` joined them. Eleven of the twelve are
+  forced through the binary, on states any machine can be put into: no skill; a contract taken from
+  under a registered agent; two installed roots whose machine-wide rows disagree; a gate and a tool
+  server whose settings name a binary that is not there; a checkout with no remote; a `pre-push` hook
+  that is not text; an unreadable stand-down; an unreadable run pointer; a ledger line saying a call
+  went through ungated; and, for the one row that is about the machine rather than the installation, a
+  search path with no `gh` on it. The thirteenth row, `transport`, has no broken state at all: it
+  answers `ok`, or `skipped` for a tracker with no executable.
+
+  `stale-run-pointer` is the twelfth and the one exemption: `a_row_that_is_broken_comes_out_of_the_
+  report_broken` names it in `tests/pipe.rs`'s own `FORCED` list without forcing it broken there, and
+  says why inline rather than leaving the gap silent. Forcing it needs a `gh` that answers
+  `issue-not-open` for one specific issue number rather than the blanket absence the `gh` row's own
+  forcing step already uses — a different fixture shape than every other row on this list needs, and
+  one this file already builds through a scripted `gh` twice over: `harness::guard::tests` and
+  `harness::doctor`'s own module drive it directly, with `stale-run-pointer` reported both `Broken`
+  (a stale pointer, and separately an unread one) and `Fine`.
 
   A row added later fails the same test until somebody forces it or says why they cannot.
 
@@ -2726,16 +2735,48 @@ suite. Everything else here is prose held by review.
   `doctor`'s new `stale-run-pointer` row reports that residue instead of closing it: it names the
   pointer and the release command, and leaves putting it down to the operator or the run itself.
 
+  Also deliberate, and the sharper edge: **two dead pointers reconcile all the way to zero, and the
+  gate stands aside, while one dead pointer still refuses.** `holders.len() == 0` after reconciliation
+  answers `Outside(NothingSworn)` — the ordinary shape of a checkout nobody claims — so a machine
+  carrying two phantom pointers for one checkout is *more* permissive than one carrying a single
+  live-looking one. That is a consequence of the guard stated above, not a second gap: a lone
+  `issue-not-open` pointer refuses through `gate`'s own single-holder path rather than through this
+  reconciliation, so `N == 1` was never touched, and nothing here decided that two phantoms are safer
+  than one legitimate refusal — it decided that a checkout two closed claims both left behind is a
+  checkout nobody currently holds, which is true.
+
   Two or more holders that reconciliation cannot separate — because the tracker genuinely says both
-  issues are open — are the common case rather than the rare one: `start_branch` gives each run its
+  are still live — are the common case rather than the rare one: `start_branch` gives each run its
   own isolated worktree without narrowing what the pointer's claim covers, so two healthy runs both
-  still cover the shared base checkout. The refusal's resolution tells them apart by the one fact
-  already on the pointer rather than by guessing at a run's health: a holder that names a `worktree`
-  is a live run with somewhere else to work, and `estigia release --run-id <run-id>` is offered only
-  for a holder that names none. And that command had to be made to actually clear a phantom pointer's
-  refusal — a run whose acquisition the tracker's timeline holds no event for at all answers
-  `nothing-to-unassign`, which `release` recognises and forgets the pointer for; every other refusal,
-  including a failed read, leaves the pointer exactly where it was.
+  still cover the shared base checkout. What tells them apart is the tracker's own answer for each
+  survivor, not the pointer: `not-current-live-holder` — the timeline saying nobody, or somebody
+  else, currently holds that issue under this run's name — is the only standing `estigia release
+  --run-id <run-id>` is offered for. A pointer's `worktree` field was tried first and was wrong in
+  both directions, measured against this crate's own `mcp::run_tool`: `PointerEffect::Swear`, what
+  `claim` runs, writes `issue`, `state` and `repo_dir` and never `worktree` — only
+  `PointerEffect::Isolated`, what `start_branch` runs *after* the claim, writes it — so a live run
+  between the two names no worktree and was offered for release, and a session that died right after
+  `start_branch` names one nobody works in any more and was read as live. When nothing among the
+  survivors is `not-current-live-holder` — two or more claims the tracker itself calls live — the
+  resolution names no command: there is no CLI verb for isolating a checkout the way `start_branch`
+  does (that tool is MCP-only), so nothing exists that would actually discharge the block for a reader
+  holding one of the live claims, and naming one anyway would be exactly the dead end this repository's
+  own rule forbids. And `estigia release` had to be made to actually clear a phantom pointer's refusal
+  — a run whose acquisition the tracker's timeline holds no event for at all answers
+  `nothing-to-unassign`, which `release` recognises and forgets the pointer for, and only once that
+  pointer's own recorded repository is the one `release` was run against, so a successful read of an
+  unrelated project's timeline forgets nothing; every other refusal, including a failed read, leaves
+  the pointer exactly where it was.
+
+  **The cost this buys**: once two or more pointers cover one checkout, every gated action pays one
+  tracker round trip per surviving holder rather than the one call `gate` alone would have made — a
+  `Read` tool call included, on a host that routes every tool through the gate the way OpenCode's
+  plugin does, since `decide_action` cannot tell a routine edit from a boundary before it has reconciled
+  the list it is deciding over. The spawn happens above `standdown::over`, not below it, so a `gh` that
+  hangs is not a door `estigia stand-down` can open past — the reconciliation blocks before the
+  stand-down is even consulted. Unmeasured beyond that: no fixture drives this cost, and none drives
+  the delivery-sibling list `linked_siblings` builds for a `gh pr merge` with no ordinary holder,
+  which falls into the same `retain` and has no test of its own.
 - **`config edit` writes one contract, and `config set` writes them all.** The plain `config set`
   propagates a row that is not per-agent — about the repository or about this machine — into every
   installed contract. The guided screen behind `config edit` writes only the target it was opened on:

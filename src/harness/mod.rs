@@ -1465,7 +1465,13 @@ pub(crate) fn is_delivery(action: &Action) -> bool {
 ///
 /// Unsteered: inherit `GIT_DIR` and every pair of directories answers as one
 /// clone, so `stale_verdict` would authorise a delivery from an unrelated tree.
-fn same_git_repository(left: &std::path::Path, right: &std::path::Path) -> bool {
+///
+/// `pub(crate)` rather than private: `cli::release` reads it too, to refuse
+/// forgetting a pointer on a timeline read of a repository that pointer never
+/// named — `cli` is a sibling of this module, not a descendant, so the
+/// visibility every other reader here gets for free has to be asked for
+/// explicitly the one time a caller outside `harness` needs the same answer.
+pub(crate) fn same_git_repository(left: &std::path::Path, right: &std::path::Path) -> bool {
     let common = |directory: &std::path::Path| {
         let answer = proof_git_command(
             directory,
@@ -2670,42 +2676,58 @@ fn tracker_answer_for_pointer(
     Some(answer)
 }
 
-/// Whether the tracker says a run pointer's issue is closed.
+/// What the tracker's own timeline says about one surviving holder.
 ///
-/// The one question [`guard::adjudicate_action`] needs to tell a phantom
-/// holder from a live one. A state disagreement answers `unexpected-state`,
-/// not `issue-not-open`, so it falls through to `false` here precisely as it
-/// must: a run whose issue moved without it is not a run whose issue closed.
+/// Three answers, and only one of them may ever be offered `estigia release`
+/// for — a pointer's own fields cannot be trusted to draw this line.
+/// `PointerEffect::Swear` (`mcp::run_tool`, the write `claim` makes) records
+/// `issue`, `state` and `repo_dir` and never `worktree`; only
+/// `PointerEffect::Isolated` — what `start_branch` runs, after the claim —
+/// writes it. So a run between `claim` and `start_branch` is a live holder
+/// with **no** worktree, and a session that died right after `start_branch`
+/// leaves a pointer naming one that is not live at all. Neither field is a
+/// liveness signal; the tracker's own answer is the only one that is.
 ///
-/// **`true` only for an explicit `issue-not-open`.** Every other answer —
-/// another refusal reason, a read that failed, a `gh` that would not spawn, a
-/// clock this machine could not read — returns `false`. That is not caution
-/// for its own sake: *an unknown result is not clearance* is the directive's
-/// own rule, and a holder dropped on a read that could not be trusted would
-/// reopen the defect a phantom pointer already is, in the other direction — a
-/// live claim discounted because the tracker went quiet for a moment.
-///
-/// Read-only. Nothing here writes a pointer, marks a run verified, or stores
-/// anything — [`guard::adjudicate_action`] reconciles a *list*, and a caller
+/// Read-only, like [`tracker_answer_for_pointer`] it is built on: nothing
+/// here writes a pointer, marks a run verified, or stores anything.
+/// `guard::adjudicate_action` reconciles a *list* against this and a caller
 /// that wants the single-holder path's own bookkeeping still goes through
-/// [`gate`] for that, as it always did.
-///
-/// Takes the three pieces [`gate`] reads out of a [`GateContext`] rather than
-/// the context itself: `guard::adjudicate_action` already holds one and can
-/// pass its fields, and [`doctor::full`](doctor::full) holds no [`GateContext`]
-/// at all — only the skill root, the repository and the configured tracker,
-/// which is everything either caller needs and nothing either would otherwise
-/// have to invent. `doctor` calls [`tracker_answer_for_pointer`] directly
-/// rather than this: see that function's own doc for why a bool cannot answer
-/// what it has to tell an operator.
-pub(crate) fn issue_is_closed_per_tracker(
+/// [`gate`] for that, as it always did. `doctor::stale_run_pointers` needs a
+/// fourth distinction this collapses on purpose — a read that failed and a
+/// confirmed-live answer are both simply not `estigia release`'s to touch —
+/// so it calls [`tracker_answer_for_pointer`] directly instead, rather than
+/// this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HolderStanding {
+    /// `issue-not-open`. The caller drops this holder before deciding
+    /// anything else about it.
+    ClosedIssue,
+    /// `not-current-live-holder`: the timeline says nobody, or somebody
+    /// other than this run, currently holds this issue. A pointer projecting
+    /// a claim that is not there — exactly what `nothing-to-unassign` clears
+    /// harmlessly, through `estigia release`'s own discovery call. The only
+    /// standing a several-holder refusal may name that command for.
+    NotCurrentHolder,
+    /// Every other answer, including a read that failed to land at all: an
+    /// unknown result is not clearance, so this counts as live and no
+    /// command may be offered for it.
+    Live,
+}
+
+pub(crate) fn holder_standing(
     skill_root: &Path,
     repo_dir: &Path,
     tracker: &crate::config::Tracker,
     run: &Run,
-) -> bool {
-    tracker_answer_for_pointer(skill_root, repo_dir, tracker, run)
-        .is_some_and(|answer| answer.reason() == Some("issue-not-open"))
+) -> HolderStanding {
+    match tracker_answer_for_pointer(skill_root, repo_dir, tracker, run)
+        .as_ref()
+        .and_then(tracker::Answer::stopped_reason)
+    {
+        Some("issue-not-open") => HolderStanding::ClosedIssue,
+        Some("not-current-live-holder") => HolderStanding::NotCurrentHolder,
+        _ => HolderStanding::Live,
+    }
 }
 
 /// Where the transport lives, or where it would live.
