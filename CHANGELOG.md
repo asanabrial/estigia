@@ -634,8 +634,11 @@ the workflow, it holds the tools.
   withheld nothing the flag would not grant, and took the read-only rows with it. The gate is the
   screen's install now, where a refusal is shown in the box and still leaves as the process's exit
   code. Non-interactive `setup` and `sync` keep refusing before they start, because they write
-  immediately; recorded downgrade and unknown lifecycle state still refuse on every route, the screen
-  included.
+  immediately. There is one preflight and not three, so `recorded-downgrade-blocked` and
+  `lifecycle-state-unreadable` moved with it: on the guided route those also arrive at the save
+  rather than before the screen. They still refuse on every route. The screen was never read-only
+  before an install either — its guard, language and folder keys write — and `docs/lifecycle.md` now
+  says so rather than leaving the sentence to imply otherwise.
 - Added `scripts/build-install.ps1` for a complete Windows source reinstall. It installs Rust 1.97 when
   needed, compiles and force-installs the locked release build, runs all-agent setup with explicit
   source-build consent, and verifies the result with lifecycle status, installation status, and

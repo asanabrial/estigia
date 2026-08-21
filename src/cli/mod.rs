@@ -406,11 +406,18 @@ fn guided(options: &SetupOptions, json: bool, allow_source_build: bool) -> Resul
 ///
 /// The lifecycle preflight lives here rather than at the command that opens the
 /// screen, and the reason is the one `guided` states two screens up about an
-/// unparsable table: opening the screen deploys no asset, so refusing at the
-/// door costs the operator the rows without protecting anything. The
-/// specification already draws that line for the neighbouring case — *dry-run
-/// performs no lifecycle read or write because it deploys no assets* — and the
-/// screen is the same shape until somebody confirms a plan.
+/// unparsable table: opening the screen deploys no **adapter asset**, which is
+/// the object this gate protects, so refusing at the door cost the operator the
+/// rows and protected nothing. The specification already draws that line for the
+/// neighbouring case — *dry-run performs no lifecycle read or write because it
+/// deploys no assets* — and the screen is the same shape until somebody confirms
+/// a plan.
+///
+/// Not the same as the screen being read-only, and the distinction is load
+/// bearing: its guard, language and folder keys each write before any plan is
+/// confirmed. `docs/lifecycle.md` names all three. None is an adapter asset and
+/// none is newly reachable — `estigia guard` never had a preflight either — but
+/// a reader who takes *deploys no asset* for *writes nothing* will be wrong.
 ///
 /// A refusal raised here is not swallowed by the alternate buffer: `tui::setup`
 /// shows it in the box and keeps it, so it still leaves as the process's exit

@@ -53,7 +53,7 @@ The typed digest and renamed record fields use lifecycle schema 3. Earlier schem
 closed as unsupported rather than being reinterpreted under this narrower model.
 
 Before a real `setup` or `sync` changes any adapter, one global preflight applies to the whole batch,
-guided setup included. An unrecorded or source-built running binary refuses by default and requires
+including guided setup. An unrecorded or source-built running binary refuses by default and requires
 that command's explicit `--allow-source-build`. The flag does not create recorded provenance or advance,
 erase, or lower high-water. An installer-recorded release below high-water refuses even with the flag; unknown
 lifecycle state fails closed. `--dry-run` performs no lifecycle read or write, and uninstall remains
@@ -64,13 +64,24 @@ can advance high-water while leaving the old binary installed. Concurrent instal
 serialized. Re-reading per adapter would still race and would permit partial-batch behavior, so this
 slice does not pretend it closes that concurrency boundary.
 
-Where guided setup applies it is the screen's **install**, not the command that opens the screen.
-`estigia setup` with no arguments — and its `install` and `tui` aliases — draws the screen on a
-source build, and the refusal arrives when a plan is confirmed, carrying the same code and the same
-way out as the shell's. It is shown over the screen and still leaves as the process's exit code.
-Refusing at the door was the earlier behaviour and it protected nothing: opening the screen deploys
-no asset, and the way out the refusal named was that same screen one flag later. What it cost was the
-read-only half — the rows a person who has just built the binary opens it to read.
+For guided setup the preflight runs at the screen's **install**, not at the command that opens the
+screen. `estigia setup` with no arguments — and its `install` and `tui` aliases — draws the screen on
+a source build, and the refusal arrives when a plan is confirmed, carrying the same code and the same
+way out as the shell's. It is shown over the screen and still leaves as the process's exit code. All
+three refusals moved together, because there is one preflight and not three: an operator on a
+downgrade-blocked or unreadable-state binary also learns at the save rather than before the screen.
+
+Refusing at the door was the earlier behaviour and it protected nothing the flag would not grant one
+command later, since the way out it named was that same screen with `--allow-source-build` on it.
+What it cost was the rows — a person who has just built the binary opens the screen to find out
+which agents it knows.
+
+**The screen is not read-only before that install**, and this paragraph is not a claim that it is.
+Three keys write before any plan is confirmed: the guard key installs a `pre-push` hook into the
+current repository, the language key writes the remembered tongue under the home, and the folder
+picker creates a directory. None is an adapter asset, and none is newly *possible* — `estigia guard`
+from the shell has never had a preflight either — but they are reachable through this screen on a
+source build where the door refusal previously stopped them.
 
 Then swear to an issue:
 
