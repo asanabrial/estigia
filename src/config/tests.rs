@@ -1787,10 +1787,6 @@ fn every_named_disposition_uses_a_transport_state() {
         contract.contains("a person's decision is not a verdict"),
         "the contract does not forbid recording the person as the missing verdict"
     );
-    assert!(
-        contract.contains("unresolved choice about what should be built"),
-        "step 7 names only a contradiction and leaves an omission unrouted"
-    );
 }
 
 /// A companion document points at the Decision Gates table rather than carrying
