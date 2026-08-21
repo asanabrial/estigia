@@ -174,14 +174,13 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
                 if !interactive_possible {
                     return Err(setup::no_terminal());
                 }
-                return after_lifecycle_preflight(
-                    lifecycle_preflight(
-                        &options,
-                        *allow_source_build,
-                        "estigia setup --interactive",
-                    ),
-                    || guided(&options, cli.json),
-                );
+                // No lifecycle preflight here. The screen is entered on a
+                // source build and refuses when it *installs* — see
+                // `guided_install`. Refusing at the door took the screen away
+                // from the one person it is for: somebody who has just built
+                // the binary and does not yet know the slugs, answered with a
+                // refusal whose own way out is this same screen one flag later.
+                return guided(&options, cli.json, *allow_source_build);
             }
             let targets = select(agent.as_deref(), *all)?;
             if *uninstall {
@@ -337,7 +336,7 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
 /// two ways to answer the same questions is two things to keep in step, and the
 /// one that walks somebody through fifteen prompts in a fixed order is the
 /// worse of the two for what people do most often — change one row.
-fn guided(options: &SetupOptions, json: bool) -> Result<(), Refusal> {
+fn guided(options: &SetupOptions, json: bool, allow_source_build: bool) -> Result<(), Refusal> {
     // Each adapter's own table, not one taken from whichever answered first.
     // Flattening them is the defect `setup --all` already had and had fixed:
     // two agents configured differently on purpose come out agreeing, the
@@ -389,7 +388,7 @@ fn guided(options: &SetupOptions, json: bool) -> Result<(), Refusal> {
     // out, so the rows have to be printed here to survive at all.
     let mut written: Option<String> = None;
     crate::tui::setup(&installed, &bare, &configured, &mut |plan| {
-        let (receipt, report) = install_planned(plan, options, json)?;
+        let (receipt, report) = guided_install(plan, options, json, allow_source_build)?;
         written = Some(report);
         Ok(receipt)
     })?;
@@ -401,6 +400,41 @@ fn guided(options: &SetupOptions, json: bool) -> Result<(), Refusal> {
     };
     say!("{report}");
     Ok(())
+}
+
+/// The screen's write, gated the way the shell's write is.
+///
+/// The lifecycle preflight lives here rather than at the command that opens the
+/// screen, and the reason is the one `guided` states two screens up about an
+/// unparsable table: opening the screen deploys no **adapter asset**, which is
+/// the object this gate protects, so refusing at the door cost the operator the
+/// rows and protected nothing. The specification already draws that line for the
+/// neighbouring case — *dry-run performs no lifecycle read or write because it
+/// deploys no assets* — and the screen is the same shape until somebody confirms
+/// a plan.
+///
+/// Not the same as the screen being read-only, and the distinction is load
+/// bearing: its guard, language and folder keys each write before any plan is
+/// confirmed, and this gate covers none of them. `docs/lifecycle.md` names all
+/// three. A reader who takes *deploys no adapter asset* for *writes nothing*
+/// will be wrong.
+///
+/// A refusal raised here is not swallowed by the alternate buffer: `tui::setup`
+/// shows it in the box and keeps it, so it still leaves as the process's exit
+/// code.
+///
+/// Separate from [`install_planned`] rather than folded into it because that
+/// function is the screen's *writer* and is driven directly by tests holding a
+/// temporary home, where every one of them is an unrecorded build. Gating there
+/// would refuse the whole suite to check one route.
+fn guided_install(
+    plan: &crate::tui::Plan,
+    options: &SetupOptions,
+    json: bool,
+    allow_source_build: bool,
+) -> Result<(crate::tui::InstallReceipt, String), crate::tui::InstallFailure> {
+    lifecycle_preflight(options, allow_source_build, "estigia setup --interactive")?;
+    install_planned(plan, options, json)
 }
 
 /// Performs one screenful of decisions: the verdict, then everything it did.
@@ -2037,14 +2071,6 @@ fn lifecycle_preflight(
         | lifecycle::Relation::AheadOfRecorded
         | lifecycle::Relation::RecordedNoHistory => Ok(()),
     }
-}
-
-fn after_lifecycle_preflight<T>(
-    preflight: Result<(), Refusal>,
-    enter: impl FnOnce() -> Result<T, Refusal>,
-) -> Result<T, Refusal> {
-    preflight?;
-    enter()
 }
 
 fn update(json: bool) -> Result<(), Refusal> {

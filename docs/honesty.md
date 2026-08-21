@@ -2673,6 +2673,23 @@ suite. Everything else here is prose held by review.
   reviewers of receipts `c7e7b821a12455ea6293a321ad4be30a` and `0cfd9a216c02aa82133bb0f992389a85`
   while checking that issue #62 was closed on every write path; the enumeration was every caller of
   `setup::rewrite_configuration`, `write_agent_configuration*` and `write_repository_configuration`.
+- **Two of the three things the guided lifecycle gate depends on are not measured.** What is measured
+  is `guided_install` itself: `the_screens_install_refuses_a_source_build_and_writes_nothing` was
+  crossed by taking the preflight out and watching an unrecorded build deploy eighteen files into a
+  temporary home. That is the function, not the route, and the route has two more links.
+
+  **The door.** Nothing asserts that `dispatch` no longer checks lifecycle before `guided`, so a
+  preflight put back in front of the screen would take it away again with the whole suite green.
+  **The flag.** Nothing asserts that the `allow_source_build` the operator typed is the one
+  `guided_install` reads. Both tests pass it as a literal, and the value travels
+  `dispatch` → `guided` → `guided_install` through two links no test drives; hardcoding `true`
+  at the first of them disarms the gate for the whole route, also with the suite green. That is the
+  worse mutation of the two, because a gate that is present and always permissive reads as working.
+
+  Neither is measurable from here for the same reason: both live behind `tui::setup`, which needs a
+  terminal, and no test in this crate can hold one — the limit the comment over `plan_of` already
+  states. What stands in for them is that `install_planned` has exactly one production caller and it
+  is `guided_install`, which is prose a reviewer checks rather than a test that holds it.
 - **The legacy-checkout stop cannot name the legacy path of a template that named no placeholder.**
   A `Worktree location` missing `<branch>` or `<run-id>` gains it in memory, and `start_branch` stops
   with `legacy-worktree-registered` when the pre-migration checkout is still registered — computed
