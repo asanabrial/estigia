@@ -66,6 +66,12 @@ pub enum Action {
         command: String,
         /// The exact pull request named by a narrowly recognised merge command.
         pr: Option<u64>,
+        /// Why a merge command's PR stayed unidentified, when the byte filter
+        /// was what disqualified it. Carried to the refusal so it can name the
+        /// disqualifying byte: a command naming PR 136 that is refused because
+        /// of a `2>&1` redirect reads as a false sentence if the refusal says
+        /// it "does not name one positive numeric pull request".
+        pr_unidentified_reason: Option<String>,
         /// The target of an exact local `git merge --ff-only`, when the shell
         /// payload was narrow enough to prove rather than interpret.
         local_fast_forward_target: Option<String>,
@@ -1274,16 +1280,49 @@ fn contains_whole_command(text: &str, fragment: &str) -> bool {
     false
 }
 
-pub(crate) fn delivery_pr_unidentified() -> Refusal {
+pub(crate) fn delivery_pr_unidentified(reason: Option<String>) -> Refusal {
+    let message = match &reason {
+        // The byte that did it, because the number is usually present and
+        // correct — the refusal that says the command "does not name one
+        // positive numeric pull request" is false of `gh pr merge 136 --merge
+        // 2>&1` and sends the reader looking for the number, which is the
+        // detour issue #66 measured. The message names the cause; the way out
+        // below still names the shape, because that is what would clear it.
+        Some(byte) => format!(
+            "the merge command carries a `{byte}` byte the literal parser cannot establish an \
+             identity for, so no publication receipt can be selected"
+        ),
+        None => {
+            "the merge command does not name one positive numeric pull request, so no publication \
+             receipt can be selected"
+                .to_owned()
+        }
+    };
+    let detail = match reason {
+        Some(reason) => {
+            format!(
+                "the command carries shell syntax the literal parser cannot establish an identity \
+                 for: the byte `{reason}` disqualified it. One literal `gh pr merge <number> ...` \
+                 command, the number in the fourth position — before every flag — and spelled \
+                 without leading zeros, and with no quoting, escaping, expansion or redirect"
+            )
+        }
+        None => {
+            "one literal `gh pr merge <number> ...` command, the number in the fourth position — \
+             before every flag — and spelled without leading zeros"
+                .to_owned()
+        }
+    };
     Refusal::not_started(
         "delivery-pr-unidentified",
-        "the merge command does not name one positive numeric pull request, so no publication \
-         receipt can be selected"
-            .to_owned(),
-        Resolution::no_command(
-            NoCommandReason::OperatorKnowledge,
-            "one literal `gh pr merge <number> ...` command",
-        ),
+        message,
+        // The shape, not just the vocabulary: the parser reads the number in
+        // the fourth word and nowhere else, and an agent whose flags come
+        // first (`gh pr merge --squash 54`) reads a way out that does not say
+        // so as already satisfied — then retries the same shape and is
+        // refused again. Named here because a refusal that does not tell you
+        // what would clear it is the thing `CLAUDE.md` warns against.
+        Resolution::no_command(NoCommandReason::OperatorKnowledge, detail),
     )
 }
 
@@ -1328,15 +1367,47 @@ pub(crate) fn complete_review_receipt_not_selected() -> Refusal {
     )
 }
 
+/// The bytes a merge command may carry before its PR identity is trustworthy.
+///
+/// The alphabet a `gh pr merge` command is held to: alphanumerics plus the
+/// separators and option spellings a literal command needs. Anything else —
+/// quoting, escaping, expansion, a redirect — can turn raw words into
+/// different words, so a command carrying it is not one whose identity can be
+/// established. [`pr_merge_target`] keeps only these; [`pr_merge_disqualifying_byte`]
+/// names the first one that sent the command to `delivery-pr-unidentified`.
+fn allowed_pr_merge_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+        || matches!(
+            byte,
+            b' ' | b'\t' | b'-' | b'_' | b'.' | b'/' | b':' | b'=' | b'+'
+        )
+}
+
+/// The first byte that disqualifies a merge command from retaining a PR.
+///
+/// `None` when the command passes the alphabet or is not even a merge: the
+/// byte filter is the only reason this answers. Named so the refusal can say
+/// which byte did it, instead of claiming the command names no PR — which is
+/// usually false, and a false refusal sends the reader looking for the number
+/// that is right there in the command.
+fn pr_merge_disqualifying_byte(command: &str) -> Option<char> {
+    command
+        .bytes()
+        .find(|byte| !allowed_pr_merge_byte(*byte))
+        .map(char::from)
+}
+
 /// The one PR target that can be retained without becoming a shell parser.
+///
+/// The number is the fourth word — before every flag — spelled as digits with
+/// no leading zero. Both spellings `gh` itself would resolve (`--squash 54`
+/// and `007`) are left unidentified rather than interpreted, because a
+/// retained number selects which publication receipt may authorise the merge:
+/// `delivery-pr-unidentified` names that shape as the way out. Reading flags
+/// to find the number anywhere else would be a gate that decides less than it
+/// did, which is the one direction this crate refuses on purpose.
 fn pr_merge_target(command: &str) -> Option<u64> {
-    if !command.bytes().all(|byte| {
-        byte.is_ascii_alphanumeric()
-            || matches!(
-                byte,
-                b' ' | b'\t' | b'-' | b'_' | b'.' | b'/' | b':' | b'=' | b'+'
-            )
-    }) {
+    if !command.bytes().all(allowed_pr_merge_byte) {
         // Quoting, escaping and expansion can turn raw words into different
         // arguments. Retaining a PR here spends review authority, so only a
         // command needing no shell interpretation can select a receipt.
@@ -1355,10 +1426,16 @@ fn pr_merge_target(command: &str) -> Option<u64> {
         return None;
     }
     let target = *words.get(3)?;
-    let pr = target
-        .bytes()
-        .all(|byte| byte.is_ascii_digit())
-        .then(|| target.parse::<u64>().ok())??;
+    // A leading zero is a number the payload did not spell: `007` parses to
+    // `7`, and `gh` resolves it the same way, but `7` would then select which
+    // receipt authorises the merge — so the spelling is taken literally or
+    // left unidentified, never interpreted.
+    if !target.bytes().all(|byte| byte.is_ascii_digit())
+        || (target.len() > 1 && target.starts_with('0'))
+    {
+        return None;
+    }
+    let pr = target.parse::<u64>().ok()?;
     if pr == 0
         || words
             .get(4..)
@@ -1388,7 +1465,13 @@ fn pr_merge_target(command: &str) -> Option<u64> {
 /// shells out to the transport publishes without telling the pointer, and the
 /// honesty contract states that reach rather than implying there is none.
 fn stale_verdict(action: &Action, run: &Run, checkout: &std::path::Path) -> Option<Refusal> {
-    let Action::Boundary { command, pr, .. } = action else {
+    let Action::Boundary {
+        command,
+        pr,
+        pr_unidentified_reason,
+        ..
+    } = action
+    else {
         return None;
     };
     // The list already declared for exactly this population, rather than a
@@ -1404,7 +1487,7 @@ fn stale_verdict(action: &Action, run: &Run, checkout: &std::path::Path) -> Opti
         let command_pr = match pr {
             Some(pr) => *pr,
             None => {
-                return Some(delivery_pr_unidentified());
+                return Some(delivery_pr_unidentified(pr_unidentified_reason.clone()));
             }
         };
         let Some(receipt) = run
@@ -1791,6 +1874,7 @@ pub fn classify_with(
                 Action::Boundary {
                     command: (*matched).to_owned(),
                     pr: None,
+                    pr_unidentified_reason: None,
                     local_fast_forward_target: None,
                 },
                 Sensitivity::Boundary,
@@ -1801,6 +1885,7 @@ pub fn classify_with(
                 Action::Boundary {
                     command: "gh api".to_owned(),
                     pr: None,
+                    pr_unidentified_reason: None,
                     local_fast_forward_target: None,
                 },
                 Sensitivity::Boundary,
@@ -1822,10 +1907,25 @@ pub fn classify_with(
             } else {
                 None
             };
+            // Why the merge stayed unidentified, when the byte filter was the
+            // reason. The classifier sees the literal, so it can say which byte
+            // did it — the refusal alone cannot, and a refusal that claims the
+            // command names no PR when it names one perfectly well is the false
+            // sentence issue #66 measured.
+            let pr_unidentified_reason = if matched == "gh pr merge" && pr.is_none() {
+                command
+                    .literal
+                    .as_deref()
+                    .and_then(pr_merge_disqualifying_byte)
+                    .map(|byte| byte.to_string())
+            } else {
+                None
+            };
             return (
                 Action::Boundary {
                     command: matched.to_owned(),
                     pr,
+                    pr_unidentified_reason,
                     local_fast_forward_target: (matched == "git merge")
                         .then(|| {
                             command

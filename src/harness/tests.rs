@@ -88,6 +88,9 @@ fn a_pr_merge_keeps_the_pull_request_identity_it_will_deliver() {
         "gh pr merge 54 <(gh pr merge 55)",
         "gh pr merge 54 >(gh pr merge 55)",
         "gh pr merge 54 $TARGET",
+        "gh pr merge --squash 54",
+        "gh pr merge -d 54",
+        "gh pr merge 007",
     ] {
         let (action, sensitivity) = classify("Bash", &json!({"command": command}));
         assert_eq!(sensitivity, Sensitivity::Boundary, "{command}");
@@ -110,6 +113,90 @@ fn a_pr_merge_keeps_the_pull_request_identity_it_will_deliver() {
     );
     assert_eq!(sensitivity, Sensitivity::Boundary);
     assert!(matches!(array, Action::Boundary { pr: None, .. }));
+}
+
+/// The refusal for an unidentified merge names the shape that would clear it.
+///
+/// `pr_merge_target` requires the number in the fourth word, so
+/// `gh pr merge --squash 54` is refused — the safe direction, and it stays.
+/// The way out used to read "one literal `gh pr merge <number> ...` command",
+/// which does not say the number must come before every flag: an agent whose
+/// flags came first reads that as already satisfied, retries the same shape,
+/// and is refused again — a loop whose only moving part is the reader. Filed
+/// as issue #66 together with the leading-zero half: a refusal that does not
+/// tell you what would clear it is the thing `CLAUDE.md` warns against.
+#[test]
+fn an_unidentified_pr_merge_refusal_names_the_shape_that_clears_it() {
+    let refusal = delivery_pr_unidentified(None);
+    let Resolution::NoCommand { detail, .. } = &refusal.resolution else {
+        panic!("the way out of an unidentified merge is not a gap a command fills: {refusal}");
+    };
+    // The word order, because the parser requires it and nothing said so.
+    assert!(
+        detail.contains("before"),
+        "the resolution does not say the number precedes the flags: {refusal}"
+    );
+    // And the spelling, because retaining `7` from `007` was interpretation —
+    // the one thing this function exists not to do.
+    assert!(
+        detail.contains("leading zero"),
+        "the resolution does not say how the number must be spelled: {refusal}"
+    );
+}
+
+/// The byte half of the same refusal: a command the byte filter disqualified
+/// names the byte that disqualified it, not a claim about the number.
+///
+/// `pr_merge_target` keeps only commands whose bytes are all alphanumerics or
+/// `` space tab - _ . / : = + `` — quoting, escaping and expansion can turn raw
+/// words into different words, so a command carrying any of it is not one whose
+/// identity can be established. That is the safe direction and it stays. What
+/// the refusal says about it must be *that*: a `gh pr merge 136 --merge 2>&1`
+/// (the redirect that sent a run reading the classifier for two hours, issue
+/// #66) is refused because of the `>` and the `&`, while the number is present
+/// and correct — so the message that says "does not name one positive numeric
+/// pull request" points the reader at the one thing that is true of the
+/// command. Naming the byte turns a dead end into a diagnosis.
+#[test]
+fn an_unidentified_pr_merge_refusal_names_the_byte_that_disqualified_it() {
+    let (action, sensitivity) =
+        classify("Bash", &json!({"command": "gh pr merge 136 --merge 2>&1"}));
+    assert_eq!(sensitivity, Sensitivity::Boundary);
+    let Action::Boundary {
+        command,
+        pr: None,
+        pr_unidentified_reason,
+        ..
+    } = &action
+    else {
+        panic!("a redirected merge retained a PR identity: {action:?}");
+    };
+    assert_eq!(command, "gh pr merge", "the classifier lost the command");
+    // The byte that disqualified the command, carried to the refusal. Without
+    // it the refusal says "does not name one positive numeric pull request" —
+    // a sentence that is false of a command naming PR 136 — and the reader
+    // goes looking for the number, which is the two-hour detour issue #66
+    // measured.
+    let reason = pr_unidentified_reason
+        .as_deref()
+        .expect("a redirected merge was unidentified without the byte that did it");
+    assert!(
+        reason.contains('>'),
+        "the disqualifying byte is not named: {reason}"
+    );
+    // And the refusal the reader actually sees says the same thing.
+    let refusal = delivery_pr_unidentified(Some(reason.to_owned()));
+    assert!(
+        refusal.message.contains(reason),
+        "the message does not name the byte that disqualified the command: {refusal}"
+    );
+    let Resolution::NoCommand { detail, .. } = &refusal.resolution else {
+        panic!("the way out of an unidentified merge is not a gap a command fills: {refusal}");
+    };
+    assert!(
+        detail.contains(reason),
+        "the byte that disqualified the command is not in the way out: {refusal}"
+    );
 }
 
 /// Every boundary and every repository write has a command line somebody wrote.
@@ -715,6 +802,7 @@ fn a_boundary_never_rides_on_the_window() {
     let action = Action::Boundary {
         command: "git push".to_owned(),
         pr: None,
+        pr_unidentified_reason: None,
         local_fast_forward_target: None,
     };
     let decision = gate(&context, &mut run, &action, Sensitivity::Boundary);
@@ -1760,6 +1848,7 @@ fn the_gate_honours_a_stand_down_and_stops_when_it_expires() {
         let action = Action::Boundary {
             command: "git push".to_owned(),
             pr: None,
+            pr_unidentified_reason: None,
             local_fast_forward_target: None,
         };
         gate(&context, &mut run, &action, Sensitivity::Boundary)
@@ -2906,6 +2995,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
             &Action::Boundary {
                 command: "gh pr merge".to_owned(),
                 pr: Some(54),
+                pr_unidentified_reason: None,
                 local_fast_forward_target: None,
             },
             &run,
@@ -2922,6 +3012,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
         &Action::Boundary {
             command: "gh pr merge".to_owned(),
             pr: Some(54),
+            pr_unidentified_reason: None,
             local_fast_forward_target: None,
         },
         &unpublished,
@@ -2946,6 +3037,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
                 &Action::Boundary {
                     command: allowed.to_owned(),
                     pr: None,
+                    pr_unidentified_reason: None,
                     local_fast_forward_target: None,
                 },
                 &run,
@@ -2962,6 +3054,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
             &Action::Boundary {
                 command: delivery.to_owned(),
                 pr: (delivery == "gh pr merge").then_some(54),
+                pr_unidentified_reason: None,
                 local_fast_forward_target: None,
             },
             &run,
@@ -3003,6 +3096,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
         &Action::Boundary {
             command: "gh pr merge".to_owned(),
             pr: Some(54),
+            pr_unidentified_reason: None,
             local_fast_forward_target: None,
         },
         &run,
@@ -3022,6 +3116,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
         &Action::Boundary {
             command: "gh pr merge".to_owned(),
             pr: Some(54),
+            pr_unidentified_reason: None,
             local_fast_forward_target: None,
         },
         &run,
@@ -3133,6 +3228,7 @@ fn assert_steered_delivery_child() {
     let delivery = Action::Boundary {
         command: "gh pr merge".to_owned(),
         pr: Some(54),
+        pr_unidentified_reason: None,
         local_fast_forward_target: None,
     };
     assert!(
@@ -3443,6 +3539,7 @@ fn a_claim_covers_the_work_happening_below_the_checkout_root() {
     let push = Action::Boundary {
         command: "git push".to_owned(),
         pr: None,
+        pr_unidentified_reason: None,
         local_fast_forward_target: None,
     };
     assert_ne!(

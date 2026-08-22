@@ -2286,9 +2286,12 @@ suite. Everything else here is prose held by review.
   inferred again from the run pointer, whose worktree can be absent after a handoff. For a delivery
   `gh pr merge` boundary only, a linked sibling sharing the pointer checkout's Git common directory
   can reach that verification. The classifier first retains one positive numeric PR only from one
-  literal `gh pr merge <number> ...`; malformed, omitted, URL, branch, long, attached and bundled
-  uppercase-`R` foreign-repository options, duplicate, compound and shell-evaluated targets remain
-  irreversible boundaries but cannot select sibling evidence. Candidate
+  literal `gh pr merge <number> ...`; malformed, omitted, URL, branch, long, leading-zero, attached
+  and bundled uppercase-`R` foreign-repository options, duplicate, compound and shell-evaluated
+  targets remain irreversible boundaries but cannot select sibling evidence. A command the byte
+  filter disqualifies — quoting, escaping, expansion, a redirect — is refused as
+  `delivery-pr-unidentified` with the disqualifying byte named in the resolution, so a
+  `2>&1` redirect reads as what it is rather than as a claim that the command names no PR. Candidate
   pointers are then filtered by complete `receipt.pr == command PR`, exactly one holder must remain,
   and only then is the invoking HEAD compared with that holder's receipt and its live tracker claim
   verified. Equal HEADs never select between PR lineages. A legacy `reviewed_head` pointer remains

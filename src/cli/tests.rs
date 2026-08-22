@@ -212,7 +212,7 @@ fn inventory() -> Vec<Refusal> {
                 "what that run holds, read from the tracker",
             ),
         ),
-        crate::harness::delivery_pr_unidentified(),
+        crate::harness::delivery_pr_unidentified(None),
         crate::harness::complete_review_receipt_missing(54),
         crate::harness::delivery_pr_mismatch(54, 55),
         crate::harness::complete_review_receipt_not_selected(),
@@ -2829,6 +2829,7 @@ fn both_doors_to_the_gate_read_one_payload_the_same_way() {
             crate::harness::Action::Boundary {
                 command: "git push".to_owned(),
                 pr: None,
+                pr_unidentified_reason: None,
                 local_fast_forward_target: None,
             },
             "`{spelling}` is a push and this door does not see it"

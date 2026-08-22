@@ -876,6 +876,20 @@ the workflow, it holds the tools.
 
 ### Refusals
 
+- **A `delivery-pr-unidentified` refusal says which byte disqualified the merge
+  command, and the number must precede the flags.** `pr_merge_target` retains
+  one positive numeric PR only from a literal `gh pr merge <number> ...`
+  command; the byte filter is right and its reason is recorded, but the refusal
+  claimed the command "does not name one positive numeric pull request" — a
+  sentence that is false of `gh pr merge 136 --merge 2>&1`, which names PR 136
+  perfectly well and was refused for the redirect. A run measuring that defect
+  spent two hours reading the classifier, because the message pointed it at the
+  one thing that was true of the command. The refusal now names the
+  disqualifying byte, and the resolution states the shape that would clear it —
+  the number in the fourth position, before every flag, spelled without leading
+  zeros. `gh pr merge 007` no longer retains the identity `7`: the spelling is
+  taken literally or left unidentified, never interpreted, because a retained
+  number selects which publication receipt may authorise the merge.
 - Every refusal carries a stable code, what happened to the world, whether a
   replay is safe, and a resolution — either a runnable invocation checked
   against the real parser, or a reason from a closed vocabulary saying why no
