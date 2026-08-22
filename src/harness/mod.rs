@@ -1280,9 +1280,16 @@ pub(crate) fn delivery_pr_unidentified() -> Refusal {
         "the merge command does not name one positive numeric pull request, so no publication \
          receipt can be selected"
             .to_owned(),
+        // The shape, not just the vocabulary: the parser reads the number in
+        // the fourth word and nowhere else, and an agent whose flags come
+        // first (`gh pr merge --squash 54`) reads a way out that does not say
+        // so as already satisfied — then retries the same shape and is
+        // refused again. Named here because a refusal that does not tell you
+        // what would clear it is the thing `CLAUDE.md` warns against.
         Resolution::no_command(
             NoCommandReason::OperatorKnowledge,
-            "one literal `gh pr merge <number> ...` command",
+            "one literal `gh pr merge <number> ...` command, the number in the fourth position — \
+             before every flag — and spelled without leading zeros",
         ),
     )
 }
@@ -1329,6 +1336,14 @@ pub(crate) fn complete_review_receipt_not_selected() -> Refusal {
 }
 
 /// The one PR target that can be retained without becoming a shell parser.
+///
+/// The number is the fourth word — before every flag — spelled as digits with
+/// no leading zero. Both spellings `gh` itself would resolve (`--squash 54`
+/// and `007`) are left unidentified rather than interpreted, because a
+/// retained number selects which publication receipt may authorise the merge:
+/// `delivery-pr-unidentified` names that shape as the way out. Reading flags
+/// to find the number anywhere else would be a gate that decides less than it
+/// did, which is the one direction this crate refuses on purpose.
 fn pr_merge_target(command: &str) -> Option<u64> {
     if !command.bytes().all(|byte| {
         byte.is_ascii_alphanumeric()
@@ -1355,10 +1370,16 @@ fn pr_merge_target(command: &str) -> Option<u64> {
         return None;
     }
     let target = *words.get(3)?;
-    let pr = target
-        .bytes()
-        .all(|byte| byte.is_ascii_digit())
-        .then(|| target.parse::<u64>().ok())??;
+    // A leading zero is a number the payload did not spell: `007` parses to
+    // `7`, and `gh` resolves it the same way, but `7` would then select which
+    // receipt authorises the merge — so the spelling is taken literally or
+    // left unidentified, never interpreted.
+    if !target.bytes().all(|byte| byte.is_ascii_digit())
+        || (target.len() > 1 && target.starts_with('0'))
+    {
+        return None;
+    }
+    let pr = target.parse::<u64>().ok()?;
     if pr == 0
         || words
             .get(4..)

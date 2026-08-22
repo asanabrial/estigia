@@ -88,6 +88,9 @@ fn a_pr_merge_keeps_the_pull_request_identity_it_will_deliver() {
         "gh pr merge 54 <(gh pr merge 55)",
         "gh pr merge 54 >(gh pr merge 55)",
         "gh pr merge 54 $TARGET",
+        "gh pr merge --squash 54",
+        "gh pr merge -d 54",
+        "gh pr merge 007",
     ] {
         let (action, sensitivity) = classify("Bash", &json!({"command": command}));
         assert_eq!(sensitivity, Sensitivity::Boundary, "{command}");
@@ -110,6 +113,35 @@ fn a_pr_merge_keeps_the_pull_request_identity_it_will_deliver() {
     );
     assert_eq!(sensitivity, Sensitivity::Boundary);
     assert!(matches!(array, Action::Boundary { pr: None, .. }));
+}
+
+/// The refusal for an unidentified merge names the shape that would clear it.
+///
+/// `pr_merge_target` requires the number in the fourth word, so
+/// `gh pr merge --squash 54` is refused — the safe direction, and it stays.
+/// The way out used to read "one literal `gh pr merge <number> ...` command",
+/// which does not say the number must come before every flag: an agent whose
+/// flags came first reads that as already satisfied, retries the same shape,
+/// and is refused again — a loop whose only moving part is the reader. Filed
+/// as issue #66 together with the leading-zero half: a refusal that does not
+/// tell you what would clear it is the thing `CLAUDE.md` warns against.
+#[test]
+fn an_unidentified_pr_merge_refusal_names_the_shape_that_clears_it() {
+    let refusal = delivery_pr_unidentified();
+    let Resolution::NoCommand { detail, .. } = &refusal.resolution else {
+        panic!("the way out of an unidentified merge is not a gap a command fills: {refusal}");
+    };
+    // The word order, because the parser requires it and nothing said so.
+    assert!(
+        detail.contains("before"),
+        "the resolution does not say the number precedes the flags: {refusal}"
+    );
+    // And the spelling, because retaining `7` from `007` was interpretation —
+    // the one thing this function exists not to do.
+    assert!(
+        detail.contains("leading zero"),
+        "the resolution does not say how the number must be spelled: {refusal}"
+    );
 }
 
 /// Every boundary and every repository write has a command line somebody wrote.
