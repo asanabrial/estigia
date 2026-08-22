@@ -4180,6 +4180,7 @@ fn git_hook(event: harness::hook::Event) -> Result<(), Refusal> {
                 &harness::Action::Boundary {
                     command: "git push".to_owned(),
                     pr: None,
+                    pr_unidentified_reason: None,
                     local_fast_forward_target: None,
                 },
                 harness::Sensitivity::Boundary,
