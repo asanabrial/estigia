@@ -3322,6 +3322,9 @@ fn repository_path(span: &str) -> bool {
 /// repository file and is left alone. An ambiguous suffix is left alone too,
 /// because it names no one file.
 fn resolved_path(span: &str, root: &std::path::Path, crate_files: &[String]) -> Option<String> {
+    if std::path::Path::new(span).has_root() {
+        return None;
+    }
     if root.join(span).exists() {
         return Some(span.to_string());
     }
@@ -3429,6 +3432,23 @@ fn a_coordinate_to_a_repository_file_that_is_not_there_is_a_defect() {
         None,
         "a bare path is prose and must be left alone, whatever the tree holds"
     );
+}
+
+/// An absolute path is never a repository file, so a device it names is never opened.
+///
+/// `Path::join` with an absolute path discards the root, and reading
+/// `/dev/stdout` on Linux blocks on the test harness's own pipe for good.
+#[test]
+fn an_absolute_path_is_not_a_repository_file() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let crate_files: Vec<String> = Vec::new();
+    for absolute in ["/dev/null", "/dev/stdout", "/etc"] {
+        assert_eq!(
+            resolved_path(absolute, &root, &crate_files),
+            None,
+            "{absolute} resolved as a repository file"
+        );
+    }
 }
 
 /// A line pin on a repository file is caught; the same file without a coordinate is not.
