@@ -12,6 +12,11 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The OpenCode and Pi loops continue a live claim with the held sentence, not the whole objective.** Issue #3.
+  While `estigia goal --json` says the run holds a live claim, the next turn is the text the Claude and Codex
+  `Stop` hooks already send (`harness::loop_text::held`, filled by `hook::stop_block` and by both plugins),
+  without the preamble or `/flow dev`; a live answer naming no issue stops the loop. The first turn and the
+  turns that continue on claimable work are unchanged.
 - **No third-party project is named in the code, the tests or the shipped skill.** Issue #1234. The
   provenance prose in `skill/` is restated on its own terms; the MIT notice for the files derived from
   another project now travels in `THIRD_PARTY_NOTICES.md`, linked from the README. The Pi loop and

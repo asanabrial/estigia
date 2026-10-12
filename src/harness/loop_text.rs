@@ -100,6 +100,15 @@ const CAP: &str = ", or when the completion cap is reached";
 
 const CLOSE: &str = "; there is no completion string to write.";
 
+const HELD: &str = "estigia: issue #{issue} is still held by {run_id} \u{2014} the claim is still open, \
+so the turn continues. Finish the work the claim covers before stopping.";
+
+/// What a turn is told while its run still holds a live claim: the issue, the
+/// run, and nothing of the objective.
+pub fn held(issue: &str, run_id: &str) -> String {
+    filled(HELD, &[("issue", issue), ("run_id", run_id)])
+}
+
 fn filled(template: &str, values: &[(&str, &str)]) -> String {
     values
         .iter()
@@ -148,6 +157,7 @@ pub fn preamble_parts() -> Value {
         "ends": ENDS,
         "cap": CAP,
         "close": CLOSE,
+        "held": HELD,
     })
 }
 

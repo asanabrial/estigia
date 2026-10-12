@@ -10346,13 +10346,14 @@ const completedAt = (n) => ({
   stdout: JSON.stringify({
     run_id: "opencode-abc",
     live: true,
+    issue: 42,
     standing: "passed",
     completed: n,
   }),
 });
 const started = {
   exitCode: 0,
-  stdout: JSON.stringify({ run_id: "opencode-abc", live: true }),
+  stdout: JSON.stringify({ run_id: "opencode-abc", live: true, issue: 42 }),
 };
 
 const empty = (extra) => ({
@@ -10370,6 +10371,20 @@ cases.live = await scenario("live", {
   start: started,
   turns: [completedAt(0)],
   max: 3,
+});
+cases.live_no_issue = await scenario("live_no_issue", {
+  start: started,
+  turns: [
+    {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        run_id: "opencode-abc",
+        live: true,
+        issue: null,
+        standing: "passed",
+      }),
+    },
+  ],
 });
 cases.dead = await scenario("dead", {
   start: started,
@@ -10408,6 +10423,7 @@ cases.completion_unknown = await scenario("completion_unknown", {
       stdout: JSON.stringify({
         run_id: "opencode-abc",
         live: true,
+        issue: 42,
         standing: "passed",
         completed: null,
       }),
@@ -10433,6 +10449,7 @@ cases.stop_after_live = await scenario("stop_after_live", {
       stdout: JSON.stringify({
         run_id: "opencode-abc",
         live: true,
+        issue: 42,
         standing: "passed",
         completed: 0,
         stop_after: "the operator asked to stop after the current task",
@@ -10446,6 +10463,7 @@ cases.stop_after_live = await scenario("stop_after_live", {
     stdout: JSON.stringify({
       run_id: "opencode-abc",
       live: true,
+      issue: 42,
       stop_after: "the operator asked to stop after the current task",
     }),
   };
@@ -10557,32 +10575,7 @@ console.log(JSON.stringify(cases));
 process.exit(0);
 "#;
 
-/// The loop plugin continues while `estigia goal` says the run is live or its
-/// queues hold claimable or dischargeable work, stops when none of the three
-/// holds, and keeps the goal with the reason it stopped.
-///
-/// One of the three tests in the crate that require `node`, beside
-/// `the_plugin_hands_the_gate_the_directory_the_call_runs_in`; it does not skip
-/// when `node` is absent. It proves each exit: a turn that ends live enqueues
-/// the same prompt again, a turn that ends without a live claim but with
-/// claimable work does too, so does a turn that ends with only a discharged
-/// condition to act on — and its preamble says what to do with it — while a turn
-/// that ends with none of the three does not, an answer that could not be read
-/// does not, a claim answer Estigia could not confirm does not even when work is
-/// count could not be read does not, and a run stops once `--max` completed
-/// issues are reported. Every stopping exit keeps the goal with the reason, the
-/// next turn of a stopped loop does nothing, and the plugin offers `/goal` to
-/// report all of it. A turn whose claim Estigia could not confirm, or whose
-/// answer could not be read, is not one of these exits: `the_loop_plugin_waits`
-/// proves it is retried on the timer and stops only once the attempts are spent,
-/// saying the read was retried.
-///
-/// It also proves the in-session stop request: a pending request stops a
-/// not-live run and is consumed, a live run continues past it without consuming
-/// it, and a fresh loop clears a request an earlier loop left behind before its
-/// first turn.
-#[test]
-fn the_loop_plugin_continues_while_estigia_says_there_is_work() {
+fn run_loop_driver() -> serde_json::Value {
     let root = tempfile::tempdir().expect("a temporary directory");
     let module = root.path().join("flow-loop.mjs");
     std::fs::write(
@@ -10612,8 +10605,36 @@ fn the_loop_plugin_continues_while_estigia_says_there_is_work() {
         String::from_utf8_lossy(&ran.stderr)
     );
 
-    let cases: serde_json::Value =
-        serde_json::from_slice(&ran.stdout).expect("the driver prints JSON");
+    serde_json::from_slice(&ran.stdout).expect("the driver prints JSON")
+}
+
+/// The loop plugin continues while `estigia goal` says the run is live or its
+/// queues hold claimable or dischargeable work, stops when none of the three
+/// holds, and keeps the goal with the reason it stopped.
+///
+/// One of the three tests in the crate that require `node`, beside
+/// `the_plugin_hands_the_gate_the_directory_the_call_runs_in`; it does not skip
+/// when `node` is absent. It proves each exit: a turn that ends live enqueues
+/// the same prompt again, a turn that ends without a live claim but with
+/// claimable work does too, so does a turn that ends with only a discharged
+/// condition to act on — and its preamble says what to do with it — while a turn
+/// that ends with none of the three does not, an answer that could not be read
+/// does not, a claim answer Estigia could not confirm does not even when work is
+/// count could not be read does not, and a run stops once `--max` completed
+/// issues are reported. Every stopping exit keeps the goal with the reason, the
+/// next turn of a stopped loop does nothing, and the plugin offers `/goal` to
+/// report all of it. A turn whose claim Estigia could not confirm, or whose
+/// answer could not be read, is not one of these exits: `the_loop_plugin_waits`
+/// proves it is retried on the timer and stops only once the attempts are spent,
+/// saying the read was retried.
+///
+/// It also proves the in-session stop request: a pending request stops a
+/// not-live run and is consumed, a live run continues past it without consuming
+/// it, and a fresh loop clears a request an earlier loop left behind before its
+/// first turn.
+#[test]
+fn the_loop_plugin_continues_while_estigia_says_there_is_work() {
+    let cases = run_loop_driver();
 
     let live = &cases["live"];
     assert_eq!(
@@ -10633,9 +10654,9 @@ fn the_loop_plugin_continues_while_estigia_says_there_is_work() {
     );
     assert!(
         texts
-            .get(1)
+            .first()
             .is_some_and(|text| text.contains("do the thing")),
-        "the second prompt was not the same objective: {texts:?}"
+        "the first prompt was not the objective: {texts:?}"
     );
     assert!(
         texts.iter().all(|text| !text.contains("--max")),
@@ -10901,8 +10922,8 @@ fn the_loop_plugin_continues_while_estigia_says_there_is_work() {
 
 const LOOP_SILENCE_SCENARIOS: &str = r#"
 const cases = {};
-const started = { exitCode: 0, stdout: JSON.stringify({ run_id: "opencode-abc", live: true, standing: "live" }) };
-const live = { exitCode: 0, stdout: JSON.stringify({ run_id: "opencode-abc", live: true, standing: "live" }) };
+const started = { exitCode: 0, stdout: JSON.stringify({ run_id: "opencode-abc", live: true, issue: 42, standing: "live" }) };
+const live = { exitCode: 0, stdout: JSON.stringify({ run_id: "opencode-abc", live: true, issue: 42, standing: "live" }) };
 
 const flaky = (failure) => {
   let calls = 0;
@@ -11022,7 +11043,7 @@ const empty = (extra) => ({
   exitCode: 0,
   stdout: JSON.stringify({ run_id: "opencode-abc", live: false, standing: "stopped", ...extra }),
 });
-const started = { exitCode: 0, stdout: JSON.stringify({ run_id: "opencode-abc", live: true }) };
+const started = { exitCode: 0, stdout: JSON.stringify({ run_id: "opencode-abc", live: true, issue: 42 }) };
 const waiting = (extra = {}) =>
   empty({ claimable: 0, dischargeable: 0, held: 1, pending: 1, unconditioned: 0, ...extra });
 const work = () => empty({ claimable: 1, dischargeable: 0, held: 0, pending: 0, unconditioned: 0 });
@@ -11448,6 +11469,47 @@ console.log(JSON.stringify(cases));
 process.exit(0);
 "#;
 
+/// A turn that ends while the run still holds a claim continues with the held
+/// text alone — the same bytes the Claude and Codex `Stop` hooks hand back —
+/// and not with the preamble and the objective again.
+#[test]
+fn the_loop_plugin_continues_a_live_claim_with_the_held_text_alone() {
+    let cases = run_loop_driver();
+    let live = &cases["live"];
+    let texts: Vec<&str> = live["texts"]
+        .as_array()
+        .expect("the texts")
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .collect();
+    let held =
+        crate::harness::hook::stop_block(&crate::identity::Identity::Number(42), "opencode-abc");
+    assert_eq!(
+        texts.get(1).copied(),
+        held["reason"].as_str(),
+        "a live claim was not continued with the held text: {texts:?}"
+    );
+    assert!(
+        !texts[1].contains("/flow"),
+        "a live continuation carried the objective again: {texts:?}"
+    );
+}
+
+/// A live answer that names no issue is not a claim the plugin can confirm, so
+/// the loop stops rather than guessing what to say.
+#[test]
+fn the_loop_plugin_stops_on_a_live_answer_that_names_no_issue() {
+    let cases = run_loop_driver();
+    let case = &cases["live_no_issue"];
+    assert_eq!(case["prompts"], 1, "{case}");
+    assert!(
+        case["stopped"]["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("did not report which issue")),
+        "{case}"
+    );
+}
+
 /// The loop plugin waits, rather than stops, while the only work left is held
 /// by another run or blocked on a condition that may still come true.
 ///
@@ -11846,7 +11908,7 @@ const clean = () => {
 };
 
 const PARENT = "ses_loop_fixture";
-const liveAnswer = { exitCode: 0, stdout: JSON.stringify({ run_id: "opencode-abc", live: true }) };
+const liveAnswer = { exitCode: 0, stdout: JSON.stringify({ run_id: "opencode-abc", live: true, issue: 42 }) };
 const answers = (n) => Array.from({ length: n }, () => liveAnswer);
 
 const open = async (n, sessions) => {
@@ -12207,7 +12269,7 @@ fn the_loop_plugin_defaults_its_objective_to_flow_dev() {
     std::fs::write(
         &driver,
         format!(
-            "{harness}const completedAt = () => null;\nconst started = {{ exitCode: 0, stdout: JSON.stringify({{ run_id: \"opencode-abc\", live: true }}) }};\nconst shared = {};\n{LOOP_DEFAULT_SCENARIOS}",
+            "{harness}const completedAt = () => null;\nconst started = {{ exitCode: 0, stdout: JSON.stringify({{ run_id: \"opencode-abc\", live: true, issue: 42 }}) }};\nconst shared = {};\n{LOOP_DEFAULT_SCENARIOS}",
             serde_json::to_string(crate::harness::loop_text::SLASH_OBJECTIVES)
                 .expect("the shared cases encode")
         ),
@@ -17417,7 +17479,7 @@ const use = ({ answer = null, exit = 0, mode = "", delay = 0 }) => {
   process.env.STUB_DELAY_MS = String(delay);
 };
 
-const LIVE = { run_id: "pi-abc", live: true, standing: "held" };
+const LIVE = { run_id: "pi-abc", live: true, issue: 42, standing: "held" };
 const DEAD = {
   run_id: "pi-abc",
   live: false,
@@ -17503,6 +17565,15 @@ const out = {};
     args: s.asked().map((call) => call.args),
     cwds: s.asked().map((call) => call.cwd),
   };
+}
+
+{
+  use({ answer: LIVE });
+  const s = await scenario();
+  await start(s, "do the thing");
+  use({ answer: { ...LIVE, issue: null } });
+  await turn(s);
+  out.live_no_issue = snapshot(s);
 }
 
 {
@@ -17811,7 +17882,7 @@ fn the_pi_loop_continues_while_estigia_says_there_is_work() {
         texts.iter().all(|text| text.contains("pi-abc")),
         "{texts:?}"
     );
-    assert!(texts.iter().all(|text| text.contains("do the thing")));
+    assert!(texts[0].contains("do the thing"));
     assert!(texts.iter().all(|text| !text.contains("--max")));
     assert_eq!(live["asked"], 2);
     for call in live["args"].as_array().expect("the calls") {
@@ -17885,6 +17956,35 @@ fn the_pi_loop_continues_while_estigia_says_there_is_work() {
         "a stopped loop asked again: {operator}"
     );
     assert_eq!(cases["already_running"]["prompts"], 1);
+}
+
+/// A turn that ends while the run still holds a claim continues with the held
+/// text alone, byte for byte what the `Stop` hooks hand back.
+#[test]
+fn the_pi_loop_continues_a_live_claim_with_the_held_text_alone() {
+    let cases = run_pi_loop_driver();
+    let texts = strings(&cases["live"]["texts"]);
+    let held = crate::harness::hook::stop_block(&crate::identity::Identity::Number(42), "pi-abc");
+    assert_eq!(
+        texts.get(1).copied(),
+        held["reason"].as_str(),
+        "a live claim was not continued with the held text: {texts:?}"
+    );
+    assert!(!texts[1].contains("/flow"), "{texts:?}");
+}
+
+/// A live answer that names no issue stops the loop and says so.
+#[test]
+fn the_pi_loop_stops_on_a_live_answer_that_names_no_issue() {
+    let cases = run_pi_loop_driver();
+    let case = &cases["live_no_issue"];
+    assert_eq!(case["prompts"], 1, "{case}");
+    assert!(
+        strings(&case["said"])
+            .iter()
+            .any(|line| line.contains("did not report which issue")),
+        "{case}"
+    );
 }
 
 #[test]
