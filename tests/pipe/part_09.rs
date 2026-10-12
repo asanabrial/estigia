@@ -3077,6 +3077,7 @@ fn inspect_candidate_reads_a_correction_between_two_publications_over_the_real_m
     assert!(said.contains("inspect-parent-missing"), "{refused}");
 }
 
+#[cfg(unix)]
 fn collect_when_done(
     ask: &dyn Fn(&str, serde_json::Value) -> serde_json::Value,
     arguments: serde_json::Value,

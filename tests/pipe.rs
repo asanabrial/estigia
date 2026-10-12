@@ -309,6 +309,15 @@ fn run_in_with_bytes(
     run_with_bytes_locked(home, here, arguments, stdin, true, None, &[])
 }
 
+/// Identity for every commit a fixture git call may create (rebase, merge,
+/// cherry-pick), so a host without a global identity behaves like one with it.
+const FIXTURE_GIT_IDENTITY: [(&str, &str); 4] = [
+    ("GIT_AUTHOR_NAME", "nobody"),
+    ("GIT_AUTHOR_EMAIL", "nobody@example.invalid"),
+    ("GIT_COMMITTER_NAME", "nobody"),
+    ("GIT_COMMITTER_EMAIL", "nobody@example.invalid"),
+];
+
 /// Runs `git -C <at> <arguments>` for a fixture, and panics naming the
 /// argument list, the exit status and stderr on a nonzero exit, or the spawn
 /// error on a failure to run at all — the two ways `.output().is_ok_and(...)`
@@ -317,6 +326,7 @@ fn checked_git(at: &std::path::Path, arguments: &[&str]) -> bool {
     match Command::new("git")
         .arg("-C")
         .arg(at)
+        .envs(FIXTURE_GIT_IDENTITY)
         .args(arguments)
         .output()
     {
@@ -337,6 +347,7 @@ fn checked_git_stdout(at: &std::path::Path, arguments: &[&str]) -> String {
     match Command::new("git")
         .arg("-C")
         .arg(at)
+        .envs(FIXTURE_GIT_IDENTITY)
         .args(arguments)
         .output()
     {
