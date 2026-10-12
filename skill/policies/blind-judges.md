@@ -266,7 +266,7 @@ records its answer, or records nothing when the answer is not a well-formed insp
 the binary's: the inconclusive results already recorded plus one. On Claude Code the validator has no
 hand launch: setup installs no `review-validator` definition and the launch gate refuses a `Task`
 launch of it. It is **additional** to the tier's own lenses, not instead of them: a
-smaller panel for a correction is a decision this slice does not take. Those lenses are handed the
+smaller panel for a correction is a decision this slice does not take. Those lenses, and the refuter that judges their findings, are handed the
 correction's diff over its parent too (`parent.head..head`) whenever the publication recorded an
 honest `delta-range`, and the whole change when it recorded a `delta-range-reason`.
 

@@ -649,7 +649,8 @@ pub(super) fn prepare_with(
     };
     let lineage = recorded.lineage.clone();
     let validator = role == Role::Validator;
-    let delta_scoped = role.is_lens()
+    let delta_scoped = !validator
+        && (role.is_lens() || role == Role::Refuter)
         && lineage
             .as_ref()
             .is_some_and(|lineage| lens_reads_delta(lineage, &receipt));
@@ -664,14 +665,12 @@ pub(super) fn prepare_with(
                     .to_owned(),
             ));
         }
-        (Some(lineage), false) if role.is_lens() && lens_reads_delta(lineage, &receipt) => {
-            review_payload_declared_at(
-                &context.repo_dir,
-                &lineage.parent.head,
-                &receipt.head,
-                &receipt.base,
-            )?
-        }
+        (Some(lineage), false) if delta_scoped => review_payload_declared_at(
+            &context.repo_dir,
+            &lineage.parent.head,
+            &receipt.head,
+            &receipt.base,
+        )?,
         (_, false) => review_payload(&context.repo_dir, &receipt.base, &receipt.head)?,
     };
     let payload_digest = if validator || delta_scoped {
