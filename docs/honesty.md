@@ -1891,7 +1891,7 @@ pointer that leaves it names the document it points at.
   | Surface | Bytes | How measured |
   |---|---:|---|
   | `skill/bindings/github.md` | 28,128 | file on disk |
-  | `skill/policies/blind-judges.md` | 41,787 | file on disk |
+  | `skill/policies/blind-judges.md` | 41,832 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
   | `skill/bindings/github/delivery.md` | 37,708 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |

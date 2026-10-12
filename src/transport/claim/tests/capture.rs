@@ -1433,9 +1433,7 @@ fn a_correction_whose_parent_head_cannot_be_resolved_refuses_the_lens_and_launch
     assert!(launched.is_empty(), "a lens was launched on no payload");
 }
 
-#[test]
-fn the_refuter_over_a_correction_still_reads_the_whole_target() {
-    let world = lens_correction_world(None);
+fn refuter_prompt(world: World) -> String {
     let receipt = world.receipt.clone();
     let mut comments = world.comments.clone();
     comments.push(recorded_lens_report_for(
@@ -1460,16 +1458,59 @@ fn the_refuter_over_a_correction_still_reads_the_whole_target() {
 
     outcome.unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
     assert_eq!(launched[0].role, REFUTER);
-    let full = crate::transport::target::review_payload(
+    String::from_utf8_lossy(&launched[0].prompt).into_owned()
+}
+
+#[test]
+fn the_refuter_over_a_delta_scoped_correction_reads_what_the_lens_reads() {
+    let world = lens_correction_world(None);
+    let lens = lens_prompt(&world);
+    let parent_head = world
+        .comments
+        .iter()
+        .find_map(|comment| {
+            crate::transport::markers::parse(&comment.body)
+                .into_iter()
+                .find_map(|marker| marker.get("parent-head").cloned())
+        })
+        .expect("the parent head");
+    let delta = crate::transport::target::review_payload_declared_at(
         &world.context.repo_dir,
-        &world.receipt.base,
+        &parent_head,
         &world.receipt.head,
+        &world.receipt.base,
     )
-    .expect("the target");
-    let prompt = String::from_utf8_lossy(&launched[0].prompt).into_owned();
-    assert!(prompt.contains("diff --git a/src/foo.rs"));
+    .expect("the delta");
+
+    let prompt = refuter_prompt(world);
+
     assert!(prompt.contains("diff --git a/src/bar.rs"));
-    assert!(prompt.contains(&format!("\npayload-digest: {}", full.digest)));
+    assert!(!prompt.contains("diff --git a/src/foo.rs"));
+    assert!(prompt.contains(&format!("\npayload-digest: {}", delta.digest)));
+    assert!(prompt.contains(&delta.text));
+    assert!(lens.contains(&delta.text));
+}
+
+#[test]
+fn the_refuter_over_a_correction_that_is_not_delta_scoped_reads_the_whole_target() {
+    for reason in ["base-advanced", "merged-range"] {
+        let world = lens_correction_world(Some(reason));
+        let full = crate::transport::target::review_payload(
+            &world.context.repo_dir,
+            &world.receipt.base,
+            &world.receipt.head,
+        )
+        .expect("the target");
+
+        let prompt = refuter_prompt(world);
+
+        assert!(prompt.contains("diff --git a/src/foo.rs"), "{reason}");
+        assert!(prompt.contains("diff --git a/src/bar.rs"), "{reason}");
+        assert!(
+            prompt.contains(&format!("\npayload-digest: {}", full.digest)),
+            "{reason}"
+        );
+    }
 }
 
 #[test]

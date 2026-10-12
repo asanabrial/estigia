@@ -370,7 +370,7 @@ row allows (default 3, where C allows 1), and the publish call refuses the next 
 `correction-already-spent` before anything is pushed (`src/transport/claim.rs`'s `corrections_spent`
 and `corrections_per_lineage`; `docs/honesty.md` records what the count does not read). Each
 correction a lineage spends is another round the panel's cost multiplies by, but a round over an
-honest correction range hands each lens only `parent-head..head` plus the parent's findings, not the
+honest correction range hands each lens, and the refuter that judges their findings, only `parent-head..head` (a lens also gets the parent's findings), not the
 whole target; a round whose range is not honest (`delta-range-reason` recorded) hands the whole
 target again. The setting that used
 to bound rounds, `Repair ceiling`, was instruction rather than enforcement; it is retired, and the
