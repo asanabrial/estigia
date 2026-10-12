@@ -1,0 +1,85 @@
+# Refusals that name no runnable continuation and are not declared by design.
+#
+# `build.rs`'s `assert_every_refusal_names_a_way_out` reads this file. Each line
+# names one refusal reason whose operator-facing envelope carries no `action` and
+# which no `BY_DESIGN` entry covers. The list may only shrink: a line that
+# matches no such refusal fails the build, naming it, so giving a refusal an
+# action — or a by-design shape — means deleting its line here.
+#
+# Do not add a line to silence a new refusal. Give the refusal an `action` a
+# caller can run, or declare why it cannot have one, instead. The reasons below
+# are the debt this guard reports and does not fix; `docs/honesty.md` records
+# what that means and the three known instances of a refusal that named a dead
+# end.
+#
+# `population` is the last known count of reasons the walk extracts. The guard's
+# floor is derived from it: a walk that finds fewer is broken, or a removal took
+# reasons with it. Raise it when the population grows, so a later drop is caught.
+population 223
+already-owned-by-different-operation
+already-yours
+blank-disposition-reason
+blank-never-ran-evidence
+claim-metadata-mismatch
+claim-operation-conflict
+claim-operation-expired
+claim-operation-no-longer-current
+comment-body-invalid
+comment-marker-incomplete
+disposition-batch-duplicate-finding
+finding-without-transaction
+force-reason-invalid
+force-reason-required
+force-required-for-reason
+heartbeat-body-invalid
+held-by-other-holder-disappeared
+held-by-other-without-other-holder
+holder-not-stale
+holder-runtime-missing
+incomplete-review-finding
+incomplete-review-transaction
+invalid-disposition-word
+invalid-finding-causal-disposition
+invalid-finding-class
+invalid-finding-evidence-class
+invalid-finding-lens
+invalid-finding-origin
+invalid-marker-attribute
+invalid-refutation-outcome
+invalid-spend-phase
+lost-claim-race
+lost-reclaim-race
+malformed-argument
+missing-argument
+never-ran-evidence-invalid
+non-positive-spend-value
+nothing-to-reclaim
+nothing-to-unassign
+operation-id-kind-conflict
+ownership-changed-projections-repaired
+ownership-kept-changing-before-projection
+reclaim-metadata-mismatch
+reclaim-operation-conflict
+reclaim-operation-no-longer-current
+refutation-batch-duplicate-finding
+renewal-kind-unsupported
+reserved-comment-kind
+review-disposition-metadata-mismatch
+review-disposition-operation-conflict
+review-disposition-readback-failed
+review-finding-metadata-mismatch
+review-finding-operation-conflict
+review-finding-readback-failed
+review-handoff-metadata-mismatch
+review-handoff-operation-conflict
+review-refutation-metadata-mismatch
+review-refutation-operation-conflict
+review-refutation-readback-failed
+spend-metadata-mismatch
+spend-operation-conflict
+spend-readback-failed
+stale-foreign-requires-reclaim
+target-operation-mismatch
+unassign-metadata-mismatch
+unassign-operation-conflict
+unknown-operation
