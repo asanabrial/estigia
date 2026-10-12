@@ -892,7 +892,10 @@ fn a_refusal_shows_the_end_of_stderr_not_its_head() {
 
 #[test]
 fn the_kept_stderr_is_its_last_bytes() {
-    let stderr = format!("{}ERROR: the real cause\n", "x".repeat(200_000));
+    let stderr = format!(
+        "{}ERROR: the real cause\n",
+        "x".repeat(run::MAX_STDERR + 4096)
+    );
     let answers = serde_json::json!([{ "stderr": stderr, "status": 1 }]).to_string();
     let (_, message) = refusal_code_for(&answers, "p");
     assert!(message.contains("the real cause"), "{message}");

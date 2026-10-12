@@ -1,8 +1,6 @@
 // Same exception `tests/pipe.rs` and `tests/release.rs` take: an integration
 // test is a separate crate, so the crate-level `allow` does not reach it.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-#![cfg(unix)]
-
 //! Drives the real `scripts/build-install.sh` against stub `rustup`/`cargo`
 //! binaries on `PATH`, so its install-root resolution, its relative-path
 //! handling and its refusals are exercised without a network or a real build.
@@ -11,6 +9,8 @@
 //! `STUB_LOG`, and for `cargo install --root <R> ...` it also writes an
 //! executable `<R>/bin/estigia` that itself logs its own argv. `CARGO_SHIM`
 //! only has to exist so `command -v cargo` finds something.
+
+#![cfg(unix)]
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

@@ -1,10 +1,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-#![cfg(unix)]
-
 //! Drives the real `scripts/test.sh` against a stand-in `cargo` that appends
 //! its argv to a log, so the flags it forwards to the fixture build are held
 //! to the exact command line. `sh` is part of the platform: failing to spawn
 //! it is a broken fixture, never a skip.
+
+#![cfg(unix)]
 
 use std::ffi::OsString;
 use std::path::Path;

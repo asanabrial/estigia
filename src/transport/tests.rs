@@ -189,6 +189,7 @@ fn a_timeout_is_still_a_timeout() {
     assert!(matches!(failure, Failure::Timeout(_)), "{failure:?}");
 }
 
+#[cfg(unix)]
 fn failing_with(stderr: &str, how: How) -> Failure {
     let script = format!("echo '{stderr}' >&2; exit 1");
     run(&["sh", "-c", &script], None, how).expect_err("status 1 with check is a failure")
