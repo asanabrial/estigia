@@ -954,7 +954,7 @@ fn every_tool_is_listed_with_a_usable_schema() {
     }
 }
 
-/// Issue #1054: a name declared without a tool of its own is not advertised.
+/// A name declared without a tool of its own is not advertised.
 ///
 /// The declaration exists for the seam test that holds the contract's required
 /// operations against the tools; a caller reaches the capability through the
@@ -973,7 +973,7 @@ fn every_unexposed_operation_is_not_advertised() {
     }
 }
 
-/// Issue #93: asking for an unexposed operation answers with why no tool
+/// Asking for an unexposed operation answers with why no tool
 /// exists **and** where the contract carries it — not with the client's
 /// `No such tool available`, and not with a reasonless refusal.
 #[test]
@@ -998,7 +998,7 @@ fn every_unexposed_operation_refuses_with_its_reason_and_the_contract_location()
     }
 }
 
-/// Issue #93: a name that exists only to refuse refuses every call, whatever
+/// A name that exists only to refuse refuses every call, whatever
 /// arguments it is handed — no argument reaches a dispatch that could act.
 #[test]
 fn a_name_that_only_refuses_refuses_whatever_it_is_given() {
@@ -1020,7 +1020,7 @@ fn a_name_that_only_refuses_refuses_whatever_it_is_given() {
     }
 }
 
-/// Issue #1054: `reclaim` is declared without a tool of its own, and a caller
+/// `reclaim` is declared without a tool of its own, and a caller
 /// that names it is refused with the reason and pointed at the tool that
 /// absorbed it — `claim` with `takeover` — rather than at a dead end.
 #[test]
@@ -1424,7 +1424,7 @@ fn no_two_tools_answer_to_the_same_name() {
     assert_eq!(before, names.len());
 }
 
-/// Issue #180: publication and receipt-bound review tools bind to the
+/// Publication and receipt-bound review tools bind to the
 /// repository host; everything else to the tracker. A single top-of-run_tool
 /// check on the tracker is what made Linear refuse `claim` and `publish`
 /// alike.
@@ -2994,8 +2994,7 @@ fn a_reclaim_records_the_checkout_it_takes_over() {
 /// Before discovery, `covered()` holds `repo_dir` alone, so a write inside
 /// the adopted checkout answers [`crate::harness::Aside::OutsideTheClaim`] —
 /// which **permits**, since `Outside` means *"not Estigia's call"*. Calling
-/// that a refusal would describe the defect this test exists for (issue
-/// #30) as its opposite. Once the renewal records the checkout the same
+/// that a refusal would describe the defect this test exists for as its opposite. Once the renewal records the checkout the same
 /// write must be adjudicated against the claim instead — and if that fill
 /// is removed, the second half of this test answers exactly like the first.
 #[test]
@@ -3190,7 +3189,7 @@ fn two_adopted_checkouts_are_not_conflated_into_one_holder() {
 /// The ungated direction: a boundary action from the adopted checkout must
 /// stop passing as unsworn once the checkout is recorded.
 ///
-/// This is the shape issue #30 was filed over: nothing covered the adopted
+/// This is the shape of the defect: nothing covered the adopted
 /// checkout, so a push made from it found zero holders and answered
 /// [`crate::harness::Aside::NothingSworn`], which *permits* — standing
 /// aside is not a refusal.
@@ -3904,7 +3903,7 @@ fn refusing_a_nameless_run_names_a_way_out_that_is_one() {
     );
 }
 
-/// Issue #48: `runtime_of` returns `""` for a run id whose only `-` leads,
+/// `runtime_of` returns `""` for a run id whose only `-` leads,
 /// like `-abcd1234`. Pushed through unchecked, `run_tool` would send
 /// `--runtime ""` and project `dev:`.
 #[test]
@@ -3939,7 +3938,7 @@ fn a_run_id_with_no_runtime_is_refused_at_the_mcp_boundary() {
     );
 }
 
-/// Issue #48, this round: `runtime_of` falls back to the **whole** id when it
+/// `runtime_of` falls back to the **whole** id when it
 /// holds no `-` at all, so a caller-supplied `run_id` of `myrun` used to reach
 /// `src/transport/claim.rs:6640` and project `dev:myrun` — a permanent
 /// repository-level label — rather than being refused the way `-abcd1234`
@@ -3981,7 +3980,7 @@ fn a_dashless_run_id_is_refused_at_the_mcp_boundary() {
     );
 }
 
-/// Issue #48, this round: `runtime_of` splits on the **last** `-`, so any id
+/// `runtime_of` splits on the **last** `-`, so any id
 /// with at least one dash and a non-empty prefix used to pass — even one
 /// whose prefix is not a runtime at all — and that prefix reached
 /// `gh label create dev:{runtime} --color bfd4f2 --force`, minting a
@@ -4059,11 +4058,11 @@ fn arg_context(root: &tempfile::TempDir) -> GateContext {
     }
 }
 
-/// Issue #234: the shape of a run id is decided in one place, and this is what
+/// The shape of a run id is decided in one place, and this is what
 /// reddens when the gate stops asking. Every tool that takes a run id answers
 /// the predicate's verdict over a corpus that spans the **class** — the
 /// minted shapes, the nameless one, a suffix that carries a dash, and the
-/// three spellings #48 closed one at a time — rather than one test per
+/// three spellings closed one at a time — rather than one test per
 /// spelling. A disjunct re-added beside the predicate, a check kept in one
 /// arm, or a tool that pushes no `--runtime` skipping the check, all make the
 /// gate admit a refused shape and this names the tool and the id.
@@ -4153,7 +4152,7 @@ fn every_tool_that_takes_a_run_id_refuses_the_shapes_the_predicate_refuses() {
     }
 }
 
-/// Issue #234, door 2: a `run_id` sent as a JSON number answered `None` to
+/// A `run_id` sent as a JSON number answered `None` to
 /// every `Value::as_str` guard at once, so all four refusals were skipped and
 /// `flags_for` rendered the number straight into `--run-id`. The read is typed
 /// now, and this is per tool because that is how the door was found — a guard
@@ -4215,7 +4214,7 @@ fn a_dashed_runtime_survives_the_validated_id_whole() {
     assert_eq!(named.runtime, "claude-code");
 }
 
-/// Issue #234, door 3: `create`'s `runtime` was a free-form string, and
+/// `create`'s `runtime` was a free-form string, and
 /// `analyst:<runtime>` is a repository-level label that outlives the issue —
 /// so caller text became a permanent label nobody's query finds. It is held
 /// to `session::runtime_component`, the same function the runtime derived from
@@ -4729,7 +4728,7 @@ fn the_start_branch_template_names_the_sibling_it_makes() {
     );
 }
 
-/// Issue #576: the refusal is for an identity whose **every** recording is
+/// The refusal is for an identity whose **every** recording is
 /// `severe`. The description said "a severe finding ... naming one is refused"
 /// without that qualifier, so a reader could take the one batch that clears
 /// `release_ci` for a mixed-class identity to be forbidden.

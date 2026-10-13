@@ -4,7 +4,7 @@
 //! environment, and the scripted-`gh` fixtures, which set no process variable at
 //! all: they hand the fake `gh` and its answers to the transport through
 //! [`crate::transport::with_process_override`], a thread-local the spawning seam
-//! reads, so those tests run concurrently — issue #1062.
+//! reads, so those tests run concurrently.
 //!
 //! A process has one environment, and `cargo` runs a crate's unit tests as one
 //! multi-threaded binary. Two helpers with a `Mutex` each are therefore two
@@ -228,7 +228,7 @@ pub(crate) fn with_config_home<T>(value: &Path, body: impl FnOnce() -> T) -> T {
 /// set and `CLAUDE_CONFIG_DIR`, `DSH_HOME` and `PI_CODING_AGENT_DIR` cleared, and put back whatever
 /// was there.
 ///
-/// Issue #34's road, not `a_moved_home_moves_every_root_under_it`'s: that test
+/// This road, not `a_moved_home_moves_every_root_under_it`'s: that test
 /// sets `SetupOptions.home_dir` directly, which is a road no CLI flag reaches.
 /// `Environment::resolve` reads a moved home from `HOME`/`USERPROFILE` instead
 /// on that road, and reads `APPDATA`/`XDG_CONFIG_HOME` from the process
@@ -236,8 +236,8 @@ pub(crate) fn with_config_home<T>(value: &Path, body: impl FnOnce() -> T) -> T {
 /// defect has to redirect all four together, a temporary home and a *second*,
 /// different temporary directory standing in for the operator's real profile.
 /// `CLAUDE_CONFIG_DIR` is cleared rather than pointed anywhere, so a borrowed
-/// home a test builds this way cannot see the developer's own shell — issue
-/// #427 — and `DSH_HOME` for the same reason since #108 reads it.
+/// home a test builds this way cannot see the developer's own shell —
+/// and `DSH_HOME` for the same reason.
 /// [`with_home_env_and_claude_config_dir`] and
 /// [`with_home_env_and_dsh_home`] are the siblings that set one.
 pub(crate) fn with_home_env<T>(
@@ -588,7 +588,7 @@ pub(crate) fn scripted_gh() -> &'static tempfile::TempDir {
 ///
 /// One directory per distinct set of names for the whole test binary, not one
 /// per call: the fixture is read-only, so a second copy of the same binary is
-/// I/O the suite pays for and nothing reads — issue #1062. The lock is held
+/// I/O the suite pays for and nothing reads. The lock is held
 /// only while the directory is looked up or built, never across a caller's body.
 pub(crate) fn fake_cli_directory(names: &[&str]) -> &'static tempfile::TempDir {
     static CACHE: std::sync::OnceLock<
@@ -797,15 +797,15 @@ pub(crate) fn answers(entries: &[serde_json::Value]) -> String {
 /// point to branch from — an unborn `HEAD` refuses that outright, unlike the
 /// bare `git init` some neighbouring test rigs use.
 ///
-/// Here rather than in either module that needs it. Issue #30 added this
-/// fixture twice in one change — once in `harness::mcp::tests` and once in
+/// Here rather than in either module that needs it. This
+/// fixture was once added twice in one change — once in `harness::mcp::tests` and once in
 /// `transport::branch::tests`, four identical `git` calls under two names —
 /// which is the shape the module doc above is entirely about. A second copy
 /// does not merely repeat itself: it drifts, and then the two modules disagree
 /// about what "a repository a worktree can be added to" means while both pass.
 ///
-/// It panics rather than answering `None`, the same repair `tracker_rig` got in
-/// issue #12: this is a git workflow harness, so a machine without a usable
+/// It panics rather than answering `None`, the same repair `tracker_rig` got:
+/// this is a git workflow harness, so a machine without a usable
 /// `git` cannot measure the work built on this at all, and a `return;` after an
 /// `eprintln!` reports an unmeasured test as `ok` to every ordinary run. The
 /// tolerance the old `Option` carried was also wider than a missing `git` — it
@@ -825,7 +825,7 @@ pub(crate) fn repository_with_commit() -> tempfile::TempDir {
                 panic!(
                     "this fixture needs a usable `git` on PATH and could not run \
                      `git {}`: {error}. Install git, or fix the command, because a test \
-                     that reports `ok` without running is the defect issue #12 filed.",
+                     that reports `ok` without running is a defect this repository has filed against itself.",
                     arguments.join(" ")
                 )
             });

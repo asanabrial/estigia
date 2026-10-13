@@ -307,7 +307,7 @@ fn a_filed_priority_is_checked_only_on_a_readable_scale() {
 }
 
 /// The five answers [`classify_base_movement`] emits, pinned whole — the issue
-/// that revisited them (#124) had to leave `unknown` never compatible and never
+/// that revisited them had to leave `unknown` never compatible and never
 /// leaving `integrate` false. Mutating the `None` arm's `integrate` to `false`,
 /// or its `movement` to `"compatible"`, turns this red.
 #[test]

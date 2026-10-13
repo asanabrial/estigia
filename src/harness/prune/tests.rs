@@ -296,7 +296,7 @@ fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
     );
 }
 
-/// Issue #777: a delivery that skips `release` leaves a checkout whose issue is
+/// A delivery that skips `release` leaves a checkout whose issue is
 /// closed. The doctor row reports it red and names `estigia prune`.
 #[test]
 fn the_doctor_row_reports_a_closed_checkout_red() {

@@ -531,7 +531,7 @@ fn an_existing_table_keeps_its_rows_and_a_missing_row_takes_the_new_default() {
     assert_eq!(read.profile(), None, "ask/auto is not a profile");
 }
 
-/// Issue #180: only setting Tracker keeps one place to configure — the host
+/// Only setting Tracker keeps one place to configure — the host
 /// inherits the pin until a Repository host row overrides it.
 #[test]
 fn a_tracker_pin_without_a_host_row_is_the_host_pin_too() {
@@ -2140,8 +2140,8 @@ fn the_two_step_lists_are_the_table_in_two_halves() {
 
 /// The exact rows that reach `GateContext` as gate-enforced settings, and no
 /// others — crossed against `SETTINGS` so another row cannot quietly join the
-/// list, or leave it, without this failing. `RepositoryHost` joined at issue
-/// #180 (carried for MCP host binding; claim allow/deny still uses Tracker).
+/// list, or leave it, without this failing. `RepositoryHost` joined
+/// (carried for MCP host binding; claim allow/deny still uses Tracker).
 #[test]
 fn the_gate_reads_exactly_the_rows_it_decides_from() {
     let guarded: Vec<Setting> = SETTINGS

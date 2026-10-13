@@ -857,7 +857,7 @@ fn reinstall_command(reinstall_from: &Path) -> String {
 }
 
 /// Whether this build of the binary is current against the checkout it is run
-/// in (issue #60). It compares **this binary** against the checkout in the
+/// in. It compares **this binary** against the checkout in the
 /// working directory. Fed rather than sent to find out: the pure decision lives
 /// in a private `gate_age_verdict`, and this is the git half that supplies what
 /// it needs.
@@ -1315,7 +1315,7 @@ pub fn tracker_in_force(skill_root: Option<&Path>, repo_dir: &Path) -> crate::co
 
 /// The `Workflow` in force here, read the same way [`tracker_in_force`] reads
 /// the tracker: so `doctor` can tell a read-only tracker under assisted work
-/// from the same tracker under autonomous work, which is refused (issue #847).
+/// from the same tracker under autonomous work, which is refused.
 pub fn workflow_in_force(skill_root: Option<&Path>, repo_dir: &Path) -> crate::config::Workflow {
     skill_root
         .map(|root| crate::skill::installed_config_in_keeping_what_parses(root, repo_dir).0)
@@ -4009,7 +4009,7 @@ mod tests {
     /// — what this row's filter is built on — runs `git rev-parse` and a bare
     /// directory answers neither side of that comparison.
     ///
-    /// It panics rather than answering `None`, the repair issue #476 gave it:
+    /// It panics rather than answering `None`, the repair it was given:
     /// this is a git workflow harness, so a machine without a usable `git`
     /// cannot measure these rows at all, and a `None` the caller turns into
     /// `return;` after an `eprintln!` reports an unmeasured test as `ok`.
@@ -4024,7 +4024,7 @@ mod tests {
                 panic!(
                     "this fixture needs a usable `git` on PATH and could not run \
                      `git init --quiet`: {error}. Install git, or fix the command, because a \
-                     test that reports `ok` without running is the defect issue #12 filed."
+                     test that reports `ok` without running is a defect this repository has filed against itself."
                 )
             });
         assert!(
@@ -4473,7 +4473,7 @@ mod tests {
             configured,
             "this fixture needs a usable `git` that can commit in a disposable repository, so \
              the row under test can be measured at all; a test that reports `ok` without running \
-             is the defect issue #12 filed"
+             is a defect this repository has filed against itself"
         );
         let first = rev_parse_head();
         assert!(
@@ -4526,7 +4526,7 @@ mod tests {
             configured,
             "this fixture needs a usable `git` that can commit in a disposable repository, so \
              the row under test can be measured at all; a test that reports `ok` without running \
-             is the defect issue #12 filed"
+             is a defect this repository has filed against itself"
         );
         let first = rev_parse_head();
         assert!(
@@ -4580,7 +4580,7 @@ mod tests {
             matches!(cloned, Ok(status) if status.success()),
             "this fixture needs a usable `git` that can clone the checkout, so the row under \
              test can be measured at all; a test that reports `ok` without running is the defect \
-             issue #12 filed"
+             this repository has filed against itself"
         );
         let git = |args: &[&str]| -> bool {
             Command::new("git")
@@ -4617,7 +4617,7 @@ mod tests {
             configured,
             "this fixture needs a usable `git` that can commit in the clone, so the row under \
              test can be measured at all; a test that reports `ok` without running is the defect \
-             issue #12 filed"
+             this repository has filed against itself"
         );
 
         let stale = gate_version(scratch.path());
@@ -4675,7 +4675,7 @@ mod tests {
             configured,
             "this fixture needs a usable `git` that can commit in a disposable repository, so \
              the row under test can be measured at all; a test that reports `ok` without running \
-             is the defect issue #12 filed"
+             is a defect this repository has filed against itself"
         );
         let first = rev_parse_head();
         assert!(

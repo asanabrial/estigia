@@ -449,7 +449,7 @@ pub const PUBLISH_READBACK_ATTEMPTS: usize = 10;
 /// The first attempt reads immediately; before attempt `n` (2 through 10)
 /// the loop waits [`PUBLISH_READBACK_RETRY_BASE_SECS`] times `n - 1` seconds
 /// — 2, 4, …, 18 — so ten attempts cover about ninety seconds, the order of
-/// the two lags measured in issue #198 (45 and 120 seconds) rather than the
+/// the two lags measured (45 and 120 seconds) rather than the
 /// order of a round trip. The spacing has its ceiling with it: a remote that
 /// never settles still refuses after the tenth read instead of hanging.
 pub const PUBLISH_READBACK_RETRY_BASE_SECS: u64 = 2;
@@ -910,7 +910,7 @@ struct RedCheckRun {
 }
 
 /// One check run on the head that has not reached `completed`, found beside
-/// a `Red` reading rather than instead of it — issue #95: a never-ran
+/// a `Red` reading rather than instead of it: a never-ran
 /// classification banked while a sibling check run was still `queued` or
 /// `in_progress` is exactly the freeze `require_cleared_publication_lane`
 /// exists to refuse.
@@ -1263,7 +1263,7 @@ fn workflow_run_id(url: &str) -> Option<String> {
 /// `Ordinary` covers green and absent, exactly as before this existed:
 /// nothing extra is written about either. `NeverRan` is new, and it is what
 /// `record_computed_verdict` writes into the verdict marker on the same
-/// footing as a finding's `evidence` — stored, read back, never re-run. Issue #95: a job
+/// footing as a finding's `evidence` — stored, read back, never re-run. A job
 /// whose containers never started (a billing failure on the account running
 /// Actions, most often) is not evidence of a defect the way a job that ran and
 /// failed is, and `gh run view --log-failed` answers nothing for it because
@@ -1276,7 +1276,7 @@ enum LaneClearance {
     /// stood in for all of them. Verbatim, trimmed, never inspected for
     /// content — the same honest limit `basis` states for itself.
     NeverRan { evidence: String },
-    /// `Publication lane: off` — check runs were not read (issue #192).
+    /// `Publication lane: off` — check runs were not read.
     NotConsulted,
 }
 
@@ -1299,7 +1299,7 @@ enum LaneClearance {
 /// failure this crate is named for", reached from its sibling rather than
 /// closed by it.
 ///
-/// The predicate is structural on purpose — see issue #95's own decision
+/// The predicate is structural on purpose — see the decision
 /// record: an annotation's wording is prose a third party can reword without
 /// notice, so nothing here reads it as anything but evidence to display.
 fn jobs_report_never_ran(data: &serde_json::Value) -> Option<bool> {
@@ -1570,7 +1570,7 @@ fn require_cleared_publication_lane(
     base: &str,
     never_ran_evidence_file: Option<&std::path::Path>,
 ) -> Result<LaneClearance, Failure> {
-    // Issue #192: a configured off gate skips the check-run read entirely.
+    // A configured off gate skips the check-run read entirely.
     // Cancelled conclusions are only classified after a listing is read, so
     // they cannot clear under off either — there is no listing.
     if publication_lane_is_off(context) {
@@ -5512,7 +5512,7 @@ fn cached_citation_resolution(
 
 /// Scans `evidence`, then `impact`, for every citation either field's prose
 /// makes, and refuses the finding at the first one that cannot be resolved
-/// against `base..head` — issue #223: a finding's free-text fields were
+/// against `base..head`: a finding's free-text fields were
 /// written to the ledger verbatim and read by nobody, so a citation naming a
 /// path that never existed recorded exactly as cleanly as one that did.
 fn check_finding_citations(
@@ -6805,7 +6805,7 @@ pub fn record_spend(
 /// not a write the gate sees.
 ///
 /// `issue_totals` is present for spotting rounds — an issue with four
-/// publications and three rejections is what #171 exists to make visible —
+/// publications and three rejections is what it exists to make visible —
 /// but it is not the comparison and nothing here divides one figure by
 /// another to make it look like one. The comparison is `records`: entries
 /// that share a phase and differ in `conditions`.
@@ -7953,7 +7953,6 @@ pub struct Publication<'a> {
     /// return. Measured on this repository, the threshold sits inside the
     /// ordinary range rather than at the large end: answers carrying 73,272
     /// and 145,756 payload bytes were refused, one carrying 36,288 was not
-    /// (issue #168).
     pub inline_payload: bool,
     /// The execution topology this run declares for this delivery — free text
     /// against `SKILL.md`'s Direct Work Delegation table (`inline`,
@@ -8245,7 +8244,7 @@ fn normalize_topology<'a>(
     if topology_reason.is_some_and(says_nothing) {
         // The reason's own refusal, not the inline threshold's: it fires for a
         // blank reason on any declared topology, so it names that value rather
-        // than assuming `inline` — issue #409.
+        // than assuming `inline`.
         let action = match topology.map(str::trim) {
             Some(value) if value.eq_ignore_ascii_case("inline") => format!(
                 "the declared topology `{value}` carries a blank --topology-reason: say why it \
@@ -8280,7 +8279,7 @@ fn normalize_topology<'a>(
 /// GitHub caps one comment body at 65,536 characters. A published marker and
 /// its prose go into one such comment, so a caller's free text that renders past
 /// this cap would produce a comment GitHub refuses — after the branch is already
-/// pushed. Issue #307.
+/// pushed.
 const COMMENT_BODY_CEILING: usize = 65_536;
 
 /// An upper bound, in characters, on every part of a published comment that is
@@ -8296,7 +8295,7 @@ const PUBLICATION_FIXED_OVERHEAD: usize = 8_192;
 /// dispatch's detail is free-form transport text with no ceiling of its own, so
 /// the comment can only be bounded once the detail is clamped here;
 /// [`LANE_SENTENCE_CEILING`] reserves this clamp, percent-encoded, plus the
-/// fixed sentences around it. Issue #307.
+/// fixed sentences around it.
 const LANE_DETAIL_CEILING: usize = 1_024;
 
 /// The fixed sentences the publication lane renders around its workflow names,
@@ -8430,7 +8429,7 @@ fn publish_with_sleep(
     // The caller's own text is the only part of the comment that no constant
     // bounds, so it is measured before the first remote write. The budget also
     // reserves the manifest's ceiling and the lane's measured width, or no single
-    // bound bounds the comment. Issue #307; the enumeration is in `docs/honesty.md`.
+    // bound bounds the comment. The enumeration is in `docs/honesty.md`.
     let caller_bytes = caller_comment_bytes(run_id, topology, topology_reason);
     let lane_bytes = lane_comment_bytes(context);
     let budget = COMMENT_BODY_CEILING
@@ -8731,7 +8730,7 @@ fn publish_with_sleep(
     // `latest` above (docs/honesty.md has the defect this replaced). An
     // unconfirmed marker is a lease target only — using it as the budget parent
     // would bootstrap a fresh genesis with cumulative zero and drop the chain
-    // a prior confirmed repair froze (issue #123).
+    // a prior confirmed repair froze.
     let correction_parent = match this_pr {
         Some(pr) if !successor => all_publications(&comments)?
             .into_iter()
@@ -9227,7 +9226,7 @@ fn un_readied(failure: Failure, wrote: bool, pr: u64) -> Failure {
 /// own, so the published comment is bounded only once the detail is bounded
 /// here first. The clamp counts bytes, not characters, because the marker
 /// percent-encodes byte by byte — a character count would let four-byte scalars
-/// expand threefold past the reservation. Issue #307.
+/// expand threefold past the reservation.
 fn clamp_lane_detail(said: &str) -> String {
     if said.len() <= LANE_DETAIL_CEILING {
         return said.to_owned();
@@ -9426,8 +9425,8 @@ fn published(
     let Some(published) = confirm_published(&seen, local_head, expected_base, true).cloned() else {
         // The push landed; the PR may exist; the timeline would otherwise hold
         // nothing naming that head. Recording an unconfirmed publication is what
-        // keeps `republish_review`'s lease satisfiable without a hand force-push
-        // (issue #123). Review and CI still refuse it — `confirmed` is false.
+        // keeps `republish_review`'s lease satisfiable without a hand force-push.
+        // Review and CI still refuse it — `confirmed` is false.
         let digest = target
             .get("digest")
             .and_then(serde_json::Value::as_str)
@@ -9668,7 +9667,7 @@ fn published(
     // omitted-payload one must not tell a judge to be handed bytes this answer
     // did not carry, and must not offer a second publication as the way to
     // get them: `publication_epoch` mixes in the clock, so that mints a new
-    // epoch and voids every verdict recorded against this one (issue #168).
+    // epoch and voids every verdict recorded against this one.
     //
     // Both are pinned whole by `tests/pipe.rs`, not by forbidden substrings.
     // Two panels rejected two attempts at the latter: a guard spelled around
@@ -9707,7 +9706,7 @@ fn published(
     });
     if inline_payload {
         // Whole or absent, never truncated: a partial diff handed to a judge
-        // is worse than none (issue #168).
+        // is worse than none.
         answer["payload"] = serde_json::json!(payload.text);
     }
     Ok(answer)

@@ -30,7 +30,7 @@ pub enum Setting {
     Worktree,
     /// Which tracker holds the issues.
     Tracker,
-    /// Where the code lives and publications are verified (issue #180).
+    /// Where the code lives and publications are verified.
     RepositoryHost,
     /// Which model each target runs on. A role named here is installed.
     Models,
@@ -42,7 +42,7 @@ pub enum Setting {
     GitOperationWindow,
     /// What a verdict here has to be backed by, and so what a reviewer may do.
     Evidence,
-    /// Whether accepted verdicts consult the publication lane (issue #192).
+    /// Whether accepted verdicts consult the publication lane.
     PublicationLane,
     /// The per-context token figure a review is reported against. Advisory:
     /// nothing here refuses a panel that runs over it.
@@ -61,13 +61,13 @@ pub enum Setting {
     Summary,
     /// The language the rest of the issue body is written in.
     Body,
-    /// What a run holding no claim may write in a checkout that has a tracker (issue #667).
+    /// What a run holding no claim may write in a checkout that has a tracker.
     IssueRequirement,
-    /// Who witnesses a claim in this repository: Estigia, or the team (issue #844).
+    /// Who witnesses a claim in this repository: Estigia, or the team.
     Workflow,
-    /// Whether OpenCode's optional loop plugin is written (issue #600).
+    /// Whether OpenCode's optional loop plugin is written.
     LoopPlugin,
-    /// Whether OpenCode also gets the generic `/goal` and `/loop` plugin (issue #639).
+    /// Whether OpenCode also gets the generic `/goal` and `/loop` plugin.
     GoalLoopPlugin,
 }
 
@@ -1009,7 +1009,7 @@ impl Setting {
                     },
                     _ => return Err(self.reject(value)),
                 };
-                // Issue #180: one place to configure when only Tracker is set.
+                // One place to configure when only Tracker is set.
                 // Method call, not `config.repository_host =`, so the honesty
                 // crossing that maps GateContext fields through parse_into does
                 // not attribute a host write to the Tracker arm.
@@ -1352,10 +1352,9 @@ pub(crate) fn retired_setting_report(label: &str, value: &str) -> Option<Refusal
 /// merge commit was hard-coded, and `Repair ceiling` when `repair_rounds`
 /// stopped reading a setting for the one-correction count. `Git operation
 /// window` is the fallback `start_branch` and `publish_review` layer the
-/// repository's own schedule over (issue #10). `review_tier`
+/// repository's own schedule over. `review_tier`
 /// (`src/transport/tier.rs`) used to read another, `blind judges`, to reduce
-/// its panel-size answer — issue #189's addition, and the porting error issue
-/// #246 reverses: how many judges a change gets is a contract question now,
+/// its panel-size answer — a porting error now reversed: how many judges a change gets is a contract question now,
 /// answered in `skill/SKILL.md` and `skill/policies/blind-judges.md`, never
 /// derived from a diff. Every other row is read by the agent out of the prose,
 /// or by the gate. Held here because the check below is only worth making for

@@ -250,7 +250,7 @@ pub fn registered_worktrees(
 ///
 /// **Adoption is discovered, never inferred from the directory a call happened
 /// to run in.** A per-call cwd guess would make coverage depend on the host a
-/// call happens to run on — the shape issue #30 explicitly rejects. Instead,
+/// call happens to run on — a shape this design rejects. Instead,
 /// every checkout git has registered for this repository is asked, through the
 /// same ownership marker `write_ownership` leaves behind, which one names this
 /// issue — whichever run created it.
@@ -567,7 +567,7 @@ fn folds_only_by_case_or_normalization(left: &std::path::Path, right: &std::path
 /// second pass yields the one code point `ǰ` already was. Default APFS is
 /// normalization-insensitive and folds
 /// them, so without this the two spellings compose ONE directory and the
-/// collision check misses — the orphan diagnosis #764 removed.
+/// collision check misses — the orphan diagnosis that was removed.
 fn fold(spelling: &str) -> String {
     spelling
         .nfc()

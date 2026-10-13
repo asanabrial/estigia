@@ -39,7 +39,7 @@ pub const DEFAULT_ASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 /// The eight branches on [`Tracker::transport`] that answer its absent arm.
 ///
-/// [`Tracker::Linear`] is that second variant (issue #847): its *tracking*
+/// [`Tracker::Linear`] is that second variant: its *tracking*
 /// operations are not implemented, so `transport()` answers `None` and every
 /// arm below is reached when the tracker is Linear, except `cli::inert_tracker`,
 /// which asks `Tracker::adjudicates_unclaimed_writes` and so excludes a
@@ -47,8 +47,7 @@ pub const DEFAULT_ASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 /// against it. The two refusals that need only that a run *can* hold a claim,
 /// `harness::unclaimed::applies` and `harness::issue_requirement::in_force`,
 /// ask [`Tracker::adjudicates_unclaimed_writes`] instead and so hold under
-/// Linear only with `Workflow: assisted`. They are the seam issue
-/// #180 left, and this declaration binds to `Tracker`'s own variants — so adding
+/// Linear only with `Workflow: assisted`. They are the seam, and this declaration binds to `Tracker`'s own variants — so adding
 /// one moves the fingerprint and `tests/guards.rs` sends a reader back to each
 /// site, which is how each was walked through when Linear landed.
 pub const TRACKER_TRANSPORT_ABSENT_POPULATION: Population = Population {
@@ -79,8 +78,8 @@ pub const TRACKER_TRANSPORT_ABSENT_POPULATION: Population = Population {
 /// Distinct from [`RepositoryHost`]: the tracker adjudicates claims and
 /// workflow state; the host publishes pull requests and tags. GitHub is both
 /// today. Linear and Trello were removed as configuration claims with no
-/// executable (`#177`); re-adding them is a tracker transport, not a host one
-/// (issue #180). [`Tracker::Linear`] returned under issue #847 as a
+/// executable; re-adding them is a tracker transport, not a host one.
+/// [`Tracker::Linear`] returned as a
 /// **read-only** source admitted only under `Workflow: assisted`: its
 /// [`Tracker::transport`] answers `None`, because Estigia writes nothing to
 /// Linear and its tracking operations have no implementation. [`Tracker`] stays
@@ -130,7 +129,7 @@ impl Tracker {
 
     /// Whether this tracker is read-only and so admits only assisted work.
     ///
-    /// The one predicate the three refusals (issue #847) read, so the reason
+    /// The one predicate the three refusals read, so the reason
     /// is named in one place rather than three.
     pub fn is_read_only(&self) -> bool {
         matches!(self, Self::Linear { .. })
@@ -182,7 +181,7 @@ impl Tracker {
 /// and the receipt-bound review half.
 ///
 /// Separate from [`Tracker`] so a future Linear (or other) tracker can hold
-/// issues while GitHub remains the host (issue #180). Only GitHub is implemented;
+/// issues while GitHub remains the host. Only GitHub is implemented;
 /// the enum shape matches [`Tracker`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepositoryHost {
@@ -280,7 +279,7 @@ impl Evidence {
 
 /// Whether `record_computed_verdict` consults the publication lane for an approval.
 ///
-/// Issue #192: a repository whose CI is disabled or unbillable still had no way to say
+/// A repository whose CI is disabled or unbillable still had no way to say
 /// the lane gate is not in force — only to supply never-ran evidence per verdict.
 /// `Off` skips the check-run read and records that the lane was not consulted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -887,19 +886,19 @@ pub struct Config {
     /// Which tracker holds the issues.
     pub tracker: Tracker,
     /// Where publications and the repository host live. Defaults to GitHub
-    /// matching [`Self::tracker`] when that tracker is GitHub (issue #180).
+    /// matching [`Self::tracker`] when that tracker is GitHub.
     pub repository_host: RepositoryHost,
     /// What a verdict here has to be backed by, and so what a reviewer may do.
     pub evidence: Evidence,
-    /// Whether accepted verdicts consult the publication lane (issue #192).
+    /// Whether accepted verdicts consult the publication lane.
     pub publication_lane: PublicationLane,
     /// What a run holding no claim may write in a checkout that has a tracker.
     pub issue_requirement: IssueRequirement,
     /// Who witnesses a claim in this repository.
     pub workflow: Workflow,
-    /// Whether OpenCode's optional loop plugin is written (issue #600).
+    /// Whether OpenCode's optional loop plugin is written.
     pub loop_plugin: LoopPlugin,
-    /// Whether OpenCode's generic `/goal` and `/loop` plugin is written (issue #639).
+    /// Whether OpenCode's generic `/goal` and `/loop` plugin is written.
     pub goal_loop_plugin: LoopPlugin,
     /// The per-context token figure a review is reported against. Advisory:
     /// nothing here refuses a panel that exceeds it.
@@ -944,7 +943,7 @@ pub struct Config {
 }
 
 impl Config {
-    /// When only `Tracker` is set, the host inherits its pin (issue #180).
+    /// When only `Tracker` is set, the host inherits its pin.
     /// A later `Repository host` row overrides; call this after applying Tracker.
     pub fn inherit_host_from_tracker_if_unset(&mut self) {
         if self.repository_host.is_default_github() {
@@ -980,7 +979,7 @@ impl Config {
 }
 
 impl Default for Config {
-    /// The portable defaults, and since issue #24 they are the balanced
+    /// The portable defaults, and they are the balanced
     /// posture: `Delivery authorisation` and `Transition authorisation` `auto`. The model half is separate —
     /// `Model routing` stays unset, and `setup` renders the reviewed `balanced`
     /// preset into the definitions where the adapter has one.
@@ -1003,8 +1002,8 @@ impl Default for Config {
             publication_lane: PublicationLane::On,
             issue_requirement: IssueRequirement::Ask,
             workflow: Workflow::Autonomous,
-            // No loop plugin, the way issue #598 shipped it behind a flag and
-            // issue #600 keeps it behind the default.
+            // No loop plugin: it ships behind a flag and
+            // stays behind the default.
             loop_plugin: LoopPlugin::Off,
             goal_loop_plugin: LoopPlugin::Off,
             // 150,000 tokens per context. `docs/honesty.md` says where the
@@ -1019,7 +1018,7 @@ impl Default for Config {
             worktree: WorktreeRoot::Auto,
             summary_language: Language("English".to_owned()),
             body_language: Language("English".to_owned()),
-            // The balanced posture (issue #24). An installation that carries
+            // The balanced posture. An installation that carries
             // its own rows in the contract keeps them; one that is missing a
             // row takes the new value on the next `setup`.
             delivery: Authority::Auto,
@@ -1733,7 +1732,7 @@ pub struct DroppedRoute {
     pub replacement: Option<&'static str>,
 }
 
-/// The key `implementer` became when the worker took the role's name (#578).
+/// The key `implementer` became when the worker took the role's name.
 fn replacement_for_retired_key(key: &str) -> Option<&'static str> {
     key.trim()
         .eq_ignore_ascii_case("implementer")

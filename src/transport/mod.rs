@@ -546,7 +546,7 @@ impl Drop for IsolatedGitDir {
 /// a diff it builds itself must supply them for the comparison too, or the
 /// comparison is decided by the machine running the suite rather than by the
 /// code under test — the equality such a test asserts is only meaningful over
-/// a diff no ambient source moved. Issue #359.
+/// a diff no ambient source moved.
 pub fn fenced_git_env() -> Vec<(&'static str, &'static str)> {
     let null = if cfg!(windows) { "NUL" } else { "/dev/null" };
     vec![
@@ -1010,7 +1010,7 @@ impl Context {
     /// `render_rows()` unconditionally. [`Context::get`] answers that effective table,
     /// so a rendered default reads the same as a written answer there;
     /// [`Context::get_written`] answers only rows somebody wrote, so a caller that must
-    /// tell the two apart reads that instead. Issue #193.
+    /// tell the two apart reads that instead.
     pub fn live(skill_dir: PathBuf, repo_dir: PathBuf, repo: Option<String>) -> Self {
         // The contract's own rows, as written. Rows this crate does not model
         // are kept: `get` matches on a prefix over whatever is in the table, and
@@ -1134,7 +1134,7 @@ impl Context {
 ///
 /// An unmodelled row is the operator's own note, kept verbatim. A modelled
 /// row counts when its value parses — a row the tolerant reader drops keeps
-/// the default, and answering that default as written would repeat #193.
+/// the default, and answering that default as written would repeat that mistake.
 fn written_row(label: &str, value: &str) -> bool {
     match crate::config::Setting::from_label(label) {
         None => true,

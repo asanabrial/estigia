@@ -1004,7 +1004,7 @@ mod tests {
     fn the_generated_vocabulary_excludes_the_fallback() {
         // Replaces a test that scraped `src/transport`'s doc comments for the
         // `/// - **`reason`** — ...` bullets the refusal taxonomies are written
-        // in — a test reading comment text, which issue #117 refuses at every
+        // in — a test reading comment text, which is refused at every
         // level: no test may depend on the text of a Rust comment.
         //
         // `TRANSPORT_VOCABULARY` is generated from code, not written by hand:

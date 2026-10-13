@@ -16,7 +16,6 @@
 //! written rather than the day somebody remembers it — and a `Resolution::run`
 //! argument it cannot read at the call site is named rather than skipped, so
 //! `doctor`'s one command built from a value is covered by a test of its own
-//! (issue #103).
 
 use clap::{Parser, Subcommand};
 

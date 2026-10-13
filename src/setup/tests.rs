@@ -2163,7 +2163,7 @@ fn only_claude_code_is_given_lifecycle_hooks() {
 
 #[test]
 fn every_agent_names_whether_a_hook_can_continue_its_turn() {
-    // The reading behind issue #7, in the gate's own words: three hosts have a
+    // The reading, in the gate's own words: three hosts have a
     // continue surface — Claude Code's stop-hook, OpenCode's optional loop
     // plugin and Codex's Stop hook under the Loop plugin setting — five cannot,
     // two are unknown pending the reference that would settle them.
@@ -2788,7 +2788,7 @@ fn a_moved_home_moves_every_root_under_it() {
 
 #[test]
 fn an_inherited_appdata_never_moves_a_root_outside_home() {
-    // Issue #34, reproduced: an inherited `APPDATA` pointing at the operator's
+    // An inherited `APPDATA` pointing at the operator's
     // real profile while `home` is a scratch directory. `elsewhere` stands in
     // for that real profile, never the machine's actual one.
     let home = tempfile::tempdir().expect("a temporary home");
@@ -2812,7 +2812,7 @@ fn an_inherited_appdata_never_moves_a_root_outside_home() {
 
 #[test]
 fn a_dropped_appdata_is_named_on_a_retired_host_s_roaming_root() {
-    // The third named consequence in issue #34: the earlier write was silent.
+    // The third named consequence: the earlier write was silent.
     // Dropping the escaping variable is right, but only if a caller can also
     // see it happened — measured here on the one adapter and platform where
     // `APPDATA` governs a root at all.
@@ -2897,7 +2897,7 @@ fn a_dropped_xdg_config_home_is_named_rather_than_silently_ignored() {
     });
 }
 
-/// Issue #108: the harness's own variable is read the way `XDG_CONFIG_HOME`
+/// The harness's own variable is read the way `XDG_CONFIG_HOME`
 /// is, and moves both of its roots under it.
 #[test]
 fn a_dsh_home_under_the_resolved_home_moves_both_harness_roots_under_it() {
@@ -2934,7 +2934,7 @@ fn a_dsh_home_under_the_resolved_home_moves_both_harness_roots_under_it() {
     );
 }
 
-/// The containment half of #108, matching the `XDG_CONFIG_HOME` tests: a value
+/// The containment half, matching the `XDG_CONFIG_HOME` tests: a value
 /// pointing outside the resolved home is ignored and named, never honoured.
 #[test]
 fn a_dsh_home_outside_the_resolved_home_is_ignored_and_named() {
@@ -3115,7 +3115,7 @@ fn a_relative_claude_config_dir_falls_back_to_the_home() {
                 mcp_config.as_deref(),
                 Some(home.path().join(".claude.json").as_path())
             );
-            // Issue #437: the relative value is still dropped, but no longer in
+            // The relative value is still dropped, but no longer in
             // silence — the note names what was ignored and what was used.
             assert_eq!(
                 notes.len(),
@@ -4742,7 +4742,7 @@ fn every_file_estigia_reads_configuration_from_is_named_in_text_the_agent_reads(
 /// and every file an adapter's gate lives in is one the gate measures.
 #[test]
 fn every_control_file_an_adapter_has_is_one_the_gate_measures() {
-    // Every platform, two XDG layouts, and — issue #428 — two Claude Code
+    // Every platform, two XDG layouts, and two Claude Code
     // configuration layouts as well: this is the only thing tying `paths_in`
     // to `is_control_surface`.
     let (_home, base) = sandbox();
@@ -4788,8 +4788,8 @@ fn every_control_file_an_adapter_has_is_one_the_gate_measures() {
                     watched.push(skills);
 
                     // `is_control_surface` reads `$CLAUDE_CONFIG_DIR` from the
-                    // real process environment (`matches_relocated_claude_config`,
-                    // issue #428) rather than from `SetupOptions`, so this run's
+                    // real process environment (`matches_relocated_claude_config`)
+                    // rather than from `SetupOptions`, so this run's
                     // variable is set to match whatever `resolve_paths` just used
                     // to compute `watched` above.
                     let assert_watched = || {
@@ -7071,7 +7071,7 @@ fn uninstall_deletes_an_owned_retired_phase_agent_without_consulting_phase_agent
 /// A definition this crate shipped once and no longer ships is taken off a
 /// machine that has it.
 ///
-/// `implementer.md` was renamed to `developer.md` (issue #578) and left every
+/// `implementer.md` was renamed to `developer.md` and left every
 /// list uninstall walks: `DELEGATED_AGENTS` names the new file, and no
 /// retirement list named the old one, so an owned `implementer.md` stayed on
 /// every machine that ever had it. Red before `RETIRED_AGENTS` named it: the
@@ -7237,7 +7237,7 @@ fn a_delegated_worker_is_installed_because_the_row_named_it() {
 }
 
 /// The same row on OpenCode writes OpenCode's dialect under OpenCode's own
-/// root, not Claude Code's: the defect issue #579 is about.
+/// root, not Claude Code's: the defect in question.
 #[test]
 fn an_opencode_delegated_worker_is_written_in_opencode_dialect_under_its_own_root() {
     let (home, options) = sandbox();
@@ -7362,7 +7362,7 @@ fn an_opencode_worker_named_inherit_writes_no_model_line() {
     );
 }
 
-/// Issue #1178: Pi reads a sub-agent definition from the agent directory's
+/// Pi reads a sub-agent definition from the agent directory's
 /// `agents/` folder, in the example extension's `name`/`description`/`tools`/
 /// `model` dialect, and only while `Model routing` names the role.
 #[test]
@@ -7585,7 +7585,7 @@ fn a_delegated_definition_root_and_a_renderer_arrive_together() {
     }
 }
 
-/// Issue #37: the two values the row already took render exactly what they
+/// The two values the row already took render exactly what they
 /// rendered before `by task` existed, byte for byte, on every adapter.
 #[test]
 fn unset_and_explicit_pairs_render_byte_for_byte_on_every_adapter() {
@@ -7698,7 +7698,7 @@ fn unset_and_explicit_pairs_render_byte_for_byte_on_every_adapter() {
     }
 }
 
-/// Issue #579: OpenCode has an agent-definitions root, so naming a role in
+/// OpenCode has an agent-definitions root, so naming a role in
 /// `Model routing` installs a definition there. No row is drawn as having no
 /// effect any more — `Delegated workers` was the only one and it is gone.
 #[test]
@@ -7937,7 +7937,7 @@ fn a_delegated_worker_is_planned_before_it_is_written_and_settles_after() {
 }
 
 /// A reported change is what is on disk afterwards, not what was planned.
-/// Issue #226: `write_file` decided `Create`/`Update` before the write, so a
+/// `write_file` decided `Create`/`Update` before the write, so a
 /// swap that never landed was still reported as one. Planned `Update` with the
 /// rename silently taking no effect errors instead of reporting an update over
 /// bytes that never moved — under the old code the write succeeded falsely
@@ -8056,7 +8056,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         ),
         1,
     );
-    // Issue #172 ruled comments and documentation never `severe`, replacing the
+    // Comments and documentation are never `severe`, replacing the
     // "without a demonstrated cost" paragraph `READING_BEFORE_BASIS` still
     // carries. The body above is frozen at what it always was — the previous
     // current rendering, kept for upgrade detection — so the wording moves
@@ -8078,7 +8078,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
          The precision gate:",
         1,
     );
-    // Issue #175 corrected the severe-class enumeration to name `location` as
+    // The severe-class enumeration was corrected to name `location` as
     // the third thing a severe finding whose causal disposition is
     // `introduced` or `worsened` states, alongside `evidence_class` and
     // `causal_disposition`. The previous current body joins the historical
@@ -8089,7 +8089,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         "impact. It alone can block, and it states `evidence_class` and `causal_disposition` — plus\n`location` (`path:line` or `path:start-end`) when that disposition is `introduced` or `worsened`.\n`warning` is a bounded risk with no demonstrated incorrectness. `suggestion` is optional\nimprovement, cosmetic wording, style or preference.",
         1,
     );
-    // Issue #196's repair round corrected the unconditional panel-size claim
+    // A repair round corrected the unconditional panel-size claim
     // in the description field: `review_tier` can reduce the acquired panel
     // to one, so "twice or five times" was not true standing alone. The
     // previous current body joins the historical ledger as
@@ -8100,7 +8100,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         "orchestrator launches this same definition once, twice or five times, per the acquired panel.",
         1,
     );
-    // Issue #191 replaced the entire body, restructuring the flat prose into
+    // The entire body was replaced, restructuring the flat prose into
     // `## Rules` and `## Review contract` sections. The previous current body joins the
     // historical ledger as `REVIEWER_TEMPLATE_BEFORE_REVIEW_CONTRACT`, the
     // same way the panel-size wording did above.
@@ -8114,7 +8114,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         "## Rules\n\n- Do NOT use the Task or Agent tool. Do NOT delegate further.\n- Do NOT modify anything — your job is ONLY to find problems.\n- Be thorough and adversarial. **Assume the change has defects until proven otherwise.**\n- Do NOT read, request, or infer the output of other judges. Their findings are unavailable to you by\n  design. Report your own warnings, suggestions, uncertainty and dissent rather than trying to form\n  panel agreement.\n- Return findings in the structured format the launch prompt specifies.\n- At the end, state what you checked and cleared, and what you could not check with the exact command\n  that would settle each.\n\n## Review contract\n\n**Sweep budget.** Run exactly **one exhaustive sweep of the target, then stop**. There is no\nloop-until-dry mechanism; the sweep budget is the entire pass. If one sweep was not enough for some\npart, say which part and why rather than taking a second — that answer is worth more than the second\nsweep, because it tells the run what your evidence does not cover.\n\n**Precision gate.** Report a finding only if it is a real, user-impacting defect you would defend\nwith concrete evidence. When in doubt, stay silent: a missed nitpick costs nothing; a false positive\ncosts a full repair cycle. Style and preference findings are banned unless they obscure a defect. If\nconcrete evidence and material impact cannot both be stated, omit the observation or keep it as a\nnon-blocking note.\n\n**The refused substitute.** \"Looks fragile\", \"could be clearer\", \"seems risky\" and \"this might\nconfuse a reader\" are not findings. Cite the exact path and line, the input that reaches it, and\nwhat it does that it should not. A finding whose evidence is a feeling is one the run can neither\nact on nor check.\n\n**Deliberate non-findings.** Do not flag a short helper or inline constant that is clear, local and\nself-explanatory. Do not flag a comment for being terse, a test for covering one case well, or prose\nfor being plain rather than complete. This is the shape, not the boundary.\n\n**Findings.** Every observation carries exactly one class, and the rule for choosing is here rather\nthan in the launch prompt, because a rule that arrives only when somebody remembers it does not\narrive.\n\n| class | what it is |\n|---|---|\n| `severe` | a reproducible correctness, security, reliability or contract defect with concrete impact — the only class that blocks |\n| `warning` | a bounded risk with no demonstrated incorrectness |\n| `suggestion` | optional improvement, cosmetic wording, style or preference |\n\nA `severe` finding states `evidence_class` and `causal_disposition`, plus `location` (`path:line` or\n`path:start-end`) when that disposition is `introduced` or `worsened`. Identity comes from the\naffected behaviour and location, never from the wording or from you.\n\nCosmetic, style and preference observations are `suggestion` unless they name a concrete defect, in\nwhich case say which and give it that defect's class. Incorrect or stale comments and documentation\nare observations about the words beside the behaviour, not about the behaviour itself, and they are\n**never `severe`** — not under a demonstrated cost, not under a reader who might be misled, not under\nany condition you can construct. A demonstrated mismatch is a `warning`; editorial drift alone is a\n`suggestion`. They stay defects the repository requires repaired; what they never do is force a\nrepublication.\n\n**Text a running agent obeys is not documentation about behaviour — it is the behaviour.** Where a\nrepository ships instructions its own agents execute, a contradiction between two of those\ninstructions is a contract defect and the paragraph above does not soften it. The repository's own\nmap says which directories are that; read it rather than assuming.\n\nA launch prompt that supplies its own classification rule does not replace this one. Prefer this\ndefinition, and record the conflict as a `suggestion` naming what the prompt said, so the run that\nwrote it learns.\n\n**Severity floor.** Only a `severe` finding can block. Warnings and suggestions are reported once,\nare never re-reviewed, and never block — they are preserved beside the verdict without withdrawing\nit.\n\n**Causality.** Only a defect this change caused can block it. State `causal_disposition` from what\nyou read: `introduced` or `worsened` blocks; `pre-existing` and `base-only` are recorded and do not.\n**When you cannot tell which, say `unknown` and say so in your report rather than choosing.** An\nunknown cause is for the run to settle; a guess in either direction is a decision you were not asked\nto make.\n\n**A clean sweep is a result.** If the pass finds nothing, say so plainly. Stating it is how the run\nlearns what the sweep covered.\n\n**An access failure is never a clean result.** If you could not read the target, resolve the head, or\nreach something you needed, report that **in place of a verdict**. Incomplete inspection reported as\ncompletion is the one outcome this review cannot recover from, because everything downstream treats\nit as evidence that was gathered. The same holds for your own output: if you cannot produce a\nwell-formed verdict, say so. Missing or malformed evidence never implies corroboration.\n\n**Scoped re-judgment.** On a repair round you receive the parent's findings and the repair delta\nbeside the whole target. Verify what the parent recorded and whether the repair introduced anything;\nthat is where a defect the repair caused lives. It does not narrow the sweep — the defects this\nrepository's panels find most often sit outside the delta, in the text the change did not touch.\n\n**Execution mode.** You emit your own findings and hand them to the orchestrator. The orchestrator\nalone compares independently produced findings; you do not count confirmations, decide quorum, or\nauthorize repair.\n",
         1,
     );
-    // Issue #191's repair round corrected the ported body against its source,
+    // A repair round corrected the ported body against its source,
     // `jd-judge-a.md`: the unconditional "Do NOT modify anything" bullet
     // duplicated a rule `{{DISCIPLINE}}` already states and had widened it,
     // the severity-floor claim that warnings are "never re-reviewed"
@@ -8141,7 +8141,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         1,
     );
 
-    // Issue #191's second repair round, still the same in-flight change as the
+    // A second repair round, still the same in-flight change as the
     // first: two blind panels rejected the port_repair body above, both on a
     // sentence copied from `jd-judge-a.md` without checking it against this
     // repository. The precision gate banned the classes the class table itself
@@ -8175,12 +8175,12 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         1,
     );
 
-    // Issue #246's repair round: the composition step 5 acquires is now fixed
+    // The composition step 5 acquires is now fixed
     // at exactly two judges, one sealed and one unsealed, never reduced by
     // `review_tier`. The description field's "once, twice or five times, per
     // the acquired panel" and the precondition's third clause, "an active
     // blind mode", both named a variable panel size and a mode axis this
-    // change already deleted. Still the same in-flight change as issue #191's
+    // change already deleted. Still the same in-flight change as the
     // second round above, so no frozen body joins the historical ledger here.
     let reading_now = reading_now.replacen(
         "orchestrator launches this same definition once, twice or five times, per the acquired panel.",
@@ -8192,7 +8192,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         "This definition is inert unless that prompt names the exact publication receipt and the review\ncriteria. Without both, stop and report that the panel invocation is incomplete. Do not substitute\na newer head, a different digest, or criteria inferred from the implementation.",
         1,
     );
-    // Issue #292: the tier scales the acquired panel, so an unconditional
+    // The tier scales the acquired panel, so an unconditional
     // "twice ... never once" no longer holds — `low` licenses one judge, the
     // unsealed one. The previous current body joins the historical ledger as
     // `REVIEWER_TEMPLATE_BEFORE_TIER_SCALED_PANEL`, the same way the panel-size
@@ -8215,7 +8215,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         "that is where a defect the repair caused lives. It does not narrow the sweep — a defect can sit\noutside the delta, in the text the change did not touch. A `severe` finding that is new to this\nrepair — one that names no parent finding — also states `origin`: `introduced` if the repair\ncreated it, `exposed` if the repair made an existing defect reachable. It is a separate question\nfrom `causal_disposition`, and a severe finding that owes one is refused without it.",
         1,
     );
-    // Issue #202 widens the precision gate's impact scope from the imported
+    // The precision gate's impact scope widens from the imported
     // "user-impacting" to the policy's own "user or delivery impact". The
     // previous current body joins the historical ledger as
     // `REVIEWER_TEMPLATE_BEFORE_IMPACT_SCOPE`, the same way the origin-field
@@ -8225,7 +8225,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         "**Precision gate.** A `severe` finding is a real defect with user or delivery impact you would defend with",
         1,
     );
-    // Issue #295: the definition's precision gate gains the recorder's
+    // The definition's precision gate gains the recorder's
     // id/evidence/impact refusal and the citation-resolution sentence, so the
     // duplication `skill/policies/blind-judges.md` claims is true. Still an
     // in-flight change, so no frozen body joins the historical ledger here.
@@ -8360,7 +8360,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
         "Restore every mutation",
         "stop and say so rather than",
         "Still do NOT change tracker state",
-        // Issue #35: a verdict recorded against a `measuring` panel used to
+        // A verdict recorded against a `measuring` panel used to
         // carry nothing but the two-value outcome. These clauses are
         // `skill::VERDICT_BASIS_REQUIREMENT`, appended after the grant's own
         // rule; `tests/payload.rs` crosses the same requirement against the
@@ -8375,7 +8375,7 @@ fn the_default_rendering_is_the_bytes_already_installed() {
             "the measuring grant no longer carries the rule that bounds it: {clause:?}"
         );
     }
-    // Issue #191's repair round: the ported body once carried a second, unconditional
+    // The ported body once carried a second, unconditional
     // copy of this same rule — "Do NOT modify anything" — that the paragraph pinned
     // above already answers for `measuring`. A blanket prohibition here is not a
     // stricter statement of the grant; it contradicts it. Absence, not presence, is
@@ -8762,11 +8762,11 @@ fn an_edited_reviewer_definition_is_not_an_unknown_one() {
     );
 }
 
-/// Issue #196's repair round corrected the definition's own description
+/// A repair round corrected the definition's own description
 /// field: an unconditional "twice or five times" no longer matched
 /// `skill/SKILL.md` developer step 5, which at the time acquired two judges
 /// always and stated plainly that nothing `review_tier` reduces — since
-/// superseded in turn by issue #292. An install still
+/// superseded in turn. An install still
 /// carrying the pre-change body —
 /// [`REVIEWER_TEMPLATE_BEFORE_PANEL_SIZE`] rendered under either evidence
 /// standard — is a rendering this binary once wrote, so it upgrades rather
@@ -8806,7 +8806,7 @@ fn a_pre_panel_size_reviewer_is_ours_but_not_static() {
     );
 }
 
-/// Issue #292's repair round scaled the acquired panel by tier: `low`
+/// A repair round scaled the acquired panel by tier: `low`
 /// licenses one judge, the unsealed one, so the definition's own description
 /// field no longer says a review always launches this definition twice. An
 /// install still carrying the pre-change body —
@@ -8848,7 +8848,7 @@ fn a_pre_tier_scaled_panel_reviewer_is_ours_but_not_static() {
     );
 }
 
-/// Issue #191's repair round corrected the ported body: an unconditional
+/// An unconditional
 /// modification bullet the `{{DISCIPLINE}}` paragraph already governs, a
 /// severity-floor claim this repository does not hold, a policy carve-out
 /// pointing at a map that does not exist, a precision gate silently
@@ -8892,7 +8892,7 @@ fn a_pre_port_repair_reviewer_is_ours_but_not_static() {
     );
 }
 
-/// Issue #191 replaced the entire body. An install still carrying the pre-change
+/// The entire body was replaced. An install still carrying the pre-change
 /// body — [`REVIEWER_TEMPLATE_BEFORE_REVIEW_CONTRACT`] rendered under either
 /// evidence standard — is a rendering this binary once wrote, so it upgrades
 /// rather than refuses: `reviewer_is_ours` and not `reviewer_is_static`, the
@@ -8931,7 +8931,7 @@ fn a_pre_review_contract_reviewer_is_ours_but_not_static() {
     );
 }
 
-/// Issue #175 added `location` to the severe-class enumeration. An install
+/// `location` was added to the severe-class enumeration. An install
 /// still carrying the pre-change body — [`REVIEWER_TEMPLATE_BEFORE_LOCATION`]
 /// rendered under either evidence standard — is a rendering this binary once
 /// wrote, so it upgrades rather than refuses: `reviewer_is_ours` and not
@@ -8971,7 +8971,7 @@ fn a_pre_location_reviewer_is_ours_but_not_static() {
     );
 }
 
-/// Issue #144 moved the severity decision rule into the definition, replacing
+/// The severity decision rule moved into the definition, replacing
 /// the classify paragraph. An install still carrying the pre-severity body —
 /// [`REVIEWER_TEMPLATE_BEFORE_SEVERITY`] rendered under either evidence
 /// standard — is a rendering this binary once wrote, so it upgrades rather
@@ -9016,7 +9016,7 @@ fn a_pre_severity_reviewer_is_ours_but_not_static() {
     );
 }
 
-/// Issue #172 ruled comments and documentation never `severe`, replacing the
+/// Comments and documentation are never `severe`, replacing the
 /// "without a demonstrated cost" paragraph in the definition's classification
 /// rule. An install still carrying the pre-change body —
 /// [`REVIEWER_TEMPLATE_BEFORE_NEVER_SEVERE`] rendered under either evidence
@@ -9057,7 +9057,7 @@ fn a_pre_never_severe_reviewer_is_ours_but_not_static() {
     );
 }
 
-/// Issue #775 slice S4: `low` licenses no judge, so the definition's own
+/// `low` licenses no judge, so the definition's own
 /// description no longer offers a one-judge launch. An install carrying the
 /// body from before is a rendering this binary once wrote, so it upgrades.
 #[test]
@@ -9081,7 +9081,7 @@ fn a_pre_no_low_judge_reviewer_is_ours_but_not_static() {
     }
 }
 
-/// Issue #202 widens the precision gate from "user-impacting" to "user or
+/// The precision gate widens from "user-impacting" to "user or
 /// delivery impact". An install still carrying the pre-change body —
 /// [`REVIEWER_TEMPLATE_BEFORE_IMPACT_SCOPE`] rendered under either evidence
 /// standard — is a rendering this binary once wrote, so it upgrades rather
@@ -9441,7 +9441,7 @@ fn setup_upgrades_each_owned_historical_reviewer() {
 /// a refusal instead of an upgrade. `the_default_rendering_is_the_bytes_already_installed`
 /// names this ledger in its own failure message but never reads it, so an
 /// author who satisfies the half that fires can still skip the half that does
-/// not. Issue #290.
+/// not.
 ///
 /// This reads `src/setup/mod.rs` through [`crate::source_text::code_of`], so it
 /// crosses declarations rather than comments. It cannot see an author who
@@ -9562,7 +9562,7 @@ fn uninstall_deletes_an_owned_historical_reviewer() {
     assert!(!reviewer.exists());
 }
 
-/// The end-to-end sequence issue #137 never had a test for, and the shape
+/// The end-to-end sequence that had no test, and the shape
 /// that put four work-around files on one operator's machine: a source
 /// build writes a reviewer body from a template that moves again before it
 /// is ever published, so the body on disk joins no frozen ledger and matches
@@ -9920,7 +9920,7 @@ fn a_config_home_comes_from_the_override_or_the_variable_and_never_from_both() {
     });
 }
 
-/// Issue #74: a config home under a symlinked home is kept, and no note names
+/// A config home under a symlinked home is kept, and no note names
 /// the same path on both sides of the substitution sentence.
 ///
 /// `paths::covers` canonicalised the home through its symlink and fell back to
@@ -11513,7 +11513,7 @@ fn the_loop_plugin_stops_on_a_live_answer_that_names_no_issue() {
 /// The loop plugin waits, rather than stops, while the only work left is held
 /// by another run or blocked on a condition that may still come true.
 ///
-/// Issue #629. Requires `node`, like the loop test above, and does not skip. It
+/// Requires `node`, like the loop test above, and does not skip. It
 /// proves: the wait is recorded where `/goal` reads it and nothing is posted into
 /// the session across several re-asks (no `session.prompt`, no
 /// `session.synthetic` — either would enter the next turn's context); one timer
@@ -12451,7 +12451,7 @@ console.log(JSON.stringify([v1, v2]));
 /// The loop plugin leaves a record whenever it fails to react, and keeps
 /// listening after its event stream ends or throws.
 ///
-/// Issue #627. Requires `node`, like the loop test above, and does not skip.
+/// Requires `node`, like the loop test above, and does not skip.
 #[test]
 fn the_loop_plugin_records_what_it_saw_and_listens_again() {
     let root = tempfile::tempdir().expect("a temporary directory");
@@ -12583,7 +12583,7 @@ fn the_loop_plugin_records_what_it_saw_and_listens_again() {
 /// Every write-shaped tool in the plugin's `GATED` list hands the gate the
 /// target path its write lands on.
 ///
-/// Issue #46: the test above drives the shell tools — the one kind the earlier
+/// The test above drives the shell tools — the one kind the earlier
 /// cure reached — and
 /// nothing else, while the gated write tools carry a target path rather
 /// than a working directory. Their calls were adjudicated at the project root,

@@ -150,7 +150,7 @@ pub struct Tool {
 ///
 /// Tracking ops need the tracker; publication and receipt-bound review ops
 /// need the repository host. A tracker without a transport must not refuse
-/// a host-bound tool, and the reverse (issue #180).
+/// a host-bound tool, and the reverse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportBind {
     /// Issues, claims, comments, states — the tracker.
@@ -168,7 +168,7 @@ impl Tool {
         // Publication half of the host only. Receipt markers and handoff write
         // the issue timeline, which is the tracker's ledger — binding those to
         // the host left markers where claim/review_findings would not look when
-        // the two pins differ (issue #180 review).
+        // the two pins differ.
         match self.name {
             "publish_review" | "republish_review" | "release_ci" | "draft_pr"
             | "judge_workspaces" => TransportBind::RepositoryHost,

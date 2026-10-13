@@ -6,7 +6,7 @@ use super::*;
 /// A real repository, because every path here goes through `git rev-parse` and
 /// a fixture would only restate the assumption.
 ///
-/// It panics rather than answering `None`, the repair issue #12 gave it: this
+/// It panics rather than answering `None`, the repair it was given: this
 /// is a git workflow harness, so a machine without a usable `git` cannot
 /// measure the push guard at all, and a `None` the caller turns into `return;`
 /// after an `eprintln!` reports an unmeasured test as `ok` to every ordinary
@@ -23,7 +23,7 @@ fn repository() -> tempfile::TempDir {
                 panic!(
                     "this fixture needs a usable `git` on PATH and could not run \
                      `git {}`: {error}. Install git, or fix the command, because a test \
-                     that reports `ok` without running is the defect issue #12 filed.",
+                     that reports `ok` without running is a defect this repository has filed against itself.",
                     arguments.join(" ")
                 )
             });
@@ -623,7 +623,7 @@ fn an_assisted_holder_among_the_refused_leaves_the_refusal_naming_no_release() {
 }
 
 /// Two holders, each isolated into its own worktree on its own branch — the
-/// shape issue #56 is about, and the fixture every test below narrows or
+/// shape in question, and the fixture every test below narrows or
 /// fails to narrow.
 fn two_holders_with_worktrees() -> (
     tempfile::TempDir,
@@ -792,7 +792,7 @@ fn an_unreadable_worktree_listing_does_not_narrow() {
 }
 
 /// A second worktree checked out on a branch some other worktree already has
-/// — `git worktree add --force` is one of the two ways issue #56's severe 2
+/// — `git worktree add --force` is one of the two ways a severe finding
 /// names to reach this, and this fixture reaches it directly.
 fn add_worktree_forced(repo: &Path, path: &Path, branch: &str) {
     let added = Command::new("git")

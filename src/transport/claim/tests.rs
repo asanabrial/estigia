@@ -911,7 +911,7 @@ fn a_reclaim_is_recorded_in_the_store_and_posts_no_comment() {
     );
 }
 
-/// The projection check the #896 design left for later: a `dev:` label or
+/// The projection check left for later: a `dev:` label or
 /// assignee the store cannot explain is another store's, so a claim over it
 /// refuses and writes nothing. The override the design names is `reclaim`, which
 /// does not run the check.
@@ -1628,7 +1628,7 @@ fn a_release_that_leaves_an_unnameable_holder_is_refused() {
     }
 }
 
-/// Issue #48, severe 2: an acquisition recorded `claude` before this build,
+/// An acquisition recorded `claude` before this build,
 /// released with `codex` after it. `ownership.rs`'s epoch-release reading
 /// must not refuse that release on the strength of the runtime alone — this
 /// is the same fact `plan_release` finding it by run id already decided.
@@ -1707,7 +1707,7 @@ fn a_takeover_separates_the_five_ways_it_can_be_wrong() {
     );
     // The only expired acquisition is this run's own: that is a fresh claim,
     // not a takeover — and the refusal must say so, not merely name the rule.
-    // Issue #36 measured a caller stuck reading only the bare reason; asserting
+    // A caller was measured stuck reading only the bare reason; asserting
     // on the guidance's *meaning* (it names `claim`) rather than its wording
     // keeps a later rewording from failing here while still failing if the
     // guidance is deleted outright.
@@ -2517,7 +2517,7 @@ fn a_retried_unassign_is_answered_from_its_own_marker_and_not_replanned() {
     assert_eq!(answer["assignee_kept"], serde_json::json!(false));
 }
 
-/// Issue #48, severe 2's retry half: `resumed_release` must resume even when
+/// `resumed_release` must resume even when
 /// the acquisition's recorded runtime and the retrying call's own disagree,
 /// because the build changed underneath the operation rather than the run.
 #[test]
@@ -2953,7 +2953,7 @@ fn an_old_verdict_marker_still_parses_with_or_without_its_optional_attributes() 
 }
 
 /// Every word `says_nothing` refuses, checked one at a time so each entry is
-/// exercised rather than merely declared — the proof issue #339 asked for that
+/// exercised rather than merely declared — the proof that
 /// a remembered set alone does not carry. The list is the predicate's own
 /// `SAYS_NOTHING_WORDS`, so a word added there is exercised here without a
 /// second copy to drift; `tests/guards.rs` reopens the population when the
@@ -3872,8 +3872,8 @@ fn a_handoff_is_resolved_against_the_latest_receipt_of_its_own_pull_request() {
 }
 
 /// An abandoned pull request's unresolved handoff keeps excluding the run that
-/// published or requested it from later pull requests on the issue. **Decision,
-/// issue #935:** the exclusion is kept, not narrowed to closed pull requests.
+/// published or requested it from later pull requests on the issue. **Decision:**
+/// the exclusion is kept, not narrowed to closed pull requests.
 /// `review_eligibility` reads the timeline alone — `all_publications` carries no
 /// pull-request state — so telling an abandoned pull request from an open one
 /// needs a tracker read this pure function does not have, and the handoff
@@ -4304,7 +4304,7 @@ fn a_release_requires_the_latest_complete_review_transaction() {
 }
 
 /// The publisher recorded on the marker is not consulted — this is the
-/// restore issue #44 builds: the local pointer is a note that can go
+/// restore it builds: the local pointer is a note that can go
 /// missing, the timeline is the authority, and the latest receipt is
 /// obtained whatever run published it.
 #[test]
@@ -4748,7 +4748,7 @@ fn head_of(at: &std::path::Path) -> String {
     .to_owned()
 }
 
-/// Issue #40: a red lane's refusal carries where the failing step's log puts
+/// A red lane's refusal carries where the failing step's log puts
 /// the failure, against the diff under review, so a run can tell a defect in
 /// its own change from one outside it.
 ///
@@ -4989,7 +4989,7 @@ fn a_leased_push_refuses_when_the_remote_moved_since_the_recorded_head() {
 
 #[test]
 fn a_base_that_advanced_past_the_branchs_own_rebase_is_refused_before_the_payload_is_built() {
-    // The exact case issue #277 measured on this repository's own timeline: a
+    // The exact case measured on this repository's own timeline: a
     // branch built on the base's tip at the time it branched, and that base
     // tip advancing again before publication. The two-dot diff `publish_with`
     // would otherwise build carries everything the base gained in between,
@@ -5077,7 +5077,7 @@ fn a_base_that_advanced_past_the_branchs_own_rebase_is_refused_before_the_payloa
     assert_eq!(envelope["reason"], "publication-base-not-ancestor");
     assert_eq!(envelope["head"], branch_head);
     assert_eq!(envelope["base"], remote_main(&remote));
-    // Issue #305's panel: a first publication has no recorded receipt, so the
+    // A first publication has no recorded receipt, so the
     // rebase recovery must name `publish_review` for it as well as
     // `republish_review` for a repair — naming only the latter landed this path
     // on `published-transaction-missing`.
@@ -5086,7 +5086,7 @@ fn a_base_that_advanced_past_the_branchs_own_rebase_is_refused_before_the_payloa
         action.contains("`publish_review`") && action.contains("`republish_review`"),
         "the refusal must name the operation that clears each path: {envelope}"
     );
-    // Issue #917: the recovery names the one literal the gate admits as an
+    // The recovery names the one literal the gate admits as an
     // integration and the state it is admitted from, so the reader does not
     // reach for a rebase (which rewrites the parent head) or for a shape the
     // gate refuses on its own terms.
@@ -5357,7 +5357,7 @@ fn the_head_a_lease_is_taken_from_is_the_latest_published_marker() {
     );
 }
 
-/// Issue #123: a push that lands with no confirmed marker must still leave a
+/// A push that lands with no confirmed marker must still leave a
 /// lease target, and that target must never qualify review or CI.
 #[test]
 fn an_unconfirmed_publication_is_a_lease_target_and_not_a_review_target() {
@@ -5411,7 +5411,7 @@ fn an_unconfirmed_publication_is_a_lease_target_and_not_a_review_target() {
         ),
         "publication-unconfirmed"
     );
-    // The lease still names that head — the recovery route issue #123 asks for.
+    // The lease still names that head — the recovery route asked for.
     assert_eq!(
         lease_for("fix/123-x", &latest.receipt.head),
         format!("--force-with-lease=fix/123-x:{head}")
@@ -5474,7 +5474,7 @@ fn correction_parent_skips_unconfirmed_publications_on_the_same_pr() {
     );
 }
 
-/// Issue #272: a `published` marker written before the budget fields existed
+/// A `published` marker written before the budget fields existed
 /// carries none of them, and must still bootstrap a fresh lineage — the
 /// migration path `bootstrap_correction_state` exists for. This is the absent
 /// outcome, which must stay legitimate; only a field that is *present* and
@@ -5509,7 +5509,7 @@ fn a_budgetless_marker_bootstraps_a_fresh_lineage_unchanged() {
     );
 }
 
-/// Issue #272: a `published` marker whose budget fields are present but do not
+/// A `published` marker whose budget fields are present but do not
 /// parse is refused by name before anything remote moves, naming the epoch and
 /// the offending field — never read as "no budget was ever frozen", which would
 /// reset the cumulative to zero in silence.
@@ -5542,7 +5542,7 @@ fn an_unparseable_budget_field_is_refused_by_name() {
     assert_eq!(envelope["epoch"], "11111111111111111111111111111111");
 }
 
-/// Issue #272: a `published` marker whose receipt fields are present but do not
+/// A `published` marker whose receipt fields are present but do not
 /// form a complete receipt is refused by name rather than dropped from
 /// `all_publications` — a corrupt publication and no publication must not be the
 /// same input to `latest`, `repair_rounds` or a budget. The oldest surviving
@@ -5603,7 +5603,7 @@ fn a_blank_topology_reason_is_refused_rather_than_kept() {
             .expect_err("a blank reason must not pass")
             .envelope();
         assert_eq!(envelope["reason"], "blank-topology-reason");
-        // Issue #409: the reason's own refusal fires for any declared topology,
+        // The reason's own refusal fires for any declared topology,
         // so its action names the one declared rather than assuming `inline`.
         assert!(
             envelope["action"]
@@ -5623,7 +5623,7 @@ fn a_blank_topology_reason_is_refused_rather_than_kept() {
         );
     }
     // A delegated topology needs no reason at all, so its refusal must not tell
-    // the caller to justify one — issue #409's "any topology value", and the
+    // the caller to justify one — "any topology value", and the
     // case the `inline`-only test above could not see.
     let envelope = super::normalize_topology(Some("developer:3"), Some("  "))
         .expect_err("a blank reason must not pass")
@@ -5641,7 +5641,7 @@ fn a_blank_topology_reason_is_refused_rather_than_kept() {
 
 /// `PUBLICATION_FIXED_OVERHEAD` has to bound the comment `published` renders
 /// apart from the caller's text, the manifest and the lane, or the pre-push
-/// refusal passes a comment GitHub then rejects. Issue #307.
+/// refusal passes a comment GitHub then rejects.
 #[test]
 fn the_fixed_overhead_bounds_the_widest_published_marker() {
     let wide = |n: usize, c: char| c.to_string().repeat(n);
@@ -5707,7 +5707,7 @@ fn the_fixed_overhead_bounds_the_widest_published_marker() {
 }
 
 /// `run-id` is caller-supplied and is **not** bounded by the run-pointer
-/// filename, so the caller bound has to count it. Issue #307.
+/// filename, so the caller bound has to count it.
 #[test]
 fn the_caller_bound_counts_the_run_id() {
     let short = super::caller_comment_bytes("claude-abc", None, None);
@@ -5720,7 +5720,7 @@ fn the_caller_bound_counts_the_run_id() {
 
 /// A dispatch's `gh` detail is free-form transport text with no ceiling of its
 /// own, so `lane-note` clamps it; the comment's lane term is bounded only once
-/// the detail is. Issue #307.
+/// the detail is.
 #[test]
 fn the_lane_note_clamps_an_oversize_gh_detail() {
     // Four-byte scalars, because the marker percent-encodes byte by byte: a
@@ -5812,7 +5812,7 @@ fn a_blank_topology_is_refused_before_anything_is_written() {
 }
 
 /// A receipt a retired `review-verdict` accepted stands approved while it is in
-/// flight (history), as issue #482's comment item set it: a republish over it is
+/// flight (history): a republish over it is
 /// refused unless a finding recorded after the acceptance answers it, and a
 /// latest verdict no panel accepted is not an acceptance at all.
 #[test]
@@ -7477,7 +7477,7 @@ fn publication_lane_answers_each_of_the_six_states() {
     );
 }
 
-/// Issue #95's own structural predicate, isolated from the network read
+/// The structural predicate, isolated from the network read
 /// around it: two recorded jobs-listing shapes, told apart on `steps: []`
 /// alone and never on the annotation's wording.
 #[test]
@@ -7624,7 +7624,7 @@ fn the_contract_escalates_once_the_one_correction_is_spent() {
     }
 }
 
-/// Issue #321's rule: a run commits to what reopens review before it reads
+/// A run commits to what reopens review before it reads
 /// anything the panel returns. The rule lives in developer step 5; the ledger
 /// it rests on lives in `blind-judges.md` and the disposition record it may
 /// answer with lives in the binding's operations companion, both linked from
@@ -7668,7 +7668,7 @@ fn the_contract_commits_to_the_disposition_rule() {
 
 /// The no-reduce sentence is scoped by its own main clause. Deleting the
 /// condition that scopes it leaves "never reduce or serialize the panel"
-/// standing alone, which is the defect issue #199's second finding names.
+/// standing alone, which is the defect a second finding names.
 #[test]
 fn the_contract_scopes_its_no_reduce_sentence() {
     let judges = include_str!("../../../skill/policies/judgment-day.md");
@@ -7683,7 +7683,7 @@ fn the_contract_scopes_its_no_reduce_sentence() {
     );
 }
 
-/// Issue #707's tracking rule, as issue #896 moved it: the checklist is recorded
+/// The tracking rule: the checklist is recorded
 /// with `task` on the claimed issue, never in a comment or a checkout file. The
 /// positive half pins the rule; the negative half says the skill does not carry
 /// the file path v4 uses, so no reader is told to write one.
@@ -11187,7 +11187,7 @@ fn a_replay_of_a_recorded_finding_answers_from_the_marker_even_when_the_diff_can
 }
 
 /// `conditions` has to be part of `record_spend`'s operation identity for the
-/// comparison #171 exists to enable: recording "sealed" and "checkout
+/// comparison it exists to enable: recording "sealed" and "checkout
 /// budgeted" against the same receipt and phase are two measurements, and an
 /// identity that ignored `conditions` would answer the second call from the
 /// first's marker rather than minting a second one.
@@ -11353,7 +11353,7 @@ fn an_unknown_spend_phase_is_refused_before_any_read() {
     assert_eq!(failure.envelope()["reason"], "invalid-spend-phase");
 }
 
-/// `implementer` was renamed to `developer` (issue #578) rather than kept as a
+/// `implementer` was renamed to `developer` rather than kept as a
 /// second accepted spelling. A timeline whose old records still read
 /// `implementer` does not make the word writable again. Adding it back to
 /// `SPEND_PHASES` turns this red.
@@ -11686,7 +11686,7 @@ fn issue_totals_still_counts_a_retired_phase_word() {
 }
 
 /// Rounds — an issue with several publications and rejections — are what
-/// #171 exists to make visible, so `by_epoch` has to keep each receipt's
+/// this exists to make visible, so `by_epoch` has to keep each receipt's
 /// subtotal apart rather than merging every round into one number. Mutating
 /// the epoch-matching `find` in `spend_summary` to always report "no match"
 /// turns the second assertion red: every record starts its own `by_epoch`
@@ -13368,7 +13368,7 @@ fn review_payload_membership_refuses_a_receipt_with_no_recorded_payload_digest()
     );
 }
 
-/// Issue #355: a candidate built entirely from real payload lines can still
+/// A candidate built entirely from real payload lines can still
 /// misrepresent the change, and the membership check accepts it — the set it
 /// searches is global, so it carries no order, no multiplicity and no record
 /// of which file a line came from. Each shape below is built from the

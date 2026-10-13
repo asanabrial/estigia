@@ -27,7 +27,7 @@
 //! `Evidence::all()` × `crate::harness::roles::RESERVED_REVIEWERS` can
 //! produce, or any previous rendering the `Evidence standard` row alone
 //! produced before the seal axis existed, so ownership rests on that set
-//! rather than on one spelling — and, since issue #256, on
+//! rather than on one spelling — and also on
 //! [`written_outside`] too: a digest of the exact bytes this build itself
 //! wrote at that path, which answers for a rendering `--allow-source-build`
 //! installed before its template was ever published and so joined no

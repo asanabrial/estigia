@@ -1462,7 +1462,7 @@ fn inherited_from_shared(shared: &[Config]) -> (Config, Vec<Setting>, Vec<Settin
 /// Split out so a test can read the exact wording a fresh root gets rather
 /// than only trusting that `note!` fired: a message nothing asserts is a
 /// message that drifts, and the silence this function replaces was half of
-/// the defect issue #112 named. Same lines, same order, whichever caller
+/// the defect named. Same lines, same order, whichever caller
 /// reads them.
 ///
 /// Not a refusal: every adapter that has an answer keeps it, so the run is
@@ -2952,8 +2952,7 @@ fn commit_edit(
     let target = writable.target.clone();
     let installed = writable.config;
     // The editor writes the machine-wide contract, and a machine-wide Linear
-    // tracker is refused for the same reason `config set` refuses it (issue
-    // #847): the row that admits it is answered in a repository's own file.
+    // tracker is refused for the same reason `config set` refuses it: the row that admits it is answered in a repository's own file.
     if config.tracker.is_read_only() {
         return Err(Refusal::not_started(
             "linear-is-per-repository",
@@ -3191,8 +3190,8 @@ fn repository_set(
             speaks_for.push(*row);
         }
     }
-    // A read-only Linear tracker is admitted only under `Workflow: assisted`
-    // (issue #847): the row and the row that admits it are both answered in this
+    // A read-only Linear tracker is admitted only under `Workflow: assisted`:
+    // the row and the row that admits it are both answered in this
     // repository's own file, so the check reads that file rather than a machine
     // default. Setting `Workflow assisted` first is the way through.
     if rows.iter().any(|(row, value)| {
@@ -3223,7 +3222,7 @@ fn repository_set(
             ));
         }
     }
-    // The other order reaches the same refused state (issue #847): setting
+    // The other order reaches the same refused state: setting
     // `Workflow autonomous` where the repository's `Tracker` is already read-only
     // Linear would leave the two rows disagreeing, so it is refused here too.
     if rows
@@ -3524,7 +3523,7 @@ fn config_set(
         return repository_set(setting, value, &here, options);
     }
     // Linear is read-only and admitted only under `Workflow: assisted`, which a
-    // repository answers in its own file (issue #847). A machine-wide value
+    // repository answers in its own file. A machine-wide value
     // could not be checked against that, and would reach every autonomous
     // checkout on the machine, so it is set in the repository instead.
     if setting == crate::config::Setting::Tracker
@@ -4102,7 +4101,7 @@ fn doctor(json: bool) -> Result<(), Refusal> {
     let skill_root = harness::discover_skill_root().ok();
     let repo_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let tracker = harness::doctor::tracker_in_force(skill_root.as_deref(), &repo_dir);
-    // A read-only tracker under autonomous work is refused here (issue #847):
+    // A read-only tracker under autonomous work is refused here:
     // it is admitted only under assisted work, and `doctor` is where a machine
     // finds that out before a run tries to swear against it.
     if tracker.is_read_only() {

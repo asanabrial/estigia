@@ -454,7 +454,7 @@ fn a_comment_edited_after_it_was_written_neither_instructs_nor_proves() {
 /// one of a bounded phrase list as an order to stand down. The list could not
 /// tell an instruction from a run's own record of its work — "adjudicate" is
 /// this crate's own word for what `claim` does — so a run's markerless closing
-/// note stopped the run that wrote it (#863). Only a control-kind marker
+/// note stopped the run that wrote it. Only a control-kind marker
 /// instructs now.
 #[test]
 fn a_markerless_comment_never_stops_the_run() {

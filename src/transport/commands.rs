@@ -714,7 +714,7 @@ pub(super) fn recorded_identity(body: &str) -> Option<String> {
 /// string the store recorded or `null` when it recorded none — including an open
 /// issue the store has never admitted. `null` and never `""`: an issue with no
 /// key is not an issue whose key is empty. The title is never read, because the
-/// identity left it in #230.
+/// identity left it.
 pub fn list_identities(context: &Context, limit: u32) -> Result<serde_json::Value, Failure> {
     let ceiling = u64::from(limit);
     let (items, open) = open_items(context, limit as usize)?;

@@ -61,7 +61,7 @@ fn git_query(root: &str, args: &[&str]) -> Option<String> {
 /// commit or a branch switch elsewhere leaves `ESTIGIA_COMMIT` and
 /// `ESTIGIA_DIRTY` at whatever this script last computed, replayed from
 /// Cargo's build-script cache on every later `cargo build`. Measured, not
-/// inferred (issue #60): editing a file this walk does not watch and
+/// inferred: editing a file this walk does not watch and
 /// rebuilding kept reporting the base commit as `dirty`.
 ///
 /// `HEAD` alone is not enough: on a branch, `HEAD` is a symbolic ref and does
@@ -116,7 +116,7 @@ fn watch_git_identity(root: &str) {
 /// Capture the checkout's identity so two builds of the same crate version can
 /// be told apart.
 ///
-/// Part of issue #60: an installed binary carries nothing that says which
+/// An installed binary carries nothing that says which
 /// source it was built from, so `estigia --version` reports `0.1.0` for every
 /// build ever made and an agent that suspects the gate is older than the code
 /// it is reading cannot establish or rule that out. The settled word comes
@@ -335,7 +335,7 @@ const REASON_PARAMETER_SCOPES: [&str; 4] =
 /// One derivation for both readers rather than a boundary restated at each,
 /// because the guard that clears a non-literal `"reason":` here and the walk
 /// that extracts the window's literals have to agree about where it ends. They
-/// did not: issue #237 measured the guard's end at the next column-zero `fn`,
+/// did not: a measurement put the guard's end at the next column-zero `fn`,
 /// seventy-one lines past where the walk stopped reading, so a `"reason":`
 /// between the two cleared the guard and reached no vocabulary.
 fn envelope_window(source: &str) -> Option<std::ops::Range<usize>> {
@@ -355,7 +355,7 @@ fn envelope_window(source: &str) -> Option<std::ops::Range<usize>> {
 ///
 /// `extract_reasons` below reads a literal and silently skips anything else,
 /// trusting that a skipped value's own literals turn up elsewhere in the
-/// file. This is what checks that trust instead of assuming it — issue #225
+/// file. This is what checks that trust instead of assuming it
 /// found four sites the trust did not hold for: `operation_marker`'s two
 /// `format!` calls, `start_branch` handing `checkout_identity`'s bare
 /// `verdict` variable to the envelope in `branch.rs`, and an inline `if`/`else`
@@ -487,7 +487,7 @@ fn extract_constructed(source: &str) -> BTreeSet<String> {
             // different. Both were missing from the vocabulary and both reached
             // the harness as one `transport-refused`, while their sibling
             // `holder-not-stale` — written as a plain literal three lines away —
-            // came through intact. Issue #36 split that `if` into
+            // came through intact. That `if` was split into
             // `plan_takeover`'s own two plain-literal `stop` calls, so no reason
             // in the tree reaches this walk through a conditional's arms today.
             // The reader stays because that shape left the code and not the
