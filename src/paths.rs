@@ -317,16 +317,20 @@ pub fn require_absolute(path: &Path, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// A temporary file this process alone will use.
+/// A temporary file no other call in this process will use.
 ///
 /// The process id discriminates it, because two runs are two processes — and a
 /// fixed name under a shared temporary directory meant two runs overlapping
-/// recorded one another's bytes for their own paths. It is not a secret and
-/// does not pretend to be: what keeps the write itself honest is
-/// [`replace_atomically`] — it renames over the destination, and a rename does
-/// not follow a symlink there.
+/// recorded one another's bytes for their own paths. A counter discriminates
+/// the calls inside one process, because two threads staging the same name
+/// shared the path and the staging temporary beside it, and one rename found
+/// the other's file already moved. It is not a secret and does not pretend to
+/// be: what keeps the write itself honest is [`replace_atomically`] — it renames
+/// over the destination, and a rename does not follow a symlink there.
 pub fn scratch_file(name: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("issue-flow-{}-{name}", std::process::id()))
+    static CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let call = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    std::env::temp_dir().join(format!("issue-flow-{}-{call}-{name}", std::process::id()))
 }
 
 /// The mark on the temporary a write is staged in.
@@ -1057,6 +1061,21 @@ mod staged_tests {
                 "the refusal does not name both digests: {report}"
             );
         });
+    }
+
+    #[test]
+    fn two_scratch_files_of_one_name_in_one_process_are_two_paths() {
+        let first = scratch_file("same");
+        let second = scratch_file("same");
+        assert_ne!(first, second);
+        replace_atomically(&first, "first").expect("the first is staged");
+        replace_atomically(&second, "second").expect("the second is staged");
+        std::fs::remove_file(&first).expect("the first cleans up");
+        assert_eq!(
+            std::fs::read_to_string(&second).expect("the second survives"),
+            "second"
+        );
+        std::fs::remove_file(&second).expect("the second cleans up");
     }
 
     fn digest_of(text: &str) -> String {
