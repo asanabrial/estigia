@@ -17,8 +17,7 @@ publication, CI release, the closing-keyword scan — are code. The steps that n
 is worth analysing, whether a blocker is discharged, whether a diff passes review — are not, and stay
 in the prose where they belong.
 
-Each operation is one of Estigia's MCP tools, called by name. Where this document writes a command
-line — `SCRIPT <operation> --flag value` — the flags are the tool's arguments under the same names.
+Each operation is one of Estigia's MCP tools, called by name; a `--flag` written here is the tool's argument of the same name.
 
 There is no interpreter and no script on the path: the operations answer in one place.
 
@@ -89,9 +88,8 @@ through the sync, nothing that hands the issue to someone, and it can only stop 
 
 ### Control markers
 
-`SKILL.md` warns that "parsing prose for the same answer is fragile — any rewording breaks it", and
-adjudication used to depend on exactly that. So every control marker these operations record
-carries a machine-readable trailer. `claim`, `reclaim`, `unassign`, `heartbeat` and `start-branch`
+Parsing prose for the same answer is fragile — any rewording breaks it — so every control marker
+these operations record carries a machine-readable trailer. `claim`, `reclaim`, `unassign`, `heartbeat` and `start-branch`
 record theirs in the local store, as do the review operations; none is posted to GitHub as a comment. The
 shape below is the one the store keeps and the one an older binary posted:
 
@@ -125,8 +123,7 @@ it caps the cost of having lost it at one renewal interval.
 
 The workflow's states are `analysis`, `ready`, `in-progress`, `review`, `blocked` and `done`. Here
 each one is stored as the label **`status:<name>`** — the prefix is this binding's convention, not the
-workflow's, and it exists so a glance at an issue separates state labels from attribution and domain
-ones.
+workflow's.
 
 ## Operations
 
@@ -208,8 +205,7 @@ self-explanatory.
 ## Auto-close, and why it does not end the work
 
 GitHub can close an issue on merge without the workflow's `close` ever running: no transition to
-`done`, labels frozen wherever they were. Seen live: an issue closed by its delivery commit sat
-CLOSED wearing `status:ready` until an audit caught it.
+`done`, labels frozen wherever they were.
 
 **Two different things cause it, and only one of them is a defect.** They produce the identical
 symptom — a non-empty `closedByPullRequestsReferences` — so the symptom alone must never be read as
@@ -224,7 +220,7 @@ symptom — a non-empty `closedByPullRequestsReferences` — so the symptom alon
 REGARDLESS of whether GitHub already closed the issue.** Closing an issue emits `issues.closed`,
 which is not a label event: it moves no `status:*` label. The auto-close is the tracker's
 bookkeeping, never the workflow's `close`, and the state machine does not know it happened. Run the transition afterwards and the end state is correct; skip it because
-"the issue is already closed" and you have reproduced the exact incident above.
+"the issue is already closed" and the issue stays CLOSED wearing its old `status:*` label.
 
 `check-closing-keywords` reports the cause, not just the symptom: a keyword is a hard stop (exit
 `1`), a branch link is reported with the follow-up it mandates and does not block. `publish-review`'s

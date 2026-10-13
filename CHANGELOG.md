@@ -12,6 +12,12 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **`SKILL.md` states each loading condition once and loads the blind-judges policy only when a review
+  needs it.** Issue #4. The reference-loading conditions live in the References table alone; step 5 says to
+  follow `review_status`'s `next` transition and to load `blind-judges.md` on an escalated stop, a correction
+  or a disputed rule; the release narrative that `repository-delivery.md` owns is a pointer. With the two
+  commits before it, the always-loaded `SKILL.md` plus `bindings/github.md` fall from 59,692 to 47,669
+  bytes and `operations-guarantees.md` from 44,396 to 34,237 (`docs/review-cost.md`).
 - **Each review rule has one owner in the shipped skill.** Issue #4. `operations-guarantees.md` loses its
   Command column, which repeated the operations table, and the rows whose section in `operations.md` opens with
   the same sentence now link to it; the ledger's settlement order lives in `blind-judges.md` and the escalated

@@ -133,6 +133,10 @@ justified them is here.
   last column consistently: one described `Analysis` to `Blocked` with their exact `status:*` labels and
   then described `Done` as `closed`, because that column also tracks the tracker's own closed flag. A
   verifier demanding `status:done` there fails on the one transition that matters most.
+- **Auto-close without a transition.** An issue closed by its delivery commit sat CLOSED wearing
+  `status:ready` until an audit caught it.
+- **The `status:` prefix.** It is this binding's convention, and it exists so a glance at an issue separates
+  state labels from attribution and domain ones.
 - **Installing `gh`.** `gh` is a separate install (`winget install GitHub.cli`, `brew install gh`,
   `apt install gh`). An analyst reaching the API over HTTPS is as capable as one running `gh`, which is why
   the analyst role was defined as network-only.
