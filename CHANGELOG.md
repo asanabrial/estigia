@@ -12,6 +12,11 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The retired-name test reads names from the text.** Issue #15. `no_shipped_skill_file_names_an_operation_no_tool_performs`
+  no longer keeps a list of retired names: it takes names in operation position (after `SCRIPT` or "call", before
+  `with --…`, in an `Operation` table's first cell), in `_` and `-` spellings and inside fenced blocks, and resolves them
+  against the tools, `NOT_EXPOSED`, `NOT_RUN` and the CLI subcommands. A second test holds the absorption map in
+  `bindings/github.md` to the code (`docs/review-cost.md`).
 - **The loop rows name every adapter that reads them.** Issue #2. The `Goal loop plugin` explanation told a Pi operator
   the row concerned OpenCode only; it now names `goal-loop.js` and Pi's `estigia-goal-loop.ts`, and the `Loop plugin`
   explanation names Claude Code's `/flow-loop` and `/flow-status` commands and `Stop` hook. The two rows' one-line

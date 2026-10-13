@@ -854,6 +854,11 @@ either stated by its owner elsewhere in the skill or history that moved to `refe
 The operations table no longer repeats the flags the MCP schema carries, `operations-guarantees.md` no
 longer has a Command column, and the tool names the skill sends an agent to are the ones
 `tools/list` advertises: `no_shipped_skill_file_names_an_operation_no_tool_performs` fails on a retired
-name outside the one absorption map in `bindings/github.md`. That test reads a fixed list of retired names
-and any `record_*` name that is not a tool, so a new retired name has to be added to it when a tool is
-absorbed.
+name outside the one absorption map in `bindings/github.md`. That test keeps no list of retired names: it takes
+every name in operation position from the text, in `_` and `-` spellings, fenced blocks included, and resolves it
+against `TOOLS`, `NOT_EXPOSED`, `NOT_RUN` and the CLI subcommands. Operation position is a name after `SCRIPT`,
+after "call", before `with` and a `--flag`, or in the first cell of a table headed `Operation` (backticked or
+bare), except a row the agent performs by hand, a segment led by `with` or `its`, and the field
+`last_activity`. A name left over is reported as absorbed when the map's left-hand side lists it. A second test
+holds the map to the code: none of its left-hand names is a tool, and the call each answers with exists. A new
+absorption needs only a line in the map.
