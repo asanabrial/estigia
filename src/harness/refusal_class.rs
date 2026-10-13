@@ -406,6 +406,7 @@ const REFUSED: &[&str] = &[
     "topology-reason-without-topology",
     "tracker-has-no-transport",
     "transport-refused",
+    "unassembled-changelog-fragments",
     "unflagged-on-trunk",
     "unknown-operation",
     "unsafe-run-id",

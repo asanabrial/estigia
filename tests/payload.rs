@@ -152,21 +152,23 @@ fn the_changelog_is_readable_by_the_tool_estigia_ships() {
     //
     // It used to run the shipped `github.py` for this. The tool that answers
     // now is the port, so the port is what is asked.
+    // The changelog is read from a copy in a repository with no `changes/`: this
+    // repository's own fragments are waiting to be assembled, and `changelog_notes`
+    // refuses exactly that, so reading in place would measure the fragments.
     let root = repository_root();
     let version = env!("CARGO_PKG_VERSION");
+    let copy = tempfile::tempdir().expect("a repository without fragments");
+    let changelog = copy.path().join("CHANGELOG.md");
+    std::fs::copy(root.join("CHANGELOG.md"), &changelog).expect("a copy of the changelog");
     let context = estigia::transport::Context {
         skill_dir: root.join("skill"),
-        repo_dir: root.clone(),
+        repo_dir: copy.path().to_path_buf(),
         config: Vec::new(),
         repo: None,
     };
 
     let answer = estigia::transport::commands::changelog_notes(
-        &context,
-        &root.join("CHANGELOG.md"),
-        version,
-        false,
-        None,
+        &context, &changelog, version, false, None,
     )
     .unwrap_or_else(|failure| {
         panic!(

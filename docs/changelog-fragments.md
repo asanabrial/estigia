@@ -47,9 +47,18 @@ It refuses, and changes nothing, when:
   release notes.
 
 Run it **before** `changelog-notes`. That operation reads only the version's entry in the file it is
-given, so a fragment not yet assembled is not in the notes the tag and the Release carry, and a tag
-is immutable. `tests/changelog_assembly.rs` drives the script, including against this repository's
-own `changes/`.
+given, so a fragment not yet assembled would be missing from the notes the tag and the Release carry,
+and a tag is immutable. It therefore refuses, `unassembled-changelog-fragments`, while
+`<repo-dir>/changes/` holds a fragment: the answer lists the names and says to run
+`scripts/assemble-changelog.sh <version>`. The directory is the repository's, whatever `--file`
+names, so a component changelog is held to the same `changes/`. Only this repository's format counts: a file named
+`<issue>-<slug>.md` whose first line is `section: <heading>`, the two tests the script applies, held to the
+same cases by a test. A directory another tool keeps there (`123.feature.md`, a `.gitkeep`) does not trip it,
+and neither does an absent or empty directory, the normal state after a cut. A file whose name has the fragment shape but whose first line cannot be read, or a `changes/` that cannot be listed, is a `read` failure naming it, not a file passed over: an unreadable fragment is the omission this refusal exists to prevent. The refusal is
+checked before the entry is looked up, so a version cut that skipped assembly is told so rather than
+told its entry is missing. `tests/changelog_assembly.rs` drives the script, including against this
+repository's own `changes/`; in whichever state the checkout is in, that test asserts something: the
+fragments assemble, or the directory is absent or empty.
 
 `CHANGELOG.md` stays the published history. Entries already in it were not moved.
 

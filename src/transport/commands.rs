@@ -1834,6 +1834,12 @@ fn agreed(reading: &serde_json::Value) -> bool {
 /// work around: the entry is part of what "delivered" means, and inventing notes
 /// at tag time is how a changelog becomes a thing nobody trusts.
 ///
+/// **Refuses while `changes/` holds a fragment of this repository's format.** The entry read here is only
+/// what `scripts/assemble-changelog.sh` has already folded into the file, so a
+/// fragment left behind is a change missing from the notes of an immutable tag.
+/// The directory is the repository's own, `<repo-dir>/changes`, whatever
+/// `--file` names: a component changelog does not get a directory of its own.
+///
 /// A relative `--file` resolves against the repository, **never** against the
 /// process working directory. The old order asked whether the path existed
 /// first, which answers against the ambient directory — and in a monorepo every
@@ -1864,6 +1870,20 @@ pub fn changelog_notes(
             "ok": false, "reason": "changelog-not-found", "file": shown, "action": action,
         })));
     };
+
+    let waiting = unassembled_fragments(&context.repo_dir)?;
+    if !waiting.is_empty() {
+        let action = [
+            "these changes/ fragments are not in the changelog yet, so their entries would be",
+            "missing from notes an immutable tag carries. Run",
+            "`scripts/assemble-changelog.sh <version>`, commit the result, then ask again",
+        ]
+        .join(" ");
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false, "reason": "unassembled-changelog-fragments",
+            "version": version, "fragments": waiting, "action": action,
+        })));
+    }
 
     let found = super::changelog::section(&text, version).map_err(|trouble| match trouble {
         super::changelog::Trouble::Missing => {
@@ -1949,6 +1969,45 @@ pub fn changelog_notes(
         "notes": if written.is_some() { serde_json::Value::Null } else { serde_json::json!(notes) },
         "next": next,
     }))
+}
+
+/// The fragments under `<repo>/changes/` that `scripts/assemble-changelog.sh`
+/// has not folded into the changelog yet, by [`super::changelog::is_fragment`].
+/// A file of another tool's format is not one; a directory that is absent is the
+/// state after a version cut.
+fn unassembled_fragments(repo_dir: &std::path::Path) -> Result<Vec<String>, Failure> {
+    let entries = match std::fs::read_dir(repo_dir.join("changes")) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(Failure::Read(format!(
+                "changes/ could not be read, so unassembled fragments cannot be ruled out: {error}"
+            )));
+        }
+    };
+    let mut names = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !entry.path().is_file() || !super::changelog::is_fragment_name(&name) {
+            continue;
+        }
+        let mut first = Vec::new();
+        std::fs::File::open(entry.path())
+            .and_then(|file| {
+                std::io::BufRead::read_until(&mut std::io::BufReader::new(file), b'\n', &mut first)
+            })
+            .map_err(|error| {
+                Failure::Read(format!(
+                    "changes/{name} could not be read, so whether it is an unassembled fragment cannot be ruled out: {error}"
+                ))
+            })?;
+        first.pop_if(|byte| *byte == b'\n');
+        if super::changelog::is_fragment(&name, &String::from_utf8_lossy(&first)) {
+            names.push(name);
+        }
+    }
+    names.sort();
+    Ok(names)
 }
 
 /// Records one protocol entry this crate composed in the local store. Nothing
