@@ -317,7 +317,7 @@ pub fn require_absolute(path: &Path, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// A temporary file no other call in this machine will use.
+/// A temporary file no other call in this process will use.
 ///
 /// The process id discriminates it, because two runs are two processes — and a
 /// fixed name under a shared temporary directory meant two runs overlapping
