@@ -28,15 +28,15 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/assets/analyst-issue-template.md", 2_850),
     ("skill/bindings/github.md", 18_014),
     ("skill/bindings/github/delivery.md", 37_708),
-    ("skill/bindings/github/operations-guarantees.md", 42_835),
-    ("skill/bindings/github/operations.md", 50_347),
+    ("skill/bindings/github/operations-guarantees.md", 34_234),
+    ("skill/bindings/github/operations.md", 49_913),
     ("skill/bindings/github/recovery.md", 6_571),
     ("skill/bindings/github/refusals.md", 52_401),
     ("skill/bindings/github/setup.md", 1_611),
     ("skill/bindings/linear.md", 4_301),
-    ("skill/policies/blind-judges.md", 41_844),
+    ("skill/policies/blind-judges.md", 41_870),
     ("skill/policies/judgment-day.md", 15_969),
-    ("skill/protocols/rdd.md", 8_282),
+    ("skill/protocols/rdd.md", 7_863),
     ("skill/references/domain-composition.md", 9_798),
     ("skill/references/repository-delivery.md", 21_040),
     ("skill/references/runtime-notes.md", 18_678),
@@ -45,13 +45,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
 
 const LINE_CEILING: usize = 2_000;
 
-const LINE_EXCEPTIONS: &[LineException] = &[LineException {
-    path: "skill/bindings/github/operations-guarantees.md",
-    line: 16,
-    reason: "the `reclaim` row's guarantee is one markdown table cell, so it cannot be split \
-                 without breaking the row, and the no-holder exception it must state carries it \
-                 past the ceiling",
-}];
+const LINE_EXCEPTIONS: &[LineException] = &[];
 
 struct LineException {
     path: &'static str,

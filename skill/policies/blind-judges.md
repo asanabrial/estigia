@@ -173,7 +173,12 @@ The verdict is computed from the receipt's findings, never chosen by a reviewer:
 | A `severe` finding that stands — `deterministic`, or `inferential` and not refuted — and was introduced or worsened here | `rejected` |
 | Only warnings, suggestions, follow-ups and refuted findings | `approved`, once every lens the tier licenses has reported |
 
-`escalated` outranks `rejected`, and `rejected` outranks `approved`; a `rejected` verdict never rests
+Each severe finding, read by its first severe recording as the refutation batch reads it, is settled by
+the first row it matches: a missing `evidence_class` or `causal_disposition`, `insufficient` evidence or
+an `unknown` cause is **escalated**; a `pre-existing` or `base-only` cause is a **follow-up** and blocks
+nothing; a `deterministic` finding is **open**; an `inferential` one follows its refuter — `refuted` drops
+it, `corroborated` and `inconclusive` keep it open, and no refuter result escalates it. A finding that is
+not severe never blocks. `escalated` outranks `rejected`, and `rejected` outranks `approved`; a `rejected` verdict never rests
 on a severe finding that declares `insufficient` evidence. The computation does not see
 what no finding records. A lens that finds a severe defect records it as a `severe` finding with its
 evidence class and cause, and that is the whole of its say: there is nothing to accept or reject, and
@@ -217,20 +222,17 @@ exactly as it would if no refutation batch had ever touched it. An `inferential`
 batch has answered escalates the receipt, which is what the batch exists to prevent.
 
 This is the only confirmation an `inferential` finding gets in ordinary review: no judge confirms a
-lens finding. A refutation batch adjudicates findings a lens has already produced and a
-rejection already rests on, and it does decide whether an `inferential` severe finding blocks: a
-`refuted` finding drops out of the ledger, a `corroborated` or `inconclusive` one stays open, and one
-the batch has not answered escalates the receipt.
+lens finding. The batch adjudicates findings a lens has already produced and a rejection already rests
+on, and it decides whether an `inferential` severe finding blocks.
 
 ### Recovering an escalated review
 
 A receipt that stands escalated while its lineage still has a correction left may be corrected like a
 rejected one. One whose lineage has no correction left, or that `escalate_review` handed to
 a person is final until a maintainer says otherwise, and saying so is a
-**person's command**, `estigia recover`, which is no tool and which the gate refuses an agent's shell
-line for on every host, a stand-down included. The agent tells the person the exact command and waits; it never runs it. The
-named login must hold the `admin` or `maintain` role, which GitHub itself is asked, and the record is
-local and posts nothing. It mints a **successor lineage**: the next publication on the pull request is
+**person's command** that no agent runs: the agent tells the person the exact command and waits. The
+command and the maintainer check are in *Recovering an escalated review* in `bindings/github/operations.md`.
+It mints a **successor lineage**: the next publication on the pull request is
 a fresh candidate with a new correction allowance and its own budget, reviewed again — recovering is
 not a release, and `release_ci` still needs an approved computed verdict on the successor's receipt.
 The successor keeps the frozen policy of the lineage it replaces: its tier is at least the one that
@@ -254,12 +256,10 @@ contains it, and `git merge-tree` merges the parent head and that base without a
 correction's own diff is the one from that merged tree to the head, and the validator is offered over
 it. When the history was rewritten (`"history-rewritten"`), or the merge does not integrate cleanly,
 `review_read` with `view: verdict` answers `validator-delta-carries-upstream` and `review_status`
-offers no validator. The validator is offered — as the `review-validator` input
-of a `collect` whose `capture` is `launch_review_input`, and that tool launches it itself — the first
-installed `claude` or `codex` CLI, with no tools, handed the exact receipt, the correction's diff over
-its parent (`parent.head..head`, or the merged tree to the head when the correction integrated a
-moved base; not the whole change, and refused `validator-delta-carries-upstream` when no clean
-integrated tree separates the correction from the base's advance, a rebase or a merge) and the parent receipt's severe
+offers no validator. `launch_review_input` launches it, as the `review-validator` input of that
+`collect`: the first installed `claude` or `codex` CLI, with no tools, handed the exact receipt, the
+correction's diff over its parent (`parent.head..head`, or the merged tree to the head when the
+correction integrated a moved base; not the whole change) and the parent receipt's severe
 findings — and
 records its answer, or records nothing when the answer is not a well-formed inspection. The attempt is
 the binary's: the inconclusive results already recorded plus one. On Claude Code the validator has no

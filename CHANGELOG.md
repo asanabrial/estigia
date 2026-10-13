@@ -12,6 +12,11 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **Each review rule has one owner in the shipped skill.** Issue #4. `operations-guarantees.md` loses its
+  Command column, which repeated the operations table, and the rows whose section in `operations.md` opens with
+  the same sentence now link to it; the ledger's settlement order lives in `blind-judges.md` and the escalated
+  recovery command in `operations.md`, each linked from the other places. `rdd.md` drops its comparison with
+  other tools. No rule changed.
 - **The GitHub binding drops what the tool schema already says.** Issue #4. `bindings/github.md` is loaded on
   every activation; its operations table now names each tool's operation without repeating the flags the
   MCP schema carries, the operations no tool exposes are one short list, and the history behind its rules
