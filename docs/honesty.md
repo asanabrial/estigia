@@ -117,7 +117,7 @@ pointer that leaves it names the document it points at.
   its own session id to mint one that matches is not measured here.
 
 - **A decision append that waits past five seconds on the store is dropped, counted, and not
-  retried.** Issue #FLAKY1: `every_decision_survives_the_ledger_passing_its_cap_while_runs_are_writing`
+  retried.** Issue #29: `every_decision_survives_the_ledger_passing_its_cap_while_runs_are_writing`
   failed in 3 of 13 and 1 of 10 full release runs on Linux arm64. Measured with a debug build, eight
   writers on a fresh store and thirty busy loops on ten cores: 24 of 100 runs lost decisions (2 to
   10 of 160 in the runs read in full), and every error captured was `database is locked` after 5.3 s to 10.6 s — the
@@ -127,6 +127,19 @@ pointer that leaves it names the document it points at.
   now waits ten minutes. What is not closed: on a machine starved that far a real decision is lost the
   same way, and the count `doctor` reports is the only trace. No bound was raised, because a longer
   wait puts the same stall on the gate's critical path.
+
+- **Two threads of one process staged the same body file, and the later rename failed.** Issue
+  #30: `a_readback_that_settles_elsewhere_says_the_head_moved` failed in 1 of 13 full release
+  runs on Linux arm64. Measured with a debug build running `transport::claim` at `--test-threads=64`:
+  at least four failures in about 45 runs, each answering `write-failed` where the test expects
+  `publication-readback-disagrees`; the one whose envelope was captured said `the body could not be
+  staged: No such file or directory (os error 2)`, and one run failed
+  `a_push_whose_readback_disagrees_leaves_a_republishable_lease_target` with it.
+  Both publish over pull request 7, and `paths::scratch_file` named the staged body by process id
+  and caller name alone, so the two shared `issue-flow-<pid>-pr-edit-7.md` and the staging temporary
+  beside it; one `rename` found the file the other had already moved. `scratch_file` now adds a
+  counter, so no two calls in a process share a path. Not measured: a staging path that survives a
+  crash is still named by process id and counter, so a recycled process id can land on a leftover.
 
 ## Comments, instructions and the build
 
