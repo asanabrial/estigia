@@ -5,6 +5,9 @@ a version opens its heading, and the entry under it is what the tag and the
 Release carry. That command fails closed on a missing or empty entry, because a
 tag is immutable and notes invented at tag time are permanent.
 
+A change since this note was added records itself as a fragment under `changes/`, folded in when a
+version is cut (`docs/changelog-fragments.md`); the entries below it are the ones that predate that.
+
 ## 0.1.0 — unreleased
 
 The first version. Estigia is a **harness**: it does not ask an agent to follow
