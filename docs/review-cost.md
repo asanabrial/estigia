@@ -1,13 +1,13 @@
 # What a review costs, and what actually spends it
 
-Issue #38 asked whether Estigia's blind-review panel is expensive because its judges are slow
+The question was whether Estigia's blind-review panel is expensive because its judges are slow
 readers, or for some other reason. This measures it: two panels, four judges, one review target,
 launched concurrently on 2026-08-30 by `claude-ac6d2184b9c7fca3`, design fixed before either panel
 ran. Two measurements are recorded here: this one, which compares two briefs inside this
 repository, and a second below, which compares this repository's panel against the other
 project's own binary.
 
-Ordinary review no longer acquires judges (issue #994): it licenses lenses only, and Judgment Day is
+Ordinary review no longer acquires judges: it licenses lenses only, and Judgment Day is
 the opt-in. The judge and panel figures below are measured history of the shape that preceded it,
 and they stay as measured; what a lens costs is measured in the sections on lenses. A review's
 forecast counts lenses alone.
@@ -19,18 +19,17 @@ count.
 **What was under review**, identical for every judge. This is not a review transaction in this
 repository's own sense — `skill/references/repository-delivery.md`'s *Publish, review, and verify*
 section defines that as epoch,
-PR, head, base, target digest and payload digest, and no epoch was reachable here: PR #142 was
+PR, head, base, target digest and payload digest, and no epoch was reachable here: the PR was
 already merged before this measurement ran.
 
 | | |
 |---|---|
-| Pull request | #142, "Let the gate see the worktree a call names" |
-| Issue | #131 |
+| Pull request | "Let the gate see the worktree a call names" |
 | Base | `883864e8261fa93eadd94390e4f38a768fd3ee9a` |
 | Head | `39ffe43ca68d6ab3e27f6137f0069e5b73e69355` |
 | Size | 5 files, 796 insertions, 54 deletions |
 
-Chosen because #131 is the change issue #38 already argues from: four publications and eight blind
+Chosen because it is the change the question already argues from: four publications and eight blind
 judges on three rejections with no code defect ever found, and a diff that mixes code and prose,
 which is the axis the grading question turns on.
 
@@ -53,14 +52,14 @@ difference in what they reported.** What that does not show is a judge reading m
 one brief than the other.
 
 A severe finding forces a republish, and a republish invalidates every verdict and restarts the
-panel — a verdict could be `rejected` only over a `severe` finding (issue #775 has since made the
-verdict computed from the ledger, so the rule is the ledger's now), and the next round
+panel — a verdict could be `rejected` only over a `severe` finding (the verdict has since become
+computed from the ledger, so the rule is the ledger's now), and the next round
 pays the full panel again. Arm E produced one severe finding: E1 and E2 independently recorded a
 severe finding with the same identity, E2's version carrying an extra limb E1 did not raise, and
 under the `Blind judges: two blind` row this repository carried at the time, both judges confirming a
 severe finding with the same identity is what blocks and buys a repair round. Arm C produced none and would have approved on the same
 bytes. One round of Arm E costs 291,408 tokens; a rejection forces the next round to pay that
-again, and #131 paid a full panel four times over. The multiplier is the round count, and the
+again, and this change paid a full panel four times over. The multiplier is the round count, and the
 round count is set by grading, not by reading speed.
 
 ## What each panel found, and how each panel graded it
@@ -70,10 +69,9 @@ the whole of what follows.
 
 ### The finding that decides it
 
-Issue #131's third acceptance criterion: *"A call naming a directory covered by another run's
+The change's third acceptance criterion: *"A call naming a directory covered by another run's
 pointer is refused."* The test that asserts it passes a `--run-id`; at the time, the only shipped
-caller passed none, so the criterion was satisfied only on a road no shipped adapter took. Issue
-#502 later gave the shipped adapter a derived identity from the host's session id, so it takes that
+caller passed none, so the criterion was satisfied only on a road no shipped adapter took. A later change gave the shipped adapter a derived identity from the host's session id, so it takes that
 road when the host supplies one.
 
 | Judge | Arm | What it did with that fact |
@@ -87,7 +85,7 @@ Three of four judges reached the same reading of the same bytes. Under Estigia's
 judges confirming a severe finding with the same identity blocks, and the change is rejected.
 Under the comparison rubric it is not a finding at all and the change is approved. Nothing about
 the bytes explains the difference — the brief does. That claim has a bound: these are the same
-bytes this repository's own two-blind panel accepted for real, merging PR #142 as `fb0fd04`, so
+bytes this repository's own two-blind panel accepted for real, merging the PR as `fb0fd04`, so
 judge-to-judge variance inside one brief is at least as consistent with the split above as a
 difference between briefs is — bounded in turn by the judge definition having changed between
 that panel and this one, so the two readings are not of quite the same brief either.
@@ -130,7 +128,7 @@ not deciding it."
 Neither judge was misapplying a rubric it had. The definition as it then read gave it three words
 and a consequence, and no criterion for choosing between them. Each judge used `severe` as
 an escalation channel, because `severe` is the only class that blocks. That is a sharper
-statement of issue #144 than #144 carries: the missing choosing rule does not merely let a prose
+statement of the defect than its report carried: the missing choosing rule does not merely let a prose
 finding block. It collapses two distinct needs — *this is a defect* and *a human must decide this*
 — into one word, and the word costs a full repair round. Both judges wanted to escalate without
 blocking, and the vocabulary had no way to say that.
@@ -138,11 +136,11 @@ blocking, and the vocabulary had no way to say that.
 ## Where the rule lives, and where it is not routed
 
 > [!NOTE]
-> **This section measures the tree as it stood at the time of the measurement, before issue #144.**
+> **This section measures the tree as it stood at the time of the measurement, before the choosing rule was added.**
 > Every `skill/agents/review-blind.md` and `skill/policies/blind-judges.md` coordinate below is
 > that tree's: the definition now carries the choosing rule,
 > and the policy keeps it because the definition is installed on Claude Code alone. The finding
-> this section reports is what produced #144; it is not a claim about the tree you are reading.
+> this section reports is what produced the choosing rule; it is not a claim about the tree you are reading.
 
 The three class names are stated in more than one place — `skill/bindings/github.md`'s own
 `review_finding` row is among them; the linear and trello bindings carry no such definition.
@@ -152,7 +150,7 @@ The policy then gave a criterion for choosing between `warning` and
 behavioural defect this measurement's severe finding turned on. Neither it nor the cosmetic criterion beside it reached the judge. That file is routed to the orchestrator —
 `skill/SKILL.md` lists it in the References table the orchestrating run reads on activation —
 and the judge never activates the skill: its own definition states that its starting context is
-only this definition and the launch prompt — a sentence #144 left standing — which does not
+only this definition and the launch prompt — a sentence the choosing-rule change left standing — which does not
 include the skill's reference table. The judge's own definition gave no criterion for choosing
 between the three classes for any kind of finding.
 
@@ -165,7 +163,7 @@ carries the same defect one layer along — its own strongest statement of the r
 (`internal/components/sdd/boundedreview.go:182-198`), so it too ships a severity rule no judge
 receives; it merely keeps a weaker one that survives. Neither project routed its best severity
 rule to its judges. The comparison routes a lesser one; Estigia routed none — a sharper result
-than "the other panel is faster", and a structural one, not an impression. That is what #144
+than "the other panel is faster", and a structural one, not an impression. That is what the choosing-rule change
 changed, and only for the one adapter that installs the definition.
 
 A different asymmetry turns out, on inspection, to be symmetric: the comparison project presents
@@ -191,12 +189,12 @@ reach the fourth.
 1. **No shared severity rubric — confirmed, and it is the dominant cause.** Established
    structurally (no criterion for choosing between the three classes reaches the judge for any
    kind of finding, general or scoped — see above) and now behaviourally: the same fact is
-   severe under one brief and not a finding at all under the other. This is issue #144. It has
-   a rival worth naming: this repository's own two-blind panel accepted PR #142's exact bytes
+   severe under one brief and not a finding at all under the other. It has
+   a rival worth naming: this repository's own two-blind panel accepted the PR's exact bytes
    for real, merging them as `fb0fd04`, so judge-to-judge variance within one brief is at least
    as consistent with that as a brief-to-brief difference is. That rival is itself bounded — the
-   judge definition changed between #131's own panels and this measurement, so the panel that
-   merged #142 and Arm E did not read under quite the same brief either.
+   judge definition changed between the change's own panels and this measurement, so the panel that
+   merged the PR and Arm E did not read under quite the same brief either.
 2. **`reading` as the evidence standard — confirmed as stated, and it is symmetric.** All four
    judges ran read-only and all four disclosed it. For Arm E that disclosure was compelled
    rather than volunteered: `src/setup/mod.rs` appends `VERDICT_BASIS_REQUIREMENT`
@@ -212,7 +210,7 @@ reach the fourth.
    cost.** It predicts Estigia's judges rejecting on prose. They did not: every prose finding in
    Arm E was non-blocking. The severe finding was about behaviour at a delivery boundary. The
    rulebook asymmetry named in `AGENTS.md`'s documentation-currency rule (`AGENTS.md`) is real,
-   but it is not what makes a review expensive here — the missing choosing rule (#144) is.
+   but it is not what makes a review expensive here — the missing choosing rule is.
 
 ## What the first measurement cannot settle
 
@@ -221,11 +219,11 @@ reach the fourth.
 ## Conclusion
 
 Estigia's judges weighted this review target correctly on the axis this repository is strict
-about: every prose finding came back `warning` or `suggestion` — and after #172, incorrect or
+about: every prose finding came back `warning` or `suggestion` — and after a later change, incorrect or
 stale comments and documentation are **never `severe`**, so those grades match the rulebook even
 from judges that never received it. What would force a repair round here was one behavioural
 finding pushed to `severe` because `severe` is the only class that blocks. That is not a rubric to
-loosen. The fix this measurement points at is the one already filed as #144: a criterion for
+loosen. The fix this measurement points at is the one already filed: a criterion for
 choosing between `severe` and `warning`, and a way to escalate a judgment call to the operator
 without spending a repair round to do it.
 
@@ -241,7 +239,6 @@ digests that definition asks for: the target digest is below, the payload digest
 
 | | |
 |---|---|
-| Issue | #95 |
 | Epoch | `2cbde7ffe09ff262d07cd885087520f7` |
 | PR | 167 |
 | Head | `61e50ae3d490eac097b56d850c61a86e876841a0` |
@@ -339,7 +336,7 @@ makes about text the payload does not show, reserving the checkout for those; se
 [judgment day](../skill/policies/judgment-day.md).
 
 The figures below predate that shape — the handing, not the rubric. Three of the six judges on
-issue #95's three receipts reported, through the agent harness's own completion reports: **147,249**,
+the issue's three receipts reported, through the agent harness's own completion reports: **147,249**,
 **178,100** and **171,667** tokens — each handed a checkout to search. Under the shape described
 above the same harness reported **121,973** and **145,840**, and later **105,250** and **97,485**.
 Which shape a figure came from is part of the figure, and the comparison below is drawn on the older
@@ -348,7 +345,7 @@ one.
 **Those two columns are bytes and tokens and must be converted before they can be compared.** At four
 bytes per token — a ratio this measurement assumes and does not measure — 632,309 bytes is roughly
 158,000 tokens and 158,000 bytes roughly 40,000. So the four-lens panel C ran is about **one** Estigia
-judge, and the one-lens panel derived above about **a quarter** of one. Issue #95 was given six judges.
+judge, and the one-lens panel derived above about **a quarter** of one. The issue was given six judges.
 
 What that compares is the size of what each system hands a reviewer. It does not compare how fast
 either reads it or how either grades what it finds; nothing here measured either.
@@ -439,7 +436,7 @@ limit `docs/honesty.md` already states of the figures above.
 | lens | 0 / 1 / 4 across low/medium/high (`RiskLevel::lenses` in `src/transport/tier.rs`) | 0 / 1 / 4 across low/medium/high (`internal/reviewtransaction/risk.go:132-142`, cross-checked at `internal/cli/review_start_contract.go:394-409`) | yes — a role on both sides, at the same counts |
 | refuter | one, sealed, holds no `Read`, writes nothing (`src/harness/roles.rs`) | one, part of a role vocabulary closed at three (`internal/reviewerprovider/contract.go:12-16`) | yes — a role on both sides |
 | targeted validator | one, sealed, read-only, holds no `Read`, writes nothing (`src/harness/roles.rs`'s `RESERVED_VALIDATOR`); required of a correction beside the tier's lenses | one, part of the same closed vocabulary (`internal/reviewerprovider/contract.go:12-16`), the terminal event of a correction | yes — a role on both sides; here it adds to a correction's panel where there it replaces it |
-| blind judges | none at any tier since issue #994, which removed `RiskLevel::judges`; they ran 1 / 2 / 2 across low/medium/high before it, and Judgment Day is the opt-in | installed as agent markdown, which a skill launches, with no reviewer role and nothing in its Go that runs one | no — nothing in its Go runs one |
+| blind judges | none at any tier, since `RiskLevel::judges` was removed; they ran 1 / 2 / 2 across low/medium/high before it, and Judgment Day is the opt-in | installed as agent markdown, which a skill launches, with no reviewer role and nothing in its Go that runs one | no — nothing in its Go runs one |
 
 The comparison project's reviewer role vocabulary is closed at three — lens, refuter,
 targeted-validator (`internal/reviewerprovider/contract.go:12-16`) — so there is no role a judge
@@ -458,24 +455,23 @@ seconds and 265 seconds are the two **lens** executions destroyed under *Three r
 result was admitted from either. A judge-versus-judge figure does not exist on either side, and none
 can be produced from the comparison project's source.
 
-The blind judges are reported beside the layer comparison rather than folded into it, and since
-issue #994 they are no longer part of ordinary review at all. Before it, `RiskLevel::judges` licensed
-1 / 2 / 2 across low/medium/high, a licence and not a release requirement since issue #775
+The blind judges are reported beside the layer comparison rather than folded into it, and they are no longer part of ordinary review at all. Before it, `RiskLevel::judges` licensed
+1 / 2 / 2 across low/medium/high, a licence and not a release requirement since the verdict became computed
 (`release_ci` reads the computed verdict and no judge's word), whereas the comparison project closed a
-passive review with no reviewer at all. Issue #994 removed that layer: ordinary review is the lenses,
+passive review with no reviewer at all. That layer was removed: ordinary review is the lenses,
 the refuter and the validator on both sides, and Judgment Day, which replaces the lens review for its
 target and "carries no delivery authority" in the comparison project, quoted under *Where the rule
-lives, and where it is not routed* above, is the one place judges exist. Issue #994 measured a typical
-`medium` review at about 450,000 tokens with two judges and roughly a third of that without them; the
-figure is its own estimate and no run here reproduced it. A total that folds the judges in compares a
+lives, and where it is not routed* above, is the one place judges exist. A typical
+`medium` review was measured at about 450,000 tokens with two judges and roughly a third of that without them; the
+figure is an estimate and no run here reproduced it. A total that folds the judges in compares a
 stack that ran this layer against one whose Go never does, and none is left to fold in.
 
 `docs/honesty.md`'s review-cost entry records what this leaves unmeasured.
 
 ## What a tool answer costs
 
-Issue #482's second half: four tool answers — `publish_review`/`republish_review`,
-`record_review_finding`, `record_review_verdict` (retired since by issue #775; the rows below are
+The second half: four tool answers — `publish_review`/`republish_review`,
+`record_review_finding`, `record_review_verdict` (retired since; the rows below are
 kept as measured) — carried fields nobody but a rare caller acts on,
 on every ordinary call. This measures what that cost and what moved.
 
@@ -531,7 +527,7 @@ raise the ceiling deliberately, not slip under a stale ceiling with no test to c
 
 ### What the tool menu itself costs
 
-Issue #1054's consolidation, measured 2026-10-09. Every host that loads the schemas up front pays
+The consolidation, measured 2026-10-09. Every host that loads the schemas up front pays
 this on every session, whether or not a tool is ever called, so the advertisement is the one answer
 whose cost is paid by not acting. The figure is the compact `serde_json::to_string` of the `result`
 object a real `estigia mcp` process answers `tools/list` with, newlines normalised to `\n`, so it is
@@ -541,7 +537,7 @@ the exact bytes a client receives for the table.
 |---|---:|---:|
 | Before — 48 acting tools plus 3 `NOT_EXPOSED` refusal schemas | 51 | 75,913 |
 | After — the consolidated table, `NOT_EXPOSED` no longer advertised | 32 | 55,381 |
-| Later — descriptions trimmed (issue #1146), from 56,133 at that head | 32 | 44,325 |
+| Later — descriptions trimmed, from 56,133 at that head | 32 | 44,325 |
 | Issue #5, `TOOLS` at 33 — shared argument text, no refusal-code lists, no `lens` argument; context unreadable | 33 | 42,643 |
 
 Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
@@ -554,7 +550,7 @@ reached through a parameter or a `view` rather than a schema of its own. `NOT_EX
 measurement is reproducible: `estigia mcp` answering `tools/list` on the built binary, with the
 `result` object serialised compactly.
 
-Issue #1146 trimmed the descriptions only: names, argument names, types, enums, minimums and
+The trim touched the descriptions only: names, argument names, types, enums, minimums and
 `required` lists are unchanged. The table had drifted to 56,133 bytes by then because nothing bounded
 it, and `TOOLS_LIST_CEILING` in `src/harness/mcp/tests.rs` now does, so growth past 44,325 fails
 without a reviewed edit to that constant. What the trim removed was text that did not help an agent
@@ -593,7 +589,7 @@ would let an ordinary publication reach it by one wrong argument.
 
 ## Waiting for a reviewer instead of polling
 
-Issue #1045. `collect_review_input` used to answer `capture-running` while a launched reviewer was
+`collect_review_input` used to answer `capture-running` while a launched reviewer was
 still working, so a run waiting on a lens polled it — one full-context turn per poll. It now takes
 an optional `wait_seconds` and blocks up to that many seconds, capped at 900 and never past the
 point the job would be abandoned, for the job to finish before refusing.
@@ -636,11 +632,11 @@ not this one, so the spend duty is held by prose alone.
 
 ## The reviewer prompt order buys no cache hits, and is not shipped
 
-Issue #1053 proposed moving the role template to the end of the prompt, so that the receipt, the
+It was proposed to move the role template to the end of the prompt, so that the receipt, the
 criteria and the diff — the same bytes for every lens — would lead it and could share a
 prompt-cache prefix, where today `build` in `src/reviewer/prompt.rs` places the role's own template
 first and every lens therefore prefixes the shared bytes differently. Measured 2026-10-09 against
-the #1063 review target; the reorder is **not shipped**, because the shared bytes are never
+a real review target; the reorder is **not shipped**, because the shared bytes are never
 cache-read in any position.
 
 **Method.** Four calls to `claude -p --model claude-sonnet-4-5 --output-format json`, reading the
@@ -674,7 +670,7 @@ which the issue puts out of scope.
 
 ## Re-measuring after a change
 
-Issue #482's baseline (2026-09-24, 15 transcripts, recorded in the issue body) measured orchestrator
+The baseline (2026-09-24, 15 transcripts, recorded in the issue body) measured orchestrator
 context by phase, forced `Stop` turns and per-issue input tokens from Claude Code's own `.jsonl`
 transcripts. `scripts/measure-transcripts.py` repeats that measurement: `python3
 scripts/measure-transcripts.py --projects ~/.claude-personal/projects` (the default), reading every
@@ -689,7 +685,7 @@ issue, and each repository's most recent session time.
 **Run on this machine, against this checkout, after the change landed and delivery sessions closed
 against it.** The condition the baseline's acceptance item 6 waited on is now met: the corpus under
 `~/.claude-personal/projects` holds delivery sessions whose own transcripts name a build carrying
-#482's slices. The recent estigia transcripts carry build commits
+those slices. The recent estigia transcripts carry build commits
 `a327302d5bf5c4bdb99524d55dfb5ede726bd768` (2026-10-01),
 `23f86174685383b3d7fee080bccf8c7f9b2ad225` (2026-10-02),
 `cdf3c243cf52e0b2469394943df271745a458875` (2026-10-04) and
@@ -787,7 +783,7 @@ and `repo_of` takes the text after the `-repo-` boundary.
 
 ## What the Judgment Day policy once quoted, and what the skill costs every activation
 
-Issue #1145 took measurements and history out of `skill/` so that an agent does not pay for them on
+Measurements and history were taken out of `skill/` so that an agent does not pay for them on
 each activation. The Judgment Day measurements below were in `skill/policies/judgment-day.md`
 and are kept here as they were stated.
 
@@ -802,7 +798,7 @@ and are kept here as they were stated.
   the answer no longer carries, and both judges of that panel found it independently, outside the
   diff both times. On one publication under the named-exception shape a judge left the payload
   exactly once, to count the entries behind a number the change moved.
-- **Sealed against unsealed, one observation and not a study.** On issue #248's final panel, the
+- **Sealed against unsealed, one observation and not a study.** On one change's final panel, the
   sealed judge detected that the payload it was handed had been abridged and correctly withheld
   every claim about the elided regions, while the unsealed judge re-derived fourteen citations and
   found a stale contract sentence outside the diff. The panel reached the out-of-payload defect; the

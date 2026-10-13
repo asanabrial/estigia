@@ -1202,7 +1202,7 @@ fn ci_release_refuses_a_receipt_no_computed_verdict_cleared() {
     );
 }
 
-/// Issue #44's reproduction: the publisher's pointer is absent — it was
+/// The reproduction: the publisher's pointer is absent — it was
 /// deleted at `SessionEnd`, as every run pointer is — while a *different* run
 /// holds the live `review` claim after resuming the issue and supplies the
 /// byte-exact latest receipt the tracker still records. Before the fix,
@@ -1419,7 +1419,7 @@ fn release_ci_restores_a_receipt_for_a_run_that_did_not_publish_it() {
 }
 
 /// A `warning` on the receipt is informational, so delivery does not wait on
-/// it: the receipt issue #321's gate refused while its warning stood
+/// it: the receipt the gate refused while its warning stood
 /// unanswered now reaches `gh pr ready` and reports `ci_released: true`.
 ///
 /// Watched red before this change: the phase answered `disposition-missing`

@@ -497,7 +497,7 @@ src/harness/mcp/  the workflow tools and the stdio JSON-RPC they arrive on
 src/setup/plugin.rs  the OpenCode gate, the Pi gate extension, the two review relays and the optional loop plugin and Pi loop extension, because those hosts read a module rather than a settings line
 src/setup/pi_prompts/  the two Pi prompt templates, `claim.md` and `review-status.md`, embedded and written unchanged
 src/setup/goal_loop.js  the generic `/goal` and `/loop` plugin, embedded and written unchanged
-build.rs       derives the transport's refusal vocabulary from the transport itself, and embeds the build's commit and dirtiness (issue #60)
+build.rs       derives the transport's refusal vocabulary from the transport itself, and embeds the build's commit and dirtiness
 src/fence.rs   a marked block in somebody else's file — invariant three, written once
 src/config/    typed model, the settings table as data, which markers the table lives in
 src/setup/     agent adapters, companions, dry-run, exact inverse

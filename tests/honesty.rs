@@ -980,7 +980,7 @@ fn every_setting_the_readme_tabulates_is_one_this_binary_has() {
 
 /// One table for every count a document claims about the crate.
 ///
-/// Merged from six one-purpose tests (#1063). Each row names the document it
+/// Merged from six one-purpose tests. Each row names the document it
 /// reads, because `number_before` takes the first occurrence in the text and
 /// pooling the documents would move which sentence answers for a phrase that
 /// appears in more than one. The badge's two spellings, the gated-agent forms
@@ -1147,7 +1147,7 @@ fn every_count_a_document_claims_is_one_the_crate_has() {
 /// into, and never a retired one.
 ///
 /// The list is a copy of `AGENTS` a person maintains by hand, so nothing held
-/// it: the retired slugs sat in it through #721's retirement and every later
+/// it: the retired slugs sat in it through an agent's retirement and every later
 /// slice, and a reader who copied the line met `agent-retired`.
 #[test]
 fn the_readme_names_every_supported_agent_and_no_retired_one_as_an_install_target() {
@@ -1177,7 +1177,7 @@ fn the_number_of_declared_populations_is_the_number_the_readme_claims() {
     // adding `writing-shell` would have left the prose saying two.
     //
     // A declaration is a `pub const … : Population = Population { .. }` — see
-    // `src/harness/population.rs` — since issue #117 moved the vocabulary out
+    // `src/harness/population.rs` — since the vocabulary moved out
     // of doc comments and into code, so no test depends on the text of a Rust
     // comment. Matched on the type annotation rather than parsed with `syn`:
     // this test only has to count how many exist, not resolve or fingerprint
@@ -1397,8 +1397,8 @@ fn the_number_of_reserved_reviewers_is_the_number_every_document_claims() {
 /// is crossed by spelling the count into a fixed phrase instead and checking
 /// that phrase for the word the derived count actually maps to, which still
 /// fails if `RiskLevel::lenses()` changes under it. `medium` and `high` used
-/// to share one prose sentence because both answered `1`; issue #246 gave
-/// `high` its own lenses instead, so the two are now crossed against
+/// to share one prose sentence because both answered `1`; `high` was later given
+/// its own lenses instead, so the two are now crossed against
 /// separate phrases and against the reserved-lens count, which is what makes
 /// this reddening rather than a number re-typed by hand alongside a
 /// registry that moved.
@@ -1532,7 +1532,7 @@ fn the_lens_count_a_publication_acquires_is_the_one_review_tier_answers() {
     );
 }
 
-/// Issue #994: ordinary review licenses lenses only, so no carrier of the tier's allocation states a
+/// Ordinary review licenses lenses only, so no carrier of the tier's allocation states a
 /// judge count any more. Crosses every carrier the removed two-judge sentence lived in, and the
 /// `review_tier` answer itself, against the phrases that sentence was made of.
 #[test]
@@ -1631,7 +1631,7 @@ fn the_two_src_only_carriers_render_the_lens_counts_the_tier_derives_and_no_judg
 #[test]
 fn the_opencode_section_names_every_launch_lane_state_the_contract_names() {
     // Crosses the rendered section against the contract's own lane list rather
-    // than typing the states twice: #528's review found the copies had drifted.
+    // than typing the states twice: a review found the copies had drifted.
     // The two lists are compared for equality, not one against the other: a
     // rendered list that *adds* a state the contract does not name is the same
     // drift in the other direction, and the old containment let it pass.
@@ -1686,7 +1686,7 @@ fn lane_states(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// Issue #292/#296's completeness guard, widened by issue #297's repair
+/// The completeness guard, widened in a repair
 /// round after a frozen four-phrase list missed all three prose severes that
 /// round's panel found, and widened a second time after the widened list
 /// itself missed a fourth — `"both confirm"`, caught by nothing because the
@@ -1702,8 +1702,7 @@ fn lane_states(text: &str) -> Vec<String> {
 /// however it is phrased; only its scoping saves it.
 ///
 /// **Not swept: `src/`.** `src/setup/reviewer_before_*.md` are frozen
-/// historical templates — including `reviewer_before_tier_scaled_panel.md`,
-/// issue #292's own addition — and they are *supposed* to carry the old
+/// historical templates — including `reviewer_before_tier_scaled_panel.md` — and they are *supposed* to carry the old
 /// wording, since upgrade detection depends on recognising exactly that
 /// text. A blanket `src/` sweep would fail on the files this repository
 /// requires to stay unchanged. Two `src/`-only carriers this change
@@ -2067,7 +2066,7 @@ fn no_skill_clause_asserts_an_unscoped_panel_count_or_confirmation() {
     );
 }
 
-/// #243's first acceptance criterion, still owed until this test: every
+/// The first acceptance criterion, still owed until this test: every
 /// sentence that used to say nothing launches a lens is gone or narrowed,
 /// and this reddens if a shipped surface still says so.
 ///
@@ -2894,7 +2893,7 @@ fn every_setting_the_gate_reads_is_one_that_does_not_differ_by_agent() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
-/// The crossing a blind panel asked for after issue #32's fourth cut: the
+/// The crossing a blind panel asked for after a fourth cut: the
 /// config fields `GateContext` (`src/harness/mod.rs`) is built from, tested
 /// against the settings `Setting::decides_what_the_gate_enforces` must
 /// answer `true` for.
@@ -3878,9 +3877,9 @@ fn the_payload_names_no_implementation_this_crate_retired() {
 /// left that list when `setup` began writing the model and the effort it names
 /// into the definitions it installs, and gave the contract a sentence naming
 /// what the row obliges. `Merge strategy` left when `closing_merge` read it.
-/// Issue #1044 then retired the four rows that had one answer each — `Delivery
-/// route`, `Review delegation`, `Merge strategy` and `Review protocol` — so
-/// they are not settings to read any more, and `READ_BY_NOBODY` below is empty.
+/// The four rows that had one answer each — `Delivery
+/// route`, `Review delegation`, `Merge strategy` and `Review protocol` — were
+/// then retired, so they are not settings to read any more, and `READ_BY_NOBODY` below is empty.
 ///
 /// `setup::Applies::Asked` says of some of them *"the contract asks, and the
 /// agent may still honour it, but nothing checks"* — and for some the contract
@@ -3966,7 +3965,7 @@ fn every_setting_is_read_by_the_gate_the_transport_or_the_prose() {
     // Rows nothing reads today, declared with the reason each is still here.
     // Shorter only, never longer: a new setting nothing acts on fails.
     //
-    // Empty since issue #1044: the last row here, `Delivery route`, was retired
+    // Empty since the last row here, `Delivery route`, was retired
     // rather than read, so every row left in `SETTINGS` is acted on by the gate,
     // the transport, or a sentence an agent is given.
     const READ_BY_NOBODY: &[&str] = &[];
@@ -4384,19 +4383,19 @@ fn opencode_is_not_told_to_handoff_because_review_blind_is_claude_only() {
         notes_compact.contains("Whenthehostcannotspawnahelperatall,oreverylaunchofthepanelfailed"),
         "runtime notes no longer bounds handoff to a failed launch"
     );
-    // Issue #156: the rendered OpenCode section carries the same two sentences.
+    // The rendered OpenCode section carries the same two sentences.
     let opencode = estigia::setup::opencode_review_section();
     let opencode_compact: String = opencode.chars().filter(|c| !c.is_whitespace()).collect();
     assert!(
         opencode_compact.contains("After`publish_review`")
             && opencode_compact.contains("withoutlaunchingfirstisadefectagainstthissentence"),
-        "opencode_review_section no longer states the #156 acceptance sentences: {opencode}"
+        "opencode_review_section no longer states the acceptance sentences: {opencode}"
     );
 }
 
 #[test]
 fn the_filing_step_still_names_the_route_it_hands_off_to() {
-    // Issue #466: nothing pinned step 8, so deleting it left every binary green
+    // Nothing pinned step 8, so deleting it left every binary green
     // -- the change's user-visible payload was unguarded. This asserts the
     // step's own bytes rather than a phrase a rewrite would survive: the line is
     // compared whole, and a second candidate is a failure rather than a silent
@@ -4529,7 +4528,7 @@ fn every_section_reference_a_stop_names_resolves_in_the_shipped_skill() {
 /// names, including the rendered installed contract and the reading-grant
 /// reviewer body.
 ///
-/// Issue #166: that paragraph was hand-edited three times in one day and wrong
+/// That paragraph was hand-edited three times in one day and wrong
 /// every time. Nothing crossed the figures against the files. This does.
 #[test]
 fn the_measured_judge_context_paragraph_matches_the_files_it_names() {

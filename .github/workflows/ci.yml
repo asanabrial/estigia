@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
   # Merge queue. Fires after the review barrier, when a ready pull request
   # enters the queue — not on topic push, and not before release_ci. Named in
-  # tests/release.rs so tidying cannot drop it silently (issue #133).
+  # tests/release.rs so tidying cannot drop it silently.
   merge_group:
 
 env:

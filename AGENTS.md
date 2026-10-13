@@ -70,7 +70,7 @@ a second copy that will disagree.
    not a habit.
 
    **Scope: `src/` and `tests/` alike, test modules included.** This supersedes the narrower
-   boundary issue #50 set, which swept `src/` only and left `tests/` out as a scoping decision
+   boundary set earlier, which swept `src/` only and left `tests/` out as a scoping decision
    rather than a judgement that the prose there differs.
 
    Write one only when all three hold, and then write one or two lines and stop:
@@ -89,14 +89,14 @@ a second copy that will disagree.
    while CI sets `RUSTFLAGS: -D warnings`, so removing it fails the build rather than merely reading
    worse. `///` on a private item is judged as any comment is, by the three conditions above.
 
-   Nothing enforces this and nothing may: no test reads the text of a comment (issue #117). It is
+   Nothing enforces this and nothing may: no test reads the text of a comment. It is
    held by review, not by the suite, and [`docs/honesty.md`](docs/honesty.md) says what that costs.
 
    **No comment is load-bearing, and one rule keeps it that way: a test that reads a Rust source
    reads it through [`source_text::code_of`](src/source_text.rs), which strips every comment first.**
    That is the whole discipline, and it is a shape you can check while writing rather than a run you
    hope catches you. It holds for `include_str!` and for `std::fs::read_to_string` alike — the second
-   is the one a sweep forgets, and forgetting it sent issue #117 back from review twice, the second
+   is the one a sweep forgets, and forgetting it sent the work back from review twice, the second
    time over two readers the first repair had not found. Strip **before** you slice, too: a boundary
    taken from raw text, `#[cfg(test)]` most of all, is one a comment can move.
 
@@ -207,7 +207,7 @@ a second copy that will disagree.
    `rustfmt`/`clippy` components, and `ci.yml` runs no toolchain action of its own, so rustup
    resolves that one file for CI and for a fresh clone alike: `cargo clippy --version` here is the
    version the lane runs. `@stable` used to float, and a Rust release could redden the lane with
-   `-D warnings` on a line no diff touched — issue #40.
+   `-D warnings` on a line no diff touched.
 
    **Anything but a bare `cargo test` needs `cargo build --bins --examples` first.** `--bins`
    builds the `estigia` binary `tests/pipe.rs` spawns; `--examples` builds the stand-in `gh`

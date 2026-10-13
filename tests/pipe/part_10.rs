@@ -425,7 +425,7 @@ fn a_repair_within_budget_alone_is_refused_by_the_accumulated_total() {
 }
 
 /// An unmerged base advance never reaches the correction budget at all —
-/// issue #277 refuses `publish_review` earlier, before the payload is
+/// `publish_review` is refused earlier, before the payload is
 /// materialised, because the two-dot diff `main`'s advance against a branch
 /// that never merged it would carry `mainfeature.txt` as this repair's own
 /// deletion. Before that refusal existed, this same fixture published
@@ -559,7 +559,7 @@ fn an_unmerged_base_advance_is_refused_before_the_correction_budget_ever_runs() 
     );
 }
 
-/// Issue #307: the caller's own fields — `run-id`, `topology` and
+/// The caller's own fields — `run-id`, `topology` and
 /// `topology-reason` — are the only part of the published comment that no
 /// constant bounds, and a value that renders past GitHub's 65,536-character cap
 /// is refused **before any remote write** — not after the branch is pushed and
@@ -680,12 +680,12 @@ fn an_oversize_topology_is_refused_before_any_remote_write() {
     }
 }
 
-/// Issue #305: the recovery `publication-base-not-ancestor` names must clear
+/// The recovery `publication-base-not-ancestor` names must clear
 /// the block on a repair round. A rebase followed by the ordinary
 /// `publish_review` push is a non-fast-forward once the branch is on the
 /// remote, so the refusal now names `republish_review`; this drives the whole
 /// path — a repair publication refused, a rebase, then the republish that must
-/// succeed rather than refuse again. Issue #1111: during a correction the
+/// succeed rather than refuse again. During a correction the
 /// refusal names only the merge, so the rebase here is taken without its advice.
 #[test]
 fn the_base_advance_refusal_sends_a_repair_round_to_the_merge_and_republish_still_clears_a_rebase()
@@ -2322,7 +2322,7 @@ fn a_repair_interleaved_with_a_second_pull_requests_publication_is_still_budgete
 
 /// The original candidate's own changed-path manifest, frozen as
 /// `budget-genesis-paths` on the published marker, is bounded before anything
-/// remote moves — issue #271. Before this refusal existed, a manifest this
+/// remote moves. Before this refusal existed, a manifest this
 /// large would have been assembled only after `push_to_origin`, with the
 /// branch already pushed and the pull request already a draft.
 #[test]

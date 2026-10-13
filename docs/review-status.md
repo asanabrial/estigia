@@ -1,6 +1,6 @@
 # `review_status`: what a review does next
 
-Issue #710, slice S2b. gentle-ai v4 answers STATUS with exactly one next transition and the agent runs it
+gentle-ai v4 answers STATUS with exactly one next transition and the agent runs it
 without deciding; without one the orchestrator chooses the review route, which is what v4 removed.
 `review_status` (MCP) / `review-status --issue <n>` (transport) is that answer. It is read-only, needs
 no claim, and decides nothing the tools do not already decide: each state below is read from the same

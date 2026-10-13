@@ -3,7 +3,7 @@ use super::*;
 /// `publish_review` omits the payload's text by default, keeps every other
 /// receipt field either way, and never truncates the text it is asked for.
 ///
-/// Issue #168: the answer used to carry the payload unconditionally, and an
+/// The answer used to carry the payload unconditionally, and an
 /// diff of a mid-sized change exceeded what the MCP surface could return, so the
 /// publishing run could not read its own receipt back. `inline_payload: true`
 /// is the only way to ask for the text now; `payload_bytes` and
@@ -338,7 +338,7 @@ fn publish_review_carries_the_payload_only_when_asked_and_never_truncates_it() {
 /// names the count and the threshold, the identical call with a stated reason
 /// succeeds, and a departure from `inline` needs no reason at all.
 ///
-/// Issue #97's revised criteria: the count is a **file** count, not the
+/// The revised criteria: the count is a **file** count, not the
 /// contract's "non-trivial" threshold, so this is exactly where the refusal
 /// over-fires by design — the fixture changes two one-line files, and the
 /// refusal fires anyway.
@@ -1315,7 +1315,7 @@ fn a_verdict_waits_for_the_publication_lane_and_absence_of_one_is_not_a_refusal(
     }
 }
 
-/// Issue #95: a run whose jobs all report `steps: []` never executed a step,
+/// A run whose jobs all report `steps: []` never executed a step,
 /// and is not evidence of a defect the way a run that ran and failed is.
 /// `gh run view --log-failed` reads nothing for the first shape because there
 /// is nothing it ran to log — commonly a billing failure on the account
@@ -1667,7 +1667,7 @@ fn a_never_ran_lane_is_told_apart_from_one_that_ran_and_failed() {
     }
 }
 
-/// A blind judge's severe finding on issue #95's third round: `read_publication_lane`
+/// A blind judge's severe finding on a third round: `read_publication_lane`
 /// returned `Red` as soon as one completed, non-green check run existed, so a
 /// head carrying that red beside a still-`queued` check run never reached the
 /// `Running` scan below it. A never-ran classification then cleared with
@@ -1859,7 +1859,7 @@ fn an_unfinished_sibling_check_run_refuses_a_never_ran_clearance() {
     );
 }
 
-/// A judge's own severe finding on issue #95's first round: `read_publication_lane`
+/// A judge's own severe finding on a first round: `read_publication_lane`
 /// returned on the **first** completed non-green check run, so a head carrying
 /// two of them — one whose run never executed a step and one that genuinely
 /// ran and failed — was accepted when the never-ran one happened to be listed
@@ -2079,7 +2079,7 @@ fn a_head_with_two_failing_runs_refuses_on_either_listing_order() {
 /// never-ran path before this: `blank-never-ran-evidence` existed only in
 /// `claim.rs` and in the binding, unreached by anything that could notice it
 /// stop firing. A file that is empty, nothing but whitespace, or filler such
-/// as `n/a` — issue #349 widened the check from `is_empty` to `says_nothing` —
+/// as `n/a` — the check was widened from `is_empty` to `says_nothing` —
 /// must be told apart from the argument being absent: absent refuses
 /// `publication-lane-never-ran`, blank or filler refuses `blank-never-ran-evidence`.
 #[test]
@@ -2245,7 +2245,7 @@ fn a_blank_or_filler_never_ran_evidence_file_is_told_apart_from_no_file_at_all()
     }
 }
 
-/// A judge's own severe finding on issue #95's first round: `never_ran_signal`
+/// A judge's own severe finding on a first round: `never_ran_signal`
 /// read the jobs listing with no `--paginate` and no `per_page`, so a run
 /// with more jobs than one default page answered from one page, and
 /// `jobs_report_never_ran`'s `.all()` never consulted `total_count` — a
@@ -2419,7 +2419,7 @@ fn a_partial_jobs_page_refuses_rather_than_clearing_the_head() {
     );
 }
 
-/// Issue #1054: `review_status` carries the publication lane and the correction
+/// `review_status` carries the publication lane and the correction
 /// count, driven through the real MCP server so the argument-to-flag wiring is
 /// crossed.
 ///
@@ -2723,7 +2723,7 @@ fn review_status_answers_the_lane_and_the_correction_state_over_the_real_mcp_ser
     }
 }
 
-/// Issue #1054: a `review_status` sub-read that fails is embedded, never
+/// A `review_status` sub-read that fails is embedded, never
 /// aborts the answer.
 ///
 /// The lane read already failed that way; the correction read used to abort
@@ -2866,7 +2866,7 @@ fn review_status_embeds_a_failed_sub_read_instead_of_aborting_the_answer() {
     );
 }
 
-/// Issue #1054: `review_tier` reads the repair's own narrow range when
+/// `review_tier` reads the repair's own narrow range when
 /// `parent_head` is given, rather than the whole `base..head`.
 #[test]
 fn review_tier_reads_the_repair_range_named_by_parent_head_over_the_real_mcp_server() {
@@ -2949,7 +2949,7 @@ fn review_tier_reads_the_repair_range_named_by_parent_head_over_the_real_mcp_ser
     );
 }
 
-/// Issue #1054: `target` classifies base movement when `recorded_base` is
+/// `target` classifies base movement when `recorded_base` is
 /// given, rather than answering the delivery target.
 #[test]
 fn target_classifies_base_movement_when_recorded_base_is_given_over_the_real_mcp_server() {

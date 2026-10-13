@@ -75,8 +75,8 @@ Five invariants, and the tests are named after them:
    is removed. An interrupted create remains exactly retryable. Comparison follows established setup
     text normalization: CRLF versus LF and a missing final newline do not count as an edit; every other
     textual difference does. An owned canonical file whose bytes match a previous rendering Estigia
-    shipped is ours-older: setup rewrites it to the current rendering rather than refusing. Since issue
-    #256, a body matching neither also survives if it is exactly what **this build itself** last wrote
+    shipped is ours-older: setup rewrites it to the current rendering rather than refusing. A body matching
+    neither also survives if it is exactly what **this build itself** last wrote
     at that exact path: every real write of a reviewer definition records a digest of the bytes it left
     behind, under the same outside-path record `created_outside` already keeps, and a later run
     compares the file it reads back against that digest before falling through to the rendering ledger.
@@ -116,7 +116,7 @@ Five invariants, and the tests are named after them:
    plain `setup` also retracts an owned `sdd-*.md` — a definition the retired protocol wrote —
    through a retired-names list rather than the install list, so it comes out even though the
    protocol that wrote it is gone, and drops a retired skill file. A definition that leaves the
-   install lists entirely — `implementer.md`, renamed to `developer.md` (issue #578) — is named in
+   install lists entirely — `implementer.md`, renamed to `developer.md` — is named in
    `RETIRED_AGENTS` and retracted by `setup` and `uninstall` on the same ownership gate, so a name
    no walk of the install lists reaches still comes off a machine that has it. What is particular to
    these two is that a **configuration entry** and not a retirement list decides it.
@@ -204,7 +204,7 @@ Five invariants, and the tests are named after them:
 
    `~/.estigia/jobs/<id>/` is a fifth, written at run time and never by `setup`. A review job's
    directory holds the manifest, the prompt, the runner's lock and logs, and its `result.json`, and
-   nothing removes it yet: issue #776 slice S6a only adds the runner, and
+   nothing removes it yet: the runner is only added, and
    [`honesty.md`](honesty.md) says what is not wired.
 
    A third leave is temporary: five adapters share `~/.agents/skills`, so taking one of them out
@@ -256,10 +256,10 @@ repeating the objective every turn only grew it. The preamble and the objective 
 `/flow-loop`, and again whenever the run holds no live claim and the loop continues on claimable or
 dischargeable work. A live answer that names no issue stops the loop. Completion is not a value the
 agent supplies: the plugin reads no `<promise>` and takes no done input. **The objective defaults
-to `/flow dev`** (issue #642): `/flow-loop` with no text, or with only flags, stores and enqueues
+to `/flow dev`**: `/flow-loop` with no text, or with only flags, stores and enqueues
 `/flow dev`; text whose first word is `/flow` or `flow` is used as given; any other text is
 prefixed with `/flow`, so `/flow-loop only Alicante and Murcia` enqueues `/flow only Alicante and
-Murcia`, a bare `flow`: the combined analyst-developer (issue #15), which takes the held issue, then an
+Murcia`, a bare `flow`: the combined analyst-developer, which takes the held issue, then an
 unassigned `review`, then an unassigned `ready`, then an `analysis` item to specify, and triages the
 text only when every queue is empty. A leading role word (`dev`,
 `triage`, `analyst`, `developer`) picks that role instead of routing, and working one issue needs
@@ -533,7 +533,7 @@ would for Codex. With no loop stored, the hook is the ordinary claim-holding one
 That ordinary `Stop` also stands aside for a run waiting on a person: one whose pointer records the
 state `blocked`, or whose newest receipt on the held issue in the local store is `escalated` (a
 publication recorded after it ends the wait). It reads the store alone, never the tracker, and a store
-it cannot read exempts nothing. The loop's own `Stop` and Codex's keep their answers (issue #1139).
+it cannot read exempts nothing. The loop's own `Stop` and Codex's keep their answers.
 
 ## Which hook commands setup treats as its own
 
@@ -992,11 +992,11 @@ Three things follow, and they are the shape of the rule rather than three separa
    file or skill root is a decision its own row records; nothing is admitted by resembling a row
    already here.
 
-Issue #62 asks for `command-code`, and this rule gives the answer it gives any runtime: it is
+A request for `command-code` gets the answer any runtime gets: it is
 admitted when its instruction file and its skill discovery are verified from what it ships. Neither
 has been, so it is not on the table, and the rule rather than the asking decides when it is. Counts
-that read the table from prose drift, and the ones known to are carried by #31, #54 and #76, which
-own those sentences.
+that read the table from prose drift, and the ones known to are left to the work that
+owns those sentences.
 
 ## Where each root resolves, and what governs it
 
@@ -1060,7 +1060,7 @@ it, in the shape the out-of-home notes below already have — the drop is no lon
 silence. An explicit override that is not absolute falls through silently in every case, because it
 is the caller's own value rather than one this run read from the environment.
 
-And since issue #34, a value `APPDATA`, `XDG_CONFIG_HOME` or `DSH_HOME` holds is used only when it
+And a value `APPDATA`, `XDG_CONFIG_HOME` or `DSH_HOME` holds is used only when it
 **resolves under that same resolved home** — `CLAUDE_CONFIG_DIR` is exempt from this check, and a
 later paragraph in this section says why. That is not literally `%USERPROFILE%`: `paths::home_dir()` prefers `HOME` over
 `USERPROFILE`, on every platform, with no `cfg(windows)` gate, so the comparison is against whatever
@@ -1070,12 +1070,12 @@ the first two. On the ordinary machine — `HOME` unset, so the resolved home is
 fire, the value is kept and the path is the one it always was.
 
 It fires wherever they do not agree, and `HOME` being unset is not on its own enough to keep them
-together. The case #34 was filed for is a home redirected to a sandbox while `APPDATA` still names
+together. The case this covers is a home redirected to a sandbox while `APPDATA` still names
 the real profile. A home exported to some other absolute path for an unrelated reason, with
 `APPDATA` never moved to follow, is the same shape. So is an `%APPDATA%` genuinely relocated by
 folder redirection — a roaming profile on a share — where `HOME` is unset and the check fires
 anyway, because it is `%APPDATA%` rather than the home that moved. `docs/honesty.md`'s entry on
-issue #34 enumerates those cells and what the substitution costs each of them. There the home-relative fallback is used instead of the real `%APPDATA%`,
+it enumerates those cells and what the substitution costs each of them. There the home-relative fallback is used instead of the real `%APPDATA%`,
 and the substitution is named as a note in the per-adapter report rather than refusing the run. The
 note goes to the adapter the substitution moved, not to every line: an adapter resolving under no
 root that variable governs has nothing to report, and says nothing. `sync` with no adapter named
@@ -1085,7 +1085,7 @@ moved is the one it can stop finding. The note no longer goes with it: `sync` re
 independently of any target, prints the notes no target already reports beside the run, and carries
 them in the `no agent has Estigia installed` refusal when the substitution is why the list came back
 empty. What remains is that the adapter itself is still not operated on, because `is_present` reads
-the substituted root; `docs/honesty.md`'s entry on issue #34 holds that and what the substitution
+the substituted root; `docs/honesty.md`'s entry on it holds that and what the substitution
 costs when `HOME` was not, in fact, a sandbox.
 
 Git Bash is **not** that machine, though it is the first candidate that comes to mind: it sets
@@ -1099,8 +1099,7 @@ machine while every other root moved with the sandbox.
 The containment rule above does **not** apply to `CLAUDE_CONFIG_DIR`. It names the whole Claude
 Code configuration rather than a root sitting beside the home, and Claude Code reads it wherever it
 points, inside the home or not. A value dropped for being outside the home would land the gate
-registration under `~/.claude`, exactly where that session does not read it, which is the defect
-issue #427 was filed for.
+registration under `~/.claude`, exactly where that session does not read it.
 
 ## The scope an install is rooted at
 
@@ -1217,10 +1216,10 @@ the example subagent extension and not from Pi's core (see [`honesty.md`](honest
 
 Claude Code's row above is where `setup` writes the reviewer definition, and OpenCode's and Pi's are
 where it writes the two delegated workers; `harness::roles::definition_for` is where the gate reads the
-reviewer definition back, and until issue #428 it read only the home-relative fallback, never
-`$CLAUDE_CONFIG_DIR/agents` itself. Closed now, beside the home root rather than instead of it — the
+reviewer definition back, and until the `$CLAUDE_CONFIG_DIR/agents` root was added it read only the home-relative fallback, never
+`$CLAUDE_CONFIG_DIR/agents` itself. Added now, beside the home root rather than instead of it — the
 same asymmetry the paragraph above states for `APPDATA` and `XDG_CONFIG_HOME` not applying to this
-variable. `docs/honesty.md`'s entry on issue #427 carries the full account, including
+variable. `docs/honesty.md`'s entry on `CLAUDE_CONFIG_DIR` carries the full account, including
 `authorize_review_blind_launch`'s canonical-reviewer proof and the control-surface fragments, which
 had the same gap.
 

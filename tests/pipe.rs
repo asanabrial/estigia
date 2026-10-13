@@ -247,7 +247,7 @@ fn run_with_bytes_locked(
     // checkout) is what first made a several-holder decision consult the
     // tracker at all, where none of these tests intend one. Checked: without
     // this, `a_per_call_working_directory_selects_the_holder_that_owns_it`
-    // asks a real `gh` about issues #12 and #34 in whatever repository
+    // asks a real `gh` about two issues in whatever repository
     // `GH_REPO` names, and its answer would decide what the test asserts.
     // `GH_HOST` and `GH_TOKEN` are the same class of steering, cleared for the
     // same reason before either is ever read.
@@ -396,7 +396,7 @@ fn low_delivery(at: &std::path::Path) -> (String, String) {
 /// configuration and attribute source outside the repository. The ambient side
 /// of a cross against the isolated payload must be as machine-independent as
 /// the isolated side, or a developer's own `core.attributesFile` or `diff.*`
-/// setting decides the comparison rather than the code under test; issue #359.
+/// setting decides the comparison rather than the code under test.
 /// Computed here rather than read from the function under test, so a defect in
 /// `review_payload` cannot hide behind a self-comparison.
 fn fenced_ambient_diff(at: &std::path::Path, base: &str, head: &str) -> Vec<u8> {

@@ -319,14 +319,14 @@ fn one_stable_blind_reviewer_definition_is_in_the_agent_manifest_not_the_skill()
     assert!(judges.contains("identical diff and criteria"));
 }
 
-/// Issue #35: what a judge's report must state was stated nowhere, and each launch
+/// What a judge's report must state was stated nowhere, and each launch
 /// path that could have carried it was pinned against a literal in its own
 /// test — the `Measuring` reviewer text in `src/setup/tests.rs`, the OpenCode
 /// text nowhere at all. So the words could drift between hosts, or between a
 /// host and the policy document that describes them, with every existing test
 /// still green: each side only ever compared itself to itself.
 ///
-/// Issue #775 retired the verdict a judge recorded, and with it the three carriers that
+/// The verdict a judge recorded was retired, and with it the three carriers that
 /// described the field it was recorded in — the MCP tool's `basis` argument, `skill/SKILL.md`'s
 /// developer step 5 and `skill/bindings/github/operations.md`'s `Recording a verdict` section.
 /// What remains is the requirement itself, which the judge definitions still carry, and this test
@@ -401,7 +401,7 @@ fn the_verdict_basis_requirement_reaches_every_generated_launch_text() {
     );
 }
 
-/// Issue #191, repair round 2: two blind panels rejected this change on a sentence copied from
+/// Repair round 2: two blind panels rejected this change on a sentence copied from
 /// another project without checking it against this repository, and both said independently that
 /// the classification rule — the never-`severe` treatment of stale prose, and the carve-out that
 /// bounds it — has three hand-maintained copies and nothing crosses them for meaning. This is

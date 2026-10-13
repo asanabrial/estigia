@@ -3,8 +3,8 @@
 A refusal answers three questions already: what happened to the world (`outcome`), whether the same
 command is safe to repeat (`replay`), and what to do (`resolution`). This document owns a fourth
 that none of them answers: **what kind of answer this was**. Without it a caller reads an outage as
-a verdict, or a moved receipt as a rule, and acts on the wrong one — issue #710 is the record of
-exactly that, in a review ledger that reported a failed read as a stale verdict.
+a verdict, or a moved receipt as a rule, and acts on the wrong one — as happened in a review ledger
+that reported a failed read as a stale verdict.
 
 `class` is one of four words. It is in `--json` as `"class"`, and it is one line of the text the
 hook and the tool server show an agent (`Refusal::agent_text`, one function for both).
@@ -16,7 +16,7 @@ hook and the tool server show an agent (`Refusal::agent_text`, one function for 
 | `refused` | The surface was read and the rule says no. | Stop, or change what was asked. |
 | `unknown` | A write may or may not have landed. | Look before acting. Never report it as any named state. |
 
-`unknown` is the fourth because #710 forbids reporting an unknown outcome as a state: `write-failed`
+`unknown` is the fourth because the rule forbids reporting an unknown outcome as a state: `write-failed`
 and `ambiguous-write` are neither a refusal by a rule nor a stale authority. It matches
 `outcome: unknown`, and the setup and TUI refusals that already carry that outcome carry this class.
 

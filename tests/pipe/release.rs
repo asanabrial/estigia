@@ -312,7 +312,7 @@ fn a_release_the_tracker_could_not_be_asked_about_forgets_nothing() {
     );
 }
 
-/// Issue #48, final elected round: `run_tool`'s `unassign` sender pushes
+/// Final elected round: `run_tool`'s `unassign` sender pushes
 /// `--runtime` from the validated `NamedRun.runtime`
 /// (`run_tool` in `src/harness/mcp/mod.rs`) the same way the claim sender does — pinned
 /// here the same way, over the comment the release write actually posts.

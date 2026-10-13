@@ -198,7 +198,7 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
             "a pre-push hook nothing can read did not report the push-guard row broken:\n{out}"
         );
 
-        // 7c. `gate-version` (issue #60): whether the binary answering this
+        // 7c. `gate-version`: whether the binary answering this
         // machine's hooks is the checkout's own build. `repository` shares no
         // history with the crate this test binary was built from, so if that
         // binary carries a commit at all, `git merge-base --is-ancestor`
@@ -230,7 +230,7 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         // itself, never from `estigia::build_info::dirty()`. That constant is
         // compiled into the test target's copy of the library — a different
         // artifact from the binary printing the row — and asking one artifact
-        // about the other is issue #280: the only way to assert the row against
+        // about the other is the only way to assert the row against
         // a shape the binary is not in. `--version` prints `estigia <VERSION>`,
         // and `VERSION` always carries a parenthetical build marker, so the
         // binary's own report is what selects the branch.
