@@ -855,10 +855,10 @@ impl Setting {
                  second, after the `;`, is comma-separated key=effort pairs, as in `apply=low`. `by \
                  task` says the shape of the work decides the model and the effort and the launcher \
                  records what it chose, instead of a role's name. A \
-                 key is a role (developer, analyst, reviewer, judge), orchestrate, or apply. A \
+                 key is a role (developer, analyst, reviewer, refuter, validator, judge), orchestrate, or apply. A \
                  model ID may use any catalog spelling, or inherit, but no comma, semicolon, pipe, \
                  or line break. An effort is low, medium, high, xhigh or max. Naming a role installs \
-                 its definition; reviewer and judge install nothing"
+                 its definition; reviewer, refuter, validator and judge install nothing"
             }
             Self::Integration => "`branch`, or `trunk`",
             // Only values at or below the built-in. A longer one is refused,

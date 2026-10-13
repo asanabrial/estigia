@@ -686,6 +686,22 @@ fn an_unrecognised_value_is_refused_and_names_what_is_accepted() {
 }
 
 #[test]
+fn the_refuter_and_the_validator_route_and_an_unknown_role_key_is_refused_naming_them() {
+    let routing = |cell: &str| {
+        Config::read(&table(&[("Model routing", cell)]), None).map(|config| config.models)
+    };
+    let routed = routing("reviewer=opus, refuter=haiku, validator=sonnet").expect("routes");
+    assert_eq!(routed.for_target("refuter"), Some("haiku"));
+    assert_eq!(routed.for_target("validator"), Some("sonnet"));
+    let refusal = routing("reviewer=opus, lens=haiku").unwrap_err();
+    assert_eq!(refusal.code, "model-routing-key-dropped");
+    let rendered = refusal.to_string();
+    for key in crate::config::ModelRouting::targets() {
+        assert!(rendered.contains(key), "{key} is not named: {rendered}");
+    }
+}
+
+#[test]
 fn a_relative_worktree_location_is_refused_rather_than_resolved() {
     let local = table(&[("Worktree location", "../trees")]);
     let refusal = Config::read(&local, None).unwrap_err();
@@ -1380,7 +1396,14 @@ fn visible_model_targets_are_the_universal_routes_and_the_roles_in_ui_order() {
             .map(|target| target.name)
             .collect::<Vec<_>>()
     };
-    let delegated = ["developer", "analyst", "reviewer", "judge"];
+    let delegated = [
+        "developer",
+        "analyst",
+        "reviewer",
+        "refuter",
+        "validator",
+        "judge",
+    ];
 
     assert_eq!(
         names(),
@@ -2042,13 +2065,7 @@ fn an_orchestrators_own_vocabulary_is_no_longer_accepted() {
         let local = table(&[("Model routing", cell)]);
         Config::read(&local, None).map(|config| config.models)
     };
-    for role in [
-        "strategist",
-        "builder",
-        "refactorer",
-        "validator",
-        "auditor",
-    ] {
+    for role in ["strategist", "builder", "refactorer", "auditor"] {
         assert!(
             routing(&format!("{role}=opus")).is_err(),
             "{role} was accepted"

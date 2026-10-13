@@ -12,6 +12,10 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The refuter and the validator can launch on their own model.** Issue #6. `Model routing` takes `refuter=<model>` and
+  `validator=<model>` beside `reviewer=`; each falls back to `reviewer` when absent, `inherit` passes no `--model`, and a
+  lens still launches on `reviewer`. With none set nothing changes. `config set` refuses any other key and names the
+  accepted ones (`docs/configuration.md`).
 - **The tool menu says each shared thing once.** Issue #5. The receipt arguments, `run_id` and `issue`
   carry one short description each; `collect_review_input` and `launch_review_input` no longer list
   refusal codes; `record_review_finding` no longer advertises `lens`, which only ever refused. The
