@@ -2340,6 +2340,28 @@ fn a_claim_restores_the_receipt_over_a_base_that_advanced_cleanly_and_the_merge_
 }
 
 #[test]
+fn a_base_the_clone_does_not_hold_leaves_no_live_receipt_and_is_no_failure() {
+    let (_root, context, receipt) = low_change();
+    let absent = "7".repeat(40);
+    let seen = pull_over_base(&receipt, &absent, false, "MERGEABLE", "CLEAN");
+    stored(
+        &context,
+        &[
+            published(&receipt),
+            computed_by("codex-b", &receipt, "approved"),
+        ],
+    );
+    let bin = crate::test_env::scripted_gh();
+
+    let live =
+        crate::test_env::with_scripted_gh(bin.path(), &crate::test_env::answers(&[seen]), || {
+            current_review_transaction(&named(&context), 42)
+        });
+
+    assert!(matches!(live, Ok(None)), "{live:?}");
+}
+
+#[test]
 fn a_base_that_advanced_with_a_conflict_is_not_the_live_receipt() {
     for (mergeable, merge_state) in [
         ("CONFLICTING", "DIRTY"),

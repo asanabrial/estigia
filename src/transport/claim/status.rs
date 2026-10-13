@@ -264,10 +264,11 @@ pub(crate) fn current_review_transaction(
     if pull.get("state").and_then(Value::as_str) != Some("OPEN") {
         return Ok(None);
     }
-    let live = matches!(
-        placement(context, &pull, &latest.receipt, true)?,
-        Placement::Exact | Placement::Advanced
-    );
+    let live = match placement(context, &pull, &latest.receipt, true) {
+        Ok(placed) => matches!(placed, Placement::Exact | Placement::Advanced),
+        Err(Failure::Read(_)) => false,
+        Err(other) => return Err(other),
+    };
     Ok(live.then_some(latest.receipt))
 }
 
