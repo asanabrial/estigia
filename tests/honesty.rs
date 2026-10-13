@@ -92,7 +92,7 @@ fn configuration() -> String {
     text
 }
 
-/// The documents plus the changelog's unreleased entry, for the counts alone.
+/// The documents plus the changelog's unreleased entry and the `changes/` fragments, for the counts alone.
 ///
 /// Separate from [`documented`], and the separation is the point. Eight guards
 /// read that one, including one asking *does the documentation still name this
@@ -127,7 +127,26 @@ fn counted() -> String {
         return all;
     }
     all.push_str(body.split("\n## ").next().unwrap_or(body));
+    all.push_str(&fragments(&root));
     all
+}
+
+/// The `changes/` fragments, which are unreleased entries not yet in the changelog.
+fn fragments(root: &std::path::Path) -> String {
+    let Ok(entries) = std::fs::read_dir(root.join("changes")) else {
+        return String::new();
+    };
+    let mut paths: Vec<_> = entries.flatten().map(|entry| entry.path()).collect();
+    paths.sort();
+    paths
+        .iter()
+        .map(|path| {
+            format!(
+                "\n{}",
+                std::fs::read_to_string(path).expect("a readable fragment")
+            )
+        })
+        .collect()
 }
 
 /// The present-tense reader does not carry the changelog.
