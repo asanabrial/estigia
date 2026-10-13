@@ -61,7 +61,7 @@ pointer that leaves it names the document it points at.
 ## Test evidence, and the run id shape
 
 - **A `setup` test has answered red once and green every other time over identical bytes, and the
-  mechanism is unknown.** Issue #320:
+  mechanism is unknown.**
   `setup::tests::setup_accepts_an_in_flight_body_no_ledger_entry_will_ever_cover` failed in one full
   `cargo test` at head `eff9e09c` (Windows, 2026-09-07) with the second `setup(...)` call's `.expect`
   reading *setup refused a body it had itself written and recorded, though it matches no known
@@ -94,8 +94,7 @@ pointer that leaves it names the document it points at.
   rather than with two tests sharing data. That is a hypothesis, offered as one: no run has
   reproduced the failure under observation.
 
-- **The run-id shape cannot tell a dashed runtime from a suffix that carried one.** Issue #234
-  closes the doors #48's rounds left — a dashed suffix such as `codex-01k4-9f2a` is refused, a
+- **The run-id shape cannot tell a dashed runtime from a suffix that carried one.** The doors the earlier rounds left are closed — a dashed suffix such as `codex-01k4-9f2a` is refused, a
   non-string `run_id` is a malformed call in every tool that takes one, and `create`'s declared
   runtime must be a runtime component — and one residual survives by construction. An id whose
   last-dash suffix *is* the minted shape is admitted: measured at this head,
@@ -107,7 +106,7 @@ pointer that leaves it names the document it points at.
   already minted from text the old checks admitted are permanent and left alone: this repairs what is
   written next, not the residue.
 
-- **Only Codex's hook derives its own runtime word.** Issue #636 found `hook::run_as` deriving
+- **Only Codex's hook derives its own runtime word.** `hook::run_as` used to derive
   `claude-…` for every agent, so a Codex run claiming as `codex-…` was invisible to its own gate.
   `session::AGENT_RUNTIMES` now maps `codex` to `codex`; every other agent that registers a
   `PreToolUse` hook (Cursor) still derives `claude-…`
@@ -153,7 +152,7 @@ pointer that leaves it names the document it points at.
   deliberate and review-visible; the failure names `tests/instruction_ceiling.rs`.
 
 - **The shipped skill no longer carries its own provenance, so the why of a rule is here and nowhere
-  an agent loads.** Issue #1145 moved rationale, history and incident narrative out of `skill/` so
+  an agent loads.** Rationale, history and incident narrative were moved out of `skill/` so
   that an activation does not pay for it. None of it changes a rule; each passage is kept here as
   it was, minus the sentence it sat in:
   - *Why the digest and not the SHA* (`skill/protocols/rdd.md`). A commit SHA says what was
@@ -164,7 +163,7 @@ pointer that leaves it names the document it points at.
     way, which is the whole reason for taking one.
   - *Branch collision.* Relying on git's `worktree add` refusal to catch two runs on one branch does
     not hold: the check is a read followed by a write with no lock between them, and the review
-    probe for issue #31 produced two successful concurrent worktrees for one branch on Git
+    probe produced two successful concurrent worktrees for one branch on Git
     2.55.0.windows.3. The 2026-07-24 incident (two runs deriving one directory; the loser writing its
     model, its migration and its tests into the winner's checkout mid-build) is what a lost race
     costs, and is the ledger entry I05 in `skill/references/safety-incidents.md`. The same issue
@@ -180,30 +179,29 @@ pointer that leaves it names the document it points at.
     panel; `skill/policies/judgment-day.md` and `skill/references/repository-delivery.md` both state
     the rule that closes it.
   - *Delivery history.* The publication lane's check runs do not populate the pull request merge box
-    (measured on PR #110, run `33027439851`); only a `pull_request` event does. The workflow carries
-    `merge_group:` so a merge-queue entry runs the same suite after ready (issue #133), and whether
+    (measured on one pull request, run `33027439851`); only a `pull_request` event does. The workflow carries
+    `merge_group:` so a merge-queue entry runs the same suite after ready, and whether
     that run satisfies required contexts is a live-repository measurement, not something Estigia
-    asserts from documentation. Delivery merges with a merge commit on that path (issue #179), and
-    the `Merge strategy` row was retired in issue #1044. GitHub as the default repository host,
-    separate from the tracker row, is issue #180.
-  - *The closing-keyword opening.* Seen live on 2026-07-25 in PR #97: knowing the rule was not
+    asserts from documentation. Delivery merges with a merge commit on that path, and
+    the `Merge strategy` row was retired. GitHub as the default repository host,
+    separate from the tracker row, is tracked separately.
+  - *The closing-keyword opening.* Seen live on 2026-07-25 in a pull request: knowing the rule was not
     enough, because `Fixes #<n>` is the muscle-memory opening of a PR body. The first line read,
-    verbatim, `Fixes #61 (link only — closing keywords are not used per project workflow; state is
+    in this shape, `Fixes #<n> (link only — closing keywords are not used per project workflow; state is
     moved via the tracker)`; the parenthetical states the rule and the sentence breaks it. That is
     why the skill supplies the exact `Refs #<n>` wording.
   - *Review target halves.* Seen live (another repository's #70): the approved lineage covered 12 workspace
     paths while the pull request delivered 15, and 35 of 65 final hunks carried no authority at
     all, while every artefact looked exactly like a reviewed delivery. That is why the diagnostic
     target is derived once and compared with what a reviewer is given.
-  - *Launch-prompt restatement.* Issue #172 records what is left unmeasured by the fact that
-    nothing mechanical detects a brief that overrides the reviewer definition's classification
-    rule.
+  - *Launch-prompt restatement.* Nothing mechanical detects a brief that overrides the reviewer definition's classification
+    rule, which leaves what a judge does with one unmeasured.
   - *Filing is not repair.* A filed finding is not a faster repair: three issues on this repository
-    (#31, #54, #76) are three filings by three runs across five days over two overlapping counts,
+  are three filings by three runs across five days over two overlapping counts,
     all still `priority:low` and unrepaired.
-  - *Approved republish.* Issue #482 made the gate refuse an undeclared republish over an approved
-    receipt before it costs anything, and issue #716 made that refusal
-    `approved-republish-without-cause` and stopped counting it as a round. The cost it guards
+  - *Approved republish.* The gate refuses an undeclared republish over an approved
+    receipt before it costs anything, and that refusal is
+    `approved-republish-without-cause` and is not counted as a round. The cost it guards
     against, measured on one issue, was roughly 550,000 tokens a round. On one publication nine
     findings were recorded and none was severe; the ledger computed `approved`; the findings were
     carried into the next change that had to touch the same files, and one round was paid instead of
@@ -219,21 +217,21 @@ pointer that leaves it names the document it points at.
   carries no comments by default — is held by review alone. It briefly had
   a test: `tests/comment_ceiling.rs` counted comment-bearing lines and refused any rise above a
   registered `CEILING`. It never read a comment, so the only cure for its refusal was to raise the
-  number, and its sibling turned red on a *warranted* deletion. Issue #117 deleted it, and widened
-  the ruling: **no test at any level may depend on the text of a comment.** What that costs is a
+  number, and its sibling turned red on a *warranted* deletion. It was deleted, and the ruling
+  widened: **no test at any level may depend on the text of a comment.** What that costs is a
   reader's judgement standing alone — prose can accumulate, or say something false, and no run will
   say so. What it buys is that deleting a comment cannot redden the suite, so a green run is never
   mistaken for evidence the prose was idle. The lexer survived the test: inverted into
   `src/source_text.rs`'s `code_of`, it is what a test reading Rust source strips with — the rule
   `AGENTS.md` item 2 now states, and the only thing standing between a future assertion and a comment
   that satisfies it. Nothing enforces that rule: it is a shape a reviewer reads, not a check. The
-  first attempt at #117 swept `include_str!` and missed `std::fs::read_to_string`; the repair swept
+  first attempt swept `include_str!` and missed `std::fs::read_to_string`; the repair swept
   fourteen more of those and still missed two, one of them in the single file the pull request named
   as its one reviewed exception. Two panels, two rejections, the same finding identity both times.
   That is what an unenforced rule costs, measured rather than supposed.
 
-- **`build.rs` used to derive the transport vocabulary from unstripped source; issue #225's
-  follow-up round closed that channel rather than leaving it documented.** `build.rs` reads each
+- **`build.rs` used to derive the transport vocabulary from unstripped source; a follow-up
+  round closed that channel rather than leaving it documented.** `build.rs` reads each
   `src/transport/*.rs` as text and extracts `TRANSPORT_VOCABULARY` from it — the list `stable_code`
   answers from, and the list `build.rs`'s own floor is sized against. That floor is the count
   `refusal-baseline.txt` records (`population 178` over `reasons.len()`), which replaced the loose
@@ -253,8 +251,8 @@ pointer that leaves it names the document it points at.
   stripped text: the `Failure::envelope` anchor is spelled once, and both `assert_reasons_covered`
   and `extract_constructed` take their window from `envelope_window`, the guard testing each
   `"reason":` position against that window. Nothing under `tests/` compiles the build script's
-  functions, so no test drives a `"reason":` the walk cannot read through the guard — issue #237
-  measured that by writing one into `src/transport/mod.rs`, where the build cleared it at the merge
+  functions, so no test drives a `"reason":` the walk cannot read through the guard — that was measured
+  by writing one into `src/transport/mod.rs`, where the build cleared it at the merge
   base and aborts on it now. What the shape test can fail on is a second derivation: the guard and
   the extractor ending their windows in two places is how the hole opened.
 
@@ -262,8 +260,8 @@ pointer that leaves it names the document it points at.
   `no_comment_spells_a_character_it_could_just_write` used to walk `src/` and `tests/` and fail if any
   `//` line contained `\u{`, on the theory that the eight characters spelling an escape are not the
   escape — and because `cargo doc` publishes a `///` line verbatim, a spelled-out escape there reaches
-  the crate's public documentation rather than the character it names. Issue #117 deleted it — reading
-  comment text is what that issue refuses — so this is no longer checked at all. At the time it was
+  the crate's public documentation rather than the character it names. It was deleted — reading
+  comment text is what the ruling refuses — so this is no longer checked at all. At the time it was
   deleted, its own comment recorded 113 such lines found across the crate, 21 of them in `///` —
   history now, not a current measurement, and nothing here re-derives it.
 
@@ -273,7 +271,7 @@ pointer that leaves it names the document it points at.
   from the run being judged"* — the property that stops a claim's liveness check being satisfied by
   the clock of the run under judgement. The sentence exists only inside doc comments, nine of them in
   `src/transport/branch.rs` and `src/transport/claim.rs`, so no code token could ever satisfy it, and
-  issue #117 deleted the test. The nine doc comments stay and are still the only statement of the
+  the test was deleted. The nine doc comments stay and are still the only statement of the
   requirement; nothing crosses them against anything. There is no runtime to enforce it against either
   — nothing in production constructs these structs yet, which is why the check was written against
   prose in the first place. The day something does, that is the moment to hold the rule in code.
@@ -294,7 +292,7 @@ pointer that leaves it names the document it points at.
   copy is left for the follow-up that corrects it. Extending the count guard to `AGENTS.md` is a
   follow-up change of its own, and not a one-line
   one — `documented()` is `README.md` plus `docs/`, and the node count has no exported constant to
-  derive from — so the decision, with this evidence, is recorded on issue #218.
+  derive from — so the decision, with this evidence, is recorded here.
 
 - **No check can hold the `cargo build --bins --examples` instruction.** The failure is silent by
   construction: a stale `target/debug/estigia` answers exactly as a fresh one does, so no test can tell
@@ -318,15 +316,14 @@ pointer that leaves it names the document it points at.
   the refuter beside it. The two
   delegated roles `developer` and `analyst` are installed for OpenCode as well as Claude Code,
   each in its host's own dialect, each written only where `Model routing` names its role and retracted
-  when the entry goes away — the exception issue #579 opened while #58's refusal to share a dialect
+  when the entry goes away — the exception opened while the refusal to share a dialect
   stands for the reviewers. A model is rendered into the two roles, and an `effort:` line, where
   one is named, into their Claude Code copies alone — **not** into `review-blind`, whose
   `model: inherit` is literal and whose bytes are pinned against an earlier release, so a model or
   effort named for `judge` reaches no file and is carried to Judgment Day's judges by the launch instead. An
   `effort:` line reaches a delegated role on Claude Code; OpenCode has no effort field, so an
   effort named for a role reaches no OpenCode file. That a host obeys either field is not measured
-  here, and every adapter but Claude Code and OpenCode has nowhere to put a role at all. As of
-  issue #45, `Delegated workers` no longer exists: its effect moved into `Model routing`, so no row's
+  here, and every adapter but Claude Code and OpenCode has nowhere to put a role at all. `Delegated workers` no longer exists: its effect moved into `Model routing`, so no row's
   whole effect is an installed definition, the `Applies::Inert` answer that named the rootless
   adapters is gone with the row that needed it, and `Setting::reaches_only_an_installed_agent_definition`
   is deleted with the exhaustive match it fed. `applies()` now decides on `AgentAdapter::can_gate_tools`
@@ -426,7 +423,7 @@ pointer that leaves it names the document it points at.
   runs to compute it.
 
 - **The grant is a declaration whose enforcement is unmeasured on every adapter, including Claude
-  Code.** Issue #58, which once made `Applies::Inert` producible (issue #45 deleted it with the row
+  Code.** The earlier account of it, which once made `Applies::Inert` producible (deleted with the row
   that needed it), described the grant as "a real second
   line of defence" on Claude Code; that is not established, here or in the project this crate ports
   from (re-read at `gentle-ai` `v4.0.0`, `ff77164d`; the first reading, at `a537c63e`, counted sixteen
@@ -461,15 +458,14 @@ pointer that leaves it names the document it points at.
   an adapter with no agent-definitions root is missing a declaration, not failing to hold a control
   that no adapter here is shown to hold.
 
-- **The profile carries the two authorisations that can ask and no judge row: issue #246
-  closed that half of issue #24.** #24 was filed wanting a defaulted `Blind judges` among the rows a
-  profile would set. #246 removed `Blind judges`, and issue #994 then removed the judges from ordinary
+- **The profile carries the two authorisations that can ask and no judge row.** A defaulted `Blind judges` was once wanted among the rows a
+  profile would set. `Blind judges` was removed, and the judges were then removed from ordinary
   review altogether: the review is the lenses `review_tier` licenses, derived from
   `RiskLevel::lenses` and stated in `skill/policies/blind-judges.md` and linked from
   `skill/SKILL.md` developer step 5, not selected by an operator row; the two judges
   survive only as Judgment Day, which an operator asks for. So the `Authorisation posture` row
-  discriminates the two authorisations that can ask and nothing else (issue #775 retired
-  `Review delegation: ask`, so that row is no longer one of them), and there is no judge row for it to
+  discriminates the two authorisations that can ask and nothing else (`Review delegation: ask` was
+  retired, so that row is no longer one of them), and there is no judge row for it to
   carry. The reviewed presets are a separate, screen-only choice: choosing one expands into the same
   `Model routing` cell, and `setup` installs a delegated role only when that cell names it, so
   `developer` and `analyst` appear only when the operator named them. `analyst` joined all six
@@ -490,8 +486,7 @@ pointer that leaves it names the document it points at.
   layering produces.
 
 - **Lens inputs, the refutation batch and the validator are started by `launch_review_input` and recorded by `collect_review_input`; the
-  validator reads a diff the binary rebuilds, not the checkout `inspect_candidate` reads.** Issue #776,
-  slices S2b, S3b, S3c, S3d and S6b. `launch_review_input` starts a lens, the `refutation-batch` or
+  validator reads a diff the binary rebuilds, not the checkout `inspect_candidate` reads.** `launch_review_input` starts a lens, the `refutation-batch` or
   `review-validator` that `review_status` offers in a `collect`, and `collect_review_input` is the one
   caller of `reviewer::settle`, which `launch_recorded` also uses. The collect
   hands a parsed answer to a recorder callback that answers `Recording`: `Recorded`,
@@ -559,8 +554,7 @@ pointer that leaves it names the document it points at.
   reviewer's own code, with its resolution as the `action`; its class is the one the table gives the
   code.
 
-  **The refuter is launched, and its distinctness is a context's, not a session's.** Issue #776,
-  slice S3c. For a `refutation-batch` input the binary hands a fresh, tool-free reviewer process the
+  **The refuter is launched, and its distinctness is a context's, not a session's.** For a `refutation-batch` input the binary hands a fresh, tool-free reviewer process the
   receipt, the rebuilt diff, the issue's body and exactly the finding ids the `collect` lists, and
   records its answer in one `record_refutation` call credited to `review-refuter`. The distinctness
   `require_distinct_reviewer` asks of a refuter is that the credited name is neither the publisher nor
@@ -572,7 +566,7 @@ pointer that leaves it names the document it points at.
   before, measured by `the_capture_credits_the_role_label_while_a_hand_call_naming_the_publisher_is_still_refused`
   and `a_hand_call_naming_the_requester_of_a_handoff_is_still_refused`. A hand
   `record_refutation` call is now refused `recorded-by-capture-only` before any of that is read
-  (issue #776, slice S5b), so a batch under the `review-refuter` label can only be a captured one.
+  (slice S5b), so a batch under the `review-refuter` label can only be a captured one.
 
   The answer must name every offered finding once and nothing else. A finding named that was not
   offered, or one offered and left out, rejects the whole answer as `reviewer-result-malformed` before
@@ -606,12 +600,11 @@ pointer that leaves it names the document it points at.
   (Unix only) drives a `collect`, a launch and collect with a stand-in `claude` and the review leaving the
   `collect`; no test runs a real reviewer CLI.
 
-  **The validator is launched, and what it sees is a diff, a list and a criteria text.** Issue #776,
-  slice S3d. For a `review-validator` input the binary hands a fresh, tool-free reviewer the receipt,
+  **The validator is launched, and what it sees is a diff, a list and a criteria text.** For a `review-validator` input the binary hands a fresh, tool-free reviewer the receipt,
   the correction's diff over its parent, the parent receipt's severe findings and the issue's body,
   and records the answer in one `record_validator_result` call. The diff is `review_payload` over
   `parent.head..head`, the range `inspect_candidate` reads, with the parent taken from the publication's
-  recorded lineage; the whole change is not handed over. Issue #1035: when the publication recorded
+  recorded lineage; the whole change is not handed over. When the publication recorded
   `delta-parent=integrated` — the base advanced, the head contains it and `git merge-tree` merged the
   parent head and that base without a conflict — the diff, and `inspect_candidate`'s parent side, run
   from that merged tree to the head instead, and the validator is offered. The capture recomputes the
@@ -689,7 +682,7 @@ pointer that leaves it names the document it points at.
   crossed by unit tests only.
 
 - **A reviewer launched through a Windows `.cmd` or `.bat` shim is launched by Rust's standard
-  library, and that path has never run on a Windows host here.** Issue #776, slice S4a. An
+  library, and that path has never run on a Windows host here.** An
   npm-installed `claude` or `codex` resolves to a shim, and `src/reviewer/run.rs` spawns it with plain
   `Command::new(program).args(args)`. At the pinned toolchain, 1.98.1, the standard library sends a
   `.bat` or `.cmd` program through `cmd.exe /e:ON /v:OFF /d /c` with arguments it quotes itself,
@@ -697,7 +690,7 @@ pointer that leaves it names the document it points at.
   an argument it cannot pass, which `run.rs` reports as `reviewer-launch-failed`; a missing shim is
   still `NotFound`, so `reviewer-cli-missing`. gentle-ai v4 needs its own
   `windows_batch_cmdline.go` because Go's `os/exec` does none of this. A port of that file was written,
-  reviewed and closed unmerged as PR #982: it was a weaker second copy of the standard library's rule,
+  reviewed and closed unmerged: it was a weaker second copy of the standard library's rule,
   without `/v:OFF` and refusing a `%` the standard library passes. The standard library's own
   `std::process` documentation at 1.98.1 says the set of characters it cannot escape may change
   between releases and that launching a batch script this way may be removed, so a toolchain bump
@@ -707,22 +700,22 @@ pointer that leaves it names the document it points at.
   refuses a script launcher because its process tree cannot be bounded
   ([`configuration.md`](configuration.md)); the reviewer path does not consult that check, so the
   two diverge on the same launcher. Nothing here
-  runs on Windows while the CI lane is off (#425), and a cross-check for a Windows target stops in
+  runs on Windows while the CI lane is off, and a cross-check for a Windows target stops in
   `libsqlite3-sys`'s C build on a host without MinGW.
 
 - **The TUI refuses a `.cmd` launcher as uncontainable and the reviewer launches one, and the
-  divergence stands.** Issue #776, slice S3. `src/tui/models.rs` returns early when
+  divergence stands.** `src/tui/models.rs` returns early when
   `process_tree::launcher_can_be_contained` is false, which on Windows is anything but `.exe` or
   `.com`; `src/reviewer/run.rs` never asks and attaches a kill-on-close Job Object after the
   spawn. It stands because the reviewer's cleanup rests on that Job Object, and because a common npm
   layout puts `claude` and `codex` behind a `.cmd` shim, so refusing there would stop reviewers on
   those installs. The divergence is the one the entry above names, linked and not restated. What would
   settle it is a Windows run showing that the Job Object kills `cmd.exe` and the `node` child it
-  starts at the deadline. No such run exists: the CI lane is off (#425). Until one does, neither
+  starts at the deadline. No such run exists: the CI lane is off. Until one does, neither
   choice is measured, and the TUI guard stays as it is.
 
 - **A reviewer's answer is read for what its text alone settles, not for what the trees or the ledger
-  settle.** Issue #776, slice S2a; `src/reviewer/result.rs` is not called by any command yet. For a
+  settle.** `src/reviewer/result.rs` is not called by any command yet. For a
   finding `parse` makes every check `record_review_finding` makes from the answer's text: the id and
   that ids do not repeat, the class, the vocabularies (a blank word is refused), the severe
   declarations, that a location is present and read by `parse_finding_location`, that `evidence` and
@@ -737,7 +730,7 @@ pointer that leaves it names the document it points at.
   them, which nothing enforces.
 
 - **A binary-launched reviewer is isolated by an allow-list on Claude Code and a deny-list on Codex.**
-  Issue #776, slice S1; `src/reviewer/` is not called by any command yet. `claude` runs with
+  `src/reviewer/` is not called by any command yet. `claude` runs with
   `--tools ""`, `--strict-mcp-config`, no session and no settings sources, so it is given nothing and
   a tool added in a later release stays off. `codex exec` has no equivalent switch. It runs
   `--sandbox read-only` with `--disable` for each stable, enabled feature that grants a tool or
@@ -754,7 +747,7 @@ pointer that leaves it names the document it points at.
   `ANTHROPIC_AUTH_TOKEN`, `CODEX_HOME`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`), so `GH_TOKEN` does not
   reach them. `AWS_*`, `GOOGLE_*` and the Bedrock and Vertex switches are not on it: a reviewer routed
   through either refuses as unavailable until that is decided. Claude runs with
-  `--output-format json`, not the `text` issue #776 quoted, because `claude -p` is reported to exit 0
+  `--output-format json`, not `text`, because `claude -p` is reported to exit 0
   with an API error as its text. One run of each real CLI, by hand on 2026-10-06, is the whole of the
   evidence that they accept these arguments: claude 2.1.292 with this argument list answered
   `{"type":"result","subtype":"success","is_error":false,"result":"ok"}` on exit 0, and codex-cli
@@ -763,8 +756,7 @@ pointer that leaves it names the document it points at.
   failure as unavailable is a heuristic over the last 2 KiB of the reviewer's error text after its
   echoed prompt is removed, so it can still misname a cause; every such code blocks, and none passes
   or skips.
-- **A reviewer runs detached from the call that started it, and a collect records its answer.** Issue
-  #776, slices S6a and S6b. `launch_review_input` writes a job directory under `~/.estigia/jobs/`,
+- **A reviewer runs detached from the call that started it, and a collect records its answer.** `launch_review_input` writes a job directory under `~/.estigia/jobs/`,
   records the job against its slot and re-executes this binary as `estigia __review-job <dir>`, detached
   (a session of its own on Unix); the runner takes an exclusive lock on `<dir>/lock` for its whole life,
   runs the adapter `select_adapter` returns exactly as the foreground path did (so the deadline, the
@@ -802,17 +794,17 @@ pointer that leaves it names the document it points at.
 
 ## Node, CI and the actions that run the suite
 
-- **Raising the checkout action did not close this repository's Node 20 exposure — issue #18 did,
+- **Raising the checkout action did not close this repository's Node 20 exposure — a later change did,
   four actions and one transitive pair later.** `actions/checkout` moved from `v4` to `v7` because
   `v4` declares `runs.using: node20` and every run printed *"being forced to run on Node.js 24"*. It
   was one of **five**, and four of them kept printing that warning for another five weeks. The table
-  below is the measurement as it stood before #18, kept because it is the reading the change was made
+  below is the measurement as it stood before that change, kept because it is the reading the change was made
   from; the closing paragraph says what each row is at the delivered head.
 
   Every `uses:` line in both workflows, with `runs.using` read from that action's own `action.yml` at
   the ref the workflow named:
 
-  | Action | Where | `runs.using` before #18 | After #18 |
+  | Action | Where | `runs.using` before | After |
   |---|---|---|---|
   | `actions/checkout@v7` | `ci.yml`, `release.yml` | `node24` — raised earlier | unchanged |
   | `dtolnay/rust-toolchain@stable` | `ci.yml` | `composite`, shell steps only | unchanged |
@@ -826,8 +818,7 @@ pointer that leaves it names the document it points at.
   So the warning still appeared, and the argument used to raise the checkout in `release.yml` — that a
   tag-triggered workflow which will not start publishes nothing and cannot be retried by pushing a
   fix — still applied to that lane **four times over** — all four direct `node20` actions were in
-  `release.yml` — plus the composite's two. **Closed by issue
-  #18**: every direct action that declares a Node runtime is on `node24` at the major named — the
+  `release.yml` — plus the composite's two. **Closed**: every direct action that declares a Node runtime is on `node24` at the major named — the
   two direct actions that declare none are `dtolnay/rust-toolchain` and the composite
   `attest-build-provenance`, which run shell steps and pinned children respectively — and
   `attest-build-provenance` is at `v3` where the
@@ -850,7 +841,7 @@ pointer that leaves it names the document it points at.
   (`RUNTIME_FLOORS`) with a completeness check (`ACTIONS_WITHOUT_A_NODE_RUNTIME_FLOOR`) that refuses
   any versioned action in either workflow missing from both lists, so an action nobody read is a red
   test rather than a silent pass. Each floor was measured by putting the old major back and seeing the
-  guard redden — all five #18 actions, including the composite's own `v3 → v2`, plus a `rust-cache`
+  guard redden — all five of those actions, including the composite's own `v3 → v2`, plus a `rust-cache`
   downgrade and an invented unlisted action.
   It still cannot bound a composite's *children*, because it does not open the composite: `@v3`'s pins
   are read here by hand, not by the test, so a future `@v4` that repinned a `node20` child would not be
@@ -1123,8 +1114,7 @@ pointer that leaves it names the document it points at.
   sentence beginning "Measured on this repository" while deleting a different borrowed number from
   the same paragraph for being borrowed.
 
-- **The CI toolchain is pinned, and the cost is that this repository stops seeing the newest stable
-  — issue #40.** The lane floated on `dtolnay/rust-toolchain@stable` with `-D warnings`, so a Rust
+- **The CI toolchain is pinned, and the cost is that this repository stops seeing the newest stable.** The lane floated on `dtolnay/rust-toolchain@stable` with `-D warnings`, so a Rust
   release that added a lint reddened it on a line no diff touched: run `32419475997`, 2026-08-20,
   `error: expression can be simplified using Option::unwrap_or()` at `src/cli/tests.rs`,
   the help URL naming `rust-1.98.0`, while the machine the change was developed on could not see it.
@@ -1223,7 +1213,7 @@ pointer that leaves it names the document it points at.
   process was launched in*, that root — `<worktree>` — is what becomes `context.repo_dir`
   (`checkout_root_covering`, read by `launched_context`). The second clause is load-bearing and not
   redundant with the clamp above it: `narrowed_by_the_call` only promises that the *candidate* lies
-  inside the launch directory or inside a checkout a pointer already records (issue #131, below),
+  inside the launch directory or inside a checkout a pointer already records (below),
   never that a holding covering the candidate does too. A holding's recorded root can be the top of
   a wider checkout than the one this process was launched in — a package directory in a monorepo,
   or anywhere a person stands when they type `estigia gate`, both named in `covers`'s own doc — and
@@ -1275,7 +1265,7 @@ pointer that leaves it names the document it points at.
   resolved against the directory this process was launched in, the result is **placed** — the
   spelling collapsed the way this platform collapses it,
   then resolved as far as the filesystem exists — and a value landing outside the launch directory
-  and outside every checkout a pointer already records (issue #131, below) is discarded in favour of
+  and outside every checkout a pointer already records (below) is discarded in favour of
   it. Measured before that clamp existed, with two live pointers and a
   `git commit` under a claim: `workdir` of `..`, of the parent checkout, and of `C:\Windows` all
   resolved, were covered by no run, and were answered `outside` with exit **zero** — the command
@@ -1410,7 +1400,7 @@ pointer that leaves it names the document it points at.
   by nobody, and one from another location is deliberately not recorded by the instances that ignore
   it, because storage has no compare-and-set and their write could overwrite the owner's. The
   resubscription is driven in the test by a stubbed stream that throws or ends once; a real host's
-  failure modes are not measured. Why the 2026-09-30 session of #627 produced no reaction is still
+  failure modes are not measured. Why the 2026-09-30 session produced no reaction is still
   not established: the record exists so the next one can be explained.
 
   **And what the loop plugin's wait on a child session does not establish.** The set of running
@@ -1457,7 +1447,7 @@ pointer that leaves it names the document it points at.
   refuses, is a **floor**: an issue delivered that way is not counted, and the cap can run past it.
   `docs/what-it-writes.md` states the install half.
 
-  **The wait sees counts, not liveness.** Issue #629: with `held + pending > 0` the loop waits on a
+  **The wait sees counts, not liveness.** With `held + pending > 0` the loop waits on a
   timer instead of stopping, and it cannot tell a wait that will end from one that will not. `held`
   is every open issue in `in-progress` or `review` the run could not claim, not "held by a live run
   other than this one": telling a live holder from a stale claim needs a claim-timeline read per
@@ -1482,8 +1472,7 @@ pointer that leaves it names the document it points at.
   `storage.scan` that never pages, not against a host; no test restarts one. The tests drive the timer with the driver's own fake clock, not a real
   five-minute wait.
 
-  **The generic `/goal` proves nothing about the work, and this is not Estigia evidence.** Issue
-  #639: the `Goal loop plugin` row writes `goal-loop.js`, whose `/goal` completes when a model
+  **The generic `/goal` proves nothing about the work, and this is not Estigia evidence.** The `Goal loop plugin` row writes `goal-loop.js`, whose `/goal` completes when a model
   answers `MET` to a question about the transcript. That is a judgement, not an adjudication: it is
   not read from the tracker, not measured against the repository, and it may be wrong in either
   direction, so a goal can stop `met` on work that is not done and continue on work that is. It never
@@ -1499,7 +1488,7 @@ pointer that leaves it names the document it points at.
   work repeats until `/loop stop`. The tests drive it against a stubbed context, with the driver's
   own timer clock, not a host.
 
-  **The Codex loop was measured against a mock model, not a real one.** Issue #637: on codex-cli
+  **The Codex loop was measured against a mock model, not a real one.** On codex-cli
   0.159.2, in a temporary `CODEX_HOME` written by `estigia setup codex` with the row `on`, `hooks/list`
   showed the gate, `SessionStart` and `Stop` all trusted; a local server standing in for the model API
   answered `codex exec`, and Estigia's own `Stop` ran against a stand-in `gh` whose ready queue held
@@ -1608,7 +1597,7 @@ pointer that leaves it names the document it points at.
   another.** They used to put their fake `gh` ahead of the real one on the process `PATH` and set
   `ESTIGIA_FAKE_ANSWERS` beside it, all under `src/test_env.rs`'s one `ENVIRONMENT` lock — so the
   ~300 fixtures that need a scripted `gh` ran one at a time, and `cargo test` spent its wall-clock
-  waiting on that lock rather than working (issue #1062: the lib suite was 199 s over 2,733 tests).
+  waiting on that lock rather than working (the lib suite was 199 s over 2,733 tests).
   The fake and its answers now travel through `crate::transport::with_process_override`, a
   thread-local the process-spawning seam reads, and each fixture resolves and answers its own `gh`
   without touching the process environment. `scripted_gh` also caches its directory per test binary
@@ -1621,7 +1610,7 @@ pointer that leaves it names the document it points at.
   Two such fixtures exist and name `with_scripted_gh_across_threads`, which keeps the old
   process-wide lock; a third written the wrong way would fail on a machine with no `gh` on `PATH` and
   could pass against a live tracker on one that has it, and no guard here would name it.
-- **Four flakes under load (issue #1185): three traced and fixed, one not reproduced.**
+- **Four flakes under load: three traced and fixed, one not reproduced.**
   `transport::draft` staged every draft body at one name per branch, and the module's tests all
   draft `issue-12` in one process, so a test could read or delete another's staged file; it failed
   14 of 20 runs of `cargo test --lib transport::draft` and the staging name now carries a
@@ -1637,7 +1626,7 @@ pointer that leaves it names the document it points at.
   which did not fail in 30 runs alone or 15 runs of the whole module at load average 11 to 25, so
   its report in the issue has no cause and no fix.
 
-  Issue #1198 replaced the measurements with deterministic tests. The staging name is built by
+  Deterministic tests replaced the measurements. The staging name is built by
   `staged_name`, and a test holds two drafts of one branch to distinct names whose cleanups do not
   touch each other. `with_fake_clis`'s null-device default is pinned directly, with the caller's
   choice and `ESTIGIA_FAKE_EXIT_WITHOUT_READING` as the two ways to opt out; the early-exit launch
@@ -1654,7 +1643,7 @@ pointer that leaves it names the document it points at.
   whether the runner's thread had finished, and a runner that finished between the two looks was
   reported as dead (0 of 30 runs failed afterwards). It re-reads the marker after the thread is found
   finished, and a test makes
-  the finish happen between the two looks. The failure reported on #1198,
+  the finish happen between the two looks. The failure reported earlier,
   `a_count_read_that_fails_after_the_findings_landed_reports_the_write`, panicked in the same
   `launch` and is read as this race, not reproduced by name.
 
@@ -1711,12 +1700,12 @@ pointer that leaves it names the document it points at.
   ready. A Judgment Day judge is not launched by the binary and keeps the older limit: Estigia
   cannot observe that the host launched it, kept it blind or kept two judges concurrent.
 
-  Since issue #775 nothing credits a reviewer by name — the retired `review_verdict` did, and
+  Nothing credits a reviewer by name any more — the retired `review_verdict` did, and
   its `self_attested` flag is gone with it — so the distinctness rule survives only where a handoff
   is resolved, where an approval supersedes an escalation, where a retired rejected verdict
   refuses, and where a refutation is recorded — the four `docs/parity.md` names. The refutation rule
   compares the caller-supplied `refuter` label against the recorded publisher and requester run ids,
-  never the recording `run_id`. **Decision, issue #935:** the check is left comparing the label
+  never the recording `run_id`. **Decision:** the check is left comparing the label
   rather than bound to `run_id`, because the run that records a refutation is the claim holder
   writing on a distinct refuter's behalf, so a `run_id` comparison would refuse the publisher's claim
   holder for a refutation it did not adjudicate; `docs/parity.md` is corrected instead to state what
@@ -1725,7 +1714,7 @@ pointer that leaves it names the document it points at.
   because it can check them.
 
   **An abandoned pull request's handoff keeps excluding its publisher from later pull requests.**
-  Issue #935: `review_eligibility` reduces the timeline alone — `all_publications` carries no
+  `review_eligibility` reduces the timeline alone — `all_publications` carries no
   pull-request state — so telling an abandoned pull request from an open one needs a tracker read the
   pure function does not have. The exclusion is kept rather than narrowed to closed pull requests:
   the handoff's discharge is a distinct run's recorded judgement, not the passage of time, and a
@@ -1737,8 +1726,8 @@ pointer that leaves it names the document it points at.
   launched the lenses the tier licenses. A closed-issue `verify_claim` accepts the follow-up only when this run's review transaction, the closing PR, and the merge commit's parents (reviewed base, then head) all agree; any other close is still `issue-not-open`, and an unreadable closer listing is a failed read. The refusal tells the two apart by its message: when the closer is still this run's own publication and the run still holds the issue, it names the reopen-and-transition continuation instead of calling the close somebody else's. It cannot prove the lenses
   read those bytes or that their findings were honest. An OpenCode run launching Task lenses is that
   same instruction, not a proof those Tasks ran or were blind. A marker can still be forged by a collaborator
-  acting outside Estigia. The composition is the tier's lens count rather than operator-selected — issue
-  #246 removed the `single`/`two blind`/`five blind` dial and issue #994 the judges — but derived is still not observed: what a
+  acting outside Estigia. The composition is the tier's lens count rather than operator-selected — the
+  `single`/`two blind`/`five blind` dial and the judges are gone — but derived is still not observed: what a
   run actually launched remains not an observation the harness can make. The enforced floor remains
   one computed exact-receipt verdict: the transport has no per-reviewer **verdict** marker — `review_verdict`
   is retired and refuses — and does not implement multi-verdict adjudication. It does have a per-finding
@@ -1746,7 +1735,7 @@ pointer that leaves it names the document it points at.
   produced is recorded separately, and the *verdict* it reduces to is computed from it, not chosen.
   The entry below says what that record does and does not carry.
 
-- **Judgment Day's rules are stated, not enforced.** Issue #994: ordinary review licenses no judges,
+- **Judgment Day's rules are stated, not enforced.** Ordinary review licenses no judges,
   and `skill/policies/judgment-day.md` states v4's Judgment Day contract, less its artifact references (Estigia keeps no store) — explicit request only,
   never alongside a lens review, no refuter, and no receipt or gate effect, with its findings
   reported to the operator and filed as issues, and then the rest: only a severe finding every judge
@@ -1790,16 +1779,16 @@ pointer that leaves it names the document it points at.
   materialises per-path unified hunks against the receipt's recorded base, once per epoch, and binds
   `payload-digest` on the published marker. The answer carries `payload_bytes` and `payload_digest`
   unconditionally and the payload text only when `--inline-payload` asks for it — the default
-  answer omits it (issue #168; before that fix the text was unconditional).
+  answer omits it (before a fix the text was unconditional).
   Overflow of `REVIEW_PAYLOAD_CEILING` (262,144 bytes) refuses `review-payload-too-large` before any
   remote write; the payload is never truncated whether it is asked for or not. Measured on this
-  change (issue #125) against `origin/main` while the work was still uncommitted: **31,795 bytes**.
+  change against `origin/main` while the work was still uncommitted: **31,795 bytes**.
   That is the size of one typical publication of this repository, not a search of `src/` (97,217
   lines at the analysis's `main`). Estigia still cannot prove the orchestrator asked for those
   bytes at all, nor that it handed them to a judge — the same honesty as the entry above.
   [judgment day](../skill/policies/judgment-day.md) now asks for the payload first and names the
   checkout as an exception for claims the diff does not show, which is prose nothing here enforces.
-  And what refused the read-back at issue #95's size was never `REVIEW_PAYLOAD_CEILING`: that
+  And what refused the read-back at one real publication's size was never `REVIEW_PAYLOAD_CEILING`: that
   publication was 145,756 bytes, comfortably under the 262,144 above, which is why it materialised
   at all. It was the host's own result cap. **Reconstructed, not measured**, and marked so because
   this document's subject is that distinction: the cap counts the whole JSON answer, so the diff
@@ -1833,10 +1822,10 @@ pointer that leaves it names the document it points at.
   consumer has a way out that a reader of these documents does not: `review_payload` is `pub`, so
   `estigia::transport::target::review_payload` returns both the bytes and the digest; only
   `pinned_diff_args` and `review_payload_bounded` are `pub(crate)`. Two judges recorded the
-  documentation gap on issue #168 independently, and two more corrected an earlier draft of this
+  documentation gap independently, and two more corrected an earlier draft of this
   entry that called the whole recipe `pub(crate)`. Nothing crosses this sentence against the code.
 
-  **Issue #341 gave the transport itself a caller of that recipe, and the instability just
+  **The transport itself gained a caller of that recipe, and the instability just
   described is exactly why it refuses rather than compares.** `review_payload_membership` reads a
   candidate reviewer-facing text from a path, recomputes the payload the same way `publish_review`
   did, and reconciles the recomputed digest against the marker's own recorded `payload-digest`
@@ -1852,16 +1841,16 @@ pointer that leaves it names the document it points at.
   once the digests agree does it test candidate lines against the payload, and only for
   membership — never completeness, so a candidate that legitimately withholds whole files to fit a
   sealed reviewer's limit is still accepted. **What that membership does not check is order,
-  multiplicity or file boundaries** (issue #355): the set it searches is built once over the whole
+  multiplicity or file boundaries**: the set it searches is built once over the whole
   payload, so a candidate assembled entirely from real lines can still misrepresent the change — a
   `-` line shown after the `+` that replaced it, one real line repeated, or a line from one file's
   hunk placed under another's `diff --git` header — and still answer `ok: true`.
   `claim::tests::review_payload_membership_accepts_reordered_duplicated_and_cross_spliced_real_lines`
   constructs all three from the fixture's own payload bytes and pins each answer. A caller reading
   `ok: true` has bought "every line was published somewhere", not "this text is a faithful
-  rendering of the change"; #341's own sealed judge recorded the limit as
+  rendering of the change"; its own sealed judge recorded the limit as
   `membership-is-blind-to-order-multiplicity-and-file-boundaries` against receipt
-  `354d9150b81c34211dcf8bd7e1fe73f3`, and #355 discloses it rather than leaving it
+  `354d9150b81c34211dcf8bd7e1fe73f3`, and a later change discloses it rather than leaving it
   implied.
 
 - **A sealed reviewer holds a copy, and nobody holding it can check it.** The entry above
@@ -1881,7 +1870,7 @@ pointer that leaves it names the document it points at.
   This one asks whether what it was handed was the change.
 
   **It has happened, and what caught it was the reader.** `skill/policies/judgment-day.md` records
-  that on issue #248's final panel the sealed judge detected that the payload it was handed had been
+  that on one final panel the sealed judge detected that the payload it was handed had been
   abridged and withheld every claim about the elided regions. Nothing in this crate observed it,
   then or now.
 
@@ -1897,7 +1886,7 @@ pointer that leaves it names the document it points at.
   reviewer's answer is bound to the candidate's identity though never to its bytes. The third admits a
   structured location against the change: `finding-location-outside-the-change` for any severe finding
   disposed `introduced` or `worsened`, whoever recorded it, and a path check besides for a
-  lens. Since issue #223 landed, a finding's evidence prose is admitted too. **The project this design is ported from
+  lens. A finding's evidence prose is admitted too. **The project this design is ported from
   computes no digest over the patch bytes it delivers either**, read at revision `a537c63e`:
   `internal/cli/review_lens_context.go` composes the reviewer's prompt in Go and the string `sha256`
   does not occur in it, while the transport that does digest a diff carries the note that
@@ -1933,12 +1922,12 @@ pointer that leaves it names the document it points at.
   named limit, not a cleared gap.
 
 
-- **A lens report records that the binary admitted a lens's answer, not who gave it.** Issue #775:
+- **A lens report records that the binary admitted a lens's answer, not who gave it.**
   `record_lens_report` stores that a role finished against a receipt, written by the run holding
   the `review` claim on the lens's behalf, because a sealed lens holds no tools to write it. The
   computed verdict refuses `approved` without a report for every role the tier licenses, so an
   unreported lens cannot be approved by omission, and a hand
-  `record_lens_report` is refused `recorded-by-capture-only` (issue #776, slice S5b), so a report
+  `record_lens_report` is refused `recorded-by-capture-only` (slice S5b), so a report
   exists only where the binary ran the lens. What remains unproven is who answered, as the launch
   entry above says. `release_ci` now depends on this: a
   `low` receipt licenses no lens and releases with no review event at all, as v4 does, on the
@@ -1946,7 +1935,7 @@ pointer that leaves it names the document it points at.
   single wrong report is indistinguishable from a right one until a second disagrees with it.
 
 - **A `review-verdict` marker releases nothing, and the one thing it can still do is refuse.**
-  Issue #775, slice S3. `release_ci` and `goal_completion` read the computed
+  `release_ci` and `goal_completion` read the computed
   verdict alone. What a recorded marker means is decided once,
   fail-closed. An `accepted` one releases nothing. A `rejected` one from a distinct reviewer refuses
   release on its exact receipt at **every** tier, including a `low` receipt whose recomputed ledger
@@ -1966,7 +1955,7 @@ pointer that leaves it names the document it points at.
   candidate is measured from. Where a receipt carries both kinds, the computed marker
   decides the parent's acceptance and either kind resolves a handoff. None of this can be told from a
   forged marker by Estigia — they are comments, readable by anyone who can write one.
-  **Decision, issue #775, with the judges themselves removed from ordinary review by issue #994:**
+  **Decision, with the judges themselves removed from ordinary review:**
   the both-judges-confirm rule is retired. A lens's severe finding is settled by the ledger, so one
   lens's `deterministic` finding rejects the receipt without a second reading, and a sibling that
   disagrees cannot veto it. What that costs is the adversarial check a second judge's confirmation
@@ -1990,29 +1979,28 @@ pointer that leaves it names the document it points at.
   any aggregate marker while release reads only a distinct reviewer's, so an old marker written by a
   forbidden run can make a receipt stand rejected, and so turn a republish over it into a correction,
   for a receipt release still accepts.
-  The terminal receipt of issue #896 follows the same rule: an `approved` receipt is recorded by
+  The terminal receipt follows the same rule: an `approved` receipt is recorded by
   `record_computed_verdict`, not by a verdict, so an approval is final against `escalate_review` and a
   distinct run's approval supersedes an escalation. A receipt is a record in the local store that
   only a run holding the review claim writes through the tools, and nothing stops somebody with the
   store from writing one: what refuses the publisher approving its own escalation away is the rule
   that a receipt credited to a run the review forbade supersedes nothing.
 
-- **`Merge strategy` accepted only the topology delivery implements, and is now retired.** Issue
-  #179: the settings table used to take `squash` and `rebase` while `closing_merge` only recognised a
+- **`Merge strategy` accepted only the topology delivery implements, and is now retired.** The settings table used to take `squash` and `rebase` while `closing_merge` only recognised a
   two-parent merge commit, so a configured non-default strategy merged successfully and then failed
   the close with a generic claim-verification refusal. The setter then refused those two with
   `merge-strategy-unimplemented`, and a delivered SHA that is not a two-parent merge under
-  `merge commit` refuses `delivery-topology-mismatch` naming the strategy. Issue #1044 retired the row
+  `merge commit` refuses `delivery-topology-mismatch` naming the strategy. The row was later retired
   outright: the enum's `Squash`/`Rebase` variants are gone, `closing_merge` hard-codes the merge
   commit, an installed row still loads and changes nothing, and `config set` refuses a new write with
   `merge-strategy-retired`.
 
-- **`Publication lane: off` skips the check-run read and says so.** Issue #192: a
+- **`Publication lane: off` skips the check-run read and says so.** A
   repository whose CI is disabled or unbillable had no posture short of per-verdict
   never-ran evidence. With the row off, `record_computed_verdict` (then `record_review_verdict`) does not call the
   check-runs API for an approval, the advisory `publication_lane` answers
   `not-consulted`, and the verdict marker carries `classification: not-consulted`.
-  Issue #425 narrows what the row is still for: a repository whose Actions cannot run
+  What the row is still for has narrowed: a repository whose Actions cannot run
   is now answered mechanically — `publication_lane` reports `disabled` for
   `enabled: false` or for every workflow `disabled_manually`, and `never-ran` for
   empty-steps runs — so `off` is no longer the posture for that case, and an
@@ -2023,7 +2011,7 @@ pointer that leaves it names the document it points at.
   either, because the read speaks only where a head has no check runs at all. The
   disabled-workflow dispatch path (`HTTP 422` → `Absent`) is unchanged.
 
-- **The `disabled` read proves only the two cases the ruling names.** Issue #425:
+- **The `disabled` read proves only the two cases the ruling names.**
   `publication_lane` answers `disabled` when `actions/permissions` reported
   `enabled: false` or every workflow under `.github/workflows/` is
   `disabled_manually`, and nothing wider. A workflow in any other state leaves the
@@ -2043,15 +2031,15 @@ pointer that leaves it names the document it points at.
   `TODO`, `pass` and `placeholder` — the same gap wearing a word, recorded as a verdict's stated
   grounds. A finding's `evidence` and `impact` were required to be present and never examined
   further. Since 2026-09-07 one predicate, `says_nothing`, decides those three, matching the
-  trimmed and lowercased value against a fixed list; issue #349 widened it to a fourth, the
+  trimmed and lowercased value against a fixed list; it was later widened to a fourth, the
   `--never-ran-evidence-file` that stands in for a lane that never ran, which took `n/a` as its
   evidence for the same reason. The list lives in one place, `SAYS_NOTHING_WORDS`, and
   `claim::tests::every_says_nothing_word_earns_its_place` iterates it rather than retyping it, so a
   word added there is exercised without a second copy to drift. The match is exact equality over
   distinct strings, so removing any one leaves that one word uncaught and nothing else changed.
   **The list is `TooTight` on purpose and its `Population` says so.** Filler is unbounded; a word
-  nobody has thought of is admitted, and this repository has been here before — issue #137 fixed a
-  refusal with a remembered set and the same defect recurred four times, which is why the set is
+  nobody has thought of is admitted, and this repository has been here before — a
+  refusal was fixed with a remembered set and the same defect recurred four times, which is why the set is
   declared rather than presented as complete. `tests/guards.rs` fingerprints the list and reopens
   the claim when it changes. It errs the other way too, and the
   `Population` records what this entry did not: `none`, `same` and `unchanged` are answers a
@@ -2061,13 +2049,13 @@ pointer that leaves it names the document it points at.
   against the predicate and carried through the real MCP call end to end. That carve-out was asked
   for the retired verdict's `basis` and never for a finding's `impact`, which the same predicate decides: a
   `suggestion`'s honest impact can legitimately be that there is none, and the workaround is a
-  round trip (`cosmetic only; no user-visible impact`). #349 left that asymmetry as it stood — the
+  round trip (`cosmetic only; no user-visible impact`). The widening left that asymmetry as it stood — the
   `Population` states the two-sided nature rather than the behaviour changing — and records it here
   so it is argued rather than re-derived. A finding's `id` keeps
   the plain blank check: an identifier is not a declaration, and a filler word there is a naming
   problem rather than an empty claim. What that carve-out does **not** do is ask whether `id` has
   an integrity requirement of its own — `id` is the collation key `record_refutation` groups
-  by, so two findings recorded as `id: "-"` collapse into one identity — and #349 left that as a
+  by, so two findings recorded as `id: "-"` collapse into one identity — and the widening left that as a
   recorded gap rather than inventing an identifier rule. The checks run before the tracker read by
   design, so a replay of a marker written before this predicate existed, carrying filler, is
   refused rather than read back; the safety half holds, nothing double-counts, and recovery is
@@ -2077,13 +2065,13 @@ pointer that leaves it names the document it points at.
   The other is the risk classifier's `reasons`, and this entry had that wrong until it was
   measured: they are crossed against the level `classify_risk` returned, and the answer is refused
   when the two disagree. What was missing was narrower, and the entry below closes it: nothing had
-  ever made that refusal fire, and a test now does (#340).
+  ever made that refusal fire, and a test now does.
 
 - **The tier's cross-check cannot fire, and that is now measured rather than assumed.**
   `review_tier_answer` derives the level twice — once from the diff through `classify_risk`, once
   from the published reasons through `risk_level_from_reasons` — and refuses the answer when the
   two disagree. The refusal shipped with the feature on 2026-09-01, and the issue filed against it
-  (#340) claimed no such check existed; that claim was wrong and is corrected on the issue. What
+  claimed no such check existed; that claim was wrong and is corrected on the issue. What
   was true is narrower: the message occurred **once** in the whole tree, at the production site,
   so nothing had ever made the guard refuse. **It still cannot, through the real path.** Both
   derivations turn on the same event — every candidate reason carries a signal, so a non-empty
@@ -2104,13 +2092,13 @@ pointer that leaves it names the document it points at.
   `explained_matches_level` or the derivations directly and nothing calls `review_tier_answer`, so
   deleting the single line that invokes it leaves the whole suite green. That is the informative
   mutation here — the one that stays green — and the extraction moved coverage onto the body while
-  leaving the seam where it was. **Nor was the composition that feeds the two derivations**: #340
-  left it in three places — production, `classify` and the `agree` helper — so an edit to how
+  leaving the seam where it was. **Nor was the composition that feeds the two derivations**: it stood
+  in three places — production, `classify` and the `agree` helper — so an edit to how
   production composed those inputs desynced the enumeration and reddened nothing in it. It did
   redden the suite: the tests that drive `review_tier` end to end do, so the cross-check runs on a
   real answer and refuses. Two seats raised the copy across two panels and a third showed the suite
-  catches what the enumeration does not; #340 recorded it rather than repaired it, because the fix is
-  one shared helper and not another check. Issue #351 extracted that helper —
+  catches what the enumeration does not; it was recorded rather than repaired, because the fix is
+  one shared helper and not another check. That helper was later extracted —
   `passive_and_configuration`, which takes `active_content` and returns the pair — and production,
   `classify` and `agree` all call it now. The `Population` declares `FailClosed` and states the
   boundary as it is: no input reaching the cross-check through `review_tier_answer` is known to
@@ -2120,7 +2108,7 @@ pointer that leaves it names the document it points at.
   defect and this change does not touch it.
 
 - **Seven reserved reviewers are launched by the binary and installed by nothing, and the gate's
-  refusal of a hand launch is by name, not by finding a file.** Issue #776 S4b.
+  refusal of a hand launch is by name, not by finding a file.**
   `launch_review_input` launches every sealed lens, the refuter and the validator from templates
   embedded with `include_str!`, with `--tools ""`, and never reads `~/.claude/agents`, so setup stopped
   installing `review-lens`, `review-risk`, `review-readability`, `review-reliability`,
@@ -2152,7 +2140,7 @@ pointer that leaves it names the document it points at.
   `DominantLens` is declared no longer derived and nothing in its tree assigns it, so there is no
   behaviour to port, and large pure documentation is `low` here with no lens. `review-lens` is
   still launched, because the delta-lens repair round needs it, and sits in no tier's allocation,
-  so this allocation retired no reserved reviewer. Issue #776 S4b retired seven installs
+  so this allocation retired no reserved reviewer. Seven installs were retired
   afterwards: see the entry on the binary-launched reviewers above.
   What the tier reads is a boundary rather than a size: the changed-path count at zero, the
   per-path authored line count at zero, and the budget `SCAN_BYTE_BUDGET` in bytes, a change over
@@ -2163,7 +2151,7 @@ pointer that leaves it names the document it points at.
   `src/transport/tier.rs` is a doc comment, and `source_text::code_of` strips every comment before a
   test reads a Rust source, so no test can reach it; the shipped strings in
   `src/harness/mcp/tools.rs` and `skill/bindings/github/operations.md` are read by an agent rather
-  than by a test. Issue #309 removed the falsifiable absolute rather than adding a fifth guard, so
+  than by a test. The falsifiable absolute was removed rather than adding a fifth guard, so
   what remains is a boundary claim — three boundaries the code does read — and nothing falsifiable
   by a change's magnitude. The behaviour is held by
   `the_tiers_license_zero_one_and_four_lenses` and its companions, not by this prose.
@@ -2206,7 +2194,7 @@ pointer that leaves it names the document it points at.
     string name one finding. Estigia does not compare evidence, locations or behaviour, so two
     lenses that describe one defect differently record two findings, and two that reuse one
     identity for different defects are indistinguishable to it. Nothing computes agreement from
-    identities any more — issue #994 removed the judges whose agreement that spelling stood for.
+    identities any more — the judges whose agreement that spelling stood for are gone.
     The policy asks reviewers to derive the identity from the affected behaviour and location;
     nothing measures whether they did.
   - **The fix-delta digest names a repair; it does not scope a review.** A publication over an earlier
@@ -2214,7 +2202,7 @@ pointer that leaves it names the document it points at.
     rather than supplied by the run being reviewed — that half is real, and a caller cannot name a
     parent it prefers. Two kinds of role receive the diff between those heads: the targeted validator, whose
     payload `src/transport/claim/capture.rs` builds from `delta_parent` and
-    `review_payload_declared_at`, and — since issue #1148 — every tier lens on a correction whose
+    `review_payload_declared_at`, and — now — every tier lens on a correction whose
     recorded range is honest (`delta-range` present, no `delta-range-reason`, not a recovered
     successor, same pull request), which is handed `parent-head..head` with that payload's digest.
     A lens on a correction whose range is not honest, on a marker written before `delta-range`
@@ -2227,7 +2215,7 @@ pointer that leaves it names the document it points at.
     is not prevented from reading more, and Estigia cannot tell what a lens did with what it was
     handed; a lens finding is still checked against `base..head`, not against the delta, so a finding
     on an unchanged-by-the-delta path of the target is admitted. `parent_head..head` is a pair of SHAs a reviewer can act on **when it is
-    honest** — issue #267 found that after a rebase it is not, and `publish_with` now shares
+    honest** — after a rebase it is not, and `publish_with` now shares
     `repair_range` with `review_tier_for_repair` (`src/transport/tier.rs`) to record, on the marker
     and the answer, whether `parent-head..head` was honest for this publication (`delta-range`) or
     why it was not (`delta-range-reason`, the same `history-rewritten`/`empty-repair-range`/`base-advanced`/`merged-range` words).
@@ -2250,7 +2238,7 @@ pointer that leaves it names the document it points at.
     its own issue.
 
   **Judge isolation is unproved, and what is checkable about it moved.** Judges run only as
-  Judgment Day since issue #994, so this entry now concerns that opt-in method. The role gate is fed the
+  Judgment Day now, so this entry now concerns that opt-in method. The role gate is fed the
   *embedded* reviewer definition rather than whatever is on disk, rendered with the effective
   `Evidence standard`, and `the_shipped_blind_reviewer_gets_the_grant_its_standard_decides` pins the
   shape for both standards: `Write`, `Edit`, `Agent` and `Task` denied under either, `Bash` following
@@ -2267,8 +2255,7 @@ pointer that leaves it names the document it points at.
   `skill/policies/judgment-day.md` is prose an orchestrator follows or does not, on the same footing as
   panel size and blindness above.
 
-- **A non-severe finding is informational, and nothing about delivery waits on it.** Issue #321
-  measured warnings outnumbering severe findings roughly eight to one across eighteen delivered
+- **A non-severe finding is informational, and nothing about delivery waits on it.** Warnings outnumbered severe findings roughly eight to one across eighteen delivered
   changes and built `record_disposition` so the author's decision — `acted-on`, `filed` or
   `declined` — was written down once, with `release_ci` refusing `disposition-missing` until every
   `warning` and `suggestion` on the receipt had an answer. That gate was retired after `gentle-ai`
@@ -2289,7 +2276,7 @@ pointer that leaves it names the document it points at.
   the record was made at all, and it no longer asks: the decision a warning once forced is now the
   author's to make silently, to file, or to decline, exactly as `gentle-ai` leaves it.
 
-- **The disposition ratio was never re-derived, and the gate it measured is retired.** Issue #321's pre-change
+- **The disposition ratio was never re-derived, and the gate it measured is retired.** The pre-change
   measurement, taken on 2026-09-07 from the tracker timelines of the 18 most recently closed issues
   carrying `issue-flow: published` markers, counting the three marker kinds: **30 `severe` findings,
   232 `warning` findings, 69 publications and 14 rejected verdicts**, with **44 of the 69
@@ -2372,7 +2359,7 @@ pointer that leaves it names the document it points at.
   (`src/setup/mod.rs`) is a separate, path-based check: a loop of two passes, one per installed
   `RESERVED_REVIEWERS` row, that refuses a definition declaring `review-blind-sealed` for reclaiming
   that reserved name outside Estigia's canonical path — by path, not by these bytes.
-  **Issue #281 settled that the path check stays, and measured it rather than reading it.** With a
+  **The path check stays, and that was measured rather than read.** With a
   sealed rendering placed over an owned `~/.claude/agents/review-blind.md`, the `review-blind` pass
   accepts and the `review-blind-sealed` pass refuses `reviewer-definition-unowned`, so `setup`
   aborts before writing — the loop propagates the first refusal, so the rows after it never run.
@@ -2581,9 +2568,9 @@ pointer that leaves it names the document it points at.
   caller who wrote `"sealed"` actually ran sealed. The orchestrating run's own consumption is the
   sharpest gap: it can estimate what it spent coordinating an issue, never measure itself precisely,
   because the count of its own context is not a number a context can read from inside itself the way
-  it can read a subagent's completion report. #171's own hand-measured cost table says so in its own
+  it can read a subagent's completion report. The hand-measured cost table says so in its own
   words — *"The task-flow layer's cost is not in this table at all ... none of it is instrumented"* —
-  and states the total it publishes as low by an unmeasured amount. So the number that closes #171
+  and states the total it publishes as low by an unmeasured amount. So the number that closes it
   will be **declared, not proved**, the same way every other
   free-text field a review marker carries already is. That is this instrument's shape, not a defect
   discovered after the fact: `input` and `tokens` are kept as two separate fields precisely because a
@@ -2624,13 +2611,13 @@ pointer that leaves it names the document it points at.
 - **Evidence standard: reading now carries the basis paragraph.** Both arms of
   `render_reviewer_agent` append `VERDICT_BASIS_REQUIREMENT`. An existing `reading` install is
   upgraded by `setup` because that body's previous bytes are on the historical ledger, or because
-  the record holds the digest of what this build itself wrote at that exact path — issue #256's
-  fix, described below. Launch still refuses `reviewer-canonical-unavailable` until that setup.
+  the record holds the digest of what this build itself wrote at that exact path — the
+  fix described below. Launch still refuses `reviewer-canonical-unavailable` until that setup.
   The remaining limit is that a `reading` judge has no commands to name, only the fact that it ran
   none — which the requirement's second sentence already accepts as a legitimate basis.
 
 - **A frozen-body ledger cannot be a definitive fix, and the same refusal recurred four times on one
-  machine before #256 named why.** #137 (closed 2026-08-29, `74cc50b`) gave `setup` a list of every body this
+  machine before the cause was named.** An earlier fix (closed 2026-08-29, `74cc50b`) gave `setup` a list of every body this
   binary or an earlier one could render for `review-blind` — `REVIEWER_TEMPLATE_BEFORE_*` in
   `src/setup/mod.rs` — and accepted an installed reviewer matching any entry as ours-older rather
   than an operator's edit. It explicitly rejected a digest for this: *"Digests on the skill tree do
@@ -2646,11 +2633,11 @@ pointer that leaves it names the document it points at.
   in-flight repair round, because nobody expected those bytes to reach a real disk. `--allow-source-build`
   is the flag that makes that expectation false — it installs whatever the working checkout holds,
   published or not — and the identical refusal recurred four times on one machine
-  (`review-blind.md.aside-20260829`, `.bak-3edc7a52`, `.presync-20260902`, and the occurrence #256
-  itself was filed against), each time on a body the ledger could never have held because it was
+  (`review-blind.md.aside-20260829`, `.bak-3edc7a52`, `.presync-20260902`, and the occurrence that
+  prompted the later fix), each time on a body the ledger could never have held because it was
   never committed.
 
-  #256's fix keeps #137's ledger — for the bootstrap case it named, a record written before digests
+  The later fix keeps the ledger — for the bootstrap case it named, a record written before digests
   existed has none, and the ledger is still the only thing that identifies that install as ours —
   and adds a digest of what `write_reviewer_definition` itself last wrote at the reviewer's exact
   path (`src/skill/record.rs`'s `written_outside` / `note_written_outside`, sharing the map
@@ -2664,11 +2651,11 @@ pointer that leaves it names the document it points at.
   body once it *is* published and superseded, if the intent is for `reviewer_is_ours` to keep
   matching it independent of a digest (a machine that skips straight from one published template to
   a later one without ever running `setup` in between has no digest for the middle state and falls
-  back on the ledger exactly as before). And a second gap #137's own proposal carried unfixed until
+  back on the ledger exactly as before). And a second gap the original proposal carried unfixed until
   now: every `REVIEWER_TEMPLATE_BEFORE_*` body is a `review-blind` rendering, and
   `historical_reviewer_renderings` rendered it under `Seal::Unsealed` and that one name alone, so
   `review-blind-sealed.md` from any earlier binary matched nothing — observed in the same session
-  that opened #256: clearing `review-blind.md` produced the identical refusal on
+  that opened this fix: clearing `review-blind.md` produced the identical refusal on
   `review-blind-sealed.md` on the very next run. `historical_reviewer_renderings` now renders every
   frozen template across every `(name, seal)` pair `RESERVED_REVIEWERS` carries, which is a strict
   superset of the old enumeration — checked by reading every push the old function made rather than
@@ -2688,7 +2675,7 @@ pointer that leaves it names the document it points at.
   rather than assumed, and nothing here would catch that condition changing.
 
   **Measured against the real installation, not only the sandbox.** The suite's own coverage is
-  sandboxed `setup()` calls in `src/setup/tests.rs`; because #137 passed every one of its unit-level
+  sandboxed `setup()` calls in `src/setup/tests.rs`; because the earlier fix passed every one of its unit-level
   criteria and then failed four times on a real machine, this change was also crossed against the
   live profile on 2026-09-05, and the counterfactual was run rather than assumed. `review-lens` was
   chosen as the subject because it is the case no ledger entry can ever cover: every frozen body is a
@@ -2841,7 +2828,7 @@ pointer that leaves it names the document it points at.
 
   The closing-keyword scan was handed the delivered issue and reported only references to it, so a
   pull request body saying `close #464` closed #464 on merge with neither the pre-push scan nor
-  `check-closing-keywords` objecting — the incident #575 recorded. The scan now reports every
+  `check-closing-keywords` objecting — the incident recorded earlier. The scan now reports every
   reference, the pre-push refusal takes any of them, `assess_autoclose` carries the ones naming
   another issue as `other_issue_keywords`, and both the post-push arm and `check-closing-keywords`
   refuse them. What remains unread: `assess_autoclose` returns before it scans when the delivered
@@ -2860,22 +2847,22 @@ pointer that leaves it names the document it points at.
 
 - **Nothing enumerates the refusals that write before they refuse, and nothing can.** `Answer::already_wrote`
   decides which arm `translate` takes, and a refusal earns `Committed` only by carrying
-  `"world": "committed"` in its own payload. Issue #419 decided the enumeration question rather than
-  leaving it implied: no test and no guard enumerates the stops reachable *after* a write, because
+  `"world": "committed"` in its own payload. The enumeration question was decided rather than
+  left implied: no test and no guard enumerates the stops reachable *after* a write, because
   reachability is a property of the **interleaving** — a marker is posted, a later read comes back
   without it — and not of the source text. The same function holds stops on both sides of its own
   write — `claim` checks the horizon and the handoff exclusion before it posts and adjudicates after,
   and the projection loop stops without having written whenever an earlier pass did — so a walk of the
   source cannot place a stop relative to a write, and a hand-kept list of the sites would be a second
   copy of the control flow that drifts silently. What holds each repaired site instead is a test that
-  drives the decision to the refusal and reads it through `translate`; that is what #416's `lost-claim-race` and
-  `lost-reclaim-race` have, and what #419's five — `claim-operation-no-longer-current`,
+  drives the decision to the refusal and reads it through `translate`; that is what `lost-claim-race` and
+  `lost-reclaim-race` have, and what the five — `claim-operation-no-longer-current`,
   `ownership-changed-projections-repaired`, `holder-runtime-missing` from the projection loop,
   `ownership projection write did not read back exactly` and
   `ownership-kept-changing-before-projection` — gained, together with
   `reclaim-operation-no-longer-current`, so the two verbs answer a retry alike. The class has now
   been closed four times — the post-push refusals, then `ensure_draft`'s two doors, then the two lost
-  races, then #419's five — and each sweep repaired the instances it could see. The fourth sweep's
+  races, then the five — and each sweep repaired the instances it could see. The fourth sweep's
   reading also found sites it left silent, named here so the fifth sweep does not have to find them
   again: `claim-operation-expired` on both its readings, `claim-metadata-mismatch`,
   `reclaim-metadata-mismatch` and `unassign-metadata-mismatch`, the operation-conflict family —
@@ -2964,8 +2951,8 @@ pointer that leaves it names the document it points at.
   read-whole behaviour. A first draft of this paragraph claimed all four were documented; a reviewer
   read `paths_in` and found two.
 
-  Three of those four were hand-spelled entries and were derived for a while. Issue #726 removed the
-  derivation: `windsurf/memories/` is a literal in `CONTROL_SURFACE` beside `.continue/rules/` and
+  Three of those four were hand-spelled entries and were derived for a while. The
+  derivation was later removed: `windsurf/memories/` is a literal in `CONTROL_SURFACE` beside `.continue/rules/` and
   `.cline/rules/`, so every path that answered `Boundary` still does and an install an earlier build
   wrote stays gated exactly as it was.
   `the_rules_directories_of_continue_and_cline_stay_gated_without_an_adapter_deriving_them` goes red
@@ -3258,7 +3245,7 @@ pointer that leaves it names the document it points at.
     `.codex/`, `opencode/agents.md` → `opencode/`, `.cursor/estigia-workflow-authority.md` →
     `.cursor/`, `.continue/rules/estigia.md` → `.continue/`, `.cline/rules/estigia.md` → `.cline/`
     and `windsurf/memories/global_rules.md` → `windsurf/`. Cline's was caught by
-    a truncation test that issue #726 deleted with the derivation, rather than by an over-gating
+    a truncation test that was deleted with the derivation, rather than by an over-gating
     fixture — coverage arriving from the under-gating side. It is not re-measured here, and no
     claim is made that the widening is still caught.
   - **Five** are silent, each widened on its own with the full suite re-run: `.qwen/qwen.md` →
@@ -3277,7 +3264,7 @@ pointer that leaves it names the document it points at.
     where the row does flip: `~/.codeium/notwindsurf/memories/global_rules.md` goes `Routine` and
     **three** tests reddened —
     `a_directory_entry_does_not_gate_a_name_that_only_starts_the_same`,
-    `the_declared_over_gating_is_the_shape_the_document_names` and a truncation test issue #726
+    `the_declared_over_gating_is_the_shape_the_document_names` and a truncation test that was
     deleted — any one of which put windsurf in the eight; the first two remain.
 
     So there is no special mechanism here, and the two sentences that claimed one are gone. Crush and
@@ -3522,7 +3509,7 @@ pointer that leaves it names the document it points at.
   with no edit to any list and its rules directory was not — measured with an `acme` adapter whose
   instructions resolved to `~/.acme/rules/estigia.md`, whose neighbour `zz-override.md` answered
   `Routine` with the whole suite green. Three of the four were derived for a while, by truncating the fragment the adapter
-  already declares, behind a `match` with **no wildcard arm**. Issues #722 and #726 turned all three
+  already declares, behind a `match` with **no wildcard arm**. All three have since been turned
   into literals in `CONTROL_SURFACE` and the derivation is gone, so the twelfth-adapter hole measured
   above is open again by construction; it is the cost named under the weaker basis earlier in this
   document. `.cursor/rules/` was always a literal, for a reason of the same kind — Estigia writes no
@@ -3729,7 +3716,7 @@ pointer that leaves it names the document it points at.
 
   - `reviewer_is_static` meant *one* spelling and now means *one of the spellings Estigia can
     produce*, enumerated over `Evidence::all()` × `crate::harness::roles::RESERVED_REVIEWERS`
-    (issue #240's second round moved the seal axis off `Seal::all()` and onto that hand-written
+    (a later round moved the seal axis off `Seal::all()` and onto that hand-written
     const, so setup and the launch gate share one list of reserved names instead of two). The
     compiler still holds the `Evidence` axis closed the way `Evidence::all` states on itself; it no
     longer holds the `seal` axis closed at this function, because `RESERVED_REVIEWERS` is a plain
@@ -3797,8 +3784,7 @@ pointer that leaves it names the document it points at.
   So what a shell reaches is not only the tracker front door above but `setup` and `sync`, which
   rewrite host agent definitions — the reviewer's own `tools:` line among them — at machine-scoped
   paths no launch directory encloses. Redirecting the home is what every judge brief on this
-  repository calls isolation, and for this command it was not sufficient. Filed as **#34** and fixed
-  there: `Environment::resolve` now takes an inherited `APPDATA` or `XDG_CONFIG_HOME` only when it
+  repository calls isolation, and for this command it was not sufficient. Fixed: `Environment::resolve` now takes an inherited `APPDATA` or `XDG_CONFIG_HOME` only when it
   resolves under the same home `HOME`/`USERPROFILE` supplied on that call, through
   `paths::covers` rather than a hand-rolled prefix check, so it case-folds on Windows the way
   `%APPDATA%` and `%USERPROFILE%` routinely differ. A value that fails that check is dropped in favour
@@ -3824,8 +3810,8 @@ pointer that leaves it names the document it points at.
   the ones no target already reports, and carried by the `no agent has Estigia installed` refusal
   when the substitution is why the list came back empty. `setup --all` prints them too, and the
   refusal names it, so an operator is not left without a next move. Two blind reviewers of epoch
-  `314aa1f385cf80c00bae6e47bf97ad8d` reached the gap independently by reading; it is issue #34's own
-  third consequence — the write is silent — in the mirror direction, repaired in #73.
+  `314aa1f385cf80c00bae6e47bf97ad8d` reached the gap independently by reading; it is that defect's own
+  third consequence — the write is silent — in the mirror direction, and has been repaired.
 
   What this design accepts, and it is three cells rather than two: a machine whose `%APPDATA%` is
   genuinely relocated by folder redirection; a machine whose `XDG_CONFIG_HOME` legitimately sits
@@ -3844,7 +3830,7 @@ pointer that leaves it names the document it points at.
   is `paths_in`'s own standard, quoted from the comment that put it there. The operator gets the
   substitution note, and the step from that note to *my gate is now inert* is one they have to take
   themselves. That is the accepted cost stated at full width; the alternative was refusing the run,
-  and why that was rejected is above. Gemini CLI and Crush, named here, are retired since #721 and
+  and why that was rejected is above. Gemini CLI and Crush, named here, have since been retired and
   `setup` no longer writes their files; the cost now stands for OpenCode, and for `uninstall` on a
   machine that still carries the other two.
 
@@ -3858,7 +3844,7 @@ pointer that leaves it names the document it points at.
   `coverage_depth` resolves each side through its nearest existing ancestor and re-appends the tail,
   so a candidate under a symlinked home is compared in one vocabulary whether or not anything has
   created it. Found by reading, by a blind reviewer of epoch `314aa1f385cf80c00bae6e47bf97ad8d`;
-  repaired in #74.
+  since repaired.
 
   Two measurements, made rather than assumed, and the second is the one worth having. On the
   operator's own machine `%APPDATA%` is `%USERPROFILE%\AppData\Roaming` and `estigia` resolves its
@@ -3939,14 +3925,14 @@ pointer that leaves it names the document it points at.
   `src/cli/mod.rs` and `src/setup/mod.rs` among others; the set is the search below, not this
   list. Nothing reads them and no shipped document repeats them, so no behaviour is
   wrong; what is wrong is that a reader of the code is told a number the code disagrees with. All
-  pre-existing at `fe4ff4b1` and filed as **#31**, which carries the search rather than a list —
+  pre-existing at `fe4ff4b1` and filed as a single item, which carries the search rather than a list —
   its first version listed fourteen sites by hand where the search answers 31.
 
   **Still open, and named rather than implied.**
 
   - No derived directory family is compiler-forced. `skills_root_fragment` matches `SkillsRoot`,
     whose variants a new adapter reuses; the other, `instruction_directory_fragment`, matched
-    `InstructionFile` and was removed by issue #726.
+    `InstructionFile` and has since been removed.
   - The seven `_` arms on the instruction enum are untouched, and the entry above owns them.
   - **The roles a run’s delegated contexts ran as are recorded, within the run and durably.** The
     gate writes each distinct `agent_type` it sees into the run pointer, and `SessionStart` reads it
@@ -3962,7 +3948,7 @@ pointer that leaves it names the document it points at.
     after the session that did has ended. That is the audit the fifth acceptance criterion asked for
     and the pointer alone could not give.
 
-    **A launch that named a model or an effort records them on that same entry.** Issue #37: the
+    **A launch that named a model or an effort records them on that same entry.** The
     gate reads the `model` and `effort` Claude Code's `Agent`/`Task` input carried and appends them,
     when present, to the role entry it writes for the launch target, so the store's `roles` table —
     and the line `estigia roles` prints — carries what the launcher declared. **It is a declaration,
@@ -4048,7 +4034,7 @@ pointer that leaves it names the document it points at.
     is the fail-closed direction. The durable log is append-only and has no such race, so a role the
     pointer loses this way is still recorded there.
 
-  - **Issue #49 adds a second field beside `roles`, from the same signal and inheriting the same
+  - **A second field is added beside `roles`, from the same signal and inheriting the same
     limits, and it is still only a record.** `Run.inline_writes` (`src/harness/session.rs`) gains a
     target whenever `agent_type` is absent on a call the gate allowed, once `roles` already held an
     entry this session — the same absence `session_start_response` reads as this run's own context
@@ -4082,18 +4068,17 @@ pointer that leaves it names the document it points at.
 
     **And it says nothing about which model wrote them.** The record is which *context* wrote and
     what its definition declared — never which model actually answered, which Estigia renders into a
-    definition and cannot observe running. A claim narrower than that is issue #37's vocabulary, not
+    definition and cannot observe running. A claim narrower than that is a different vocabulary, not
     this field's.
 
   - **A write to `.git/estigia/estigia.local.md` on the write-tool road is a boundary whichever row
     it names, and a shell write to it gets the same answer a shell write to any other
     control-surface file gets — not answered from the renewal window, and not, after six cuts spent
     trying, answered by reading the write's own payload either. `REPOSITORY_SHELL` used to answer
-    before either question and shadow this file and the control surface alike; that shadow was issue
-    #85, and it is closed — the list at the end of this entry names how.** `Evidence standard` is
+    before either question and shadow this file and the control surface alike; that shadow is closed — the list at the end of this entry names how.** `Evidence standard` is
     `Scope::Everywhere`, so it can be set per repository, and a repository row lives in
     `.git/estigia/estigia.local.md` — a path `CONTROL_SURFACE` does not carry and
-    `is_control_surface` does not derive. This used to be measured, before issue #32 opened, by
+    `is_control_surface` does not derive. This used to be measured by
     asking the gate with a live claim held: that file answered *"verified inside the renewal
     window"*, exactly as `src/lib.rs` does, whichever row a write named — so a run holding this
     checkout could widen the grant its own judges receive on an answer that had nothing to do with
@@ -4215,7 +4200,7 @@ pointer that leaves it names the document it points at.
     since it reaches no gate decision — the seventh cut later gave that concession up; see
     "What ships now" below.
 
-    It shipped, and it was rejected in turn — issue #32 reopened against the running fifth cut on
+    It shipped, and it was rejected in turn — it was reopened against the running fifth cut on
     exactly the question `named_in_row` never asks. That function answers for a line's **label**,
     cell zero of a split on `|`, and never reads any cell after it — but the document this file's
     own block is read out of is not parsed cell by cell at all: `fence::locate` finds the managed
@@ -4298,10 +4283,10 @@ pointer that leaves it names the document it points at.
     `shell::writes_a_file` was no help in spotting that, because it recognised the redirect in
     `git commit -m wip && printf x >> .git/estigia/estigia.local.md` too, and that line still answered
     `Routine`. The parity was exact and that was the point: this file sat under the same shadow every
-    control-surface file already sat under. The list below names it as issue #85, and how it closed.
+    control-surface file already sat under. The list below names it, and how it closed.
 
     The cost is real, and stated here rather than argued away: `Repair ceiling` — retired as a
-    setting by issue #716, and kept in these tests only as the string of a row the gate never reads —
+    setting, and kept in these tests only as the string of a row the gate never reads —
     a row
     nothing in the gate reads (`Setting::decides_what_the_gate_enforces` answers `false` for it,
     unchanged by this fix), now costs one tracker read like every other row in the file, on every
@@ -4321,7 +4306,7 @@ pointer that leaves it names the document it points at.
     matches, and `CONTROL_SURFACE` carries no fragment reaching the bare `.git/estigia` directory
     either — `.estigia/` is a different path. This fix does not close it; it is named here rather
     than folded in, since removing a directory is a different question from which row a write
-    inside the file names. Issue #85's fix, below, does not touch it either: no `REPOSITORY_SHELL`
+    inside the file names. The fix below does not touch it either: no `REPOSITORY_SHELL`
     fragment is a substring of either line, so that arm never runs for either, with or without the
     fix — measured the same way, still `Routine` after it.
 
@@ -4330,17 +4315,17 @@ pointer that leaves it names the document it points at.
     control-surface or the repository-configuration question was ever asked, so a shell line naming
     one of its fragments answered `Routine` unless the same line also matched one of the boundary
     lists asked *before* it — `DISARMS_THE_HARNESS`, `mutates_through_the_api`, or `IRREVERSIBLE` and
-    the operator's declared boundaries. This was tracked as issue #85 rather than folded into this
-    one, and it is now closed by that issue, not by this fix: `REPOSITORY_SHELL`'s own arm stays
+    the operator's declared boundaries. This was tracked separately rather than folded into this
+    one, and it is now closed by that work, not by this fix: `REPOSITORY_SHELL`'s own arm stays
     exactly where it was in the match order — still before `NEUTRALISES_A_FILE` and before
     `shell::writes_a_file` — but it now asks the same control-surface and repository-configuration
     question `shell::writes_a_file`'s arm already asked, before it answers rather than instead of answering.
 
-    `git commit -m wip && git push` is unaffected by issue #85's fix, measured against the
+    `git commit -m wip && git push` is unaffected by that fix, measured against the
     classifier at both ends: `Action::Boundary { command: "git push", .. }`, because `git push`
     is on `IRREVERSIBLE`, and `IRREVERSIBLE` is still asked before `REPOSITORY_SHELL` either way. What
     the precedence used to shadow, measured the same way: `git commit -m wip && printf x >>
-    .git/estigia/estigia.local.md` answered a `Routine` sensitivity before issue #85's fix and a `Boundary` one
+    .git/estigia/estigia.local.md` answered a `Routine` sensitivity before that fix and a `Boundary` one
     now. `git commit` is still what `REPOSITORY_SHELL` matches and the whole line is still decided in
     that arm — the arm now reads `.git/estigia/estigia.local.md` beside it before it answers, rather
     than returning before either question is asked.
@@ -4348,24 +4333,24 @@ pointer that leaves it names the document it points at.
     The cost is not a small constant, and it is not carried by every command — only by the ones on
     `REPOSITORY_SHELL`, which are `git` spellings and `gh issue develop`. Measured
     in-process, `classify_with` called in a loop, debug build, against builds at both ends: `git stash`
-    ~4.6µs a call before #85's fix and ~29µs after — the new call to `surface_of` and
+    ~4.6µs a call before that fix and ~29µs after — the new call to `surface_of` and
     `text_names_the_repository_configuration`, paid even when neither matches. A longer line paid
     more, because `text_names_path`'s suffix ladder re-runs `normalise` and the whole fragment list
     once per rung, one rung per byte offset of every `-`- or `~`-prefixed word: a realistic long
-    `git commit -m "…"` message carrying a handful of such words cost ~39µs before #85's fix and
+    `git commit -m "…"` message carrying a handful of such words cost ~39µs before that fix and
     ~470µs after, over 5,000 iterations each way. Both numbers are small next to end-to-end gate
     latency: `estigia gate Bash --input '{"command":"git stash"}'`, timed end to end rather than in
-    process, same debug build and machine, costs ~75ms wall clock per invocation — so #85's fix ships without a
+    process, same debug build and machine, costs ~75ms wall clock per invocation — so that fix ships without a
     bound on the ladder — but the ladder's own cost was never bounded either, and a line built to
     carry many more `-`/`~`-prefixed words than an ordinary commit message will was not measured here.
 
     **The cost is not new to the crate, and one measurement settles that.** On a different line from
     the one above — 832 bytes, punctuation-heavy, 2,000 iterations rather than 5,000, so the figures
     here are not comparable to that paragraph's and are not meant to be — debug, both ends built: `git commit -m "…"` cost
-    117µs before #85's fix and 1.70ms after — but an `rm` carrying the same operand already cost
-    **1.70ms**, unchanged by #85's fix, because `rm` reaches the write-reader arm and has always paid
+    117µs before that fix and 1.70ms after — but an `rm` carrying the same operand already cost
+    **1.70ms**, unchanged by that fix, because `rm` reaches the write-reader arm and has always paid
     `text_names_path` in full. An `echo` of the same length, which reaches no path reader at all,
-    cost 246µs. So #85's fix does not add a cost class: it removes `git` lines' exemption from the
+    cost 246µs. So that fix does not add a cost class: it removes `git` lines' exemption from the
     one the crate already had, and the exemption was the same early return that let a control
     surface travel on a repository-shell answer. A line built to burn the ladder could already be
     spelled `rm`.
@@ -4375,7 +4360,7 @@ pointer that leaves it names the document it points at.
     copies from reaches its question only after `shell::writes_a_file` has identified a write
     target. So a `REPOSITORY_SHELL` command that merely *names* a control surface, writing nothing,
     now costs a live tracker read. Measured against binaries built at both ends:
-    `git commit -m note about .claude/settings.json` answered from the renewal window before #85's
+    `git commit -m note about .claude/settings.json` answered from the renewal window before that
     fix and answers `is held by …` after it. **`CONTROL_SURFACE` carries twelve entries with no
     separator, seven of them instruction files — `claude.md`, `claude.local.md`, `agents.md`,
     `agents.local.md`, `gemini.md`, `qwen.md`, `crush.md` — so `git commit -m update CLAUDE.md` is in
@@ -4405,7 +4390,7 @@ pointer that leaves it names the document it points at.
     commit it holds is on the remote. A directory that fails that check is left alone and named.
     Where they live is unsettled: they are placed under the configured `Worktree location` today,
     which is what makes them look like registered worktrees when Git considers them no such thing,
-    and a separate root is an open question rather than a decision (issue #22). `estigia prune` now
+    and a separate root is an open question rather than a decision. `estigia prune` now
     lists a detached checkout no branch owns, so the sweep can find one, but it cannot tell a
     judge's directory from any other orphan: a live judge's panel is listed like the rest and removed
     only when the operator confirms, which is why the listing is a name to check rather than a
@@ -4438,8 +4423,7 @@ pointer that leaves it names the document it points at.
 ## Skips, deletions and the bounds of a round
 
 - **A skip spelled as a pass, in the places the `tracker_rig` repair did not reach.** That repair took the skip out of
-  `tracker_rig`'s *type*, so no caller of it can be handed a value meaning *did not run*. **Issue #12
-  took it out of the other two fixtures named here, and issue #476 took it out of the last two that
+  `tracker_rig`'s *type*, so no caller of it can be handed a value meaning *did not run*. **It was taken out of the other two fixtures named here, and later out of the last two that
   still answered an `Option` — `git_repo()` in `src/harness/doctor.rs` and `release_repo()` in
   `src/cli/tests.rs` — and this entry records what that closed and what it did not.** The
   paragraphs below are kept as measured, with the disposition of each stated in place, because a
@@ -4452,7 +4436,7 @@ pointer that leaves it names the document it points at.
   `--nocapture`. A normal run showed six plain `ok`. (A first draft of this said thirteen and seven.
   Thirteen counted the definition line; the seventh skip was `no POSIX shell here`, which appeared
   only because the stripped `PATH` used to take git away had removed bash as well — and that one is a
-  legitimate skip by the test below, not one of these.) **Closed by issue #12:** `repository()` now
+  legitimate skip by the test below, not one of these.) **Closed:** `repository()` now
   returns the directory and panics, naming the command that clears it, when git is absent or a git
   call fails — the same repair `tracker_rig` got. Its subject is the **push guard** — the one gate no
   agent can route around, because it sits under git rather than under an agent, and the one `estigia
@@ -4462,18 +4446,18 @@ pointer that leaves it names the document it points at.
   than a current measurement.**
 
   Seven more skip sites sit in the `pipe` suite itself, across five test functions, at the
-  read-only-file capability and at git usability. **Left as they are by issue #12**, because whether
+  read-only-file capability and at git usability. **Left as they are**, because whether
   they should raise or be `#[ignore]` is a decision rather than a mechanical edit:
   `#[ignore]` is reported as *ignored* and a `return;` after an `eprintln!` is reported as *passed*.
   One of the seven is worse than the others and is counted here for the first time:
   `a_row_that_is_broken_comes_out_of_the_report_broken` prints its skip and **does not return** — it
   drops two assertions and carries on to report `ok`, which is the same failure in a smaller dose and
-  invisible even to a reader looking for early returns. **This is the part of the defect #12 filed
+  invisible even to a reader looking for early returns. **This is the part of the defect
   that survives it**: the read-only-file capability is a genuine machine property and the git sites
   are not, so a single policy cannot close both, and it stays an open decision with its skip sites
   counted here rather than silently.
 
-  The third is newer than both: `repository_with_commit` in `src/test_env.rs`, added by issue #30 —
+  The third is newer than both: `repository_with_commit` in `src/test_env.rs`, added since —
   `-> Option<tempfile::TempDir>` again, with **nine** call sites, **seven early returns and two that
   skip the body instead** — five early returns and the two block sites in
   `src/harness/mcp/tests.rs`, one early return in `src/transport/branch/tests.rs`, and one inside
@@ -4482,19 +4466,17 @@ pointer that leaves it names the document it points at.
   `discovery_records_nothing_it_cannot_prove_and_refuses_nothing_on_its_own_account`, whose third
   block needs no `git` and is not guarded at all, so on a machine where the fixture failed that test
   did not skip: it ran one of the three refusals it is named for and reported `ok`. That is the
-  smaller-dose failure described one paragraph up, and the entry for issue #30 below says the same
-  test "drives all three refusals … in one place" — true only where the fixture succeeds. **Closed by
-  issue #12:** the fixture returns the directory and panics when a git call fails, so the test now
+  smaller-dose failure described one paragraph up, and the entry below says the same
+  test "drives all three refusals … in one place" — true only where the fixture succeeds. **Closed:** the fixture returns the directory and panics when a git call fails, so the test now
   runs all three refusals on every machine or fails loudly, and the "true only where the fixture
   succeeds" caveat no longer holds.
 
   Its tolerance was also wider than `repository()`'s: it covered *any* failure of its four `git` calls
   — `init`, two `config` calls, and an empty commit — and of `tempfile::tempdir()` besides, not only
   a missing `git`. A machine with `commit.gpgsign` set globally, or a `core.hooksPath` hook that
-  rejects the commit, took every test built on it to green having measured nothing. **Closed by issue
-  #12:** failure of any call is now a panic naming the failing command, so a signing machine or a
+  rejects the commit, took every test built on it to green having measured nothing. **Closed:** failure of any call is now a panic naming the failing command, so a signing machine or a
   rejecting hook fails the fixture rather than passing the tests built on it. That is not an
-  idle set of tests: they carry the whole acceptance evidence for issue #30 — adoption on the
+  idle set of tests: they carry the whole acceptance evidence for adoption on the
   `Swear` and `Renew` effects (`reclaim` and `verify_claim` are the tools driven; `claim` shares
   `Swear` and is covered through it rather than by a test of its own), the two-adopted-checkouts
   refusal, the three discovery refusals, the write-gating test, and the push test, all named where
@@ -4504,14 +4486,14 @@ pointer that leaves it names the document it points at.
   `src/cli/tests.rs`, both `-> Option<tempfile::TempDir>` over a single `git init --quiet`, with
   every call site that reached them a `return;` after an `eprintln!`. The count is not restated: it
   measured skip blocks that no longer exist, and the call sites have moved since, so any number
-  written here would be one no test can cross. **Closed by issue #476:** both return the directory
+  written here would be one no test can cross. **Closed:** both return the directory
   and panic, naming the failing command, when `git init --quiet` cannot spawn or exits non-zero.
   Measured with a
   failing `git` first on `PATH`: `gate_version_reports_a_row_against_a_real_checkout` reported `ok`
   before and panics at `src/harness/doctor.rs` after, and
   `forgetting_a_pointer_the_tracker_says_holds_no_epoch_removes_it` the same at `src/cli/tests.rs`.
   `two_holders_with_worktrees` in `src/harness/guard/tests.rs`, the third the issue named, had
-  already stopped answering one in #12's own follow-up, so there was nothing left to close there.
+  already stopped answering one in its own follow-up, so there was nothing left to close there.
 
   The line between this and a legitimate skip is whether the machine could have run it. Symlink
   privilege, `mklink /D`, administrative shares and drive letters cannot be conjured, and the ten
@@ -4520,9 +4502,9 @@ pointer that leaves it names the document it points at.
   units, which is how a count stops being checkable.) `git` is not that: this is a git workflow harness, and a
   machine without git cannot measure the push guard **at all**, so `ok` claimed something never
   checked. That was already decided for the tracker rig, where git absence is now a hard
-  failure. **Issue #476 closed the two `Option` fixtures this paragraph was about** — `git_repo()`
+  failure. **The two `Option` fixtures this paragraph was about have been closed** — `git_repo()`
   and `release_repo()` now panic, naming the failing `git` command, measured with a failing `git`
-  first on `PATH`. **Issue #830 closed the inline skips the same repair had not reached**: the
+  first on `PATH`. **The inline skips the same repair had not reached have been closed too**: the
   `git init` that `full_reports_the_home_it_was_given_and_softens_the_push_guard_there` wrote by
   hand, the git-failure skips in the doctor rows that each printed `SKIPPED:` and returned, and the
   inline `git` setup `the_narrowing_resolves_to_the_worktree_the_call_is_adjudicated_in` stood down
@@ -4530,7 +4512,7 @@ pointer that leaves it names the document it points at.
   rows built on it either. The skips that answer a build-state property rather than a git failure —
   no commit, a dirty tree, a shallow clone, no scratch directory — remain, and legitimately: the
   machine could not have run those. So what still holds two opposite policies for one condition is
-  the seven `pipe`-suite skip sites above, which remain the open decision #12 left.
+  the seven `pipe`-suite skip sites above, which remain the open decision.
 
   **The guard that holds the rig catches an accident. It does not catch an author, and this is the
   measurement of how far short it falls.** Reviewers walked past
@@ -4671,8 +4653,8 @@ pointer that leaves it names the document it points at.
   consumer YAML with weak substring checks nor claims malicious-collaborator authenticity.
 
 - **Corrections per lineage are enforced where a correction is published, and counted from markers
-  anyone who can write a comment can also delete.** Issue #716, with the limit made the `Corrections
-  per lineage` row (default 3) by issue #1135. A lineage is an original candidate
+  anyone who can write a comment can also delete.** The limit is the `Corrections
+  per lineage` row (default 3). A lineage is an original candidate
   and its repairs on one pull request, and the publish call refuses the correction past the limit —
   `correction-already-spent` — before it pushes. Nothing is stored for it: `repair_rounds` derives the
   count from the `parent` receipts on the timeline, so a deleted `published` or verdict comment
@@ -4688,7 +4670,7 @@ pointer that leaves it names the document it points at.
   - **A base advance forced during a correction.** The integration is a publication over a rejected
     parent, so it is the lineage's correction when it is the first, and is refused when the parent
     already was one; a moved base exempts nothing here. How often the base moves during a
-    correction is not measured; since #302 it costs the budget only the repair's own lines, over a
+    correction is not measured; it now costs the budget only the repair's own lines, over a
     parent tree that already carries the advance.
   - **A republish over an approved receipt.** It zeroes the count and spends no correction, and it
     stays inside its pull request's budget and scope, so it can still be refused
@@ -4706,8 +4688,7 @@ pointer that leaves it names the document it points at.
   `repair-ceiling-retired` rather than followed.
 
 - **A validator result records an answer the binary was handed, not proof the validator read the
-  trees.** Issue #716, slice S2; a hand `record_validator_result` is refused `recorded-by-capture-only`
-  since issue #776, slice S5b, so a result is a launched context's answer, described under the
+  trees.** A hand `record_validator_result` is refused `recorded-by-capture-only`, so a result is a launched context's answer, described under the
   validator launch above. `record_validator_result` stores that a read-only validator
   answered `pass` or `fail` for `original_criteria` and `correction_regression` over one correction,
   written by the run holding the `review` claim on the validator's behalf because a sealed validator
@@ -4729,12 +4710,10 @@ pointer that leaves it names the document it points at.
   for it — an approval cannot supersede an escalation whose publisher is unknown — and the parent a
   publication records is the newest on its own pull request and only that: a publication on another
   one in between no longer resets the count, and a pull request's first publication records no parent
-  at all, where it used to record the issue's newest publication from another pull request (issue
-  #1186). The pull request is the lineage boundary, so a chained slice or a replacement pull request
+  at all, where it used to record the issue's newest publication from another pull request. The pull request is the lineage boundary, so a chained slice or a replacement pull request
   begins with its own corrections.
 
-- **A recovery is a person's command, and what the gate can prove about that is narrow.** Issue #716,
-  slice S3. v4 binds a six-line authorisation text to the predecessor lineage, revision and target identity, and checks only that
+- **A recovery is a person's command, and what the gate can prove about that is narrow.** v4 binds a six-line authorisation text to the predecessor lineage, revision and target identity, and checks only that
   binding. Estigia drops the text: `estigia recover` is a CLI command with no MCP tool, the gate denies
   an agent's shell line for it (`recover-is-for-a-person`) on every host rather than asking, decided by `harness::person_only` before any claim, stand-down or
   role road, and the
@@ -4793,15 +4772,15 @@ pointer that leaves it names the document it points at.
   subagent's own completion report, read back by the run that launched it; that launching run's own
   consumption — briefing every judge, reading every report, recording every
   finding — has no such channel to measure itself from inside its own context, and is not in this
-  default or in the distribution behind it. **Narrowed by issue #482: an orchestrator record is now
+  default or in the distribution behind it. **Narrowed: an orchestrator record is now
   possible, not merely absent.** The delivery step records one `record_spend --phase orchestrator`
   before `transition --to done`, self-reported on the same terms as every phase already is — see
   `docs/review-cost.md`'s "The orchestrator's own phase is recorded, not measured". That closes the
   *channel*, not the *trust* gap this paragraph names: the orchestrating run still has no way to
   measure its own consumption from inside its own context, so what it reports is exactly as
-  unverifiable as what the twenty-eight judge figures above already are, and a delivery before #482
+  unverifiable as what the twenty-eight judge figures above already are, and a delivery before that
   landed still has no such record at all. **This row's own prose used to be conditionally
-  routed, and issue #246 closed that gap.** `skill/policies/judgment-day.md` names `Review budget`, and so
+  routed, and that gap is closed.** `skill/policies/judgment-day.md` names `Review budget`, and so
   does `skill/bindings/github/operations.md`, but the document is unconditionally routed now — the
   `single`/`two blind`/`five blind` dial that used to leave the default operator with no policy
   document at all is gone, along with the row that chose between them, so every operator reaches
@@ -4837,7 +4816,7 @@ pointer that leaves it names the document it points at.
   - **A first publication is never budgeted.** There is nothing yet to freeze it against, so the
     check writes `budget-candidate-tree` alone and returns. A candidate of any size — one line or
     two thousand — publishes.
-  - **A base advance no longer resets the budget (issue #302), and what replaced the reset is
+  - **A base advance no longer resets the budget, and what replaced the reset is
     measured against a tree nobody authored.** When this publication's base advanced past the
     parent's (`base_advanced_past`) and the branch integrated it, by merge or by rebase, the round
     is measured from `git merge-tree --write-tree <parent head> <new base>` to this head's tree,
@@ -4874,11 +4853,11 @@ pointer that leaves it names the document it points at.
       never falls back to the old reset. The fixture pins the failure on a ref git cannot
       resolve, not on an old git, which this repository's CI does not run.
     - An unmerged advance still never reaches this check: `publication-base-not-ancestor`
-      (issue #277) refuses it first. Outside a correction it names two recoveries, merging the
+    refuses it first. Outside a correction it names two recoveries, merging the
       base's tip or rebasing onto it and publishing again, and either lands here. During a
       correction, when a receipt of the issue stands on the branch's open pull request, it names
       only the merge and says why: a rebase rewrites the parent head and the validator refuses
-      `validator-delta-carries-upstream` (issue #1111). Issue #305 corrected that refusal twice
+      `validator-delta-carries-upstream`. That refusal was corrected twice
       over which operation each shape needs, and an enumeration run for it found no other refusal
       in the transport that names a recovery landing on a second refusal. The correction reading
       costs the refusal two reads, the pull request listing and the timeline, and a failure of
@@ -4911,16 +4890,16 @@ pointer that leaves it names the document it points at.
     still charged against the frozen budget, and Estigia re-reviews every republish in full — unlike
     the source, where an admitted correction path is not re-inspected by any lens at all.
 
-- **Bounding the frozen manifest does not bound the comment it lands in — and issue #307 closes the
-  channel #271 left open.** Issue #271 refuses `genesis-manifest-too-large` when `budget-genesis-paths`
+- **Bounding the frozen manifest does not bound the comment it lands in — and the
+  channel left open is now closed.** The publish call refuses `genesis-manifest-too-large` when `budget-genesis-paths`
   alone, percent-encoded, would clear `GENESIS_MANIFEST_CEILING` (32,768 bytes) — but `topology` and
   `topology_reason` are caller free text with no length limit of their own (`claim.rs`; the MCP
   argument definitions at `src/harness/mcp/tools.rs` declare a type and a description, never a
   maximum), and they land on the same `published` marker the manifest does, and again in the prose the
   answer's own `publication_note` writes around it. A caller could still grow the comment past
   GitHub's 65,536 character cap through either field while the manifest itself sat comfortably under
-  its own ceiling; #271 closed one channel, not the comment as a whole. **#307 measured the comment
-  and refuses the field that would not fit, before any remote write.** `publication-comment-too-large`
+  its own ceiling; that closed one channel, not the comment as a whole. **The comment is measured
+  and the field that would not fit is refused, before any remote write.** `publication-comment-too-large`
   fires from `publish_with_sleep` after the values are trimmed and before the fetch, when the caller's
   own marker fields plus `topology_line` would exceed
   `COMMENT_BODY_CEILING` (65,536) minus `PUBLICATION_FIXED_OVERHEAD` (8,192: an upper bound on the
@@ -4951,8 +4930,8 @@ pointer that leaves it names the document it points at.
   only the `\u{1f}` separators inflate. A path set built from bytes outside that set would sit at the
   3x bound instead, which is why the check measures rather than assumes.
 
-  What that margin is **not** is a guaranteed remainder — but with #307 measuring the caller's own
-  fields and reserving both the manifest's ceiling and the lane's measured width, the comment is
+  What that margin is **not** is a guaranteed remainder — but with the caller's own
+  fields measured and both the manifest's ceiling and the lane's measured width reserved, the comment is
   bounded: the fixed 8,192 characters plus a manifest of at most 32,768 plus the lane plus the
   caller's text at the remainder sum to no more than the cap. The reservations are conservative — the
   manifest ceiling is charged even on a first publication, which writes no manifest at all — and that
@@ -4987,7 +4966,7 @@ pointer that leaves it names the document it points at.
   budget's own measurement now. `GIT_ATTR_SOURCE`, `GIT_CONFIG_PARAMETERS` and the caller's own
   `LC_ALL` are gone the same way, as a consequence of replacing the environment rather than by
   naming each one — the candidate's own binary detection still runs on content, since git sniffs
-  `NUL` bytes independently of any attribute. `review_tier`'s own `diff_stats` call stays ambient: since issue #775 a `low` answer lets
+  `NUL` bytes independently of any attribute. `review_tier`'s own `diff_stats` call stays ambient: now a `low` answer lets
   `release_ci` release on the structural readback, so that read now moves a clearance, and it is
   out of this entry's scope.
 
@@ -5035,7 +5014,7 @@ pointer that leaves it names the document it points at.
   here.
 
 - **The review payload a judge is handed runs isolated the same way, and that moves a digest
-  wherever a repository's own config sets a diff knob.** Issue #353: `review_payload_bounded`
+  wherever a repository's own config sets a diff knob.** `review_payload_bounded`
   (`src/transport/target.rs`) built the unified diff every judge and every crossing operation reads
   with a plain `git diff`, layered over the caller's ambient environment the way `run_with_env`
   layers everywhere else in this crate. The same collapse the entry above measures for `diff_stats`
@@ -5081,8 +5060,8 @@ pointer that leaves it names the document it points at.
   machine, or this repository's own config or `.gitattributes` a year from now could set something
   none of the above measured and move a payload's bytes the next time it is rebuilt.
 
-  **Six sites across four files described the previous behaviour when this landed, and issue #360
-  closed them.** Isolating the payload falsified every sentence about the rebuild
+  **Six sites across four files described the previous behaviour when this landed, and they
+  were closed.** Isolating the payload falsified every sentence about the rebuild
   `review_payload_membership` performs, since it reaches `review_payload_bounded` through
   `super::target::review_payload` — in `CHANGELOG.md`, twice in `skill/bindings/github.md`, in the
   MCP tool description, and twice in `src/transport/claim.rs`, the last of those being the `action` a
@@ -5099,10 +5078,9 @@ pointer that leaves it names the document it points at.
   permissions answer is a failed read. Step 5 of the contract routes on all of them. Nothing
   refuses a panel launched over a red lane, because a sub-agent launch is not a write the gate
   sees. `record_computed_verdict` still refuses an
-  approval on a lane whose run genuinely ran and failed, or one still unfinished — issue
-  #95 adds the one case it does not refuse, a lane whose run never executed a step at all, gated on
+  approval on a lane whose run genuinely ran and failed, or one still unfinished — the one case it does not refuse is a lane whose run never executed a step at all, gated on
   the caller's own evidence rather than on green. This adds an earlier read; it removes no later
-  refusal but the one #95 names.
+  refusal but that one.
 
 - **Estigia starts the publication lane and cannot prove a repository has one.** The refusal in
   `record_computed_verdict` is real — an approval is not banked for a head whose check runs
@@ -5177,7 +5155,7 @@ pointer that leaves it names the document it points at.
     admitted.
 
   A dispatched run's check runs **do not** satisfy branch protection's required contexts on a pull
-  request head. Measured on this repository, PR #110, 2026-08-27, both runs against head
+  request head. Measured on this repository, 2026-08-27, both runs against head
   `ead3ca84`: `gh workflow run ci.yml --ref <branch>` (Actions run `33027439851`) completed success
   with three check runs on the commit under `app_id 15368` carrying the three context names then
   required; with those green, `gh pr checks 110` still answered `no checks reported`,
@@ -5196,7 +5174,7 @@ pointer that leaves it names the document it points at.
   the one after it.
 
 - **A marker field that is present but unreadable is refused by name rather than read as an absent
-  one — and the two readers that used to collapse the two are the ones that changed.** Issue #272:
+  one — and the two readers that used to collapse the two are the ones that changed.**
   `ReviewTransaction::from_marker` and `CorrectionState::from_marker` both returned `Option`, so a
   `published` marker whose fields were present but malformed was indistinguishable from one that
   carried no such fields. `all_publications` consumed them through `filter_map`, so a corrupt
@@ -5221,7 +5199,7 @@ pointer that leaves it names the document it points at.
   timeline, not assumed.** The uncertain half of the issue was whether an older `published` marker
   might legitimately fail `is_complete()` and so turn a readable timeline unreadable. Measured
   against this repository's own timeline: the **oldest** surviving `published` marker is
-  `234883ed2fa264d0be514a36fd074342` on issue #50, written 2026-08-23T21:19:26Z, and it is complete —
+  `234883ed2fa264d0be514a36fd074342` on one issue, written 2026-08-23T21:19:26Z, and it is complete —
   32-hex epoch, positive PR, 40-hex head and base, 64-hex digest. Of **649** `published` markers on
   the timeline, **none** is malformed. Refusing is therefore safe against every marker this
   repository has ever written, and the drop-with-refusal alternative was not taken.
@@ -5231,15 +5209,15 @@ pointer that leaves it names the document it points at.
   be forged from an agent's text, and `all_publications` already filters to self-authored, unedited
   comments — **no instance of a malformed marker has been observed**. The two ways in are both things
   this project already does: a partially written marker (the unbounded `budget-genesis-paths` failure
-  #271 records lands after the push) and version skew between a swapped binary and the MCP server
+  lands after the push) and version skew between a swapped binary and the MCP server
   still holding the old executable. How often a base advance occurs during a review round is also not
-  answered here; #277's audit counted 7 of 270 publications whose base was not an ancestor of the
+  answered here; an audit counted 7 of 270 publications whose base was not an ancestor of the
   head, and that is a floor for movement, not a measure of it.
 
 ## Setup, configuration and uninstall
 
 - **The superseded-reviewer ledger is crossed against the templates beside it, and not against a
-  freeze that never happened.** Issue #290. `REVIEWER_TEMPLATES_SUPERSEDED` (`src/setup/mod.rs`) is
+  freeze that never happened.** `REVIEWER_TEMPLATES_SUPERSEDED` (`src/setup/mod.rs`) is
   the hand-written list of every previous `review-blind.md` and lens body, and `reviewer_is_ours`
   consults it so an install still carrying an older definition upgrades instead of being refused as
   foreign. Nothing crossed it: commenting out an entry left the suite green while every operator
@@ -5253,8 +5231,7 @@ pointer that leaves it names the document it points at.
   guard is satisfied by the chain alone, the ledger stays one body short, and neither guard holds the
   chain against the list. The two hold one half each — this one the list against its declarations,
   the sibling the chain against the current rendering.
-- **`status` names why the tools half is off, and leaves two of the four states together.** Issue
-  #116. `tools off` was one word for four states — no verified registration site, a site known and
+- **`status` names why the tools half is off, and leaves two of the four states together.** `tools off` was one word for four states — no verified registration site, a site known and
   not written yet, a file that cannot be read or parsed, and an entry under a key this build does not
   look under — and the only prose on the row answered the *gate* half. `AgentAdapter::tools_gap()`
   now names the first and `status` prints it under the harness line, while an adapter that can
@@ -5348,16 +5325,16 @@ pointer that leaves it names the document it points at.
   reads. Deleting that file did not create these; it stopped concealing them. `lost-claim-race` and
   fifty-eight more reach a run as a word to branch on, with the instructions that go with them living
   only in the `action` field of the envelope itself.
-  Issue #36 closed two of these — `holder-not-stale` and `operation-id-kind-conflict` — by naming
-  them in `skill/bindings/github.md`'s `reclaim` and `claim` rows. Issue #417 added
-  `reclaim-discarded` to the `reclaim` row with its instructions, and the same sentence names
+  Two of these — `holder-not-stale` and `operation-id-kind-conflict` — were closed by naming
+  them in `skill/bindings/github.md`'s `reclaim` and `claim` rows. `reclaim-discarded` was then added
+  to the `reclaim` row with its instructions, and the same sentence names
   `lost-reclaim-race`, so that refusal left this list as the new one arrived documented. The figure
   this entry carried before that change counted one more than the list held, so the correction moved
-  it by two rather than one: the over-count retired and `lost-reclaim-race` removed. Issue #610 then
-  took `board-empty-inconclusive` off the list as the audit-board operation left the port, moving the
+  it by two rather than one: the over-count retired and `lost-reclaim-race` removed. Then
+  `board-empty-inconclusive` came off the list as the audit-board operation left the port, moving the
   figure once more.
 
-  Issue #260 re-derived the list against `TRANSPORT_VOCABULARY` — the vocabulary `build.rs` generates
+  The list was then re-derived against `TRANSPORT_VOCABULARY` — the vocabulary `build.rs` generates
   from all three spellings a refusal can take — where this check had re-implemented only the first.
   Seven refusals the narrower walk could not see joined it: `read-failed`, `write-failed` and
   `ambiguous-write` from `Failure::envelope`'s `match self`, and `already-yours`, `nothing-to-reclaim`,
@@ -5365,7 +5342,7 @@ pointer that leaves it names the document it points at.
   `"reason":` literal. Each is a real gap, not an exemption: the transport can answer with it and no
   prose an agent reads names it.
 
-  Eleven joined the list under issue #225: eight of them were spelled by `operation_marker`'s two
+  Eleven then joined the list: eight of them were spelled by `operation_marker`'s two
   `format!`-built expressions, and three were verdicts of `branch_identity_verdict`
   (`src/transport/worktree.rs`) that `checkout_identity` passed through a plain `&'static str`. That
   function returns four incoherent verdicts across three return sites — one site carrying two — and
@@ -5374,7 +5351,7 @@ pointer that leaves it names the document it points at.
   `build.rs`'s: a `"reason": <expression>` the check's own literal-only extractor could not read was a
   reason it silently skipped, the identical blindness `TRANSPORT_VOCABULARY`'s extractor had. Giving
   each kind's two reasons a literal per match arm (see `OperationKind` in `src/transport/claim.rs`)
-  fixed both walks at once: the harness gap issue #225 was filed for, and this one, which had been
+  fixed both walks at once: the harness gap that was filed, and this one, which had been
   concealing eleven reasons this walk had never been able to see rather than eleven the crate had
   newly grown.
 
@@ -5389,7 +5366,7 @@ pointer that leaves it names the document it points at.
   writing the instructions into `skill/references/`, and that is not written yet.
 - **A read-back that agrees after waiting may agree for the wrong reason, and nothing here can tell.**
   Ten spaced attempts now cover about ninety seconds because the pull request object lags the branch
-  ref — 45 and 120 seconds on the two publications issue #198 measured — and the refusal says which
+  ref — 45 and 120 seconds on the two publications measured — and the refusal says which
   world the last read stood in: the ref carrying the pushed head means wait, a moved head means
   investigate, an unreadable ref means it cannot tell. What the distinction cannot do is see a foreign
   push land inside the waiting window. A run that pushes, waits through lag, and reads agreement may
@@ -5398,7 +5375,7 @@ pointer that leaves it names the document it points at.
 - **An exit-2 refusal with no `action` is still sent to `estigia config list`, and nothing checks
   that the command clears it.** `translate`'s code-2 arm carries the transport's own `action` for
   every reason the table does not answer, and the fallback message repeats the envelope's scalar
-  fields; that closed issue #381, where a `finding-citation-unresolvable` reached a session as the
+  fields; that closed a gap where a `finding-citation-unresolvable` reached a session as the
   exit code and a configuration command and nothing else, and the session spent five calls guessing
   at a `cause` the envelope had carried all along. The fallback is not the code-2 arm's alone: it
   runs for **every** code whose envelope carries no `detail`, and `Failure::envelope` writes one for
@@ -5458,13 +5435,13 @@ pointer that leaves it names the document it points at.
   runtime companion is reachable from another shipped file through a link or its canonical routed
   identity. These prose-to-prose checks cannot prove that an agent opened or obeyed any document.
 - **The retired SDD spellings still load from a table, and neither the setting nor the screen
-  remains.** Issue #703 retires `Planning: sdd*`: the retirement reading recognises the retired
+  remains.** `Planning: sdd*` is retired: the retirement reading recognises the retired
   spellings and reports `planning-protocol-retired` once without storing a planning value; `setup`
   drops the row when it rewrites the block, and an owned `sdd-*.md` is retracted by the retired-names
-  list in [`src/skill.rs`](../src/skill.rs). Issue #705
-  removes the `Planning` row and the planning phase model targets from the interactive surface, and
-  issue #704 removes the setting, the protocol, the phase assets and the `PlanningPhase` routing
-  kind, while keeping that retirement reading in `src/config/settings.rs`. What is **not** measured:
+  list in [`src/skill.rs`](../src/skill.rs). The
+  `Planning` row and the planning phase model targets are removed from the interactive surface, and
+  the setting, the protocol, the phase assets and the `PlanningPhase` routing
+  kind are gone, while keeping that retirement reading in `src/config/settings.rs`. What is **not** measured:
   doctor reads through the folding read, so it sees `direct` and does not surface the report the
   writer prints. The retirement list names `sdd-apply`, `sdd-verify` and `sdd-archive`, which no
   build here installed, because retraction is by ownership and the list is the retired protocol's
@@ -5503,7 +5480,7 @@ pointer that leaves it names the document it points at.
 
   Since 2026-09-07 **`git pull` is matched**, as an `IRREVERSIBLE` boundary and deliberately not as a
   `DELIVERS` one. It runs a merge internally, so a run refused on the first spelling reached the
-  identical commit with the second — measured on issue #277, where `git pull origin main --no-rebase
+  identical commit with the second — measured once, where `git pull origin main --no-rebase
   --no-edit` produced merge `3e09d3d` after the merge spelling was refused, and the substitution was
   reported rather than performed quietly. Before the change it classified `Untouched`, which is no
   gate at all; it is now a boundary, so the claim is verified, and it stays out of `DELIVERS` because
@@ -5519,7 +5496,7 @@ pointer that leaves it names the document it points at.
   **The merge spelling now integrates where the pull spelling always did.** The two used to differ
   for no reason the contract cares about: `stale_verdict` and `out_of_phase` return early for any
   fragment `DELIVERS` does not hold, so a run refused `verdict-bound-to-other-bytes` on `git merge`
-  could integrate with `git pull --no-rebase`. Since #645 an exact integration merge in the run's own
+  could integrate with `git pull --no-rebase`. An exact integration merge in the run's own
   checkout (the shapes are in the entry on `stale_verdict` below) spends no verdict either, so the
   asymmetry no longer pushes anybody to the pull spelling. The pull stays out of `DELIVERS` and is
   still read as neither a delivery nor an integration by `stale_verdict`.
@@ -5628,7 +5605,7 @@ pointer that leaves it names the document it points at.
   boundary and the `irreversible-shell` declaration names every listing it exempts. A quoted `-l` or
   `--list` still lists because `git` is not in the allowlist, so `git tag '--list'` is read whole and
   the flag reader sees the flag; no separate quoted-flag view is needed.
-  **A quoted command word is read as the word it spells (#1096).** Bash removes quotes before it
+  **A quoted command word is read as the word it spells.** Bash removes quotes before it
   runs a word, so `git 'push' origin main`, `gh pr 'merge' 7` and `estigia config 'set' …` run the
   unquoted command, and used to classify as nothing while `gh pr 'merge'` was worse: the data view
   blanked the verb itself. `shell::unquote_plain_words` now runs once, before every matcher and
@@ -5643,7 +5620,7 @@ pointer that leaves it names the document it points at.
   **What exact-literal matching leaves is enumerated rather than implied**, because it guarantees
   something always is. Traced by reading the six matchers on 2026-09-07 and not by running them.
   *Not matched at all:* a backslash line continuation survives, because the
-  shell strips continuations and the literal text does not match (a quoted verb is read since #1096); a `.exe` suffix and a full path
+  shell strips continuations and the literal text does not match (a quoted verb is read now); a `.exe` suffix and a full path
   carrying a global option survive, because `.exe` is stripped only for `estigia` and
   `without_leading_options` compares the word `git` exactly; `git update-ref refs/tags/…` creates a
   tag without the tag verb; `gh release upload`, `delete` and `delete-asset` are in no list at all;
@@ -5653,16 +5630,15 @@ pointer that leaves it names the document it points at.
   *Matched, but never read as a delivery:* `gh api` against the merge, release and tag-ref
   endpoints, and the pull spelling this entry adds — both reach a boundary, and `stale_verdict` and
   `out_of_phase` read neither. Two further families are filed here rather than declared. The first
-  is two `estigia config` subcommands that write what the disarm list watches, filed as unwatched
-  (#331); both are matched now, and the disarm paragraph below this one says what the crossing
-  holds. The other family, `su -c`/`script -c`, is covered since #332: both names joined
+  is two `estigia config` subcommands that write what the disarm list watches, filed as unwatched; both are matched now, and the disarm paragraph below this one says what the crossing
+  holds. The other family, `su -c`/`script -c`, is covered: both names joined
   `INLINE_CODE`, so the code flag reads their quoted command. **BSD `script` runs the words after
-  the optional typescript file instead, and that spelling is covered since #452**: `script` joined
+  the optional typescript file instead, and that spelling is covered**: `script` joined
   `RUNS_ANOTHER_COMMAND` too, whose reading takes any later word that names a write, so
   `script /dev/null rm -rf src` — measured running the deletion on darwin, where `-c` is an
   illegal option — is a write now. What that buys costs one tracker read in the direction the
   module always picks: a typescript file named after a write reads as `… under script`.
-  **`rg --pre COMMAND` is the same shape spelled as a flag, and it is covered since #678**: `rg`
+  **`rg --pre COMMAND` is the same shape spelled as a flag, and it is covered**: `rg`
   alone searches, so it is not on `RUNS_ANOTHER_COMMAND`, but `--pre`/`--pre=` names a program the
   line runs over every file it searches. Such a line is a write, and it is placed **inside**
   however it redirects — `rg --pre /bin/rm x > /tmp/out` is held, not passed by its redirect to
@@ -5795,7 +5771,7 @@ pointer that leaves it names the document it points at.
   answer is not something a reader that spawns no process can produce or see. A dirty tree is
   refused nowhere on the integration path, and that absence is deliberate: `--continue` only ever
   runs against a mid-merge tree, which a cleanliness check would refuse along with everything else,
-  leaving the exemption issue #33 exists for with no case left to grant.
+  leaving the exemption with no case left to grant.
   `a_conflicting_integration_is_resolved_without_leaving_in_progress` in `tests/pipe/part_04.rs` stages
   exactly that tree — a resolved conflict, mid-merge — and gates `git merge --continue` expecting it
   allowed. What stands in the cleanliness check's place is git's own refusal to run a merge that
@@ -5835,7 +5811,7 @@ pointer that leaves it names the document it points at.
   Harness, and the bullets on them below say why. The eighth entry is the agent-neutral skills root,
   which is not an agent and has no tool loop to gate.
   The gate also still answers for six retired hosts — Gemini CLI, Continue, Cline, Crush, Windsurf
-  and Qwen — because a machine that installed one before issue #721 retired it still carries its hook
+  and Qwen — because a machine that installed one before it was retired still carries its hook
   and dialect; `setup` installs into none of them and `uninstall` is the only path that touches them.
 - **No live Pi turn has run the gate; the rest is read from the installed Pi 1.1.0 package.** The Pi
   extension is measured under `node` against a stand-in binary: the arguments it hands
@@ -5888,7 +5864,7 @@ pointer that leaves it names the document it points at.
   recognised as a child. A loop only
   exists where `/flow-loop` was typed, which is what keeps a child from running one in practice.
 - **A Pi subagent is linked to its parent by an environment variable and an unauthenticated flag; no
-  live Pi child has run it.** Issue #1178. Reproduced first: a child `--session-id CHILD --runtime pi`
+  live Pi child has run it.** Reproduced first: a child `--session-id CHILD --runtime pi`
   writing in a claimed worktree is answered `outside` / `nothing-sworn`, because its derived run holds no
   issue (`a_pi_child_is_decided_as_its_parent_run_when_it_names_the_parent_session` pins that row, then
   the same call with `--parent-session-id` refused exactly as the parent's own write is). What is
@@ -5905,7 +5881,7 @@ pointer that leaves it names the document it points at.
   an unknown one. A root session that switches (`/new`, `/resume`) re-exports its new id, so a child
   spawned afterwards names the new session; one spawned before keeps the old one.
 - **No live Pi has drawn the claim status or the refusal card; both are read from the installed Pi
-  1.1.0 package.** Issue #1178. Measured under `node` against a stand-in binary and a fake `pi`: the
+  1.1.0 package.** Measured under `node` against a stand-in binary and a fake `pi`: the
   arguments of the `goal` call, that a held claim, a stopped one, none, a signal, an exit code, unparsable
   output and a call past the bound each produce the status text or the clear the code says, that a
   child asks about the root session, that nothing is shown without `ctx.hasUI`, and that a refusal
@@ -5923,7 +5899,7 @@ pointer that leaves it names the document it points at.
   reads the tracker to say whether a claim is live, so a slow tracker shows the claim as unknown after
   five seconds.
 - **No live Pi has run `/estigia-doctor` or expanded the prompt templates; both are read from the
-  installed Pi 1.1.0 package.** Issue #1205. Measured under `node` against a stand-in binary and a fake
+  installed Pi 1.1.0 package.** Measured under `node` against a stand-in binary and a fake
   `pi`: the one `doctor` call and its working directory, that the report arrives as one entry carrying
   the binary's text unchanged and sends no message, that a nonzero exit with output still shows it,
   that a missing binary, a signal, a call past the bound and a silent exit each say `did not answer`
@@ -5944,8 +5920,7 @@ pointer that leaves it names the document it points at.
   the model treats the text as a request to load the `flow` skill is not measured. A timer that fires
   after the session was replaced finds the session id changed and stops the loop without notifying,
   because the stale context is not touched.
-- **No live Pi has received the session context, and a replaced session's pointer outlives it.** Issue
-  #1204. Reproduced first: the generated extension never ran `estigia session`, so a Pi turn began
+- **No live Pi has received the session context, and a replaced session's pointer outlives it.** Reproduced first: the generated extension never ran `estigia session`, so a Pi turn began
   without the run id, the held issue or the `Issue requirement` note a Claude Code session is told. Now
   measured under `node` against a stand-in binary: the arguments of `session start` with the reason and
   the previous session id read from the first line of `previousSessionFile`, the `sections.estigia`
@@ -5964,7 +5939,7 @@ pointer that leaves it names the document it points at.
   pointers of sessions that were replaced and never resumed are not forgotten by this change; they are
   the ordinary stale pointers the daily prune in `session::maintain` already ages out.
 
-- **The Pi `/goal` judge was read from Pi's declarations, not run.** Issue #1178. The extension asks
+- **The Pi `/goal` judge was read from Pi's declarations, not run.** The extension asks
   `ctx.modelRegistry.streamSimple(ctx.model, { systemPrompt, messages }, { signal, maxTokens })` and reads
   the text blocks of `await stream.result()`; the signatures, the `AssistantMessage` content shape and the
   `stopReason` values were read from the installed Pi 1.1.0's `.d.ts` files and `docs/extensions.md`, and
@@ -6005,7 +5980,7 @@ pointer that leaves it names the document it points at.
   against a stand-in binary under `node`. A later `tool_call` handler can mutate `event.input` after this one has answered; Pi documents that
   mutation as allowed. Pi's own control files are covered in the entry below.
 - **Pi's settings can unload the gate and the tool server, and the gate measures the write and
-  `doctor` reads the result, not the loader.** Issue #1182. Read in Pi 1.1.0's documentation and
+  `doctor` reads the result, not the loader.** Read in Pi 1.1.0's documentation and
   settings screen: the `extensions` array of `settings.json` takes an exact exclusion `-path`, a glob
   exclusion `!pattern` and the built-in `-builtin:mcp`; a project's settings apply over the user's;
   and a project `mcp.json` entry with no `command`, `url` or `type` overrides only `enabled`,
@@ -6028,7 +6003,7 @@ pointer that leaves it names the document it points at.
   runs in, not necessarily the project Pi opens; and that a project file takes effect only once the
   project is trusted, which the row does not consult. The agent directory is the one the entry below describes.
 - **Pi's agent directory follows `PI_CODING_AGENT_DIR`, but only as the process that runs `setup`,
-  `status`, `doctor` or the gate sees it.** Issue #1182. One resolver reads the variable (a leading `~`
+  `status`, `doctor` or the gate sees it.** One resolver reads the variable (a leading `~`
   is the home; anything else not absolute is dropped with a note, falling back to `~/.pi/agent`) and
   every Pi path comes from it: the directive, the server entry, the extensions, the agent definitions,
   and the directory the `pi-config` row reads. The directory is followed wherever it points, unlike
@@ -6124,7 +6099,7 @@ pointer that leaves it names the document it points at.
   epoch. GitHub has no atomic conditional-ready operation, so an out-of-band ready or push can bypass
   this cooperative order.
   The local delivery gate persists the complete epoch/PR/head/base/digest receipt and still checks
-  the published head at the boundary that spends it, but since issue #439 not always against the
+  the published head at the boundary that spends it, but not always against the
   same thing: a `git merge`, `git tag` or `gh release` from a run whose recorded review head is not
   the invoking checkout's own head is refused as `verdict-bound-to-other-bytes`, naming the path
   inspected and the head found there. The invoking checkout is the covered directory the gate already
@@ -6134,7 +6109,7 @@ pointer that leaves it names the document it points at.
   and the head found there — never against the invoking checkout's own `HEAD`. That checkout is,
   under Claude Code, structurally the launch checkout, since the Bash tool resets it between calls;
   comparing against it could never pass even when the PR's remote head was exactly the one reviewed,
-  which is the gap issue #439 closed. For a delivery `gh pr merge` boundary only, a linked sibling
+  which is the gap that was closed. For a delivery `gh pr merge` boundary only, a linked sibling
   sharing the pointer checkout's Git common directory can reach that verification. The classifier
   first retains one positive numeric PR only from one literal `gh pr merge <number> ...`; malformed,
   omitted, URL, branch, long, leading-zero, attached and bundled uppercase-`R` foreign-repository
@@ -6185,7 +6160,7 @@ pointer that leaves it names the document it points at.
 
 ## Delivery: the receipt, the base and the remote
 
-- **What Issue #439's `gh pr view` read measures, and what it does not.** It measures the PR's
+- **What the `gh pr view` read measures, and what it does not.** It measures the PR's
   `headRefOid` at the moment `stale_verdict` asks, one read per merge attempt, and refuses a mismatch
   against the receipt with the PR number, the reviewed head and the head found. It does not measure
   the base: `release_ci` already re-verified `baseRefOid` at ready time, and the only later reads of
@@ -6253,20 +6228,19 @@ pointer that leaves it names the document it points at.
   `required_status_checks.strict: false`, so a stale branch merged cleanly onto whatever `main` had
   become. The chosen remedy is that one setting: with `strict: true`, GitHub requires the topic branch
   to be up to date with the base before merging, and an update is a push, which invalidates the
-  receipt — so a moved base forces a fresh publish/review round rather than a silent merge. **Issue
-  #124 decided what that forced round is.** The `compatible` classification still integrates, but the
+  receipt — so a moved base forces a fresh publish/review round rather than a silent merge. **The forced round is defined as follows.** The `compatible` classification still integrates, but the
   integrating republish is repair-shaped: the republish gate reads whether the base **advanced** past
   the parent receipt's rather than the push shape, so a merge that keeps the parent head is publishable
   over an approved parent, the marker records the parent receipt and the delta, the panel re-judges
   the parent receipt's findings over the whole change, since a moved base is read whole, and
-  since issue #716 a republish over an
-  approved parent is a new candidate that spends no correction — the platform elected it, not the
+  a republish over an
+  approved parent is now a new candidate that spends no correction — the platform elected it, not the
   author. A merged advance keeps `parent-head` an ancestor and so used to read as the narrow range;
-  since #548 `repair_range` answers `whole-change` with `whole_change_reason: "base-advanced"`
+  `repair_range` now answers `whole-change` with `whole_change_reason: "base-advanced"`
   whenever the base moved, merged or rebased — and `"merged-range"` when the base did not move but
   a side branch was merged back — so the delta lens never reviews base content, and
-  since #302 the budget measures the round against the tree git merges the parent head and the new
-  base into. Issue #716 also made the exemption direction-aware: it read inequality of the two base
+  the budget now measures the round against the tree git merges the parent head and the new
+  base into. The exemption is also direction-aware: it read inequality of the two base
   tips before, so a base reset backwards counted as an integration, and now it needs the parent's
   base to be a proper ancestor of this publication's. Every other classification still integrates and re-reviews the whole
   change, `unknown` is still never compatible, and this change touches neither `strict` nor the
@@ -6277,7 +6251,7 @@ pointer that leaves it names the document it points at.
     removed between publication and merge is a delivery with the same exposure as before, and no
     local check would say so. Read live on 2026-09-27: `main`'s protection answered
     `required_status_checks: null`, so the setting is not on at this moment — the exposure this
-    bullet names. The forced-integration shape #124 builds is, until it is restored, the
+    bullet names. The forced-integration shape is, until it is restored, the
     contract's intended route rather than the platform's requirement.
   - **The delivered SHA's first parent is guaranteed by GitHub's strict check, not by Estigia.** The
     gate's merge-identity checks (`stale_verdict`, `pr_merge_target`) still compare the reviewed
@@ -6290,20 +6264,20 @@ pointer that leaves it names the document it points at.
     already exceeded the delivery interval (15–25 minutes); each base move now costs an
     integrate-and-republish round that invalidates the accepted verdict. The window the contract
     needs — publish, review, CI, merge with the base unchanged — is still longer than the observed
-    interval, so a run delivering beside another may wait many rounds. Since #124 an integration
-    over a moved base is admitted over an approved parent — and since #716 it is a new candidate that
+    interval, so a run delivering beside another may wait many rounds. An integration
+    over a moved base is admitted over an approved parent — and it is a new candidate that
     spends no correction, repair-shaped on a `compatible` movement — so the correction limit does not
     bound a base-movement storm either; the honest bound there is the base itself, and what ends the
     wait is
     the base stopping rather than a person being escalated to. That is the honest price of
-    the guarantee, stated rather than hidden. Issue #133 adds `merge_group:` to `ci.yml` so a merge
+    the guarantee, stated rather than hidden. `ci.yml` carries `merge_group:` so a merge
     queue can run the suite after ready without each branch re-integrating by hand first; enabling
     the queue and whether its run satisfies required contexts is a live-repository configuration
     and measurement, not something this crate sets or proves. Read live on 2026-09-12: this
     repository's `main` answered `Required status checks not enabled` and GraphQL `mergeQueue` was
-    `null`, so the measurement #133 names could not be taken from a checkout alone.
+    `null`, so that measurement could not be taken from a checkout alone.
 - **A `published` marker does not prove the remote still holds that head, and an unconfirmed one
-  does not prove the pull request ever reported it.** Issue #123: after a successful push,
+  does not prove the pull request ever reported it.** After a successful push,
   `publish_review` reads the PR back before recording a confirmed receipt. When that readback
   disagrees, the push has already landed and the timeline would otherwise name nothing the lease
   can target — leaving only a hand force-push, which is the step `republish_review` exists to keep
@@ -6340,7 +6314,7 @@ pointer that leaves it names the document it points at.
   the issue is byte-identical to an ordinary publication's. So an incident review reading the timeline
   — which is the only record that outlives the call — sees a new epoch and cannot tell whether the
   bytes arrived by fast-forward or over a force-push.
-  **Corrected: this was never a consumer cost, and issue #97 is the proof.** The entry used to say
+  **Corrected: this was never a consumer cost.** The entry used to say
   naming it in the marker would change what every consumer of that marker parses — stated as a general
   claim about the marker rather than about `republished` specifically. It was wrong: `markers::parse`
   (`markers.rs`) inserts every key with no validation on read, and every `published` reader
@@ -6353,7 +6327,7 @@ pointer that leaves it names the document it points at.
   widening one issue's fix into a second one's, not a technical wall. A future change is free to add
   it the same way.
 - **The review transaction carries a declared execution topology, and Estigia sees the declaration,
-  not the delegation.** Issue #97: `publish_review`/`republish_review` take `--topology` and
+  not the delegation.** `publish_review`/`republish_review` take `--topology` and
   `--topology-reason`, write them to the `published` marker on the `payload-digest` precedent —
   recorded, not bound, since Estigia cannot observe how an agent wrote code — and answer them
   through `review_transaction`, not through the publish answer. Four things this still cannot prove, named rather than smoothed over:
@@ -6382,7 +6356,7 @@ pointer that leaves it names the document it points at.
     separate issue, not this one.
   - **Saying nothing is still free, and that is the limit that bears on the issue's own purpose.** The
     refusal fires on a trimmed, case-insensitive `inline` past the count; a publication that passes no
-    `--topology` at all is not refused, and its marker carries no topology key. Issue #97 was filed
+    `--topology` at all is not refused, and its marker carries no topology key. A report was filed
     because *"nobody can tell 'judged the table and departed with reasons' apart from 'never read the
      table'"*, and against a run that simply omits the argument that is still true — **this gate reaches
      the run honest enough to declare `inline`, and no other.** It is what the issue's own approach
@@ -6390,8 +6364,8 @@ pointer that leaves it names the document it points at.
      would refuse every caller that predates it, which is a decision this change did not have. What it
      buys is real and smaller than it looks: a declaration, once made, is on the timeline for good.
 
-  Issue #210 closed the three ways a declaration could differ across the note, the marker and the
-  answer: a blank `--topology` or `--topology-reason` is refused rather than recorded, a reason with
+  The three ways a declaration could differ across the note, the marker and the
+  answer were closed: a blank `--topology` or `--topology-reason` is refused rather than recorded, a reason with
   no topology is refused as incomplete, and both values are trimmed once before the predicate, the
   marker and the answer see them — so the three surfaces agree by construction. Case is preserved as
   typed: with nothing reading the field back, folding it would lose information for nothing, and the
@@ -6411,7 +6385,7 @@ pointer that leaves it names the document it points at.
   against the new receipt, never the lease.
 
 - **The store-only timeline read trusts the store and is given its repository.** `Ledger::read_timeline_at`
-  (issue #710, S2a) reads no GitHub, so it cannot learn what the store has not yet synced: a stand-down or
+  (S2a) reads no GitHub, so it cannot learn what the store has not yet synced: a stand-down or
   adjudication commented since this machine last touched the issue is not in what it answers. It also
   does not discover which repository the checkout belongs to — the caller names it, and
   `review_status` does so from the checkout (next entry). The `expected_epoch` check on `publish_review` and `republish_review` reads the timeline
@@ -6419,8 +6393,7 @@ pointer that leaves it names the document it points at.
   the branch's pull request and nothing else, and a branch with no open pull request compares against
   `none`.
 
-- **`review_status` is a read, not a lock, and it names the repository from the checkout.** Issue #710,
-  S2b; the answers are in [`review-status.md`](review-status.md). It answers against the receipt it
+- **`review_status` is a read, not a lock, and it names the repository from the checkout.** The answers are in [`review-status.md`](review-status.md). It answers against the receipt it
   read and every command it names carries that receipt, so a publication landing afterwards is refused
   by the command (`published-transaction-mismatch`, `expected-epoch-moved`) and never executed. That
   protects a reader that executes the answer unchanged; it does nothing for one that decides from the
@@ -6643,7 +6616,7 @@ pointer that leaves it names the document it points at.
   `tool.execute.before` when its host handed it no session id and no run id was exported around the
   plugin's process, and `estigia gate <tool>` invoked with no identity at all — asks the same
   `adjudicate_action` with no refs to narrow on, because a tool call carries no destination ref to
-  read; that gap is issue #46's, and this change does not touch it. And `guard::decide` is the one
+  read; that gap is separate, and this change does not touch it. And `guard::decide` is the one
   production caller: `cli::mod::git_hook`'s `PrePush` arm calls it directly rather than building its
   own copy of the `Action::Boundary` literal and calling `adjudicate_action`, and
   `tests/pipe/gate_hook.rs`'s `a_pre_push_hook_is_decided_on_the_holder_the_pushed_branch_names` drives that
@@ -6665,7 +6638,7 @@ pointer that leaves it names the document it points at.
 - **The renewal window is a cadence, and a cadence is a gap.** A routine write inside two minutes of
   the last answer is not re-verified, and neither is a Claude Code `Stop`: it used to read the tracker
   at every turn end, which with the claim read-back's own reads spent the GitHub GraphQL budget of a
-  whole account (issue #895), so it now keeps a successful answer for the window and records its own.
+  whole account, so it now keeps a successful answer for the window and records its own.
   A claim lost inside it keeps the turn going once more per window. Only a successful read is kept;
   one that failed or answered unknown is read again. The Codex `Stop` path and `estigia goal` read the
   tracker on every call and are not covered by this. A claim lost during those two minutes is a claim the gate does
@@ -6684,7 +6657,7 @@ pointer that leaves it names the document it points at.
   time is unknown. Nothing asks GitHub for the reset (`rate_limit` is itself a call), nothing retries
   — a retry spends the budget being waited for — and a rate-limited *write* is still `write-failed`,
   because it may have landed. The stderr is matched on the phrases `gh` prints today; a rewording
-  falls back to `read-failed`, which is the safe direction. Issue #895.
+  falls back to `read-failed`, which is the safe direction.
 - **A JSON file Estigia edits keeps its shape and loses its shaping.** `settings.json` and
   `.claude.json` have to be parsed to be edited safely, and four things are read off the original
   and given back: the indentation, a byte-order mark, the line endings, and whether the file ended
@@ -6760,7 +6733,7 @@ pointer that leaves it names the document it points at.
   `a_stranded_run_recovers_from_the_checkout_it_is_running_in` — which asserts both halves, since a
   run readmitted on an empty record is a run whose writes are still measured against nothing.
 
-  **Since issue #30, the same renewal also discovers a checkout this run never built at all.**
+  **The same renewal also discovers a checkout this run never built at all.**
   Everything above repairs a run stranded mid-`claim`, from a worktree that run *created* itself.
   A run that never calls `start_branch` — because a previous session's checkout, or the one its own
   `reclaim` just took over, already exists — used to leave `worktree` `None` for the whole of its
@@ -6849,7 +6822,7 @@ pointer that leaves it names the document it points at.
   `a_checkout_this_process_cannot_resolve_is_still_one_checkout`, whose corpus differs by an
   accented pair rather than an ASCII one, because an ASCII pair cannot tell the two rules apart.
 - **A branch differing from a registered one only by case or Unicode normalization is refused, on a
-  filesystem that distinguishes them too.** Issue #764: `worktree_path` composes `<branch>~<run-id>`,
+  filesystem that distinguishes them too.** `worktree_path` composes `<branch>~<run-id>`,
   and the run ID is lowercase by construction while the branch is only separator-encoded — so
   `Fix-1-a` and `fix-1-a` with one run ID compose `/w/estigia~Fix-1-a~run-x` and
   `/w/estigia~fix-1-a~run-x`, two strings and one directory on the filesystems this crate's operators
@@ -6864,7 +6837,7 @@ pointer that leaves it names the document it points at.
   delete. The fold is deliberately independent of the filesystem: on a volume that distinguishes the
   two spellings they are two directories and they are refused anyway, the conservative direction,
   because accepting them there would leave the hazard standing on the volumes that fold. The composed
-  `<branch>~<run-id>` shape and `SCOPE_JOIN` are unchanged. Issue #840 extended the fold to
+  `<branch>~<run-id>` shape and `SCOPE_JOIN` are unchanged. The fold was extended to
   normalization: `é` as U+00E9 and `e` plus U+0301 are different byte sequences but one directory on
   default APFS, which is normalization-insensitive, so the same orphan diagnosis was reachable through
   an ordinary accented branch name. The fold normalizes, lowercases and normalizes again: the first
@@ -6872,7 +6845,7 @@ pointer that leaves it names the document it points at.
   code points, and only after lowercasing changes the base to `j` does the second pass compose it to
   `ǰ` — the one code point the composed spelling already was. The case half is still
   `str::to_lowercase`, not full Unicode case folding, so a pair the volume's case folding merges but
-  `to_lowercase` does not — `Σ`/`ς`, `µ`/`μ`, `ſ`/`s` — is not refused; that limit is #764's and this
+  `to_lowercase` does not — `Σ`/`ς`, `µ`/`μ`, `ſ`/`s` — is not refused; that limit is separate and this
   change does not touch it. Measured by
   `two_branches_differing_only_by_case_are_refused_rather_than_called_an_orphan` and
   `two_branches_differing_only_by_normalization_are_refused_rather_than_called_an_orphan`, which
@@ -6880,7 +6853,7 @@ pointer that leaves it names the document it points at.
   `a_case_only_difference_is_the_collision_and_a_separator_one_is_not`, which holds the Windows
   separator case apart from it and the case-plus-normalization pair with it.
 - **`worktree_path` substitutes placeholders in one pass and refuses a component `trim()` would change.**
-  Issue #1143: the template was resolved by four chained `replace` calls, so placeholder text inside
+  The template was resolved by four chained `replace` calls, so placeholder text inside
   an earlier value was substituted again by a later one — branch `a<run-id>` and `aR` under run `R`
   composed one path. Separately, the component was passed through `trim()`, which strips Unicode
   whitespace git allows in a ref name (U+00A0, U+2003), so `\u{a0}fix` and `fix` composed one path.
@@ -7050,14 +7023,13 @@ pointer that leaves it names the document it points at.
   `a_queued_claim_projects_the_assignee_and_runtime_label_from_the_store`.
 - **No setting is read by nobody.**
   An operator sets twenty-two rows and `config list` reports all of them. Measured: `context.get` is
-  called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location`, `Review budget` (since
-  issue #775, for the review forecast line) and `Git operation window`. The gate reads
+  called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location`, `Review budget` (for the review forecast line) and `Git operation window`. The gate reads
   `Irreversible commands`, and the payload's prose names the rest of the acted-on rows. That once
   left `Delivery authorisation`, `Transition authorisation`, `Delivery route`, `Merge strategy`,
   `Review delegation` and `Model routing` read by nothing at all. `setup::Applies::Asked` said of
   three of them *"the contract asks, and the agent may still honour it, but nothing checks"*, and
-  for three the contract did not ask either. Issue #1044 retired the four rows that had exactly one
-  answer — `Delivery route`, `Review delegation`, `Merge strategy` and `Review protocol` — and
+  for three the contract did not ask either. The four rows that had exactly one
+  answer — `Delivery route`, `Review delegation`, `Merge strategy` and `Review protocol` — were retired, and
   hard-coded what each meant, so they are no longer settings to read, and the list the guard
   declares is empty.
 
@@ -7074,14 +7046,14 @@ pointer that leaves it names the document it points at.
   same number by a test — so they share one installed contract and one rendered sentence rather than
   each having their own, and the sentence is written for that: it names the host it means, Claude Code
   being the one adapter that receives the definitions `setup` installs, and leaves the routing value
-  in the per-agent row, which that adapter's own file may move, rather than restating it (issue #39).
+  in the per-agent row, which that adapter's own file may move, rather than restating it.
   Comments in the
-  source still say eight; that population is #31's, which carries the search rather than a count. It does
+  source still say eight; that population carries the search rather than a count. It does
   **does** decide whether those two definitions exist — naming the role in `Model routing` is what
-  installs it, and removing the entry retracts it, which is the change issue #45 made when the
+  installs it, and removing the entry retracts it, which is the change made when the
   `Delegated workers` row was deleted. Nothing here starts a model; what changed is that something
   reads the row. `Merge strategy` left
-  the unread list with issue #179: `closing_merge` read it. Issue #1044 then retired it, so
+  the unread list when `closing_merge` read it. It was then retired, so
   delivery's merge commit is hard-coded and the row is gone: the list in
   `every_setting_is_read_by_the_gate_the_transport_or_the_prose` is empty, and the guard now fails on
   any row the gate, the transport and the prose all leave unread.
@@ -7178,14 +7150,14 @@ pointer that leaves it names the document it points at.
   to the agent; Estigia records its outcome and receipt but does not observe who or what produced
   it.
 - **Refusals about a tracker or host with no transport can no longer fire on GitHub alone, and are
-  kept anyway.** Removing Linear and Trello left `Tracker` with one variant, and issue #180's
+  kept anyway.** Removing Linear and Trello left `Tracker` with one variant, and
   `RepositoryHost` is GitHub-only the same way, so both `transport()` methods answer
   `Some("estigia")` for every value that can exist. Production sites still branch on absence —
   tracker sites in `src/cli/mod.rs`, `src/harness/doctor.rs`, `src/harness/mod.rs`, and the
   per-operation match in `src/harness/mcp/mod.rs` (tracker-bound tools vs host-bound tools after
-  #180) — and every one of those branches is unreachable while only GitHub is implemented. The
+  the split) — and every one of those branches is unreachable while only GitHub is implemented. The
   tests that could only construct the missing-transport scenario were deleted rather than weakened;
-  the guards were not. What #180 *did* change is the shape of the MCP refusal: it is no longer a
+  the guards were not. What the split *did* change is the shape of the MCP refusal: it is no longer a
   single top-of-`run_tool` check on the tracker for every tool; publication and receipt-bound
   review tools ask the host instead, so a future tracker without a transport can still run
   `publish_review` against a GitHub host.
@@ -7255,11 +7227,11 @@ pointer that leaves it names the document it points at.
   The skill comparison is against this binary's embedded copy, so a stale binary reports its own
   age as current — it cannot detect that a newer build would write something else. An install whose
   operator table no build recognises reports unreadable rather than current, and the remedy names
-  the row rather than `sync`. Same mechanism as issue #174's installed judge definition, which is
+  the row rather than `sync`. Same mechanism as the installed judge definition, which is
   linked rather than restated.
 
 - **Installed-asset staleness is a recorded digest comparison, and a mismatch is Broken with `sync`.**
-  Issue #227: every install records an aggregate digest of the embedded skill assets — sorted
+  Every install records an aggregate digest of the embedded skill assets — sorted
   paths, NUL-delimited, metadata-free, so two builds from identical sources agree — and `doctor`
   compares it against the running build's. A mismatch is a stale install and names `sync`; no
   record at all is skipped, not cleared, because absence says nothing about the files. The same
@@ -7268,7 +7240,7 @@ pointer that leaves it names the document it points at.
   build from one and says unknown rather than picking. What neither answers is whether the
   running binary itself is current — the comparison is against its own embedded copy either way.
 - **The `gate-version` row compares what is installed against the checkout, not what any host
-  actually invokes.** The comparison is the running binary's embedded commit (issue #60) against the
+  actually invokes.** The comparison is the running binary's embedded commit against the
   checkout's `HEAD`: it establishes whether the checkout's `HEAD` is a point *this* binary — the
   one answering the command — already contained; a **no** does not establish that this build is
   earlier, only that the checkout's head is not a fact of the history this build already held. It
@@ -7284,7 +7256,7 @@ pointer that leaves it names the document it points at.
   clearance.
 - **`status --json`'s copy of the identity is asserted nowhere.** `estigia --version` has
   `version_reports_the_build_identity_not_only_the_crate_version` in `tests/pipe/cli_process.rs` comparing the
-  printed line to `estigia::build_info::VERSION` directly, and issue #329 added the same assertion
+  printed line to `estigia::build_info::VERSION` directly, and the same assertion was added
   for the MCP handshake's `serverInfo.version` (`src/harness/mcp/mod.rs`) and the TUI banner
   (`src/tui.rs`). `status --json`'s `"estigia"` field (`src/cli/mod.rs`) has no equivalent:
   reverting it to bare `env!("CARGO_PKG_VERSION")` leaves the whole suite green.
@@ -7340,12 +7312,12 @@ pointer that leaves it names the document it points at.
   states, not two, which is a change to what `build_info::dirty()` returns, not a change local to
   `build.rs`.
 
-  A fifth reading of this row, filed and measured apart (issue #280), is **not** the same fact: it was
+  A fifth reading of this row, filed and measured apart, is **not** the same fact: it was
   two artifacts of one `cargo test` reading *different* values, not one value going stale. The
   `gate-version` fixture in `tests/pipe.rs` chose its assertion branch from
   `estigia::build_info::dirty()` — a constant compiled into the test target's copy of the library —
   while asserting on what the *binary* printed; a run once saw the test target read `dirty` while the
-  binary's row did not, which is the failure message naming the dirty branch. Re-measured for #280, the
+  binary's row did not, which is the failure message naming the dirty branch. Re-measured, the
   disagreement did **not** reproduce: in one `cargo test` the integration test and the binary link the
   same library rlib, so `dirty()` is a single compiled value and the two targets cannot read it apart.
   What was true, and what the fix removes, is the shape that could produce the symptom at all — a
@@ -7363,7 +7335,7 @@ pointer that leaves it names the document it points at.
   "never a silent pass" — this is a pass, spoken plainly, for a state the row cannot see.
 
 - **Codex's trust for Estigia's gate is written from a re-implementation of its hash, and `doctor`
-  cannot ask Codex whether it would run the hook — issue #641.** codex-cli 0.159 skipped Estigia's
+  cannot ask Codex whether it would run the hook.** codex-cli 0.159 skipped Estigia's
   hook without a message because no `[hooks.state."<key>"] trusted_hash` named it, while `doctor`
   said `1 live`: the row read the registration and never whether the agent would honour it. Setup now
   writes the entry, and `doctor` reads it back. What that leaves unproven:
@@ -7404,7 +7376,7 @@ pointer that leaves it names the document it points at.
   - **`status` still says `gate on` from the registration alone.** Only `doctor` reads trust.
 
 - **`config.toml` is read and edited through a TOML parser, and setup refuses a file it cannot read
-  back — issue #648.** The line reader that wrote `[hooks.state."<key>"]` misread valid inputs two
+  back.** The line reader that wrote `[hooks.state."<key>"]` misread valid inputs two
   blind panels found: a `[hooks]` header carrying a URL with `=` in its comment, a `]` inside a
   header comment, a single-quoted `'state'` key, and a line starting with `[` inside a `"""…"""`
   value. It missed the spellings `[hooks."state"."<key>"]` and `[ hooks.state."<key>" ]`, so a table
@@ -7419,11 +7391,11 @@ pointer that leaves it names the document it points at.
     covers that edit — a line-based removal that leaves the file unparseable is refused before the
     write — but the edit itself is not done through the parser. A comment inside the table is dropped with it when a key follows; a comment after the last key is kept.
   - **The re-read is Estigia's own.** Setup proves the file parses and that Estigia reads the trust
-    it meant to write; it still does not ask Codex whether Codex would honour it, which is the #641
+    it meant to write; it still does not ask Codex whether Codex would honour it, which is the
     gap above.
 
 - **A stalled `gh` is a broken row within ten seconds, and the screen that waits on it is not
-  measured.** Issue #1150. `doctor`'s `gh` row ran `gh auth status` with no time limit, and the
+  measured.** `doctor`'s `gh` row ran `gh auth status` with no time limit, and the
   `tui` Doctor page ran the checks on the thread that reads keys, so in raw mode (where Ctrl-C is a
   key and not a signal) a stalled `gh` froze the screen with no way out, and the keys pressed during
   the wait were handed to the page afterwards. `src/bounded.rs` now runs the program (the runner the
@@ -7450,7 +7422,7 @@ pointer that leaves it names the document it points at.
   `src/build_info.rs`, read directly and not through `gate_age_verdict` — into a successful tool
   answer whose body is a JSON object; a body of any other shape is left as it was. `gate_version`'s
   `Health`, which is what `gate_age_verdict` decides, has two callers: `doctor`'s `gate-version`
-  row, as it has had since issue #60, and now `hook::session_start_response`, which renders it into
+  row, as it always has, and now `hook::session_start_response`, which renders it into
   a sentence at `SessionStart` when it is not `Fine`. It reaches no tool answer, so no tool answer
   says whether the build that produced it is current. None of this
   touches `refusal_from_answer`'s
@@ -7545,7 +7517,7 @@ pointer that leaves it names the document it points at.
   transiently unreadable, which the `1 =>` arm never consults. Separating them needs instrumentation
   recording how many `gh issue view` calls the failing run made, and that instrumentation would have
   to run on a platform this repository's maintainers do not reproduce on. No further sighting is
-  possible for now: this lane has been disabled since 2026-09-01 (issue #192). The legibility is
+  possible for now: this lane has been disabled since 2026-09-01. The legibility is
   fixed and measured; the flake itself is not, and the entry says so rather than implying the
   fixture change ended it.
 
@@ -7572,7 +7544,7 @@ pointer that leaves it names the document it points at.
   `a_single_stale_holder_still_refuses_through_its_own_issue_not_open`, which then reports "a single
   stale holder no longer refuses on its own answer: Outside(NothingSworn)". `doctor`'s new
   `stale-run-pointer` row reports the stranger case: it names the pointer and the release command. A
-  pointer this harness recognises as an own-delivery close is not that residue, and issue #80 gave it
+  pointer this harness recognises as an own-delivery close is not that residue, and it has
   a bucket of its own — `stale_run_pointers` (`src/harness/doctor.rs`) now reads `Answer::standing()`
   (`src/harness/tracker.rs`), which tells a code-0 pass apart from a code that never landed a read
   where `stopped_reason` alone could not, and tests a passing answer's own `checked[0]` for the
@@ -7582,14 +7554,13 @@ pointer that leaves it names the document it points at.
   population fell into the row's unread arm instead, whose message asserts the pointer "could not be
   checked against the tracker" and sends the operator to find out why `gh issue view` failed — both
   wrong for a call that succeeded. That was a defect in the row's own message, and it is fixed for
-  this population now. Issue #348 gave that token **one spelling**: `verify_claim` builds
+  this population now. That token has **one spelling**: `verify_claim` builds
   `checked[0]` from `OWN_DELIVERY_CLOSE_PREFIX` and `Answer::is_own_delivery_close` reads it back from the
   same const, where before the transport wrote the literal and the harness matched a second copy of
   it with nothing crossing them. `OWN_DELIVERY_CLOSE_SPELLING_POPULATION` binds to the const, so
   editing the token reopens `tests/guards.rs`; a second spelling introduced elsewhere is the escape
   that population names rather than hides. **The predicate that routes the population is exercised
-  by a test; the end-to-end arm is not.** Issue #348 added
-  `own_delivery_close_reads_the_transports_own_prefix_and_nothing_else`, which calls the predicate
+  by a test; the end-to-end arm is not.** The test `own_delivery_close_reads_the_transports_own_prefix_and_nothing_else` calls the predicate
   with a fabricated `Answer` — including bodies whose `checked[0]` is absent, non-array or
   non-string — so the reader itself is measured. Driving the whole `stranded` arm still needs a
   fixture that actually produces `own_delivery_close` — a closing PR the receipt names and a merge
@@ -7598,19 +7569,19 @@ pointer that leaves it names the document it points at.
   anywhere in this crate's suite, so the `stranded` arm is classified code with no test behind it,
   same as the population it was carved out of.
 
-  **Two more of #348's findings landed on the same row.** The `Fine` sentence used to say no
+  **Two more findings landed on the same row.** The `Fine` sentence used to say no
   pointer "names one closed behind this run's own delivery", which is false of an **aged** stranded
   pointer: `verify_claim` orders its checks open-or-own-delivery, then label state, then live
   holdership, and `reduce_ownership` (`src/transport/ownership.rs`) moves an acquisition
   whose deadline has passed into `stale` with `holder: None`, so such a pointer answers
   `not-current-live-holder` — a code-1 stop the row treats as neither stale nor stranded nor unread
-  and so reports `Fine` over. #348 narrowed the sentence and had the row say how many pointers it
+  and so reports `Fine` over. The sentence was narrowed and the row says how many pointers it
   actually read as still open and held (`N of them read as still open and held by this run`). That
   count is what makes `a_genuinely_passing_pointer_is_reported_fine` fail when the fixture's label
   state is changed to `"review"`: the pointer then answers `unexpected-state` and the count is zero,
   where asserting the `Health` variant alone passed either way.
 
-  **Issue #821 found the narrowed sentence still denied two states.** Its first clause, "names an
+  **The narrowed sentence still denied two states.** Its first clause, "names an
   issue the tracker reports closed", is false of an aged stranded pointer, which reaches `Fine` with
   its issue closed. Its second, "still holds one closed behind this run's own delivery", is false of
   a label-mismatched own-delivery close: that one stops at `unexpected-state` before holdership is
@@ -7751,10 +7722,10 @@ pointer that leaves it names the document it points at.
   name as authority- and repository-steering; others may exist and are unmeasured, the same way the
   round-trip cost above is unmeasured rather than assumed zero.
 
-- **`GH_REPO` on the harness process was set and never cleared (issues #262, #379).** Two production
+- **`GH_REPO` on the harness process was set and never cleared.** Two production
   sites — `gate` and `tracker_answer_for_pointer` — wrote `GH_REPO` only when `named_repo` was
   `Some`, so a later call that named none inherited the previous pin. MCP `run_tool` already set or
-  cleared after #180; it now goes through the same `apply_gh_repo` helper. Under `cargo test` every
+  cleared it after the split; it now goes through the same `apply_gh_repo` helper. Under `cargo test` every
   path shares one process; the SAFETY notes that said "one invocation per process" are true in
   production and false in the suite. `apply_gh_repo` always sets or removes, and
   `a_named_gh_repo_pin_does_not_survive_a_call_that_names_none` holds the clear. What still costs:
@@ -7786,7 +7757,7 @@ pointer that leaves it names the document it points at.
   (`src/transport/claim/close.rs`) — so `verify_claim` answers `closed-by-own-delivery` rather
   than `issue-not-open` (`src/transport/claim.rs`). `Answer::stopped_reason()` is
   `None` for anything but a code-1 answer (`src/harness/tracker.rs`), so `holder_standing`
-  classifies that pointer `Live` (`src/harness/mod.rs`). Issue #80 rewrote that read to go
+  classifies that pointer `Live` (`src/harness/mod.rs`). That read was rewritten to go
   through `Answer::standing()`, and the classification it produces is unchanged: a pass reaches the
   same `Live` arm it always did. The reconciliation cannot drop it at any holder count, and the
   single-holder `gate` call does not refuse it, so nothing in the gate
@@ -7812,7 +7783,7 @@ pointer that leaves it names the document it points at.
   did not until now.
   What it does instead is hold the checkout. The next run to claim there makes two holders, neither of
   them droppable, and `several-runs-hold-this-checkout` refuses that run's first write — which is what
-  issue #61 measured. The `issue-not-open` path belongs to a different population: a pointer whose
+  was measured. The `issue-not-open` path belongs to a different population: a pointer whose
   close this harness cannot recognise as a delivery of its own. So a delivery that follows every other
   step and skips release still reports success, and what it leaves is not a stale record somebody
   sweeps up later but a live-looking holder that blocks the next run. `tests/pipe/part_09.rs`'s
@@ -7904,14 +7875,14 @@ pointer that leaves it names the document it points at.
   `required` or `ask`, a run holding no claim is refused (`issue-required`) or asked before a routine
   write the gate can place inside a checkout that has a tracker and an installed contract — a file
   edit or write, or a shell line carrying one of the `REPOSITORY_SHELL` fragments such as `git commit`.
-  Issue #667. Under `ask` a write the gate **cannot place** inside or outside the checkout is allowed
-  rather than asked for, and the checkout it may have dirtied is named at the next session start;
-  issue #719. What it does not hold:
+  Under `ask` a write the gate **cannot place** inside or outside the checkout is allowed
+  rather than asked for, and the checkout it may have dirtied is named at the next session start.
+  What it does not hold:
   - **`ask` is delivered as an ask on Claude Code and on Pi's terminal UI only, and its answer cannot
     be read back.** The hook answers `permissionDecision: ask` when the agent that registered it is
     `claude-code`. Pi is asked through `estigia gate --runtime pi --can-ask`, which exits `4` with the
     question; the extension passes the flag only when `ctx.mode === "tui"` and shows `ctx.ui.confirm`.
-    Issue #1204. That path is **unverified against a live Pi**: the exit-code and extension halves are
+    That path is **unverified against a live Pi**: the exit-code and extension halves are
     driven under `node` against a stand-in binary, and the `confirm` call, its title and its
     resolution to `true` are read from Pi 1.1.0's `docs/extensions.md` and `dist/core/extensions/types.d.ts`,
     not observed on screen. `rpc`, `json` and print modes are never asked. Every
@@ -7947,8 +7918,8 @@ pointer that leaves it names the document it points at.
     formatter or another writer is also present, and inline interpreter code (`bash -c`, `sh -c`,
     `python -c`, `eval`). Under `required` an unplaceable write is refused; under `ask` it is allowed,
     with a dirty checkout reported at the next session start rather than held. A symlink outside the checkout that points into it is not
-    resolved: a redirect through one passes. Issue #675.
-    **Issue #685 adds exactly one shape to that rule**, recognised by `shell::quoted_heredoc_target`:
+    resolved: a redirect through one passes.
+    **Exactly one shape is added to that rule**, recognised by `shell::quoted_heredoc_target`:
     a first line that is exactly `cat > TARGET <<'DELIM'`, `cat >> TARGET <<'DELIM'` or
     `cat <<'DELIM' > TARGET` (or `>>`), spaces or tabs between the tokens in any number, the delimiter
     quoted with `'` or `"` and made of `[A-Za-z0-9_]`, nothing else on the line; `TARGET` a literal
@@ -7980,14 +7951,14 @@ pointer that leaves it names the document it points at.
     allowed write rather than from the operator's own uncommitted work; see a `git status` that
     fails, which says nothing rather than reporting a clean tree; name more than eight paths at once
     (a count follows the eight); or undo anything. A publication's refusal of a dirty review target
-    is the other boundary, and it refuses rather than reports. Issue #719.
+    is the other boundary, and it refuses rather than reports.
   - **A write inside an isolated checkout that a claim names is exempt, whichever session made it.**
     A delegated writer (an OpenCode child session derives its own run) holds no claim of its own, and
     the claim, not the session, is what the requirement asks for. The exemption reads every run
     pointer holding an issue and applies when its recorded `worktree` covers both the directory the
     call runs in and the write's landing — the checkout enclosing an absolute target, or that same
     directory for a relative one — and its `worktree` differs from its `repo_dir`, so a pointer whose
-    `worktree` equals its `repo_dir` grants nothing. Issue #670, #672. Its boundary: it is
+    `worktree` equals its `repo_dir` grants nothing. Its boundary: it is
     path-based, so any session with that directory as its working directory is exempt, claimed or
     not, for as long as the pointer holds an issue — there is no expiry or supersession check; a
     write in the base checkout is still asked; an unreadable pointer is skipped, so it grants
@@ -8001,7 +7972,7 @@ pointer that leaves it names the document it points at.
   - Measured by the tests in `src/harness/issue_requirement/tests.rs`, which go red with `decision`
     returning `None`.
 - **`Claim workflow` `assisted` takes an issue through a local claim and publishes it as a draft pull
-  request.** Issue #844, second and third of three changes. Under `assisted` every tool in `TRACKER_WRITERS` is
+  request.** Under `assisted` every tool in `TRACKER_WRITERS` is
   refused with `workflow-assisted-writes-no-tracker`, `estigia goal` answers no claimable or
   dischargeable work (its human line says the queues were not read, its JSON keeps the zeros a loop
   plugin stops on), and the `assist` tool, offered only there, reads the issue and makes the
@@ -8038,7 +8009,7 @@ pointer that leaves it names the document it points at.
     catches a commit or a push only where the push guard is installed.
   - **The marker and the branch are bytes the agent can write.** A shell command inside the
     worktree can rewrite the marker or switch the branch back, and nothing places that write.
-  - **`draft_pr` publishes a draft and guarantees little else.** Third change of #844. It pushes
+  - **`draft_pr` publishes a draft and guarantees little else.** It pushes
     the branch the assisted pointer names fast-forward, opens a draft with the title and body as
     given and reads it back as open, a draft and at the pushed head. It writes nothing to the
     tracker, and it adds no marker, receipt or `Refs` line, so nothing on the tracker ties the pull
@@ -8159,8 +8130,8 @@ pointer that leaves it names the document it points at.
   `store` is the fifth row that is **not** among them, on purpose: every claim, renewal and release
   now decides from the local workflow store, so a file that will not open is exactly why a run
   cannot swear, and the row blocks readiness like `gh` does.
-- **The claim family decides from the local workflow store, and since slice d1a writes only to it.**
-  Issue #896, slice a2; slice d1a below narrows what is posted. `claim`, `reclaim`, `unassign`, `heartbeat`, `start-branch`, `transition`
+- **The claim family decides from the local workflow store, and writes only to it.**
+  What is posted is narrowed below. `claim`, `reclaim`, `unassign`, `heartbeat`, `start-branch`, `transition`
   and `verify-claim` — and so every gated write, which renews first — read ownership and workflow
   state from `~/.estigia/state.db`. An issue is imported on first touch, with one `gh issue view`
   read, and refused as `import-diverged` when the holder or the latest publication would differ.
@@ -8169,8 +8140,8 @@ pointer that leaves it names the document it points at.
   was one GraphQL call before and is two REST calls and no GraphQL call now (the first touch adds
   the one `issue view` import). On a **closed** issue `verify-claim` proves the close was this run's own delivery from the
   `published` receipt in the store, and asks GitHub only for the pull request that closed the issue
-  and its merge commit. It read the issue's comments over GraphQL for that receipt until issue #896
-  slice e; nothing posts the receipt there any more, so every delivery's own close was refused as
+  and its merge commit. It read the issue's comments over GraphQL for that receipt until
+  nothing posted the receipt there any more, so every delivery's own close was refused as
   `issue-not-open` once the review family stopped posting, which
   `an_own_delivery_close_is_proved_from_the_store_when_github_carries_no_marker` now holds. The assignee and
   `dev:`/`status:` labels are still read for the projection, and are never what decides.
@@ -8248,7 +8219,7 @@ pointer that leaves it names the document it points at.
     only when GitHub reported a comment without one) **and the latest publication, and nothing
     else**: a store that drifts on findings, verdicts, spend or handoffs imports cleanly.
 - **The claim family writes only the local store; GitHub carries labels and the assignee.**
-  Issue #896, slice d1a. `claim`, `reclaim`, `unassign`, `heartbeat`/`progress`/`blocked` and the
+  `claim`, `reclaim`, `unassign`, `heartbeat`/`progress`/`blocked` and the
   `branch` marker of `start-branch` record their marker in `~/.estigia/state.db` and post no
   comment, and no human sentence either (`Claimed by ..., expect to report by ...` is gone). What
   they still write to GitHub is the projection, after the local commit: the `dev:` label (made when
@@ -8266,7 +8237,7 @@ pointer that leaves it names the document it points at.
     the commit and the label leaves a recorded claim whose label is made by the next projection,
     not by the retry of the claim itself.
 - **The review family writes only the local store; GitHub carries human prose.**
-  Issue #896, slice d1b. `publish_review` and `republish_review` (the `published` receipt and its
+  `publish_review` and `republish_review` (the `published` receipt and its
   unconfirmed form), `handoff_review`, the recorders of finding, lens report, refutation,
   disposition, validator result, spend and computed verdict, and the `review-receipt` marker of an
   approval or an escalation record their marker, and the prose beside it, in `~/.estigia/state.db`
@@ -8310,7 +8281,7 @@ pointer that leaves it names the document it points at.
     skip the label, contradicting the retry the documents describe. It now makes the label on every
     call that holds the claim, one more `gh label create --force` per retry.
 - **Review evidence decides from the same store, and a few reads of the timeline still go to
-  GitHub.** Issue #896, slice b1. `review_transaction`, `repair_rounds`, `review_findings`,
+  GitHub.** `review_transaction`, `repair_rounds`, `review_findings`,
   `review_payload_membership`, `spend_summary`, `goal_completion`, `release_ci`, the review
   recorders (finding, refutation, disposition, spend, verdict), `handoff_review`, the lineage reads
   of `publish_review` and `republish_review` and the review queue's per-candidate eligibility read
@@ -8333,10 +8304,10 @@ pointer that leaves it names the document it points at.
   and no longer wait for GitHub to list it. The in-flight review identity is named
   `ReviewTransaction` in the code and `review_transaction` in the run pointer, which is still
   read under its old name `review_receipt`. The tool name, the refusal codes and the prose were
-  renamed to that vocabulary by #1026, slice b3; the old tool name `publication_receipt` is still
+  renamed to that vocabulary; the old tool name `publication_receipt` is still
   accepted as an alias.
 - **The queues, the dedup keys and the completion count decide from the same store, and a queue
-  read no longer reads a candidate.** Issue #896, slice c. `list-state`, `list-identities` and
+  read no longer reads a candidate.** `list-state`, `list-identities` and
   `completed_count` read the open issues from one REST list
   (`repos/{owner}/{repo}/issues?state=open`, with no label filter) and then decide each issue's
   state, holder, identity and dedup key from `~/.estigia/state.db`: a `status:` label never decides,
@@ -8366,7 +8337,7 @@ pointer that leaves it names the document it points at.
   when that issue is imported, so one added to such a body after its first import is not seen; a
   clause recorded with `blocked_until` has no such gap.
 - **The dedup identity, the `blocked-until` clauses and the ODD checklist are recorded in the store
-  and nowhere else.** Issue #896, slice c6. `create` records the identity and any clauses in the
+  and nowhere else.** `create` records the identity and any clauses in the
   transaction that admits the issue and writes no `analysis` or `blocked-until` marker to the body;
   `blocked_until` adds or clears clauses and `task` records the checklist, and none of the three
   writes to GitHub. The costs: a lost or replaced `state.db` loses all three, because no copy on the
@@ -8401,7 +8372,7 @@ pointer that leaves it names the document it points at.
   label or assignee names an owner the store cannot explain, so two machines with separate stores
   no longer each hold one issue silently; `reclaim` is the explicit override.
 - **A verify, heartbeat or transition still makes two REST reads of GitHub, and neither decides
-  who holds the issue or in what state; a `claim` makes those two and one more.** Issue #896's
+  who holds the issue or in what state; a `claim` makes those two and one more.** The
   criterion is "makes no GitHub read to
   decide its outcome". Measured by the call counter on the stand-in `gh`
   (`a_gated_write_on_an_open_held_issue_makes_no_graphql_call_and_two_rest_calls`), a `verify-claim`
@@ -8559,7 +8530,7 @@ pointer that leaves it names the document it points at.
 ## The populations and the prose they cross
 
 - **Every population declaration is found by walking `src/`, resolved to the item its `subject`
-  names, and fingerprinted together with it.** Since issue #117 a declaration is a `pub const … :
+  names, and fingerprinted together with it.** A declaration is now a `pub const … :
   Population` — the type in `src/harness/population.rs`, each const beside the code it describes —
   and not a doc comment, so `tests/guards.rs` reads it with
   `syn` rather than scraping a `#[doc]` attribute. The sources are read off the directory rather than
@@ -8570,7 +8541,7 @@ pointer that leaves it names the document it points at.
   read since it last moved — not that any declaration is true, and not that every guard needing one has
   one.
 
-  **A list is a population; the matcher is a decision, and issue #13 gave the control-surface one a
+  **A list is a population; the matcher is a decision, and the control-surface one has a
   second subject.** The declaration on `CONTROL_SURFACE` fingerprints the list, so three changes to
   `is_anchored_fragment` moved which paths the gate watched with this registry green, two of them
   narrowings. `CONTROL_SURFACE_CORPUS` is now the matcher's subject: a fixed corpus of paths with the
@@ -8584,7 +8555,7 @@ pointer that leaves it names the document it points at.
   associated consts inside `impl` blocks, and the bodies of inline `mod`s. It does **not** walk
   statements, so a `const … : Population` written inside a function body is invisible to it — the same
   blind spot the doc-comment mechanism had, still open after the migration, found by a blind judge and
-  no longer shouted about by the guard that used to, which #117 had deleted along with the rest.
+  no longer shouted about by the guard that used to, which had been deleted along with the rest.
   `no_population_declaration_hides_from_the_walk` closes it from the other end: it counts the type
   ascription in each file's comment-stripped text and fails, naming the file, the moment the text
   writes more declarations than the walk found. So a declaration hidden in a function body is refused
@@ -8656,8 +8627,8 @@ pointer that leaves it names the document it points at.
   posed beside them so a fix that folded the two together would fail instead of agreeing.
 
 - **The runtime is still folded into a forced takeover's evidence digest, and the retry that would
-  read it cannot be reached.** Issue #48 settled that the runtime is attribution and the run id is
-  identity, and removed four tuple comparisons; `forced_reclaim_hash`
+  read it cannot be reached.** The runtime is attribution and the run id is
+  identity, and four tuple comparisons were removed; `forced_reclaim_hash`
   ([`src/transport/ownership.rs`](../src/transport/ownership.rs)) was missed because its runtime
   argument is not spelled as a comparison — the neighbouring entry is that digest across the language
   boundary. On this side it decides nothing. The fold that says whether a forced reclaim stands
@@ -8678,7 +8649,7 @@ pointer that leaves it names the document it points at.
   target and always writes the evidence it hashes. It stays rather than being dropped because the
   digest is the wire format: a forced marker already on a timeline hashed its evidence with `runtime`
   in the list, and recomputing without it would read every one of them as `EvidenceUnproven` and
-  change who held an issue retroactively. The population is every forced takeover written before #48,
+  change who held an issue retroactively. The population is every forced takeover written before that,
   which recorded `runtime=claude` under any run id. What it costs is the latent retry mismatch this
   entry names, and nothing reaches it.
 
@@ -8734,7 +8705,7 @@ pointer that leaves it names the document it points at.
   neighbour, whole-table agreement or not, because they are meant to differ per agent — an operator
   who wanted otherwise still has to say so with `estigia config set`.
 
-  A second, narrower defect (issue #112) survived this fix: `estigia setup <slug>` for one named
+  A second, narrower defect survived this fix: `estigia setup <slug>` for one named
   agent built its shared population from that single adapter, so a fresh root's only neighbour was
   never read and the run wrote `Config::default()` with nothing said. The population read for
   inheritance is now every *installed* adapter unioned with the run's own targets, and
@@ -8767,7 +8738,7 @@ pointer that leaves it names the document it points at.
   or without a new adapter. Narrow, for the same reason: a machine answering shared rows through
   per-root overrides is `BROKEN` before any adapter is added, and `estigia config set` without
   `--agent` writes every installed **contract** directly — the mechanism that cleared this exact
-  row on the machine that reported issue #112, whose three-row `deepseek-harness` divergence was
+  row on the machine that reported it, whose three-row `deepseek-harness` divergence was
   closed that way rather than by a per-root override. Closing this residual is not this fix's to
   make: it belongs to `canonical`'s own comparison, or to `config set`, neither of which this
   change touches.
@@ -8776,7 +8747,7 @@ pointer that leaves it names the document it points at.
 
 - **Moving a comment into a document buys reachability, not a crossing, and proximity is the price.**
   [`AGENTS.md`](../AGENTS.md) item 2 takes the incidents, measurements and arguments out of `src/`
-  and into `docs/`, in tranches. The first tranche has now moved: the sweep behind issue #143 took
+  and into `docs/`, in tranches. The first tranche has now moved: the first sweep took
   `src/harness/mcp/` from 22.5% of its non-blank lines to 8.0%, and the `rmcp` narrative
   one of those comments carried now lives here, above
   at "The cost avoided by hand-writing this server instead of using `rmcp`". What later tranches do
@@ -8858,7 +8829,7 @@ pointer that leaves it names the document it points at.
   one of the names known to move that.
 
   The `--ff-only` exemption beside it, `is_safe_local_fast_forward`, uses this same list rather than a
-  `GIT_` prefix (#67). It used to refuse on every `GIT_*` prefix, so on a host that sets `GIT_EDITOR` —
+  `GIT_` prefix. It used to refuse on every `GIT_*` prefix, so on a host that sets `GIT_EDITOR` —
   this checkout's own host does — the narrower command, `git merge --ff-only <target>`, was refused
   while the broader one, a merge-commit integration in the run's own checkout, was allowed: an
   inversion, recorded here until this change removed it. The two exemptions prove different things —
@@ -8874,11 +8845,11 @@ pointer that leaves it names the document it points at.
   `an_exact_local_fast_forward_is_allowed_without_widening_other_merges` puts `GIT_EDITOR=true` back
   into the child after `tracker_command`'s `GIT_*` strip and asserts the literal merge is still
   allowed, so the suite now fails on a host the exemption would refuse. The earlier scrub that this
-  replaced is the one issue #443 recorded: the library test read the process environment and the
+  replaced is the one recorded earlier: the library test read the process environment and the
   `tests/pipe.rs` child inherited it, so both were made independent of the host by removing what the
   defect needed to be seen.
 
-  **An integrating merge spends no verdict, and it is read in the directory it names (#645).**
+  **An integrating merge spends no verdict, and it is read in the directory it names.**
   `stale_verdict` used to refuse every `git merge` whose checkout head differed from the recorded
   receipt, so on a second review round the integration the contract prescribes was refused
   `verdict-bound-to-other-bytes` and the run fell back to a rebase, which rewrites history. It also
@@ -8904,7 +8875,7 @@ pointer that leaves it names the document it points at.
   the base branch, only that the checkout is the run's own worktree; that is the first entry above and
   it stands. A run whose worktree is itself on the base branch is not told apart.
 
-  **A near-miss integration names the shape (#917).** A `git merge` in the run's own checkout whose
+  **A near-miss integration names the shape.** A `git merge` in the run's own checkout whose
   shape is not the one `exact_integration_merge` proves — a pipe, a redirect, a second command, a
   second target, a quoted ref, or a directory the line moves to in a way the reader cannot name — is
   refused either way. It used to fall through to `out-of-phase` in `in-progress` when the checkout
@@ -8919,8 +8890,7 @@ pointer that leaves it names the document it points at.
   and a merge in `review` or `done` is still a delivery. It does not close the gap the paragraph
   above states: it still does not check the branch the merge is aimed at.
 
-  **The exemption's reach stops at a JSON string, and the deadlock issue #33 was opened for is
-  unchanged past that point.** `shell_command_argument` sets `literal` only when exactly one key
+  **The exemption's reach stops at a JSON string, and the deadlock is unchanged past that point.** `shell_command_argument` sets `literal` only when exactly one key
   normalises to a command and that key's value is a JSON string; an argv array donates a `text` for
   the ordinary classifier to read but no `literal`, and `is_exact_integration_merge` is `false`
   whenever `literal` is `None`. So for any shell tool whose adapter sends `command` as an argv array
@@ -8952,8 +8922,7 @@ pointer that leaves it names the document it points at.
 - **ZCode registers its instruction file and its MCP server; three things remain unverified.** The
   twelfth adapter installs the shared skill and fences the directive into `~/.zcode/AGENTS.md`, taken
   from ZCode's own shipped configuration reference: the user-scope instruction file, loaded into every
-  session before any workspace `AGENTS.md`. **The MCP registration was the second thing withheld, and
-  issue #115 crossed the reason for it against a running client rather than a page**: on the machine
+  session before any workspace `AGENTS.md`. **The MCP registration was the second thing withheld, and the reason for it was crossed against a running client rather than a page**: on the machine
   that filed it, `~/.zcode/cli/config.json` declared one stdio server, Leteo, under the nested
   `mcp.servers` key, and ZCode CLI 0.16.5's own log recorded `mcp.server.connected` for it — with no
   `~/.agents/mcp.json` and no project-scope `.zcode/` anywhere that connection could instead have come
@@ -8974,11 +8943,11 @@ pointer that leaves it names the document it points at.
   `~/.agents/mcp.json` at all (above), and a search of its `~/.zcode/cli/log/*.jsonl` for any mention
   of `.agents/mcp.json` returned nothing — consistent with the file's absence, and no more than that.
 
-  **This registration also widened issue #119's population, unrecorded until now.** Before it,
+  **This registration also widened the population of an earlier fix, unrecorded until now.** Before it,
   `paths_in` answered `None` for ZCode's `mcp_config`, so `uninstall` never opened
   `~/.zcode/cli/config.json`; now it does. `is_now_empty` (`src/setup/mod.rs`) answers true
   for any document whose every top-level value is an empty container or null, and `discard`
-  then removes the file. **#119's fix narrowed this at the MCP step: a file the uninstall
+  then removes the file. **That fix narrowed this at the MCP step: a file the uninstall
   changed nothing in is no longer written or discarded**, so an operator's `{"mcp": {}}` survives the
   uninstall byte for byte. What remains is the worked case, where the uninstall did change the file:
   `{"mcp": {"servers": {"estigia": …}}, "hooks": {}}` has `strip_zcode_mcp`
@@ -8987,7 +8956,7 @@ pointer that leaves it names the document it points at.
   section this adapter writes. What that costs is bounded by the same rule: a config carrying a real
   `hooks.enabled` has a non-empty top-level object, so `is_now_empty` answers false and the file
   survives. Only a file whose every remaining top-level value is an empty container or null is taken,
-  which is why the worked case has to spell `"hooks": {}`. #119's population
+  which is why the worked case has to spell `"hooks": {}`. That population
   was general-CLI-configuration-file cases already; this entry just adds one, and the fix there left
   `is_now_empty` and `discard` alone.
 
@@ -9026,7 +8995,7 @@ pointer that leaves it names the document it points at.
   `a_host_read_root_carries_the_same_authority_as_the_directive` in `src/harness/tests.rs`.
 
 - **DeepSeek Harness registers, with its skill root and instruction target verified.** The thirteenth
-  adapter when it was added (the seventh since #721 retired six) installs the skill into `~/.dsh/skills` — the harness's own skill root that the
+  adapter when it was added (the seventh since six were retired) installs the skill into `~/.dsh/skills` — the harness's own skill root that the
   `skill-filesystem` provider scans as its `user-dsh` root — and fences the
   directive into `~/.dsh/AGENTS.md`, the harness's fixed user-global instruction file that every
   `agent-instructions` baseline starts from. Both come from the harness's own shipping source rather
@@ -9065,13 +9034,13 @@ pointer that leaves it names the document it points at.
   which scraped every `/// - **`reason`** — ...` bullet out of `src/transport`'s own doc comments and
   checked that each one survived `stable_code` unchanged — so a reason written in prose that the
   transport's code never actually constructs would have been caught reaching a caller as
-  `transport-refused` regardless. Issue #117 removed it: reading comment text to decide what a test
-  measures is exactly what that issue refuses, at every level, without exception for a taxonomy
+  `transport-refused` regardless. It was removed: reading comment text to decide what a test
+  measures is exactly what the ruling refuses, at every level, without exception for a taxonomy
   crossing. What replaced it, `the_generated_vocabulary_excludes_the_fallback`, measures one thing:
   that `transport-refused` is not itself an entry in `TRANSPORT_VOCABULARY`. It shipped with two
   further assertions, and neither survived. A round-trip through `stable_code` was cut before this
   test's first merge — a blind judge found it could not fail, since `stable_code` *is* a lookup into
-  that same vocabulary. A floor on `TRANSPORT_VOCABULARY.len()` shipped and stood until issue #225's
+  that same vocabulary. A floor on `TRANSPORT_VOCABULARY.len()` shipped and stood until a
   follow-up round made it dead: `include!` pulls this file's `TRANSPORT_VOCABULARY` in from exactly
   the generated file `build.rs`'s own floor already walked over, so the floor here can no longer
   observe a count `build.rs` has not already cleared — but only because `build.rs`'s own floor was
@@ -9111,7 +9080,7 @@ pointer that leaves it names the document it points at.
   each runtime actually reads every path in the table was read from published documentation, not
   crossed against a running host, so the table is a reading rather than a measurement — and one cell
   is weaker still: Codex's project `hooks.json`, read from a community configuration and Codex's own
-  pages, is reported by an open upstream issue (#27133) as not loaded when Codex runs where `.git` is
+  pages, is reported by an open upstream issue as not loaded when Codex runs where `.git` is
   a file, a git worktree, so a workspace install against one may write a gate Codex never reads.
   Nothing here crosses that against a host. Cursor's project `hooks.json` has a stricter schema than
   the user-level file the global scope writes — a required top-level `version` — read from a community
@@ -9182,7 +9151,7 @@ pointer that leaves it names the document it points at.
 ## What the gate narrows, and what it records
 
 - **`observed` is attached on more roads than it is rendered on, and the register naming what is
-  still missing has twice claimed more than the code does.** Issue #59 gave a gate refusal a
+  still missing has twice claimed more than the code does.** A gate refusal was given a
   structured `Refusal.observed` account of what the gate parsed — the command fragment matched, the
   checkout the call was adjudicated against. Two panels rejected this entry, each on a sentence
   claiming coverage the code did not have; this version is written clause by clause against the
@@ -9213,7 +9182,7 @@ pointer that leaves it names the document it points at.
 
   **Attached is not the same as rendered, and the one shipped caller that can reach the session-less
   road never asks for the rendering.** `report` (`src/cli/mod.rs`) writes `Display` — which never mentions
-  `observed`, by the acceptance criterion issue #59 was built against — unless `json` is `true`.
+  `observed`, by the acceptance criterion it was built against — unless `json` is `true`.
   `src/setup/plugin.rs` invokes `${ESTIGIA} gate ${tool} --input ${payload}` with no `--json`,
   and reads `answer.stderr` as prose, says it when the status is neither allow nor refuse,
   and throws it as the refusal — the one shipped agent that drives
@@ -9263,14 +9232,14 @@ pointer that leaves it names the document it points at.
   anything downstream can still ask for.
 
 - **The clamp `narrowed_by_the_call` applies now trusts one thing beyond `launched`: a pointer a
-  claim already wrote.** Issue #131, measured: `Worktree location` on a real install is
+  claim already wrote.** Measured: `Worktree location` on a real install is
   `H:\REPO\worktree\<repo>\<branch>` — a **sibling** of the repository it was minted from, never a
   child of it — so a call naming that worktree could never resolve through the sibling-blind clamp
   the earlier entry above describes. A run that had claimed, published, obtained a verdict and
   released CI could not deliver: `estigia gate` adjudicated `gh pr merge` against the launch checkout
   on `main`, and answered `verdict-bound-to-other-bytes`. This fix admitted the worktree as evidence
   that the checkout was covered; it did not touch what `stale_verdict` compared a `gh pr merge`
-  against, which stayed the invoking directory's own `HEAD` until issue #439 rebound that one
+  against, which stayed the invoking directory's own `HEAD` until a later change rebound that one
   delivery to the PR head the tracker reports (see the verdict-binding entry above) — so the launch
   checkout naming `main` stopped being what the comparison read at all. The invariant this repository runs on: an
   agent may work several tasks, and several agents may each work their own, whatever the runtime
@@ -9350,7 +9319,7 @@ pointer that leaves it names the document it points at.
   mismatch. The pinning is prose, not an enforcement, and no shipped adapter tells an agent its
   derived id the way `SessionStart` tells a Claude run.
 
-   **Three readers of the resolved `repo_dir`, not one.** Issue #149: the same `context.repo_dir`
+   **Three readers of the resolved `repo_dir`, not one.** The same `context.repo_dir`
    this arm builds is also where configuration and role are selected, and the entry above named only
    the verdict binding. The three, each with the call that reads it:
 
@@ -9375,7 +9344,7 @@ pointer that leaves it names the document it points at.
    it honours a sibling worktree of this repository. Nothing in this arm asks whether
    `repo_dir`'s git identity matches `launched`'s. That is the invariant working as written for task
    identity, not an accidental hole beside it — and it means the other repository's `.estigia/` rows
-   and role definitions decide the call. Issue #131 never named cross-repository resolution; the
+   and role definitions decide the call. The original request never named cross-repository resolution; the
    decision recorded here is that the code keeps it, and this entry is where a reader learns it
    rather than inferring it was considered harmless because it was silent. No test in this change
    drives a second repository's pointer through the identity-less road; the path is the same
@@ -9399,21 +9368,21 @@ pointer that leaves it names the document it points at.
 
 ## What a measurement reconstructs
 
-- **The review-cost measurement does not close what it was launched to answer.** Issue #38 asked
+- **The review-cost measurement does not close what it was launched to answer.** The question was
   what makes a blind review expensive; the counterfactual it would have to be weighed against is
   still unmeasured — nobody has quantified what Estigia's panel *avoids*: rework a rejected verdict
   would have caught later, two runs racing one issue, a delivery of unreviewed bytes. The measurement
   reports a cost, not a saving, and this issue does not close on it.
 
-  It also does not reproduce issue #131's own conditions. The installed judge definition changed
+  It also does not reproduce the conditions of the change it measured. The installed judge definition changed
   mid-run, on 2026-08-30, gaining the sentence naming the three severity classes and which one
-  blocks; issue #144 later replaced that sentence with the rule for choosing between them, so the
+  blocks; a later change replaced that sentence with the rule for choosing between them, so the
   cited lines have moved twice — the class names themselves are stated in several
   other places (`docs/review-cost.md` names them), but this is the first the judge's own definition
-  carried. #131's eight judges ran under the earlier definition, which named neither `severe` nor which
-  class blocks — the "three rejected verdicts, every one on a sentence" outcome that issue is
+  carried. The change's eight judges ran under the earlier definition, which named neither `severe` nor which
+  class blocks — the "three rejected verdicts, every one on a sentence" outcome the measurement is
   sampled from was produced by a judge never told which class blocks. A panel launched after the
-  update measures the current shipped judge, not the one that produced #131's rejections, and
+  update measures the current shipped judge, not the one that produced those rejections, and
   `docs/review-cost.md` reports the later panel's numbers as that and nothing more.
 
   The two panels it compares are not identical carriers either: the comparison arm ran the other
@@ -9443,7 +9412,7 @@ pointer that leaves it names the document it points at.
   belongs here too, not only there. `skill/references/repository-delivery.md`'s *Publish, review,
   and verify* section defines
   a review transaction as an epoch, PR, head, base, target digest and payload digest
-  together; no epoch was reachable for PR #142 because it was already merged before this
+  together; no epoch was reachable for the pull request because it was already merged before this
   measurement ran, so neither panel graded a receipt this repository's own gate would
   recognise as one.
 
@@ -9457,8 +9426,7 @@ pointer that leaves it names the document it points at.
 
   **A second measurement, on 2026-08-30, drove the comparison project's own binary.** For itself it
   closes one of the limits above and narrows a second; both still stand over the first measurement,
-  and `docs/review-cost.md` records the new one. Its target was a review transaction — issue #95,
-  epoch `2cbde7ffe09ff262d07cd885087520f7`, with head, base and target digest, though not the payload
+  and `docs/review-cost.md` records the new one. Its target was a review transaction — epoch `2cbde7ffe09ff262d07cd885087520f7`, with head, base and target digest, though not the payload
   digest that definition also names. The comparison side was executed as its own project runs it
   rather than read from its source or pasted into a carrier, which closes the binary half of the limit
   at the paragraph beginning "The two panels it compares are not identical carriers"; the panel half
@@ -9470,7 +9438,7 @@ pointer that leaves it names the document it points at.
   because the reviewer returned a key the schema forbids. The last two discarded 181 and 265 seconds
   of reviewer execution. That measurement therefore compares what each system *sends* a reviewer and
   how many it selects, and compares nothing about what either system *finds* or how it grades it. The
-  cross-system half of issue #38's grading question is open.
+  cross-system half of the grading question is open.
 
   Its two cost columns are bytes on one side and whole-agent tokens on the other, and
   `docs/review-cost.md` converts between them at four bytes per token — a ratio that measurement
@@ -9504,17 +9472,16 @@ pointer that leaves it names the document it points at.
   own per-judge figures in that document therefore measure its judges against nothing.
 
   **No figure in `docs/review-cost.md` measures a whole delivery.** Its per-judge figures come from
-  two shapes of judge brief; its panel figures are panels. Issue #362's own delivery records what it
+  two shapes of judge brief; its panel figures are panels. One delivery records what it
   could measure — its analyst, implementer and review layers — against its own review transaction
-  through `record_spend`, and that delivery predates issue #482, so it omitted the orchestrating run
-  for the reason the `Review budget` entry above gives. Since #482 the orchestrating run has its own
+  through `record_spend`, and that delivery predates the orchestrator record, so it omitted the orchestrating run
+  for the reason the `Review budget` entry above gives. Since then the orchestrating run has its own
   `record_spend --phase orchestrator` at delivery — `docs/review-cost.md`'s "What a tool answer
   costs" and its neighbouring section name the acceptance this closes — but that is one field
   existing, not a distribution: no whole-delivery figure spanning every phase of one issue,
   orchestrator included, has been recorded and reported here yet.
 
-  **The wait a review now spends for its reviewers is measured before, not after.** Issue #1045's
-  `collect_review_input --wait-seconds` replaces polling a running lens with one bounded call;
+  **The wait a review now spends for its reviewers is measured before, not after.** `collect_review_input --wait-seconds` replaces polling a running lens with one bounded call;
   `docs/review-cost.md`'s "Waiting for a reviewer instead of polling" records the corpus's one
   session that reached the tool — 16 calls, 1 answered `capture-running` — and states the after as
   zero by construction rather than observed, because `launch_review_input` and `collect_review_input`
@@ -9523,7 +9490,7 @@ pointer that leaves it names the document it points at.
 ## Refusals, and the way out they name
 
 - **A refusal that names no way out is measured at build time, and the 74 the guard reports are
-  frozen as debt rather than fixed.** Issue #228. `build.rs`'s
+  frozen as debt rather than fixed.** `build.rs`'s
   `assert_every_refusal_names_a_way_out` reads the same walk over `src/transport` that fills
   `TRANSPORT_VOCABULARY` and holds three rules that were held by review alone — *do not name a
   command unless running it clears the block* (`AGENTS.md`), *an unknown result is not clearance*,
@@ -9565,12 +9532,11 @@ pointer that leaves it names the document it points at.
   each holder. A phantom run pointer's refusal named an `estigia release` that did not discharge it,
   and deleting the pointer file was the only correction until `estigia release` was made to clear
   it. And `reviewer-definition-changed` named the installed file and a world-action to move it aside
-  when the body was one Estigia itself had written, the real exit being a binary carrying the digest
-  (#256). Each was found by a person hitting it, and this is the first run that can report any of
+  when the body was one Estigia itself had written, the real exit being a binary carrying the digest. Each was found by a person hitting it, and this is the first run that can report any of
   them.
 
 - **The per-runtime capability table is canonical; it does not measure that any host obeys a
-  capability it is declared to carry.** Issue #229. `src/setup/capabilities.rs` holds
+  capability it is declared to carry.** `src/setup/capabilities.rs` holds
   `canonical(InstructionFile) -> Capabilities`, a total `match` with no `_` arm, and every entry of
   `AGENTS` declares its own `Capabilities`. A declaration that disagrees with the table fails the
   build: a `const` assertion in that module runs `capabilities_agree` over the registry, so a row
@@ -9600,15 +9566,15 @@ pointer that leaves it names the document it points at.
   column is `true` for every supported runtime — the directive is written for all of them — and
   `false` only in `Capabilities::NOTHING`.
 
-  **Issue #116 narrows by this and is not closed.** #116 is about the *reporting* — one word
+  **This narrows the reporting gap and does not close it.** The gap is in the *reporting* — one word
   covering four states in what a person reads — and the table now holds, per runtime, which of the
   four states applies, so the row a report renders can be read off one place rather than inferred
-  from the adapters. The reporting itself is untouched here. **Issue #181 is already delivered**:
-  agent definitions have a retirement list, `skill::RETIRED_AGENTS` (PR #793), and this change does
+  from the adapters. The reporting itself is untouched here. **One related part is already delivered**:
+  agent definitions have a retirement list, `skill::RETIRED_AGENTS`, and this change does
   not touch it.
 
 - **The merge-commit topology rule admits a forward-integrated delivery, and no longer proves the
-  first parent was exactly the reviewed base.** Issue #287. `skill/SKILL.md` step 6 and
+  first parent was exactly the reviewed base.** `skill/SKILL.md` step 6 and
   `skill/bindings/github.md`'s `verify_claim` exception now require the delivered SHA's second parent
   to be exactly the reviewed head and the reviewed base to be an **ancestor** of its first parent;
   `skill/bindings/github/delivery.md` and `skill/references/repository-delivery.md` state the same
@@ -9635,7 +9601,7 @@ pointer that leaves it names the document it points at.
   read.
 
 - **A read-only Linear source reads an issue and writes nothing, and its transport is `curl`.**
-  Issue #847. `Tracker linear <team-key>` is admitted only under `Workflow: assisted`, and the row
+  `Tracker linear <team-key>` is admitted only under `Workflow: assisted`, and the row
   that admits it is answered in a repository's own file: `config set` refuses the value without
   `--repo` (machine-wide), `config edit` refuses it, `config set --repo` refuses it where the
   repository's `Claim workflow` is not assisted, `config set Workflow autonomous --repo` refuses it where
@@ -9709,8 +9675,8 @@ pointer that leaves it names the document it points at.
 
 - **A review transaction's evidence prose and a pull request body are not files in this repository,
   and nothing reads either: a test count or a mutation claim written into one is unchecked prose.**
-  Issue #151, whose operator decision of 2026-10-04 chose this record over rewriting a merged body.
-  The measurement is PR #142's evidence section, which says *"Six new tests, each demonstrated red
+  The operator decision of 2026-10-04 chose this record over rewriting a merged body.
+  The measurement is one pull request's evidence section, which says *"Six new tests, each demonstrated red
   under mutation **in both directions**"* and tables six rows, against a diff that added **nine** test
   functions to `src/cli/tests.rs`. The three it never tables are
   `without_a_run_id_a_sibling_directory_no_pointer_covers_stays_refused`,
@@ -9733,11 +9699,10 @@ pointer that leaves it names the document it points at.
   its own non-mutating status in its doc comment — *"it stays green under both the old widening and
   the repaired narrowing"* — and the declaration is correct: nothing in the change reaches it.
 
-  **What this does not do.** It does not put a count back into PR #142: a merged pull-request body is
+  **What this does not do.** It does not put a count back into that pull request: a merged pull-request body is
   no surface any delivery step carries, and the operator decision of 2026-10-04 ruled the rewrite out
   rather than open one. It does not remove the sentence that disagrees with its own diff — that
-  sentence lives in a merged body, not in this repository, and no file here states a count for
-  #142's change. And it does not build a reader for pull-request bodies: nothing in the suite opens
+  sentence lives in a merged body, not in this repository, and no file here states a count for that change. And it does not build a reader for pull-request bodies: nothing in the suite opens
   one, so a receipt's test count and its mutation claims stay prose held by review alone, as the
   counts in this document were until `tests/honesty.rs` crossed them. Recording the set of test
   names a receipt claims, and diffing it against the set the change derives, is a separate
@@ -9746,7 +9711,7 @@ pointer that leaves it names the document it points at.
 ## Citations, and the coordinates that rot
 
 **`docs/` cited code as `path:line`, and nothing crossed the coordinates — a base integration
-shifted the lines and a pin silently pointed at unrelated code (#72).** Two such pins were found
+shifted the lines and a pin silently pointed at unrelated code.** Two such pins were found
 wrong by two blind judges on the same delivery, both landing on unrelated code — one on
 `review_receipt`'s doc comment and its serde default where the `reviewed_head` reach limit was meant,
 the other on prose inside a worktree-discovery guard where a `PointerEffect` arm was meant — while
@@ -9790,8 +9755,7 @@ history is kept; the coordinates are not.
 
 ## Generated files and reproduction
 
-- **A declared generated file is reviewed by reproduction at approval time, not by reading.** Issue
-  #1086, second slice. The payload shows it as a manifest line and `review_computed_verdict` regenerates
+- **A declared generated file is reviewed by reproduction at approval time, not by reading.** The payload shows it as a manifest line and `review_computed_verdict` regenerates
   it before recording `approved`; the digest still binds the real head blob. Third slice: the tier and
   the correction budget no longer count a manifest path either (next entry).
   [`generated-files.md`](generated-files.md) has the format. What this measures is that the head blob
@@ -9820,7 +9784,7 @@ history is kept; the coordinates are not.
     without filters, against the head blob as stored.
   - **Tests drive `sh` with `printf`, not `npm`.** No real lockfile generator was run.
 
-- **The tier and the correction budget do not see generated churn.** Issue #1086, third slice.
+- **The tier and the correction budget do not see generated churn.**
   `review_tier` leaves a manifest path out of `changed_lines` and of the content scan, and the
   correction budget leaves it out of the original count and of every repair's charge, so a regenerated
   lockfile neither licenses lenses nor spends the 200-line allowance. Both read
@@ -9838,7 +9802,7 @@ history is kept; the coordinates are not.
   - **Anchors still see the real diff.** A finding on a manifest path is accepted, because a reviewer
     may legitimately open the file through `inspect`; the exclusion is of counting, not of anchoring.
 
-- **A timed child is drained, given no stdin, contained and reaped.** Issue #1140. `spawn_with_deadline`
+- **A timed child is drained, given no stdin, contained and reaped.** `spawn_with_deadline`
   reads both pipes on threads while it polls, gives the child a null stdin like the untimed
   `Command::output()`, runs it under `reviewer::process_tree`, and on a deadline kills the tree and
   waits. What this measures is that a child writing a megabyte, reading stdin, emitting non-UTF-8 bytes
