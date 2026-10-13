@@ -1916,7 +1916,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 41,870 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 38,557 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 39,190 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -9846,3 +9846,17 @@ does not measure:
 - **Read from source, not from a run.** That Pi 1.1.0 records a changed section as a later system
   message, and that pi-ai folds it into the leading prompt for most providers, comes from reading
   Pi's source; no live session was run against a provider's cache.
+
+## What `release_ci` says about CI
+
+`release_ci` returns `lane`, the reading `publication_lane` gives for the released head, and `next`: `merge` for
+`not-consulted`, `disabled` and `never-ran`, `ci_status` for every other reading. What this measures is the unit
+tests that script each lane reading and the one that scripts a failed read. What it does not measure:
+
+- **`absent` goes to `ci_status`.** The read follows the ready mark within moments, so a head whose check runs have
+  not registered yet is indistinguishable from a repository with Actions on and no workflow; merging on it could skip
+  a CI that is about to start. A repository in the second case still waits on `gh pr checks`, which reports no checks.
+- **An unreadable lane goes to `ci_status`.** Not knowing is not a licence to merge; the cost is the old wait.
+- **No end-to-end release against a lane that is off.** The `release_ci` payload is asserted through the pipe only
+  for an unreadable lane; the off, `disabled` and `never-ran` branches are asserted on the function that builds the
+  answer, not on the whole operation.

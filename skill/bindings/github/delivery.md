@@ -325,6 +325,11 @@ reused PR draft and reads that back before push, or creates a new PR with `--dra
 therefore run before ordinary cooperative CI. `release_ci` replays the live claim, the newest receipt on its own pull request, draft PR and coherent target, then
 marks ready and reads the result back.
 
+**`release_ci` answers whether CI will run.** Its answer carries `lane`, the reading `review_status`
+gives, and `next`: `merge` when `lane.state` is `not-consulted`, `disabled` or `never-ran`, so run no
+`ci_status` and watch no checks; `ci_status` for every other reading, an unreadable one included.
+`ci_released` is `true` only then.
+
 **Draft toggle is the flow's job, not a manual gesture.** `publish_review` / `republish_review` call
 `ensure_draft` before the push so a ready PR cannot emit the per-push pull-request event and expose
 the new head before the review barrier is restored; `release_ci` marks ready afterwards. Outside the
@@ -349,7 +354,10 @@ read rather than declared. `review_status`'s `lane` answers `disabled` when
 behind the head's failing check runs reports `steps: []` on every job — commonly a billing or
 spending-limit failure — and it carries GitHub's own annotation of why, when there is one. In all
 three the merge rests on the approved computed verdict for the exact receipt and on the local suite run over
-those same bytes, never on a lane that did not run. Before merging, the run records what it read,
+those same bytes, never on a lane that did not run. `not-consulted`, the repository's own `Publication
+lane` row set to `off`, is the fourth: it needs no comment, because the row is the repository's recorded
+decision and the comment records an observation the run made, which a lane that was not read does not
+give. For `disabled` and `never-ran`, before merging, the run records what it read,
 verbatim, as an issue comment (`SCRIPT comment --issue <n> --run-id <id> --kind note --body-file
 <f>`): the `read` field of the `disabled` answer, or the `annotation` field of the `never-ran` answer
 when it carries one, exactly as the answer carried it, beside the receipt's epoch, head and base and

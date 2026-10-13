@@ -4816,6 +4816,10 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
         "an answer value the read-only `publication_lane` operation reports, not a refusal code",
     ),
     (
+        "not-consulted",
+        "an answer value the read-only `publication_lane` operation reports, not a refusal code",
+    ),
+    (
         "parent-base",
         "a JSON answer field on `publish_review`'s marker \u{2014} the deferred 'tool names' class",
     ),

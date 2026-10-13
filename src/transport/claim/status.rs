@@ -122,7 +122,9 @@ pub fn review_status(context: &Context, issue: u64) -> Result<Value, Failure> {
                             } else if placement == Placement::Computing {
                                 halt("mergeability-unknown", MERGEABILITY_UNKNOWN)
                             } else if pull.get("isDraft").and_then(Value::as_bool) == Some(false) {
-                                halt("released", &released_continuation(receipt, &pull))
+                                let (lane, _) =
+                                    super::ci_outlook(context, &receipt.head, receipt.pr);
+                                halt("released", &released_continuation(receipt, &pull, &lane))
                             } else {
                                 execute("release_ci", "approved", bound)
                             }
@@ -167,7 +169,11 @@ fn delivered_continuation() -> String {
     )
 }
 
-fn released_continuation(receipt: &ReviewTransaction, pull: &Value) -> String {
+pub(super) fn released_continuation(
+    receipt: &ReviewTransaction,
+    pull: &Value,
+    lane: &Value,
+) -> String {
     let advanced = pull
         .get("baseRefOid")
         .and_then(Value::as_str)
@@ -180,9 +186,22 @@ fn released_continuation(receipt: &ReviewTransaction, pull: &Value) -> String {
             )
         })
         .unwrap_or_default();
-    format!(
+    let state = lane
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("unreadable");
+    let lead = if super::next_after_release(lane) == "merge" {
+        format!(
+            "CI is released for this receipt, but no CI will run on it (the publication lane \
+             reads `{state}`): do not wait for checks. The run holding this receipt merges it"
+        )
+    } else {
         "CI is released for this receipt. When CI is green on this exact head, the run holding \
-         this receipt merges it with `gh pr merge {pr} --merge --match-head-commit {head}` if \
+         this receipt merges it"
+            .to_owned()
+    };
+    format!(
+        "{lead} with `gh pr merge {pr} --merge --match-head-commit {head}` if \
          `Delivery authorisation` authorises this run, and otherwise asks first, naming the \
          reviewed head {head} and base {base}{advanced}",
         pr = receipt.pr,

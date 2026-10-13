@@ -1,6 +1,7 @@
 use super::*;
 use crate::harness::refusal_class::class_of_answer;
 use crate::outcome::RefusalClass;
+use crate::transport::claim::status::released_continuation;
 use serde_json::{Value, json};
 
 fn pull(receipt: &ReviewTransaction, state: &str, draft: bool) -> Value {
@@ -2515,4 +2516,59 @@ fn a_base_the_clone_does_not_hold_is_unavailable_not_a_clean_advance() {
         .expect_err("an unreadable ancestry was answered");
 
     assert_eq!(class_of_failure(&failure), RefusalClass::Unavailable);
+}
+
+fn released_continuation_under(lane: Value) -> String {
+    let (_root, _context, receipt) = low_change();
+    let pull = json!({"baseRefOid": receipt.base});
+    released_continuation(&receipt, &pull, &lane)
+}
+
+#[test]
+fn a_released_receipt_does_not_wait_for_ci_where_the_lane_says_none_will_run() {
+    for state in ["not-consulted", "disabled", "never-ran"] {
+        let continuation = released_continuation_under(json!({"state": state}));
+        assert!(
+            continuation.contains("no CI will run") && continuation.contains(state),
+            "{state}: {continuation}"
+        );
+        assert!(!continuation.contains("When CI is green"), "{continuation}");
+    }
+}
+
+#[test]
+fn a_released_receipt_waits_for_ci_where_a_lane_will_run_or_cannot_be_read() {
+    for state in ["green", "running", "absent", "red", "unreadable"] {
+        let continuation = released_continuation_under(json!({"state": state}));
+        assert!(
+            continuation.contains("When CI is green"),
+            "{state}: {continuation}"
+        );
+        assert!(!continuation.contains("no CI will run"), "{continuation}");
+    }
+}
+
+#[test]
+fn review_status_reads_the_lane_into_the_released_continuation() {
+    let (_root, context, receipt) = low_change();
+    let off = Context {
+        config: vec![(
+            "Publication lane".to_owned(),
+            "off".to_owned(),
+            Source::Written,
+        )],
+        ..context
+    };
+    let comments = [
+        live_claim("claude-a"),
+        published(&receipt),
+        computed_by("codex-b", &receipt, "approved"),
+    ];
+
+    let (next, answer) = next_of(&off, &comments, &[pull(&receipt, "OPEN", false)]);
+
+    assert_eq!(next["reason_code"], "released", "{answer}");
+    let continuation = next["continuation"].as_str().expect("a continuation");
+    assert!(continuation.contains("no CI will run"), "{continuation}");
+    assert!(!continuation.contains("When CI is green"), "{continuation}");
 }

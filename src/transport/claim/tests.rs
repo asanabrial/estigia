@@ -18974,3 +18974,112 @@ fn the_base_refusal_outside_a_correction_still_offers_the_rebase() {
         "outside a correction both recoveries stay named: {envelope}"
     );
 }
+
+fn lane_off_context(root: &std::path::Path) -> Context {
+    Context {
+        config: vec![(
+            "Publication lane".to_owned(),
+            "off".to_owned(),
+            Source::Written,
+        )],
+        ..lane_read_context(root)
+    }
+}
+
+#[test]
+fn release_ci_names_the_lane_and_sends_a_lane_that_is_off_to_the_merge() {
+    let root = tempfile::tempdir().expect("a context root");
+    let head = "a".repeat(40);
+    let (lane, next) = ci_outlook(&lane_off_context(root.path()), &head, 7);
+    assert_eq!(lane["state"], "not-consulted", "{lane}");
+    assert_eq!(next, "merge");
+}
+
+#[test]
+fn release_ci_sends_a_repository_whose_actions_are_off_to_the_merge_and_keeps_the_read() {
+    let root = tempfile::tempdir().expect("a context root");
+    let head = "d".repeat(40);
+    let permissions = serde_json::json!({"allowed": null, "enabled": false});
+    let mut answers = lane_read_answers();
+    answers.push(serde_json::json!({
+        "matches": "actions/permissions",
+        "stdout": permissions.to_string(),
+        "status": 0,
+    }));
+    let bin = crate::test_env::scripted_gh();
+    let (lane, next) =
+        crate::test_env::with_scripted_gh(bin.path(), &crate::test_env::answers(&answers), || {
+            ci_outlook(&lane_read_context(root.path()), &head, 7)
+        });
+    assert_eq!(lane["state"], "disabled", "{lane}");
+    assert_eq!(lane["read"], permissions, "{lane}");
+    assert_eq!(next, "merge");
+}
+
+#[test]
+fn release_ci_sends_a_lane_that_never_ran_to_the_merge() {
+    let head = "b".repeat(40);
+    let lane = publication_lane_answer(
+        &head,
+        read_publication_lane(&check_runs(&[check_run(
+            "check (ubuntu-latest)",
+            "completed",
+            Some("failure"),
+        )]))
+        .expect("a readable listing"),
+        Some(RedClassification::NeverRan {
+            annotation: Some("no minutes remaining on this account".to_owned()),
+            runs: Vec::new(),
+        }),
+        ActionsAvailability::Available,
+    )
+    .expect("a never-ran answer");
+    assert_eq!(lane["state"], "never-ran");
+    assert_eq!(next_after_release(&lane), "merge");
+}
+
+#[test]
+fn release_ci_keeps_a_lane_that_will_run_on_ci_status() {
+    let root = tempfile::tempdir().expect("a context root");
+    let head = "c".repeat(40);
+    let answers = [
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "check-runs",
+            "stdout": check_runs(&[check_run("ci", "in_progress", None)]).to_string(),
+            "status": 0,
+        }),
+    ];
+    let bin = crate::test_env::scripted_gh();
+    let (lane, next) =
+        crate::test_env::with_scripted_gh(bin.path(), &crate::test_env::answers(&answers), || {
+            ci_outlook(&lane_read_context(root.path()), &head, 7)
+        });
+    assert_eq!(lane["state"], "running", "{lane}");
+    assert_eq!(next, "ci_status");
+}
+
+#[test]
+fn release_ci_does_not_send_a_lane_it_could_not_read_to_the_merge() {
+    let root = tempfile::tempdir().expect("a context root");
+    let head = "c".repeat(40);
+    let answers = [
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+            "status": 0,
+        }),
+        serde_json::json!({"matches": "check-runs", "stdout": "", "status": 1}),
+    ];
+    let bin = crate::test_env::scripted_gh();
+    let (lane, next) =
+        crate::test_env::with_scripted_gh(bin.path(), &crate::test_env::answers(&answers), || {
+            ci_outlook(&lane_read_context(root.path()), &head, 7)
+        });
+    assert_eq!(lane["state"], "unreadable", "{lane}");
+    assert_eq!(next, "ci_status");
+}

@@ -1407,6 +1407,8 @@ fn release_ci_restores_a_receipt_for_a_run_that_did_not_publish_it() {
     let answered: serde_json::Value =
         serde_json::from_str(&text).unwrap_or_else(|error| panic!("{error}: {text}"));
     assert_eq!(answered["ci_released"], true, "{text}");
+    assert_eq!(answered["next"], "ci_status", "{text}");
+    assert_eq!(answered["lane"]["state"], "unreadable", "{text}");
     assert_eq!(answered["basis"], "structural-readback", "{text}");
 
     let pointer: serde_json::Value = serde_json::from_str(
