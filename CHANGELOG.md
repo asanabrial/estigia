@@ -12,6 +12,10 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The Pi system section no longer changes with the queued-write count.** Issue #20. The text `estigia session
+  start` serves to Pi stated "N GitHub writes are queued", so every write made while the git operation window
+  was closed rewrote the leading prompt and defeated prompt caching. It now says "GitHub writes are queued"; the
+  Claude Code SessionStart and Stop texts keep the count (`docs/what-it-writes.md`, `docs/honesty.md`).
 - **A repository's own file is found from any directory inside the checkout.** Issue #36. The repository override
   (`<common dir>/estigia/estigia.local.md`) was looked for only at `<working directory>/.git`, so a session in a
   subdirectory such as `apps/engine` read no repository layer and the contract's value applied: a repository that

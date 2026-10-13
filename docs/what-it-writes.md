@@ -722,9 +722,11 @@ binary's text, which Pi renders as an `<estigia>` section appended to the prompt
 so it never replaces the prompt the way a returned `systemPrompt` does. The text is
 `harness::hook::session_start_text`, which wraps `session_start_response`, the function the Claude
 Code hook uses, so the run id, what the run holds, the `Issue requirement` note, the build note and the
-queue note are one text for both. It asks on every run rather than caching: the answer depends on a
+queue note are one text for both apart from the queue count. It asks on every run rather than caching: the answer depends on a
 claim made since the last turn and costs one local process, and a section that changed is what Pi
-persists as a patch, so a compaction keeps the current one. A binary that does not answer, answers
+persists as a patch, so a compaction keeps the current one. The queue note in this section states that GitHub writes are queued without counting them: a changed section
+rewrites the leading prompt for most providers, and a count that grew with every queued write would do that
+on every turn while nothing else had changed. A binary that does not answer, answers
 with a code, a signal or nothing, or is past the bound, gives a section reading `Estigia: session
 context unknown (<why>)`, never an empty one and never the last text. A child process asks about the
 exported root session, like the status line.
