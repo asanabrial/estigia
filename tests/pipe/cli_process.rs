@@ -147,13 +147,13 @@ fn an_operators_gh_repo_never_reaches_a_spawned_gh() {
         built.display()
     );
     let fake_bin = tempfile::tempdir().expect("a directory for the fake gh");
-    std::fs::copy(
-        &built,
-        fake_bin
-            .path()
-            .join(if cfg!(windows) { "gh.exe" } else { "gh" }),
-    )
-    .expect("the fake gh is copied onto the path");
+    let fake_gh = fake_bin
+        .path()
+        .join(if cfg!(windows) { "gh.exe" } else { "gh" });
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&built, &fake_gh).expect("the fake gh is linked onto the path");
+    #[cfg(not(unix))]
+    std::fs::copy(&built, &fake_gh).expect("the fake gh is copied onto the path");
 
     let mut joined = std::ffi::OsString::from(fake_bin.path());
     joined.push(if cfg!(windows) { ";" } else { ":" });
