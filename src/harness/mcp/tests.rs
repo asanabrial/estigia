@@ -1155,67 +1155,185 @@ fn every_tool_names_a_row_the_binding_actually_has() {
     }
 }
 
-const RETIRED_OPERATIONS: &[&str] = &[
-    "repair_rounds",
-    "review_findings",
-    "review_payload_membership",
-    "spend_summary",
-    "review_transaction",
-    "computed_verdict",
-    "record_lens_report",
-    "record_refutation",
-    "record_validator_result",
-    "record_review_verdict",
-    "list_identities",
-    "publication_receipt",
-    "inspect_candidate",
-    "expected_target",
-    "base_movement",
-    "review_tier_for_repair",
-    "review_verdict",
-    "review_refutation",
-];
-
 const ABSORPTION_MAP_HEADING: &str = "### Operations no tool exposes";
 
-fn backticked_identifiers(line: &str) -> Vec<&str> {
-    line.split('`')
-        .skip(1)
-        .step_by(2)
-        .filter(|word| {
-            word.contains('_') && word.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+const FIELDS_IN_OPERATION_TABLES: &[&str] = &["last_activity"];
+
+fn spelling(name: &str) -> String {
+    name.replace('-', "_")
+}
+
+fn is_identifier(word: &str) -> bool {
+    let mut chars = word.chars();
+    chars.next().is_some_and(|first| first.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+}
+
+fn cli_names(command: &clap::Command, into: &mut Vec<String>) {
+    for sub in command.get_subcommands() {
+        into.push(spelling(sub.get_name()));
+        into.extend(sub.get_all_aliases().map(spelling));
+        cli_names(sub, into);
+    }
+}
+
+fn callable_names() -> Vec<String> {
+    let mut names: Vec<String> = TOOLS
+        .iter()
+        .flat_map(|tool| [tool.name, tool.contract_name, tool.operation])
+        .chain(NOT_EXPOSED.iter().map(|(name, _)| *name))
+        .chain(NOT_RUN.iter().map(|(name, _)| *name))
+        .map(spelling)
+        .collect();
+    cli_names(
+        &<crate::cli::Cli as clap::CommandFactory>::command(),
+        &mut names,
+    );
+    names
+}
+
+fn backticked(text: &str) -> Vec<(usize, usize, &str)> {
+    let mut found = Vec::new();
+    let mut open = None;
+    for (at, _) in text.match_indices('`') {
+        match open.take() {
+            Some(start) => found.push((start, at + 1, &text[start + 1..at])),
+            None => open = Some(at),
+        }
+    }
+    found
+}
+
+fn operation_candidates(line: &str, in_operation_table: bool) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let mut seen = |word: &str| {
+        if is_identifier(word) {
+            found.push(word.to_owned());
+        }
+    };
+    let mut rest = line;
+    while let Some(at) = rest.find("SCRIPT ") {
+        rest = &rest[at + "SCRIPT ".len()..];
+        let end = rest
+            .find(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-'))
+            .unwrap_or(rest.len());
+        seen(&rest[..end]);
+    }
+    for (start, end, word) in backticked(line) {
+        let before = line[..start].trim_end().to_ascii_lowercase();
+        let after = &line[end..];
+        let called = before.ends_with(" call") || before.ends_with(" calls") || before == "call";
+        let with_flag = after.starts_with(" with `--");
+        if called || with_flag {
+            seen(word);
+        }
+    }
+    if in_operation_table {
+        let mut cells = line.strip_prefix('|').unwrap_or("").split('|');
+        let first = cells.next().unwrap_or("").trim();
+        let agent_performed = cells
+            .next()
+            .is_some_and(|cell| cell.trim_start().starts_with("performed by the agent"));
+        if !agent_performed {
+            seen(first);
+            for (start, _, word) in backticked(first) {
+                let lead = first[..start].trim_end();
+                if !(lead.ends_with("with") || lead.ends_with("its")) {
+                    seen(word);
+                }
+            }
+        }
+    }
+    found
+}
+
+fn absorption_map(binding: &str) -> Vec<&str> {
+    let mut in_fence = false;
+    let mut in_map = false;
+    let mut lines = Vec::new();
+    for line in binding.lines() {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+        } else if !in_fence && line.starts_with('#') {
+            in_map = line.starts_with(ABSORPTION_MAP_HEADING);
+        }
+        if in_map && line.starts_with("- ") {
+            lines.push(line);
+        }
+    }
+    lines
+}
+
+fn retired_names() -> Vec<String> {
+    let binding = crate::skill::FILES
+        .iter()
+        .find(|file| file.path == "bindings/github.md")
+        .expect("the GitHub binding ships");
+    absorption_map(binding.contents)
+        .into_iter()
+        .flat_map(|line| {
+            let (left, _) = line.split_once('→').expect("a map entry has an arrow");
+            backticked(left)
+                .into_iter()
+                .map(|(_, _, word)| spelling(word))
+                .collect::<Vec<_>>()
         })
         .collect()
 }
 
+fn unresolved_operations(path: &str, contents: &str, callable: &[String]) -> Vec<String> {
+    let retired = retired_names();
+    let mut stale = Vec::new();
+    let mut in_fence = false;
+    let mut in_map = false;
+    let mut in_operation_table = false;
+    for (index, line) in contents.lines().enumerate() {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if !in_fence && line.starts_with('#') {
+            in_map = path == "bindings/github.md" && line.starts_with(ABSORPTION_MAP_HEADING);
+        }
+        if in_map {
+            continue;
+        }
+        if !in_fence {
+            if let Some(row) = line.strip_prefix('|') {
+                if let Some(cell) = row.split('|').next() {
+                    let header = cell.trim().trim_matches('`');
+                    if header.eq_ignore_ascii_case("operation") {
+                        in_operation_table = true;
+                    }
+                }
+            } else {
+                in_operation_table = false;
+            }
+        }
+        for word in operation_candidates(line, in_operation_table && !in_fence) {
+            let word = spelling(&word);
+            if callable.contains(&word) || FIELDS_IN_OPERATION_TABLES.contains(&word.as_str()) {
+                continue;
+            }
+            let why = if retired.contains(&word) {
+                "was absorbed (see the map in bindings/github.md)"
+            } else {
+                "is not a tool, an unexposed operation or a subcommand"
+            };
+            stale.push(format!("{path}:{} names `{word}`, which {why}", index + 1));
+        }
+    }
+    stale
+}
+
 #[test]
 fn no_shipped_skill_file_names_an_operation_no_tool_performs() {
-    let callable: Vec<&str> = TOOLS
-        .iter()
-        .flat_map(|tool| [tool.name, tool.contract_name])
-        .chain(NOT_EXPOSED.iter().map(|(name, _)| *name))
-        .collect();
+    let callable = callable_names();
     let mut stale: Vec<String> = Vec::new();
     let mut scanned = 0;
     for file in crate::skill::FILES {
-        let mut in_map = false;
-        for (index, line) in file.contents.lines().enumerate() {
-            if line.starts_with('#') {
-                in_map =
-                    file.path == "bindings/github.md" && line.starts_with(ABSORPTION_MAP_HEADING);
-            }
-            if in_map {
-                continue;
-            }
-            scanned += 1;
-            for word in backticked_identifiers(line) {
-                let retired = RETIRED_OPERATIONS.contains(&word);
-                let invented = word.starts_with("record_") && !callable.contains(&word);
-                if retired || invented {
-                    stale.push(format!("{}:{} names `{word}`", file.path, index + 1));
-                }
-            }
-        }
+        scanned += file.contents.lines().count();
+        stale.extend(unresolved_operations(file.path, file.contents, &callable));
     }
     assert!(
         scanned > 1000,
@@ -1226,6 +1344,74 @@ fn no_shipped_skill_file_names_an_operation_no_tool_performs() {
         "these name an operation that no tool performs and NOT_EXPOSED does not declare; \
          name the tool or view that answers it instead:\n{}",
         stale.join("\n")
+    );
+}
+
+#[test]
+fn the_absorption_map_names_only_operations_no_tool_performs_and_answers_with_one_that_exists() {
+    let callable = callable_names();
+    let binding = crate::skill::FILES
+        .iter()
+        .find(|file| file.path == "bindings/github.md")
+        .expect("the GitHub binding ships");
+    let entries = absorption_map(binding.contents);
+    assert!(entries.len() > 4, "the absorption map was not read");
+    for line in entries {
+        let (left, right) = line.split_once('→').expect("a map entry has an arrow");
+        for (_, _, word) in backticked(left) {
+            let exposed = TOOLS.iter().any(|tool| {
+                spelling(tool.name) == spelling(word)
+                    || spelling(tool.contract_name) == spelling(word)
+            });
+            assert!(
+                !exposed,
+                "`{word}` is in the absorption map and is also a tool"
+            );
+        }
+        let (_, _, answer) = backticked(right)
+            .into_iter()
+            .next()
+            .expect("a map entry names the call that answers it");
+        assert!(
+            callable.contains(&spelling(answer)),
+            "the map answers with `{answer}`, which nothing performs: {line}"
+        );
+    }
+}
+
+#[test]
+fn the_retired_name_scan_sees_hyphenated_bare_and_fenced_names() {
+    let callable = callable_names();
+    for (label, text) in [
+        (
+            "hyphenated",
+            "Run `review-findings` with `--issue` first.\n",
+        ),
+        (
+            "bare",
+            "| Operation | Command |\n|---|---|\n| repair_rounds | read-only |\n",
+        ),
+        ("fenced", "```bash\nSCRIPT review-findings --issue 1\n```\n"),
+        (
+            "after the map",
+            "### Operations no tool exposes\n- `a` → `claim`\n### Next\ncall `spend_summary`\n",
+        ),
+    ] {
+        let hits = unresolved_operations("bindings/github.md", text, &callable);
+        assert!(
+            !hits.is_empty(),
+            "{label}: a retired name went unseen in {text:?}"
+        );
+    }
+    let inside_map = "### Operations no tool exposes\n```\n# x\n```\ncall `spend_summary`\n";
+    assert_eq!(
+        unresolved_operations("bindings/github.md", inside_map, &callable),
+        Vec::<String>::new()
+    );
+    let clean = "Read `README.md` and the `view` field; pass `--force`.\n| Operation | Command |\n|---|---|\n| `claim` | `SCRIPT claim` |\n| `review_read` with `view` | ok |\n";
+    assert_eq!(
+        unresolved_operations("references/x.md", clean, &callable),
+        Vec::<String>::new()
     );
 }
 
