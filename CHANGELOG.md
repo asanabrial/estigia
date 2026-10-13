@@ -12,6 +12,13 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The shipped skill names only tools the server exposes.** Issue #4. `repair_rounds`, `review_findings`,
+  `review_transaction`, `review_payload_membership`, `spend_summary`, `list_identities`, `inspect_candidate`
+  and the capture-only recorders were absorbed into `review_status`, `review_read` and `list_state`, but
+  `skill/` kept sending agents to them; each is now the call that answers it, and the GitHub binding carries
+  one map of the names no tool exposes. `blind-judges.md` says once that the orchestrator calls
+  `launch_review_input` for each slot `review_status` offers and the binary starts the reviewer. The test
+  `no_shipped_skill_file_names_an_operation_no_tool_performs` fails on a retired name outside that map.
 - **The goal judges run every third turn, and Pi's judge sees a bounded transcript.** Issue #3. The generic
   `/goal` on OpenCode and on Pi counts each turn and asks the model only on every third and on the turn that
   reaches the cap; the turns between continue with the condition and no judge call. Pi's transcript is capped

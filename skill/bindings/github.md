@@ -184,7 +184,6 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `ensure_states` | `SCRIPT ensure-states` |
 | `flush` | `SCRIPT flush [--read-only]` |
 | `create` | `SCRIPT create --identity <id> --title <t> --body-file <f> --priority <scale:value> --domain <name> --runtime <rt> --run-id <id> [--state ready\|blocked] [--blocked-until <n>=<s>[+<n>=<s>...]] [--epoch <publication> [--findings <id[+id...]>]]` |
-| `list_identities` | `SCRIPT list-identities [--limit <n>]` |
 | `list_state` | `SCRIPT list-state [--state <s>] --run-id <id> [--identities] [--limit <n>]` |
 | `claim` | `SCRIPT claim --issue <n> --run-id <id> --runtime <rt> --horizon <UTC> --operation-id <32-hex> [--transition-to <s>] [--takeover [--target-operation <epoch>] [--force --reason-file <f>]]` — see *Claim* in github/operations.md |
 | `reclaim` | `SCRIPT reclaim --issue <n> --run-id <id> --runtime <rt> --horizon <UTC> --operation-id <32-hex> [--state <s>] [--target-operation <epoch>] [--force --reason-file <f>]` |
@@ -201,32 +200,17 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `republish_review` | `SCRIPT republish-review --issue <n> --branch <b> --base <base> --run-id <id> --pr-title <t> --pr-body-file <f> [--worktree <p>] [--expect-state <s>] [--inline-payload] [--with-review] [--topology <t>] [--topology-reason <text>] [--expected-epoch <epoch\|none>]` |
 | `handoff_review` | `SCRIPT handoff-review --issue <n> --run-id <id> --target-operation <epoch> --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> --blocker <text> --discharger <text>` |
 | `review_finding` | `SCRIPT review-finding --issue <n> --run-id <id> --reviewer <id> --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> --id <lineage-key> --class severe\|warning\|suggestion --evidence <text> --impact <text> [--evidence-class deterministic\|inferential\|insufficient] [--causal-disposition introduced\|worsened\|pre-existing\|base-only\|unknown] [--location <path>:<line>\|<path>:<start>-<end>] [--lens <role>] [--parent <lineage-key>] [--origin introduced\|exposed]` — see *Recording a finding* in github/operations.md |
-| `review_verdict` | `SCRIPT review-verdict` — see *Recording a verdict* in github/operations.md |
 | `escalate_review` | `SCRIPT escalate-review --issue <n> --run-id <id> --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> --escalated-to <person> --reason <text>` — see *Escalating a review* in github/operations.md |
-| `review_refutation` | `SCRIPT review-refutation --issue <n> --run-id <id> --refuter <id> --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> --outcomes <json>` — see *Recording a refutation* in github/operations.md |
 | `review_disposition` | `SCRIPT review-disposition --issue <n> --run-id <id> --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> --dispositions <json>` — see *Recording a disposition* in github/operations.md |
-| `review_validator_result` | `SCRIPT review-validator-result --issue <n> --run-id <id> --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> --operation-id <id> [--inspection <available\|unavailable>] [--original-criteria <pass\|fail>] [--correction-regression <pass\|fail>] [--reason <text>] [--attempt <1\|2\|3>]` (`--attempt` is required with `unavailable`) — see *Recording a validator result* in github/operations.md |
-| `review_lens_report` | `SCRIPT review-lens-report --issue <n> --run-id <id> --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> --role <lens-role> [--focus <risk\|resilience\|readability\|reliability>]` — see *Recording a lens report* in github/operations.md |
 | `launch_review_input` | `SCRIPT launch-review-input --issue <n> --run-id <id> [--name <lens-role\|refutation-batch\|review-validator>] [--names <name,...>]` — see *Capturing a review input* in github/operations.md |
 | `collect_review_input` | `SCRIPT collect-review-input --issue <n> --run-id <id> [--name <lens-role\|refutation-batch\|review-validator>] [--names <name,...>] [--wait-seconds <n>]` — see *Capturing a review input* in github/operations.md |
 | `review_computed_verdict` | `SCRIPT review-computed-verdict --issue <n> --run-id <id> --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> [--worktree <p>] [--never-ran-evidence-file <f>]` — see *Recording a computed verdict* in github/operations.md |
-| `computed_verdict` | `SCRIPT computed-verdict --issue <n> --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> [--worktree <p>]` — see *Recording a computed verdict* in github/operations.md |
 | `record_spend` | `SCRIPT spend --issue <n> --run-id <id> --phase review\|developer\|analyst\|orchestrator --epoch <publication> --pr <n> --head <sha> --base <sha> --digest <sha256> --conditions <text> --input <n> --tokens <n> --seconds <n> --contexts <n> [--note <text>]` |
-| `spend_summary` | `SCRIPT spend-summary --issue <n> --phase review\|developer\|analyst\|orchestrator` |
-| `repair_rounds` | `SCRIPT repair-rounds --issue <n>` |
 | `review_status` | `SCRIPT review-status --issue <n>` — answers `lane` and `corrections` beside `next` |
 | `review_read` | `SCRIPT review-read --issue <n> --view <transaction\|findings\|verdict\|membership\|inspect\|spend> [--epoch <id>] [--id <finding-id>] [--with-text] [--candidate <path>] [--request <name-status\|numstat\|stat\|patch\|object>] [--path <p>] [--side <parent\|candidate>] [--pr <n>] [--head <sha>] [--base <sha>] [--digest <sha256>] [--phase <review\|developer\|analyst\|orchestrator>] [--worktree <p>]` |
 | `target` | `SCRIPT target --base <sha> [--recorded-base <sha>] [--worktree <p>] [--native-start <f>] [--brief]` |
-| `review_findings` | `SCRIPT review-findings --issue <n> [--epoch <id>] [--id <finding-id>] [--with-text]` |
-| `review_transaction` | `SCRIPT review-transaction --issue <n> [--epoch <id>]` |
-| `review_payload_membership` | `SCRIPT review-payload-membership --issue <n> [--epoch <id>] --candidate <path> [--worktree <p>]` |
-| `inspect_candidate` | `SCRIPT inspect-candidate --issue <n> --epoch <id> --request <name-status\|numstat\|stat\|patch\|object> [--path <p>] [--side <parent\|candidate>] [--worktree <p>]` |
 | `release_ci` | `SCRIPT release-ci --issue <n> --run-id <id> --epoch <id> --pr <n> --head <sha> --base <sha> --digest <sha256> [--worktree <p>]` — see *Recording a computed verdict* in github/operations.md |
-| `publication_lane` | `SCRIPT publication-lane --head <sha> [--pr <n>]` |
 | `review_tier` | `SCRIPT review-tier --base <sha> --head <sha> [--focus <risk\|resilience\|readability\|reliability>] [--worktree <p>]` — see *Deriving the review tier* in github/operations.md |
-| `review_tier_for_repair` | `SCRIPT review-tier-for-repair --base <sha> --parent-head <sha> --head <sha> [--clearing-finding <severe\|warning\|suggestion>] [--focus <risk\|resilience\|readability\|reliability>] [--worktree <p>]` — see *Deriving a repair's tier* in github/operations.md |
-| `expected_target` | `SCRIPT expected-target --base <sha> [--worktree <p>] [--native-start <f>] [--brief]` |
-| `base_movement` | `SCRIPT base-movement --base <branch> --recorded-base <sha> [--worktree <p>]` |
 | `changelog-notes` | `SCRIPT changelog-notes --version <x.y.z> --file <changelog> [--out <f>]` |
 | `check closing keywords` | `SCRIPT check-closing-keywords --issue <n>` |
 | `unassign` | `SCRIPT unassign --issue <n> --runtime <rt> --run-id <id> --operation-id <32-hex> [--target-operation <epoch>] [--held-by-other] [--evidence-file <f>] [--spend <json>]` — see *Releasing an issue* in github/operations.md |
@@ -238,6 +222,17 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `close` | *(agent, not scripted)* |
 | assisted checkout | `SCRIPT assist --issue <n> --branch <b> --base <base> --run-id <id>` |
 | draft pull request | `SCRIPT draft-pr --title <t> --body-file <f> --branch <b> --worktree <p>` |
+
+### Operations no tool exposes
+
+Each name below has no tool of its own; the call on the right answers it.
+
+- `list_identities` → `list_state` with `identities`.
+- `review_findings`, `review_transaction`, `review_payload_membership`, `inspect_candidate`, `computed_verdict`, `spend_summary` → `review_read` with `view` `findings`, `transaction`, `membership`, `inspect`, `verdict`, `spend`.
+- `repair_rounds`, `publication_lane` → `review_status`, which answers `lane` and `corrections`.
+- `review_tier_for_repair` → `review_tier` with `parent_head`.
+- `expected_target`, `base_movement` → `target`, which classifies base movement when `recorded_base` is given.
+- `review_refutation`, `review_validator_result` and the lens report → recorded only by `collect_review_input`, after the binary ran the reviewer; `review_verdict` is retired, and the verdict is computed by `record_computed_verdict`.
 
 ### Markdown bodies always go through a file
 

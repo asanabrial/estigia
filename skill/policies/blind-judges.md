@@ -36,9 +36,8 @@ Every acquired lens runs concurrently, each sealed to the identical diff and cri
 `Read` — it cannot fetch anything the launch did not hand it, so the binary, which launches it,
 carries every byte a lens reviews. An `inferential` lens finding is answered by the refuter below and by nothing else.
 
-A lens is launched by the binary, not the orchestrator. `review_status` offers each lens a receipt
-still owes as a `collect` input whose `capture` is `launch_review_input`, and that tool launches the
-lens itself from a template embedded in the binary — the first installed `claude` or `codex` CLI, with
+The orchestrator calls `launch_review_input` for each lens slot `review_status` offers, as a `collect`
+input, for a lens a receipt still owes; the binary starts the reviewer process itself, from a template embedded in the binary — the first installed `claude` or `codex` CLI, with
 no tools (an OpenCode run with its relay plugin installed relays instead) — and records the findings and then the lens report, or records nothing when any finding is
 outside the change. On Claude Code there is no hand launch: setup installs no lens definition and the
 launch gate refuses a `Task` launch of a lens name.
@@ -523,8 +522,8 @@ only for Judgment Day.
 `Evidence standard` decides the unsealed grant; the sealed one is fixed. The two judge definitions carry the paragraph asking for
 what a closing statement rests on, applied when `setup` or `sync` next writes each file. For Judgment Day the orchestrator remains
 responsible for passing the effective judge model, launching both judges concurrently, withholding
-sibling output and preserving dissent. For ordinary review it remains responsible for launching every
-lens the tier licenses. That is a real contract, not mechanical proof that it happened.
+sibling output and preserving dissent. For ordinary review it remains responsible for calling `launch_review_input` for every
+lens slot `review_status` offers. That is a real contract, not mechanical proof that it happened.
 
 **What is still enforced around this:** the claim, the renewal before repository writes and at every
 irreversible boundary, and a push no live claim authorises refused under git. Those hold whatever a
