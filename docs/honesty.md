@@ -116,6 +116,18 @@ pointer that leaves it names the document it points at.
   `SessionStart` hook from Estigia, so nothing tells a Codex run its id; whether the run can read
   its own session id to mint one that matches is not measured here.
 
+- **A decision append that waits past five seconds on the store is dropped, counted, and not
+  retried.** Issue #FLAKY1: `every_decision_survives_the_ledger_passing_its_cap_while_runs_are_writing`
+  failed in 3 of 13 and 1 of 10 full release runs on Linux arm64. Measured with a debug build, eight
+  writers on a fresh store and thirty busy loops on ten cores: 24 of 100 runs lost decisions (2 to
+  10 of 160 in the runs read in full), and every error captured was `database is locked` after 5.3 s to 10.6 s — the
+  `APPEND_WAIT` bound expiring on the open (`create its version table`, `begin a migration`) or on the
+  insert, not a rotation. The product behaves as `record` documents — best effort, a failed append
+  counted for `doctor` — so the test, which assumed the bound never expires, was the wrong side and
+  now waits ten minutes. What is not closed: on a machine starved that far a real decision is lost the
+  same way, and the count `doctor` reports is the only trace. No bound was raised, because a longer
+  wait puts the same stall on the gate's critical path.
+
 ## Comments, instructions and the build
 
 - **The instruction-surface ceiling counts bytes, not whether the prose agrees with the gate.**

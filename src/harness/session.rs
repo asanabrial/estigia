@@ -760,8 +760,12 @@ pub fn record(root: &Path, entry: &Value) {
 }
 
 fn append(root: &Path, kind: Record, entry: &Value) {
+    append_waiting(root, kind, entry, APPEND_WAIT);
+}
+
+fn append_waiting(root: &Path, kind: Record, entry: &Value, wait: Duration) {
     let path = crate::transport::store::beside(root);
-    let Ok(store) = Store::open_waiting(&path, APPEND_WAIT) else {
+    let Ok(store) = Store::open_waiting(&path, wait) else {
         return;
     };
     if store.add_record(kind, entry).is_err() {
@@ -1550,7 +1554,9 @@ mod tests {
         // rename, and two runs crossing the cap together lost the history one of
         // them had just set aside — 55 of 160 decisions survived on macOS. The
         // store is one transaction per append, so under the same writers every
-        // decision must come back.
+        // decision must come back. The wait is far past `APPEND_WAIT`: that bound
+        // drops a decision on a starved machine by design, and this test measures
+        // the cap, not the bound.
         let root = tempfile::tempdir().expect("a temporary root");
         let state = root.path().join("runs");
         std::fs::create_dir_all(&state).expect("the state directory");
@@ -1565,14 +1571,16 @@ mod tests {
                 scope.spawn(move || {
                     barrier.wait();
                     for n in 0..each {
-                        record(
+                        append_waiting(
                             &state,
+                            Record::Decision,
                             &serde_json::json!({
                                 "at": 1,
                                 "run_id": format!("claude-{run}"),
                                 "verdict": "new",
                                 "n": n,
                             }),
+                            Duration::from_secs(600),
                         );
                     }
                 });
@@ -1587,7 +1595,7 @@ mod tests {
         assert_eq!(
             survived,
             runs * each,
-            "{survived} of {} decisions are missing, and the store is meant to keep every one",
+            "only {survived} of {} decisions came back, and the store is meant to keep every one",
             runs * each
         );
     }
