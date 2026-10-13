@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 
 const DOCUMENTS: &[(&str, usize)] = &[
-    ("skill/SKILL.md", 31_578),
+    ("skill/SKILL.md", 29_995),
     ("skill/agents/analyst.md", 1_968),
     ("skill/agents/developer.md", 2_881),
     ("skill/agents/review-blind.md", 7_984),
@@ -26,32 +26,26 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/agents/review-risk.md", 4_276),
     ("skill/agents/review-validator.md", 1_998),
     ("skill/assets/analyst-issue-template.md", 2_850),
-    ("skill/bindings/github.md", 28_128),
+    ("skill/bindings/github.md", 17_674),
     ("skill/bindings/github/delivery.md", 37_708),
-    ("skill/bindings/github/operations-guarantees.md", 44_448),
-    ("skill/bindings/github/operations.md", 50_347),
+    ("skill/bindings/github/operations-guarantees.md", 34_237),
+    ("skill/bindings/github/operations.md", 49_913),
     ("skill/bindings/github/recovery.md", 6_571),
-    ("skill/bindings/github/refusals.md", 52_232),
+    ("skill/bindings/github/refusals.md", 52_401),
     ("skill/bindings/github/setup.md", 1_611),
     ("skill/bindings/linear.md", 4_301),
-    ("skill/policies/blind-judges.md", 41_882),
-    ("skill/policies/judgment-day.md", 16_041),
-    ("skill/protocols/rdd.md", 8_282),
-    ("skill/references/domain-composition.md", 9_825),
-    ("skill/references/repository-delivery.md", 21_040),
+    ("skill/policies/blind-judges.md", 41_870),
+    ("skill/policies/judgment-day.md", 15_969),
+    ("skill/protocols/rdd.md", 7_863),
+    ("skill/references/domain-composition.md", 9_798),
+    ("skill/references/repository-delivery.md", 21_111),
     ("skill/references/runtime-notes.md", 18_678),
-    ("skill/references/safety-incidents.md", 11_663),
+    ("skill/references/safety-incidents.md", 16_227),
 ];
 
 const LINE_CEILING: usize = 2_000;
 
-const LINE_EXCEPTIONS: &[LineException] = &[LineException {
-    path: "skill/bindings/github/operations-guarantees.md",
-    line: 16,
-    reason: "the `reclaim` row's guarantee is one markdown table cell, so it cannot be split \
-                 without breaking the row, and the no-holder exception it must state carries it \
-                 past the ceiling",
-}];
+const LINE_EXCEPTIONS: &[LineException] = &[];
 
 struct LineException {
     path: &'static str,
@@ -207,11 +201,8 @@ fn the_operations_table_routes_its_long_cells_to_a_named_companion() {
         "`claim`",
         "`publish_review`",
         "`review_finding`",
-        "`review_verdict`",
-        "`review_refutation`",
         "`review_disposition`",
         "`review_tier`",
-        "`review_tier_for_repair`",
     ] {
         let row = table
             .lines()

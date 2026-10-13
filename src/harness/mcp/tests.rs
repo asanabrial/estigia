@@ -1155,6 +1155,80 @@ fn every_tool_names_a_row_the_binding_actually_has() {
     }
 }
 
+const RETIRED_OPERATIONS: &[&str] = &[
+    "repair_rounds",
+    "review_findings",
+    "review_payload_membership",
+    "spend_summary",
+    "review_transaction",
+    "computed_verdict",
+    "record_lens_report",
+    "record_refutation",
+    "record_validator_result",
+    "record_review_verdict",
+    "list_identities",
+    "publication_receipt",
+    "inspect_candidate",
+    "expected_target",
+    "base_movement",
+    "review_tier_for_repair",
+    "review_verdict",
+    "review_refutation",
+];
+
+const ABSORPTION_MAP_HEADING: &str = "### Operations no tool exposes";
+
+fn backticked_identifiers(line: &str) -> Vec<&str> {
+    line.split('`')
+        .skip(1)
+        .step_by(2)
+        .filter(|word| {
+            word.contains('_') && word.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+        })
+        .collect()
+}
+
+#[test]
+fn no_shipped_skill_file_names_an_operation_no_tool_performs() {
+    let callable: Vec<&str> = TOOLS
+        .iter()
+        .flat_map(|tool| [tool.name, tool.contract_name])
+        .chain(NOT_EXPOSED.iter().map(|(name, _)| *name))
+        .collect();
+    let mut stale: Vec<String> = Vec::new();
+    let mut scanned = 0;
+    for file in crate::skill::FILES {
+        let mut in_map = false;
+        for (index, line) in file.contents.lines().enumerate() {
+            if line.starts_with('#') {
+                in_map =
+                    file.path == "bindings/github.md" && line.starts_with(ABSORPTION_MAP_HEADING);
+            }
+            if in_map {
+                continue;
+            }
+            scanned += 1;
+            for word in backticked_identifiers(line) {
+                let retired = RETIRED_OPERATIONS.contains(&word);
+                let invented = word.starts_with("record_") && !callable.contains(&word);
+                if retired || invented {
+                    stale.push(format!("{}:{} names `{word}`", file.path, index + 1));
+                }
+            }
+        }
+    }
+    assert!(
+        scanned > 1000,
+        "the shipped skill was not read: {scanned} lines"
+    );
+    assert!(
+        stale.is_empty(),
+        "these name an operation that no tool performs and NOT_EXPOSED does not declare; \
+         name the tool or view that answers it instead:\n{}",
+        stale.join("\n")
+    );
+}
+
 #[test]
 fn no_two_tools_answer_to_the_same_name() {
     let mut names = TOOLS.iter().map(|tool| tool.name).collect::<Vec<_>>();

@@ -807,3 +807,24 @@ this document assumes: most of what was removed lived in policies and companions
 a review or a delivery reaches them. The old registry summed to 430,747, not the 430,776 the files
 measured, because a ceiling is an upper bound and a stale one below its file is not a refusal.
 
+
+### The always-loaded pair, a second trim
+
+Issue #4. Same counting as above, measured from `bd8f161`. No rule changed: each removed instruction is
+either stated by its owner elsewhere in the skill or history that moved to `references/safety-incidents.md`.
+
+| File | Before | After |
+|---|---:|---:|
+| `skill/SKILL.md` | 31,564 | 29,995 |
+| `skill/bindings/github.md` | 28,128 | 17,674 |
+| `SKILL.md` plus `bindings/github.md`, loaded on every GitHub activation | 59,692 | 47,669 |
+| `skill/bindings/github/operations-guarantees.md` | 44,396 | 34,237 |
+| `skill/references/safety-incidents.md`, which received the history | 11,662 | 16,227 |
+| All shipped `skill/**/*.md` | 425,666 | 407,474 |
+
+The operations table no longer repeats the flags the MCP schema carries, `operations-guarantees.md` no
+longer has a Command column, and the tool names the skill sends an agent to are the ones
+`tools/list` advertises: `no_shipped_skill_file_names_an_operation_no_tool_performs` fails on a retired
+name outside the one absorption map in `bindings/github.md`. That test reads a fixed list of retired names
+and any `record_*` name that is not a tool, so a new retired name has to be added to it when a tool is
+absorbed.

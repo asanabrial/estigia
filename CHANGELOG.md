@@ -12,6 +12,29 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **`SKILL.md` states each loading condition once and loads the blind-judges policy only when a review
+  needs it.** Issue #4. The reference-loading conditions live in the References table alone; step 5 says to
+  follow `review_status`'s `next` transition and to load `blind-judges.md` on an escalated stop, a correction
+  or a disputed rule; the release narrative that `repository-delivery.md` owns is a pointer. With the two
+  commits before it, the always-loaded `SKILL.md` plus `bindings/github.md` fall from 59,692 to 47,669
+  bytes and `operations-guarantees.md` from 44,396 to 34,237 (`docs/review-cost.md`).
+- **Each review rule has one owner in the shipped skill.** Issue #4. `operations-guarantees.md` loses its
+  Command column, which repeated the operations table, and the rows whose section in `operations.md` opens with
+  the same sentence now link to it; the ledger's settlement order lives in `blind-judges.md` and the escalated
+  recovery command in `operations.md`, each linked from the other places. `rdd.md` drops its comparison with
+  other tools. No rule changed.
+- **The GitHub binding drops what the tool schema already says.** Issue #4. `bindings/github.md` is loaded on
+  every activation; its operations table now names each tool's operation without repeating the flags the
+  MCP schema carries, the operations no tool exposes are one short list, and the history behind its rules
+  (the 2026-07-22 claim race, the retired script, the exit-code rationale, the legacy prose markers) moved to
+  `references/safety-incidents.md`. Every instruction stayed.
+- **The shipped skill names only tools the server exposes.** Issue #4. `repair_rounds`, `review_findings`,
+  `review_transaction`, `review_payload_membership`, `spend_summary`, `list_identities`, `inspect_candidate`
+  and the capture-only recorders were absorbed into `review_status`, `review_read` and `list_state`, but
+  `skill/` kept sending agents to them; each is now the call that answers it, and the GitHub binding carries
+  one map of the names no tool exposes. `blind-judges.md` says once that the orchestrator calls
+  `launch_review_input` for each slot `review_status` offers and the binary starts the reviewer. The test
+  `no_shipped_skill_file_names_an_operation_no_tool_performs` fails on a retired name outside that map.
 - **The goal judges run every third turn, and Pi's judge sees a bounded transcript.** Issue #3. The generic
   `/goal` on OpenCode and on Pi counts each turn and asks the model only on every third and on the turn that
   reaches the cap; the turns between continue with the condition and no judge call. Pi's transcript is capped

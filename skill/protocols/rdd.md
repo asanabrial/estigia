@@ -79,14 +79,10 @@ Merging: `repository-delivery.md`.
 
 ## Review is not switchable off here
 
-Other tools that implement this pattern offer a disabled mode where nothing gates and delivery falls
-back to ordinary repository policy. That mode does not exist under this contract: review is required
-by the state contract. This run, or a separately started one, obtains the second context, and nobody is
-asked for consent first: the run states the `forecast` line and proceeds. No consent and no off switch.
-
-The invariant those tools state for their disabled mode is still worth keeping, because it is the
-same one this whole contract is built on: *an unreadable switch is not a disabled switch*. A control
-surface that cannot be read permits no write, and an unknown result is not clearance.
+Review is required by the state contract; there is no disabled mode. This run, or a separately started
+one, obtains the second context, and nobody is asked for consent first: the run states the `forecast`
+line and proceeds. No consent and no off switch. *An unreadable switch is not a disabled switch*: a
+control surface that cannot be read permits no write, and an unknown result is not clearance.
 
 ## What Estigia enforces here, and what it does not
 
@@ -97,14 +93,13 @@ which `release_ci` recomputes over the live ledger rather than trusting its mark
 of the aggregate verdict, so that no reviewer's word is one; and, since the finding ledger exists, that
 every finding names the publication under review rather than merely a well-formed one, and that a repair's **severe** finding either names a parent
 its parent receipt recorded or states whether the repair `introduced` or `exposed` the defect. A
-warning or a suggestion new to a repair is asked for neither, which is deliberate and pinned:
-requiring an origin of every class reddens the lineage test.
+warning or a suggestion new to a repair is asked for neither, deliberately.
 
 **Not enforced:** whether the lenses named were the right ones, whether a lens report means the
 lens ran, or whether a finding's class and evidence class were honest. There is no per-judge
 verdict and no panel transcript, and nothing here counts findings into a quorum.
-Structured *finding* evidence, which used to be on that list, is not any more — there is one marker
-per finding now, credited to a named reviewer and bound to the exact receipt. What is adjudicated is
+Structured *finding* evidence is enforced: there is one marker per finding, credited to a named reviewer
+and bound to the exact receipt. What is adjudicated is
 shape and reference: that a class is one of three words, that evidence and impact were stated, and
 that a receipt or a parent is the one it claims to be. Whether a `severe` finding is severe, whether
 the evidence reproduces, and whether a repair introduced what its reviewer says it did are the

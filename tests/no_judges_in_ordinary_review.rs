@@ -67,7 +67,6 @@ negates acquisition; the judge word is only a link text :: Use the lenses the ti
 Judgment Day scope; launch is a noun :: Analysis is cheap, parallel, and repository-read-only — a Judgment Day judge measuring under `Evidence standard: measuring` writes only in the isolated directory its launch hands it, outside the claimed checkout
 Judgment Day scope; launch is a noun :: On a repository whose `Evidence standard` is `measuring` a Judgment Day judge also builds, tests and mutates — inside the isolated directory its launch hands it and nowhere else
 launch is a noun :: The orchestrator passes `Model routing`'s effective `judge` model on each launch
-the tool's binding row; no acquisition :: | `the-workspaces-tool` | `SCRIPT the-workspaces-tool --issue <n> --runid <id> --epoch <id> --pr <n> --head <sha> --base <sha> --digest <sha256> --count <n> [--worktree-root <p>]` | mints one **bare working directory** per Judgment Day judge for a panel over the named receipt, resolved from `Worktree location` the way `start-branch` resolves the claimed checkout, so the directories are its siblings and are scoped to the run and the head
 "##;
 
 fn allowed() -> Vec<(&'static str, &'static str)> {

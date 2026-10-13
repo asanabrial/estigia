@@ -418,13 +418,8 @@ receipt exists to escalate.
 ## Recording a computed verdict
 
 `review_read` with `view: verdict` answers, and `review_computed_verdict` records once, the verdict one exact
-receipt's ledger supports. The caller names the receipt and never the outcome. Each severe finding,
-read by its first severe recording as the refutation batch reads it, is settled by the first row it
-matches: a missing `evidence_class` or `causal_disposition`, `insufficient` evidence or an `unknown`
-cause is **escalated**; a `pre-existing` or `base-only` cause is a **follow-up** and blocks nothing;
-a `deterministic` finding is **open**; an `inferential` one follows its refuter — `refuted` drops it,
-`corroborated` and `inconclusive` keep it open, and no refuter result escalates it. A finding that
-is not severe never blocks. The outcome is `escalated` over `rejected` over `approved`, and
+receipt's ledger supports. The caller names the receipt and never the outcome. Each severe finding is
+settled by the order in *What the ledger computes* in `policies/blind-judges.md`, which owns it. The outcome is `escalated` over `rejected` over `approved`, and
 `approved` additionally needs every lens role the receipt's review panel licenses to have filed a
 `review_lens_report`: for a first publication the tier is re-derived from `base..head` with
 `review_tier`, and for a repair whose recorded lineage names the honest narrow range the panel is the

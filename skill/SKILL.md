@@ -16,7 +16,7 @@ Use for `flow triage [conditions]`, `flow dev [domain-rules] [issue-number]`, ba
 Analyst conditions and dev domains are optional: a bounded target is the scope; otherwise the analyst audits the repository and the dev implements the selected issue.
 Read repository instructions first and load only the tracker binding selected by operator configuration before tracker work.
 Resolve this skill's immutable filesystem directory once per activation and load every local reference from that resolved directory; never reopen companions through the stable installation alias during a concurrent upgrade.
-Load [domain composition](references/domain-composition.md) for handoff, priority, or routing rules; [runtime notes](references/runtime-notes.md) for invocation, delegation, or team mechanics; and [safety incidents](references/safety-incidents.md) for race, reclaim, handoff, or failure rationale.
+Load the other references only as the References table below says.
 
 ## Hard Rules
 
@@ -72,7 +72,6 @@ Crossing a threshold selects delegated work only. Size, file count, and risk do 
 | Analyst has no conditions or domain | Use the autonomous `general` contract in [domain composition](references/domain-composition.md); file only the strongest deduplicated finding or nothing. |
 | A domain route is recorded | Analyst loads the left rule book; dev loads the right; the combined analyst-developer loads both, each bar governing its own half and neither relaxed. State explicitly when implementation routing is absent. |
 | Runtime mechanics or independent-context acquisition vary | Follow [runtime notes](references/runtime-notes.md); runtime limits change the mechanism, never the invariant. |
-| Claim, reclaim, or handoff safety needs rationale | Follow the active binding and [safety incidents](references/safety-incidents.md), without copying incident narrative here. |
 | State must be chosen | Invalid specification -> `analysis`; implementable and unassigned -> `ready`; claimed build -> `in-progress`; built work awaiting delivery evidence or ordinary delivery permission -> `review`; an unbuilt external wait, or a human adjudication that is not a routine wait on the ordinary review, CI, identity and delivery-permission gates -> `blocked` with the exact condition or decision and its discharger; merged and verified -> `done`. |
 | A renewal answers "stop" | A control message naming this run, or an item closed or no longer in the expected state. Stop repository work, acknowledge once where the binding asks, release only this runtime's `dev:<runtime>` projection, and change no workflow state — it belongs to whoever moved it. |
 | A renewal's read fails | Nothing was answered. Write nothing — no heartbeat, evaluation, review, or delivery — and retry the read. Never a stand-down and never clearance. |
@@ -82,7 +81,6 @@ Crossing a threshold selects delegated work only. Size, file count, and risk do 
 ## Execution Steps
 
 Before either role's first tracker write in an unfamiliar project, run the selected binding's `ensure_states`; then use that binding's executable operations and readbacks rather than reconstructing them.
-Load [domain composition](references/domain-composition.md) for routing, scale validation, queue partitioning, or autonomous fallback; [runtime notes](references/runtime-notes.md) for invocation, read-only enforcement, independent-context acquisition, or runtime limits; [safety incidents](references/safety-incidents.md) only when claim, reclaim, handoff, or failure rationale is needed; and [repository delivery](references/repository-delivery.md) when repository rules do not fully define isolation, integration, or review-unit sizing.
 
 ### Analyst
 
@@ -107,39 +105,37 @@ claimed issue is the record of the work, and the publication is the review candi
    done, the commit identity. A revision records the same id again, and a resume reads `tasks`,
    which is the only source of truth.
 6. **Implement task by task.** One work-unit commit per task, Conventional Commit, test-first
-   wherever a deterministic test applies — the single default policy, not a flag. A commit is a unit of work and not a
-   review boundary: the candidate is the publication.
+   wherever a deterministic test applies — the single default policy, not a flag.
 7. **Close.**
 
 Small work — classification step 4 answering fewer than two meaningful steps — writes no checklist
 but still needs an issue and a claim, as every write does.
 
-1. Resume this run's held issue at its recorded state before consulting queues. Otherwise drain unassigned `review` before `ready`, rechecking the delivery blocker before claiming published work. The review queue is requester-aware: while an exact-receipt handoff is unresolved, its publishing and requesting runs are excluded and a different run remains eligible. A failed candidate-timeline read makes the queue unreadable rather than eligible. An item in `blocked` whose every recorded clause already holds is discharged before the queue reads as empty — the analyst's drain rule, applied here: move it to the state its preserved evidence supports, then select and claim it under this run's own id.
+1. Resume this run's held issue at its recorded state before consulting queues. Otherwise drain unassigned `review` before `ready`, rechecking the delivery blocker before claiming published work. The review queue is requester-aware (`list_state` excludes an unresolved handoff's publishing and requesting runs); a failed candidate-timeline read makes it unreadable rather than eligible. An item in `blocked` whose every recorded clause already holds is discharged before the queue reads as empty — the analyst's drain rule, applied here: move it to the state its preserved evidence supports, then select and claim it under this run's own id.
 2. For `ready`, partition valid candidates by stable domain and declared scale, rank only within each partition, and choose the oldest partition head; a selected domain limits selection to its highest-ranked oldest item. Use oldest-first only when no candidate has a valid scale contract.
 3. `claim` with the run-id and horizon, which the store adjudicates; the earliest live claim wins, and a loser releases and selects again. Pass `transition_to` to move the issue in the same call — `claim` then `transition` as one, which is what every ready item needs — or omit it to claim without moving. Keep claimed review work in `review` unless a code change requires `in-progress` and a fresh publish/review/CI cycle; for ready work, move once to `in-progress` with `dev:<runtime>` and no second claim event. Move a task between states on your own only when `Transition authorisation` authorises this run; otherwise ask first and say which move you are asking for.
-4. Load the route's right-hand implementation rule book before planning; if absent, state that none applies and build to written acceptance criteria. Follow repository rules, use the repository-delivery fallback for missing isolation, integration, or review-unit sizing policy, and implement in the isolated checkout; the gate re-verifies the claim against the first branch/worktree/file write it observes, so no separate `verify_claim` is owed there.
+4. Load the route's right-hand implementation rule book before planning; if absent, state that none applies and build to written acceptance criteria. Follow repository rules, use the repository-delivery fallback for missing isolation, integration, or review-unit sizing policy, and implement in the isolated checkout; the gate re-verifies the claim against the first branch/worktree/file write it observes.
 5. **Renew before publishing.** Publish or reuse the shared PR as a confirmed draft, record its
    epoch, PR, head, base and clean-target digest, then transition to `review`; read the publication
    lane before acquiring reviewers, and use `republish_review` for a rewritten history —
    [repository delivery](references/repository-delivery.md) owns the lane reading, the cooperative
    CI ordering and the force-push rule. Ask for `with_review` on the publication to bring the tier,
    its forecast and the first `review_status` back in the same answer, so the `review_tier` and
-   `review_status` reads that follow are not a second round trip. Then, in order: `launch_review_input` and then
-   `collect_review_input` for every slot `review_status` offers (pass `names` to launch or collect
+   `review_status` reads that follow are not a second round trip. Then follow `review_status`'s `next`
+   transition until it stops, which in order is: `launch_review_input` and then
+   `collect_review_input` for every slot it offers (pass `names` to launch or collect
    them all in one call); `record_computed_verdict` for the
    exact receipt; `release_ci`. Call `escalate_review` when a spent correction leaves the decision
    to a person, and `handoff_review` when this run cannot obtain the required distinct context.
-   [Blind judges](policies/blind-judges.md) owns the settlement order, the refutation batch, the
+   Load [blind judges](policies/blind-judges.md) only on an escalated stop, a correction, or a disputed
+   rule: it owns the settlement order, the refutation batch, the
    targeted validator, the one-correction rule, the classification of findings and the release
-   rule; [runtime notes](references/runtime-notes.md) owns when a launch failed and a handoff is
+   rule, and states what reopens review and what is only a non-blocking finding;
+   [runtime notes](references/runtime-notes.md) owns when a launch failed and a handoff is
    owed; [operations and guarantees](bindings/github/operations-guarantees.md) states `review_status`'s answers and the `unavailable` and `stale` classes.
    **Commit to the disposition before reading anything the panel returns**, because read afterwards
-   it justifies whatever has already been decided — [blind judges](policies/blind-judges.md) states
-   what reopens review and what is only a non-blocking finding.
-6. Renew at each irreversible boundary; merge only when reviewed, green, and current head/base identities match. Deliver on your own only when `Delivery authorisation` authorises this run; otherwise ask first, with the reviewed head and base named. For a merge-commit route, require the delivered SHA's second parent to be exactly the reviewed head and the reviewed base to be an ancestor of its first parent; other configured strategies require their binding-declared equivalent topology and any delivered-SHA gate. For each changed version, publish and remotely verify its immutable annotated tag and required Release; renew again, record one `record_spend` for the `orchestrator` phase — and one for each delegated phase — against the issue's review transaction, then transition to `done`, record review/CI/tests/measurements/PR/delivering SHA/publications with the run-id, close, and release. Release is last and not optional: it puts down the isolated checkout and local branch this run created — once the tracker recognises the delivery and neither carries unpublished work — and it removes the pointer, a local projection of a claim that no longer exists; the delivering run is the only context that can put it down without asking the tracker whose it was. It also deletes every remote head the run recorded starting — `start_branch` writes a `branch` marker naming it — so a branch delivered through another, or pushed under a name other than the pull request's, does not outlive its delivery. `release` never reads whether the issue is open, so one this delivery already closed releases normally. **A delivery that skips it is reported, not refused**: `doctor`'s `stale-run-pointer` and `prune` rows name the pointer and the checkout such a skip leaves, both red, and the cost is paid later, by another run's first write in that checkout. On handoff, preserve all evidence and choose the destination the Decision Gates table names.
-   `release` carries the close-evidence comment and the spend figures in the same call —
-   `evidence_file` posts the note and `spend` records one measurement through `record_spend`, in
-   that order, before the release itself.
+   it justifies whatever has already been decided.
+6. Renew at each irreversible boundary; merge only when reviewed, green, and current head/base identities match. Deliver on your own only when `Delivery authorisation` authorises this run; otherwise ask first, with the reviewed head and base named. For a merge-commit route, require the delivered SHA's second parent to be exactly the reviewed head and the reviewed base to be an ancestor of its first parent; other configured strategies require their binding-declared equivalent topology and any delivered-SHA gate. For each changed version, publish and remotely verify its immutable annotated tag and required Release; renew again, record one `record_spend` for the `orchestrator` phase — and one for each delegated phase — against the issue's review transaction, then transition to `done`, record review/CI/tests/measurements/PR/delivering SHA/publications with the run-id, close, and release. Release is last and not optional: it puts down the isolated checkout and local branch this run created, and removes the pointer, a local projection of a claim that no longer exists. It also deletes every remote head the run recorded starting. `release` never reads whether the issue is open, so one this delivery already closed releases normally. **A delivery that skips it is reported, not refused** — [repository delivery](references/repository-delivery.md) owns the conditions and what `doctor` and `prune` name. `release` carries the close-evidence comment and the spend figures in the same call (`evidence_file`, `spend`; the order is *Releasing an issue* in [github operations](bindings/github/operations.md)). On handoff, preserve all evidence and choose the destination the Decision Gates table names.
 
 7. The built-work handoff in steps 5 and 6 applies the Decision Gates table. It does not invent a third wait. Record the exact blocker, or the exact decision and its discharger, before releasing ownership.
 
@@ -168,9 +164,9 @@ into this file. Each owns its subject once, so a rule that changes is changed in
 | [github operations guarantees](bindings/github/operations-guarantees.md) | An operation's guarantee beyond its command is needed — what it does past the obvious, and the refusals only it raises. |
 | [github refusals](bindings/github/refusals.md) | A github-binding operation refused and the answer's own `action` is not self-explanatory, so the code's meaning and remedy are needed. |
 | [linear binding](bindings/linear.md) | The `Tracker` row names `linear`: the issue is read and nothing is written, under assisted work only. |
-| [runtime notes](references/runtime-notes.md) | Invocation sigils, delegation, independent-context acquisition, agent-team lifetime, or a runtime's honest limits are in question. |
+| [runtime notes](references/runtime-notes.md) | Invocation sigils, delegation, read-only enforcement, independent-context acquisition, agent-team lifetime, or a runtime's honest limits are in question. |
 | [analyst issue template](assets/analyst-issue-template.md) | Filling a new finding's body. It owns the heading order, the fixed first heading, alert syntax, and attribution. |
-| [blind judges](policies/blind-judges.md) | Independent review is obtained: how a lens's findings are settled. |
+| [blind judges](policies/blind-judges.md) | `review_status` stops as escalated, a correction is owed, or a rule about how a lens's findings are settled or what reopens review is disputed. |
 | [judgment day](policies/judgment-day.md) | The operator explicitly asks for the adversarial panel: the method's rules, its isolation precondition and what a judge's closing statement reports. |
 | [receipt-driven development](protocols/rdd.md) | Every review. |
 
@@ -205,8 +201,6 @@ tighten only `Delivery authorisation` and `Transition authorisation`; the strict
 > `Authorisation posture` sets the two authorisations that can ask, delivery and transitions, at once:
 > `balanced` makes both `auto`, and `cautious` makes both `ask`. An explicit authorisation row written
 > after it wins, and the model half is separate — `Model routing` stays `unset` unless you write it.
-> Its other value, `by task`, names no role: the shape of the work decides the model and the effort,
-> and the launcher records what it chose.
 
 > The two markers delimit the default template used when the installer creates
 > `estigia.local.md`. Configure the ignored local file, never this versioned block.

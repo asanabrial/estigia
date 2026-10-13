@@ -267,7 +267,7 @@ names a pointer whose issue closed behind this run's own delivery, and its `prun
 or checkout no live claim owns. `estigia prune` lists what either row named and removes it only on
 `--confirm`; it never deletes what a live claim holds or what carries commits the remote does not
 have. The two rows are red and block nothing: the skip is a leftover, not a reason a fresh run cannot
-swear.
+swear. The cost is paid later, by another run's first write in that checkout.
 
 **A reviewer's directory is not a checkout, and `release` does not remove it.** The isolation rule
 gives each Judgment Day judge a directory of its own, one per judge per review round. Estigia does not spawn
