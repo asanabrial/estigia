@@ -54,7 +54,7 @@ and a tag is immutable. It therefore refuses, `unassembled-changelog-fragments`,
 names, so a component changelog is held to the same `changes/`. Only this repository's format counts: a file named
 `<issue>-<slug>.md` whose first line is `section: <heading>`, the two tests the script applies, held to the
 same cases by a test. A directory another tool keeps there (`123.feature.md`, a `.gitkeep`) does not trip it,
-and neither does an absent or empty directory, the normal state after a cut. The refusal is
+and neither does an absent or empty directory, the normal state after a cut. A file whose name has the fragment shape but whose first line cannot be read, or a `changes/` that cannot be listed, is a `read` failure naming it, not a file passed over: an unreadable fragment is the omission this refusal exists to prevent. The refusal is
 checked before the entry is looked up, so a version cut that skipped assembly is told so rather than
 told its entry is missing. `tests/changelog_assembly.rs` drives the script, including against this
 repository's own `changes/`; in whichever state the checkout is in, that test asserts something: the

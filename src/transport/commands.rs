@@ -1985,23 +1985,27 @@ fn unassembled_fragments(repo_dir: &std::path::Path) -> Result<Vec<String>, Fail
             )));
         }
     };
-    let mut names: Vec<String> = entries
-        .flatten()
-        .filter(|entry| entry.path().is_file())
-        .filter(|entry| {
-            let mut first = Vec::new();
-            let read = std::fs::File::open(entry.path()).and_then(|file| {
+    let mut names = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !entry.path().is_file() || !super::changelog::is_fragment_name(&name) {
+            continue;
+        }
+        let mut first = Vec::new();
+        std::fs::File::open(entry.path())
+            .and_then(|file| {
                 std::io::BufRead::read_until(&mut std::io::BufReader::new(file), b'\n', &mut first)
-            });
-            first.pop_if(|byte| *byte == b'\n');
-            read.is_ok()
-                && super::changelog::is_fragment(
-                    &entry.file_name().to_string_lossy(),
-                    &String::from_utf8_lossy(&first),
-                )
-        })
-        .map(|entry| entry.file_name().to_string_lossy().into_owned())
-        .collect();
+            })
+            .map_err(|error| {
+                Failure::Read(format!(
+                    "changes/{name} could not be read, so whether it is an unassembled fragment cannot be ruled out: {error}"
+                ))
+            })?;
+        first.pop_if(|byte| *byte == b'\n');
+        if super::changelog::is_fragment(&name, &String::from_utf8_lossy(&first)) {
+            names.push(name);
+        }
+    }
     names.sort();
     Ok(names)
 }

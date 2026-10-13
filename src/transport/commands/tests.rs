@@ -1003,3 +1003,82 @@ fn another_tools_changes_directory_does_not_stop_the_notes() {
 
     assert_eq!(answer["notes"], "The entry.");
 }
+
+#[cfg(unix)]
+#[test]
+fn a_fragment_named_file_that_cannot_be_read_refuses_the_notes_and_names_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().expect("a repository");
+    std::fs::write(root.path().join("CHANGELOG.md"), NOTES_CHANGELOG).expect("the changelog");
+    let changes = root.path().join("changes");
+    std::fs::create_dir(&changes).expect("changes/");
+    let hidden = changes.join("7-unreadable.md");
+    std::fs::write(&hidden, "section: The harness\n\n- x\n").expect("a fragment");
+    std::fs::set_permissions(&hidden, std::fs::Permissions::from_mode(0o000)).expect("chmod");
+    std::fs::write(changes.join("notes.txt"), "x").expect("a foreign file");
+    std::fs::set_permissions(
+        changes.join("notes.txt"),
+        std::fs::Permissions::from_mode(0o000),
+    )
+    .expect("chmod");
+    assert!(
+        std::fs::File::open(&hidden).is_err(),
+        "a mode 000 file is still readable here, so this test cannot measure anything; run it as a user without read-everything permission"
+    );
+
+    let outcome = notes_of(root.path());
+    std::fs::set_permissions(&hidden, std::fs::Permissions::from_mode(0o644)).expect("restore");
+
+    let Err(failure) = outcome else {
+        panic!("notes were read past a fragment that could not be read");
+    };
+    let Failure::Read(message) = failure else {
+        panic!("an unreadable fragment must be a read failure");
+    };
+    assert!(message.contains("changes/7-unreadable.md"), "{message}");
+    assert!(!message.contains("notes.txt"), "{message}");
+}
+
+#[test]
+fn a_changes_that_is_a_file_refuses_the_notes_as_unreadable() {
+    let root = tempfile::tempdir().expect("a repository");
+    std::fs::write(root.path().join("CHANGELOG.md"), NOTES_CHANGELOG).expect("the changelog");
+    std::fs::write(root.path().join("changes"), "not a directory").expect("changes as a file");
+
+    let Err(failure) = notes_of(root.path()) else {
+        panic!("notes were read although changes/ could not be listed");
+    };
+
+    assert!(
+        matches!(&failure, Failure::Read(message) if message.contains("changes/ could not be read")),
+        "{}",
+        failure.envelope()
+    );
+}
+
+#[test]
+fn the_fragment_refusal_comes_before_the_missing_entry_refusal() {
+    let root = tempfile::tempdir().expect("a repository");
+    std::fs::write(root.path().join("CHANGELOG.md"), NOTES_CHANGELOG).expect("the changelog");
+    std::fs::create_dir(root.path().join("changes")).expect("changes/");
+    std::fs::write(
+        root.path().join("changes/5-five.md"),
+        "section: The harness\n\n- x\n",
+    )
+    .expect("a fragment");
+
+    let Err(failure) = changelog_notes(
+        &local_context(root.path()),
+        std::path::Path::new("CHANGELOG.md"),
+        "9.9.9",
+        false,
+        None,
+    ) else {
+        panic!("a missing entry was read");
+    };
+
+    assert_eq!(
+        failure.envelope()["reason"],
+        "unassembled-changelog-fragments"
+    );
+}

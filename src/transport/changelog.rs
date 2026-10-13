@@ -146,14 +146,18 @@ fn is_heading_at_most(line: &str, level: usize) -> bool {
 /// and `tests/changelog_assembly.rs` pins the two to the same cases. Anything
 /// else belongs to another tool and is not this module's to refuse over.
 pub fn is_fragment(name: &str, first_line: &str) -> bool {
-    let named = name
-        .strip_suffix(".md")
-        .and_then(|stem| stem.strip_prefix(|c: char| c.is_ascii_digit()))
-        .is_some_and(|rest| rest.contains('-'));
-    named
+    is_fragment_name(name)
         && first_line
             .strip_prefix("section: ")
             .is_some_and(|heading| !heading.is_empty())
+}
+
+/// Whether a file name under `changes/` has the `<digit>*-*.md` shape of a
+/// fragment, before its first line is read.
+pub fn is_fragment_name(name: &str) -> bool {
+    name.strip_suffix(".md")
+        .and_then(|stem| stem.strip_prefix(|c: char| c.is_ascii_digit()))
+        .is_some_and(|rest| rest.contains('-'))
 }
 
 #[cfg(test)]
