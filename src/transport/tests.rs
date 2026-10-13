@@ -2,6 +2,20 @@ use super::*;
 
 #[cfg(unix)]
 #[test]
+fn a_descendant_holding_the_pipe_has_its_group_killed_before_the_leader_is_reaped() {
+    let started = std::time::Instant::now();
+    let output = run(
+        &["sh", "-c", "sleep 30 & exit 0"],
+        None,
+        How::write_within(Duration::from_secs(20)),
+    )
+    .expect("the leader exited cleanly");
+    assert_eq!(output.status, 0);
+    assert!(started.elapsed() < Duration::from_secs(20));
+}
+
+#[cfg(unix)]
+#[test]
 fn process_arguments_preserve_non_utf8_path_bytes() {
     use std::os::unix::ffi::OsStringExt;
 

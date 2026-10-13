@@ -774,8 +774,8 @@ fn spawn_with_deadline(
 
     let start = std::time::Instant::now();
     loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
+        match process_tree::exited(&mut child) {
+            Ok(true) => {
                 let limit = std::time::Instant::now() + PIPE_GRACE;
                 for _ in 0..readers {
                     let wait = limit.saturating_duration_since(std::time::Instant::now());
@@ -784,6 +784,15 @@ fn spawn_with_deadline(
                         break;
                     }
                 }
+                let status = match child.wait() {
+                    Ok(status) => status,
+                    Err(error) => {
+                        return Err(Failure::Read(format!(
+                            "{} could not be waited on: {error}",
+                            args[0]
+                        )));
+                    }
+                };
                 let take = |kept: &Mutex<Vec<u8>>| {
                     kept.lock()
                         .map(|mut kept| std::mem::take(&mut *kept))
@@ -799,7 +808,7 @@ fn spawn_with_deadline(
                     },
                 );
             }
-            Ok(None) if start.elapsed() >= deadline => {
+            Ok(false) if start.elapsed() >= deadline => {
                 // Killed, and still reported as ambiguous: the remote may have
                 // completed the mutation before the local wait gave up.
                 let _ = tree.terminate();
@@ -811,7 +820,7 @@ fn spawn_with_deadline(
                     deadline.as_secs_f64()
                 )));
             }
-            Ok(None) => std::thread::sleep(Duration::from_millis(10)),
+            Ok(false) => std::thread::sleep(Duration::from_millis(10)),
             Err(error) => {
                 let _ = tree.terminate();
                 let _ = child.kill();
