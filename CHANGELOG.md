@@ -12,6 +12,11 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **`target` answers the brief form unless the manifest is asked for.** Issue #5. Without arguments the
+  operation returns base, head, digest, path count and uncommitted paths; the per-file `manifest` array,
+  about 100 bytes per tracked file, comes back only with `--manifest` (`manifest: true` on the tool), which
+  replaces `--brief`. The digest and the `--native-start` comparison are unchanged, and a file saved for
+  that comparison has to be written with the manifest.
 - **`tools/list` advertises only the tools the process can call.** Issue #5. Under `Workflow: assisted` the
   menu omits the twenty `TRACKER_WRITERS` tools that workflow refuses; under any other readable workflow it
   omits `assist` and `draft_pr`; an unreadable context still lists everything. A hidden name still answers

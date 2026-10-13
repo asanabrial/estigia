@@ -1596,21 +1596,22 @@ fn a_pointer_is_never_written_under_an_empty_run_id() {
 fn a_boolean_goes_out_as_a_bare_flag_or_not_at_all() {
     let tool = tools::find("target").expect("a declared tool");
 
-    let set = super::flags_for(tool, &json!({"base": "main", "brief": true})).expect("well formed");
+    let set =
+        super::flags_for(tool, &json!({"base": "main", "manifest": true})).expect("well formed");
     assert!(
-        set.contains(&"--brief".to_owned()),
+        set.contains(&"--manifest".to_owned()),
         "a boolean was not rendered as a bare flag: {set:?}"
     );
 
     let clear =
-        super::flags_for(tool, &json!({"base": "main", "brief": false})).expect("well formed");
+        super::flags_for(tool, &json!({"base": "main", "manifest": false})).expect("well formed");
     assert!(
-        !clear.contains(&"--brief".to_owned()),
+        !clear.contains(&"--manifest".to_owned()),
         "declining a boolean still sent it: {clear:?}"
     );
     let missing = super::flags_for(tool, &json!({"base": "main"})).expect("well formed");
     assert!(
-        !missing.contains(&"--brief".to_owned()),
+        !missing.contains(&"--manifest".to_owned()),
         "omitting a boolean still sent it: {missing:?}"
     );
 

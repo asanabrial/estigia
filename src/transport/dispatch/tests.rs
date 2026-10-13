@@ -1026,7 +1026,7 @@ fn review_read_routes_every_view_and_names_its_missing_argument() {
 /// when that mode is absent, rather than silently dropped.
 ///
 /// `--force` without `--takeover`, `--clearing-finding` without
-/// `--parent-head`, `--native-start`/`--brief` with `--recorded-base`, and
+/// `--parent-head`, `--native-start`/`--manifest` with `--recorded-base`, and
 /// `--state` beside `--identities` all name two different reads at once.
 /// Answering one of them is the silent drop this crate refuses.
 #[test]
@@ -1098,8 +1098,8 @@ fn a_mode_flag_given_without_its_mode_is_refused() {
         ),
         (
             "target",
-            &["--base", "b", "--recorded-base", "r", "--brief"],
-            "--brief",
+            &["--base", "b", "--recorded-base", "r", "--manifest"],
+            "--manifest",
         ),
         (
             "list-state",

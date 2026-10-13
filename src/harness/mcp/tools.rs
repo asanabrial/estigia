@@ -1386,9 +1386,9 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "target",
         contract_name: "target",
-        description: "The complete delivery target as a path/mode/blob manifest with one digest. \
-                      Read-only. When `recorded_base` is given, answers how the base has moved \
-                      instead: none, compatible, overlapping, conflicting or unknown.",
+        description: "The delivery target: base, head, digest, path count. Read-only. \
+                      When `recorded_base` is given, answers how the base has moved instead: \
+                      none, compatible, overlapping, conflicting or unknown.",
         operation: "target",
         arguments: &[
             Argument::required("base", "string", "The base SHA."),
@@ -1401,9 +1401,10 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional("worktree", "string", "The isolated checkout."),
             Argument::optional("native_start", "string", "A reviewer's target to compare."),
             Argument::optional(
-                "brief",
+                "manifest",
                 "boolean",
-                "Omit the manifest array, keeping base, head, digest, paths and uncommitted.",
+                "Add the path/mode/blob manifest: to save for native_start, or to read a \
+                 difference path by path.",
             ),
         ],
         effect: PointerEffect::None,

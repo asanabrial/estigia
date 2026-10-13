@@ -24,18 +24,19 @@ use super::{
 /// it is a stop: an approval that covers less than the branch delivers looks
 /// exactly like one that covers all of it. The comparison runs against the
 /// internal manifest built below, never against the rendered answer, so it
-/// fires the same way whether or not `brief` asked for that manifest back.
+/// fires the same way whether or not `with_manifest` asked for that manifest back.
 ///
-/// `brief` omits the `manifest` array from the answer, keeping `ok`, `base`,
-/// `head`, `digest`, `paths` and `uncommitted`. The digest is computed over
-/// the manifest before either shape is rendered, so it does not move between
-/// them — see `CHANGELOG.md` for why the array is worth skipping.
+/// Without `with_manifest` the `manifest` array is omitted from the answer,
+/// keeping `ok`, `base`, `head`, `digest`, `paths` and `uncommitted`. The
+/// digest is computed over the manifest before either shape is rendered, so it
+/// does not move between them — see `CHANGELOG.md` for why the array is worth
+/// skipping.
 pub fn expected_target(
     context: &Context,
     base: &str,
     worktree: Option<&std::path::Path>,
     supplied: Option<&std::path::Path>,
-    brief: bool,
+    with_manifest: bool,
 ) -> Result<serde_json::Value, Failure> {
     let at = worktree.unwrap_or(&context.repo_dir);
     let base_oid = object(at, &format!("{base}^{{commit}}"))?;
@@ -112,7 +113,7 @@ pub fn expected_target(
         "paths": target.len(),
         "uncommitted": uncommitted,
     });
-    if !brief {
+    if with_manifest {
         // The manifest itself, and not only the digest over it: a digest says
         // two targets differ, the manifest says *which paths*. In `Manifest`
         // order, which is sorted, matching what the transport emits.
@@ -173,7 +174,7 @@ pub fn clean_target(
     let at = worktree.unwrap_or(&context.repo_dir);
     let before_head = object(at, "HEAD^{commit}")?;
     let before_status = clean_status(at)?;
-    let target = expected_target(context, base, worktree, None, false)?;
+    let target = expected_target(context, base, worktree, None, true)?;
     let after_status = clean_status(at)?;
     let after_head = object(at, "HEAD^{commit}")?;
     coherent_clean_snapshot(
