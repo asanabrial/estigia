@@ -618,6 +618,16 @@ fn missing_fixture_message(built: &Path) -> String {
     )
 }
 
+#[cfg(unix)]
+fn link_fixture(built: &Path, dest: &Path) {
+    std::os::unix::fs::symlink(built, dest).expect("the fake CLI is linked onto the path");
+}
+
+#[cfg(not(unix))]
+fn link_fixture(built: &Path, dest: &Path) {
+    std::fs::copy(built, dest).expect("the fake CLI is copied onto the path");
+}
+
 fn build_fake_cli_directory(names: &[&str]) -> tempfile::TempDir {
     let here = std::env::current_exe().expect("this test binary knows where it is");
     let built = here
@@ -633,15 +643,12 @@ fn build_fake_cli_directory(names: &[&str]) -> tempfile::TempDir {
     assert!(built.is_file(), "{}", missing_fixture_message(&built));
     let bin = tempfile::tempdir().expect("a directory for the fake CLIs");
     for name in names {
-        std::fs::copy(
-            &built,
-            bin.path().join(if cfg!(windows) {
-                format!("{name}.exe")
-            } else {
-                (*name).to_owned()
-            }),
-        )
-        .expect("the fake CLI is copied onto the path");
+        let dest = bin.path().join(if cfg!(windows) {
+            format!("{name}.exe")
+        } else {
+            (*name).to_owned()
+        });
+        link_fixture(&built, &dest);
     }
     bin
 }
@@ -1004,5 +1011,25 @@ mod fake_cli_default_tests {
     fn the_default_is_put_back_when_the_body_returns() {
         with_fake_clis(&[], &[], |_| ());
         assert_eq!(super::with_environment_read_locked(stdin_log), None);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod fake_cli_link_tests {
+    use super::fake_cli_directory;
+
+    #[test]
+    fn every_fake_cli_is_a_link_to_the_built_fixture_and_not_a_copy_a_fork_can_hold_busy() {
+        let directory = fake_cli_directory(&["claude"]);
+        let mut seen = 0;
+        for entry in std::fs::read_dir(directory.path()).unwrap() {
+            let path = entry.unwrap().path();
+            let metadata = std::fs::symlink_metadata(&path).unwrap();
+            assert!(metadata.file_type().is_symlink(), "{}", path.display());
+            let target = std::fs::read_link(&path).unwrap();
+            assert_eq!(target.file_name().unwrap(), "fake_process");
+            seen += 1;
+        }
+        assert_eq!(seen, 1);
     }
 }

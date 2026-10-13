@@ -341,7 +341,7 @@ fn codex_without_a_last_message_file_refuses_rather_than_reading_stdout() {
             let refusal = Codex::new(on_path(bin, "codex"))
                 .review(&invocation(b"p", None))
                 .unwrap_err();
-            assert_eq!(refusal.code, "reviewer-no-answer");
+            assert_eq!(refusal.code, "reviewer-no-answer", "{}", refusal.message);
         },
     );
 }
@@ -351,11 +351,11 @@ fn a_program_that_will_not_start_is_reviewer_cli_missing() {
     let refusal = ClaudeCode::new(PathBuf::from("/nonexistent/estigia/claude"))
         .review(&invocation(b"p", None))
         .unwrap_err();
-    assert_eq!(refusal.code, "reviewer-cli-missing");
+    assert_eq!(refusal.code, "reviewer-cli-missing", "{}", refusal.message);
     let refusal = Codex::new(PathBuf::from("/nonexistent/estigia/codex"))
         .review(&invocation(b"p", None))
         .unwrap_err();
-    assert_eq!(refusal.code, "reviewer-cli-missing");
+    assert_eq!(refusal.code, "reviewer-cli-missing", "{}", refusal.message);
 }
 
 #[test]
@@ -375,7 +375,11 @@ fn a_non_zero_exit_is_reviewer_exited_nonzero_and_names_stderr() {
                     .review(&invocation(b"p", None))
                     .unwrap_err(),
             ] {
-                assert_eq!(refusal.code, "reviewer-exited-nonzero");
+                assert_eq!(
+                    refusal.code, "reviewer-exited-nonzero",
+                    "{}",
+                    refusal.message
+                );
                 assert!(refusal.message.contains("segfault in the thing"));
                 assert!(refusal.message.contains("exited with 3"));
             }
@@ -423,7 +427,7 @@ fn a_login_refusal_names_the_environment_the_reviewer_was_launched_with() {
             let refusal = ClaudeCode::new(on_path(bin, "claude"))
                 .review(&invocation(b"p", None))
                 .unwrap_err();
-            assert_eq!(refusal.code, "reviewer-unavailable");
+            assert_eq!(refusal.code, "reviewer-unavailable", "{}", refusal.message);
             assert!(
                 refusal.message.contains("HOME=/launch/home"),
                 "{}",
@@ -506,7 +510,11 @@ fn output_past_the_cap_is_reviewer_output_too_large() {
             let refusal = ClaudeCode::new(on_path(bin, "claude"))
                 .review(&invocation(b"p", None))
                 .unwrap_err();
-            assert_eq!(refusal.code, "reviewer-output-too-large");
+            assert_eq!(
+                refusal.code, "reviewer-output-too-large",
+                "{}",
+                refusal.message
+            );
         },
     );
 }
@@ -521,7 +529,11 @@ fn output_exactly_at_the_cap_is_not_too_large() {
             let refusal = ClaudeCode::new(on_path(bin, "claude"))
                 .review(&invocation(b"p", None))
                 .unwrap_err();
-            assert_eq!(refusal.code, "reviewer-launch-failed");
+            assert_eq!(
+                refusal.code, "reviewer-launch-failed",
+                "{}",
+                refusal.message
+            );
         },
     );
 }
@@ -537,7 +549,7 @@ fn a_reviewer_that_outlives_the_deadline_is_killed_and_refused() {
                 .with_deadline(Duration::from_millis(300))
                 .review(&invocation(b"p", None))
                 .unwrap_err();
-            assert_eq!(refusal.code, "reviewer-deadline");
+            assert_eq!(refusal.code, "reviewer-deadline", "{}", refusal.message);
             assert!(started.elapsed() < Duration::from_secs(10));
         },
     );
@@ -573,7 +585,7 @@ fn selection_prefers_claude_then_codex_then_refuses() {
     });
     with_fake_clis(&[], &variables, |bin| {
         let refusal = select_in(bin).err().expect("no reviewer CLI is installed");
-        assert_eq!(refusal.code, "reviewer-cli-missing");
+        assert_eq!(refusal.code, "reviewer-cli-missing", "{}", refusal.message);
     });
 }
 
@@ -584,7 +596,7 @@ fn selection_takes_the_relay_when_no_cli_is_installed() {
         let relay = select_relay_in(bin).expect("the relay is selected");
         assert!(relay.relays(), "the relay does not say it relays");
         let refusal = relay.review(&invocation(b"p", None)).unwrap_err();
-        assert_eq!(refusal.code, "reviewer-unavailable");
+        assert_eq!(refusal.code, "reviewer-unavailable", "{}", refusal.message);
         assert!(
             refusal.message.contains("claude") && refusal.message.contains("codex"),
             "the refusal does not name the CLI to install: {}",
@@ -621,7 +633,7 @@ fn an_opencode_run_without_its_relay_keeps_claude_then_codex_then_refuses() {
         let refusal = select_with(bin, false, false)
             .err()
             .expect("no reviewer is installed");
-        assert_eq!(refusal.code, "reviewer-cli-missing");
+        assert_eq!(refusal.code, "reviewer-cli-missing", "{}", refusal.message);
     });
 }
 
@@ -763,7 +775,7 @@ fn an_empty_answer_is_reviewer_no_answer_not_success() {
                     .review(&invocation(b"p", None))
                     .unwrap_err(),
             ] {
-                assert_eq!(refusal.code, "reviewer-no-answer");
+                assert_eq!(refusal.code, "reviewer-no-answer", "{}", refusal.message);
             }
         },
     );
@@ -776,7 +788,11 @@ fn a_spawn_error_other_than_not_found_is_reviewer_launch_failed() {
     let refusal = ClaudeCode::new(dir.path().to_path_buf())
         .review(&invocation(b"p", None))
         .unwrap_err();
-    assert_eq!(refusal.code, "reviewer-launch-failed");
+    assert_eq!(
+        refusal.code, "reviewer-launch-failed",
+        "{}",
+        refusal.message
+    );
 }
 
 #[test]
@@ -795,7 +811,11 @@ fn a_prompt_the_cli_never_read_is_reviewer_launch_failed_on_a_zero_exit() {
             let refusal = ClaudeCode::new(on_path(bin, "claude"))
                 .review(&invocation(&prompt, None))
                 .unwrap_err();
-            assert_eq!(refusal.code, "reviewer-launch-failed");
+            assert_eq!(
+                refusal.code, "reviewer-launch-failed",
+                "{}",
+                refusal.message
+            );
             assert!(refusal.message.contains("prompt"));
         },
     );
@@ -815,7 +835,11 @@ fn the_unavailable_matcher_reads_stderr_and_only_a_short_stdout_beside_an_empty_
             let refusal = ClaudeCode::new(on_path(bin, "claude"))
                 .review(&invocation(b"p", None))
                 .unwrap_err();
-            assert_eq!(refusal.code, "reviewer-exited-nonzero");
+            assert_eq!(
+                refusal.code, "reviewer-exited-nonzero",
+                "{}",
+                refusal.message
+            );
         },
     );
     let long_only = serde_json::json!([{ "stdout_exact": long_review, "status": 2 }]).to_string();
@@ -826,7 +850,11 @@ fn the_unavailable_matcher_reads_stderr_and_only_a_short_stdout_beside_an_empty_
             let refusal = ClaudeCode::new(on_path(bin, "claude"))
                 .review(&invocation(b"p", None))
                 .unwrap_err();
-            assert_eq!(refusal.code, "reviewer-exited-nonzero");
+            assert_eq!(
+                refusal.code, "reviewer-exited-nonzero",
+                "{}",
+                refusal.message
+            );
         },
     );
     let short_only =
@@ -838,7 +866,7 @@ fn the_unavailable_matcher_reads_stderr_and_only_a_short_stdout_beside_an_empty_
             let refusal = ClaudeCode::new(on_path(bin, "claude"))
                 .review(&invocation(b"p", None))
                 .unwrap_err();
-            assert_eq!(refusal.code, "reviewer-unavailable");
+            assert_eq!(refusal.code, "reviewer-unavailable", "{}", refusal.message);
         },
     );
 }
@@ -972,7 +1000,7 @@ fn a_whitespace_only_answer_is_reviewer_no_answer() {
             let refusal = Codex::new(on_path(bin, "codex"))
                 .review(&invocation(b"p", None))
                 .unwrap_err();
-            assert_eq!(refusal.code, "reviewer-no-answer");
+            assert_eq!(refusal.code, "reviewer-no-answer", "{}", refusal.message);
         },
     );
     let answers = serde_json::json!([{

@@ -610,11 +610,11 @@ fn tracker_rig() -> TrackerRig {
     // A real executable named `gh`, not a script: on Windows a bare `gh`
     // resolves to `gh.exe` and never to `gh.cmd`, so a script fixture would let
     // the machine's own `gh` answer instead.
-    std::fs::copy(
-        &built,
-        bin.path().join(if cfg!(windows) { "gh.exe" } else { "gh" }),
-    )
-    .expect("the fake gh is copied onto the path");
+    let fake_gh = bin.path().join(if cfg!(windows) { "gh.exe" } else { "gh" });
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&built, &fake_gh).expect("the fake gh is linked onto the path");
+    #[cfg(not(unix))]
+    std::fs::copy(&built, &fake_gh).expect("the fake gh is copied onto the path");
 
     let repo = tempfile::tempdir().expect("a directory for the checkout");
     let git = |arguments: &[&str]| checked_git(repo.path(), arguments);
