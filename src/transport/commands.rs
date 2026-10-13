@@ -1667,6 +1667,11 @@ pub fn transition(
         )));
     }
     let ledger = super::store::Ledger::open(context, issue, now)?;
+    let delivery = if to == "done" {
+        super::claim::verified_delivery(context, &ledger.timeline()?)?
+    } else {
+        None
+    };
     if super::outbox::is_closed(context) {
         ledger.set_state(to)?;
         let queued = super::outbox::queue(
@@ -1676,15 +1681,23 @@ pub fn transition(
             &serde_json::json!({}),
             now,
         )?;
-        return Ok(serde_json::json!({
+        let mut deferred = serde_json::json!({
             "ok": true,
             "issue": issue,
             "to": to,
             "projection": "deferred",
             "queued": queued,
-        }));
+        });
+        if let Some(delivery) = delivery {
+            deferred["delivery"] = delivery;
+        }
+        return Ok(deferred);
     }
-    project_state(context, &ledger, issue, to, from)
+    let mut result = project_state(context, &ledger, issue, to, from)?;
+    if let Some(delivery) = delivery {
+        result["delivery"] = delivery;
+    }
+    Ok(result)
 }
 
 /// The projection half of [`transition`]: the board column, the `status:`

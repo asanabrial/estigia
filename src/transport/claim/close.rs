@@ -25,6 +25,20 @@ pub(crate) fn match_own_close(
     if !closing_prs.contains(&receipt.pr) {
         return None;
     }
+    match_merge(
+        receipt,
+        delivering_sha,
+        second_parent,
+        base_is_ancestor_of_first_parent,
+    )
+}
+
+fn match_merge(
+    receipt: &ReviewTransaction,
+    delivering_sha: &str,
+    second_parent: &str,
+    base_is_ancestor_of_first_parent: bool,
+) -> Option<OwnClose> {
     if delivering_sha.len() != 40
         || second_parent != receipt.head
         || !base_is_ancestor_of_first_parent
@@ -37,6 +51,87 @@ pub(crate) fn match_own_close(
         head: receipt.head.clone(),
         delivering_sha: delivering_sha.to_owned(),
     })
+}
+
+/// What `transition --to done` reads before it moves anything: the merge of
+/// the latest confirmed publication's pull request, held to the same proof as
+/// [`own_delivery_close`] without its closing-reference condition — a pull
+/// request that only references the issue is delivered all the same.
+///
+/// `None` when the issue has no confirmed publication, so a `done` with no
+/// receipt is not this check's to refuse. Otherwise the merge and its parents,
+/// or a `delivery-not-verified` stop carrying them.
+pub(crate) fn verified_delivery(
+    context: &Context,
+    comments: &[ownership::Comment],
+) -> Result<Option<serde_json::Value>, Failure> {
+    let Some(publication) = super::all_publications(comments)?
+        .into_iter()
+        .rfind(|p| p.confirmed)
+    else {
+        return Ok(None);
+    };
+    let receipt = publication.receipt;
+    let not_verified = |cause: &str, detail: String, extra: serde_json::Value| {
+        let mut body = serde_json::json!({
+            "ok": false,
+            "reason": "delivery-not-verified",
+            "cause": cause,
+            "pr": receipt.pr,
+            "reviewed_head": receipt.head,
+            "reviewed_base": receipt.base,
+            "detail": detail,
+            "action": "merge the reviewed head with a merge commit (not a squash or a rebase) \
+                       and repeat the transition; `done` records a delivery, so it is not \
+                       written for work whose merge does not join what was reviewed",
+        });
+        if let (Some(body), Some(extra)) = (body.as_object_mut(), extra.as_object()) {
+            body.extend(extra.clone());
+        }
+        Failure::Stop(body)
+    };
+    let Some((sha, first, second)) = closing_merge(context, receipt.pr)? else {
+        return Err(not_verified(
+            "not-merged",
+            format!("pull request #{} has no merge commit", receipt.pr),
+            serde_json::json!({}),
+        ));
+    };
+    let base_is_ancestor_of_first_parent =
+        super::super::target::is_ancestor(&context.repo_dir, &receipt.base, &first)?;
+    let merge = serde_json::json!({
+        "pr": receipt.pr,
+        "merge_commit": sha,
+        "parents": [first, second],
+    });
+    if match_merge(&receipt, &sha, &second, base_is_ancestor_of_first_parent).is_none() {
+        return Err(not_verified(
+            merge_cause(&receipt, &sha, &second, base_is_ancestor_of_first_parent),
+            format!(
+                "the merge {sha} of pull request #{} does not join the reviewed head {}",
+                receipt.pr, receipt.head
+            ),
+            merge,
+        ));
+    }
+    Ok(Some(merge))
+}
+
+fn merge_cause(
+    receipt: &ReviewTransaction,
+    delivering_sha: &str,
+    second_parent: &str,
+    base_is_ancestor_of_first_parent: bool,
+) -> &'static str {
+    if delivering_sha.len() != 40 {
+        "merge-commit-unreadable"
+    } else if second_parent != receipt.head {
+        "second-parent-is-not-the-reviewed-head"
+    } else if !base_is_ancestor_of_first_parent {
+        "reviewed-base-is-not-behind-the-first-parent"
+    } else {
+        "merge-commit-unreadable"
+    }
 }
 pub(crate) fn own_delivery_close(
     context: &Context,
@@ -586,5 +681,333 @@ mod tests {
             !body.contains("issue-not-open") && !body.contains("state != \"OPEN\""),
             "transition grew a closed-issue stand-down, so it no longer agrees with verify_claim"
         );
+    }
+
+    struct DoneRun {
+        answer: Result<serde_json::Value, Failure>,
+        log: String,
+    }
+
+    fn done_on_an_issue(
+        repo: &std::path::Path,
+        base: &str,
+        merge: Option<(&str, &str)>,
+        published: bool,
+    ) -> DoneRun {
+        done_run(repo, base, merge, published, false, None)
+    }
+
+    fn done_run(
+        repo: &std::path::Path,
+        base: &str,
+        merge: Option<(&str, &str)>,
+        published: bool,
+        closed: bool,
+        unreadable: Option<&str>,
+    ) -> DoneRun {
+        let run_id = "claude-abcd1234";
+        let head = "b".repeat(40);
+        let merge_sha = "e".repeat(40);
+        let mut comments = vec![serde_json::json!({
+            "id": "IC_claim",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": format!(
+                "Claimed by {run_id}.\n\n{}\n",
+                crate::transport::markers::render(
+                    "claim",
+                    &[
+                        ("run-id", run_id),
+                        ("runtime", "claude"),
+                        ("horizon", "2099-01-01T00:00Z"),
+                        ("op-id", &"c".repeat(32)),
+                    ],
+                )
+                .expect("a claim marker"),
+            ),
+        })];
+        if published {
+            comments.push(serde_json::json!({
+                "id": "IC_publication",
+                "createdAt": "2026-01-01T01:00:00Z",
+                "viewerDidAuthor": true,
+                "includesCreatedEdit": false,
+                "body": format!(
+                    "published.\n\n{}\n",
+                    crate::transport::markers::render(
+                        "published",
+                        &[
+                            ("run-id", run_id),
+                            ("epoch", &"a".repeat(32)),
+                            ("pr", "42"),
+                            ("head", &head),
+                            ("base", base),
+                            ("digest", &"d".repeat(64)),
+                        ],
+                    )
+                    .expect("a published marker"),
+                ),
+            }));
+        }
+        let issue = serde_json::json!({
+            "state": "OPEN",
+            "labels": [{ "name": "status:review" }],
+            "comments": comments,
+        })
+        .to_string();
+        let merge_commit = match merge {
+            Some(_) => serde_json::json!({ "mergeCommit": { "oid": merge_sha } }),
+            None => serde_json::json!({ "mergeCommit": null }),
+        };
+        let (first, second) = merge.unwrap_or(("", ""));
+        let parents = serde_json::json!({
+            "parents": [{ "sha": first }, { "sha": second }],
+        })
+        .to_string();
+        let bin = crate::test_env::scripted_gh();
+        let script = crate::test_env::answers(&[
+            serde_json::json!({
+                "matches": "issue view 7 --json labels",
+                "stdout": serde_json::json!({ "labels": [{ "name": "status:done" }] }).to_string(),
+                "status": 0,
+            }),
+            serde_json::json!({ "matches": "issue view", "stdout": issue, "status": 0 }),
+            serde_json::json!({
+                "matches": "repo view",
+                "stdout": serde_json::json!({ "owner": { "login": "o" }, "name": "r" }).to_string(),
+                "status": 0,
+            }),
+            serde_json::json!({
+                "matches": "pr view 42 --json mergeCommit",
+                "stdout": merge_commit.to_string(),
+                "stderr": "boom",
+                "status": i32::from(unreadable == Some("pr")),
+            }),
+            serde_json::json!({
+                "matches": format!("api repos/o/r/commits/{merge_sha}"),
+                "stdout": parents,
+                "stderr": "boom",
+                "status": i32::from(unreadable == Some("commit")),
+            }),
+            serde_json::json!({ "matches": "issue edit", "status": 0 }),
+        ]);
+        let context = Context {
+            skill_dir: repo.to_path_buf(),
+            repo_dir: repo.to_path_buf(),
+            config: if closed {
+                vec![(
+                    "Git operation window".to_owned(),
+                    "enabled 09:00-17:00".to_owned(),
+                    crate::transport::Source::Written,
+                )]
+            } else {
+                Vec::new()
+            },
+            repo: closed.then(|| "fixture/repo".to_owned()),
+        };
+        let log_dir = tempfile::tempdir().expect("a log directory");
+        let log = log_dir.path().join("gh.log");
+        let answer = crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+            crate::harness::operation_window::with_now_override(Some(|| Some(20 * 60)), || {
+                crate::transport::commands::transition(
+                    &context,
+                    7,
+                    "done",
+                    Some("review"),
+                    "2026-01-01T02:00:00Z",
+                )
+            })
+        });
+        DoneRun {
+            answer,
+            log: std::fs::read_to_string(&log).unwrap_or_default(),
+        }
+    }
+
+    fn refusal_reason(run: &DoneRun) -> serde_json::Value {
+        let Err(Failure::Stop(body)) = &run.answer else {
+            panic!("done was not refused as a stop: {:?}", run.answer);
+        };
+        body.clone()
+    }
+
+    #[test]
+    fn done_is_refused_when_the_merge_does_not_join_the_reviewed_head() {
+        let (root, base, descendant, _unrelated) = repo_with_a_descendant_and_an_unrelated_commit();
+        let other = "f".repeat(40);
+        let run = done_on_an_issue(root.path(), &base, Some((&descendant, &other)), true);
+        let body = refusal_reason(&run);
+        assert_eq!(body["reason"], "delivery-not-verified", "{body}");
+        assert_eq!(body["merge_commit"], "e".repeat(40), "{body}");
+        assert_eq!(
+            body["parents"],
+            serde_json::json!([descendant, other]),
+            "{body}"
+        );
+        assert!(
+            !run.log.contains("issue edit"),
+            "the label moved: {}",
+            run.log
+        );
+    }
+
+    #[test]
+    fn done_is_refused_when_the_pull_request_is_not_merged() {
+        let (root, base, _descendant, _unrelated) =
+            repo_with_a_descendant_and_an_unrelated_commit();
+        let run = done_on_an_issue(root.path(), &base, None, true);
+        let body = refusal_reason(&run);
+        assert_eq!(body["reason"], "delivery-not-verified", "{body}");
+        assert!(
+            body["detail"].as_str().expect("a detail").contains("#42"),
+            "{body}"
+        );
+        assert!(
+            !run.log.contains("issue edit"),
+            "the label moved: {}",
+            run.log
+        );
+    }
+
+    #[test]
+    fn done_is_refused_when_the_reviewed_base_is_not_behind_the_first_parent() {
+        let (root, base, _descendant, unrelated) = repo_with_a_descendant_and_an_unrelated_commit();
+        let head = "b".repeat(40);
+        let run = done_on_an_issue(root.path(), &base, Some((&unrelated, &head)), true);
+        let body = refusal_reason(&run);
+        assert_eq!(body["reason"], "delivery-not-verified", "{body}");
+        assert!(
+            !run.log.contains("issue edit"),
+            "the label moved: {}",
+            run.log
+        );
+    }
+
+    #[test]
+    fn done_is_accepted_and_reports_the_merge_when_it_joins_the_reviewed_head() {
+        let (root, base, descendant, _unrelated) = repo_with_a_descendant_and_an_unrelated_commit();
+        let head = "b".repeat(40);
+        let run = done_on_an_issue(root.path(), &base, Some((&descendant, &head)), true);
+        let answer = run
+            .answer
+            .expect("a delivery that joins the reviewed head is done");
+        assert_eq!(answer["to"], "done", "{answer}");
+        assert_eq!(
+            answer["delivery"]["merge_commit"],
+            "e".repeat(40),
+            "{answer}"
+        );
+        assert_eq!(
+            answer["delivery"]["parents"],
+            serde_json::json!([descendant, head]),
+            "{answer}"
+        );
+        assert_eq!(answer["delivery"]["pr"], 42, "{answer}");
+    }
+
+    #[test]
+    fn done_with_no_receipt_reads_no_merge_and_behaves_as_before() {
+        let (root, base, _descendant, _unrelated) =
+            repo_with_a_descendant_and_an_unrelated_commit();
+        let run = done_on_an_issue(root.path(), &base, None, false);
+        let answer = run
+            .answer
+            .expect("a transition with no receipt is not checked");
+        assert_eq!(answer["to"], "done", "{answer}");
+        assert!(answer.get("delivery").is_none(), "{answer}");
+        assert!(
+            !run.log.contains("pr view"),
+            "a merge was read: {}",
+            run.log
+        );
+    }
+
+    fn deferred_state_and_queue() -> (Option<String>, usize) {
+        let repo = crate::transport::store::Repo {
+            host: "github.com".to_owned(),
+            owner: "fixture".to_owned(),
+            name: "repo".to_owned(),
+        };
+        let store = crate::transport::store::Store::open(
+            &crate::transport::store::store_path().expect("a store path"),
+        )
+        .expect("opens");
+        (
+            store.issue_state(&repo, 7).expect("reads"),
+            store.outbox(&repo).expect("reads").len(),
+        )
+    }
+
+    #[test]
+    fn done_is_refused_while_the_window_is_closed_and_defers_nothing() {
+        let (root, base, descendant, _unrelated) = repo_with_a_descendant_and_an_unrelated_commit();
+        let other = "f".repeat(40);
+        let run = done_run(
+            root.path(),
+            &base,
+            Some((&descendant, &other)),
+            true,
+            true,
+            None,
+        );
+        let body = refusal_reason(&run);
+        assert_eq!(body["reason"], "delivery-not-verified", "{body}");
+        let (state, queued) = deferred_state_and_queue();
+        assert_eq!(state.as_deref(), Some("review"), "the refusal was recorded");
+        assert_eq!(queued, 0, "the refusal queued a write");
+    }
+
+    #[test]
+    fn done_deferred_while_the_window_is_closed_carries_the_delivery() {
+        let (root, base, descendant, _unrelated) = repo_with_a_descendant_and_an_unrelated_commit();
+        let head = "b".repeat(40);
+        let run = done_run(
+            root.path(),
+            &base,
+            Some((&descendant, &head)),
+            true,
+            true,
+            None,
+        );
+        let answer = run.answer.expect("a verified delivery is deferred");
+        assert_eq!(answer["projection"], "deferred", "{answer}");
+        assert_eq!(answer["delivery"]["merge_commit"], "e".repeat(40));
+        let (state, queued) = deferred_state_and_queue();
+        assert_eq!(state.as_deref(), Some("done"));
+        assert_eq!(queued, 1);
+    }
+
+    #[test]
+    fn done_is_refused_naming_the_read_that_failed() {
+        for (unreadable, named) in [("pr", "pr view"), ("commit", "commits/")] {
+            let (root, base, descendant, _unrelated) =
+                repo_with_a_descendant_and_an_unrelated_commit();
+            let head = "b".repeat(40);
+            let run = done_run(
+                root.path(),
+                &base,
+                Some((&descendant, &head)),
+                true,
+                false,
+                Some(unreadable),
+            );
+            let Err(Failure::Read(message)) = &run.answer else {
+                panic!(
+                    "{unreadable}: done was not refused as a read: {:?}",
+                    run.answer
+                );
+            };
+            assert!(message.contains(named), "{unreadable}: {message}");
+            assert!(!run.log.contains("issue edit"), "{unreadable}: {}", run.log);
+            assert_eq!(deferred_state_and_queue().0.as_deref(), Some("review"));
+        }
+    }
+
+    #[test]
+    fn a_malformed_merge_sha_is_named_as_unreadable_and_not_as_a_base_mismatch() {
+        let receipt = receipt();
+        let verdict = merge_cause(&receipt, &"e".repeat(39), &receipt.head, true);
+        assert_eq!(verdict, "merge-commit-unreadable");
     }
 }

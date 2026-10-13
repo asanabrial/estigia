@@ -138,6 +138,8 @@ Judgement calls that could have gone the other way:
   are `refused`: they are a rule about who may use a directory, answered after a successful read.
 - `issue-not-open` is `refused`: the issue is not one to work, which is the rule and not a moved
   receipt.
+- `delivery-not-verified` is `refused`: the merge was read and it does not join the reviewed head, so the rule
+  says no. A merge that cannot be read is a `read-failed`, not this.
 - `delivery-pr-mismatch` is `refused` although the receipt differs from the command: the command
   asked for the wrong pull request, and nothing the run held has moved.
 - `verdict-bound-to-other-bytes` used to carry three causes. It now means only that the head moved

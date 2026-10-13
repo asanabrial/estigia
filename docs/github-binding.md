@@ -42,3 +42,20 @@ creates that link. Treating its consequence as a violation would make the recomm
 permanently un-shippable, and a gate that fires on every correct delivery is a gate that gets
 ignored — at which point it also stops catching the keyword, which is the avoidable case that
 actually matters.
+
+## Why `done` verifies the merge
+
+`done` means merged and verified, and the verification used to be the operator remembering to read the merge
+commit's parents. `transition --to done` now reads them: with a confirmed review receipt on the issue it takes the
+receipt's pull request and requires a merge commit whose second parent is the reviewed head and whose first parent
+descends from the reviewed base — the proof `verify_claim` already uses for a closed issue (`own_delivery_close`),
+without its condition that GitHub counts the pull request as a closer. That condition is left out on purpose: a pull
+request that only says `Refs #<n>` is delivered all the same, and refusing it would make the recommended wording
+un-shippable.
+
+A refusal is `delivery-not-verified`, with a `cause` (`not-merged`, `second-parent-is-not-the-reviewed-head`,
+`reviewed-base-is-not-behind-the-first-parent`, and `merge-commit-unreadable` for a merge sha that is not 40 hex) and the merge commit and parents it read. A squash or rebase merge is
+refused earlier, as `delivery-topology-mismatch`. An issue with no confirmed receipt moves as before, and so does every
+state other than `done`. The check reads GitHub, so it also runs when the tracker is closed to writes: a merge it
+cannot read refuses the `done` rather than recording it unverified. The same check serves the CLI and the
+`transition` tool, because both reach one transport operation.
