@@ -605,7 +605,7 @@ fn unclaimed_dirt_note(context: &GateContext, run: &session::Run) -> String {
 fn with_queue_note(context: &GateContext, mut answer: Value) -> Value {
     let stops_nothing = answer.get("decision").is_none();
     if stops_nothing
-        && let (Some(note), Some(fields)) = (queue_note(context), answer.as_object_mut())
+        && let (Some(note), Some(fields)) = (queue_note(context, true), answer.as_object_mut())
     {
         fields.insert("systemMessage".to_owned(), json!(note));
     }
@@ -635,15 +635,15 @@ fn start_background_flush() -> bool {
 /// What to say about the GitHub writes the closed window held back, or nothing
 /// when none wait. Reads only the local queue count; when the window is open and
 /// writes wait, it also starts the flush that sends them.
-fn queue_note(context: &GateContext) -> Option<String> {
+fn queue_note(context: &GateContext, with_count: bool) -> Option<String> {
     let queued = crate::transport::outbox::queued_writes();
     if queued == 0 {
         return None;
     }
-    let writes = if queued == 1 {
-        "1 GitHub write is".to_owned()
-    } else {
-        format!("{queued} GitHub writes are")
+    let writes = match (with_count, queued) {
+        (false, _) => "GitHub writes are".to_owned(),
+        (true, 1) => "1 GitHub write is".to_owned(),
+        (true, _) => format!("{queued} GitHub writes are"),
     };
     let window = &context.operation_window;
     if super::operation_window::permits_now(window, super::operation_window::now_minutes()) {
@@ -668,12 +668,16 @@ fn queue_note(context: &GateContext) -> Option<String> {
     ))
 }
 
-fn queue_paragraph(context: &GateContext) -> String {
-    queue_note(context).map_or_else(String::new, |note| format!("\n\n{note}"))
+fn queue_paragraph(context: &GateContext, with_count: bool) -> String {
+    queue_note(context, with_count).map_or_else(String::new, |note| format!("\n\n{note}"))
 }
 
 /// The context injected when a session begins.
 pub fn session_start_response(context: &GateContext, run: &session::Run) -> Value {
+    session_start_body(context, run, true)
+}
+
+fn session_start_body(context: &GateContext, run: &session::Run, with_count: bool) -> Value {
     // Unreadable is not absent: what the run holds is unknown, not nothing.
     let held = if run.unreadable {
         format!(
@@ -807,7 +811,7 @@ pub fn session_start_response(context: &GateContext, run: &session::Run) -> Valu
 This session carries no identity Estigia can derive a run id from, so nothing can be sworn here: a claim needs one run to bind to, and every session in this state would share the same name. Reads go through untouched, and a write is held to `Issue requirement` where the repository sets one.{}{}{}",
                     drift_note(context),
                     build_note(context),
-                    queue_paragraph(context)
+                    queue_paragraph(context, with_count)
                 ),
             }
         });
@@ -822,7 +826,7 @@ Run id `{}`. {held}{isolation}{dirt}{delegated}{inline}{}{}{}",
                 run.run_id,
                 drift_note(context),
                 build_note(context),
-                queue_paragraph(context)
+                queue_paragraph(context, with_count)
             ),
         }
     })
@@ -839,18 +843,23 @@ pub struct StartedFrom<'a> {
 
 /// The text `SessionStart` injects, for a host that has no hook to carry it.
 ///
-/// Built from [`session_start_response`], so the two never describe a run
-/// differently; a session started from another one holding an issue is told so,
-/// and told the one command that puts that issue down. The claim is never moved.
+/// Built from the same body as [`session_start_response`], so the two never
+/// describe a run differently, except that the queue note carries no count: Pi
+/// serves this text as a system section, and a count that grows with every
+/// queued write would rewrite the leading prompt each turn.
+///
+/// A session started from another one holding an issue is told so, and told the
+/// one command that puts that issue down. The claim is never moved.
 pub fn session_start_text(
     context: &GateContext,
     run: &session::Run,
     from: Option<&StartedFrom<'_>>,
 ) -> String {
-    let mut text = session_start_response(context, run)["hookSpecificOutput"]["additionalContext"]
-        .as_str()
-        .unwrap_or_default()
-        .to_owned();
+    let mut text =
+        session_start_body(context, run, false)["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
     if let Some(from) = from
         && matches!(from.reason, "fork" | "new")
         && !run.unreadable
@@ -3812,6 +3821,32 @@ mod tests {
                 0,
                 "a flush started while the window was closed"
             );
+        });
+    }
+
+    #[test]
+    fn the_text_served_to_pi_does_not_change_as_writes_queue() {
+        let run = session::Run::new("pi-abcd1234".to_owned());
+        at_minutes(20 * 60, || {
+            queue_writes(1);
+            let one = session_start_text(&closed_context(), &run, None);
+            queue_writes(4);
+            let five = session_start_text(&closed_context(), &run, None);
+            assert_eq!(one, five);
+            assert!(
+                one.contains("GitHub writes are queued; nothing reaches"),
+                "{one}"
+            );
+            assert!(!one.contains("1 GitHub"), "{one}");
+        });
+    }
+
+    #[test]
+    fn the_claude_session_start_text_still_names_the_count() {
+        queue_writes(5);
+        at_minutes(20 * 60, || {
+            let text = announced(&closed_context());
+            assert!(text.contains("5 GitHub writes are queued"), "{text}");
         });
     }
 

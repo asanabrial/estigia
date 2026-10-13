@@ -9814,3 +9814,17 @@ that writes such a command and runs `setup` then `uninstall` over it. What it do
   whose command line is literally `<program> hook stop` is still read as Estigia's.
 - **Only the first word is the program.** A wrapper in front of it (`env X=1 estigia hook stop`,
   `sh -c "…"`) is not recognised, so setup leaves it and writes its own entry beside it.
+
+## The Pi system section and the prompt cache
+
+The `<estigia>` section Pi carries (`estigia session start`) states the queued GitHub writes without
+their count, so a queue that only grows leaves the text byte-identical. What this measures is the one
+unit test that serves the text with one and with five queued writes and compares the bytes. What it
+does not measure:
+
+- **A real state change still changes the section.** A claim, a release or a changed isolated checkout
+  rewrites the text, and on a model without mid-conversation system messages that rewrites the leading
+  prompt and costs the history cache once.
+- **Read from source, not from a run.** That Pi 1.1.0 records a changed section as a later system
+  message, and that pi-ai folds it into the leading prompt for most providers, comes from reading
+  Pi's source; no live session was run against a provider's cache.
