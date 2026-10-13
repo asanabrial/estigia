@@ -33,6 +33,22 @@ A file that is not valid TOML, has a key other than these, repeats a `path`, giv
 or gives a `path` or `cwd` that is absolute, contains `..` or contains a control character is refused as
 `generated-declaration-malformed`. It is never read as an empty declaration.
 
+## Lockfiles nobody declared
+
+A lockfile that `estigia.generated.toml` does not declare reaches every reviewer in full. `estigia doctor`
+reports a `lockfiles` row when `git ls-files` lists a file with one of these basenames, anywhere in the
+tree, that the working tree's declaration does not name: `Cargo.lock`, `package-lock.json`,
+`npm-shrinkwrap.json`, `yarn.lock`, `pnpm-lock.yaml`, `bun.lock`, `bun.lockb`, `poetry.lock`, `uv.lock`,
+`Pipfile.lock`, `go.sum`, `composer.lock`, `Gemfile.lock`, `Podfile.lock`, `pubspec.lock`, `mix.lock`,
+`flake.lock`, `gradle.lockfile`.
+
+The row is advisory (reported like a skipped check, never broken) and names, per file, the `[[generated]]`
+lines to add, with the regenerating command for that file's ecosystem and a `cwd` for a file below the
+root. The commands are suggestions: confirm each regenerates the file byte-identically before declaring it,
+because a declared path that does not reproduce is refused. Nothing is declared for the operator. The row is
+absent when every such file is declared or there is none. It reads the working tree, unlike the review, which
+reads only the base.
+
 ## Only the base declares
 
 A declaration counts only when read from the **base** commit of the change, through `git` against

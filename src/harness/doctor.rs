@@ -1030,8 +1030,104 @@ fn gate_age_verdict(
     )
 }
 
+/// Lockfile basenames `doctor` offers a declaration for, each with the argv that regenerates it.
+const LOCKFILES: &[(&str, &[&str])] = &[
+    ("Cargo.lock", &["cargo", "generate-lockfile"]),
+    (
+        "package-lock.json",
+        &["npm", "install", "--package-lock-only"],
+    ),
+    (
+        "npm-shrinkwrap.json",
+        &["npm", "install", "--package-lock-only"],
+    ),
+    ("yarn.lock", &["yarn", "install"]),
+    ("pnpm-lock.yaml", &["pnpm", "install", "--lockfile-only"]),
+    ("bun.lock", &["bun", "install", "--lockfile-only"]),
+    ("bun.lockb", &["bun", "install"]),
+    ("poetry.lock", &["poetry", "lock"]),
+    ("uv.lock", &["uv", "lock"]),
+    ("Pipfile.lock", &["pipenv", "lock"]),
+    ("go.sum", &["go", "mod", "tidy"]),
+    ("composer.lock", &["composer", "update", "--lock"]),
+    ("Gemfile.lock", &["bundle", "lock"]),
+    ("Podfile.lock", &["pod", "install"]),
+    ("pubspec.lock", &["dart", "pub", "get"]),
+    ("mix.lock", &["mix", "deps.get"]),
+    ("flake.lock", &["nix", "flake", "lock"]),
+    (
+        "gradle.lockfile",
+        &["./gradlew", "dependencies", "--write-locks"],
+    ),
+];
+
+fn toml_string(text: &str) -> String {
+    serde_json::to_string(text).unwrap_or_default()
+}
+
+/// The `lockfiles` row: tracked lockfiles `estigia.generated.toml` does not declare, each with the
+/// lines to add. Absent when there is nothing to say; advisory when there is, because the operator
+/// decides what is generated and the row never writes the declaration.
+pub fn lockfiles(repo_dir: &Path) -> Option<Check> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_dir)
+        .args(["ls-files", "-z"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+    let declared: Vec<String> = std::fs::read_to_string(repo_dir.join("estigia.generated.toml"))
+        .ok()
+        .and_then(|text| crate::transport::generated::parse(&text).ok())
+        .map(|declarations| {
+            declarations
+                .into_iter()
+                .map(|declaration| declaration.path)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut found: Vec<(String, &[&str])> = String::from_utf8_lossy(&output.stdout)
+        .split('\0')
+        .filter(|path| !path.is_empty() && !path.chars().any(char::is_control))
+        .filter(|path| !declared.iter().any(|declared| declared == path))
+        .filter_map(|path| {
+            let name = path.rsplit('/').next().unwrap_or(path);
+            LOCKFILES
+                .iter()
+                .find(|(known, _)| *known == name)
+                .map(|(_, argv)| (path.to_owned(), *argv))
+        })
+        .collect();
+    if found.is_empty() {
+        return None;
+    }
+    found.sort();
+    let mut detail = format!(
+        "{} tracked lockfile{} not declared in estigia.generated.toml, so a change to {} reaches \
+         every reviewer in full; to have it checked by reproduction instead, add",
+        found.len(),
+        if found.len() == 1 { " is" } else { "s are" },
+        if found.len() == 1 { "it" } else { "one" },
+    );
+    let margin = format!("\n{}", " ".repeat(13));
+    for (path, argv) in found {
+        let command: Vec<String> = argv.iter().map(|part| toml_string(part)).collect();
+        detail.push_str(&format!("{margin}[[generated]]"));
+        detail.push_str(&format!("{margin}path = {}", toml_string(&path)));
+        detail.push_str(&format!("{margin}command = [{}]", command.join(", ")));
+        if let Some((directory, _)) = path.rsplit_once('/') {
+            detail.push_str(&format!("{margin}cwd = {}", toml_string(directory)));
+        }
+    }
+    Some(Check {
+        name: "lockfiles",
+        about: "whether a tracked lockfile is sent to every reviewer in full because nothing declares it generated",
+        health: Health::Skipped { detail },
+    })
+}
+
 /// Everything `doctor` looks at, by the name it reports under. Three of the
-/// seventeen (`contract`, `gate`, `tools`) produce one row per configured agent.
+/// eighteen (`contract`, `gate`, `tools`) produce one row per configured agent.
 pub const CHECKS: &[&str] = &[
     "skill",
     "skill-assets",
@@ -1050,6 +1146,7 @@ pub const CHECKS: &[&str] = &[
     "gate-version",
     "store",
     "pi-config",
+    "lockfiles",
 ];
 
 /// One row two roots answer differently: the setting, what the agent reads, and
@@ -1309,6 +1406,7 @@ pub fn full(
         .and_then(|adapter| crate::setup::resolve_paths(adapter, options).ok())
         .and_then(|paths| paths.instructions.parent().map(Path::to_path_buf));
     checks.push(pi_config(pi_agent_dir.as_deref(), repo_dir));
+    checks.extend(lockfiles(repo_dir));
 
     // Carried rather than defaulted: on an empty path the store's own path is
     // the *relative* `state.db`, and this row would answer about whatever file
@@ -3915,6 +4013,112 @@ mod tests {
             String::from_utf8_lossy(&output.stderr).trim()
         );
         directory
+    }
+
+    fn track(repo: &Path, files: &[(&str, &str)]) {
+        for (name, text) in files {
+            let path = repo.join(name);
+            std::fs::create_dir_all(path.parent().expect("a parent")).expect("a directory");
+            std::fs::write(&path, text).expect("a file");
+        }
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(["add", "--all"])
+            .status()
+            .expect("git add");
+        assert!(status.success());
+    }
+
+    #[test]
+    fn an_undeclared_tracked_lockfile_is_named_with_the_line_to_add() {
+        let repo = git_repo();
+        track(
+            repo.path(),
+            &[("Cargo.lock", "x"), ("web/package-lock.json", "y")],
+        );
+        let check = lockfiles(repo.path()).expect("a row for undeclared lockfiles");
+        assert_eq!(check.name, "lockfiles");
+        let Health::Skipped { detail } = check.health else {
+            panic!("an advisory row is not broken: {:?}", check.health);
+        };
+        for line in [
+            "[[generated]]",
+            "path = \"Cargo.lock\"",
+            "command = [\"cargo\", \"generate-lockfile\"]",
+            "path = \"web/package-lock.json\"",
+            "command = [\"npm\", \"install\", \"--package-lock-only\"]",
+            "cwd = \"web\"",
+        ] {
+            assert!(
+                detail.lines().any(|found| found.trim() == line),
+                "{line:?} is not a line of {detail}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_declared_lockfile_has_no_row() {
+        let repo = git_repo();
+        track(
+            repo.path(),
+            &[
+                ("Cargo.lock", "x"),
+                (
+                    "estigia.generated.toml",
+                    "[[generated]]\npath = \"Cargo.lock\"\ncommand = [\"cargo\", \"generate-lockfile\"]\n",
+                ),
+            ],
+        );
+        assert_eq!(lockfiles(repo.path()), None);
+    }
+
+    #[test]
+    fn a_repository_with_no_lockfile_has_no_row() {
+        let repo = git_repo();
+        track(repo.path(), &[("src/main.rs", "fn main() {}")]);
+        assert_eq!(lockfiles(repo.path()), None);
+    }
+
+    #[test]
+    fn an_untracked_lockfile_has_no_row() {
+        let repo = git_repo();
+        std::fs::write(repo.path().join("Cargo.lock"), "x").expect("a file");
+        assert_eq!(lockfiles(repo.path()), None);
+    }
+
+    #[test]
+    fn only_the_undeclared_lockfile_is_named() {
+        let repo = git_repo();
+        track(
+            repo.path(),
+            &[
+                ("Cargo.lock", "x"),
+                ("go.sum", "y"),
+                (
+                    "estigia.generated.toml",
+                    "[[generated]]\npath = \"Cargo.lock\"\ncommand = [\"cargo\", \"generate-lockfile\"]\n",
+                ),
+            ],
+        );
+        let Some(Check {
+            health: Health::Skipped { detail },
+            ..
+        }) = lockfiles(repo.path())
+        else {
+            panic!("a row for go.sum");
+        };
+        assert!(
+            detail.contains("go.sum") && !detail.contains("Cargo.lock"),
+            "{detail}"
+        );
+    }
+
+    #[test]
+    fn an_undeclared_tracked_lockfile_has_no_row_when_the_directory_is_not_a_repository() {
+        let directory = tempfile::tempdir().expect("a directory");
+        std::fs::write(directory.path().join("Cargo.lock"), "x").expect("a file");
+        assert_eq!(lockfiles(directory.path()), None);
     }
 
     #[test]
