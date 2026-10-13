@@ -98,7 +98,9 @@ jobs:
       # The suite runs on every target that can run it. A cross-built archive
       # is published having compiled and nothing more, and saying which is
       # which is the honest part.
+      # Windows targets skip the suite until issue #11, as `ci.yml` does.
       - name: Test
+        if: runner.os != 'Windows'
         run: cargo test --release --target ${{ matrix.target }}
 
       - name: Build
@@ -109,7 +111,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME}"
+          # A branch name can carry `/`, which would put the archive in a subdirectory.
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME}"; else version="${GITHUB_SHA:0:12}"; fi
           package="estigia-${version}-${{ matrix.target }}"
           mkdir -p "dist/${package}"
           cp "target/${{ matrix.target }}/release/estigia" "dist/${package}/"
@@ -124,7 +127,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $version = $env:GITHUB_REF_NAME
+          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { $env:GITHUB_SHA.Substring(0, 12) }
           $package = "estigia-$version-${{ matrix.target }}"
           New-Item -ItemType Directory -Force -Path "dist/$package" | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/estigia.exe" "dist/$package/"
