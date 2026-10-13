@@ -199,24 +199,37 @@ fn no_allowed_non_issue_use_is_at_or_below_the_ceiling() {
 
 #[test]
 #[should_panic(expected = "AGENTS.md")]
-fn a_root_holding_none_of_the_anchors_is_refused() {
-    let empty = std::env::temp_dir().join(format!("estigia-empty-root-{}", std::process::id()));
+fn a_root_without_the_anchor_files_is_refused() {
+    let root = tempfile::tempdir().unwrap();
     for dir in ["docs", "skill", "src"] {
-        std::fs::create_dir_all(empty.join(dir)).unwrap();
+        std::fs::create_dir_all(root.path().join(dir)).unwrap();
     }
-    shipped_text(&empty);
+    shipped_text(root.path());
+}
+
+#[test]
+#[should_panic(expected = "the scan read nothing under docs/")]
+fn a_root_whose_directories_hold_nothing_is_refused() {
+    let root = tempfile::tempdir().unwrap();
+    for dir in ["docs", "skill", "src"] {
+        std::fs::create_dir_all(root.path().join(dir)).unwrap();
+    }
+    for anchor in ["AGENTS.md", "README.md", "CHANGELOG.md"] {
+        std::fs::write(root.path().join(anchor), "").unwrap();
+    }
+    shipped_text(root.path());
 }
 
 #[test]
 #[should_panic(expected = "cannot read")]
 fn a_file_that_exists_and_cannot_be_read_fails_the_scan() {
-    let root = std::env::temp_dir().join(format!("estigia-unreadable-{}", std::process::id()));
+    let root = tempfile::tempdir().unwrap();
     for dir in ["docs", "skill", "src"] {
-        std::fs::create_dir_all(root.join(dir)).unwrap();
+        std::fs::create_dir_all(root.path().join(dir)).unwrap();
     }
     for anchor in ["AGENTS.md", "README.md", "CHANGELOG.md"] {
-        std::fs::write(root.join(anchor), "").unwrap();
+        std::fs::write(root.path().join(anchor), "").unwrap();
     }
-    std::fs::write(root.join("docs").join("bad.md"), [0xff, 0xfe, 0xfd]).unwrap();
-    shipped_text(&root);
+    std::fs::write(root.path().join("docs").join("bad.md"), [0xff, 0xfe, 0xfd]).unwrap();
+    shipped_text(root.path());
 }
