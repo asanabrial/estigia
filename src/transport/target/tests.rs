@@ -520,7 +520,7 @@ fn a_changed_file_that_cannot_be_hashed_is_refused_and_not_reported_as_deleted()
     std::fs::write(at.join("keep.txt"), "changed and unreadable\n").expect("a change");
     std::fs::set_permissions(at.join("keep.txt"), std::fs::Permissions::from_mode(0o000))
         .expect("chmod 000");
-    let answer = expected_target(&context(at), &base, None, None, false);
+    let answer = expected_target(&context(at), &base, None, None, true);
     std::fs::set_permissions(at.join("keep.txt"), std::fs::Permissions::from_mode(0o644))
         .expect("chmod back");
     match answer {
@@ -539,8 +539,8 @@ fn a_narrow_expected_target_omits_the_manifest_but_matches_the_full_answer_other
     let (root, base, _head) = two_commit_repo("changed\n");
     let context = context(root.path());
 
-    let full = expected_target(&context, &base, None, None, false).expect("a full target");
-    let narrow = expected_target(&context, &base, None, None, true).expect("a narrow target");
+    let full = expected_target(&context, &base, None, None, true).expect("a full target");
+    let narrow = expected_target(&context, &base, None, None, false).expect("a narrow target");
 
     assert!(
         full.get("manifest")
@@ -574,9 +574,9 @@ fn review_target_mismatch_still_fires_over_the_narrow_modes_inputs() {
     let claimed_path = root.path().join("claimed.json");
     std::fs::write(&claimed_path, "[]").expect("a supplied manifest of nothing");
 
-    let full = expected_target(&context, &base, None, Some(&claimed_path), false)
+    let full = expected_target(&context, &base, None, Some(&claimed_path), true)
         .expect_err("an empty supplied manifest cannot match a real delivery");
-    let narrow = expected_target(&context, &base, None, Some(&claimed_path), true)
+    let narrow = expected_target(&context, &base, None, Some(&claimed_path), false)
         .expect_err("the narrow mode must refuse identically");
 
     assert_eq!(full.envelope()["reason"], "review-target-mismatch");
@@ -970,4 +970,30 @@ fn two_payloads_differing_only_in_a_declared_head_blob_have_different_digests() 
     assert_ne!(first_head, second_head);
     assert_ne!(first.text, second.text);
     assert_ne!(first.digest, second.digest);
+}
+
+fn dispatched_target(context: &Context, flags: &[&str]) -> serde_json::Value {
+    let flags: Vec<String> = flags.iter().map(|flag| (*flag).to_owned()).collect();
+    crate::transport::dispatch::dispatch(context, "target", &flags, "2026-10-13T00:00:00Z")
+        .expect("a target")
+}
+
+#[test]
+fn the_target_operation_answers_the_brief_form_unless_the_manifest_is_asked_for() {
+    let (root, base, _head) = two_commit_repo("changed\n");
+    let context = context(root.path());
+
+    let brief = dispatched_target(&context, &["--base", &base]);
+    assert!(
+        brief.get("manifest").is_none(),
+        "the default answer carries the manifest: {brief}"
+    );
+
+    let full = dispatched_target(&context, &["--base", &base, "--manifest"]);
+    assert!(
+        full.get("manifest")
+            .is_some_and(serde_json::Value::is_array),
+        "asking for the manifest did not return it: {full}"
+    );
+    assert_eq!(brief["digest"], full["digest"]);
 }

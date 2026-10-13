@@ -117,11 +117,11 @@ stays identical.
 
 **Ask for the manifest only when a path list is what you need.** It carries one object per tracked
 file, so its size is set by the repository rather than by the change, and a caller binding or
-comparing a digest never reads it. `--brief` omits it and answers the same digest, and a supplied
-target still fails closed against the same paths — so the comparison that matters is unaffected. Use
-the full answer when a difference has to be read path by path, or when the answer is being saved
-as the file a later `--native-start` compares — that comparison reads the manifest and refuses
-without one — and `--brief` for every other call.
+comparing a digest never reads it. The default answer omits it and carries the same digest, and a
+supplied target still fails closed against the same paths — so the comparison that matters is
+unaffected. Pass `--manifest` (`manifest: true`) when a difference has to be read path by path, or
+when the answer is being saved as the file a later `--native-start` compares — that comparison reads
+the manifest and refuses without one.
 
 A published receipt is narrower: it requires `uncommitted` to be empty. A PR head cannot identify
 working-tree bytes, so publishing or releasing CI from a dirty checkout stops rather than binding a

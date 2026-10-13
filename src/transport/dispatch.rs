@@ -27,7 +27,7 @@ use super::{Context, Failure};
 const SWITCHES: &[&str] = &[
     "force",
     "held-by-other",
-    "brief",
+    "manifest",
     "inline-payload",
     "with-review",
     "with-text",
@@ -596,11 +596,11 @@ fn run_operation(
                          base movement instead, which has no target to compare",
                     ));
                 }
-                if f.on("brief") {
+                if f.on("manifest") {
                     return Err(flag_without_its_mode(
                         operation,
-                        "brief",
-                        "--brief omits the manifest array from the target answer, and \
+                        "manifest",
+                        "--manifest adds the manifest array to the target answer, and \
                          --recorded-base answers base movement instead, which carries no manifest",
                     ));
                 }
@@ -619,9 +619,7 @@ fn run_operation(
                     // `--native-start`: a manifest a reviewer was given, and any
                     // disagreement with it fails closed.
                     f.path("native-start"),
-                    // `--brief`: omit the manifest array from the answer. Defaults
-                    // to off, which is today's full answer.
-                    f.on("brief"),
+                    f.on("manifest"),
                 ),
             }
         }

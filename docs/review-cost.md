@@ -542,6 +542,7 @@ the exact bytes a client receives for the table.
 | Before — 48 acting tools plus 3 `NOT_EXPOSED` refusal schemas | 51 | 75,913 |
 | After — the consolidated table, `NOT_EXPOSED` no longer advertised | 32 | 55,381 |
 | Later — descriptions trimmed (issue #1146), from 56,133 at that head | 32 | 44,325 |
+| Issue #5, `TOOLS` at 33 — shared argument text, no refusal-code lists, no `lens` argument; context unreadable | 33 | 42,643 |
 
 Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
 retired aggregate verdict and the three `NOT_EXPOSED` names were removed outright; `reclaim`,
@@ -561,6 +562,34 @@ call a tool: where a field moved to, and a measurement of the payload threshold.
 stays here: answers carrying 73,272 and 145,756 payload bytes were refused by the MCP surface and
 one carrying 36,288 was not, so the threshold sits inside the ordinary range, which is why
 `inline_payload` defaults to false.
+
+Issue #5 made the list depend on the process's `GateContext`, which is fixed for the process, so
+`listChanged` stays false. Where `Workflow` is `assisted` the list omits every `TRACKER_WRITERS` tool,
+which that workflow refuses; under any other readable workflow it omits `ASSISTED_ONLY`; a context that
+cannot be read, or whose workflow is unknown, lists all 33. A hidden name still dispatches and refuses
+with its own typed reason.
+
+| `tools/list` result, issue #5 | Names | Bytes |
+|---|---:|---:|
+| Before — every context | 33 | 44,318 |
+| After — context unreadable (every tool) | 33 | 42,643 |
+| After — autonomous | 31 | 40,901 |
+| After — assisted | 13 | 14,380 |
+
+`TOOLS_LIST_CEILING` is the unreadable-context figure, the largest list a process can answer. Three
+changes made the rest of the difference: the receipt arguments (`epoch`, `pr`, `head`, `base`,
+`digest`), `run_id` and `issue` each carry one short description defined once; the
+`collect_review_input` and `launch_review_input` descriptions no longer list refusal codes, since each
+refusal names itself; and `record_review_finding` no longer advertises `lens`, which exists only to be
+refused. A caller that still sends `lens` through the tool is told it does not take it; the transport
+still refuses it `recorded-by-capture-only`.
+
+`target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
+paid only by a call that passes `manifest`.
+
+`republish_review` stays a tool of its own although its arguments equal `publish_review`'s. Its
+separate name is the guard on a call that destroys remote history, and a flag on `publish_review`
+would let an ordinary publication reach it by one wrong argument.
 
 ## Waiting for a reviewer instead of polling
 

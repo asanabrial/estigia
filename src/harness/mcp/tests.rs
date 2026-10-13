@@ -1596,21 +1596,22 @@ fn a_pointer_is_never_written_under_an_empty_run_id() {
 fn a_boolean_goes_out_as_a_bare_flag_or_not_at_all() {
     let tool = tools::find("target").expect("a declared tool");
 
-    let set = super::flags_for(tool, &json!({"base": "main", "brief": true})).expect("well formed");
+    let set =
+        super::flags_for(tool, &json!({"base": "main", "manifest": true})).expect("well formed");
     assert!(
-        set.contains(&"--brief".to_owned()),
+        set.contains(&"--manifest".to_owned()),
         "a boolean was not rendered as a bare flag: {set:?}"
     );
 
     let clear =
-        super::flags_for(tool, &json!({"base": "main", "brief": false})).expect("well formed");
+        super::flags_for(tool, &json!({"base": "main", "manifest": false})).expect("well formed");
     assert!(
-        !clear.contains(&"--brief".to_owned()),
+        !clear.contains(&"--manifest".to_owned()),
         "declining a boolean still sent it: {clear:?}"
     );
     let missing = super::flags_for(tool, &json!({"base": "main"})).expect("well formed");
     assert!(
-        !missing.contains(&"--brief".to_owned()),
+        !missing.contains(&"--manifest".to_owned()),
         "omitting a boolean still sent it: {missing:?}"
     );
 
@@ -5287,7 +5288,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 44_325;
+const TOOLS_LIST_CEILING: usize = 42_643;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -5310,4 +5311,137 @@ fn no_description_carries_history_or_a_measurement() {
             "a tool description carries `{phrase}`, which belongs in docs/"
         );
     }
+}
+
+fn listed_names(context: Result<&GateContext, &Refusal>) -> Vec<String> {
+    let response = handle_line(
+        &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}).to_string(),
+        context,
+    )
+    .expect("a request with an id gets a response");
+    response["result"]["tools"]
+        .as_array()
+        .expect("a tool list")
+        .iter()
+        .map(|tool| tool["name"].as_str().expect("a name").to_owned())
+        .collect()
+}
+
+#[test]
+fn an_assisted_menu_omits_every_tool_that_writes_the_tracker() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = assisted_context(&root);
+    let names = listed_names(Ok(&context));
+    for name in tools::TRACKER_WRITERS {
+        assert!(
+            !names.iter().any(|listed| listed == name),
+            "{name} is refused in assisted work and was advertised"
+        );
+    }
+    for name in tools::ASSISTED_ONLY {
+        assert!(
+            names.iter().any(|listed| listed == name),
+            "{name} is the assisted work and was not advertised"
+        );
+    }
+}
+
+#[test]
+fn an_autonomous_menu_omits_the_assisted_only_tools_and_keeps_the_rest() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = bare_context(&root, &root.path().join("repo"));
+    let names = listed_names(Ok(&context));
+    for name in tools::ASSISTED_ONLY {
+        assert!(
+            !names.iter().any(|listed| listed == name),
+            "{name} is refused outside assisted work and was advertised"
+        );
+    }
+    assert_eq!(names.len(), TOOLS.len() - tools::ASSISTED_ONLY.len());
+}
+
+#[test]
+fn an_unreadable_context_or_an_unknown_workflow_lists_every_tool() {
+    let refusal = crate::skill::no_skill_root();
+    assert_eq!(listed_names(Err(&refusal)).len(), TOOLS.len());
+    let root = tempfile::tempdir().expect("a temporary root");
+    let mut context = bare_context(&root, &root.path().join("repo"));
+    context.workflow = None;
+    assert_eq!(listed_names(Ok(&context)).len(), TOOLS.len());
+}
+
+#[test]
+fn a_tool_the_menu_hides_still_answers_its_typed_refusal_by_name() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let assisted = assisted_context(&root);
+    assert!(!listed_names(Ok(&assisted)).contains(&"ensure_states".to_owned()));
+    let ToolFailure::Refused(refusal) = run_tool("ensure_states", &json!({}), Ok(&assisted))
+        .expect_err("an assisted workflow writes no tracker")
+    else {
+        panic!("refused as malformed rather than by the rule");
+    };
+    assert_eq!(refusal.code, "workflow-assisted-writes-no-tracker");
+}
+
+#[test]
+fn a_receipt_run_or_issue_argument_has_one_description_everywhere() {
+    let receipt = ["epoch", "pr", "head", "base", "digest"];
+    for name in receipt.iter().chain(&["run_id", "issue"]) {
+        let mut descriptions: Vec<&str> = TOOLS
+            .iter()
+            .filter(|tool| {
+                *name == "run_id"
+                    || *name == "issue"
+                    || receipt
+                        .iter()
+                        .all(|part| tool.arguments.iter().any(|a| a.name == *part && a.required))
+            })
+            .flat_map(|tool| tool.arguments.iter())
+            .filter(|argument| {
+                argument.required
+                    && argument.name == *name
+                    && (*name != "issue" || argument.json_type == "integer")
+            })
+            .map(|argument| argument.description)
+            .collect();
+        descriptions.sort_unstable();
+        descriptions.dedup();
+        assert_eq!(
+            descriptions.len(),
+            1,
+            "`{name}` is described {} ways: {descriptions:?}",
+            descriptions.len()
+        );
+    }
+}
+
+#[test]
+fn the_review_tools_do_not_list_the_refusals_each_call_already_carries() {
+    for name in ["collect_review_input", "launch_review_input"] {
+        let tool = tools::find(name).expect("a declared tool");
+        for code in ["capture-", "reviewer-"] {
+            assert!(
+                !tool.description.contains(code),
+                "`{name}` lists a refusal code (`{code}…`) that the refusal itself names"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_finding_cannot_name_a_lens_through_the_tool() {
+    let tool = tools::find("record_review_finding").expect("a declared tool");
+    assert!(
+        !tool
+            .arguments
+            .iter()
+            .any(|argument| argument.name == "lens"),
+        "`lens` exists only to be refused and is advertised"
+    );
+    let ToolFailure::Malformed(message) = super::flags_for(tool, &json!({"lens": "review-risk"}))
+        .expect_err("an unadvertised argument is refused")
+    else {
+        panic!("refused as a refusal rather than as an argument the tool does not take");
+    };
+    assert!(message.contains("`lens`"), "{message}");
 }

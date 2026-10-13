@@ -180,10 +180,15 @@ impl Tool {
 const RUN_ID: Argument = Argument::required(
     "run_id",
     "string",
-    "This run's id, exactly as SessionStart reported it.",
+    "This run's id, as SessionStart reported it.",
 );
-const ISSUE: Argument =
-    Argument::required("issue", "integer", "The issue number.").counting_from(1);
+const ISSUE: Argument = Argument::required("issue", "integer", "Issue number.").counting_from(1);
+const RECEIPT_EPOCH: Argument = Argument::required("epoch", "string", "Publication epoch.");
+const RECEIPT_PR: Argument =
+    Argument::required("pr", "integer", "Pull request number.").counting_from(1);
+const RECEIPT_HEAD: Argument = Argument::required("head", "string", "Published head SHA.");
+const RECEIPT_BASE: Argument = Argument::required("base", "string", "Published base SHA.");
+const RECEIPT_DIGEST: Argument = Argument::required("digest", "string", "Target manifest digest.");
 // `assist` reads a Linear key (`ENG-123`) as readily as a GitHub number, so its
 // issue argument is a string; `dispatch` parses whichever it is.
 const ISSUE_ANY: Argument = Argument::required(
@@ -366,11 +371,7 @@ pub const TOOLS: &[Tool] = &[
             // and required anyway: without it the run pointer cannot follow
             // the move, and every later `verify_claim` measures against a
             // state the issue has already left. See `POINTER_ONLY`.
-            Argument::required(
-                "run_id",
-                "string",
-                "This run's id, so the state it believes the issue is in stays current.",
-            ),
+            RUN_ID,
             Argument::optional(
                 "from",
                 "string",
@@ -538,11 +539,11 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "The exact current ownership epoch this handoff may release.",
             ),
-            Argument::required("epoch", "string", "The publication epoch."),
-            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
-            Argument::required("head", "string", "The full published head SHA."),
-            Argument::required("base", "string", "The full published base SHA."),
-            Argument::required("digest", "string", "The complete-target manifest digest."),
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
             Argument::required(
                 "blocker",
                 "string",
@@ -574,15 +575,11 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "The context credited with finding it; a label only.",
             ),
-            Argument::required(
-                "epoch",
-                "string",
-                "The publication epoch this finding judges.",
-            ),
-            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
-            Argument::required("head", "string", "The full published head SHA."),
-            Argument::required("base", "string", "The full published base SHA."),
-            Argument::required("digest", "string", "The complete-target manifest digest."),
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
             Argument::required(
                 "id",
                 "string",
@@ -638,19 +635,9 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "Where this defect lives: `path:line` or `path:start-end`, the path \
                  repository-relative. Required of a severe finding whose `causal_disposition` \
-                 is `introduced` or `worsened`, and of any finding naming `lens`. A malformed \
-                 value is always refused. Where owed, every line must fall inside a changed \
-                 hunk; a path touched only by deletion, a binary edit or a mode change settles \
-                 by being touched. A lens finding not otherwise owed containment is checked on \
-                 its path alone.",
-            ),
-            Argument::optional(
-                "lens",
-                "string",
-                "Set only by `collect_review_input`; a hand call naming it is refused \
-                 `recorded-by-capture-only`. The shipped lens role the finding came from: \
-                 `review-lens`, `review-risk`, `review-readability`, `review-reliability` or \
-                 `review-readback`.",
+                 is `introduced` or `worsened`. A malformed value is always refused. Where owed, \
+                 every line must fall inside a changed hunk; a path touched only by deletion, \
+                 a binary edit or a mode change settles by being touched.",
             ),
         ],
         effect: PointerEffect::Renew,
@@ -668,11 +655,11 @@ pub const TOOLS: &[Tool] = &[
         arguments: &[
             ISSUE,
             RUN_ID,
-            Argument::required("epoch", "string", "The review transaction's epoch."),
-            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
-            Argument::required("head", "string", "The full published head SHA."),
-            Argument::required("base", "string", "The full published base SHA."),
-            Argument::required("digest", "string", "The complete-target manifest digest."),
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
             Argument::required(
                 "escalated_to",
                 "string",
@@ -702,11 +689,11 @@ pub const TOOLS: &[Tool] = &[
         arguments: &[
             ISSUE,
             RUN_ID,
-            Argument::required("epoch", "string", "The publication epoch."),
-            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
-            Argument::required("head", "string", "The full published head SHA."),
-            Argument::required("base", "string", "The full published base SHA."),
-            Argument::required("digest", "string", "The complete-target manifest digest."),
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
             Argument::required(
                 "dispositions",
                 "string",
@@ -721,17 +708,15 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "launch_review_input",
         contract_name: "launch_review_input",
-        description: "Start the reviewer for each slot `name` or `names` requests, each offered by a \
-                      `review_status` `collect`, returning before any has answered. Refused \
-                      `capture-input-not-offered` unless `review_status` is a `collect` offering \
-                      each slot. The diff is rebuilt from the `collect`'s receipt; \
-                      the criteria are the issue's body. The reviewer is the first \
-                      installed `claude` or `codex` CLI in a detached tool-less job under a 15 \
-                      minute deadline, or the relay on an OpenCode run with its plugin. Answers \
-                      `{job, deadline_at}` per slot, or `{launched: [...]}`, and records nothing. \
-                      A slot already running is refused `capture-already-running`, reported in a \
-                      batch. Requires a live review claim. `collect_review_input` records the \
-                      answer.",
+        description: "Start the reviewer for each slot `name` or `names` requests, each offered \
+                      by a `review_status` `collect`, returning before any has answered. The \
+                      diff is rebuilt from the `collect`'s receipt; the criteria are the issue's \
+                      body. The reviewer is the first installed `claude` or `codex` CLI in a \
+                      detached tool-less job under a 15 minute deadline, or the relay on an \
+                      OpenCode run with its plugin. Answers `{job, deadline_at}` per slot, or \
+                      `{launched: [...]}`, and records nothing. A batch reports a slot that \
+                      cannot start. Requires a live review claim. `collect_review_input` \
+                      records the answer.",
         operation: "launch-review-input",
         arguments: &[
             ISSUE,
@@ -757,21 +742,15 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "collect_review_input",
         description: "Record what the reviewer `launch_review_input` started answered. Give \
                       `names` for several slots or `name` for one; only the run that launched a \
-                      job collects it (`capture-job-other-run`), and a slot no job holds is \
-                      refused `capture-job-missing`. `review_status` must still be a `collect` \
-                      offering each slot, or the job is discarded and the call refused \
-                      `capture-result-stale`. A running job is refused `capture-running`, naming \
-                      its `deadline_at`, unless `wait_seconds` is given; a job past its deadline \
-                      is killed and refused `reviewer-deadline`, and a dead runner is \
-                      `capture-runner-lost`. A batch reports a running slot rather than stopping. \
-                      A reviewer that could not run, or answered outside its role's contract, \
-                      refuses under its own `reviewer-*` code. A lens's findings are checked as \
-                      `record_review_finding` checks them before any is written, so one bad \
-                      finding rejects the answer as `reviewer-result-malformed` and writes \
-                      nothing; then the lens report is recorded. A `refutation-batch` answer must \
-                      name each listed finding once and nothing else. A `review-validator` \
-                      `fail` or `unavailable` inspection is recorded, not rejected. A second call \
-                      for a recorded job writes nothing. Requires a live review claim.",
+                      job collects it, and `review_status` must still be a `collect` offering \
+                      each slot. A running job is refused unless `wait_seconds` is given; a batch \
+                      reports a running slot rather than stopping. A lens's findings are checked \
+                      as `record_review_finding` checks them before any is written, so one bad \
+                      finding rejects the answer and writes nothing; then the lens report is \
+                      recorded. A `refutation-batch` answer must name each listed finding once \
+                      and nothing else. A `review-validator` `fail` or `unavailable` inspection \
+                      is recorded, not rejected. A second call for a recorded job writes \
+                      nothing. Requires a live review claim.",
         operation: "collect-review-input",
         arguments: &[
             ISSUE,
@@ -812,11 +791,11 @@ pub const TOOLS: &[Tool] = &[
         arguments: &[
             ISSUE,
             RUN_ID,
-            Argument::required("epoch", "string", "The publication epoch."),
-            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
-            Argument::required("head", "string", "The full published head SHA."),
-            Argument::required("base", "string", "The full published base SHA."),
-            Argument::required("digest", "string", "The complete-target manifest digest."),
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
             Argument::optional(
                 "worktree",
                 "string",
@@ -849,15 +828,11 @@ pub const TOOLS: &[Tool] = &[
                 "Which phase spent this.",
             )
             .of(SPEND_PHASES),
-            Argument::required(
-                "epoch",
-                "string",
-                "The publication epoch this measurement is attributed to.",
-            ),
-            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
-            Argument::required("head", "string", "The full published head SHA."),
-            Argument::required("base", "string", "The full published base SHA."),
-            Argument::required("digest", "string", "The complete-target manifest digest."),
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
             Argument::required(
                 "conditions",
                 "string",
@@ -1104,11 +1079,11 @@ pub const TOOLS: &[Tool] = &[
         arguments: &[
             ISSUE,
             RUN_ID,
-            Argument::required("epoch", "string", "The publication epoch."),
-            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
-            Argument::required("head", "string", "The exact published head SHA."),
-            Argument::required("base", "string", "The exact published base SHA."),
-            Argument::required("digest", "string", "The expected-target manifest digest."),
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
             Argument::optional("worktree", "string", "The isolated checkout."),
         ],
         effect: PointerEffect::Renew,
@@ -1154,11 +1129,11 @@ pub const TOOLS: &[Tool] = &[
         arguments: &[
             ISSUE,
             RUN_ID,
-            Argument::required("epoch", "string", "The publication epoch the panel reviews."),
-            Argument::required("pr", "integer", "The pull request number.").counting_from(1),
-            Argument::required("head", "string", "The full published head SHA."),
-            Argument::required("base", "string", "The full published base SHA."),
-            Argument::required("digest", "string", "The complete-target manifest digest."),
+            RECEIPT_EPOCH,
+            RECEIPT_PR,
+            RECEIPT_HEAD,
+            RECEIPT_BASE,
+            RECEIPT_DIGEST,
             Argument::required(
                 "count",
                 "integer",
@@ -1386,9 +1361,9 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "target",
         contract_name: "target",
-        description: "The complete delivery target as a path/mode/blob manifest with one digest. \
-                      Read-only. When `recorded_base` is given, answers how the base has moved \
-                      instead: none, compatible, overlapping, conflicting or unknown.",
+        description: "The delivery target: base, head, digest, path count. Read-only. \
+                      When `recorded_base` is given, answers how the base has moved instead: \
+                      none, compatible, overlapping, conflicting or unknown.",
         operation: "target",
         arguments: &[
             Argument::required("base", "string", "The base SHA."),
@@ -1401,9 +1376,10 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional("worktree", "string", "The isolated checkout."),
             Argument::optional("native_start", "string", "A reviewer's target to compare."),
             Argument::optional(
-                "brief",
+                "manifest",
                 "boolean",
-                "Omit the manifest array, keeping base, head, digest, paths and uncommitted.",
+                "Add the path/mode/blob manifest: to save for native_start, or to read a \
+                 difference path by path.",
             ),
         ],
         effect: PointerEffect::None,

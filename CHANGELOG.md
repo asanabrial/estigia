@@ -12,6 +12,20 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The tool menu says each shared thing once.** Issue #5. The receipt arguments, `run_id` and `issue`
+  carry one short description each; `collect_review_input` and `launch_review_input` no longer list
+  refusal codes; `record_review_finding` no longer advertises `lens`, which only ever refused. The
+  unreadable-context list falls from 44,318 to 42,643 bytes, autonomous is 40,901 and assisted 14,380
+  (`docs/review-cost.md`). `republish_review` stays separate on purpose.
+- **`target` answers the brief form unless the manifest is asked for.** Issue #5. Without arguments the
+  operation returns base, head, digest, path count and uncommitted paths; the per-file `manifest` array,
+  about 100 bytes per tracked file, comes back only with `--manifest` (`manifest: true` on the tool), which
+  replaces `--brief`. The digest and the `--native-start` comparison are unchanged, and a file saved for
+  that comparison has to be written with the manifest.
+- **`tools/list` advertises only the tools the process can call.** Issue #5. Under `Workflow: assisted` the
+  menu omits the twenty `TRACKER_WRITERS` tools that workflow refuses; under any other readable workflow it
+  omits `assist` and `draft_pr`; an unreadable context still lists everything. A hidden name still answers
+  its typed refusal when called (`docs/review-cost.md`).
 - **`SKILL.md` states each loading condition once and loads the blind-judges policy only when a review
   needs it.** Issue #4. The reference-loading conditions live in the References table alone; step 5 says to
   follow `review_status`'s `next` transition and to load `blind-judges.md` on an escalated stop, a correction

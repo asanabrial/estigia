@@ -129,7 +129,7 @@ pub fn handle_line(line: &str, context: Result<&GateContext, &Refusal>) -> Optio
 
     Some(match method {
         "initialize" => success(id, initialize(&params)),
-        "tools/list" => success(id, json!({ "tools": tool_schemas() })),
+        "tools/list" => success(id, json!({ "tools": tool_schemas(context) })),
         "tools/call" => match call(&params, context) {
             Ok(result) => success(id, result),
             Err(message) => error_response(id, code::INVALID_PARAMS, &message),
@@ -170,8 +170,20 @@ fn initialize(params: &Value) -> Value {
     })
 }
 
-fn tool_schemas() -> Vec<Value> {
-    TOOLS.iter().map(Tool::schema).collect()
+/// The tools this process can call. The context is fixed for the process, so
+/// the list never changes under a client; a context that cannot be read lists
+/// everything, and a hidden name still dispatches and refuses by its own rule.
+fn tool_schemas(context: Result<&GateContext, &Refusal>) -> Vec<Value> {
+    let workflow = context.ok().and_then(|context| context.workflow);
+    TOOLS
+        .iter()
+        .filter(|tool| match workflow {
+            Some(crate::config::Workflow::Assisted) => !tools::writes_the_tracker(tool.name),
+            Some(_) => !tools::is_assisted_only(tool.name),
+            None => true,
+        })
+        .map(Tool::schema)
+        .collect()
 }
 
 fn call(params: &Value, context: Result<&GateContext, &Refusal>) -> Result<Value, String> {

@@ -410,7 +410,7 @@ read   check_closing_keywords (issue)
 read   review_status    (issue)   # carries `lane` and `corrections`
 read   review_read      (issue, view, epoch, id, with_text, candidate, request, path, side, pr, head, base, digest, phase, worktree)
 read   review_tier      (base, head, parent_head, clearing_finding)
-read   target           (base, recorded_base, worktree, native_start, brief)
+read   target           (base, recorded_base, worktree, native_start, manifest)
 read   tasks            (issue)   # the ODD checklist, from the local store
 WRITE  claim            (issue, run_id, horizon[, takeover, target_operation, force, reason_file])
 WRITE  heartbeat        (issue, run_id, expect_state, body_file)

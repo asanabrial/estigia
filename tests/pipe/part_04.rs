@@ -1267,7 +1267,7 @@ fn release_ci_restores_a_receipt_for_a_run_that_did_not_publish_it() {
         config: Vec::new(),
         repo: None,
     };
-    let target = estigia::transport::target::expected_target(&context, &base, None, None, true)
+    let target = estigia::transport::target::expected_target(&context, &base, None, None, false)
         .expect("the fixture checkout's own target is derivable");
     let digest = target["digest"]
         .as_str()
@@ -1481,7 +1481,7 @@ fn delivery_delivers_a_receipt_holding_an_unanswered_non_blocking_finding() {
         config: Vec::new(),
         repo: None,
     };
-    let target = estigia::transport::target::expected_target(&context, &base, None, None, true)
+    let target = estigia::transport::target::expected_target(&context, &base, None, None, false)
         .expect("the fixture checkout's own target is derivable");
     let digest = target["digest"]
         .as_str()
