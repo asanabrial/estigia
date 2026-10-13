@@ -931,3 +931,75 @@ fn the_title_search_quotes_the_title_as_one_phrase() {
         "the title was not searched as one quoted phrase: {calls}"
     );
 }
+
+const NOTES_CHANGELOG: &str = "# Changelog\n\n## 0.2.0 - unreleased\n\nThe entry.\n";
+
+fn notes_of(root: &std::path::Path) -> Result<serde_json::Value, Failure> {
+    changelog_notes(
+        &local_context(root),
+        std::path::Path::new("CHANGELOG.md"),
+        "0.2.0",
+        false,
+        None,
+    )
+}
+
+#[test]
+fn notes_are_refused_while_a_fragment_waits_to_be_assembled() {
+    let root = tempfile::tempdir().expect("a repository");
+    std::fs::write(root.path().join("CHANGELOG.md"), NOTES_CHANGELOG).expect("the changelog");
+    std::fs::create_dir(root.path().join("changes")).expect("changes/");
+    for name in ["9-nine.md", "10-ten.md", ".gitkeep"] {
+        std::fs::write(
+            root.path().join("changes").join(name),
+            "section: The harness\n\n- **A change.**\n",
+        )
+        .expect("a fragment");
+    }
+
+    let Err(failure) = notes_of(root.path()) else {
+        panic!("notes were read past an unassembled fragment");
+    };
+    let answer = failure.envelope();
+
+    assert_eq!(answer["reason"], "unassembled-changelog-fragments");
+    assert_eq!(
+        answer["fragments"],
+        serde_json::json!(["10-ten.md", "9-nine.md"])
+    );
+    let action = answer["action"].as_str().expect("an action");
+    assert!(
+        action.contains("scripts/assemble-changelog.sh <version>"),
+        "{action}"
+    );
+}
+
+#[test]
+fn notes_are_read_when_changes_is_absent_or_holds_no_fragment() {
+    let root = tempfile::tempdir().expect("a repository");
+    std::fs::write(root.path().join("CHANGELOG.md"), NOTES_CHANGELOG).expect("the changelog");
+
+    let absent = notes_of(root.path()).expect("no changes/ directory");
+    assert_eq!(absent["ok"], true);
+
+    std::fs::create_dir(root.path().join("changes")).expect("changes/");
+    std::fs::write(root.path().join("changes/.gitkeep"), "").expect("a placeholder");
+    let empty = notes_of(root.path()).expect("an empty changes/ directory");
+    assert_eq!(empty["notes"], "The entry.");
+}
+
+#[test]
+fn another_tools_changes_directory_does_not_stop_the_notes() {
+    let root = tempfile::tempdir().expect("a repository");
+    std::fs::write(root.path().join("CHANGELOG.md"), NOTES_CHANGELOG).expect("the changelog");
+    let changes = root.path().join("changes");
+    std::fs::create_dir_all(changes.join("nested-1.md")).expect("a directory");
+    std::fs::write(changes.join("123.feature.md"), "Adds a thing.\n").expect("towncrier");
+    std::fs::write(changes.join("4-four.md"), "- no section line\n").expect("no section");
+    std::fs::write(changes.join("notes.md"), "section: The harness\n- x\n").expect("no number");
+    std::fs::write(changes.join(".gitkeep"), "").expect("a placeholder");
+
+    let answer = notes_of(root.path()).expect("nothing here is this repository's fragment");
+
+    assert_eq!(answer["notes"], "The entry.");
+}

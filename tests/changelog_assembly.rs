@@ -217,19 +217,75 @@ fn an_empty_or_missing_directory_assembles_nothing_and_succeeds() {
 }
 
 #[test]
+fn the_script_and_the_rust_definition_of_a_fragment_agree_on_every_case() {
+    let cases = [
+        ("4-four.md", "section: Setup\n\n- **Four.**\n", true),
+        ("123-a-b.md", "section: Setup\n\n- **A.**\n", true),
+        ("1-.md", "section: Setup\n\n- **A.**\n", true),
+        ("123.feature.md", "section: Setup\n\n- **A.**\n", false),
+        ("123.md", "section: Setup\n\n- **A.**\n", false),
+        ("notes.md", "section: Setup\n\n- **A.**\n", false),
+        ("x-1.md", "section: Setup\n\n- **A.**\n", false),
+        ("4-four.txt", "section: Setup\n\n- **A.**\n", false),
+        ("4-four.md", "- **No section line.**\n", false),
+        ("4-four.md", "section:Setup\n\n- **A.**\n", false),
+        ("4-four.md", "section: \n\n- **A.**\n", false),
+        ("4-four.md", " section: Setup\n\n- **A.**\n", false),
+    ];
+    for (name, text, expected) in cases {
+        let rig = Rig::new(CHANGELOG);
+        rig.fragment(name, text);
+        let script_accepts = rig.run("0.2.0").status.success();
+        let first_line = text.split('\n').next().unwrap();
+        assert_eq!(
+            estigia::transport::changelog::is_fragment(name, first_line),
+            expected,
+            "{name}: {text:?}"
+        );
+        assert_eq!(script_accepts, expected, "the script, for {name}: {text:?}");
+    }
+}
+
+#[test]
 fn this_repositorys_own_fragments_assemble_into_its_changelog() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let rig = Rig::new(&std::fs::read_to_string(root.join("CHANGELOG.md")).expect("changelog"));
     let own = root.join("changes");
-    let Ok(entries) = std::fs::read_dir(&own) else {
-        return;
+    let names: Vec<_> = match std::fs::read_dir(&own) {
+        Ok(entries) => entries
+            .map(|entry| entry.expect("an entry").file_name())
+            .filter(|name| !name.to_string_lossy().starts_with('.'))
+            .collect(),
+        Err(error) => {
+            assert_eq!(
+                error.kind(),
+                std::io::ErrorKind::NotFound,
+                "changes/ is neither readable nor absent: {error}"
+            );
+            Vec::new()
+        }
     };
-    for entry in entries.flatten() {
-        std::fs::copy(entry.path(), rig.changes().join(entry.file_name())).expect("a copy");
+
+    if names.is_empty() {
+        assert!(
+            !own.exists() || own.is_dir(),
+            "changes/ exists and is not a directory"
+        );
+    } else {
+        for name in &names {
+            std::fs::copy(own.join(name), rig.changes().join(name)).expect("a copy");
+        }
+        let before = rig.text();
+
+        let output = rig.run(env!("CARGO_PKG_VERSION"));
+
+        assert!(output.status.success(), "{}", stderr(&output));
+        assert!(rig.remaining().is_empty(), "{:?}", rig.remaining());
+        assert_ne!(
+            rig.text(),
+            before,
+            "{} fragments changed nothing",
+            names.len()
+        );
     }
-
-    let output = rig.run(env!("CARGO_PKG_VERSION"));
-
-    assert!(output.status.success(), "{}", stderr(&output));
-    assert!(rig.remaining().is_empty());
 }
