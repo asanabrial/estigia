@@ -197,6 +197,7 @@ const REFUSED: &[&str] = &[
     "correction-budget-exceeded",
     "correction-outside-reviewed-scope",
     "delegated-definition-unowned",
+    "delivery-not-verified",
     "delivery-pr-mismatch",
     "delivery-pr-unidentified",
     "delivery-route-retired",

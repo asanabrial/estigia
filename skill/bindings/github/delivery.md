@@ -466,6 +466,12 @@ idempotent, so running it against an
 already-closed issue costs one call. The final `gh issue close` is then a no-op and may report the
 issue as already closed — that is success, not an error.
 
+**`done` verifies the merge.** With a confirmed review receipt on the issue, `transition --to done` first
+reads the receipt's pull request and is refused as `delivery-not-verified` unless it is merged by a merge
+commit whose second parent is the reviewed head and whose first parent descends from the reviewed base. The
+refusal names the merge commit and its parents. It runs after the merge and `record_spend`, needs no closing
+reference, and the answer carries `delivery` (pull request, merge commit, parents). No receipt, no check.
+
 That is the **final-delivery** path. An intermediate slice of a retained issue must not borrow it:
 record the workflow state that should survive before merging, renew with
 `verify-claim --allow-closed-by-pr <pr>` after the linked PR closes the issue, reopen it with

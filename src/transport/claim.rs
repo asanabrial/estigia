@@ -30,6 +30,7 @@ pub use capture::{
 pub(crate) fn failure_refusal(failure: &Failure) -> Refusal {
     capture::refusal_of(failure)
 }
+pub(crate) use close::verified_delivery;
 pub use recover::{RecoverReview, host_repo_of, recover_review};
 pub use status::review_status;
 pub(crate) use status::{current_review_transaction, repo_of};
