@@ -1212,7 +1212,9 @@ const AFFIRMED: &[(&str, u64)] = &[
     // function. Deliberately too-tight: it is a line filter, so a call written
     // in a shape it does not see — inside a `#[cfg(test)]` block in a production
     // file, through a macro, a function pointer or a `use` alias — escapes it.
-    ("install-planned-callers", 5569553564125469859),
+    // Reaffirmed for issue #36: `install_planned` now asks `skill::checkout_root` rather than
+    // `here.join(".git")`; its call sites and the preflight in front of them are untouched.
+    ("install-planned-callers", 10948558613944442242),
     // `tracker-transport-absent` — new on 2026-10-05, issue #346, reaffirmed on
     // 2026-10-05 by issue #847. `Tracker` has two variants now: `Github`, whose
     // `transport()` answers `Some`, and `Linear`, whose `transport()` answers
