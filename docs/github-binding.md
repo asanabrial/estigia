@@ -54,7 +54,7 @@ request that only says `Refs #<n>` is delivered all the same, and refusing it wo
 un-shippable.
 
 A refusal is `delivery-not-verified`, with a `cause` (`not-merged`, `second-parent-is-not-the-reviewed-head`,
-`reviewed-base-is-not-behind-the-first-parent`) and the merge commit and parents it read. A squash or rebase merge is
+`reviewed-base-is-not-behind-the-first-parent`, and `merge-commit-unreadable` for a merge sha that is not 40 hex) and the merge commit and parents it read. A squash or rebase merge is
 refused earlier, as `delivery-topology-mismatch`. An issue with no confirmed receipt moves as before, and so does every
 state other than `done`. The check reads GitHub, so it also runs when the tracker is closed to writes: a merge it
 cannot read refuses the `done` rather than recording it unverified. The same check serves the CLI and the
