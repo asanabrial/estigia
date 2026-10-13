@@ -50,6 +50,11 @@ does not reproduce byte for byte is refused. The operator supplies a `command` t
 declared for the operator. The row is absent when every such file is declared or there is none. It reads the
 working tree, unlike the review, which reads only the base.
 
+When `estigia.generated.toml` exists but cannot be read or does not parse, and a lockfile is tracked, the row
+says so and gives the reason instead of listing lockfiles. Which of them the file declares is unknown, so none
+is called undeclared and no `[[generated]]` entry is shown. It stays advisory. A file that is absent declares
+nothing, as before.
+
 ## Only the base declares
 
 A declaration counts only when read from the **base** commit of the change, through `git` against

@@ -12,6 +12,10 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The `lockfiles` row says when the declaration cannot be read.** Issue #22. A present `estigia.generated.toml`
+  that does not parse used to be read as declaring nothing, so every tracked lockfile was called undeclared. The row
+  now says the file could not be read, with the reason, lists no lockfile and shows no `[[generated]]` entry; it
+  stays advisory (`docs/generated-files.md`). A test also pins the "none is suggested" sentence of issue #25.
 - **`doctor` names lockfiles nobody declared as generated.** Issue #7. A new advisory `lockfiles` row lists each
   tracked lockfile (eighteen known basenames) that `estigia.generated.toml` does not declare and the `[[generated]]`
   entry to complete, with no suggested `command` because the usual generators re-resolve dependencies instead of
