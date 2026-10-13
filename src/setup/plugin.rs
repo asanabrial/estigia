@@ -1290,6 +1290,8 @@ const preamble = (run_id, dischargeable) =>
   PREAMBLE.cap +
   PREAMBLE.close;
 
+const held = (issue, run_id) => fill(PREAMBLE.held, {{ issue, run_id }});
+
 const ask = async (sessionID, cwd, withCompleted) => {{
   const run = shell();
   if (typeof run !== "function") {{
@@ -1350,10 +1352,13 @@ const parse = (text) => {{
   return {{ prompt, max: cap ? Number(cap[1]) : null, wait: minutes, refused }};
 }};
 
-const enqueue = (ctx, goal, sessionID, dischargeable) =>
+const enqueue = (ctx, goal, sessionID, dischargeable, issue = null) =>
   ctx.session.prompt({{
     sessionID,
-    text: `${{preamble(goal.run_id, dischargeable)}}\n\n${{goal.prompt}}`,
+    text:
+      issue === null
+        ? `${{preamble(goal.run_id, dischargeable)}}\n\n${{goal.prompt}}`
+        : held(issue, goal.run_id),
     delivery: "queue",
   }});
 
@@ -1667,7 +1672,15 @@ const consider = async (ctx, sessionID, lapsed) => {{
     }}
   }}
   let dischargeable = 0;
-  if (read.said?.live !== true) {{
+  let issue = null;
+  if (read.said?.live === true) {{
+    const named = read.said?.issue;
+    if (named === null || named === undefined || named === "") {{
+      await stop(ctx, sessionID, "Estigia did not report which issue this run holds");
+      return;
+    }}
+    issue = String(named);
+  }} else {{
     if (typeof read.said?.stop_after === "string" && read.said.stop_after !== "") {{
       await stop(
         ctx,
@@ -1734,7 +1747,7 @@ const consider = async (ctx, sessionID, lapsed) => {{
     return;
   }}
   disarm(sessionID);
-  await enqueue(ctx, goal, sessionID, dischargeable);
+  await enqueue(ctx, goal, sessionID, dischargeable, issue);
   await reacted(ctx, sessionID, "enqueued");
 }};
 

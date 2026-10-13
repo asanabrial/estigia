@@ -12,6 +12,16 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The goal judges run every third turn, and Pi's judge sees a bounded transcript.** Issue #3. The generic
+  `/goal` on OpenCode and on Pi counts each turn and asks the model only on every third and on the turn that
+  reaches the cap; the turns between continue with the condition and no judge call. Pi's transcript is capped
+  at 4,000 characters per user or assistant message and 20,000 in all, newest kept, instead of 120,000.
+  OpenCode builds the judge's context itself, so there only the cadence bounds it.
+- **The OpenCode and Pi loops continue a live claim with the held sentence, not the whole objective.** Issue #3.
+  While `estigia goal --json` says the run holds a live claim, the next turn is the text the Claude and Codex
+  `Stop` hooks already send (`harness::loop_text::held`, filled by `hook::stop_block` and by both plugins),
+  without the preamble or `/flow dev`; a live answer naming no issue stops the loop. The first turn and the
+  turns that continue on claimable work are unchanged.
 - **No third-party project is named in the code, the tests or the shipped skill.** Issue #1234. The
   provenance prose in `skill/` is restated on its own terms; the MIT notice for the files derived from
   another project now travels in `THIRD_PARTY_NOTICES.md`, linked from the README. The Pi loop and

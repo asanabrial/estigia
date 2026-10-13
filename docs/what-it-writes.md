@@ -249,7 +249,12 @@ issue is done and released — while another issue is claimable by it, or while 
 recorded exit condition already holds and only the discharge stands between it and a claim. It
 decides that by asking a read-only verb, `estigia goal`, which answers whether this session's run
 holds a live claim, on which issue, and, when it holds none, how many issues it could claim and how
-many it could discharge, and what is held or pending. Completion is not a value the
+many it could discharge, and what is held or pending. **A live claim is continued with the held
+text alone** (issue #3): the same sentence the Claude and Codex `Stop` hooks hand back, naming the issue
+and the run, with no preamble and no `/flow dev` — the session already holds that context, and
+repeating the objective every turn only grew it. The preamble and the objective go out once, at
+`/flow-loop`, and again whenever the run holds no live claim and the loop continues on claimable or
+dischargeable work. A live answer that names no issue stops the loop. Completion is not a value the
 agent supplies: the plugin reads no `<promise>` and takes no done input. **The objective defaults
 to `/flow dev`** (issue #642): `/flow-loop` with no text, or with only flags, stores and enqueues
 `/flow dev`; text whose first word is `/flow` or `flow` is used as given; any other text is
@@ -460,7 +465,8 @@ loop below takes that entry over.
 
 **One objective rule and one preamble.** `src/harness/loop_text.rs` holds the rule (`objective`: no
 text is `dev`, text starting with the word `flow` is used as given, anything else follows `flow`) and
-the preamble text. The OpenCode plugin is rendered from those strings at `setup`, and Codex's hook
+the preamble text, and the held sentence (`held`) that `harness::hook::stop_block` fills and both
+plugins fill from `preamble_parts`. The OpenCode plugin is rendered from those strings at `setup`, and Codex's hook
 builds its prompt from the same functions at run time; a table of cases is asserted by the Rust
 tests and by the node-driven plugin test. What differs is the invocation: Codex has no custom slash
 commands and invokes a skill by mention, so the same rule renders `$flow dev` there and `/flow dev`
@@ -506,7 +512,8 @@ and a plain uninstall removes them.
 
 **What the `Stop` hook decides.** While a stored loop is running, the hook continues the turn with the
 next `/flow` prompt — the preamble from `harness::loop_text` and the `Slash` invocation, the same
-shared decision Codex's hook uses — whenever `estigia goal` says the run is live or another issue is
+shared decision Codex's hook uses — or, while the run holds a live claim, with the held text alone
+(`harness::hook::stop_block`) — whenever `estigia goal` says the run is live or another issue is
 claimable or dischargeable; it honours a pending `stop-after`; it stops at the stored `--max`, counted
 by `estigia goal --completed` as issues that reached `done` under the run; it lets the turn end and
 says what the queue waits on when only held or pending work is left, since a `Stop` hook cannot wait;
@@ -552,7 +559,9 @@ marker).
 
 - `/goal <condition> [--max <n>]` stores the condition for the session, in the location it was asked
   in, and enqueues a first prompt. After every `session.execution.succeeded` for that session the
-  plugin asks an evaluator whether the condition holds. **Met** stops the goal with a visible message.
+  plugin counts the turn, and on every third turn (`JUDGE_EVERY`) and on the turn that reaches the cap
+  asks an evaluator whether the condition holds; the turns between enqueue the condition and "Keep
+  working toward it" without asking (issue #3). **Met** stops the goal with a visible message.
   **Not met** enqueues another prompt carrying the condition and the evaluator's reason, until the
   turn cap (default 25, `--max` overrides) stops it. Bare `/goal` prints the condition, the turns,
   the last judgement and whether it stopped; `/goal clear` stops it.
@@ -566,7 +575,8 @@ OpenCode 2.0.20's `POST /api/session/:sessionID/generate`, whose own description
 transient text from the current session context without mutating session history", with a
 `{ prompt }` payload and a `{ data: { text } }` response. That is the honest fit: the judge sees
 the transcript the session already holds, no child session is created and none is left behind, and
-nothing is added to the history the next turn reads. The prompt asks for `MET` or `NOT MET` on the
+nothing is added to the history the next turn reads. The host builds that context itself, so on
+OpenCode only the cadence bounds what a judgement costs; the plugin cannot cut it. The prompt asks for `MET` or `NOT MET` on the
 first line and a reason on the second; the plugin reads the first line case-insensitively, ignoring trailing punctuation, and **anything
 else, an empty answer, a thrown error or a missing method stops the goal** — never continues it.
 The answer is read as `{ text }` or `{ data: { text } }`, since which of the two the plugin
@@ -796,8 +806,8 @@ compaction, not `agent_end` — it asks again, and while Estigia says the run is
 claimable or dischargeable, it sends the next turn with `pi.sendMessage(..., { triggerTurn: true,
 deliverAs: "followUp" })`. Work that is only held or blocked on a condition that may still come true waits
 on a timer (`--wait`, default five minutes) and asks again; an answer that arrived but could not be read
-is read again on the wait timer, three reads in all, and then stops the loop, as for OpenCode. The objective, the preamble and the
-`--max` counting are the ones `harness::loop_text` renders for OpenCode.
+is read again on the wait timer, three reads in all, and then stops the loop, as for OpenCode. The objective, the preamble, the
+held text a live claim is continued with, and the `--max` counting are the ones `harness::loop_text` renders for OpenCode.
 
 Five things differ from OpenCode by design. The binary is called asynchronously with a 30-second
 timeout, and a timeout, a binary that could not be run or an exit with no code is "did not answer": the
@@ -824,8 +834,10 @@ bare `/goal` to report, `/goal clear`, `/loop [interval] <prompt> [--max n]` and
 
 Four things differ from OpenCode by design. The judge is the session's model, asked through
 `ctx.modelRegistry.streamSimple` with a plain-text rendering of the session's user, assistant and
-tool-result messages (tool output cut at 2,000 characters, the whole at 120,000) and the OpenCode
-judgement prompt; the call carries an `AbortSignal` that fires after 120 seconds, and a timeout, a thrown
+tool-result messages (a user or assistant message cut at 4,000 characters, tool output at 2,000, the
+whole at 20,000 keeping the newest) and the OpenCode judgement prompt, asked on every third turn
+(`JUDGE_EVERY`) and on the turn that reaches the cap as for OpenCode, with the turns between continuing
+the goal without a call (issue #3); the call carries an `AbortSignal` that fires after 120 seconds, and a timeout, a thrown
 error, a stop reason of `error`, no model or an answer whose first line is neither `MET` nor `NOT MET`
 stops the goal and says so. A goal continues on `agent_settled` only while `ctx.isIdle()`, and a turn Pi
 reports as aborted stops the goal and a self-paced loop; an interval loop runs on its timer and ignores

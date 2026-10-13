@@ -19,7 +19,9 @@ const MAX_INTERVAL_MS = 2147483647;
 const UNITS = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
 const JUDGE_TIMEOUT_MS = 120000;
 const JUDGE_MAX_TOKENS = 200;
-const TRANSCRIPT_LIMIT = 120000;
+const JUDGE_EVERY = 3;
+const MESSAGE_LIMIT = 4000;
+const TRANSCRIPT_LIMIT = 20000;
 const RESULT_LIMIT = 2000;
 const DELIVERY = { triggerTurn: true, deliverAs: "followUp" };
 
@@ -105,9 +107,9 @@ const transcriptOf = (ctx) => {
   const lines = [];
   for (const message of Array.isArray(messages) ? messages : []) {
     if (message?.role === "user" || message?.role === "custom") {
-      lines.push(`[user]\n${textOf(message.content, TRANSCRIPT_LIMIT)}`);
+      lines.push(`[user]\n${textOf(message.content, MESSAGE_LIMIT)}`);
     } else if (message?.role === "assistant") {
-      lines.push(`[assistant]\n${textOf(message.content, TRANSCRIPT_LIMIT)}`);
+      lines.push(`[assistant]\n${textOf(message.content, MESSAGE_LIMIT)}`);
     } else if (message?.role === "toolResult") {
       lines.push(`[tool result: ${message.toolName ?? "tool"}]\n${textOf(message.content, RESULT_LIMIT)}`);
     }
@@ -202,14 +204,19 @@ export default function (pi) {
   };
 
   const consider = async (ctx, session, goal) => {
+    const turns = goal.turns + 1;
+    if (turns % JUDGE_EVERY !== 0 && turns < goal.max) {
+      goal.turns = turns;
+      enqueue(`Goal: ${goal.condition}\nKeep working toward it.`);
+      return;
+    }
     const verdict = await judge(ctx, goal);
     if (!ownGoal(ctx, session, goal)) return;
     if (!verdict.read) {
       stopGoal(ctx, goal, `the evaluator's answer could not be read (${verdict.why})`);
       return;
     }
-    goal.turns += 1;
-    const turns = goal.turns;
+    goal.turns = turns;
     goal.judged = { at: new Date().toISOString(), met: verdict.met, reason: verdict.reason, turns };
     if (verdict.met) {
       closeGoal(goal, "the condition was judged met");
@@ -387,7 +394,7 @@ export default function (pi) {
     });
     if (running(previous)) say(ctx, `Goal replaced: it was "${previous.condition}".`);
     enqueue(
-      `Goal: ${rest}\nWork toward it. After each of your turns the condition is judged from this conversation, ` +
+      `Goal: ${rest}\nWork toward it. Every third turn, and on the last turn the cap allows, the condition is judged from this conversation, ` +
         "and you are prompted again until it holds.",
     );
   };

@@ -1325,10 +1325,7 @@ pub fn run_as(
 pub fn stop_block(issue: &crate::identity::Identity, run_id: &str) -> Value {
     json!({
         "decision": "block",
-        "reason": format!(
-            "estigia: issue #{issue} is still held by {run_id} — the claim is still open, \
-             so the turn continues. Finish the work the claim covers before stopping."
-        ),
+        "reason": super::loop_text::held(&issue.to_string(), run_id),
     })
 }
 

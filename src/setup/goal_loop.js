@@ -16,6 +16,7 @@
 const GOAL = "goal-loop:goal:";
 const LOOP = "goal-loop:loop:";
 const DEFAULT_MAX = 25;
+const JUDGE_EVERY = 3;
 const MIN_INTERVAL_MS = 10000;
 const MAX_INTERVAL_MS = 2147483647;
 const UNITS = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
@@ -129,6 +130,14 @@ const judge = async (ctx, sessionID, goal) => {
 const consider = async (ctx, sessionID) => {
   const goal = await ctx.storage.get(GOAL + sessionID);
   if (!running(goal) || goal.directory !== locationOf(ctx)) return;
+  const counted = goal.turns + 1;
+  if (counted % JUDGE_EVERY !== 0 && counted < goal.max) {
+    const current = await ctx.storage.get(GOAL + sessionID);
+    if (!running(current) || current.id !== goal.id) return;
+    await ctx.storage.set(GOAL + sessionID, { ...current, turns: counted });
+    await enqueue(ctx, sessionID, `Goal: ${goal.condition}\nKeep working toward it.`);
+    return;
+  }
   const verdict = await judge(ctx, sessionID, goal);
   const held = await ctx.storage.get(GOAL + sessionID);
   if (!running(held) || held.id !== goal.id) return;
@@ -254,7 +263,7 @@ const startGoal = async (ctx, sessionID, text) => {
   await enqueue(
     ctx,
     sessionID,
-    `Goal: ${rest}\nWork toward it. After each of your turns the condition is judged from this conversation, ` +
+    `Goal: ${rest}\nWork toward it. Every third turn, and on the last turn the cap allows, the condition is judged from this conversation, ` +
       "and you are prompted again until it holds.",
   );
 };

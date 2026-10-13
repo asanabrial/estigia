@@ -5948,8 +5948,11 @@ pointer that leaves it names the document it points at.
   returns no text, which stops the goal as unreadable, never as met), and what the judge is shown. The
   transcript is the extension's own plain-text rendering of user, custom, assistant text and tool-result
   messages from `buildSessionProjection`, not `convertToLlm`'s: images, thinking, tool-call arguments,
-  compaction and branch summaries are not rendered, tool output is cut at 2,000 characters and the whole at
-  120,000, so after a compaction the judge sees less than the model does. The goal and loop live in the
+  compaction and branch summaries are not rendered, a user or assistant message is cut at 4,000 characters,
+  tool output at 2,000 and the whole at 20,000 keeping the newest, so after a compaction, or a long
+  turn, the judge sees less than the model does. The judge runs on every third turn and on the cap
+  turn, so a condition that holds after turn 1 is noticed at turn 3, and the turns it was not asked on
+  were spent: no completion marker in the session is read to judge earlier (issue #3). The goal and loop live in the
   extension's memory and `session_shutdown` clears them; that the event fires for `/new`, `/resume` and
   `/fork` as well as quitting is read from the documentation's statement about session replacement, not
   observed. Another extension that registers `goal` or `loop` is not detected, and which registration Pi

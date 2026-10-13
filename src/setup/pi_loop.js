@@ -46,6 +46,8 @@ const preamble = (run_id, dischargeable, capped) =>
   (capped ? PREAMBLE.cap : "") +
   PREAMBLE.close;
 
+const held = (issue, run_id) => fill(PREAMBLE.held, { issue, run_id });
+
 const objective = (given) =>
   given === ""
     ? OBJECTIVE.default
@@ -275,11 +277,14 @@ const retryOrStop = (pi, ctx, session, read) => {
   waited(pi, ctx, session, `${why}; retrying`, attempts);
 };
 
-const enqueue = (pi, goal, dischargeable) =>
+const enqueue = (pi, goal, dischargeable, issue = null) =>
   pi.sendMessage(
     {
       customType: MESSAGE_TYPE,
-      content: `${preamble(goal.run_id, dischargeable, typeof goal.max === "number")}\n\n${goal.prompt}`,
+      content:
+        issue === null
+          ? `${preamble(goal.run_id, dischargeable, typeof goal.max === "number")}\n\n${goal.prompt}`
+          : held(issue, goal.run_id),
       display: true,
     },
     { triggerTurn: true, deliverAs: "followUp" },
@@ -312,7 +317,15 @@ const consider = async (pi, ctx, session) => {
     }
   }
   let dischargeable = 0;
-  if (read.said?.live !== true) {
+  let issue = null;
+  if (read.said?.live === true) {
+    const named = read.said?.issue;
+    if (named === null || named === undefined || named === "") {
+      stop(ctx, session, "Estigia did not report which issue this run holds");
+      return;
+    }
+    issue = String(named);
+  } else {
     if (typeof read.said?.stop_after === "string" && read.said.stop_after !== "") {
       stop(
         ctx,
@@ -360,7 +373,7 @@ const consider = async (pi, ctx, session) => {
   }
   if (!running(loops.get(session)) || stopRequested.has(session)) return;
   disarm(session);
-  enqueue(pi, goal, dischargeable);
+  enqueue(pi, goal, dischargeable, issue);
   reacted(goal, "enqueued");
 };
 

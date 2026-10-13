@@ -123,7 +123,7 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Fifty-two tests **require** `node` on the path, and all fifty-two drive the OpenCode plugins and
+   --no-deps`. Sixty-six tests **require** `node` on the path, and all sixty-six drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
    let a gate defect stand. Four are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
@@ -131,16 +131,20 @@ a second copy that will disagree.
    `the_opencode_plugin_hands_an_oversized_input_to_the_gate_on_standard_input` and
    `the_plugin_says_so_when_the_gate_returns_no_exit_code`; two drive the Pi gate extension's display,
 `the_pi_extension_shows_the_claim_the_binary_reports_and_clears_it_when_there_is_none` and
-`the_pi_extension_draws_a_refusal_card_with_the_binarys_words_and_asks_the_model_for_nothing`; five drive the optional loop
+`the_pi_extension_draws_a_refusal_card_with_the_binarys_words_and_asks_the_model_for_nothing`; seven drive the optional loop
    plugin (`the_loop_plugin_continues_while_estigia_says_there_is_work`,
    `the_loop_plugin_waits_on_held_or_pending_work_and_asks_again`,
    `the_loop_plugin_waits_while_a_child_session_runs_and_resumes_when_it_ends`,
-   `the_loop_plugin_defaults_its_objective_to_flow_dev` and
-   `the_loop_plugin_records_what_it_saw_and_listens_again`); six drive the generic goal and loop
-   plugin through `run_goal_loop_driver`; three drive the review relay plugin —
+   `the_loop_plugin_defaults_its_objective_to_flow_dev`,
+   `the_loop_plugin_records_what_it_saw_and_listens_again`,
+   `the_loop_plugin_continues_a_live_claim_with_the_held_text_alone` and
+   `the_loop_plugin_stops_on_a_live_answer_that_names_no_issue`); eight drive the generic goal and loop
+   plugin through `run_goal_loop_driver`, among them
+   `the_generic_goal_judges_every_third_turn_and_continues_the_others_unasked` and
+   `the_generic_goal_judges_the_turn_that_reaches_its_cap`; three drive the review relay plugin —
    `the_review_relay_materialises_the_prompt_and_admits_the_answer`,
    `the_review_relay_keeps_the_reason_when_the_relay_exits_before_reading_stdin` and
-   `the_review_relay_keeps_unavailable_and_stale_apart` — and reproduce the two v4 relay defects; one drives
+   `the_review_relay_keeps_unavailable_and_stale_apart` — and reproduce the two v4 relay defects; eight drive
    the Pi gate extension, `the_pi_extension_blocks_on_one_and_two_and_lets_a_gate_that_did_not_answer_through_with_a_word`,
    `the_pi_extension_gates_a_tool_by_the_shape_of_its_input_and_not_only_by_its_name`,
    `the_pi_extension_bounds_the_gate_call_and_shows_the_person_a_write_that_went_out_unchecked`,
@@ -161,15 +165,19 @@ a second copy that will disagree.
    and three drive the Pi review relay extension —
    `the_pi_review_relay_materialises_the_prompt_and_admits_the_answer`,
    `the_pi_review_relay_keeps_the_reason_when_the_binary_exits_before_reading_stdin` and
-   `the_pi_review_relay_keeps_unavailable_and_stale_apart`; and seven drive the Pi loop extension
+   `the_pi_review_relay_keeps_unavailable_and_stale_apart`; and eleven drive the Pi loop extension
    through `run_pi_loop_driver` —
    `the_pi_loop_registers_its_commands_and_listens_for_the_settled_turn`,
    `the_pi_loop_continues_while_estigia_says_there_is_work`,
    `the_pi_loop_waits_on_held_or_pending_work_and_asks_again`,
    `the_pi_loop_stops_and_says_so_when_estigia_does_not_answer`,
    `the_pi_loop_acts_only_in_the_session_that_asked_and_on_a_settled_idle_turn`,
-   `the_pi_loop_defaults_its_objective_to_flow_dev` and
-   `the_pi_loop_reports_what_it_holds_and_what_the_tracker_says`; and nine drive the Pi goal and loop
+   `the_pi_loop_defaults_its_objective_to_flow_dev`,
+   `a_pi_loop_timer_enqueues_through_the_extension_that_armed_it`,
+   `the_pi_loop_stops_on_a_requested_stop_and_clears_the_request_once`,
+   `the_pi_loop_continues_a_live_claim_with_the_held_text_alone`,
+   `the_pi_loop_stops_on_a_live_answer_that_names_no_issue` and
+   `the_pi_loop_reports_what_it_holds_and_what_the_tracker_says`; and twelve drive the Pi goal and loop
    extension through `run_pi_goal_loop_driver` —
    `the_pi_goal_loop_registers_goal_and_loop_and_nothing_that_collides`,
    `the_pi_goal_continues_on_an_unmet_judgement_and_stops_on_a_met_one`,
@@ -178,13 +186,16 @@ a second copy that will disagree.
    `a_judgement_that_never_answers_is_bounded_and_read_as_no_answer`,
    `a_stop_a_replacement_or_a_session_change_mid_judgement_is_not_overwritten`,
    `the_pi_goal_reports_clears_and_acts_only_on_a_settled_idle_turn_of_its_session`,
-   `a_child_session_runs_neither_goal_nor_loop` and
+   `a_child_session_runs_neither_goal_nor_loop`,
+   `the_pi_goal_judges_every_third_turn_and_continues_the_others_unasked`,
+   `the_pi_goal_judges_the_turn_that_reaches_its_cap`,
+   `the_pi_goal_bounds_the_transcript_the_evaluator_is_shown` and
    `the_pi_loop_repeats_on_an_interval_and_after_each_turn_and_stops`.
    None skips when `node` is missing; all fail and say so, since a skip
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that fifty-three tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that sixty-six tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here
