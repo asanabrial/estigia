@@ -1134,6 +1134,54 @@ fn with_no_routing_the_reviewer_cli_picks_its_own_model() {
     assert_eq!(launched[0].model, None);
 }
 
+const ROUTED_PER_ROLE: &str =
+    "reviewer=lens-model, refuter=refuter-model, validator=validator-model";
+
+fn routed_per_role(mut world: World) -> World {
+    world.context.config = vec![(
+        "Model routing".to_owned(),
+        ROUTED_PER_ROLE.to_owned(),
+        Source::Written,
+    )];
+    world
+}
+
+#[test]
+fn a_lens_launches_on_the_reviewer_model_when_every_role_is_routed() {
+    let world = routed_per_role(capturable());
+
+    let (outcome, launched) = capture(&world, RELIABILITY_LENS, answer_of(&[]));
+
+    assert!(outcome.is_ok(), "{outcome:?}");
+    assert_eq!(launched[0].model.as_deref(), Some("lens-model"));
+}
+
+#[test]
+fn the_refuter_launches_on_the_refuter_model_when_every_role_is_routed() {
+    let world = routed_per_role(refutable());
+
+    let (outcome, launched) = capture(
+        &world,
+        BATCH,
+        outcomes_of(&[("f-1", "refuted"), ("f-2", "refuted")]),
+    );
+
+    assert!(outcome.is_ok(), "{outcome:?}");
+    assert_eq!(launched[0].role, REFUTER);
+    assert_eq!(launched[0].model.as_deref(), Some("refuter-model"));
+}
+
+#[test]
+fn the_validator_launches_on_the_validator_model_when_every_role_is_routed() {
+    let world = routed_per_role(validator_owed());
+
+    let (outcome, launched) = capture(&world, VALIDATOR, passing());
+
+    assert!(outcome.is_ok(), "{outcome:?}");
+    assert_eq!(launched[0].role, VALIDATOR);
+    assert_eq!(launched[0].model.as_deref(), Some("validator-model"));
+}
+
 fn lens_report_focuses(world: &World) -> Vec<Option<String>> {
     let comments = Ledger::read_timeline_at(
         &store_path().expect("the scratch store"),
