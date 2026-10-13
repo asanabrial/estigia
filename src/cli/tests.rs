@@ -3557,6 +3557,31 @@ fn setting_a_row_on_the_repository_writes_its_own_file_and_refuses_an_agents_row
     assert_eq!(refusal.code, "setting-not-the-repositorys");
 }
 
+#[test]
+fn setting_a_row_on_the_repository_from_a_subdirectory_writes_the_checkouts_file() {
+    let repo = tempfile::tempdir().expect("a repository");
+    std::fs::create_dir_all(repo.path().join(".git")).expect("a checkout");
+    let deep = repo.path().join("apps").join("engine");
+    std::fs::create_dir_all(&deep).expect("a subdirectory");
+    let home = tempfile::tempdir().expect("a temporary home");
+    let options = SetupOptions {
+        home_dir: Some(home.path().to_path_buf()),
+        ..SetupOptions::default()
+    };
+
+    super::repository_set(Setting::Evidence, "measuring", &deep, &options)
+        .expect("a subdirectory of a checkout is inside it");
+
+    let written = std::fs::read_to_string(crate::skill::repository_config_path(repo.path()))
+        .expect("the checkout's own file was written");
+    assert!(written.contains("measuring"));
+    assert!(!deep.join(".git").exists());
+    assert_eq!(
+        crate::skill::known_repositories(home.path()),
+        vec![repo.path().to_path_buf()]
+    );
+}
+
 /// The screen writes the checkout it is **pointed at**, not the one it is in.
 ///
 /// The dropdown lets somebody load another checkout's answers without going

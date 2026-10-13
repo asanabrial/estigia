@@ -1356,6 +1356,17 @@ pub fn repository_config_path(repo_dir: &Path) -> PathBuf {
         .join(crate::config::LOCAL_FILE)
 }
 
+/// The top level of the checkout `dir` is inside: `dir` or its nearest ancestor
+/// that holds a `.git`, whether a directory or the `gitdir:` file of a linked
+/// worktree or submodule. `None` for a directory inside no checkout.
+pub fn checkout_root(dir: &Path) -> Option<PathBuf> {
+    dir.ancestors()
+        .find(|candidate| {
+            !candidate.as_os_str().is_empty() && candidate.join(".git").symlink_metadata().is_ok()
+        })
+        .map(Path::to_path_buf)
+}
+
 /// The git directory shared by a checkout and every worktree linked to it.
 ///
 /// Not `repo_dir/.git`, which is a **file** in a linked worktree. Joining onto
@@ -1378,10 +1389,18 @@ pub fn repository_config_path(repo_dir: &Path) -> PathBuf {
 /// with no `commondir` beside it — and that is right, because a submodule is
 /// its own repository and answers for itself.
 ///
-/// Anything else — no `.git`, an unreadable one, a file that does not say
-/// `gitdir:` — resolves to `repo_dir/.git`, which is where every ordinary
-/// checkout keeps it and where every file written before this existed still is.
+/// `repo_dir` need not be the top level: the nearest ancestor holding a `.git`
+/// is the checkout, as git itself finds it, so a session working from
+/// `apps/engine` reads the rows of the repository it is inside.
+///
+/// Anything else — no `.git` in `repo_dir` or above it, an unreadable one, a
+/// file that does not say `gitdir:` — resolves to `<top level>/.git`, which is
+/// where every ordinary checkout keeps it and where every file written before
+/// this existed still is. A directory inside no checkout resolves to its own
+/// `.git`, which does not exist, and so has no layer.
 fn git_common_dir(repo_dir: &Path) -> PathBuf {
+    let repo_dir = checkout_root(repo_dir).unwrap_or_else(|| repo_dir.to_path_buf());
+    let repo_dir = repo_dir.as_path();
     let dot_git = repo_dir.join(".git");
     if dot_git.is_dir() {
         return dot_git;
@@ -1506,7 +1525,7 @@ fn recorded_repositories(home: &Path) -> Vec<PathBuf> {
 /// was already set.
 pub fn remember_repository(home: &Path, repo_dir: &Path) {
     let mut known = recorded_repositories(home);
-    let repo_dir = repo_dir.to_path_buf();
+    let repo_dir = checkout_root(repo_dir).unwrap_or_else(|| repo_dir.to_path_buf());
     if known.contains(&repo_dir) {
         return;
     }
@@ -2567,6 +2586,85 @@ mod tests {
             super::repository_config_path(&repo).starts_with(&git_dir),
             "an ordinary checkout no longer keeps its answers under `.git`"
         );
+    }
+
+    fn linked_worktree_of(checkout: &Path, outside: &Path) -> PathBuf {
+        let linked = checkout.join(".git").join("worktrees").join("wt");
+        let worktree = outside.join("wt");
+        std::fs::create_dir_all(&linked).expect("the linked worktree's git directory");
+        std::fs::create_dir_all(&worktree).expect("the worktree");
+        std::fs::write(
+            worktree.join(".git"),
+            format!("gitdir: {}\n", linked.display()),
+        )
+        .expect("the pointer git writes in a linked worktree");
+        std::fs::write(linked.join("commondir"), "../..\n").expect("the shared directory");
+        worktree
+    }
+
+    #[test]
+    fn a_subdirectory_of_a_checkout_reads_the_checkouts_rows() {
+        let (_repository, path) = repository_with_rows("| Integration | trunk | branch |\n");
+        let deep = path.join("apps").join("engine");
+        std::fs::create_dir_all(&deep).expect("a subdirectory");
+
+        let (found, text) = repository_rows(&deep)
+            .expect("the rows read")
+            .expect("the subdirectory found no repository file");
+
+        assert_eq!(found, repository_config_path(&path));
+        assert!(text.contains("Integration"));
+    }
+
+    #[test]
+    fn a_subdirectory_of_a_linked_worktree_reads_the_checkouts_rows() {
+        let (_repository, path) = repository_with_rows("| Integration | trunk | branch |\n");
+        let outside = tempfile::tempdir().expect("somewhere for the worktree");
+        let worktree = linked_worktree_of(&path, outside.path());
+        let deep = worktree.join("apps").join("engine");
+        std::fs::create_dir_all(&deep).expect("a subdirectory of the worktree");
+
+        let (found, _) = repository_rows(&deep)
+            .expect("the rows read")
+            .expect("the worktree subdirectory found no repository file");
+
+        assert_eq!(found, repository_config_path(&path));
+    }
+
+    #[test]
+    fn a_directory_outside_every_repository_has_no_repository_layer() {
+        let outside = tempfile::tempdir().expect("a directory with no checkout above it");
+        let deep = outside.path().join("a").join("b");
+        std::fs::create_dir_all(&deep).expect("a nested directory");
+
+        assert!(repository_rows(&deep).expect("the rows read").is_none());
+        assert_eq!(
+            repository_config_path(&deep),
+            deep.join(".git")
+                .join("estigia")
+                .join(crate::config::LOCAL_FILE)
+        );
+    }
+
+    #[test]
+    fn a_subdirectory_of_a_submodule_answers_for_the_submodule() {
+        let outside = tempfile::tempdir().expect("somewhere to build a checkout");
+        let parent = outside.path().join("parent");
+        let module = parent.join(".git").join("modules").join("child");
+        let child = parent.join("child");
+        std::fs::create_dir_all(&module).expect("the submodule's git directory");
+        std::fs::create_dir_all(child.join("src")).expect("the submodule");
+        std::fs::write(
+            child.join(".git"),
+            format!("gitdir: {}\n", module.display()),
+        )
+        .expect("the submodule's pointer");
+
+        assert_eq!(
+            repository_config_path(&child.join("src")),
+            repository_config_path(&child)
+        );
+        assert!(repository_config_path(&child.join("src")).starts_with(&module));
     }
 
     /// Registering one checkout does not forget another that is merely away.

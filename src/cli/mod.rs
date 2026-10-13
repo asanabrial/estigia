@@ -805,7 +805,7 @@ pub(crate) fn install_planned(
         repository_settings.dedup();
     }
     let asks_for_a_file = !here.as_os_str().is_empty()
-        && here.join(".git").exists()
+        && skill::checkout_root(here).is_some()
         && chosen.first().is_some_and(|adapter| {
             changed_by_slug[adapter.slug]
                 .iter()
@@ -3138,7 +3138,7 @@ fn repository_set(
         refuse_a_row_looser_than_an_agent_holds(*row, row_value, options)?;
     }
     // A repository first: creating `.git` here would not make a checkout.
-    if !here.join(".git").exists() {
+    if skill::checkout_root(here).is_none() {
         return Err(Refusal::not_started(
             "not-a-repository",
             format!("{} is not a git checkout", here.display()),

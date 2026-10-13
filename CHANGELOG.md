@@ -12,6 +12,13 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **A repository's own file is found from any directory inside the checkout.** Issue #36. The repository override
+  (`<common dir>/estigia/estigia.local.md`) was looked for only at `<working directory>/.git`, so a session in a
+  subdirectory such as `apps/engine` read no repository layer and the contract's value applied: a repository that
+  disabled `Git operation window` still had commits denied by the machine-wide window. The checkout is now the
+  nearest ancestor holding a `.git` (directory or `gitdir:` file), for a linked worktree's subdirectory too; a
+  directory inside no checkout still has no layer and a submodule still answers for itself. `config set --repo`
+  and `config forget` work from a subdirectory and record the top level (`docs/configuration.md`).
 - **The `lockfiles` row says when the declaration cannot be read.** Issue #22. A present `estigia.generated.toml`
   that does not parse used to be read as declaring nothing, so every tracked lockfile was called undeclared. The row
   now says the file could not be read, with the reason, lists no lockfile and shows no `[[generated]]` entry; it

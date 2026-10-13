@@ -436,6 +436,47 @@ fn the_effective_schedule_layers_contract_local_and_repository() {
 }
 
 #[test]
+fn the_repository_schedule_applies_from_a_subdirectory_and_from_a_linked_worktree() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let skill = root.path().join("skill");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&skill).expect("a skill root");
+    std::fs::create_dir_all(repo.join(".git")).expect("a checkout");
+    std::fs::write(
+        skill.join(crate::skill::CONTRACT),
+        table("enabled mon-fri 08:00-17:00 inverted"),
+    )
+    .expect("a contract");
+    let file = crate::skill::repository_config_path(&repo);
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the repository directory");
+    std::fs::write(&file, table("disabled")).expect("a repository override");
+    let linked = repo.join(".git").join("worktrees").join("wt");
+    let worktree = root.path().join("wt");
+    std::fs::create_dir_all(&linked).expect("the linked git directory");
+    std::fs::create_dir_all(&worktree).expect("the worktree");
+    std::fs::write(
+        worktree.join(".git"),
+        format!("gitdir: {}\n", linked.display()),
+    )
+    .expect("the worktree pointer");
+    std::fs::write(linked.join("commondir"), "../..\n").expect("the shared directory");
+    let fallback = GitOperationWindow::Disabled;
+
+    for deep in [
+        repo.join("apps").join("engine"),
+        worktree.join("apps").join("engine"),
+    ] {
+        std::fs::create_dir_all(&deep).expect("a subdirectory");
+        assert_eq!(
+            effective_in(&skill, &deep, &fallback),
+            GitOperationWindow::Disabled,
+            "{} did not read the repository's own schedule",
+            deep.display()
+        );
+    }
+}
+
+#[test]
 fn a_present_but_unparsable_row_is_invalid_not_disabled() {
     let root = tempfile::tempdir().expect("a temporary root");
     let skill = root.path().join("skill");
