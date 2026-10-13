@@ -756,7 +756,7 @@ mod tests {
         assert!(!same_directory(&here, &here.join("src")));
     }
 
-    /// Issue #74: a candidate under a symlinked home is contained whether or
+    /// A candidate under a symlinked home is contained whether or
     /// not anything has created it yet.
     ///
     /// `canonicalize` resolves the home through its symlink and falls back to
@@ -1001,8 +1001,7 @@ mod staged_tests {
     }
 
     /// A rename that reports success without taking effect is refused, naming
-    /// both sides: what the destination holds against what was staged. Issue
-    /// #226. Deleting the read-back this proves turns this red at the
+    /// both sides: what the destination holds against what was staged. Deleting the read-back this proves turns this red at the
     /// assertion below — the write would report success over foreign bytes.
     #[test]
     fn a_silent_rename_noop_is_refused_with_both_sides_named() {

@@ -545,9 +545,9 @@ pub fn run_tool(
         ))));
     }
 
-    // Per operation, not per installation (issue #180): a tracker without a
+    // Per operation, not per installation: a tracker without a
     // transport must not refuse a host-bound tool, and the reverse. The two
-    // assisted-only tools are exempt for a read-only tracker (issue #847): they
+    // assisted-only tools are exempt for a read-only tracker: they
     // read the issue through `transport::linear` and write nothing to it, so
     // `Tracker linear`'s absent tracking transport is not in their way.
     match tool.binds() {
@@ -674,7 +674,7 @@ pub fn run_tool(
         })));
     }
 
-    // The tracker decides where the issue is read (issue #847). `assist`'s
+    // The tracker decides where the issue is read. `assist`'s
     // issue is a string, so a number and a key both arrive; a shape that does
     // not match the configured tracker is refused here rather than letting
     // `assist` pick its source from the argument alone, and an argument that is
@@ -1113,8 +1113,8 @@ pub fn run_tool(
         context.repo_dir.clone(),
         named_repo,
     );
-    // Tracker and host may name different repos (issue #180); a prior tool's
-    // pin must not stick when this one has none (issues #262, #379). Held
+    // Tracker and host may name different repos; a prior tool's
+    // pin must not stick when this one has none. Held
     // through the dispatch so a concurrent clear cannot land mid-spawn.
     let _gh_pin = super::gh_repo_pin();
     super::apply_gh_repo_locked(transport.repo.as_deref());

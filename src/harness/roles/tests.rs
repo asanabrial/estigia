@@ -165,7 +165,7 @@ fn unprovable_or_duplicate_project_reviewer_candidates_fail_closed() {
     assert_eq!(refusal.code, "reviewer-project-unprovable");
 }
 
-// Issue #428: these tests prove the *default* canonical-reviewer road, and
+// These tests prove the *default* canonical-reviewer road, and
 // `authorize_review_blind_launch` now reads `CLAUDE_CONFIG_DIR` first —
 // cleared here the same way `with_home_env` already clears it for `setup`'s
 // own tests, so an operator's own relocated shell cannot stand in for `home`.
@@ -1025,7 +1025,7 @@ fn a_moved_config_home_does_not_hide_the_default_root() {
 /// A Claude Code sub-agent definition, in the dialect that adapter writes.
 const CLAUDE_STYLE_DEFINITION: &str = "---\nname: scribe\ntools: Read, Grep\n---\nread only\n";
 
-/// Issue #428: `setup` resolves Claude Code's agent-definitions root under
+/// `setup` resolves Claude Code's agent-definitions root under
 /// `$CLAUDE_CONFIG_DIR` when it is set (`agent_definitions_root`), and the
 /// gate never looked there — a definition written exactly where `setup` put
 /// it was `Ok(None)`, which `declared_policy` reads as *every tool allowed*.
@@ -1054,7 +1054,7 @@ fn a_relocated_claude_config_dir_is_searched_beside_the_default() {
 }
 
 /// The mirror of the test above: the relocated root is searched **beside**
-/// the default, never instead of it — the same direction issue #34's account
+/// the default, never instead of it — the same direction the account
 /// of the OpenCode root states.
 #[test]
 fn a_relocated_claude_config_dir_does_not_hide_the_default_root() {
@@ -1083,7 +1083,7 @@ fn a_relocated_claude_config_dir_does_not_hide_the_default_root() {
     );
 }
 
-/// Issue #428's other gap: `authorize_review_blind_launch` proved the
+/// `authorize_review_blind_launch` proved the
 /// canonical reviewer under `home.join(".claude/agents")` alone, so a session
 /// running under a relocated `$CLAUDE_CONFIG_DIR` found the *other* profile's
 /// file (or none) and refused every reserved launch —
@@ -1216,7 +1216,7 @@ fn reserved_reviewer_template_answers_each_rows_own_body() {
     assert_eq!(reserved_reviewer_template("not-a-reserved-name"), None);
 }
 
-/// The trap named in issue #222 stage 3: `render_reviewer_agent` used to
+/// The trap: `render_reviewer_agent` used to
 /// search for a needle hardcoded to the judge's own placeholder,
 /// `\nname: review-blind\n`. A lens template whose own frontmatter already
 /// reads `name: review-lens` makes that search silently miss and the

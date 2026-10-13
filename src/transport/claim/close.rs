@@ -152,7 +152,7 @@ fn closing_merge(context: &Context, pr: u64) -> Result<Option<(String, String, S
     // Merge-commit topology: exactly two parents (the integration tip and the
     // reviewed head). Any other
     // shape is not this strategy — refuse naming it rather than returning the
-    // generic "not my delivery" that stranded squash/rebase closes (issue #179).
+    // generic "not my delivery" that stranded squash/rebase closes.
     if parents.len() != 2 {
         return Err(Failure::Stop(serde_json::json!({
             "ok": false,

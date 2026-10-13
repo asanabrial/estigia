@@ -244,7 +244,7 @@ pub fn is_nameless(run_id: &str) -> bool {
 /// `<runtime>-unknown`.
 ///
 /// One answer, decided here, for every caller that has to admit or refuse an
-/// id from outside this crate. #48 refused the spellings it had measured one
+/// id from outside this crate. Earlier code refused the spellings it had measured one
 /// disjunct at a time — no dash, an empty runtime, an alphabet — and each
 /// round was complete for its own spelling and blind to the next. The class
 /// only closes when the whole shape is decided in one place, and the runtime
@@ -1402,10 +1402,10 @@ mod tests {
         }
     }
 
-    /// Issue #234, door 1: `<runtime>-<session-prefix>` from the contract's
+    /// `<runtime>-<session-prefix>` from the contract's
     /// own instruction, on a host whose session id carries a dash. The
     /// last-dash split reads `codex-01k4-9f2a` as runtime `codex-01k4`, a
-    /// well-formed component, so #48's alphabet admits it and `dev:codex-01k4`
+    /// well-formed component, so the alphabet check admits it and `dev:codex-01k4`
     /// is what gets minted — invisible to the `gh issue list --label dev:codex`
     /// query the label exists for. Refused rather than derived: nothing can
     /// tell a dashed runtime from a suffix that carries a dash, so a derivation
@@ -1429,7 +1429,7 @@ mod tests {
         );
     }
 
-    /// #48 closed these one at a time, each round complete for its own
+    /// These were closed one at a time, each round complete for its own
     /// spelling. One answer refuses all of them, and names which part is not
     /// the minted shape.
     #[test]

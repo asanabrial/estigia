@@ -202,7 +202,7 @@ pub const RETIRED_PHASE_AGENTS: &[&str] = &[
 /// Ownership, not membership here, decides what comes out: a definition Estigia
 /// did not create is somebody else's and is left where it is.
 pub const RETIRED_AGENTS: &[&str] = &[
-    // The delegated worker, renamed to `developer.md` (issue #578) without a
+    // The delegated worker, renamed to `developer.md` without a
     // list to take the old name away.
     "implementer.md",
 ];
@@ -349,7 +349,7 @@ fn assets_digest_of(assets: &[(&str, &str)]) -> String {
 /// Bindings are selected by `Tracker`; protocol documents are conditionally
 /// routed from the contract rather than loaded as alternatives.
 /// `policies/blind-judges.md` used to be a third, chosen by `Blind judges`;
-/// issue #246 made the policy unconditional, and it is now linked
+/// it has since become unconditional, and it is now linked
 /// unconditionally from the contract's document table the same way every
 /// other always-shipped reference is, so it left this list rather than staying
 /// in it with nothing left to select it.
@@ -379,7 +379,7 @@ pub const RETIRED: &[&str] = &[
     // transport above is — a stale copy of either is a document telling
     // somebody to run tools this build no longer exposes.
     //
-    // `bindings/linear.md` left this list when issue #847 brought Linear back
+    // `bindings/linear.md` left this list when Linear came back
     // as a read-only source: it is a shipped file again, so it is in `FILES`
     // and is installed and uninstalled as one.
     "bindings/trello.md",
@@ -4544,7 +4544,7 @@ mod tests {
     /// each iteration failed the assertion below, the file still present
     /// after the call it claims removes it.
     ///
-    /// `bindings/linear.md` is no longer here: issue #847 shipped it again, so
+    /// `bindings/linear.md` is no longer here: it is shipped again, so
     /// `FILES` reaches it and this test's own premise would be false.
     #[test]
     fn the_two_paths_this_round_retired_are_taken_off_a_machine_that_has_them() {
@@ -4665,7 +4665,7 @@ mod tests {
 
     /// The crossing above only reaches a path that is named here, so one this
     /// crate ships now and forgets to append is invisible to it — the direction
-    /// issue #177 left open. Both collections: the skill files and the agent
+    /// it leaves open. Both collections: the skill files and the agent
     /// definitions.
     #[test]
     fn every_path_this_crate_ships_now_is_named_as_ever_shipped() {

@@ -26,7 +26,7 @@ fn context(root: &Path) -> GateContext {
     }
 }
 
-/// The leak issues #262 and #379 name: a conditional `set_var` that only
+/// The leak: a conditional `set_var` that only
 /// writes on `Some` leaves a prior pin for every later call that names none.
 /// `apply_gh_repo(None)` is the production clear; without it this assert fails.
 #[test]
@@ -1067,7 +1067,7 @@ fn a_payload_without_one_literal_command_refuses_the_integration_exemption() {
     // string donating a literal: an argv array; two keys that both
     // normalise to a command, as plain strings; and the same ambiguity with
     // one of the two values an argv array instead. `git merge origin/main`
-    // from `in-progress` is exactly the deadlock issue #33 was opened to
+    // from `in-progress` is exactly the deadlock this was opened to
     // close for the exemption's intended case — a plain literal string —
     // and must stay refused `out-of-phase` for every shape here, because
     // none of them gives the gate a literal to prove.
@@ -4559,7 +4559,7 @@ fn taking_a_control_surface_out_of_service_counts_even_though_it_writes_nothing(
         );
     }
 
-    // The repository's own configuration is the file issue #32 gated for
+    // The repository's own configuration is the file gated for
     // writes, and it is deliberately not on the control surface — so the
     // neutralising verbs read it on their own, or the same line was a boundary
     // on the write road and `Untouched` here.
@@ -4597,7 +4597,7 @@ fn taking_a_control_surface_out_of_service_counts_even_though_it_writes_nothing(
 fn a_neutralised_repository_configuration_is_a_boundary_the_gate_enforces() {
     // The classifier answer is half of it; the other half is that the gate acts
     // on it. A `chmod` on the repository's own configuration is the same file
-    // issue #32 gated for writes, and it must deny where a write does rather
+    // gated for writes, and it must deny where a write does rather
     // than ride the renewal window because the verb is not a write this crate
     // spells.
     let root = tempfile::tempdir().expect("a temporary root");
@@ -5647,7 +5647,7 @@ fn what_a_push_is_aimed_at_is_recorded_and_not_adjudicated() {
     //
     // The one thing that tells those apart is the destination ref. git hands it
     // to a `pre-push` hook on standard input, for free. The local half of it is
-    // now read before `adjudicate_action` is called — issue #56, resolving
+    // now read before `adjudicate_action` is called, resolving
     // *which run's claim* a push belongs to when several hold one checkout —
     // but only to select **who**. The action `adjudicate_action` is handed is
     // still the same three words, so both doors still see the same *what*.
@@ -5720,8 +5720,7 @@ fn what_a_push_is_aimed_at_is_recorded_and_not_adjudicated() {
         "the refs stopped reaching the ledger, so a push can be adjudicated and not named"
     );
     // The gap is only half closed. `decide` takes the refs too — but to select
-    // **who** among several holders this checkout's push belongs to (issue
-    // #56), never to decide **what** the push is: the three words pinned above
+    // **who** among several holders this checkout's push belongs to, never to decide **what** the push is: the three words pinned above
     // are unchanged, and `git push` is still absent from `DELIVERS`. If the
     // signature moves again, read whether the new argument answers the "who"
     // question this pin already covers or the "what" question it does not.
@@ -6425,7 +6424,7 @@ fn the_local_settings_and_the_agent_definitions_are_boundaries_on_both_roads() {
     // `home`, and nothing after it reads `HOME`, `USERPROFILE`, `APPDATA` or
     // `XDG_CONFIG_HOME` again to decide a boundary from a spelled string.
     //
-    // That was true of the whole of `classify` until issue #428:
+    // That was true of the whole of `classify` once:
     // `matches_relocated_claude_config` now reads `CLAUDE_CONFIG_DIR` too, to
     // answer a question no fragment can — whether a target lands under a
     // *relocated* Claude Code root — and it does so unlocked, the same way
@@ -6473,11 +6472,11 @@ fn the_local_settings_and_the_agent_definitions_are_boundaries_on_both_roads() {
     }
 }
 
-/// Issue #428, the gate's own share of it: `.claude/settings`, `.claude/agents/`
+/// `.claude/settings`, `.claude/agents/`
 /// and `.claude/skills/` are spelled with the `.claude` directory name baked
 /// into the fragment, so a `$CLAUDE_CONFIG_DIR` naming anything else hid all
 /// three from `is_control_surface` — the write a relocated `setup` makes
-/// ordinary read as `Routine`. `docs/honesty.md`'s #427 entry named
+/// ordinary read as `Routine`. `docs/honesty.md`'s entry named
 /// `.claude.json`, `CLAUDE.md` and Estigia's own skill directory as already
 /// safe, because those three fragments carry no directory name at all; this
 /// test is about the three that do.

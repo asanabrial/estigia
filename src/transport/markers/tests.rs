@@ -105,7 +105,7 @@ fn quoting_a_marker_does_not_issue_it() {
 /// **first** `-->` anywhere in the finished body — the real marker's own
 /// close — and read everything in between, including the real marker's own
 /// opener, as one long comment that does not open a marker. `parse` resumed
-/// after it, and the real marker it swallowed was never seen (issue #35).
+/// after it, and the real marker it swallowed was never seen.
 ///
 /// The second half is the passing control `quoting_a_marker_does_not_issue_it`
 /// already requires of a **closed** ordinary comment: it must go on being

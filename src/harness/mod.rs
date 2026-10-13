@@ -388,8 +388,8 @@ const CONTROL_SURFACE: &[&str] = &[
 /// The population and boundary `CONTROL_SURFACE_CORPUS` enforces.
 ///
 /// The declaration above sits on `CONTROL_SURFACE`, which is a **list**, so it
-/// fingerprints the population and not the code that matches against it. Issue
-/// #13 measured what that leaves open: three changes to the matcher rode through
+/// fingerprints the population and not the code that matches against it. A measurement
+/// showed what that leaves open: three changes to the matcher rode through
 /// one pull request with the registry green, two of them narrowings. This corpus
 /// is the matcher's second subject — each entry is a path and the answer **both**
 /// roads must keep giving it, so an edit that moves an answer reddens
@@ -2210,7 +2210,7 @@ fn argument_name(key: &str) -> String {
 /// `pub(crate)` because `cli::narrowed_by_the_call` reads the same aliases for
 /// the same reason — the target path is the write tool's evidence of where the
 /// write lands, and a second interpretation of these keys would be a second
-/// copy of the rule. This is the one owner issue #46 requires.
+/// copy of the rule. This is the one owner.
 pub(crate) fn path_argument(input: &serde_json::Value) -> Option<String> {
     argument_named(input, &["filepath", "path", "notebookpath"])
 }
@@ -2659,7 +2659,7 @@ pub struct GateContext {
     pub window: Duration,
     /// The tracker the operator configured.
     pub tracker: crate::config::Tracker,
-    /// Where publications and the code host live (issue #180).
+    /// Where publications and the code host live.
     pub repository_host: crate::config::RepositoryHost,
     /// Where work integrates: a reviewed branch, or trunk behind a flag.
     pub integration: crate::config::Integration,
@@ -2896,7 +2896,7 @@ fn decide_observing(
         // because the receipt is a claim about bytes this checkout did not
         // review. A non-`gh pr merge` delivery in the same repository with
         // neither is still `Outside(AnotherCheckout)`: `stale_verdict` returns
-        // `None` for want of a reviewed head to compare. Issue #19.
+        // `None` for want of a reviewed head to compare.
         if is_delivery(action)
             && (same_repository || run.review_transaction.is_some() || run.reviewed_head.is_some())
             && let Some(refusal) = stale_verdict(
@@ -2949,7 +2949,7 @@ fn decide_observing(
     }
 
     // Always pin or clear: a prior call's `Some` must not stick when this one
-    // names none (issues #262, #379). Production is one invocation per process;
+    // names none. Production is one invocation per process;
     // `cargo test` is not. The pin covers apply-through-dispatch only — dropped
     // before `stale_verdict`, whose `live_pr_head_reader` takes it again (a
     // non-reentrant mutex would deadlock if this still held it).
@@ -3119,7 +3119,7 @@ pub(crate) fn gh_repo_pin() -> std::sync::MutexGuard<'static, ()> {
 /// A previous call's pin must not stick when this one names no repository.
 /// Production is one invocation per process; under `cargo test` every harness
 /// path shares one process with every other test, so a conditional write that
-/// only sets and never clears is a leak (issues #262, #379). Test-only: the
+/// only sets and never clears is a leak. Test-only: the
 /// shipping call sites hold [`gh_repo_pin`] across apply and dispatch.
 #[cfg(test)]
 pub(crate) fn apply_gh_repo(named: Option<&str>) {

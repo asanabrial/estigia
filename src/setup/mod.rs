@@ -785,13 +785,13 @@ pub struct AgentPaths {
     /// fourth means teaching the gate to read it in the same change.
     pub agents_root: Option<PathBuf>,
     /// One line per inherited root this resolution noted — because it pointed
-    /// outside the resolved home (issue #34), or because it was not an absolute
-    /// path (issue #437). `APPDATA`, `XDG_CONFIG_HOME` and `DSH_HOME` are noted
+    /// outside the resolved home, or because it was not an absolute
+    /// path. `APPDATA`, `XDG_CONFIG_HOME` and `DSH_HOME` are noted
     /// for the first reason alone — a relative value among them is dropped
     /// before the note pass — and `CLAUDE_CONFIG_DIR` is exempt from the
     /// containment check and is noted for the second alone. An empty vector here
     /// does not say the machine was clean; it says nothing was noted *for this
-    /// adapter*. See `docs/honesty.md`'s entry on issue #34. A caller that hits
+    /// adapter*. See `docs/honesty.md`'s entry on it. A caller that hits
     /// one is expected to report it, not to fail on it.
     pub notes: Vec<String>,
 }
@@ -842,9 +842,9 @@ impl AgentAdapter {
     /// (`environment.claude_config()`, `$CLAUDE_CONFIG_DIR` when set and
     /// `~/.claude` otherwise) rather than `$HOME` directly. OpenCode keeps its
     /// own under `$XDG_CONFIG_HOME/opencode`, which is why the base directory is
-    /// per adapter (`agent_definitions_base`) and not the Claude one. #58
-    /// refused reusing Claude Code's renderer here, not having one of OpenCode's
-    /// own; #579 gives OpenCode its renderer for the two delegated workers,
+    /// per adapter (`agent_definitions_base`) and not the Claude one. Reusing
+    /// Claude Code's renderer here is refused, and OpenCode has one of its
+    /// own for the two delegated workers,
     /// while the reserved reviewers stay Claude-only.
     ///
     /// `const` so the canonical table's `agent_definitions` column is crossed
@@ -997,7 +997,7 @@ pub struct SetupResult {
     #[serde(skip)]
     pub completed: bool,
     /// `AgentPaths::notes`, carried onto the result so the report an operator
-    /// reads is the one that names an environment substitution — issue #34.
+    /// reads is the one that names an environment substitution.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
 }
@@ -1366,7 +1366,7 @@ impl Environment {
         };
         let dsh_home = absolute_or_none(inherited("DSH_HOME"));
 
-        // Issue #34: an inherited value is only ever contained-checked against
+        // An inherited value is only ever contained-checked against
         // a `home` this same call read from the environment — never against a
         // `home` the caller supplied deliberately. `paths::covers`, not a
         // hand-rolled `starts_with`: it case-folds on Windows, where `%APPDATA%`
@@ -1475,7 +1475,7 @@ impl Environment {
 
 /// An inherited root, kept only when it resolves under `home`.
 ///
-/// Issue #34: an isolated checkout whose `APPDATA` still pointed at the
+/// An isolated checkout whose `APPDATA` still pointed at the
 /// operator's real profile rewrote their real configuration. The under-home
 /// fallback already covers *absent*; this covers *present and pointing
 /// somewhere else*. `escaped` collects what was dropped rather than discarding
@@ -1503,8 +1503,7 @@ fn absolute_or_none(path: Option<PathBuf>) -> Option<PathBuf> {
 /// The same rule as [`absolute_or_none`], for a root read from the environment,
 /// reporting what it dropped. A relative value names a path under the working
 /// directory rather than a configuration root, so it is still treated as absent
-/// — and the drop is recorded rather than left silent, which is what issue #437
-/// filed.
+/// — and the drop is recorded rather than left silent.
 fn absolute_or_noted(
     path: Option<PathBuf>,
     variable: InheritedVariable,
@@ -1524,7 +1523,7 @@ fn absolute_or_noted(
 ///
 /// Public because the gate needs the same answer: one rule, absolute or
 /// nothing, and a relative or empty value is a caller's mistake treated as
-/// absent. Since issue #34 the *installer* applies a second rule on top that
+/// absent. The *installer* applies a second rule on top that
 /// the gate does not — `Environment::resolve` keeps this answer only when it
 /// resolves under the same call's home — and that stays safe because
 /// `definition_for` pushes `~/.config/opencode/agents` **and** this answer.
@@ -1536,9 +1535,9 @@ pub fn xdg_config_home() -> Option<PathBuf> {
 /// `CLAUDE_CONFIG_DIR`, resolved the same one way [`xdg_config_home`] resolves
 /// its own variable.
 ///
-/// Public for the same reason: the gate needs this answer too — issue #428.
+/// Public for the same reason: the gate needs this answer too.
 /// `definition_for` pushes the root this names **beside** the default, never
-/// instead of it, the same asymmetry issue #34 states for the OpenCode root
+/// instead of it, the same asymmetry as for the OpenCode root
 /// beside it. `authorize_review_blind_launch` reads it differently, on
 /// purpose: when this is set, it is the *only* tree the canonical reviewer is
 /// proved against, because the default `~/.claude/agents` belongs to
@@ -3285,7 +3284,7 @@ fn setup_into_with_skill(
     };
     let actions = Vec::new();
     // Empty until `resolve_paths` answers below; every failure ahead of that
-    // point has nothing of issue #34's to report.
+    // point has nothing to report.
     let mut notes: Vec<String> = Vec::new();
     macro_rules! step {
         ($operation:expr) => {
@@ -5484,7 +5483,7 @@ fn host_review_section(slug: &str) -> Option<(crate::fence::Fence, String)> {
 /// rather than in a wording of its own that a later change
 /// to those terms would leave behind. The binary, not a host `Task`, launches
 /// the sealed lenses, so their counts are rendered from
-/// `RiskLevel::lenses()` rather than typed — issue #316. `pub` so a crossing
+/// `RiskLevel::lenses()` rather than typed. `pub` so a crossing
 /// test can read the rendered surface directly.
 pub fn opencode_review_section() -> String {
     review_section(

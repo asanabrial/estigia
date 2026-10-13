@@ -51,7 +51,7 @@ fn a_switch_does_not_swallow_the_flag_after_it() {
 /// given a value at all: `get("basis")` answered `None` for a caller that had
 /// supplied one, which is the *absent* answer and not the *empty* one —
 /// exactly the distinction `record_review_verdict`'s blank-basis refusal
-/// exists to keep apart (issue #35).
+/// exists to keep apart.
 #[test]
 fn a_flags_value_is_read_even_when_it_looks_like_a_flag() {
     let flags: Vec<String> = ["--outcome", "accepted", "--basis", "--nothing was measured"]
@@ -114,7 +114,7 @@ fn a_switch_nobody_passed_is_off() {
     // And the hand-written list `Flags::read` decides by is exactly the set the
     // dispatch actually asks `on` about. Without this, adding a `.on("new")`
     // and forgetting the list makes `--new` take the next word as its value and
-    // swallow the flag after it — the same silent drop issue #35 was filed for,
+    // swallow the flag after it — the same silent drop,
     // reintroduced from the other end. A list nothing crosses is the defect
     // class this repository refuses, and the scan above already knows the
     // answer.
@@ -1129,8 +1129,8 @@ fn a_mode_flag_given_without_its_mode_is_refused() {
 /// A hand call to a name only capture once wrote is refused as unknown, and
 /// never reaches a record.
 ///
-/// The three capture-only recorders and the aggregate verdict left the surface
-/// in #1054. What must not survive that change is a hand call answered `ok`, or
+/// The three capture-only recorders and the aggregate verdict left the surface.
+/// What must not survive that change is a hand call answered `ok`, or
 /// one routed to an interpreter: the guarantee that these records are written
 /// only by the capture, or not at all.
 #[test]

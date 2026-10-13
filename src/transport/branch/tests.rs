@@ -378,7 +378,7 @@ use crate::test_env::repository_with_commit;
 ///
 /// `the_registered_path_is_carried_verbatim_not_reconstructed_from_the_key`
 /// already pins the parser this reads, but it builds a synthetic listing and
-/// never calls this function — the defect issue #30 fixed lived in *this*
+/// never calls this function — the defect that was fixed lived in *this*
 /// caller, which used to walk `registry.keys()` and rebuild a path from each
 /// one, and nothing exercised that call directly. Reverting to
 /// `for path in registry.keys() { PathBuf::from(path) }` still leaves the
@@ -1617,7 +1617,7 @@ fn a_delivered_checkout_is_put_down_with_its_branch() {
     );
 }
 
-/// Issue #22, folding #559: the workflow tells a run to work inside its own
+/// The workflow tells a run to work inside its own
 /// isolated checkout, so `release` can be launched there and the context's
 /// `repo_dir` is the directory being removed. Both destructive commands must run
 /// from outside it, or `git worktree remove` refuses its own cwd and the local

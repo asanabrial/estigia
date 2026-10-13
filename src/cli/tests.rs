@@ -112,7 +112,7 @@ fn inventory() -> Vec<Refusal> {
                 "a readable standard input carrying the reviewer's answer",
             ),
         ),
-        // Issue #847: a read-only Linear tracker is admitted only under assisted
+        // A read-only Linear tracker is admitted only under assisted
         // work, and each refusal names the way out.
         Refusal::not_started(
             "linear-is-per-repository",
@@ -1655,7 +1655,7 @@ fn a_root_whose_local_override_will_not_parse_contributes_nothing_to_the_populat
 
 #[test]
 fn fresh_root_notes_names_the_root_when_nothing_else_is_installed() {
-    // Half of issue #112's silence: `shared.len() < 2` covered two answers and
+    // Half of the silence: `shared.len() < 2` covered two answers and
     // not zero, so a lone named agent with a fresh root said nothing at all.
     // Criterion 5 asks that a run never write defaults into a fresh root
     // without naming the root and the rows it defaulted — this is the case
@@ -1936,7 +1936,7 @@ fn a_refusal_that_wrote_nothing_says_so() {
     }
 }
 
-/// Issue #73: the `nothing_configured` refusal is byte-identical when no
+/// The `nothing_configured` refusal is byte-identical when no
 /// substitution produced it, and carries the note when one did.
 #[test]
 fn nothing_configured_is_unchanged_without_a_substitution() {
@@ -3181,7 +3181,7 @@ fn command_of_argument(argument: &str) -> Option<String> {
 /// a string literal, or a `format!`'s first literal. `unread` are the ones it
 /// could not — a `const`, a function call, anything whose command is not at the
 /// call site — kept rather than skipped, so the guard fails loudly naming them
-/// instead of passing on what it never read. Issue #103: the scan used to take
+/// instead of passing on what it never read. The scan used to take
 /// the next `"` anywhere in the file, so a non-literal argument was read as some
 /// unrelated string or dropped, and either way never checked.
 fn suggested_in_source(root: &std::path::Path) -> Suggested {
@@ -3305,7 +3305,7 @@ fn every_command_the_source_suggests_parses_and_not_only_the_listed_ones() {
 
     // A non-literal argument is named rather than skipped, so a new one is
     // covered the day it is written and not the day somebody notices it is
-    // missing. Issue #103.
+    // missing.
     let uncovered: Vec<String> = suggested
         .unread
         .iter()
@@ -3330,7 +3330,7 @@ fn every_command_the_source_suggests_parses_and_not_only_the_listed_ones() {
 }
 
 /// The scan must name a non-literal argument rather than skip it, which is the
-/// defect #103 filed: `Resolution::run(some_call())` was read as the next `"`
+/// defect that was filed: `Resolution::run(some_call())` was read as the next `"`
 /// in the file, or dropped, and either way never checked.
 #[test]
 fn the_source_scan_names_a_non_literal_argument_instead_of_skipping_it() {
@@ -5325,7 +5325,7 @@ fn a_retired_host_s_appdata_substitution_is_named_in_the_per_adapter_report() {
 #[test]
 fn a_setup_that_stopped_before_any_file_still_names_a_retired_host_s_appdata_substitution() {
     // The `!dry_run && !completed && changed == 0` early return in `describe`
-    // has its own note loop, said to matter because "issue #34's substitution
+    // has its own note loop, said to matter because "the substitution
     // happens before the first file is touched" — but the only test that took
     let home = tempfile::tempdir().expect("a temporary home");
     let elsewhere = tempfile::tempdir().expect("a second temporary directory");
@@ -7428,7 +7428,7 @@ fn a_directory_the_call_names_may_narrow_the_decision_and_not_move_it() {
 
 /// A write-shaped tool call narrows by the directory its target lands in.
 ///
-/// Issue #46: the earlier cure read the one tool that names a working directory
+/// The earlier cure read the one tool that names a working directory
 /// (Bash's `workdir`) and left the six that name a **file** — every `Write`,
 /// `Edit` and `Patch` was adjudicated at the project root, so two concurrent
 /// isolated runs refused each other's writes with `several-runs-hold-this-
@@ -7619,7 +7619,7 @@ fn checkout_root_covering_never_climbs_above_the_launch_directory() {
     );
 }
 
-/// Issue #131: `Worktree location` on a real install is a **sibling** of the
+/// `Worktree location` on a real install is a **sibling** of the
 /// repository it was minted from — `H:\REPO\worktree\<repo>\<branch>`, never
 /// a child of `H:\REPO\<repo>` — so a call naming that worktree could never
 /// resolve, and a run holding a completed claim, a verdict and a green CI run
@@ -7659,7 +7659,7 @@ fn a_call_naming_this_run_s_own_sibling_worktree_is_admitted() {
         candidate,
         Some(placed(&worktree)),
         "a worktree this run's own pointer records was refused for sitting beside the launch \
-         directory instead of inside it — the sibling clamp issue #131 reports"
+         directory instead of inside it — the sibling clamp"
     );
     let candidate = candidate.expect("asserted above");
     let resolved = super::checkout_root_covering(state.path(), &candidate, &launched).0;
@@ -7962,8 +7962,8 @@ fn a_call_carrying_an_identity_cannot_reach_a_sibling_run_s_worktree_nested_insi
 ///
 /// This module already drives real `git` elsewhere — `release_repo`, further
 /// down this file, is the closer precedent — and a machine where `git` is
-/// unusable panics rather than standing this test down: issue #476 removed the
-/// last `Option` fixture's tolerance and issue #830 removed this inline one,
+/// unusable panics rather than standing this test down: the tolerance of the
+/// last `Option` fixture and of this inline one was removed,
 /// because a `return;` after an `eprintln!` reports an unmeasured test as `ok`.
 #[test]
 fn the_narrowing_resolves_to_the_worktree_the_call_is_adjudicated_in() {
@@ -8024,7 +8024,7 @@ fn the_narrowing_resolves_to_the_worktree_the_call_is_adjudicated_in() {
     let (reviewed, now) = setup.unwrap_or_else(|| {
         panic!(
             "this fixture needs a usable `git` that can init, commit and read back a worktree; \
-             a test that reports `ok` without running is the defect issue #12 filed"
+             a test that reports `ok` without running is a defect this repository has filed against itself"
         )
     });
     assert_ne!(
@@ -8259,7 +8259,7 @@ fn release_context(
 /// — can actually answer about: it runs `git rev-parse`, and a bare directory
 /// answers neither side of that comparison.
 ///
-/// It panics rather than answering `None`, the repair issue #476 gave it: this
+/// It panics rather than answering `None`, the repair it was given: this
 /// is a git workflow harness, so a machine without a usable `git` cannot
 /// measure the release guard at all, and a `None` the caller turns into
 /// `return;` after an `eprintln!` reports an unmeasured test as `ok`.
@@ -8274,7 +8274,7 @@ fn release_repo() -> tempfile::TempDir {
             panic!(
                 "this fixture needs a usable `git` on PATH and could not run \
                  `git init --quiet`: {error}. Install git, or fix the command, because a \
-                 test that reports `ok` without running is the defect issue #12 filed."
+                 test that reports `ok` without running is a defect this repository has filed against itself."
             )
         });
     assert!(

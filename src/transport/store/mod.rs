@@ -1,5 +1,5 @@
 //! The local workflow store: one SQLite file per user, every row keyed by the
-//! repository it belongs to. Since slice a2 of issue #896 the claim family
+//! repository it belongs to. The claim family
 //! decides from it; `docs/honesty.md` lists what it does not yet hold.
 
 use std::path::{Path, PathBuf};

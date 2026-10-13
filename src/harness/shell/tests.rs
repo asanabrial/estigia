@@ -189,7 +189,7 @@ fn a_bsd_scripts_trailing_command_is_read_as_a_write() {
         "the gate decided BSD script's trailing command was none of its business"
     );
 
-    // The quoted spelling #332 covered keeps its answer, and a recording
+    // The quoted spelling covered earlier keeps its answer, and a recording
     // session whose command only reads is still not a write.
     assert!(
         super::writes_a_file("script -c 'rm -rf src' /dev/null").is_some(),
@@ -747,7 +747,7 @@ fn a_write_inside_backticks_is_read_like_one_inside_a_dollar_paren() {
 /// `worktree add` behind `-C`, `--git-dir` or `--no-pager`.
 ///
 /// The `git merge` pair is no longer folded into the equality loop below. It
-/// used to be, and that equality is exactly the severe finding issue #33's
+/// used to be, and that equality is exactly the severe finding a
 /// second repair round closed: the call site that decides the integration
 /// exemption keyed on the fragment `classify_with` matched — "git merge" for
 /// both spellings here — rather than on the literal line, so a `-C`- or

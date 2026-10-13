@@ -44,7 +44,7 @@
 //! module touched in most of the repository's own recent history, which
 //! made the classifier a constant function. This repository's review
 //! authority is not separable by filename the way the source project's is;
-//! issue #51 is what would change that. The gap is named in
+//! The gap is named in
 //! `docs/honesty.md`.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -76,7 +76,7 @@ const REASON_EMPTY_CONTENT: &str = "empty_content";
 /// non-executable, passive-shaped paths: that reading is vacuously true over
 /// an empty stat set too, and conflating the two let `classify_risk` and
 /// [`risk_level_from_reasons`] agree on `Low` for a range nothing was ever
-/// read from. Issue #299.
+/// read from.
 const REASON_NOTHING_MEASURED: &str = "nothing_measured";
 
 /// The extensions `isSemanticRiskEligible` and `stripSemanticPathExtension`
@@ -784,7 +784,6 @@ fn classify_risk(
     // measured, so nothing was proven passive either — checked explicitly
     // here because `only_passive` is `true` over an empty slice, so without
     // this the next branch returns `Low` for a range nothing was read from.
-    // Issue #299.
     if stats.is_empty() {
         return RiskLevel::Medium;
     }
@@ -1585,7 +1584,7 @@ fn executable_mode_changed(old_mode: &str, new_mode: &str) -> bool {
 /// Not ported: `isNativeReviewAuthorityPath`, the source project's own
 /// six-path self-reference. This repository's review authority is not
 /// separable by filename the way theirs is — `docs/honesty.md` names the
-/// measurement that found this and issue #51, the change that would let it
+/// measurement that found this and the change that would let it
 /// be ported.
 fn hot_path_risk_signals(logical_path: &str) -> Vec<&'static str> {
     let mut signals = Vec::new();
@@ -1631,7 +1630,7 @@ fn is_empty_content_stat(stat: &DiffStat) -> bool {
 /// which an absent loop reaches vacuously — saying a change was measured and
 /// found passive, of one that was never measured at all. That branch is a
 /// divergence from the port rather than a translation of it: the Go original
-/// has none. Issue #299.
+/// has none.
 fn fallback_risk_reason(stats: &[DiffStat], active_content: &BTreeSet<String>) -> RiskReason {
     if stats.is_empty() {
         return RiskReason {

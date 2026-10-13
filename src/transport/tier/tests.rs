@@ -777,7 +777,7 @@ fn a_large_ordinary_documentation_change_is_low_end_to_end() {
     assert!(answer["changed_lines"].as_u64().expect("a count") >= 900);
 }
 
-/// Issue #296: a repair round is sized by its own delta, not by the whole
+/// A repair round is sized by its own delta, not by the whole
 /// change it sits on top of. The whole range answers `medium` — it touches a
 /// `.rs` file, which is never passive — while the repair itself only adds
 /// passive prose on top of that already-published code change, and
@@ -785,7 +785,7 @@ fn a_large_ordinary_documentation_change_is_low_end_to_end() {
 /// it `range: "repair"` with no `whole_change_reason`, while [`review_tier`]
 /// still answers `medium` for the whole one. Strictly linear history:
 /// `parent_head` is still an ancestor of `head` and the narrow range is
-/// non-empty, so this alone cannot fail for either reason issue #297's two
+/// non-empty, so this alone cannot fail for either reason the two
 /// repair rounds exist —
 /// `a_rebased_repairs_own_range_is_not_recoverable_so_it_answers_the_whole_change_instead`
 /// and
@@ -828,7 +828,7 @@ fn a_repair_rounds_own_delta_answers_low_while_the_whole_change_answers_medium()
     );
 }
 
-/// Issue #482: a repair of a `warning` or a `suggestion` after an accepted
+/// A repair of a `warning` or a `suggestion` after an accepted
 /// verdict is reviewed by the delta lens alone, once the narrow range is the
 /// honest one — `panel: "lens"`, one lens, in place of `level`'s
 /// own allocation (`src/lib.rs` here is never passive, so the whole range and
@@ -973,7 +973,7 @@ fn a_repair_answer_forecasts_the_panel_it_licenses_and_the_lens_alone_prices_one
     );
 }
 
-/// Issue #493: a `warning`-cleared repair whose own delta is `high` keeps the
+/// A `warning`-cleared repair whose own delta is `high` keeps the
 /// tier's own panel — the hot-path shape is reviewed by the tier's lenses,
 /// not by the delta lens alone.
 #[test]
@@ -1043,7 +1043,7 @@ fn an_unknown_clearing_finding_class_is_refused() {
     );
 }
 
-/// Issue #297: the panel that rejected #296's first shape proved a frozen
+/// The panel that rejected the first shape proved a frozen
 /// candidate tree is not a defence against base movement — `tree(A)` is the
 /// tree *of a commit*, and `git diff tree(A) tree(B)` is `git diff A B`, so
 /// the pair that shape prescribed was `parent_head..head` under a different
@@ -1252,7 +1252,7 @@ fn a_side_branch_merge_with_an_unmoved_base_is_a_merged_range() {
     );
 }
 
-/// Issue #297's second repair round: `git merge-base --is-ancestor A A`
+/// `git merge-base --is-ancestor A A`
 /// exits `0`, so an identical-bytes republish — `parent_head == head`, a
 /// real input the contract itself names, since a republish invalidates
 /// evidence "even when the bytes are identical" — makes the ancestry guard
@@ -1298,7 +1298,7 @@ fn an_unnormalisable_path_refuses_rather_than_answers() {
 }
 
 // ---------------------------------------------------------------------------
-// Issue #299: an empty measurement is not a passive one.
+// An empty measurement is not a passive one.
 // ---------------------------------------------------------------------------
 
 /// Drives `classify_risk` directly over an empty stat set — the shape a
@@ -1345,7 +1345,7 @@ fn the_two_classifiers_agree_the_empty_stat_set_is_not_the_zero_tier() {
 /// The end-to-end case: `review_tier` over `base == head` answers `medium`,
 /// one lens, zero changed lines, and a reason naming that nothing was
 /// measured — never the `low`, zero-lens answer the vacuous-truth defect
-/// produced (issue #299's own measurement against the shipped binary).
+/// produced.
 #[test]
 fn an_empty_range_answers_medium_naming_that_nothing_was_measured() {
     let root = repo();
@@ -1600,7 +1600,7 @@ fn a_default_global_attributes_file_does_not_reach_the_isolated_diff() {
 }
 
 // ---------------------------------------------------------------------------
-// Issue #340: the fail-closed cross-check between `classify_risk` and
+// The fail-closed cross-check between `classify_risk` and
 // `risk_level_from_reasons`.
 // ---------------------------------------------------------------------------
 
@@ -1609,7 +1609,7 @@ fn a_default_global_attributes_file_does_not_reach_the_isolated_diff() {
 /// `touches_configuration` — which is what makes it a pair the real path is
 /// not known to ever produce.
 ///
-/// Investigation for issue #340 could not construct a `stats` / `active_content`
+/// Investigation could not construct a `stats` / `active_content`
 /// pair that reaches `review_tier_answer`'s own computation of `level` and
 /// `reasons` and makes them disagree — `classify_risk` and
 /// `risk_level_from_reasons` read the same `reasons`, and
@@ -1689,7 +1689,7 @@ fn agree(stats: &[DiffStat], active_content: &BTreeSet<String>) -> (RiskLevel, R
 }
 
 /// Pins the agreement `explained_matches_level` leans on for every shape
-/// issue #340's investigation named as worth trying, plus a few its reading
+/// the investigation named as worth trying, plus a few its reading
 /// of `derive_snapshot_risk_reasons` and `classify_risk` added: a mode-flip on
 /// a passive path, a configuration path beside a passive one (in both
 /// alphabetical orders), a binary stat beside a configuration path (in both
