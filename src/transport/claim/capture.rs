@@ -28,7 +28,7 @@ use crate::reviewer::result::{
     self, Criterion, Finding, Outcome, RoleResult, Validation, repeated_id,
 };
 use crate::reviewer::{
-    DEFAULT_DEADLINE, Invocation, Receipt, Recording, ReviewerCode, Role, prompt, reviewer_model,
+    DEFAULT_DEADLINE, Invocation, Receipt, Recording, ReviewerCode, Role, model_for_role, prompt,
     settle,
 };
 use crate::transport::Context;
@@ -745,7 +745,7 @@ pub(super) fn prepare_with(
             role: role.name().to_owned(),
             receipt: reviewed,
             prompt,
-            model: reviewer_model(&routing.0),
+            model: model_for_role(&routing.0, role),
         },
         ledger,
     })

@@ -306,3 +306,18 @@ pub fn reviewer_model(routing: &ModelRouting) -> Option<String> {
         .filter(|model| *model != "inherit")
         .map(str::to_owned)
 }
+
+/// The model `role` launches on: its own routing target when it has one and
+/// the `reviewer` target otherwise.
+pub fn model_for_role(routing: &ModelRouting, role: Role) -> Option<String> {
+    let own = match role {
+        Role::Refuter => routing.for_target("refuter"),
+        Role::Validator => routing.for_target("validator"),
+        _ => None,
+    };
+    match own {
+        Some("inherit") => None,
+        Some(model) => Some(model.to_owned()),
+        None => reviewer_model(routing),
+    }
+}

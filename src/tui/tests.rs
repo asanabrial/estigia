@@ -449,6 +449,8 @@ fn an_agents_page_asks_only_what_differs_by_agent() {
             "developer",
             "analyst",
             "reviewer",
+            "refuter",
+            "validator",
             "judge",
         ]
     );
@@ -831,6 +833,8 @@ fn model_targets_are_the_fixed_phase_and_role_set() {
             "developer",
             "analyst",
             "reviewer",
+            "refuter",
+            "validator",
             "judge",
         ]
     );
@@ -913,6 +917,8 @@ fn uniform_model_routing_reaches_only_selected_agents() {
             "developer",
             "analyst",
             "reviewer",
+            "refuter",
+            "validator",
             "judge",
         ]
     );

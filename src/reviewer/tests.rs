@@ -657,6 +657,68 @@ fn the_reviewer_model_reads_its_routing_target_and_inherit_names_none() {
     assert_eq!(reviewer_model(&routing), None);
 }
 
+fn routed(spec: &str) -> ModelRouting {
+    ModelRouting::parse(spec).expect("a routing")
+}
+
+fn models_by_role(routing: &ModelRouting) -> Vec<(Role, Option<String>)> {
+    Role::ALL
+        .into_iter()
+        .map(|role| (role, model_for_role(routing, role)))
+        .collect()
+}
+
+#[test]
+fn with_only_a_reviewer_model_every_role_launches_on_it() {
+    for (role, model) in models_by_role(&routed("reviewer=opus")) {
+        assert_eq!(model.as_deref(), Some("opus"), "{role:?}");
+    }
+    for (role, model) in models_by_role(&ModelRouting::default()) {
+        assert_eq!(model, None, "{role:?}");
+    }
+}
+
+#[test]
+fn a_refuter_model_moves_only_the_refuter() {
+    for (role, model) in models_by_role(&routed("reviewer=opus, refuter=haiku")) {
+        let expected = if role == Role::Refuter {
+            "haiku"
+        } else {
+            "opus"
+        };
+        assert_eq!(model.as_deref(), Some(expected), "{role:?}");
+    }
+}
+
+#[test]
+fn a_validator_model_moves_only_the_validator() {
+    for (role, model) in models_by_role(&routed("reviewer=opus, validator=haiku")) {
+        let expected = if role == Role::Validator {
+            "haiku"
+        } else {
+            "opus"
+        };
+        assert_eq!(model.as_deref(), Some(expected), "{role:?}");
+    }
+}
+
+#[test]
+fn a_role_model_stands_without_a_reviewer_model_and_inherit_names_none() {
+    let alone = routed("refuter=haiku");
+    assert_eq!(
+        model_for_role(&alone, Role::Refuter).as_deref(),
+        Some("haiku")
+    );
+    assert_eq!(model_for_role(&alone, Role::Risk), None);
+    assert_eq!(model_for_role(&alone, Role::Validator), None);
+    let inherited = routed("reviewer=opus, validator=inherit");
+    assert_eq!(model_for_role(&inherited, Role::Validator), None);
+    assert_eq!(
+        model_for_role(&inherited, Role::Lens).as_deref(),
+        Some("opus")
+    );
+}
+
 #[test]
 fn every_code_spells_its_stable_name() {
     let names: Vec<&str> = [

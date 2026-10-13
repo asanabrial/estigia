@@ -1401,12 +1401,13 @@ mod tests;
 
 /// The roles a run can route a model to.
 ///
-/// Four: the two Estigia installs a definition for — the run that writes and
-/// runs the suite, and the read-only analyst — and the two the review panel is
-/// made of, a reviewer when review is delegated and the judge when Judgment Day is
-/// asked for. Present in the routing is what installs the first two; the last
-/// two have no definition to install, and [`Self::installs`] is the word that
-/// separates them rather than a second list.
+/// Six: the two Estigia installs a definition for — the run that writes and
+/// runs the suite, and the read-only analyst — and the four the review panel is
+/// made of, a reviewer when review is delegated, the refuter and the validator
+/// that fall back to it, and the judge when Judgment Day is asked for. Present
+/// in the routing is what installs the first two; the rest have no definition
+/// to install, and [`Self::installs`] is the word that separates them rather
+/// than a second list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Role {
     /// The worker that writes and runs the suite.
@@ -1415,6 +1416,10 @@ pub enum Role {
     Analyst,
     /// The reviewer, when review is delegated.
     Reviewer,
+    /// The refuter, which launches on the reviewer's model when it has none.
+    Refuter,
+    /// The validator, which launches on the reviewer's model when it has none.
+    Validator,
     /// A blind judge, when judges are asked.
     Judge,
 }
@@ -1426,6 +1431,8 @@ impl Role {
             Self::Developer => "developer",
             Self::Analyst => "analyst",
             Self::Reviewer => "reviewer",
+            Self::Refuter => "refuter",
+            Self::Validator => "validator",
             Self::Judge => "judge",
         }
     }
@@ -1434,10 +1441,22 @@ impl Role {
     /// added without arriving here. Arriving is not being returned — widening
     /// the arm and leaving the list short still compiles.
     pub fn all() -> Vec<Self> {
-        let every = vec![Self::Developer, Self::Analyst, Self::Reviewer, Self::Judge];
+        let every = vec![
+            Self::Developer,
+            Self::Analyst,
+            Self::Reviewer,
+            Self::Refuter,
+            Self::Validator,
+            Self::Judge,
+        ];
         for role in &every {
             match role {
-                Self::Developer | Self::Analyst | Self::Reviewer | Self::Judge => {}
+                Self::Developer
+                | Self::Analyst
+                | Self::Reviewer
+                | Self::Refuter
+                | Self::Validator
+                | Self::Judge => {}
             }
         }
         every
@@ -1750,7 +1769,14 @@ pub(crate) fn dropped_routes_report(dropped: &[DroppedRoute]) -> Refusal {
         .join(", ");
     Refusal::not_started(
         "model-routing-key-dropped",
-        format!("`Model routing` no longer accepts {named}"),
+        format!(
+            "`Model routing` no longer accepts {named}; it takes {}",
+            ModelRouting::targets()
+                .iter()
+                .map(|key| format!("`{key}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         Resolution::run(
             "estigia config set \"Model routing\" \"<the entries you keep, in the current spelling>\" --agent <slug>",
         ),
