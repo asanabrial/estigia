@@ -307,8 +307,7 @@ pub(super) const TUI_SETTINGS: &[Setting] = &[
 
 /// The per-agent rows `adapter` is offered: the rows that can act on it.
 ///
-/// Two rows narrow — the loop, which OpenCode and Codex act on, and the generic
-/// goal and loop plugin, which only OpenCode reads — and
+/// Two rows narrow — the loop and the generic goal and loop plugin — and
 /// [`Setting::applies_to_agent`] answers which list. The same predicate decides
 /// what the adapter's own file carries, so a row the screen does not draw is
 /// not written either.

@@ -459,13 +459,13 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Issue body language", "Idioma del cuerpo del issue"),
     ("Loop plugin", "Plugin de bucle"),
     (
-        "whether OpenCode gets the plugin, and Codex the Stop and SessionStart hooks, that continue a session while the run still holds its issue or another is claimable",
-        "si OpenCode recibe el plugin, y Codex los hooks Stop y SessionStart, que continúan una sesión mientras la ejecución sigue teniendo su issue o hay otro reclamable",
+        "whether this agent gets the loop that continues a session while the run still holds its issue or another is claimable",
+        "si este agente recibe el bucle que continúa una sesión mientras la ejecución sigue teniendo su issue o hay otro reclamable",
     ),
     ("Goal loop plugin", "Plugin de objetivo y bucle"),
     (
-        "whether OpenCode also gets the generic plugin that offers `/goal` and `/loop`, which consults no tracker and runs no Estigia command",
-        "si OpenCode recibe además el plugin genérico que ofrece `/goal` y `/loop`, que no consulta ningún tracker ni ejecuta ninguna orden de Estigia",
+        "whether this agent also gets the generic plugin that offers `/goal` and `/loop`, which consults no tracker and runs no Estigia command",
+        "si este agente recibe además el plugin genérico que ofrece `/goal` y `/loop`, que no consulta ningún tracker ni ejecuta ninguna orden de Estigia",
     ),
     // The groups, and the one-word scope every row carries beside its value.
     ("Authority", "Autoridad"),
