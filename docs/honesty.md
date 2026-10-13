@@ -307,7 +307,7 @@ pointer that leaves it names the document it points at.
 - **The old-reference guard sees only numbers above a ceiling.** `tests/issue_references.rs` fails on
   a `#N` in the shipped text (`AGENTS.md`, `README.md`, `CHANGELOG.md`, `docs/`, `skill/`, `changes/`
   and the string literals of `src/` through `source_text::code_of`) when `N` exceeds
-  `PUBLIC_ISSUES_THROUGH`, which is raised by hand. An old reference whose number is at or below that
+  `PUBLIC_ISSUES_THROUGH`, which is raised by hand when the public tracker passes it. An old reference whose number is at or below that
   ceiling is indistinguishable from a public one, so it passes; the guard also does not read `tests/`,
   where a number is often a fixture, or the comments of `src/`.
 

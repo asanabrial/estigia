@@ -153,7 +153,7 @@ decision recorded where a reader looks for it:
   divergences are declared. Tracking is recorded with the `task` operation under the claimed issue in the local store,
   not in a checkout file (`routing.go:116`); and review binds the publication, so a chained delivery reviews per pull
   request rather than per commit (`routing.go:119`).
-- **The managed block per runtime.** Settled. gentle-ai v4 renders a full
+- **The managed block per runtime.** Settled as a declared divergence. gentle-ai v4 renders a full
   orchestrator block per runtime and strips the receipt-driven-development content from runtimes that
   are not review-capable (`internal/components/agentguidance/orchestrator.go:246-266`). Estigia
   deliberately keeps a short pointer directive instead, identical for every runtime: the ODD and
@@ -193,7 +193,7 @@ decision recorded where a reader looks for it:
   do not touch this. Estigia also says why in a plain sentence, beside every reason code, where v4
   shows codes and typed refusals only.
   `Repair ceiling`, which had no counterpart in v4, is retired.
-- **Recovering an escalated review.** Settled. v4's `review recover` takes an
+- **Recovering an escalated review.** Settled as a declared divergence. v4's `review recover` takes an
   exact six-line maintainer authorisation (two spans in
   `internal/reviewtransaction/compact_store.go`) bound to the predecessor lineage, revision and target identity and copies it onto the successor,
   checking the text binding and no repository permission. Estigia diverges, declared: it drops the
@@ -209,7 +209,7 @@ decision recorded where a reader looks for it:
   arguments, defaults or messages since v4.0.0 (`RunReviewRecover` in
   `internal/cli/review_facade.go` only adds carry-over of agent escalation, lens selection and request
   context to the successor), so this is Estigia's own.
-- **A moved base never resets the budget.** Settled. v4 never re-freezes: a correction is a fix diff from the frozen candidate tree, charged
+- **A moved base never resets the budget.** Settled by matching v4. v4 never re-freezes: a correction is a fix diff from the frozen candidate tree, charged
   against the frozen budget and genesis scope (`internal/reviewtransaction/compact.go:2053-2063`).
   Estigia used to start a new genesis with the cumulative at zero when the base advanced, and now
   matches: the round is measured against the tree `git merge-tree --write-tree` makes of the parent

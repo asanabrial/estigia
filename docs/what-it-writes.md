@@ -75,7 +75,7 @@ Five invariants, and the tests are named after them:
    is removed. An interrupted create remains exactly retryable. Comparison follows established setup
     text normalization: CRLF versus LF and a missing final newline do not count as an edit; every other
     textual difference does. An owned canonical file whose bytes match a previous rendering Estigia
-    shipped is ours-older: setup rewrites it to the current rendering rather than refusing. Since then, a body matching
+    shipped is ours-older: setup rewrites it to the current rendering rather than refusing. A body matching
     neither also survives if it is exactly what **this build itself** last wrote
     at that exact path: every real write of a reviewer definition records a digest of the bytes it left
     behind, under the same outside-path record `created_outside` already keeps, and a later run
@@ -1099,8 +1099,7 @@ machine while every other root moved with the sandbox.
 The containment rule above does **not** apply to `CLAUDE_CONFIG_DIR`. It names the whole Claude
 Code configuration rather than a root sitting beside the home, and Claude Code reads it wherever it
 points, inside the home or not. A value dropped for being outside the home would land the gate
-registration under `~/.claude`, exactly where that session does not read it, which is the defect
-that rule exists to prevent.
+registration under `~/.claude`, exactly where that session does not read it.
 
 ## The scope an install is rooted at
 
@@ -1217,8 +1216,8 @@ the example subagent extension and not from Pi's core (see [`honesty.md`](honest
 
 Claude Code's row above is where `setup` writes the reviewer definition, and OpenCode's and Pi's are
 where it writes the two delegated workers; `harness::roles::definition_for` is where the gate reads the
-reviewer definition back, and until it was closed it read only the home-relative fallback, never
-`$CLAUDE_CONFIG_DIR/agents` itself. Closed now, beside the home root rather than instead of it — the
+reviewer definition back, and until the `$CLAUDE_CONFIG_DIR/agents` root was added it read only the home-relative fallback, never
+`$CLAUDE_CONFIG_DIR/agents` itself. Added now, beside the home root rather than instead of it — the
 same asymmetry the paragraph above states for `APPDATA` and `XDG_CONFIG_HOME` not applying to this
 variable. `docs/honesty.md`'s entry on `CLAUDE_CONFIG_DIR` carries the full account, including
 `authorize_review_blind_launch`'s canonical-reviewer proof and the control-surface fragments, which

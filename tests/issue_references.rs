@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-const PUBLIC_ISSUES_THROUGH: u64 = 100;
+const PUBLIC_ISSUES_THROUGH: u64 = 70;
 
 const NOT_ISSUE_REFERENCES: &[(&str, u64, &str)] = &[
     ("CHANGELOG.md", 464, "`close #464, #469, #473 and #474`"),
@@ -14,9 +14,7 @@ const NOT_ISSUE_REFERENCES: &[(&str, u64, &str)] = &[
     ("CHANGELOG.md", 464, "GitHub closed #464 on"),
     ("CHANGELOG.md", 464, "skipping #464's `done`"),
     ("CHANGELOG.md", 318, "another repository's #318"),
-    ("CHANGELOG.md", 167, "(PR #167)"),
     ("docs/parity.md", 4967, "removed SDD and OpenSpec in #4967"),
-    ("docs/honesty.md", 70, "another repository's #70"),
     ("docs/honesty.md", 464, "`close #464`"),
     ("docs/honesty.md", 464, "closed #464 on merge"),
     ("docs/honesty.md", 318, "another repository's #318"),
@@ -34,16 +32,13 @@ const NOT_ISSUE_REFERENCES: &[(&str, u64, &str)] = &[
     ),
 ];
 
-fn root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
-
 fn files_under(dir: &Path, found: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
+    let entries = std::fs::read_dir(dir)
+        .unwrap_or_else(|error| panic!("cannot list {}: {error}", dir.display()));
+    for entry in entries {
+        let path = entry
+            .unwrap_or_else(|error| panic!("cannot read an entry of {}: {error}", dir.display()))
+            .path();
         if path.is_dir() {
             files_under(&path, found);
         } else {
@@ -52,20 +47,23 @@ fn files_under(dir: &Path, found: &mut Vec<PathBuf>) {
     }
 }
 
-fn shipped_text() -> Vec<(String, String)> {
-    let root = root();
+fn shipped_text(root: &Path) -> Vec<(String, String)> {
     let mut paths = vec![
         root.join("AGENTS.md"),
         root.join("README.md"),
         root.join("CHANGELOG.md"),
     ];
     for dir in ["docs", "skill", "changes", "src"] {
-        files_under(&root.join(dir), &mut paths);
+        let path = root.join(dir);
+        if dir == "changes" && !path.exists() {
+            continue;
+        }
+        files_under(&path, &mut paths);
     }
     let mut texts = Vec::new();
     for path in paths {
         let relative = path
-            .strip_prefix(&root)
+            .strip_prefix(root)
             .expect("under the root")
             .to_string_lossy()
             .replace('\\', "/");
@@ -74,9 +72,8 @@ fn shipped_text() -> Vec<(String, String)> {
         if !is_rust && !is_text {
             continue;
         }
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            continue;
-        };
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
         let text = if is_rust {
             if relative.ends_with("/tests.rs") || relative.contains("/tests/") {
                 continue;
@@ -87,6 +84,13 @@ fn shipped_text() -> Vec<(String, String)> {
             text
         };
         texts.push((relative, text));
+    }
+    for prefix in ["docs/", "skill/", "src/"] {
+        assert!(
+            texts.iter().any(|(path, _)| path.starts_with(prefix)),
+            "the scan read nothing under {prefix} of {}",
+            root.display()
+        );
     }
     texts
 }
@@ -127,7 +131,7 @@ fn references_in(text: &str) -> Vec<(u64, &str)> {
 #[test]
 fn shipped_text_cites_no_issue_number_beyond_the_public_ones() {
     let mut stray = Vec::new();
-    for (path, text) in shipped_text() {
+    for (path, text) in shipped_text(&PathBuf::from(env!("CARGO_MANIFEST_DIR"))) {
         for (number, line) in references_in(&text) {
             let allowed = NOT_ISSUE_REFERENCES.iter().any(|(file, allowed, context)| {
                 *file == path && *allowed == number && line.contains(context)
@@ -142,8 +146,8 @@ fn shipped_text_cites_no_issue_number_beyond_the_public_ones() {
     assert!(
         stray.is_empty(),
         "these cite an old issue reference, or an issue newer than PUBLIC_ISSUES_THROUGH \
-         ({PUBLIC_ISSUES_THROUGH}); drop the number, or raise the constant by hand if the issue \
-         is public, or list a non-issue use in NOT_ISSUE_REFERENCES:\n{}",
+         ({PUBLIC_ISSUES_THROUGH}); drop the number, or raise the constant by hand once the public \
+         tracker has passed it, or list a non-issue use in NOT_ISSUE_REFERENCES:\n{}",
         stray.join("\n")
     );
 }
@@ -159,4 +163,60 @@ fn the_reference_scanner_reads_issue_numbers_and_nothing_else() {
     assert_eq!(numbers("issue #117 and (#50)"), vec![117, 50]);
     assert_eq!(numbers("estigia#482"), vec![482]);
     assert!(numbers("color #fff, ## 3, a/b#13045, &#123;, x_#9").is_empty());
+}
+
+#[test]
+fn every_allowed_non_issue_use_still_matches_a_line_of_its_file() {
+    let texts = shipped_text(&PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    let mut stale = Vec::new();
+    for (file, number, context) in NOT_ISSUE_REFERENCES {
+        let matched = texts.iter().any(|(path, text)| {
+            path == file
+                && references_in(text)
+                    .iter()
+                    .any(|(found, line)| found == number && line.contains(context))
+        });
+        if !matched {
+            stale.push(format!("{file}: #{number} in {context:?}"));
+        }
+    }
+    assert!(
+        stale.is_empty(),
+        "these NOT_ISSUE_REFERENCES entries match no line any more; delete them:\n{}",
+        stale.join("\n")
+    );
+}
+
+#[test]
+fn no_allowed_non_issue_use_is_at_or_below_the_ceiling() {
+    for (file, number, _) in NOT_ISSUE_REFERENCES {
+        assert!(
+            *number > PUBLIC_ISSUES_THROUGH,
+            "{file}: #{number} is at or below PUBLIC_ISSUES_THROUGH and needs no entry"
+        );
+    }
+}
+
+#[test]
+#[should_panic(expected = "AGENTS.md")]
+fn a_root_holding_none_of_the_anchors_is_refused() {
+    let empty = std::env::temp_dir().join(format!("estigia-empty-root-{}", std::process::id()));
+    for dir in ["docs", "skill", "src"] {
+        std::fs::create_dir_all(empty.join(dir)).unwrap();
+    }
+    shipped_text(&empty);
+}
+
+#[test]
+#[should_panic(expected = "cannot read")]
+fn a_file_that_exists_and_cannot_be_read_fails_the_scan() {
+    let root = std::env::temp_dir().join(format!("estigia-unreadable-{}", std::process::id()));
+    for dir in ["docs", "skill", "src"] {
+        std::fs::create_dir_all(root.join(dir)).unwrap();
+    }
+    for anchor in ["AGENTS.md", "README.md", "CHANGELOG.md"] {
+        std::fs::write(root.join(anchor), "").unwrap();
+    }
+    std::fs::write(root.join("docs").join("bad.md"), [0xff, 0xfe, 0xfd]).unwrap();
+    shipped_text(&root);
 }

@@ -814,8 +814,7 @@ fn ci_starts_on_a_released_draft_or_an_explicit_dispatch_and_on_nothing_else() {
     assert!(
         compact.contains("merge_group:"),
         "the merge-queue suite cannot run: a ready pull request that enters the queue needs \
-         `merge_group:` on this workflow, and without it the only pre-merge run is missing \
-         :\n{workflow}"
+         `merge_group:` on this workflow, and without it the only pre-merge run is missing:\n{workflow}"
     );
     for forbidden in ["opened", "synchronize", "reopened"] {
         assert!(
