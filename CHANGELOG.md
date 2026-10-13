@@ -12,6 +12,10 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **`doctor` names lockfiles nobody declared as generated.** Issue #7. A new advisory `lockfiles` row lists each
+  tracked lockfile (eighteen known basenames) that `estigia.generated.toml` does not declare and the `[[generated]]`
+  lines to add; it is absent when there is nothing to name, and nothing is declared automatically
+  (`docs/generated-files.md`). `doctor` now checks eighteen things.
 - **The refuter and the validator can launch on their own model.** Issue #6. `Model routing` takes `refuter=<model>` and
   `validator=<model>` beside `reviewer=`; each falls back to `reviewer` when absent, `inherit` passes no `--model`, and a
   lens still launches on `reviewer`. With none set nothing changes. `config set` refuses any other key and names the

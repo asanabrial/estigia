@@ -3000,6 +3000,16 @@ fn every_setting_the_gate_enforces_is_one_gate_context_actually_carries() {
 #[test]
 fn every_name_this_list_declares_is_one_doctor_can_report() {
     let root = tempfile::tempdir().expect("a temporary directory");
+    std::fs::write(root.path().join("Cargo.lock"), "").expect("a lockfile");
+    for arguments in [["init", "--quiet"], ["add", "Cargo.lock"]] {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(arguments)
+            .status()
+            .expect("git on the path");
+        assert!(status.success(), "git {arguments:?} failed");
+    }
     let home = tempfile::tempdir().expect("a temporary home");
     let options = estigia::setup::SetupOptions {
         home_dir: Some(home.path().to_path_buf()),

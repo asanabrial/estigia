@@ -7190,7 +7190,7 @@ pointer that leaves it names the document it points at.
   no transport could again be decided by a second, drifting implementation, and nothing in this suite
   would catch it until the guard is rewritten against that tracker's actual shape.
 
-- **`doctor` checks seventeen things, not everything.** Skill, installed skill assets, `gh`
+- **`doctor` checks eighteen things, not everything.** Skill, installed skill assets, `gh`
   authentication, a git remote, this repository's push guard, the contract each configured agent
   reads, whether the root the gate decides in carries the rows those agents read, whether the gate
   each of them registers would actually run, whether the tool server each
@@ -7200,7 +7200,8 @@ pointer that leaves it names the document it points at.
   delivery owns have accumulated, whether any call has reached that
   gate and gone undecided, whether the binary answering this command is the checkout's own
   build, whether the local workflow store opens, and whether Pi's own settings exclude Estigia's
-  extensions or override its tool server. It does not check the tracker's labels, or whether the
+  extensions or override its tool server, and whether a tracked lockfile is sent to every reviewer in full because
+  `estigia.generated.toml` does not declare it (an advisory row that is absent when there is nothing to name). It does not check the tracker's labels, or whether the
   repository it found is the one the issues live in.
 
   The skill comparison is against this binary's embedded copy, so a stale binary reports its own
@@ -8091,7 +8092,7 @@ pointer that leaves it names the document it points at.
   consequence: it is no longer git's own text that answers. The recovery is the same
   `git worktree remove`, and it is written in the binding rather than enforced here. Measured by the blind reviewer of receipt
   `6b192e0ee94f11004b621c06c8e8e5dd` across twenty-four template shapes.
-- **Four of the seventeen are about the past.** `silence`: a call the gate cannot decide on — a
+- **Four of the eighteen are about the past.** `silence`: a call the gate cannot decide on — a
   payload it cannot parse, or one that never arrived — is waved through, and that is the right
   answer: a schema this build does not know could be wrapping a read as easily as a write. What is
   wrong is doing it quietly. Both leave a ledger line, and `doctor` is what reads those lines back,
