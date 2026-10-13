@@ -173,27 +173,33 @@ fn run_process_with(
     loop {
         collect_reader_results(&receiver, &mut stdout, &mut stderr);
         if status.is_none() {
-            match child.try_wait() {
-                Ok(Some(found)) => {
-                    status = Some(found);
+            match process_tree::exited(&mut child) {
+                Ok(true) => {
                     exited_at = Some(Instant::now());
-                    reaped = true;
+                    tree_terminated = true;
+                    if let Some(tree) = &tree
+                        && let Err(error) = tree.terminate()
+                    {
+                        failure = Some(tree_termination_failure(&program, error));
+                    }
+                    match child.wait() {
+                        Ok(found) => {
+                            status = Some(found);
+                            reaped = true;
+                        }
+                        Err(error) => {
+                            failure.get_or_insert_with(|| {
+                                format!("{} could not be waited on: {error}", program.display())
+                            });
+                        }
+                    }
                 }
-                Ok(None) => {}
+                Ok(false) => {}
                 Err(error) => {
                     failure.get_or_insert_with(|| {
                         format!("{} could not be waited on: {error}", program.display())
                     });
                 }
-            }
-        }
-
-        if status.is_some() && !tree_terminated {
-            tree_terminated = true;
-            if let Some(tree) = &tree
-                && let Err(error) = tree.terminate()
-            {
-                failure = Some(tree_termination_failure(&program, error));
             }
         }
 
@@ -431,5 +437,21 @@ mod tests {
         let captured = read_all(output.as_slice()).expect("memory input is readable");
         assert_eq!(captured.bytes.len(), MAX_CAPTURED_OUTPUT);
         assert!(captured.truncated);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_that_exits_has_its_group_killed_before_it_is_reaped() {
+        let now = Instant::now();
+        let output = run_process(
+            PathBuf::from("sh"),
+            vec!["-c".to_owned(), "exit 0".to_owned()],
+            Duration::from_secs(10),
+            None,
+            now + Duration::from_secs(10),
+            now + Duration::from_secs(20),
+        )
+        .expect("a clean exit finishes");
+        assert!(output.status.success());
     }
 }

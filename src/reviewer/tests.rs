@@ -1226,3 +1226,23 @@ fn the_reviewer_child_keeps_the_user_names_the_keychain_lookup_needs() {
         },
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn a_reviewer_that_exits_has_its_group_killed_before_it_is_reaped() {
+    let scratch = std::env::temp_dir();
+    let args = [
+        std::ffi::OsString::from("-c"),
+        std::ffi::OsString::from("exit 0"),
+    ];
+    let finished = run::execute(&run::Launch {
+        program: Path::new("sh"),
+        args: &args,
+        cwd: &scratch,
+        stdin: b"",
+        environment: &[],
+        deadline: Duration::from_secs(10),
+    })
+    .expect("a clean exit finishes");
+    assert_eq!(finished.code, Some(0));
+}

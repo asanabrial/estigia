@@ -28,18 +28,60 @@ mod unix {
 
     impl Owner {
         pub(crate) fn terminate(&self) -> Result<(), String> {
+            #[cfg(test)]
+            assert!(
+                leader_is_unreaped(self.group),
+                "process group {} was signalled after its leader was reaped",
+                self.group
+            );
             // SAFETY: the child was placed in a fresh process group whose ID is
             // its PID. A negative PID addresses that group and no other one.
             if unsafe { libc::kill(-self.group, libc::SIGKILL) } == 0 {
                 return Ok(());
             }
             let error = std::io::Error::last_os_error();
-            if error.raw_os_error() == Some(libc::ESRCH) {
+            let nothing_left = match error.raw_os_error() {
+                Some(libc::ESRCH) => true,
+                Some(libc::EPERM) => matches!(peek(self.group as u32), Ok(true)),
+                _ => false,
+            };
+            if nothing_left {
                 Ok(())
             } else {
                 Err(error.to_string())
             }
         }
+    }
+
+    /// Whether the child has exited, without reaping it: a zombie leader keeps
+    /// its process-group ID reserved until the caller waits.
+    pub(crate) fn exited(child: &mut Child) -> std::io::Result<bool> {
+        peek(child.id())
+    }
+
+    fn peek(pid: u32) -> std::io::Result<bool> {
+        // SAFETY: an all-zero siginfo_t is a valid out-parameter for waitid.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        // SAFETY: `info` is a valid out-parameter, and WNOWAIT leaves the child
+        // waitable.
+        let status = unsafe {
+            libc::waitid(
+                libc::P_PID,
+                pid as libc::id_t,
+                &mut info,
+                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+            )
+        };
+        if status != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: waitid succeeded, so the pid field of `info` is initialised.
+        Ok(unsafe { info.si_pid() } != 0)
+    }
+
+    #[cfg(test)]
+    fn leader_is_unreaped(group: i32) -> bool {
+        peek(group as u32).is_ok()
     }
 
     pub(crate) fn launcher_can_be_contained(_program: &Path) -> bool {
@@ -132,6 +174,10 @@ mod windows {
         }
     }
 
+    pub(crate) fn exited(child: &mut Child) -> std::io::Result<bool> {
+        child.try_wait().map(|status| status.is_some())
+    }
+
     pub(crate) fn launcher_can_be_contained(program: &Path) -> bool {
         program
             .extension()
@@ -143,6 +189,33 @@ mod windows {
 }
 
 #[cfg(unix)]
-pub(crate) use unix::{Owner, launcher_can_be_contained, prepare};
+pub(crate) use unix::{Owner, exited, launcher_can_be_contained, prepare};
 #[cfg(windows)]
-pub(crate) use windows::{Owner, launcher_can_be_contained, prepare};
+pub(crate) use windows::{Owner, exited, launcher_can_be_contained, prepare};
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::process::Command;
+    use std::time::{Duration, Instant};
+
+    use super::{exited, prepare};
+
+    #[test]
+    fn an_exited_leader_is_observed_unreaped_and_its_group_is_still_signalled_cleanly() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 3"]);
+        let prepared = prepare(&mut command).expect("a process group is prepared");
+        let mut child = command.spawn().expect("sh starts");
+        let tree = prepared.attach(&child).expect("the group is owned");
+        let limit = Instant::now() + Duration::from_secs(10);
+        while !exited(&mut child).expect("the child is observed") {
+            assert!(Instant::now() < limit, "sh did not exit");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(exited(&mut child).expect("observing again does not reap"));
+        tree.terminate()
+            .expect("a zombie-only group is not an error");
+        let status = child.wait().expect("the leader is still waitable");
+        assert_eq!(status.code(), Some(3));
+    }
+}

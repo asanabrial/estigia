@@ -557,7 +557,8 @@ There is deliberately no universal model list. `AgentAdapter` owns the source fo
   no structurally valid model ID makes the advisory catalog unavailable rather than parsing a prefix.
   A missing, failed, timed-out or rejected script-launcher probe leaves custom model input available.
 - Every completed direct process triggers **best-effort descendant cleanup**; every timeout or
-  lingering-pipe failure does too. A fresh Unix process group receives `SIGKILL`; a direct Windows `.exe` or
+  lingering-pipe failure does too. A fresh Unix process group receives `SIGKILL` while its leader is
+  exited but not yet reaped, so a recycled process-group ID is never signalled; a direct Windows `.exe` or
   `.com` is assigned to a kill-on-close Job Object and script launchers are refused. The direct child
   is killed and polled for reaping during failure cleanup, then handed to a background reaper if the OS
   does not report exit in that grace. Job assignment occurs just after Windows spawn, so a child that

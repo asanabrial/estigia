@@ -168,10 +168,10 @@ pub(super) fn execute(launch: &Launch<'_>) -> Result<Finished, Refusal> {
     });
 
     let limit = Instant::now() + launch.deadline;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {}
+    loop {
+        match process_tree::exited(&mut child) {
+            Ok(true) => break,
+            Ok(false) => {}
             Err(error) => {
                 let note = stop(&tree, &mut child);
                 return Err(launch_failed(format!(
@@ -196,8 +196,12 @@ pub(super) fn execute(launch: &Launch<'_>) -> Result<Finished, Refusal> {
             )));
         }
         std::thread::sleep(POLL_INTERVAL);
-    };
-    if let Err(error) = tree.terminate() {
+    }
+    let killed = tree.terminate();
+    let status = child
+        .wait()
+        .map_err(|error| launch_failed(format!("{shown} could not be waited on: {error}")))?;
+    if let Err(error) = killed {
         return Err(launch_failed(format!(
             "{shown} exited with {} and killing its process tree failed: {error}",
             exit_description(status.code())
