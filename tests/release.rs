@@ -133,7 +133,7 @@ fn the_intel_macos_runner_label_is_dated() {
     // that image: `workflow_targets` reads the triples and never the labels.
     // When GitHub retires the last hosted x86_64 macOS image the leg queues
     // until the 24-hour timeout and every publication lane goes red — the
-    // failure #432 recorded, with nothing in-crate noticing first. So the label
+    // failure that was recorded, with nothing in-crate noticing first. So the label
     // is dated: past the day below, an unchanged label is a red test rather than
     // a stuck lane.
     let workflow = read(".github/workflows/release.yml");
@@ -153,8 +153,8 @@ fn the_intel_macos_runner_label_is_dated() {
         now < INTEL_MACOS_LABEL_GOES_RED_AT,
         "the release workflow still builds x86_64-apple-darwin on macos-15-intel, which GitHub \
          retires in August 2027. A retired label queues until the 24-hour timeout and reddens \
-         every publication lane (#432). Move the target to a supported image or drop it (issue \
-         #436), then update this check"
+         every publication lane. Move the target to a supported image or drop it, \
+         then update this check"
     );
 }
 
@@ -782,7 +782,7 @@ fn every_command_the_rules_tell_you_to_run_is_one_ci_runs() {
 /// trigger somebody deletes while tidying, and the first thing that notices is a
 /// delivery that lost its lane.
 ///
-/// The fourth is `merge_group:` (issue #133): it fires when a ready pull request
+/// The fourth is `merge_group:`: it fires when a ready pull request
 /// enters the merge queue, after the review barrier, not on topic push. Named
 /// here for the same reason as `workflow_dispatch:` — a silent drop is a
 /// delivery that loses its only pre-merge suite under the queue.
@@ -815,7 +815,7 @@ fn ci_starts_on_a_released_draft_or_an_explicit_dispatch_and_on_nothing_else() {
         compact.contains("merge_group:"),
         "the merge-queue suite cannot run: a ready pull request that enters the queue needs \
          `merge_group:` on this workflow, and without it the only pre-merge run is missing \
-         (issue #133):\n{workflow}"
+         :\n{workflow}"
     );
     for forbidden in ["opened", "synchronize", "reopened"] {
         assert!(
@@ -953,7 +953,7 @@ fn no_workflow_runs_a_deprecated_action_or_discards_a_red_cache() {
         // Every step on a versioned action, checked against that action's own
         // floor. This was the checkout alone, and the checkout was one of five:
         // four actions in these workflows declared `node20` while the guard read
-        // past them, which is the gap issue #18 filed.
+        // past them, which was the gap.
         for code in &running {
             let Some((action, reference)) = versioned_action(code) else {
                 continue;

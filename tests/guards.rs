@@ -727,12 +727,12 @@ const AFFIRMED: &[(&str, u64)] = &[
     // unchanged, still true.
     //
     // Re-read on 2026-10-05: `git switch --create` and `git switch --force-create`
-    // joined it (issue #544, folding #545/#546). They create a ref exactly as
+    // joined it. They create a ref exactly as
     // `git switch -c` does, and the claim — these spellings are gated, and they
     // are not the only spellings — is unchanged by adding two more gated
     // spellings.
     //
-    // Re-read on 2026-10-07: `git switch --orphan` joined it (issue #888). It
+    // Re-read on 2026-10-07: `git switch --orphan` joined it. It
     // creates a ref exactly as `git switch -c` does, and the claim is unchanged
     // by adding one more gated spelling.
     ("repository-shell", 11936916847651860326),
@@ -770,12 +770,12 @@ const AFFIRMED: &[(&str, u64)] = &[
     //
     // Re-read on 2026-09-27: the committed arm's fallback detail now says *this
     // operation had already written* rather than *this call*, because a retry
-    // resuming an earlier call's marker takes the same arm (issue #419). Codes
+    // resuming an earlier call's marker takes the same arm. Codes
     // `0` through `5` and the `_` arm to `Unknown` are unchanged, so the
     // population and its boundary still hold.
     //
     // Re-read on 2026-10-06: `translate` also sets the refusal's `class` from the
-    // exit code and the class table (issue #710). Codes `0` through `5`, and the
+    // exit code and the class table. Codes `0` through `5`, and the
     // `_` arm to `Unknown`, are untouched: the new field reads the same exit code
     // and maps `5` and the unnamed codes to `unknown`, never to a named state.
     // Re-read the next day, after review: only exit `1` reads the class table, so a
@@ -827,7 +827,7 @@ const AFFIRMED: &[(&str, u64)] = &[
     // `disarming-shell`, carried here from the file layout that used to hold
     // both under one comment block; see that entry below.)
     //
-    // Re-read on 2026-09-27, for issue #331. Two members joined rather than a
+    // Re-read on 2026-09-27. Two members joined rather than a
     // rule moving: `estigia config edit` and `estigia config forget` write what
     // the listed `estigia config set` writes — the installed contract, and a
     // repository's own rows — and neither matched any population, so the gate
@@ -839,7 +839,7 @@ const AFFIRMED: &[(&str, u64)] = &[
     // substring match, so a spelling that reaches the same effect another way
     // is not — is unchanged. Affirmed.
     ("disarming-shell", 16261140763946589303),
-    // Added on 2026-09-27, for issue #331. `estigia config list` and `estigia
+    // Added on 2026-09-27. `estigia config list` and `estigia
     // config repos` are the subcommands of a verb the disarm list names that
     // only read; the crossing that holds every leaf under such a verb to the
     // list needs the other side declared somewhere a test can read, and this is
@@ -851,7 +851,7 @@ const AFFIRMED: &[(&str, u64)] = &[
     // cleared, so a third writing subcommand is a decision rather than an
     // omission.
     ("disarm-reads", 2044718300305756683),
-    // Re-read on 2026-10-07, for issue #969. The verb and the `estigia` word
+    // Re-read on 2026-10-07. The verb and the `estigia` word
     // are now matched on a dequoted copy as the record matchers already were,
     // so `estigia stand\-down`, `st''and-down` and `es''tigia stand-down` no
     // longer split past the matcher while the shell runs them. The declaration
@@ -966,9 +966,9 @@ const AFFIRMED: &[(&str, u64)] = &[
     //
     // - Three members **left** this list and are not a loosening. `.cline/rules/`,
     //   `.continue/rules/` and `windsurf/memories/` were derived, by truncating
-    //   the instruction fragment each of those adapters declared. Issue #722
-    //   retired Continue and Cline as installable hosts, so their two directories
-    //   became literals again, and issue #726 did the same for Windsurf's and
+    //   the instruction fragment each of those adapters declared. Continue and
+    //   Cline were retired as installable hosts, so their two directories
+    //   became literals again, and the same happened to Windsurf's and
     //   removed the derivation: no answer moved, and a future adapter's rules
     //   directory is no longer a compile-time question, which `docs/honesty.md`
     //   says. `.cursor/rules/` stayed a literal and says why: Estigia writes no
@@ -989,7 +989,7 @@ const AFFIRMED: &[(&str, u64)] = &[
     //
     // The matcher grew a third anchoring rule with them — a fragment holding no
     // separator is a whole segment — and that is the matcher rather than the rule.
-    // Since issue #13 the corpus beside this list holds all three clauses: drop any
+    // The corpus beside this list holds all three clauses: drop any
     // one of them and `the_control_surface_matcher_answers_its_corpus` reddens, so
     // recording the moved answer is what reopens the `control-surface-corpus`
     // claim.
@@ -1002,8 +1002,8 @@ const AFFIRMED: &[(&str, u64)] = &[
     // entry. Both are configuration a host reads to decide what an
     // agent may do, which is the principle above — the same one Windsurf's MCP
     // file was already admitted under, even though `paths_in` answers `None` for
-    // that one. Issue #115 then crossed `~/.zcode/cli/config.json` against a
-    // running ZCode CLI: `paths_in` now resolves it and setup writes there, which
+    // that one. `~/.zcode/cli/config.json` against a
+    // running ZCode CLI was then crossed too: `paths_in` now resolves it and setup writes there, which
     // only strengthens the case for gating it, and
     // `every_control_file_an_adapter_has_is_one_the_gate_measures` crosses
     // ZCode's `mcp_config` against this population. The rule did not move; two
@@ -1023,11 +1023,11 @@ const AFFIRMED: &[(&str, u64)] = &[
     // `CONTROL_SURFACE` itself, since it is prose about the declaration rather
     // than the declaration. Words unchanged, still true.
     //
-    // Re-read by issue #1182: four entries for the files Pi reads to decide what to load
+    // Re-read: four entries for the files Pi reads to decide what to load
     // (`settings.json` at both levels, the project's `mcp.json` and `extensions/`). The rule
     // did not move; paths that always satisfied it were added.
     ("control-surface", 17443982373056176872),
-    // Added 2026-09-24 by issue #13. The declaration above names `CONTROL_SURFACE`,
+    // Added 2026-09-24. The declaration above names `CONTROL_SURFACE`,
     // a list, so it held the population and not the code that matches against it:
     // three changes to `is_anchored_fragment` moved which paths the gate watches
     // while this registry stayed green, two of them narrowings. The corpus is the
@@ -1035,13 +1035,13 @@ const AFFIRMED: &[(&str, u64)] = &[
     // give it — so a matcher edit that moves an answer reddens its behaviour test,
     // and recording the new answer here is what reopens this claim.
     //
-    // Re-read 2026-10-04 by issue #109, which folded #461 and #462. The corpus
+    // Re-read 2026-10-04. The corpus
     // grew a relative path that begins with a fragment — held only by the
     // `starts_with` half of the anchor — and a path under an adapter-derived
     // instruction directory that no `CONTROL_SURFACE` literal names, so the
     // declaration now enumerates both seams. Words moved, still true.
     //
-    // Re-read by issue #726, which removed the derivation: the directory is a
+    // Re-read when the derivation was removed: the directory is a
     // `CONTROL_SURFACE` literal now, the corpus entry stays and the declaration
     // no longer names an adapter-derived fragment. No answer moved.
     ("control-surface-corpus", 8243348639883436307),
@@ -1074,7 +1074,7 @@ const AFFIRMED: &[(&str, u64)] = &[
     // Re-read on 2026-08-28: moved into `WRITES_A_FILE_POPULATION`, a `pub
     // const` immediately before `writes_a_file`. Words unchanged, still true.
     //
-    // Re-read on 2026-10-04 (issue #82): the caller now hands `writes_a_file`
+    // Re-read on 2026-10-04: the caller now hands `writes_a_file`
     // `shell::data_view`'s line, whose quoted data and here-document bodies a
     // single read-only simple command provably does not run, so a write verb
     // inside a `jq` program is no longer read as a command. `writes_a_file`
@@ -1082,7 +1082,7 @@ const AFFIRMED: &[(&str, u64)] = &[
     // declaration is still true — its boundary is what is *visible on the
     // command line*, and a quoted program is not on it.
     //
-    // Re-read on 2026-10-05 (issue #678): `rg --pre` joined the reading, for the
+    // Re-read on 2026-10-05: `rg --pre` joined the reading, for the
     // flag spelling that runs a program over every file it searches. The boundary
     // is unmoved — that program is visible on the line — and a plain `rg` search
     // is still not a write.
@@ -1097,7 +1097,7 @@ const AFFIRMED: &[(&str, u64)] = &[
     // `pub const` immediately before `RUNS_ANOTHER_COMMAND`. Words unchanged,
     // still true.
     //
-    // Re-read on 2026-09-27 (issue #452): `script` joined the list, for BSD's
+    // Re-read on 2026-09-27: `script` joined the list, for BSD's
     // spelling — darwin's — which hands its command over as the words after
     // the optional typescript file rather than through the code flag the entry
     // beside it reads. The boundary is unmoved: that command is still visible
@@ -1117,7 +1117,7 @@ const AFFIRMED: &[(&str, u64)] = &[
     // const` immediately before `NEUTRALISES_A_FILE`. Words unchanged, still
     // true.
     //
-    // Re-read on 2026-10-04 (issue #87): the arm asked `surface_of` alone, so a
+    // Re-read on 2026-10-04: the arm asked `surface_of` alone, so a
     // `chmod` on the repository's own configuration — deliberately not on the
     // control surface — was `Untouched`. The boundary sentence now names the
     // repository configuration beside the control surface, and the arm asks the
@@ -1135,13 +1135,13 @@ const AFFIRMED: &[(&str, u64)] = &[
     // Re-read on 2026-08-28: moved into `DELIVERS_POPULATION`, a `pub const`
     // immediately before `DELIVERS`. Words unchanged, still true.
     //
-    // Re-read on 2026-10-05 (issue #707): the boundary sentence now says one
+    // Re-read on 2026-10-05: the boundary sentence now says one
     // issue may land several pull requests — a chained delivery merges each
     // slice on its own — so the population counts a step and not a delivery.
     // The five spellings are unmoved.
     ("delivery-phase", 10798423924504364469),
-    // `says-nothing` — new on 2026-09-07, issue #339; re-read on 2026-10-03,
-    // issue #349. `blank-review-basis` refused an empty or whitespace-only
+    // `says-nothing` — new on 2026-09-07; re-read on 2026-10-03.
+    // `blank-review-basis` refused an empty or whitespace-only
     // `basis`, and `record_review_finding` refused an empty `evidence` or
     // `impact` the same way, but a word wearing the same emptiness — `n/a`,
     // `TODO`, `placeholder` — satisfied all three and was recorded as the
@@ -1153,12 +1153,12 @@ const AFFIRMED: &[(&str, u64)] = &[
     // `"nothing was executed"` accepted through the real MCP call in
     // `tests/pipe.rs`'s `a_verdict_names_what_it_measured_or_says_it_did_not`.
     // The subject moved from the function to the list so the fingerprint still
-    // covers the words; #349 also added the never-ran evidence file to the
+    // covers the words; the later change also added the never-ran evidence file to the
     // fields this population decides, and
     // `claim::tests::every_says_nothing_word_earns_its_place` exercises each
     // word the list holds.
     ("says-nothing", 875567323853761936),
-    // `explained-matches-level` — new on 2026-09-07, issue #340. The issue's
+    // `explained-matches-level` — new on 2026-09-07. The issue's
     // own Problem section claimed nothing cross-checks the risk classifier's
     // `reasons` against its `level`; that check has existed since `review_tier`
     // shipped, and `rg 'is not explained by its reasons' src tests` found
@@ -1196,10 +1196,10 @@ const AFFIRMED: &[(&str, u64)] = &[
     // pins the agreement itself over fourteen of those shapes, so an edit that
     // desyncs the two derivations reddens there on one of those fourteen and
     // cannot speak for a shape outside them.
-    // Reopened by issue #714 S1: the population text now names the content scan's three reasons,
+    // Reopened: the population text now names the content scan's three reasons,
     // each carrying a signal, so both derivations still read `high` from the same reasons.
     ("explained-matches-level", 15100569489321898599),
-    // `install-planned-callers` — new on 2026-10-03, issue #42. `install_planned`
+    // `install-planned-callers` — new on 2026-10-03. `install_planned`
     // deploys adapter assets and is ungated; the guided route is safe only
     // because `guided_install` calls `lifecycle_preflight` first, and that had
     // been prose a reviewer checks rather than a test that holds it. Read
@@ -1215,13 +1215,13 @@ const AFFIRMED: &[(&str, u64)] = &[
     // Reaffirmed for issue #36: `install_planned` now asks `skill::checkout_root` rather than
     // `here.join(".git")`; its call sites and the preflight in front of them are untouched.
     ("install-planned-callers", 10948558613944442242),
-    // `tracker-transport-absent` — new on 2026-10-05, issue #346, reaffirmed on
-    // 2026-10-05 by issue #847. `Tracker` has two variants now: `Github`, whose
+    // `tracker-transport-absent` — new on 2026-10-05, reaffirmed on
+    // 2026-10-05. `Tracker` has two variants now: `Github`, whose
     // `transport()` answers `Some`, and `Linear`, whose `transport()` answers
     // `None` — so the eight arms that read that absence are reached when the
     // tracker is Linear, except `cli::inert_tracker`, which asks
     // `Tracker::adjudicates_unclaimed_writes` and so excludes a read-only tracker
-    // only under `Workflow: assisted`. They are the seam issue #180 left, and the
+    // only under `Workflow: assisted`. They are the seam that was left, and the
     // declaration binds to `Tracker`'s own variants so a further one reopens it.
     // Read against the code before recording: the eight sites are `cli::doctor`'s
     // "has no executable transport" sentence (which now names Linear's
@@ -1231,11 +1231,10 @@ const AFFIRMED: &[(&str, u64)] = &[
     // `NoTracker` aside, `harness::tracker_answer_for_pointer`,
     // `harness::queue_read` and `harness::completed_work`;
     // `harness::unclaimed::applies` and `harness::issue_requirement::in_force`
-    // left the list for `Tracker::adjudicates_unclaimed_writes` (issue #847
-    // follow-up), which holds the refusals under Linear. Deliberately
+    // left the list for `Tracker::adjudicates_unclaimed_writes` (a follow-up), which holds the refusals under Linear. Deliberately
     // too-tight: a call site added before a further variant lands is not caught.
     ("tracker-transport-absent", 17163727701946764455),
-    // `own-delivery-close-spelling` — new on 2026-10-05, issue #348. The
+    // `own-delivery-close-spelling` — new on 2026-10-05. The
     // `closed-by-own-delivery` token the transport writes into `checked[0]` and
     // the harness reads back had two spellings with nothing crossing them; they
     // now share `OWN_DELIVERY_CLOSE_PREFIX`, and this declaration binds to that const
@@ -1542,12 +1541,11 @@ fn the_tracker_rig_cannot_answer_that_it_did_not_run() {
     );
 }
 
-/// The two git fixtures that answered an `Option` hold the panic issue #476 gave them.
+/// The two git fixtures that answered an `Option` hold a panic.
 ///
 /// `git_repo()` in `src/harness/doctor.rs` and `release_repo()` in
 /// `src/cli/tests.rs` returned `Option<tempfile::TempDir>` over a single
-/// `git init --quiet`, and a caller spelled a missing `git` as a skip. #476 made
-/// both return the directory and panic instead, but the panic was held by no
+/// `git init --quiet`, and a caller spelled a missing `git` as a skip. Both now return the directory and panic instead, but the panic was held by no
 /// test: reverting the fixtures and their call sites left the suite green, which
 /// `AGENTS.md` calls a finding rather than a formality. This is that test.
 ///

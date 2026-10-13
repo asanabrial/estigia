@@ -304,6 +304,13 @@ pointer that leaves it names the document it points at.
   half is what makes that binary current, and no run can observe the probe. `AGENTS.md` carries the
   instruction and says what each half builds; the reason none holds it is this entry.
 
+- **The old-reference guard sees only numbers above a ceiling.** `tests/issue_references.rs` fails on
+  a `#N` in the shipped text (`AGENTS.md`, `README.md`, `CHANGELOG.md`, `docs/`, `skill/`, `changes/`
+  and the string literals of `src/` through `source_text::code_of`) when `N` exceeds
+  `PUBLIC_ISSUES_THROUGH`, which is raised by hand. An old reference whose number is at or below that
+  ceiling is indistinguishable from a public one, so it passes; the guard also does not read `tests/`,
+  where a number is often a fixture, or the comments of `src/`.
+
 ## Models, routing and reviewer definitions
 
 - **Model catalogs do not measure runtime availability or capability.** The Claude Code and Codex

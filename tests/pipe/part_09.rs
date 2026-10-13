@@ -1,6 +1,6 @@
 use super::*;
 
-/// Issue #48, final elected round: the `handoff_review` sender pushes
+/// Final elected round: the `handoff_review` sender pushes
 /// `--runtime` from the validated `NamedRun.runtime`
 /// (`run_tool` in `src/harness/mcp/mod.rs`) rather than the constant — and that value
 /// reaches the timeline through the `unassign` write `handoff_review`
@@ -178,7 +178,7 @@ fn a_non_claude_run_id_hands_off_review_under_its_own_runtime_not_the_constant()
     );
 }
 
-/// Issue #48, author-elected round: the adopted-operation arm at
+/// Author-elected round: the adopted-operation arm at
 /// `src/transport/claim.rs:6411` checks `adopted_expected` against the
 /// **live, already-persisted** marker `may_claim` adopts — not the caller's
 /// own fresh id, which is why neither
@@ -305,7 +305,7 @@ fn a_claim_to_a_person_prints_the_transport_answer_indented() {
     );
 }
 
-/// Issue #48, severe 1: a claim marker persisted under an operation id this
+/// Severe 1: a claim marker persisted under an operation id this
 /// run already holds — `run_tool` reuses it rather than minting fresh, the
 /// documented renewal in `run_tool` (`src/harness/mcp/mod.rs`) — must be readable
 /// under the run's own current runtime even when the marker was written
@@ -567,7 +567,7 @@ fn a_claim_retry_after_a_landed_write_whose_readback_failed_adopts_the_epoch() {
 
 /// A run whose own claim has lapsed cannot take the issue back through
 /// `claim`, because the operation id `claim` reuses on retry names a **dead**
-/// event rather than a live one to resume — issue #36.
+/// event rather than a live one to resume.
 ///
 /// Reproduced with the run's own holding of the issue having come from a
 /// `reclaim` rather than a `claim`, because that is the shape the issue's own
@@ -870,9 +870,9 @@ fn a_lapsed_self_claim_that_originated_as_a_reclaim_can_be_claimed_again() {
 }
 
 /// A run whose own claim lapsed and was then reclaimed and released by another
-/// run can take the issue again — issue #83.
+/// run can take the issue again.
 ///
-/// #36's exception read `holding().stale` only, and `reduce_ownership`
+/// The exception read `holding().stale` only, and `reduce_ownership`
 /// truncates at the last takeover. Once a foreign `reclaim` closed the epoch
 /// this run's acquisition sat in, that acquisition appeared in neither `live`
 /// nor `stale`, so the reused id met the old lockout again: a `reclaim`-origin
@@ -1248,7 +1248,7 @@ fn create_passes_the_callers_title_through_unmodified() {
 /// `create` files the caller's body with no `issue-flow:` marker in it and
 /// records the identity and the `blocked-until` clause in the local store.
 ///
-/// `ESTIGIA_FAKE_BODY_LOG` (issue #48) reads the staged `--body-file` before
+/// `ESTIGIA_FAKE_BODY_LOG` reads the staged `--body-file` before
 /// `create`'s own `std::fs::remove_file(&staged)` runs, so this crosses the
 /// window the title test above could not.
 ///
@@ -1454,7 +1454,7 @@ fn an_unreadable_repository_identity_mirrors_nothing_and_the_label_still_moves()
     );
 }
 
-/// Issue #61: `skill/SKILL.md`'s delivery step named merge, tag, renew,
+/// `skill/SKILL.md`'s delivery step named merge, tag, renew,
 /// transition to `done`, record evidence and close — and never named release,
 /// so a run that followed it exactly left `~/.estigia/runs/<id>.json` naming a
 /// checkout, over an issue that same run had just closed. This drives the
@@ -1784,7 +1784,7 @@ fn a_delivery_that_follows_the_sequence_puts_its_own_claim_down() {
     assert!(
         !pointer.exists(),
         "the run pointer survived a release the tracker accepted \u{2014} the exact phantom \
-         holder issue #61 is about"
+         holder this guards against"
     );
 
     // And the checkout stays: the timeline carries no publication of this
@@ -1809,7 +1809,7 @@ fn a_delivery_that_follows_the_sequence_puts_its_own_claim_down() {
     );
 }
 
-/// Issue #21: `release` is the one step the delivery path runs after the close,
+/// `release` is the one step the delivery path runs after the close,
 /// and it is where the run that delivered puts its checkout down. This drives a
 /// real `release` against an issue whose close the tracker recognises as this
 /// run's own delivery — the same `own_delivery_close` proof `verify_claim`
@@ -2036,7 +2036,7 @@ fn releasing_a_delivered_issue_puts_its_checkout_and_branch_down() {
     );
 }
 
-/// Issue #777: a delivery deletes every remote head its run recorded starting,
+/// A delivery deletes every remote head its run recorded starting,
 /// not only the pull request's own — the branch linked at `start_branch` is not
 /// always the branch published, and GitHub's `delete_branch_on_merge` removes
 /// only the latter. The checkout here is on the recorded branch while the pull
@@ -2279,7 +2279,7 @@ fn a_delivery_deletes_a_recorded_remote_head_that_is_not_the_pull_requests() {
     );
 }
 
-/// Issue #777: the operator-invoked sweep. It lists a merged head, deletes
+/// The operator-invoked sweep. It lists a merged head, deletes
 /// nothing until `--confirm`, and removes it when confirmed.
 #[test]
 fn prune_lists_a_merged_head_and_confirm_deletes_it() {
@@ -2372,7 +2372,7 @@ fn prune_lists_a_merged_head_and_confirm_deletes_it() {
     );
 }
 
-/// Issue #22, folding #559: a release whose unassign marker is already on the
+/// A release whose unassign marker is already on the
 /// issue — the retried release — must retire the checkout too. Before this, the
 /// resumed path answered without a `checkout` key and never attempted
 /// retirement, so a first release that posted its marker and then failed before
@@ -3399,7 +3399,7 @@ fn launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_r
     assert!(said.contains("capture-input-not-offered"), "{again}");
 }
 
-/// Issue #1051: a `high` review licenses four lenses, and the batched `names`
+/// A `high` review licenses four lenses, and the batched `names`
 /// argument launches every one of them in a single call and collects every one
 /// of them in the next, rather than one call per slot. The review still reaches
 /// `approved` end to end, and the call count drops from the eight a per-slot

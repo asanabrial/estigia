@@ -29,9 +29,9 @@ itself prevents that — the corruption happens one layer below where the text i
 
 ## Auto-close, and why it does not end the work
 
-Seen live (2026-07-26, issue #118 / PR #119): the PR body's first line read
-`Refs #118 — a plain reference, deliberately NOT a closing keyword`, no commit message on the branch
-carried a keyword either, and `closingIssuesReferences` still returned `[118]`. GitHub converts the
+Seen live (2026-07-26): the PR body's first line read
+`Refs #N — a plain reference, deliberately NOT a closing keyword`, no commit message on the branch
+carried a keyword either, and `closingIssuesReferences` still returned `[N]`. GitHub converts the
 Development-sidebar link into a closing reference the moment a PR opens from that branch, and
 empties `linkedBranches` in the same move. A check that blamed the prose sent the run to edit text
 that never contained the offence.

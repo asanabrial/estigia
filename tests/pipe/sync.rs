@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn a_sync_that_names_no_agent_says_which_root_the_substitution_moved() {
-    // Issue #73: on the machine #34 is for, the adapter whose files sit under
+    // On the affected machine, the adapter whose files sit under
     // the dropped root stops being found, `sync` omits it, and the note that
     // would explain the omission is never printed. With no other adapter
     // installed the run refuses with `no agent has Estigia installed`, which
@@ -191,7 +191,7 @@ fn what_sync_tells_a_person_it_also_tells_a_script() {
     // override: `installed_configs` reads `skill::contract_config`, which
     // cannot see `estigia.local.md` or an agent's own file — deliberately,
     // since promoting either into a fresh root's versioned block is the
-    // defect issue #112 named. `config set` without `--agent` propagates the
+    // defect that was named. `config set` without `--agent` propagates the
     // same value to every installed contract, and `--agent` writes the file
     // this population no longer reads, so neither reaches this fixture
     // through the CLI. Writing the row directly stands for an adapter

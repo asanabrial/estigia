@@ -57,7 +57,7 @@ fn help_and_version_exit_zero() {
     }
 }
 
-/// `--version` prints this build's embedded identity (issue #60), not only
+/// `--version` prints this build's embedded identity, not only
 /// the crate version every build answered with before it.
 ///
 /// The `gate-version` fixture further down used to treat `", dirty)"` as a
@@ -786,7 +786,7 @@ fn every_spawn_of_the_binary_clears_claude_config_dir() {
     // And exactly one spawn: a second `Command::new` inside the helper would
     // clear nothing for the command it built, and the body check below cannot
     // see it, because the helper's body is what that check excises. The mutation
-    // recorded in #437 — a second `Command::new(estigia())` inside
+    // recorded earlier — a second `Command::new(estigia())` inside
     // `estigia_command` — reddens this count alone: it spells no
     // `CARGO_BIN_EXE_estigia` and sits in the body the outside check excises.
     let spawns = text.matches(spawn).count();

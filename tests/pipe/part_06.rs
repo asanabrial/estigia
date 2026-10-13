@@ -475,7 +475,7 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
         "a write naming a file inside the claim was refused as ambiguous: {said}"
     );
     // The write is attributed to the run that owns the worktree its target
-    // lands in — the fix for issue #46 — and the stray `workdir` in the
+    // lands in — the fix — and the stray `workdir` in the
     // payload is Bash's key, read for Bash and ignored here.
     let write_ledger = decisions(home.path());
     assert!(
@@ -538,7 +538,7 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
     // uncovered `cwd` on a write payload must not touch the answer at all —
     // the write's own `file_path` still names a covered worktree, and that is
     // what decides. Discarding the bogus `cwd` and falling through to that
-    // evidence is the fix for issue #46, not a case of "no evidence
+    // evidence is the fix, not a case of "no evidence
     // survives", so this is *not* the ambiguous-fallback group above: it is
     // driven separately, and checked the way the write attribution rows
     // above it are checked — by the ledger, not by the exit code, because a
@@ -639,8 +639,8 @@ fn a_per_call_working_directory_selects_the_holder_that_owns_it() {
 /// against the directory the plugin was instantiated for. A session rooted at
 /// the shared base is covered by every live run at equal depth, so its writes
 /// were refused `several-runs-hold-this-checkout` — including writes naming no
-/// checkout at all, measured on this machine on 2026-09-25 against #490 and
-/// #496 with `~/.zshrc`. `--session-id` with `--runtime` is the other half of
+/// checkout at all, measured on this machine on 2026-09-25 against two
+/// issues with `~/.zshrc`. `--session-id` with `--runtime` is the other half of
 /// `--run-id`: the derivation stays in the crate, pinned against
 /// `session::run_id` here rather than against its text.
 #[test]
@@ -783,7 +783,7 @@ fn a_call_carrying_a_session_id_is_not_refused_for_the_checkouts_holders() {
 }
 
 /// `--json`'s `observed.checkout` names which candidate the resolution took,
-/// and why one was dropped when one was — issue #59's structured account of a
+/// and why one was dropped when one was — a structured account of a
 /// refusal's stated cause, checked here against the checkout half rather than
 /// against a rule that was wrong.
 ///
@@ -941,8 +941,8 @@ fn observed_checkout_distinguishes_zero_holders_from_several_holders() {
 
 /// The same-directory exemption in `checkout_root_covering`: a single
 /// holder's recorded root equal to the launch directory survives the drop.
-/// The branch is observable through the reason, not the directory — #59 made
-/// `checkout_root_covering` report why it discarded a root, so dropping this
+/// The branch is observable through the reason, not the directory — `checkout_root_covering`
+/// was made to report why it discarded a root, so dropping this
 /// one would state, of the launch directory itself, that it was clamped
 /// outside the launch directory.
 #[test]

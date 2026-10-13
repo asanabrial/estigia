@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Re-measure Claude Code transcripts the way estigia#482's baseline did.
+"""Re-measure Claude Code transcripts the way the baseline measurement did.
 
 python3 scripts/measure-transcripts.py [--projects DIR] [--json]
 

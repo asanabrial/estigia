@@ -1812,7 +1812,7 @@ fn a_repair_finding_names_what_it_continues_or_says_why_it_is_new() {
     }
 }
 
-/// Issue #48: a claim over MCP hard-coded `--runtime`, so a non-Claude run
+/// A claim over MCP hard-coded `--runtime`, so a non-Claude run
 /// id's own claim used to project `dev:claude` instead of its own name.
 ///
 /// Two calls, the same shape
@@ -1927,12 +1927,12 @@ fn a_non_claude_run_id_projects_its_own_runtime_not_the_constant() {
     );
 }
 
-/// Issue #234, door 1, end to end: the id a caller writes becomes a
+/// Door 1, end to end: the id a caller writes becomes a
 /// repository-level `dev:<runtime>` label — permanent, and the only thing the
 /// label's own query reads. `codex-01k4-9f2a` is what the contract's own
 /// instruction produces on a host whose session id carries a dash, and the
 /// last-dash split reads its runtime as `codex-01k4`, a well-formed component,
-/// so #48's alphabet admitted it and minted `dev:codex-01k4` — invisible to
+/// so the earlier alphabet admitted it and minted `dev:codex-01k4` — invisible to
 /// `gh issue list --label dev:codex`. The refusal now happens before the
 /// tracker is asked anything, so nothing is created.
 ///

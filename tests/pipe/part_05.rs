@@ -1026,7 +1026,7 @@ fn a_refusal_after_the_push_reports_that_the_write_landed() {
 
 /// A closing keyword naming **another** issue is refused after the push too.
 ///
-/// The pre-push half of the #575 scan is held by
+/// The pre-push half of the scan is held by
 /// [`a_closing_keyword_refuses_before_the_branch_reaches_the_remote`]. The
 /// post-push half — `published`'s `names_another` arm, taken when a keyword
 /// arrived from the remote side of a pull request this run did not write — was
@@ -2412,7 +2412,7 @@ fn a_republish_lands_a_rewritten_branch_and_stops_when_the_claim_moved() {
     );
 }
 
-/// Issue #267: after a rebase, `parent-head..head` also carries everything the
+/// After a rebase, `parent-head..head` also carries everything the
 /// base gained in between, and every shipped surface named that range
 /// unconditionally as the delta a re-review reads. This drives a real rebase
 /// through `republish_review` and checks that the publication now records the

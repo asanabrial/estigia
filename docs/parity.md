@@ -41,7 +41,7 @@ Estigia is a **workflow authority** and nothing else. The comparison covers exac
 
 ## ODD and RDD are adopted, with two pillars kept
 
-Estigia adopts gentle-ai v4's ODD workflow and RDD review (initiative **#720**): small work stays
+Estigia adopts gentle-ai v4's ODD workflow and RDD review: small work stays
 small, review is sized by risk, a lineage gets a bounded number of corrections, and Judgment Day is opt-in. The
 differences that follow are each settled in the next section. Two of Estigia's own pillars are kept
 where a literal port would invert them, and both are declared divergences with a cost.
@@ -57,7 +57,7 @@ where a literal port would invert them, and both are declared divergences with a
 - **Authority stays with Estigia, not with a checkout file.** v4 keeps its review transaction under
   `<git-common-dir>/gentle-ai/review-transactions/v2/` and its ODD tasks in `odd/tasks/*.md`.
   Estigia keeps workflow state, receipts, findings, verdicts and tasks in the local store
-  `~/.estigia/state.db` (#896), never in the checkout and never on the issue timeline. The cost: the
+  `~/.estigia/state.db`, never in the checkout and never on the issue timeline. The cost: the
   store is one copy per machine, snapshotted only onto that same machine under
   `~/.estigia/snapshots/`, so a second machine cannot see its
   claims, and a binary older than the store's schema refuses to read it, so every open session must
@@ -91,10 +91,10 @@ parity.
 Nothing on the shared layer is open. Each difference the comparison found is settled by a rule or a
 decision recorded where a reader looks for it:
 
-- **The `Review protocol` default.** Settled by **#588**: a fresh table starts at `receipt-driven`,
-  the protocol the contract argues for and the one gentle-ai ships. Issue #775 then made it the only
-  protocol: an installed `standard` still loads and reads as `receipt-driven`. Issue #1044 retired the
-  row outright, so `standard` and every other value load under the hard-coded `receipt-driven` and an
+- **The `Review protocol` default.** Settled: a fresh table starts at `receipt-driven`,
+  the protocol the contract argues for and the one gentle-ai ships. It then became the only
+  protocol: an installed `standard` still loads and reads as `receipt-driven`. The
+  row was retired outright, so `standard` and every other value load under the hard-coded `receipt-driven` and an
   installed row is reported as `review-protocol-retired`. It also made the verdict computed, as v4's
   is: each severe
   finding is settled by v4's ordered table, a lens's completion is its own recorded event, and only
@@ -103,17 +103,17 @@ decision recorded where a reader looks for it:
   releases on the structural readback with no lens and no marker. And a retired `review-verdict`
   marker is history that still refuses when it was a distinct reviewer's rejection
   (`legacy-verdict-rejected`), which v4 never carried.
-- **Judges.** Settled by **#994**: ordinary review licenses none, matching v4 `ff77164`, whose
+- **Judges.** Settled: ordinary review licenses none, matching v4 `ff77164`, whose
   `risk.go` names no judge; Judgment Day is the opt-in. It runs only on an explicit request,
   replaces the lens review for that target, launches no refuter, issues no receipt and gates
   nothing, as v4's `judgment-day/SKILL.md` states. `review-blind` and `review-blind-sealed` stay
   installed as its two judges. One divergence is declared rather than closed: v4 has no ledger a
   judge could write to, and Estigia's `record_review_finding` would accept a judge's finding,
   which the policy forbids and nothing enforces — [`honesty.md`](honesty.md) records it.
-- **Reviewer distinctness.** Settled by issue #775 slice S4: v4 carries none, and Estigia keeps four
+- **Reviewer distinctness.** Settled: v4 carries none, and Estigia keeps four
   rules as declared divergences, each because Estigia has a mechanism v4 does not. A handoff is
   resolved only by a recorder outside the publisher and requester set (v4 has no handoff). An
-  approval supersedes an escalation only from such a recorder (#924). A retired rejected
+  approval supersedes an escalation only from such a recorder. A retired rejected
   `review-verdict` still refuses (`legacy-verdict-rejected`). And a refutation is refused when the
   caller-supplied `refuter` label names the publisher or a requester (`reviewer-not-distinct`): v4
   admits refuter results only against a Go-issued request hash with proof_refs, while Estigia's batch
@@ -129,17 +129,17 @@ decision recorded where a reader looks for it:
   [`what-it-writes.md`](what-it-writes.md#which-runtimes-estigia-adapts-and-on-what-evidence): a
   runtime is adapted when what it ships can be verified. The count was never the measure — the two
   projects overlap without either containing the other.
-- **Windows batch-shim quoting.** Settled by issue **#776** slice S4a: v4's
+- **Windows batch-shim quoting.** Settled: v4's
   `internal/reviewerprovider/windows_batch_cmdline.go` exists because Go's `os/exec` cannot quote
   for a `.cmd` shim. Rust's standard library does it at the pinned toolchain, with `/v:OFF` and a
   `%` escape v4 lacks, so Estigia launches the shim with plain `Command` and ports nothing. What that
   leaves unmeasured is in [`honesty.md`](honesty.md).
-- **Per-unit commits and candidate assessment.** Settled by **#589**: the candidate is the
+- **Per-unit commits and candidate assessment.** Settled: the candidate is the
   publication. A commit is not a review candidate and no review is due before one, because a verdict
   binds the epoch, head, base and digest `publish_review` mints;
   [`repository-delivery.md`](../skill/references/repository-delivery.md) states the rule where
   review-unit sizing lives.
-- **SDD removed, matching `gentle-ai` `v4.0.0`.** Settled by **#703**, **#704** and **#705**: at
+- **SDD removed, matching `gentle-ai` `v4.0.0`.** Settled: at
   `v4.0.0` gentle-ai ships no SDD — it removed SDD and OpenSpec in #4967 (`e219644b`),
   `internal/components/sdd/` no longer exists, and ODD is its only flow, where the `v3.7.0` line this
   entry once recorded against shipped ten phases. Estigia has removed it too: the protocol
@@ -147,13 +147,13 @@ decision recorded where a reader looks for it:
   routing kind and the screen's planning targets are gone, a stored `Planning: sdd*` row still reads
   as `direct` and reports `planning-protocol-retired` once, and an owned `sdd-*.md` is retracted
   through a retired-names list. Neither side ships a phase set.
-- **The ODD protocol.** Settled by **#707**: `skill/SKILL.md` carries gentle-ai v4's seven ODD steps
+- **The ODD protocol.** Settled: `skill/SKILL.md` carries gentle-ai v4's seven ODD steps
   (`internal/components/agentguidance/routing.go:33-48`), the evidence budget
   (`internal/agents/capabilitymanifest/manifest.go:214-236`) and test-first as the default. Two
   divergences are declared. Tracking is recorded with the `task` operation under the claimed issue in the local store,
   not in a checkout file (`routing.go:116`); and review binds the publication, so a chained delivery reviews per pull
   request rather than per commit (`routing.go:119`).
-- **The managed block per runtime.** Settled by issue **#715**. gentle-ai v4 renders a full
+- **The managed block per runtime.** Settled. gentle-ai v4 renders a full
   orchestrator block per runtime and strips the receipt-driven-development content from runtimes that
   are not review-capable (`internal/components/agentguidance/orchestrator.go:246-266`). Estigia
   deliberately keeps a short pointer directive instead, identical for every runtime: the ODD and
@@ -161,11 +161,11 @@ decision recorded where a reader looks for it:
   would be a second statement of them to disagree with the first and would cost tokens every turn.
   Nothing is stripped per runtime, since the binary-launched review needs a reviewer CLI on the
   machine and not a particular runtime. What v4's split guards, relay wording reaching a runtime with
-  no relay, is kept as `Capabilities::review_relay` (`true` for OpenCode, whose relay plugin #718 builds, and for Pi, whose relay extension #1178 builds, and `false` for every other runtime) and a leak
+  no relay, is kept as `Capabilities::review_relay` (`true` for OpenCode, whose relay plugin is built, and for Pi, whose relay extension is built, and `false` for every other runtime) and a leak
   test over the rendered directive and the OpenCode and Pi review sections, using Estigia's own markers
   (`relay`, `review transport`, `--input`) rather than v4's, which name v4's host-specific wording.
   One block per instruction file and in-place replacement of an older one are pinned by tests.
-- **Corrections per lineage.** Settled by issue **#716** slice S1, and widened by issue **#1135**: v4
+- **Corrections per lineage.** Settled: v4
   allows one correction attempt after the original review (`MaxCompactCorrectionAttempts = 1`,
   `internal/reviewtransaction/compact.go:23`) and Estigia refuses the one past the `Corrections per
   lineage` row, as `correction-already-spent`, at the publish call. That row defaults to 3, an
@@ -174,14 +174,14 @@ decision recorded where a reader looks for it:
   transaction record, so a deleted marker lowers it. The lineage's boundary is the pull request, so a
   change moved to a new pull request starts its own correction. A republish over an approved receipt
   is a new lineage, which v4 expresses as a new transaction. And the targeted validator
-  (issue **#716** slice S2, `internal/reviewtransaction/compact.go:2085-2200`) is a read-only role whose
+  (`internal/reviewtransaction/compact.go:2085-2200`) is a read-only role whose
   result is a local record that the correction's computed verdict waits for, in addition to the tier's
   lenses where v4's validator is the terminal event; a pass never overrides the ledger, a conclusive
   failure escalates with v4's two causes. The fifth: the third `unavailable` inspection escalates as
   `validator_inconclusive`, where v4 spends no correction on an inconclusive attempt and only refuses a
   fourth. `budget_exceeded` is not reachable here, since an over-budget correction is
   refused before it publishes. `escalate_review` also stays open once the corrections are spent, for a
-  person. A sixth, from issue **#1035**: when a correction merges a moved base, Estigia offers
+  person. A sixth: when a correction merges a moved base, Estigia offers
   the targeted validator over the tree git merges the parent head and that base into, rather than
   escalating `validator-delta-carries-upstream`; only a rewritten history or a merge that conflicts
   still escalates that way. gentle-ai `main` at `8ae99114` (2026-10-08), read since v4.0.0
@@ -193,7 +193,7 @@ decision recorded where a reader looks for it:
   do not touch this. Estigia also says why in a plain sentence, beside every reason code, where v4
   shows codes and typed refusals only.
   `Repair ceiling`, which had no counterpart in v4, is retired.
-- **Recovering an escalated review.** Settled by issue **#716** slice S3. v4's `review recover` takes an
+- **Recovering an escalated review.** Settled. v4's `review recover` takes an
   exact six-line maintainer authorisation (two spans in
   `internal/reviewtransaction/compact_store.go`) bound to the predecessor lineage, revision and target identity and copies it onto the successor,
   checking the text binding and no repository permission. Estigia diverges, declared: it drops the
@@ -203,14 +203,13 @@ decision recorded where a reader looks for it:
   stored lineage record but a publication whose marker carries `recovered-from`, so its tier floor and
   lens focus are found by walking parents. What a person at a shell could still do, name another
   maintainer's login, and what the gate's Bash rule does not match, are in `docs/honesty.md`. A
-  second divergence, from issue **#1035**: `estigia recover <issue> --reason "<why>"` is enough,
+  second divergence: `estigia recover <issue> --reason "<why>"` is enough,
   `--epoch` defaulting to the issue's one escalated receipt and `--authorized-by` to the login `gh` is
   authenticated as, both overridable. gentle-ai `main` at `8ae99114` has not changed `review recover`'s
   arguments, defaults or messages since v4.0.0 (`RunReviewRecover` in
   `internal/cli/review_facade.go` only adds carry-over of agent escalation, lens selection and request
   context to the successor), so this is Estigia's own.
-- **A moved base never resets the budget.** Settled by issue **#716** slice S4, which resolves **#302**
-  and **#548**. v4 never re-freezes: a correction is a fix diff from the frozen candidate tree, charged
+- **A moved base never resets the budget.** Settled. v4 never re-freezes: a correction is a fix diff from the frozen candidate tree, charged
   against the frozen budget and genesis scope (`internal/reviewtransaction/compact.go:2053-2063`).
   Estigia used to start a new genesis with the cumulative at zero when the base advanced, and now
   matches: the round is measured against the tree `git merge-tree --write-tree` makes of the parent
@@ -223,8 +222,7 @@ decision recorded where a reader looks for it:
 
 Declined, with the reason:
 
-- **Model routing.** That half of the comparison is already tracked — **#24**, **#37**, **#45**,
-  **#584** — and this document does not restate it.
+- **Model routing.** That half of the comparison is already tracked elsewhere, and this document does not restate it.
 
 ## Where the shipped skill's ODD wording is anchored in gentle-ai
 

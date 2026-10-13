@@ -601,7 +601,7 @@ fn an_override_file_that_will_not_open_is_not_an_absence_of_overrides() {
 }
 
 /// A fresh installation, with no `config set` at all, reads the balanced
-/// posture — issue #24's shipped default, measured through `config list`
+/// posture — the shipped default, measured through `config list`
 /// rather than asserted on `Config::default`.
 #[test]
 fn a_fresh_installation_reads_the_balanced_posture_through_config_list() {
@@ -871,7 +871,7 @@ fn an_upgrade_folds_the_retired_delegated_workers_row_instead_of_refusing_it() {
         .lines()
         .find(|line| line.starts_with("| Model routing |"))
         .unwrap_or_else(|| panic!("the installed contract has no Model routing row:\n{installed}"));
-    // The pre-#45 shape an installation from before the restructure carries: the
+    // The earlier shape an installation from before the restructure carries: the
     // routing row gone, the retired row back with both roles named.
     let doctored = installed.replace(row, "| Delegated workers | developer analyst | none |");
     assert_ne!(doctored, installed, "the row was not replaced");
@@ -886,7 +886,7 @@ fn an_upgrade_folds_the_retired_delegated_workers_row_instead_of_refusing_it() {
     );
 
     // The row is out of the table and the roles it named are installed by the
-    // routing, which is what "presence installs it" means after #45.
+    // routing, which is what "presence installs it" means now.
     let written = std::fs::read_to_string(&contract).expect("the contract reads");
     assert!(
         !written.contains("| Delegated workers |"),
@@ -2184,8 +2184,8 @@ fn setup_for_one_named_agent_names_what_a_fresh_neighbour_took() {
     // The regression this guards: deleting `report_fresh_roots(...)` at the
     // `setup` call site leaves the whole suite green, because nothing else in
     // this crate drives `estigia setup <slug>` end to end and reads its own
-    // stderr for this note. `estigia setup <slug>` is the command issue #112
-    // is titled for, and it must still say something when a fresh root
+    // stderr for this note. `estigia setup <slug>` is the command the
+    // issue was about, and it must still say something when a fresh root
     // inherits from a machine that already has one configured — not only
     // `sync`, which `what_sync_tells_a_person_it_also_tells_a_script` already
     // covers.
