@@ -5288,7 +5288,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 44_325;
+const TOOLS_LIST_CEILING: usize = 42_643;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -5381,4 +5381,67 @@ fn a_tool_the_menu_hides_still_answers_its_typed_refusal_by_name() {
         panic!("refused as malformed rather than by the rule");
     };
     assert_eq!(refusal.code, "workflow-assisted-writes-no-tracker");
+}
+
+#[test]
+fn a_receipt_run_or_issue_argument_has_one_description_everywhere() {
+    let receipt = ["epoch", "pr", "head", "base", "digest"];
+    for name in receipt.iter().chain(&["run_id", "issue"]) {
+        let mut descriptions: Vec<&str> = TOOLS
+            .iter()
+            .filter(|tool| {
+                *name == "run_id"
+                    || *name == "issue"
+                    || receipt
+                        .iter()
+                        .all(|part| tool.arguments.iter().any(|a| a.name == *part && a.required))
+            })
+            .flat_map(|tool| tool.arguments.iter())
+            .filter(|argument| {
+                argument.required
+                    && argument.name == *name
+                    && (*name != "issue" || argument.json_type == "integer")
+            })
+            .map(|argument| argument.description)
+            .collect();
+        descriptions.sort_unstable();
+        descriptions.dedup();
+        assert_eq!(
+            descriptions.len(),
+            1,
+            "`{name}` is described {} ways: {descriptions:?}",
+            descriptions.len()
+        );
+    }
+}
+
+#[test]
+fn the_review_tools_do_not_list_the_refusals_each_call_already_carries() {
+    for name in ["collect_review_input", "launch_review_input"] {
+        let tool = tools::find(name).expect("a declared tool");
+        for code in ["capture-", "reviewer-"] {
+            assert!(
+                !tool.description.contains(code),
+                "`{name}` lists a refusal code (`{code}…`) that the refusal itself names"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_finding_cannot_name_a_lens_through_the_tool() {
+    let tool = tools::find("record_review_finding").expect("a declared tool");
+    assert!(
+        !tool
+            .arguments
+            .iter()
+            .any(|argument| argument.name == "lens"),
+        "`lens` exists only to be refused and is advertised"
+    );
+    let ToolFailure::Malformed(message) = super::flags_for(tool, &json!({"lens": "review-risk"}))
+        .expect_err("an unadvertised argument is refused")
+    else {
+        panic!("refused as a refusal rather than as an argument the tool does not take");
+    };
+    assert!(message.contains("`lens`"), "{message}");
 }

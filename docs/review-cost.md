@@ -542,6 +542,7 @@ the exact bytes a client receives for the table.
 | Before — 48 acting tools plus 3 `NOT_EXPOSED` refusal schemas | 51 | 75,913 |
 | After — the consolidated table, `NOT_EXPOSED` no longer advertised | 32 | 55,381 |
 | Later — descriptions trimmed (issue #1146), from 56,133 at that head | 32 | 44,325 |
+| Issue #5, `TOOLS` at 33 — shared argument text, no refusal-code lists, no `lens` argument; context unreadable | 33 | 42,643 |
 
 Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
 retired aggregate verdict and the three `NOT_EXPOSED` names were removed outright; `reclaim`,
@@ -570,9 +571,25 @@ with its own typed reason.
 
 | `tools/list` result, issue #5 | Names | Bytes |
 |---|---:|---:|
-| Context unreadable (every tool) | 33 | 44,318 |
-| Autonomous | 31 | 42,560 |
-| Assisted | 13 | 14,523 |
+| Before — every context | 33 | 44,318 |
+| After — context unreadable (every tool) | 33 | 42,643 |
+| After — autonomous | 31 | 40,901 |
+| After — assisted | 13 | 14,380 |
+
+`TOOLS_LIST_CEILING` is the unreadable-context figure, the largest list a process can answer. Three
+changes made the rest of the difference: the receipt arguments (`epoch`, `pr`, `head`, `base`,
+`digest`), `run_id` and `issue` each carry one short description defined once; the
+`collect_review_input` and `launch_review_input` descriptions no longer list refusal codes, since each
+refusal names itself; and `record_review_finding` no longer advertises `lens`, which exists only to be
+refused. A caller that still sends `lens` through the tool is told it does not take it; the transport
+still refuses it `recorded-by-capture-only`.
+
+`target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
+paid only by a call that passes `manifest`.
+
+`republish_review` stays a tool of its own although its arguments equal `publish_review`'s. Its
+separate name is the guard on a call that destroys remote history, and a flag on `publish_review`
+would let an ordinary publication reach it by one wrong argument.
 
 ## Waiting for a reviewer instead of polling
 

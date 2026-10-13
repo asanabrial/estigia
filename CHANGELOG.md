@@ -12,6 +12,11 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The tool menu says each shared thing once.** Issue #5. The receipt arguments, `run_id` and `issue`
+  carry one short description each; `collect_review_input` and `launch_review_input` no longer list
+  refusal codes; `record_review_finding` no longer advertises `lens`, which only ever refused. The
+  unreadable-context list falls from 44,318 to 42,643 bytes, autonomous is 40,901 and assisted 14,380
+  (`docs/review-cost.md`). `republish_review` stays separate on purpose.
 - **`target` answers the brief form unless the manifest is asked for.** Issue #5. Without arguments the
   operation returns base, head, digest, path count and uncommitted paths; the per-file `manifest` array,
   about 100 bytes per tracked file, comes back only with `--manifest` (`manifest: true` on the tool), which

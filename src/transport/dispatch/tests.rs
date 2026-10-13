@@ -411,6 +411,12 @@ fn every_flag_a_tool_sends_is_one_the_dispatcher_reads() {
     // `review` was left unable to publish at all.
     const OPERATOR_ONLY: &[(&str, &str, &str)] = &[
         (
+            "review-finding",
+            "lens",
+            "set only by `collect_review_input`; a hand call naming it is refused \
+             `recorded-by-capture-only`, so the tool does not advertise it",
+        ),
+        (
             "changelog-notes",
             "include-heading",
             "a rendering choice the CLI makes, not a fact about the issue",
