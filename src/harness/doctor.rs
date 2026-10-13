@@ -1068,20 +1068,28 @@ pub fn lockfiles(repo_dir: &Path) -> Option<Check> {
         .output()
         .ok()
         .filter(|output| output.status.success())?;
-    let declared: Vec<String> = std::fs::read_to_string(repo_dir.join("estigia.generated.toml"))
-        .ok()
-        .and_then(|text| crate::transport::generated::parse(&text).ok())
-        .map(|declarations| {
-            declarations
-                .into_iter()
-                .map(|declaration| declaration.path)
-                .collect()
-        })
-        .unwrap_or_default();
+    let unreadable = match std::fs::read_to_string(repo_dir.join("estigia.generated.toml")) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(error) => Err(error.to_string()),
+        Ok(text) => crate::transport::generated::parse(&text)
+            .map(|declarations| {
+                declarations
+                    .into_iter()
+                    .map(|declaration| declaration.path)
+                    .collect()
+            })
+            .map_err(|failure| match failure {
+                crate::transport::Failure::Stop(value) => value
+                    .get("detail")
+                    .and_then(|detail| detail.as_str())
+                    .unwrap_or("it does not parse")
+                    .to_owned(),
+                _ => "it does not parse".to_owned(),
+            }),
+    };
     let mut found: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .split('\0')
         .filter(|path| !path.is_empty() && !path.chars().any(char::is_control))
-        .filter(|path| !declared.iter().any(|declared| declared == path))
         .filter_map(|path| {
             let name = path.rsplit('/').next().unwrap_or(path);
             LOCKFILES.contains(&name).then(|| path.to_owned())
@@ -1091,6 +1099,28 @@ pub fn lockfiles(repo_dir: &Path) -> Option<Check> {
         return None;
     }
     found.sort();
+    let declared = match unreadable {
+        Ok(declared) => declared,
+        Err(reason) => {
+            return Some(Check {
+                name: "lockfiles",
+                about: "whether a tracked lockfile is sent to every reviewer in full because nothing declares it generated",
+                health: Health::Skipped {
+                    detail: format!(
+                        "estigia.generated.toml could not be read ({reason}), so which of the {} \
+                         tracked lockfile{} it declares is unknown; correct the file and run \
+                         doctor again",
+                        found.len(),
+                        if found.len() == 1 { "" } else { "s" },
+                    ),
+                },
+            });
+        }
+    };
+    found.retain(|path| !declared.contains(path));
+    if found.is_empty() {
+        return None;
+    }
     let mut detail = format!(
         "{} tracked lockfile{} not declared in estigia.generated.toml, so a change to {} reaches \
          every reviewer in full; to have it checked by reproduction instead, declare it with",
@@ -4054,6 +4084,80 @@ mod tests {
             !detail
                 .lines()
                 .any(|line| line.trim().starts_with("command =")),
+            "{detail}"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_declaration_is_said_so_and_names_no_lockfile_as_undeclared() {
+        let repo = git_repo();
+        track(
+            repo.path(),
+            &[
+                ("Cargo.lock", "x"),
+                ("estigia.generated.toml", "[[generated]\npath = "),
+            ],
+        );
+        let Some(Check {
+            name,
+            health: Health::Skipped { detail },
+            ..
+        }) = lockfiles(repo.path())
+        else {
+            panic!("a skipped row for the unreadable declaration");
+        };
+        assert_eq!(name, "lockfiles");
+        assert!(detail.contains("could not be read"), "{detail}");
+        assert!(detail.contains("not valid TOML"), "{detail}");
+        for absent in ["[[generated]]", "path =", "not declared", "Cargo.lock"] {
+            assert!(!detail.contains(absent), "{absent:?} is in {detail}");
+        }
+    }
+
+    #[test]
+    fn a_declaration_that_cannot_be_opened_is_said_so() {
+        let repo = git_repo();
+        track(repo.path(), &[("Cargo.lock", "x")]);
+        std::fs::create_dir(repo.path().join("estigia.generated.toml")).expect("a directory");
+        let Some(Check {
+            health: Health::Skipped { detail },
+            ..
+        }) = lockfiles(repo.path())
+        else {
+            panic!("a skipped row");
+        };
+        assert!(detail.contains("could not be read"), "{detail}");
+        assert!(!detail.contains("not declared"), "{detail}");
+    }
+
+    #[test]
+    fn an_unreadable_declaration_with_no_lockfile_has_no_row() {
+        let repo = git_repo();
+        track(
+            repo.path(),
+            &[
+                ("src/main.rs", "x"),
+                ("estigia.generated.toml", "[[generated]"),
+            ],
+        );
+        assert_eq!(lockfiles(repo.path()), None);
+    }
+
+    #[test]
+    fn the_undeclared_row_says_no_command_is_suggested() {
+        let repo = git_repo();
+        track(repo.path(), &[("Cargo.lock", "x")]);
+        let Some(Check {
+            health: Health::Skipped { detail },
+            ..
+        }) = lockfiles(repo.path())
+        else {
+            panic!("a skipped row");
+        };
+        assert!(
+            detail.contains(
+                "none is suggested here, because the usual ones re-resolve dependencies instead"
+            ),
             "{detail}"
         );
     }
