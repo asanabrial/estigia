@@ -1125,7 +1125,8 @@ pointer that leaves it names the document it points at.
 
 - **On Windows the crate is compiled and linted in CI, and its tests are not run.** Issue #11 owns
   it. The `windows-latest` lane runs formatting, clippy, documentation and the release build, and
-  its `tests` step is skipped. The suite first reached a Windows runner at run 38317428664, once
+  its `tests` step is skipped; `release.yml` skips its `Test` step on the Windows targets for the
+  same reason, so a Windows archive is published having compiled and nothing more. The suite first reached a Windows runner at run 38317428664, once
   the crate compiled there, and **55 tests failed** on that first execution. Until #11 is done a
   regression that only Windows can see passes this lane, and the platform-shaped assumptions behind
   those 55 are unmeasured here.
