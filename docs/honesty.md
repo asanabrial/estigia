@@ -1895,7 +1895,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 41,870 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 37,708 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 38,021 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -6139,9 +6139,11 @@ pointer that leaves it names the document it points at.
   handoff removed the publisher's pointer.
   A `claim` restores one too: its answer carries the issue's newest publication under
   `review_transaction` when that publication is confirmed, stands approved and unescalated, and its
-  pull request is open with the receipt's head and base, so a release-then-claim sequence keeps the
-  merge the gate admits. That is one `gh pr view` read, made only when the issue holds a publication,
-  and a failed read restores nothing rather than failing the claim. It does not read CI state, and a
+  pull request is open at the receipt's head with a base that is the receipt's or has advanced cleanly
+  past it (see *A base that advanced cleanly keeps the receipt live* below), so a release-then-claim
+  sequence keeps the merge the gate admits. That is one `gh pr view` read, made only when the issue
+  holds a publication, plus one local ancestry read when only the base differs, and a failed read
+  restores nothing rather than failing the claim. It does not read CI state, and a
   push between the claim's read and the merge is caught only by `--match-head-commit`.
   `git push` and `gh pr create` are deliberately not gated on it, because pushing after a review is
   how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
@@ -6161,8 +6163,9 @@ pointer that leaves it names the document it points at.
 - **What Issue #439's `gh pr view` read measures, and what it does not.** It measures the PR's
   `headRefOid` at the moment `stale_verdict` asks, one read per merge attempt, and refuses a mismatch
   against the receipt with the PR number, the reviewed head and the head found. It does not measure
-  the base: `release_ci` already re-verified `baseRefOid` at ready time, and nothing in this crate
-  reads it again afterward — the delivered SHA's first parent is GitHub's strict setting's promise,
+  the base: `release_ci` already re-verified `baseRefOid` at ready time, and the only later reads of
+  it are `review_status` and the claim's restoration of a receipt, which accept a clean advance (the
+  entry after this one) — the delivered SHA's first parent is GitHub's strict setting's promise,
   as the branch-protection entry below says — so a base that moves *between* that ready check and
   this merge attempt is not seen at this boundary. It does not measure anything after the read: the
   read is a snapshot, and a push landing on the PR between this read and the merge itself is not seen
@@ -6173,6 +6176,25 @@ pointer that leaves it names the document it points at.
   covered checkout and this one share a Git common directory — never on what `gh pr view` itself
   would have answered for it, so a checkout `gh` could still reach is refused before that read ever
   runs if it is not a checkout of the claimed repository.
+- **A base that advanced cleanly keeps the receipt live, and a semantic conflict between two
+  independently green changes is not tested before the merge.** Issue #44, operator decision
+  2026-10-13. A receipt used to be live only while the pull request's `baseRefOid` was the reviewed
+  base, so every merge to `main` cost each other approved pull request a review and a CI run. It now
+  stays live for the merge, in `review_status` and in the claim's restoration of it
+  (`current_review_transaction`), when the head is the reviewed head, the pull request is ready and
+  its receipt approved, the current base descends from the reviewed base (`git merge-base
+  --is-ancestor`), and GitHub reports `mergeable: MERGEABLE` with a `mergeStateStatus` that is not
+  `DIRTY`. `UNKNOWN` in either field is answered `mergeability-unknown`, never clean. **The accepted
+  risk:** CI went green on the reviewed head over the *old* base, and nothing asks it again over the
+  new one, so two changes that merge without a textual conflict yet break each other are not caught
+  before the merge; only the CI that runs on `main` afterwards sees it. The gate still compares the
+  head alone (the entry above), so it never refused a moved base; what changed is that the receipt
+  is no longer withdrawn. `release_ci` stays strict about the base: it publishes the target to CI,
+  and a draft whose base moved is answered `pull-request-moved`, as is every approved-but-not-ready,
+  rejected or unjudged receipt. `mergeable` is GitHub's own and is lazily computed, so a clean read
+  can still precede a conflict that lands in between; `--match-head-commit` guards the head only.
+  When the base object is not in the local clone the ancestry read fails and `review_status` answers
+  `unavailable` rather than guessing; the claim restores nothing.
 - **`recorded_receipt` no longer requires the caller to be the run that published, and this proves
   only that the tracker recorded the publication — never that the caller reviewed anything.** A
   local run pointer is deleted at `SessionEnd` (`session::forget`, `src/harness/hook.rs`) while

@@ -2225,3 +2225,294 @@ fn a_claim_with_no_publication_carries_no_receipt() {
 
     assert!(answer.get("review_transaction").is_none(), "{answer}");
 }
+
+fn pull_over_base(
+    receipt: &ReviewTransaction,
+    base: &str,
+    draft: bool,
+    mergeable: &str,
+    merge_state: &str,
+) -> Value {
+    json!({
+        "matches": "pr view",
+        "stdout": json!({
+            "number": receipt.pr,
+            "url": "https://github.com/o/r/pull/7",
+            "headRefOid": receipt.head,
+            "baseRefOid": base,
+            "state": "OPEN",
+            "isDraft": draft,
+            "mergeable": mergeable,
+            "mergeStateStatus": merge_state,
+        })
+        .to_string(),
+        "status": 0,
+    })
+}
+
+fn advance_base(context: &Context) -> String {
+    git(
+        &context.repo_dir,
+        &["commit", "--quiet", "--allow-empty", "-m", "main advances"],
+    );
+    head_of(&context.repo_dir)
+}
+
+fn unrelated_base(context: &Context) -> String {
+    git(
+        &context.repo_dir,
+        &["checkout", "-q", "--orphan", "unrelated"],
+    );
+    git(
+        &context.repo_dir,
+        &["commit", "--quiet", "--allow-empty", "-m", "unrelated root"],
+    );
+    let root = head_of(&context.repo_dir);
+    git(&context.repo_dir, &["checkout", "-q", "-f", "main"]);
+    root
+}
+
+fn approved(receipt: &ReviewTransaction) -> [ownership::Comment; 3] {
+    [
+        live_claim("claude-a"),
+        published(receipt),
+        computed_by("codex-b", receipt, "approved"),
+    ]
+}
+
+#[test]
+fn a_base_that_advanced_cleanly_leaves_an_approved_receipt_released_for_the_merge() {
+    let (_root, context, receipt) = low_change();
+    let advanced = advance_base(&context);
+
+    let (next, answer) = next_of(
+        &context,
+        &approved(&receipt),
+        &[pull_over_base(
+            &receipt,
+            &advanced,
+            false,
+            "MERGEABLE",
+            "CLEAN",
+        )],
+    );
+
+    assert_eq!(next["kind"], "stop", "{answer}");
+    assert_eq!(next["reason_code"], "released", "{answer}");
+    assert_eq!(answer["receipt"]["base"], receipt.base);
+    let continuation = next["continuation"].as_str().expect("a continuation");
+    assert!(continuation.contains("advanced"), "{continuation}");
+    assert!(continuation.contains(&advanced), "{continuation}");
+}
+
+#[test]
+fn a_claim_restores_the_receipt_over_a_base_that_advanced_cleanly_and_the_merge_is_admitted() {
+    let (_root, context, receipt) = low_change();
+    let advanced = advance_base(&context);
+    let answer = claim_over(
+        &context,
+        &[
+            published(&receipt),
+            computed_by("codex-b", &receipt, "approved"),
+        ],
+        &[pull_over_base(
+            &receipt,
+            &advanced,
+            false,
+            "MERGEABLE",
+            "CLEAN",
+        )],
+    );
+    let state = tempfile::tempdir().expect("a state root");
+    let gate = gate_over(&context, state.path());
+
+    let run = sworn_over(&gate, &answer);
+
+    assert_eq!(run.review_transaction.as_ref(), Some(&receipt), "{answer}");
+    let seen = ReviewTransaction {
+        base: advanced,
+        ..receipt.clone()
+    };
+    assert!(
+        merge_verdict(&gate, &run, &receipt, &seen).is_none(),
+        "a merge on the reviewed head over an advanced base was refused"
+    );
+}
+
+#[test]
+fn a_base_the_clone_does_not_hold_leaves_no_live_receipt_and_is_no_failure() {
+    let (_root, context, receipt) = low_change();
+    let absent = "7".repeat(40);
+    let seen = pull_over_base(&receipt, &absent, false, "MERGEABLE", "CLEAN");
+    stored(
+        &context,
+        &[
+            published(&receipt),
+            computed_by("codex-b", &receipt, "approved"),
+        ],
+    );
+    let bin = crate::test_env::scripted_gh();
+
+    let live =
+        crate::test_env::with_scripted_gh(bin.path(), &crate::test_env::answers(&[seen]), || {
+            current_review_transaction(&named(&context), 42)
+        });
+
+    assert!(matches!(live, Ok(None)), "{live:?}");
+}
+
+#[test]
+fn a_base_that_advanced_with_a_conflict_is_not_the_live_receipt() {
+    for (mergeable, merge_state) in [
+        ("CONFLICTING", "DIRTY"),
+        ("CONFLICTING", "CLEAN"),
+        ("MERGEABLE", "DIRTY"),
+    ] {
+        let (_root, context, receipt) = low_change();
+        let advanced = advance_base(&context);
+        let seen = pull_over_base(&receipt, &advanced, false, mergeable, merge_state);
+
+        let (next, answer) = next_of(&context, &approved(&receipt), std::slice::from_ref(&seen));
+        assert_eq!(next["reason_code"], "pull-request-moved", "{answer}");
+
+        let claimed = claim_over(
+            &context,
+            &[
+                published(&receipt),
+                computed_by("codex-b", &receipt, "approved"),
+            ],
+            &[seen],
+        );
+        assert!(
+            claimed.get("review_transaction").is_none(),
+            "{mergeable}/{merge_state}: {claimed}"
+        );
+    }
+}
+
+#[test]
+fn a_mergeability_github_is_still_computing_is_refused_with_a_word_that_says_so() {
+    for (mergeable, merge_state) in [
+        ("UNKNOWN", "UNKNOWN"),
+        ("UNKNOWN", "CLEAN"),
+        ("MERGEABLE", "UNKNOWN"),
+    ] {
+        let (_root, context, receipt) = low_change();
+        let advanced = advance_base(&context);
+        let seen = pull_over_base(&receipt, &advanced, false, mergeable, merge_state);
+
+        let (next, answer) = next_of(&context, &approved(&receipt), std::slice::from_ref(&seen));
+        assert_eq!(next["kind"], "stop", "{answer}");
+        assert_eq!(next["reason_code"], "mergeability-unknown", "{answer}");
+        let continuation = next["continuation"].as_str().expect("a continuation");
+        assert!(continuation.contains("still computing"), "{continuation}");
+
+        let claimed = claim_over(
+            &context,
+            &[
+                published(&receipt),
+                computed_by("codex-b", &receipt, "approved"),
+            ],
+            &[seen],
+        );
+        assert!(
+            claimed.get("review_transaction").is_none(),
+            "{mergeable}/{merge_state}: {claimed}"
+        );
+    }
+}
+
+#[test]
+fn a_base_that_does_not_descend_from_the_reviewed_base_is_not_the_live_receipt() {
+    let (_root, context, receipt) = low_change();
+    let unrelated = unrelated_base(&context);
+    let seen = pull_over_base(&receipt, &unrelated, false, "MERGEABLE", "CLEAN");
+
+    let (next, answer) = next_of(&context, &approved(&receipt), std::slice::from_ref(&seen));
+    assert_eq!(next["reason_code"], "pull-request-moved", "{answer}");
+
+    let claimed = claim_over(
+        &context,
+        &[
+            published(&receipt),
+            computed_by("codex-b", &receipt, "approved"),
+        ],
+        &[seen],
+    );
+    assert!(claimed.get("review_transaction").is_none(), "{claimed}");
+}
+
+#[test]
+fn a_moved_head_is_not_the_live_receipt_whatever_the_base_and_the_mergeability() {
+    let (_root, context, receipt) = low_change();
+    let advanced = advance_base(&context);
+    let moved = ReviewTransaction {
+        head: "9".repeat(40),
+        ..receipt.clone()
+    };
+    let seen = pull_over_base(&moved, &advanced, false, "MERGEABLE", "CLEAN");
+
+    let (next, answer) = next_of(&context, &approved(&receipt), std::slice::from_ref(&seen));
+    assert_eq!(next["reason_code"], "pull-request-moved", "{answer}");
+
+    let claimed = claim_over(
+        &context,
+        &[
+            published(&receipt),
+            computed_by("codex-b", &receipt, "approved"),
+        ],
+        &[seen],
+    );
+    assert!(claimed.get("review_transaction").is_none(), "{claimed}");
+}
+
+#[test]
+fn a_draft_whose_base_advanced_is_not_released_to_ci_over_the_old_base() {
+    let (_root, context, receipt) = low_change();
+    let advanced = advance_base(&context);
+
+    let (next, answer) = next_of(
+        &context,
+        &approved(&receipt),
+        &[pull_over_base(
+            &receipt,
+            &advanced,
+            true,
+            "MERGEABLE",
+            "CLEAN",
+        )],
+    );
+
+    assert_eq!(next["reason_code"], "pull-request-moved", "{answer}");
+}
+
+#[test]
+fn a_receipt_that_is_not_approved_is_not_carried_over_an_advanced_base() {
+    let (_root, context, receipt) = low_change();
+    let advanced = advance_base(&context);
+
+    let (next, answer) = next_of(
+        &context,
+        &[live_claim("claude-a"), published(&receipt)],
+        &[pull_over_base(
+            &receipt,
+            &advanced,
+            false,
+            "MERGEABLE",
+            "CLEAN",
+        )],
+    );
+
+    assert_eq!(next["reason_code"], "pull-request-moved", "{answer}");
+}
+
+#[test]
+fn a_base_the_clone_does_not_hold_is_unavailable_not_a_clean_advance() {
+    let (_root, context, receipt) = low_change();
+    let seen = pull_over_base(&receipt, &"9".repeat(40), false, "MERGEABLE", "CLEAN");
+
+    let failure = status_over(&context, &approved(&receipt), &[seen])
+        .expect_err("an unreadable ancestry was answered");
+
+    assert_eq!(class_of_failure(&failure), RefusalClass::Unavailable);
+}

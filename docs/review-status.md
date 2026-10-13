@@ -14,7 +14,10 @@ just made, so the read that always follows a publication is not a second round t
 - **The local store, only.** The issue's timeline comes from `Ledger::read_timeline_at`: no import, no
   sync, no store created. It never reads an issue's comments or labels from GitHub.
 - **GitHub's own objects, only.** `gh pr view` for the newest publication's pull request (state, draft,
-  head, base) and, only when the next step would record an approval, the publication lane's check runs.
+  head, base, `mergeable`, `mergeStateStatus`) and, only when the next step would record an approval,
+  the publication lane's check runs. When the head is the receipt's and only the base differs, one local
+  `git merge-base --is-ancestor <reviewed base> <current base>` in the checkout says whether the base
+  advanced; a base object the clone does not hold makes the answer `unavailable`, never a clean advance.
 - **The repository is not read from GitHub either.** It is the operator-named repository when one is
   configured, else the `origin` remote when that is a `github.com` remote. Anything else is a failed
   read, and so is a store whose rows sit under another repository than the one derived (the issue is
@@ -76,9 +79,10 @@ validator result is refused `recorded-by-capture-only`, so a slot
 | Approved, ledger or tier moved, and a finding was recorded after the verdict | `execute` | `verdict-stale` | `publish_review`, `expected_epoch: <this epoch>` |
 | Approved, ledger or tier moved, and no finding was recorded after the verdict | `stop` | `verdict-stale` | a person decides: record the defect the verdict did not weigh with `record_review_finding` and publish again, or close the pull request and publish afresh |
 | Approved by a legacy verdict with no computed marker, ledger not yet recorded | as the unjudged rows | | `record_computed_verdict`, or the lens and refutation inputs it needs |
-| Approved, CI already released | `stop` | `released` | the run holding the receipt merges it with `gh pr merge <pr> --merge --match-head-commit <head>` (the receipt's own pull request and head) once CI is green on that head and base and `Delivery authorisation` authorises this run; otherwise it asks first, naming the reviewed head and base |
+| Approved, CI already released | `stop` | `released` | the run holding the receipt merges it with `gh pr merge <pr> --merge --match-head-commit <head>` (the receipt's own pull request and head) once CI is green on that head and `Delivery authorisation` authorises this run; otherwise it asks first, naming the reviewed head and base. The same answer when the base advanced past the reviewed base, the pull request is ready, its head is the reviewed head, the new base descends from the reviewed base and GitHub reports it `MERGEABLE` with a `mergeStateStatus` that is not `DIRTY`; the continuation then names the new base, and CI is not asked again on it |
+| Approved, CI released, base advanced past the reviewed base, and GitHub still computing the mergeability | `stop` | `mergeability-unknown` | ask again once GitHub has answered; `UNKNOWN` (in `mergeable` or `mergeStateStatus`) is never read as clean |
 | Merged | `stop` | `delivered` | the run holding the receipt completes the delivery with `closing::FOLLOW_UP`: `transition --to done`, then `release`, which is last and not optional |
-| Pull request head or base is not the receipt's | `stop` | `pull-request-moved` | `publish_review` deliberately — a genuinely unjudged receipt and an approval already answered by a finding fall through to it — except a lineage whose corrections are all spent (`escalate_review`) or a fresh approval with no cause after its verdict (`record_review_finding`, then publish) |
+| Pull request head or base is not the receipt's (a base that advanced cleanly over an approved, ready receipt is the two rows above, not this one) | `stop` | `pull-request-moved` | `publish_review` deliberately — a genuinely unjudged receipt and an approval already answered by a finding fall through to it — except a lineage whose corrections are all spent (`escalate_review`) or a fresh approval with no cause after its verdict (`record_review_finding`, then publish) |
 | Computable approval over a lane that is red, never ran or is unfinished | `stop` | the lane's own `publication-lane-*` code | the lane's own action |
 
 A recovered escalation is answered `recovered` before the pull request's head or base is compared,
@@ -108,8 +112,8 @@ repository that is not `owner/name` is unavailable, never replaced by `origin`.
 Failure to read is never a state. The classes are [`refusal-classes.md`](refusal-classes.md)'s.
 
 - **`unavailable`**: the store is unreadable or holds no such issue (`review-status-store-unreadable`,
-  `review-status-issue-not-in-store`), the pull request read failed, the lane read failed, or the
-  repository could not be named. Read again later; nothing was decided.
+  `review-status-issue-not-in-store`), the pull request read failed, the lane read failed, the
+  repository could not be named, or the ancestry of an advanced base could not be read. Read again later; nothing was decided.
 - **`stale`**: a command `status` named is refused because the receipt moved after the answer. Every
   `record_*` tool and `release_ci` re-check the exact receipt (`published-transaction-mismatch`), and a
   publication re-checks `expected_epoch` (`expected-epoch-moved`) before anything is pushed. The
