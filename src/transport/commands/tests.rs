@@ -1021,10 +1021,8 @@ fn a_fragment_named_file_that_cannot_be_read_refuses_the_notes_and_names_it() {
         std::fs::Permissions::from_mode(0o000),
     )
     .expect("chmod");
-    assert!(
-        std::fs::File::open(&hidden).is_err(),
-        "a mode 000 file is still readable here, so this test cannot measure anything; run it as a user without read-everything permission"
-    );
+    let readable = std::fs::File::open(&hidden).is_ok();
+    assert!(!readable, "mode 000 is readable: run as non-root");
 
     let outcome = notes_of(root.path());
     std::fs::set_permissions(&hidden, std::fs::Permissions::from_mode(0o644)).expect("restore");
