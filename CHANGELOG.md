@@ -12,6 +12,10 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **`tools/list` advertises only the tools the process can call.** Issue #5. Under `Workflow: assisted` the
+  menu omits the twenty `TRACKER_WRITERS` tools that workflow refuses; under any other readable workflow it
+  omits `assist` and `draft_pr`; an unreadable context still lists everything. A hidden name still answers
+  its typed refusal when called (`docs/review-cost.md`).
 - **`SKILL.md` states each loading condition once and loads the blind-judges policy only when a review
   needs it.** Issue #4. The reference-loading conditions live in the References table alone; step 5 says to
   follow `review_status`'s `next` transition and to load `blind-judges.md` on an escalated stop, a correction

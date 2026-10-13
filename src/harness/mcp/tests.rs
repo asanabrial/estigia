@@ -5311,3 +5311,73 @@ fn no_description_carries_history_or_a_measurement() {
         );
     }
 }
+
+fn listed_names(context: Result<&GateContext, &Refusal>) -> Vec<String> {
+    let response = handle_line(
+        &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}).to_string(),
+        context,
+    )
+    .expect("a request with an id gets a response");
+    response["result"]["tools"]
+        .as_array()
+        .expect("a tool list")
+        .iter()
+        .map(|tool| tool["name"].as_str().expect("a name").to_owned())
+        .collect()
+}
+
+#[test]
+fn an_assisted_menu_omits_every_tool_that_writes_the_tracker() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = assisted_context(&root);
+    let names = listed_names(Ok(&context));
+    for name in tools::TRACKER_WRITERS {
+        assert!(
+            !names.iter().any(|listed| listed == name),
+            "{name} is refused in assisted work and was advertised"
+        );
+    }
+    for name in tools::ASSISTED_ONLY {
+        assert!(
+            names.iter().any(|listed| listed == name),
+            "{name} is the assisted work and was not advertised"
+        );
+    }
+}
+
+#[test]
+fn an_autonomous_menu_omits_the_assisted_only_tools_and_keeps_the_rest() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = bare_context(&root, &root.path().join("repo"));
+    let names = listed_names(Ok(&context));
+    for name in tools::ASSISTED_ONLY {
+        assert!(
+            !names.iter().any(|listed| listed == name),
+            "{name} is refused outside assisted work and was advertised"
+        );
+    }
+    assert_eq!(names.len(), TOOLS.len() - tools::ASSISTED_ONLY.len());
+}
+
+#[test]
+fn an_unreadable_context_or_an_unknown_workflow_lists_every_tool() {
+    let refusal = crate::skill::no_skill_root();
+    assert_eq!(listed_names(Err(&refusal)).len(), TOOLS.len());
+    let root = tempfile::tempdir().expect("a temporary root");
+    let mut context = bare_context(&root, &root.path().join("repo"));
+    context.workflow = None;
+    assert_eq!(listed_names(Ok(&context)).len(), TOOLS.len());
+}
+
+#[test]
+fn a_tool_the_menu_hides_still_answers_its_typed_refusal_by_name() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let assisted = assisted_context(&root);
+    assert!(!listed_names(Ok(&assisted)).contains(&"ensure_states".to_owned()));
+    let ToolFailure::Refused(refusal) = run_tool("ensure_states", &json!({}), Ok(&assisted))
+        .expect_err("an assisted workflow writes no tracker")
+    else {
+        panic!("refused as malformed rather than by the rule");
+    };
+    assert_eq!(refusal.code, "workflow-assisted-writes-no-tracker");
+}

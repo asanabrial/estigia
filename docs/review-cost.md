@@ -562,6 +562,18 @@ stays here: answers carrying 73,272 and 145,756 payload bytes were refused by th
 one carrying 36,288 was not, so the threshold sits inside the ordinary range, which is why
 `inline_payload` defaults to false.
 
+Issue #5 made the list depend on the process's `GateContext`, which is fixed for the process, so
+`listChanged` stays false. Where `Workflow` is `assisted` the list omits every `TRACKER_WRITERS` tool,
+which that workflow refuses; under any other readable workflow it omits `ASSISTED_ONLY`; a context that
+cannot be read, or whose workflow is unknown, lists all 33. A hidden name still dispatches and refuses
+with its own typed reason.
+
+| `tools/list` result, issue #5 | Names | Bytes |
+|---|---:|---:|
+| Context unreadable (every tool) | 33 | 44,318 |
+| Autonomous | 31 | 42,560 |
+| Assisted | 13 | 14,523 |
+
 ## Waiting for a reviewer instead of polling
 
 Issue #1045. `collect_review_input` used to answer `capture-running` while a launched reviewer was
