@@ -13,8 +13,7 @@
   evidence offered that the reconstruction is trustworthy — not a substitute for having run the
   old code.
 
-  **The re-measured transcript corpus is compared against the baseline, corpus-to-corpus.** Issue
-  #482's acceptance asked for a comparison against the 2026-09-24 baseline, and
+  **The re-measured transcript corpus is compared against the baseline, corpus-to-corpus.** The acceptance criteria asked for a comparison against the 2026-09-24 baseline, and
   `docs/review-cost.md`'s "Re-measuring after a change" now draws it. The limit that section states
   is the one that survives here: `scripts/measure-transcripts.py` aggregates the whole growing
   corpus, so the comparison sets a later corpus against the baseline rather than measuring this
@@ -22,8 +21,7 @@
   section carries the figures and the limits it records beside them; this entry records only that
   the comparison is drawn, and that its aggregation is what it costs.
 
-- **A `never-ran` verdict is recorded evidence, not verified evidence.** Issue #95, read since
-  issue #775 through `record_computed_verdict`: it approves under a publication lane whose failing
+- **A `never-ran` verdict is recorded evidence, not verified evidence.** Read through `record_computed_verdict`: it approves under a publication lane whose failing
   runs report `steps: []` on every job only when the caller supplies `--never-ran-evidence-file`,
   and it stores that file's content in the marker verbatim — on the same footing as a finding's
   `evidence`, read back and never re-run. Estigia does not confirm the account is actually billing-blocked, does not re-run the
@@ -39,7 +37,7 @@
   words, why nothing ran. It is never the predicate — the branch is `steps: []` alone — because an
   annotation is prose a platform can reword without notice, and a gate that changed meaning when a
   product it does not control edited a sentence is the failure this repository has already found
-  once, when a stop was decided by a bounded phrase list rather than a marker (#863).
+  once, when a stop was decided by a bounded phrase list rather than a marker.
 
   A run cancelled before any step starts reports the identical `steps: []` shape a genuine billing
   failure does — the one way the run being judged, not a platform failure, could reach this branch
@@ -49,25 +47,25 @@
   non-`cancelled` conclusion and `steps: []` at face value, and does not itself distinguish a
   platform outage from some other way a run's containers might report no steps.
 
-- **Nothing detects a launch prompt that overrides the judge's classification rule.** Issue #172:
+- **Nothing detects a launch prompt that overrides the judge's classification rule.**
   `skill/agents/review-blind.md` holds the rule for choosing between `severe`, `warning` and
   `suggestion`, and states why it lives there rather than in a launch prompt. A prompt that supplies
   its own rule anyway replaces it silently. The gate has no decision to make here — a sub-agent's
   prompt is not a write — and no test reads one. The repair is an instruction to the judge to prefer the definition
   and record the conflict, which is enforcement by the reviewed party alone: a judge that ignores the
   instruction leaves no trace, and Estigia cannot prove a judge applied the definition rather than the
-  brief.   It is worth stating what this cost before it was found: on issue #38, four `severe` findings
+  brief. It is worth stating what this cost before it was found: in one review, four `severe` findings
   across two panels were documentation defects graded under a prompt-supplied rule, and the two
   rejections they forced spent a full panel of tokens each — the figure is not re-derived here
   because the panel receipts were not retained with a method a later reader can re-run.
 
 - **`review_tier` carries two named gaps against `ClassifyRisk` (a third, the process-boundary
-  scan, was closed by issue #714), and one widening.** Issue #189
+  scan, was closed since), and one widening.** It
   ports the hot-path tokens, `isServiceTokenReviewPath`, `isShellReviewPath` and
   `executableModeChanged` — four producers reaching `auth`, `update`, `security`, `payments`,
   `permissions` and `shell_process`.
 
-  The first gap, **`processBoundaryRiskReasons`**, is closed by issue #714's first slice
+  The first gap, **`processBoundaryRiskReasons`**, is closed
   (`src/transport/tier/content_scan.rs`): a content scan over the files a change touches reads
   `high` on an added process-spawn construct (`process_boundary`, signal `shell_process`), on a
   `#!` line in either tree (`process_boundary`), on a scan past `SCAN_BYTE_BUDGET` or a diff whose
@@ -146,8 +144,8 @@
   `claim.rs` for being touched often would exclude the file holding `record_computed_verdict` and
   `release_ci`, optimising the metric against the exact safety the rule exists to protect. The Go's
   version works because that project's review authority lives in six small, rarely-touched files;
-  this repository's does not, because it is not yet separable by filename — issue #51, splitting
-  `src/transport/claim.rs` and its neighbours, is what would let this producer be ported faithfully.
+  this repository's does not, because it is not yet separable by filename — splitting
+  `src/transport/claim.rs` and its neighbours is what would let this producer be ported faithfully.
   Until then the producer is removed rather than shipped as a rule that always answers `high`: a
   classifier that cannot say no is not a classifier, and this repository would rather carry a named
   gap than a rule nobody could trust the reading of. This gap also narrows what reaches `high`: a
@@ -171,8 +169,8 @@
   rather than under-fires. That conclusion stands; the two-call-site count behind it did not, and
   is corrected here.
 
-- **`review_tier`'s tier classification carried three blind spots. Issue #246 closed two of them by
-  deleting the mechanism they were about; issue #292 reopened one of those two in a different shape,
+- **`review_tier`'s tier classification carried three blind spots. Two of them were closed by
+  deleting the mechanism they were about; one of those two was reopened in a different shape,
   and the third survives untouched.**
 
   It reads two tree-to-tree `git diff` calls and never the worktree — the two `pinned_diff_args` calls
@@ -186,16 +184,16 @@
   reach it. This one is not about the deleted `judges` field and does not close with it — it is a
   property of the tier classification `lenses` still reads today.
 
-  **Closed with the deletion, and issue #994 removing `RiskLevel::judges` again leaves it closed:**
+  **Closed with the deletion, and the later removal of `RiskLevel::judges` leaves it closed:**
   the old `RiskLevel::judges` was unable to distinguish an operator's own `Blind judges` row from a
   rendered default — `Context::live`'s unconditional `render_rows()` merge at
   `src/transport/mod.rs` folded in every modelled setting's default when nothing was
   written, so a repository whose contract could not be read was sized as though the operator had
-  chosen `single` (#193). The ambiguity needed a row to misread, and the row is gone; the judge count
-  that #292 derived from the tier alone is gone with it, since ordinary review licenses lenses only.
+  chosen `single`. The ambiguity needed a row to misread, and the row is gone; the judge count
+  that was derived from the tier alone is gone with it, since ordinary review licenses lenses only.
 
-  **The ceiling half of #193 closed the same way, by reading provenance instead of deleting the
-  row, and issue #716 then retired the row.** `repair_rounds` read `Repair ceiling` through
+  **The ceiling half closed the same way, by reading provenance instead of deleting the
+  row, and the row was then retired.** `repair_rounds` read `Repair ceiling` through
   `Context::get_written` (`src/transport/mod.rs`), which answers only rows somebody wrote, so a
   `Context::live` over directories holding no contract answered `null` where it had answered the
   default `3`. The setting is gone and `repair_rounds` reads no setting at all, so `get_written` has no
@@ -204,7 +202,7 @@
   reads a rendered default the same as a written answer, by the same merge
   this entry names above.
 
-  **Issue #199's third bullet was closed by issue #1048: the tier-licensing sentence no longer
+  **The third bullet was closed: the tier-licensing sentence no longer
   lives in `skill/SKILL.md`.** Developer step 5 now links to `skill/policies/blind-judges.md`, whose
   "Lens acquisition" section states the rule and is crossed by
   `the_lens_count_a_publication_acquires_is_the_one_review_tier_answers`. The rendered carriers are
@@ -214,7 +212,7 @@
   by deletion: the typed-count block `src/config/settings.rs` no longer exists, so there is no
   wording left to revert and no pin to write.
 
-  **Closed by issue #775 slice S4, and widened by issue #994: the floor is gone and so are the
+  **Closed, and later widened: the floor is gone and so are the
   judges.** `RiskLevel::lenses` answers `Low => 0`, as the origin project closes a `RiskLow` review
   with no reviewer. `review_tier` and `review_tier_for_repair` answer no `judges` key at any tier, and
   `forecast` counts lenses alone; `the_review_tier_answer_carries_no_judges_at_any_tier` pins that,
@@ -225,10 +223,8 @@
   stated there and **not enforced**: nothing refuses it, and a finding recorded against a receipt
   would enter the ledger like any other.
 
-- **`RiskLevel::lenses` scales the review; nothing proves the licensed lenses actually ran.** Issue
-  #292 gave `review_tier` a count derived the same way `lenses` already was; issue #994 removed the
-  judge half and what remains is the lens count, and the property below is unchanged by it. Issue
-  #296, immediately below, names the same unproved property one layer earlier: which range a caller
+- **`RiskLevel::lenses` scales the review; nothing proves the licensed lenses actually ran.** `review_tier` was given a count derived the same way `lenses` already was; the
+  judge half was later removed and what remains is the lens count, and the property below is unchanged by it. The entry immediately below names the same unproved property one layer earlier: which range a caller
   reads before that count is even derived.
 
   **Nothing observes that the derived number of lenses actually ran.** `release_ci` requires the
@@ -245,7 +241,7 @@
   per-tier judge count. It does **not** prove an orchestrator reads any of them before acquiring the
   lenses.
 
-- **An empty range answered the zero tier, and it was reachable today, not latent.** Issue #299:
+- **An empty range answered the zero tier, and it was reachable today, not latent.**
   `review_tier` with `base == head` — or any pair whose diff touches no path at all — read as `low`
   with zero lenses, measured directly against the shipped binary rather than assumed from the code.
   `review_tier` is read-only and requires no claim, so any caller could reach this by passing one
@@ -278,21 +274,20 @@
   change exists to refuse, added inside the repair for it.
 
 - **A repair's tier is derived from a range that is honest only when the timeline can prove it —
-  and nothing verifies that the orchestrator reads that range rather than the whole change.** Issue
-  #296: `review_tier` answered `base..head` on a repair round exactly as it did on a first
+  and nothing verifies that the orchestrator reads that range rather than the whole change.** `review_tier` answered `base..head` on a repair round exactly as it did on a first
   publication, so a repair that only corrected sentences was sized as the code change it sat on top
-  of — measured as the largest single cost in this repository's own review budget (#131: 8 judges,
+  of — measured as the largest single cost in this repository's own review budget (8 judges,
   3 rejections, zero code defects, on prose alone).
 
-  **The first design was wrong, and the panel reviewing pull request #297 caught it before it
+  **The first design was wrong, and the panel reviewing the pull request caught it before it
   merged.** That design, `review_tier_over_trees`, read two frozen tree object ids — the parent
   publication's own candidate tree and this publication's own, both recorded unconditionally by
   every publication's `budget-candidate-tree` field (`src/transport/claim.rs`) — on the belief
   that a frozen id excludes base movement. It does not: a candidate tree is the tree *of a commit*
   (`tree_of(context, ..., head)` at `claim.rs`), and `git diff tree(A) tree(B)` is the same
   diff as `git diff A B`, so that pair *was* `parent-head..head` under a different name — exactly
-  the range issue #267 already measured folding `main`'s own advance into what looked like the
-  repair's own size (1,205 insertions where the repair was 562, on issue #248's own repair).
+  the range an earlier measurement already showed folding `main`'s own advance into what looked like the
+  repair's own size (1,205 insertions where the repair was 562, on a real repair).
   Freezing the id never froze the range; after a rebase the repair head's own content already
   carries the base's advance regardless of which object ids name the ends.
 
@@ -303,7 +298,7 @@
   it — there is no repair-only range left to recover from what the timeline records, and the
   answer falls back to the whole `base..head`.
 
-  **The panel reviewing pull request #297 rejected that first shape a second time, on two more
+  **The panel reviewing the pull request rejected that first shape a second time, on two more
   defects the ancestry guard alone did not close.** `git merge-base --is-ancestor A A` exits `0`,
   so an identical-bytes republish — `parent_head == head`, a real input the contract itself names,
   since a republish invalidates evidence "even when the bytes are identical" — makes
@@ -312,7 +307,7 @@
   lenses over the reflexive one, because an empty diff yielded no candidates,
   `fallback_risk_reason` answered `non_executable_only`, `only_passive` was vacuously true over an
   empty slice, and the fail-closed cross-check did not fire — level and reasons agreed, both wrong
-  together. Issue #299 later replaced that reading: an empty stat set now answers
+  together. A later change replaced that reading: an empty stat set now answers
   `nothing_measured`, and `review_tier` answers `medium` for such a range rather than deriving
   nothing from it. The fix here is not to special-case that one input: an empty
   `parent_head..head` carries no evidence about the repair's own edits, so it falls
@@ -329,7 +324,7 @@
   range actually measured. And the earlier claim that this guard "mirrors" `correction_budget_check`
   is also gone: that function tests `is_ancestor(merge_base(base, head), parent.head)`, different
   operands answering a different question, and the two disagreed on exactly the merge-from-base
-  case above. Issue #548 closed that case by adding the fork-point test to `repair_range`
+  case above. A later change closed that case by adding the fork-point test to `repair_range`
   after the ancestry guard: a base advance merged into the branch is `whole-change` with
   `whole_change_reason: "base-advanced"`, which the budget's `base_advanced_past` reads the same way
   from the parent's base, so a one-lens panel is never granted over content the base wrote. A merge
@@ -341,24 +336,24 @@
 
   **So the saving does not apply to a rebased repair round, and that bound is not to be softened.**
   Branch protection here forces an integration whenever `main` advances during review; a run that
-  rebases rewrites the parent head and falls back to the whole change, and since #548 one that merges
-  the base falls back to it too, as `base-advanced` — and since #124 the forced integration
-  over an approved parent is publishable either way, where before the elective gate left the rebase
-  as the only route for that round. #296's
+  rebases rewrites the parent head and falls back to the whole change, and one that merges
+  the base also falls back to it, as `base-advanced` — and the forced integration
+  over an approved parent is now publishable either way, where before the elective gate left the rebase
+  as the only route for that round. The
   narrower tier is available exactly when no rebase happened since the parent publication, and the
   operation admits plainly when it is not rather than guessing narrower than the change actually
   was.
 
   What this still does not close: **nothing verifies that an orchestrator calls
   `review_tier_for_repair` for a repair round rather than `review_tier` over the whole change**, the
-  same gap #292's entry above names for the judge count itself. `skill/policies/blind-judges.md` and
+  same gap the entry above names for the judge count itself. `skill/policies/blind-judges.md` and
   `skill/bindings/github/operations.md` state which range to read and when; nothing in this transport reads it
   back, requires it, or can tell the two calls apart from their answers alone — a caller that
   ignores the rule and reads `base..head` on every round gets a well-formed answer either way, only
   a larger one than the rule intends.
 
   **And the range is necessary rather than sufficient, measured on a repair this repository ran the
-  same day.** Run `claude-57cb079c6abe0a87` reported issue #258’s repair round, delivered commits
+  same day.** Run `claude-57cb079c6abe0a87` reported a repair round, delivered commits
   `d75407ff..31b2df54`: seven files, fifteen insertions, fourteen deletions, three of them `.rs`, two
   of those carrying only `///` comments. Filtering every comment line out leaves **two** changed
   lines in the whole repair — a string literal in `src/setup/tests.rs` whose content *is* a shipped
@@ -382,10 +377,10 @@
   either would carve a hole in the classifier to make an answer come out right, which is the shape
   `CLAUDE.md` refuses; the classifier is believed here, not changed.
 
-  **Issue #267 closed the adjacent gap, one level up from this classifier: the range a re-review is
+  **The adjacent gap was closed, one level up from this classifier: the range a re-review is
   told to read, not the tier derived from it.** `parent-head..head` is what every shipped surface
   named unconditionally as the delta a re-review reads, and after a rebase that range also absorbs
-  everything the base gained in between — measured on issue #248's own repair, epoch
+  everything the base gained in between — measured on a real repair, epoch
   `48efa712a453694413b0614f2933c37b`: `parent-head..head` answered 14 files/1,205 insertions/103
   deletions where the repair itself was 10 files/562/26, `git merge-base --is-ancestor` on the two
   heads exiting `1`. The decision above — ancestry, then whether the narrow range touched a path —
@@ -399,11 +394,11 @@
   an unqualified claim.
 
 - **The issue identity is readable for open `analysis` findings only, and the collision is still
-  not mechanised.** Issue #230 took the identity off the issue title — `create` had composed
+  not mechanised.** The identity was taken off the issue title — `create` had composed
   `format!("{identity}: {title}")` for every issue this tracker holds — and put it in the `analysis`
   control marker instead, leaving the key
   [`domain-composition.md`](../skill/references/domain-composition.md) calls the one on which
-  equivalent findings collide on a surface no operation returned. `list_identities` (issue #232)
+  equivalent findings collide on a surface no operation returned. `list_identities`
   reads it back from the local store's `issues.identity`, which `create` and the lazy import
   recorded from the `analysis` marker and never from the title, with the open issues from one REST
   list: `null` for an issue that recorded none. What it does
@@ -415,30 +410,30 @@
   collision itself remains the analyst's to judge.
 
 - **A lens is a sealed reader with one narrow question, not a third judge, and sealing it costs
-  nothing where sealing a judge cost two severe findings.** Issue #48 measured that gap: a sealed
+  nothing where sealing a judge cost two severe findings.** That gap was measured: a sealed
   judge is a full-scope reviewer denied its sight, and the two severe findings it missed both rested
   on files no hunk touched — the seal removed evidence the judge's own scope still claimed to cover.
   A lens has no such scope to lose. Its one question — *does any sentence this change adds
   contradict any code this change adds?* — is answerable entirely from the diff by construction: a
   contradiction between a claim and the code that makes it false lives inside the same payload the
-  claim was added in, `#225`'s own CHANGELOG-contradicts-`build.rs` shape being the case in point.
+  claim was added in, one earlier CHANGELOG-contradicts-`build.rs` shape being the case in point.
   Sealing costs a judge its sight because the judge's question reaches past what it was handed;
   sealing a lens costs nothing because the lens's question never did.
 
   The question was derived by classifying every `review-finding` this tracker held on 2026-09-02 —
   885 of them —
   by identity slug, a keyword classification and approximate rather than measured per-finding, and
-  the entry on issue #222 says so. 436 of those, 63 of them `severe`, read as prose disagreeing with
+  the entry on `review-lens` says so. 436 of those, 63 of them `severe`, read as prose disagreeing with
   code beside it; 36 read as behaviour, which is what a judge's open scope exists for and a lens does
   not attempt.
 
-  **What issue #251 built.** `review-lens` is a reserved row and a rendered definition —
+  **What was built.** `review-lens` is a reserved row and a rendered definition —
   `RESERVED_REVIEWERS`, `skill::AGENT_DEFINITIONS`, the embedded-asset digest, and every registry
   that walks either already knew it existed — and `skill/policies/blind-judges.md` now acquires
-  it, scaled by `review_tier`'s own count, and when #251 built this it did so beside two judges:
+  it, scaled by `review_tier`'s own count, and when this was built it was beside two judges:
   `medium` acquired one lens, `high` five, `low` none, in two waves — every acquired lens first,
   concurrently, sealed to the identical diff and criteria and holding no `Read`, then the two judges
-  over the merged list of lens findings. Issue #994 removed the second wave and the judges with it,
+  over the merged list of lens findings. The second wave was later removed, and the judges with it,
   and the counts are the source project's `0`/`1`/`4` today: the lenses run concurrently and are
   the whole of ordinary review.
   `record_review_finding` now knows a lens: `--lens` names one of the five shipped roles, validated
@@ -463,23 +458,23 @@
   list of lens findings for the round — never a second pass per finding, and `review-refuter`'s one
   batch is that pass today; `insufficient` does not qualify a
   rejection on its own and is recorded and carried rather than dropped. This repository built no
-  refuter through issue #251 — its own *Out of scope* says so. **Issue #158 built one, for a
+  refuter at that point — its own *Out of scope* says so. **One was built later, for a
   different question than the one this paragraph was about, and this entry is corrected rather
-  than left describing a gap that closed.** Issue #293 had already added `review_findings`
-  (`claim.rs`), a read-only operation answering every finding recorded against an exact resolved
+  than left describing a gap that closed.** `review_findings`
+  (`claim.rs`) had already been added, a read-only operation answering every finding recorded against an exact resolved
   receipt, so the ground this entry used to give — *no read path returns findings for an epoch* —
-  was not true even before #158. What #293 alone did not close is what #158 did: `review-refuter`
+  was not true even before the refuter. What that addition alone did not close is what the refuter did: `review-refuter`
   is now a reserved row in `RESERVED_REVIEWERS` (`src/harness/roles.rs`), sealed, carrying its own
   template (`skill/agents/review-refuter.md`) rather than the judge's or any lens's;
   `record_refutation` (`claim.rs`) records its one-batch-per-receipt answer —
   `corroborated`/`refuted`/`inconclusive` per finding, never one task per candidate; and
   the computed verdict drops a finding recorded `refuted` from the ledger.
-  **What #158 left open, on purpose, is a different question: whether this refuter should also
+  **What the refuter left open, on purpose, is a different question: whether this refuter should also
   perform the confirming pass an `inferential` **lens** finding already gets.** It does not. So the
   confirming pass for an `inferential` lens finding stood as it was — the judges' own
   single pass over the whole merged list of lens findings for the round, never a second pass per
   finding — with `review-refuter` wired only into the computed verdict's reading of refutation
-  outcomes. Issue #994 removed the judges' pass, so the refuter's one batch is now the only
+  outcomes. The judges' pass was later removed, so the refuter's one batch is now the only
   confirming mechanism for an `inferential` finding, as in the source project.
 
   **What `review_findings` answers is not checked, and three things it does not prove are worth
@@ -493,23 +488,23 @@
   a checked claim, and nothing here re-runs a finding to confirm one. And `FINDING_TEXT_CEILING`
   (32,768 bytes) is chosen against a bound, not measured: the only measurement this repository has
   of the MCP surface's own answer size is the band `Publication::inline_payload`'s own doc comment
-  in `claim.rs` states (issue #168), not the issue #95 entry in [`honesty.md`](honesty.md) — which
+  in `claim.rs` states, not the corresponding entry in [`honesty.md`](honesty.md) — which
   names only 145,756 bytes refused at 151,889 characters and never states 36,288 at all. That band:
   answers carrying
   73,272 and 145,756 payload bytes were refused and one carrying 36,288 was not. 32,768 sits inside
   the observed-clear half of it; that is a choice made against the band, not a measurement of where
   `review_findings`'s own answer stops fitting through the same surface.
 
-  **Two divergences this port owns rather than inherits, decided on issue #251 and recorded
-  there rather than smoothed over.** This build ships a fifth lens, `review-lens`, beside the
+  **Two divergences this port owns rather than inherits, decided and recorded
+  here rather than smoothed over.** This build ships a fifth lens, `review-lens`, beside the
   source project's four; its question — *does any sentence this change adds contradict any code
-  this change adds?* — has no counterpart in their set. Issue #714's second slice took it out of
+  this change adds?* — has no counterpart in their set. A later change took it out of
   the tier's allocation, which is now the source project's `0`/`1`/`4`; only the delta-lens repair
   round launches it.
 
   A third divergence this build once carried is closed. It ran lenses beside two judges the tier
   licensed, where the source project's own Judgment Day mode states plainly that it *"replaces
-  ordinary 4R as the adversarial method for that target; never run both"*. Issue #994 ports that as
+  ordinary 4R as the adversarial method for that target; never run both"*. That is ported as
   stated: ordinary review acquires lenses and no judge, and Judgment Day, which runs only when the
   operator explicitly asks, replaces the lens review for its target and never runs beside it.
 
@@ -546,11 +541,10 @@
   carriers only. The five lens copies are paraphrases no test crosses, so nothing keeps them
   agreeing with the constants or with each other — the floor is written, and the crossing is not.
 
-- **A lens count is not a risk dial, and `RiskLevel::lenses` (issue #243's first change) is built so
+- **A lens count is not a risk dial, and `RiskLevel::lenses` is built so
   a fourth tier cannot silently answer zero.** At the time this was measured, the judge count scaled
   with risk because judges are independent opinions on one open question — more risk, more opinions,
-  and a bigger panel raises the odds that at least one of them catches what another missed; issue
-  #246 later deleted that scaling entirely, along with the `judges` answer it described, because the
+  and a bigger panel raises the odds that at least one of them catches what another missed; that scaling was later deleted entirely, along with the `judges` answer it described, because the
   source project this crate ports `review_tier` from never counts judges in code at all — it counts
   lenses in Go and states judge counts in prose. A lens is not an opinion; it is one
   narrow question, and N copies of that one question over one diff measure how consistently an agent
@@ -577,13 +571,13 @@
   `RiskLevel::lenses()` directly — the same crossing shape the reserved-reviewer count already gets
   from that file's own `the_number_of_reserved_reviewers_is_the_number_every_document_claims`.
 
-  **Closed by issue #251 — four carriers this entry tracks, not a running total for the whole
+  **Closed — four carriers this entry tracks, not a running total for the whole
   issue.** This entry used to say three shipped sentences claimed nothing launches a lens —
   `skill/policies/blind-judges.md`'s, `skill/references/runtime-notes.md`'s and
   `docs/configuration.md`'s. A fourth survived the same round, inside this very file: a
-  paragraph under the "Issue #246's third change" bullet below, `docs/honesty.md` at
-  the time, pre-existing from issue #246 and never
-  read again during #251's own drafting, said the lens severity floor was "not yet closed" and
+  paragraph under the "third change" bullet below, `docs/honesty.md` at
+  the time, pre-existing and never
+  read again during that change's own drafting, said the lens severity floor was "not yet closed" and
   "prose because nothing runs a lens yet" while the paragraphs beside it were rewritten to say
   the opposite. All four are corrected now. **Four is not the count of every sentence this issue
   has ever corrected, and this entry stops trying to be that count.** A prior repair round's own
@@ -591,8 +585,7 @@
   issue's own ledger rather than restated here, because a number copied from a finding instead of
   re-derived is exactly the mistake this paragraph has already made twice. Re-derivation attempted
   in this round found a different number again: `git diff 424c6c48 c194b20b -- skill 'docs/*.md'
-  README.md CHANGELOG.md | grep -E '^-[^-]' | grep -inE 'lens'` — `424c6c48` the head issue
-  #251's original publication reached, `c194b20b` the head its first repair round produced —
+  README.md CHANGELOG.md | grep -E '^-[^-]' | grep -inE 'lens'` — `424c6c48` the head the original publication reached, `c194b20b` the head its first repair round produced —
   returns 23 removed lines
   mentioning the word, and reading every one by eye finds two carrying the launch-claim family
   this entry tracks — both in the one paragraph at `docs/honesty.md` at the time — with the rest
@@ -634,7 +627,7 @@
   occurrence rather than only a synthetic one: it reached `skill/SKILL.md`'s blind-panel
   clarification during this same round's own repair, the sweep named the file and the exact
   phrase, and it was corrected before this entry was written. `docs/honesty.md` — the
-  "Issue #246's third change" bullet's own lens-floor paragraph, at the time — was missed by
+  "third change" bullet's own lens-floor paragraph, at the time — was missed by
   three readings: the operator's phrase-grep, which did
   not name it among the eleven; the sweep, which cannot reach it by construction, wholesale-
   excluding this file and, independently, carrying no `CLAIMS` phrase that matches its wording
@@ -644,7 +637,7 @@
   passes two surfaces took — two misses on one, three on the other — not an argument that either
   count is now complete.
 
-- **Issue #246's third change: two brakes ported as prose, and one not ported at all — named as such
+- **The third change: two brakes ported as prose, and one not ported at all — named as such
   rather than left silent.** The porting error this whole issue exists to fix — the
   source project's lens dial wired to this binding's judge count, `RiskLevel::judges` read through a
   `Blind judges` setting — is `src/transport/tier.rs`'s own module doc's admission (*"This module used
@@ -653,8 +646,7 @@
   fixed, in prose rather than in code — because that is where the source project keeps its own judge
   count, in `internal/assets/skills/judgment-day/SKILL.md`, never in Go — is what the two entries above
   ("`review_tier`'s tier classification carried three blind spots" and "A lens count is not a risk
-  dial") already carry in full, including the measurement behind keeping a fifth lens, which issue
-  #714's second slice then stopped allocating. This entry does not restate either.
+  dial") already carry in full, including the measurement behind keeping a fifth lens, which a later change then stopped allocating. This entry does not restate either.
 
   **The severity floor is theirs, byte-identical across all four of their lens bodies:** *"Severity
   floor. Only BLOCKER/CRITICAL findings that survive adversarial verification enter the fix → re-review
@@ -666,7 +658,7 @@
   was missing.
 
   **No `review-refuter` is ported *into this loop*, and this is why — at `medium` and `high`.**
-  (Issue #158 later built a `review-refuter` role, for the distinct question of adjudicating a
+  (A `review-refuter` role was later built, for the distinct question of adjudicating a
   panel's own findings before a rejection spends a round rather than for this loop's own
   adversarial-verification floor — this document's own entry above, beside `FINDING_EVIDENCE_CLASSES`,
   says which and does not reopen this argument.) Their own adversarial-verification paragraph
@@ -674,8 +666,8 @@
   *"Judgment Day is the exception: its two-judge convergence satisfies adversarial verification and
   it spawns no `review-refuter` tasks."* Part 1 of this issue once made the panel two judges with unanimity, and by that rule the judge path
   carried the verification a `severe` finding needs before it drove a repair, so a refuter there
-  would have been a second confirmation pass. Issue #775 retired the unanimity rule, and issue #994
-  then removed the judge path from ordinary review, so the argument is moot rather than reversed:
+  would have been a second confirmation pass. The unanimity rule was retired, and the judge path
+  was then removed from ordinary review, so the argument is moot rather than reversed:
   ordinary review has lenses only, a lens's `inferential` severe finding follows its refuter, and
   Judgment Day — where two-judge agreement is the corroboration — launches none, as the source
   project states. The measurement that
@@ -685,12 +677,12 @@
   would have prevented it was already written and was not followed — which is a reading discipline, not
   a missing gate, and nothing here adds one.
 
-  **The lens path's floor closed with issue #251, inside the same file that once bounded it.** This
+  **The lens path's floor closed, inside the same file that once bounded it.** This
   entry used to say the floor was not yet closed here and was prose because nothing ran a lens yet: a
   lens carries no panel to confirm itself against, so its own `severe` finding could not be the
   adversarial verification the floor asks for, and `skill/policies/blind-judges.md`'s "Severity
   floor" subsection said a judge must confirm every lens severe finding before the fix loop applies.
-  That sentence is gone, not merely unenforced: issue #251 ported the source's own routing in its
+  That sentence is gone, not merely unenforced: the source's own routing was ported in its
   place — `evidence_class` decides, `deterministic` qualifies a rejection with no confirmation owed,
   `inferential` needed the one pass over the whole merged finding list for the round, now the refuter's one batch — carrying
   the source's own structural task-ceiling rule (*"1 refuter task for a standard review or 3 total
@@ -707,11 +699,11 @@
   open. `skill/SKILL.md` developer step 5 already said the identical shape before this change — a ceiling
   refuses the next launch, assembles what every round measured, hands it to a named person, and stays in
   `review` rather than `blocked` — and `skill/policies/blind-judges.md`'s repair paragraph says the
-  same; since issue #716 the bound is a spent correction rather than a ceiling, and the rest of the
+  same; the bound is now a spent correction rather than a ceiling, and the rest of the
   shape is unchanged. Comparing the two before writing found nothing genuinely absent, so nothing was added;
   a sentence restating a rule that already holds is the duplication this repository files issues about.
 
-- **Issue #52's first cut crosses three symbol classes `skill/` names against the code that owns
+- **The first cut crosses three symbol classes `skill/` names against the code that owns
   them, and the mapping pass that scoped it named two more this change does not take.** The
   mechanism is an extractor, `crate::markdown::markdown_inline_code_spans`, that reads every inline
   code span in a Markdown document — fenced blocks (``` or ~~~) skipped entirely, a prose mention
@@ -832,7 +824,7 @@
   prose with nothing in the harness enforcing it, named in the entries above this one.
 
   Since 2026-09-07 the four finding vocabularies are crossed against the definitions a reviewer
-  actually starts from, and since issue #343 that crossing is described as what it is. One test walks
+  actually starts from, and that crossing is described as what it is. One test walks
   the seven `RESERVED_REVIEWERS` rows that record findings and asserts each value the transport
   accepts appears in the definition's own template bytes — a template-level check, because
   `render_reviewer_agent` substitutes three literals none of the values is a substring of, so a value
@@ -895,19 +887,19 @@
   at this head rather than a sample, and it is a set nothing before this change could read: each is
   free text a human or a future grep has to parse, and a grep is exactly what produced this count.
 
-  **#31, #54 and #76** are the concrete case. #31 (filed 2026-08-19) and #76 (filed 2026-08-24) are
+  **Three filings** are the concrete case. The first (filed 2026-08-19) and the last (filed 2026-08-24) are
   two recordings of one finding — a stale adapter count on the neutral skill root — found
   independently five days apart by two different runs, each unaware the other had already filed it;
-  #54 (filed 2026-08-21), by a third run, is a related but genuinely different count on the same
+  the middle one (filed 2026-08-21), by a third run, is a related but genuinely different count on the same
   family of source comments. All three still carry `priority:low` and none is repaired as of
-  2026-09-06. A comment posted to #31 on 2026-09-06 now cross-links all three by number and says so
+  2026-09-06. A comment posted to the first on 2026-09-06 now cross-links all three and says so
   in prose — but that link is itself only prose: no field on any of the three issues carries
   another's identity, `create` was never called with `--findings` naming a sibling, and nothing
   added since reads the comment back as data. The rule this change adds does not retrofit that link;
   it only means a finding filed from now on need not repeat the loss.
 
 - **`finding-citation-unresolvable` checks that a `path:line` citation names something that exists
-  and has enough lines, not that it still means what the finding says.** Issue #223 ports
+  and has enough lines, not that it still means what the finding says.** It ports
   `artifactReferenceTokens`/`artifactRepositoryPathReference`/`frozenRepositoryPathLookup.contains`
   (three spans in `artifact_admission.go`), and the check it adds to
   `record_review_finding` — `src/transport/claim.rs`'s `check_finding_citations`, run over `evidence`
@@ -915,7 +907,7 @@
   nothing more. It answers `finding-citation-unresolvable` under one of four causes —
   `malformed-path`, `path-not-in-either-tree`, `path-is-not-a-file` or `line-past-end-of-file` — and
   **reads both `base` and `head` from the recording checkout**, through `citation_ls_tree` and
-  `tier::blob_content` under `How::read()`. Before #223 only a severe `introduced`/`worsened` finding
+  `tier::blob_content` under `How::read()`. Before it only a severe `introduced`/`worsened` finding
   or a lens finding touched `base..head` locally; the citation check runs for **every** class, so a
   run recording a `suggestion` from a checkout that never fetched the receipt's `head` now fails with
   a git read error instead of recording:
@@ -994,7 +986,7 @@
 - **Estigia cannot observe which bytes a judge was actually handed.** `publish_review` materialises
   the review payload and binds its digest as `payload-digest`; it cannot see whether the run that
   read it pasted the whole file into a judge's context, summarised it, or handed over something else
-  entirely. `publication-base-not-ancestor` (issue #277) closes one way a *correct* digest could still
+  entirely. `publication-base-not-ancestor` closes one way a *correct* digest could still
   cover a *corrupted* payload — a `base..head` diff built against a base that moved past the branch's
   own rebase, carrying the base's own history inverted into what reads as this change's deletions —
   but the refusal is a gate on how the payload is built, not a proof of what happened after it left
@@ -1010,7 +1002,7 @@
   say whether any of the six were caught by a reviewer before a verdict was recorded against them —
   neither was measured, and neither is claimed here.
 
-  **No installed server has ever run this refusal, and issue #318 is why.** The MCP server
+  **No installed server has ever run this refusal.** The MCP server
   executes an installed binary. This machine's binary reports the commit it was built from,
   `53f5c0b`, dated 2026-09-06 01:42 — nineteen hours before the merge that delivered this refusal —
   and its own mtime, 01:51 the same morning, bounds any replacement since. Reading its bytes agrees:
@@ -1019,12 +1011,11 @@
   evidence rather than a stripped symbol — a third reading, of the function name `judges_spelled`,
   was offered here in an earlier draft and proves nothing, since `[profile.release]` sets
   `strip = true` and that identifier is never a literal. So every publication this repository has
-  recorded was answered by a server with no such check compiled into it, including the two on issue
-  #317 whose base was not an ancestor of their head. Nothing above ever claimed otherwise; what is
+  recorded was answered by a server with no such check compiled into it, including the two whose base was not an ancestor of their head. Nothing above ever claimed otherwise; what is
   corrected here is a reading anybody would take from the present tense, that a delivered refusal is
   one that runs.
 
-  **What the suite crosses, and the one thing only issue #317's fixture does.** Three tests name this
+  **What the suite crosses, and the one thing only one fixture does.** Three tests name this
   refusal, and only one of them is blind to the fetch.
   `an_unmerged_base_advance_is_refused_before_the_correction_budget_ever_runs` (`tests/pipe/part_10.rs`)
   advances the base from the publishing repository itself, so its `refs/remotes/origin/main` is
@@ -1049,7 +1040,7 @@
   often the refusal would fire now, which no run has yet been in a position to take.
 
 - **A second delivery on one command line travelled on the first one's label, and the repair does
-  not close every shape of that.** Issue #69. `classify_observing` recorded the first
+  not close every shape of that.** `classify_observing` recorded the first
   `IRREVERSIBLE` fragment *in list order*, and `stale_verdict` and `out_of_phase` both return early
   unless `DELIVERS` holds the fragment recorded. `git push` is on the first list and not the second,
   so `git push && gh pr merge <n>` skipped every delivery check there is. The fragment recorded is
@@ -1062,9 +1053,9 @@
   git tag v1` recorded `git merge`, and `git push && gh pr create`, both fragments tier 0, recorded
   the push and reached no delivery check at all. So this repair helps precisely when a line carries
   a fragment stronger than the one the list names first.
-  Issue #325 closes the same-tier case by refusing a line whose built-in fragments put two or more in
+  The same-tier case is closed by refusing a line whose built-in fragments put two or more in
   one tier, with `several-irreversible-fragments-on-one-line` naming the fragments rather than any one
-  of them, and it was filed rather than folded in because #69's own third acceptance criterion
+  of them, and it was handled separately rather than folded in because the original's own third acceptance criterion
   demands a refusal code that a multiplicity refusal can never reach.
 
   **Which is the thing this repair measured that no document said before: no compound line can
@@ -1087,7 +1078,7 @@
   way — but it is a property of the function rather than of the lists, and a declared fragment that
   is *not* a built-in spelling is tier 0 whatever it delivers, because Estigia cannot know whether
   somebody's `make deploy` delivers or rehearses, which is the reason `DELIVERS_POPULATION` already
-  gives for excluding declared fragments from that list. #325's multiplicity count keeps the same
+  gives for excluding declared fragments from that list. The multiplicity count keeps the same
   exclusion: only built-in `IRREVERSIBLE` fragments are counted, so an operator's declared boundary
   never makes a line overfull on its own.
 
@@ -1103,13 +1094,13 @@
   **A second population this repair newly refuses.** `git commit -m "git tag the release" &&
   git push` from `in-progress` answered `allow` before this change, recording `git push`; it
   answers `out-of-phase` after it, recording `git tag`, which `contains_whole_command` matches
-  inside the quoted message and which outranks `git push`. The over-match itself is #82's subject;
+  inside the quoted message and which outranks `git push`. The over-match itself is a separate matter;
   what is recorded here is the population the ranking change moved.
 
 - **`tests/pipe.rs` can fail under machine contention, and this repair does not make that stop
-  happening.** Issue #75, measured on `017cd5a1`: 14 runs of `cargo test --test pipe` under sustained
+  happening.** Measured on `017cd5a1`: 14 runs of `cargo test --test pipe` under sustained
   external load produced 2 failures, a 14% rate — consistent with, though too small a sample to
-  claim it matches, the roughly one-in-five #327 reported. Both captured panics named a fixture
+  claim it matches, the roughly one-in-five rate previously reported. Both captured panics named a fixture
   command that failed under load, not a defect in the test's own subject —
   `what_a_half_written_file_left_behind_is_not_the_operators` hit `Os { code: 3, kind: NotFound,
   message: "El sistema no puede encontrar la ruta especificada." }` seven lines after a discarded
@@ -1151,14 +1142,14 @@
   in `tests/pipe.rs`, being 82 `tracker_rig()` calls plus one one-off — so roughly 23 s of aggregate
   staging work per uncontended full run and roughly 57 s under load, spread across threads rather
   than wall clock. `cargo test --test pipe` alone accounts for 83 of them, about 11 s and 28 s
-  respectively. One `mktemp` failed outright across those 7,200 calls. Issue #1062 has since cached
-  `scripted_gh`'s directory per test binary, so the 87 `src/` call sites stage once and the aggregate
+  respectively. One `mktemp` failed outright across those 7,200 calls. The `scripted_gh` directory has since been cached
+  per test binary, so the 87 `src/` call sites stage once and the aggregate
   above is the pipe suite's 83 alone. None of this is closed by the change above — it is the same
   shape of gap, a deadline this repair does not and cannot remove, recorded here rather than left as
   a green run nobody questions.
 
-- **`setup` follows `CLAUDE_CONFIG_DIR` and the gate did not — closed by issue #428, with the
-  measurement.** Issue #427 made `resolve_paths` read the variable, so `setup`, `sync`, `doctor`,
+- **`setup` follows `CLAUDE_CONFIG_DIR` and the gate did not — closed, with the
+  measurement.** `resolve_paths` reads the variable, so `setup`, `sync`, `doctor`,
   `config` and `uninstall` all resolve Claude Code's five roots under `$CLAUDE_CONFIG_DIR` when it
   is set, but `definition_for`, `authorize_review_blind_launch` and the control-surface spellings the
   gate itself matches still resolved `.claude` under the home — on a machine whose Claude Code
@@ -1177,7 +1168,7 @@
 
   Three fixes close it. `harness::roles::definition_for` now also searches
   `$CLAUDE_CONFIG_DIR/agents`, beside `~/.claude/agents` rather than instead of it — the same
-  asymmetry issue #34 states for the OpenCode root beside it in the same function.
+  asymmetry stated for the OpenCode root beside it in the same function.
   `harness::roles::authorize_review_blind_launch` proves the canonical reviewer against
   `$CLAUDE_CONFIG_DIR/agents` alone when the variable is set, and never against `~/.claude/agents` —
   that tree belongs to whichever profile the operator is *not* running under, and letting it stand in
@@ -1196,7 +1187,7 @@
   folds every whitespace run and every `NOT_IN_A_PATH_SEGMENT` byte into a separator before asking.
   A third survived the folded spelling the first fix added: the **escaped** spelling of the space
   leaves the folded byte and the token boundary side by side, so the view carries `//` where the
-  folded root carries one `/`. All are closed (issues #455, #456 and #828): the root must now begin
+  folded root carries one `/`. All are closed: the root must now begin
   at a path boundary, and the shell road's folded spelling of the root is asked beside the root
   itself — with one separator and with two, the run the escaped spelling emits.
 
@@ -1214,7 +1205,7 @@
   Each of the first two fixes reddens on its own when reverted — measured, not merely argued.
 
   `CLAUDE_CONFIG_DIR` remains deliberately not contained-checked against the home the way `APPDATA`
-  and `XDG_CONFIG_HOME` are — `docs/what-it-writes.md`'s paragraph after its issue #34 section says
+  and `XDG_CONFIG_HOME` are — `docs/what-it-writes.md`'s paragraph after its section on a redirected home says
   why, and that reasoning is unaffected by this fix.
 - **Filing with a priority no declared scale allows is accepted, and the queue read says so.**
   `create` attaches whatever `priority` it is given and answers `priority_checked`: `true` only when
@@ -1231,7 +1222,7 @@
   belongs to the domain.
 
 - **A developer's out-of-scope finding is handed to an analyst by prose alone, and the handoff is
-  unobserved.** Issue #14: the Developer execution steps now say that a defect outside the issue in
+  unobserved.** The Developer execution steps now say that a defect outside the issue in
   hand goes to an analyst run — a separate context holding its own claim — with the reproduction and
   the evidence the developer holds, and is never filed by the developer itself, because the context
   that produced a finding is the one that judges it worst.
@@ -1241,12 +1232,12 @@
   timeline from one that followed it, and that stays said here.
 
 - **The Stop hook reads a transcript it cannot prove is complete, and the approved-republish gate reads
-  order, not intent.** Issue #482: a run whose only remaining work is a background launch that has not
+  order, not intent.** A run whose only remaining work is a background launch that has not
   reported now ends its turn instead of being kept for a poll, and a publication over an approved
   parent on the same pull request is refused unless a finding has been recorded against that parent
   receipt since the verdict — or the base advanced past the parent receipt's own recorded base, the
   integration `required_status_checks.strict: true` forces whether the run merged the base or rebased
-  onto it (#124). What neither
+  onto it. What neither
   check proves: the hook counts a launch only from the host's own record that it **started** — a
   `toolUseResult` carrying a non-empty `backgroundTaskId`, or one reporting `async_launched`; the
   text of a result is never read, so output that quotes the notice is not a launch — and it counts a
@@ -1259,9 +1250,9 @@
   truth: a finding recorded after the verdict clears the refusal whether or not the defect is real,
   the same declaration-not-proof standing every other field of a review finding has, and its
   advanced-base exception proves only that the parent's recorded base is a proper ancestor of this
-  publication's (issue #716 made it direction-aware; it read inequality of the two tips before) — not that the movement
+  publication's (it is direction-aware now; it read inequality of the two tips before) — not that the movement
   was compatible, not that the integration is correct, not that the setting was on, and not that the
-  panel's delta read is the whole of what changed (a merged advance is read whole since #548, so
+  panel's delta read is the whole of what changed (a merged advance is now read whole, so
   the delta lens is never the panel over base content). Both readers
   fail closed on a failed read — an unreadable transcript keeps the turn, and a timeline that will not
   read refuses the publication.
