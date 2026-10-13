@@ -43,11 +43,12 @@ tree, that the working tree's declaration does not name: `Cargo.lock`, `package-
 `flake.lock`, `gradle.lockfile`.
 
 The row is advisory (reported like a skipped check, never broken) and names, per file, the `[[generated]]`
-lines to add, with the regenerating command for that file's ecosystem and a `cwd` for a file below the
-root. The commands are suggestions: confirm each regenerates the file byte-identically before declaring it,
-because a declared path that does not reproduce is refused. Nothing is declared for the operator. The row is
-absent when every such file is declared or there is none. It reads the working tree, unlike the review, which
-reads only the base.
+entry to complete: the `path`, and a `cwd` for a file below the root. It suggests no `command`. The usual
+generators (`cargo generate-lockfile`, `npm install`, `poetry lock` and the rest) re-resolve dependencies
+against whatever the registry holds now rather than reproducing the committed file, and a declared path that
+does not reproduce byte for byte is refused. The operator supplies a `command` they have verified. Nothing is
+declared for the operator. The row is absent when every such file is declared or there is none. It reads the
+working tree, unlike the review, which reads only the base.
 
 ## Only the base declares
 
