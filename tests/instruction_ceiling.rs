@@ -26,7 +26,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/agents/review-risk.md", 4_276),
     ("skill/agents/review-validator.md", 1_998),
     ("skill/assets/analyst-issue-template.md", 2_850),
-    ("skill/bindings/github.md", 26_420),
+    ("skill/bindings/github.md", 18_014),
     ("skill/bindings/github/delivery.md", 37_708),
     ("skill/bindings/github/operations-guarantees.md", 42_835),
     ("skill/bindings/github/operations.md", 50_347),
@@ -40,7 +40,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/references/domain-composition.md", 9_798),
     ("skill/references/repository-delivery.md", 21_040),
     ("skill/references/runtime-notes.md", 18_678),
-    ("skill/references/safety-incidents.md", 11_662),
+    ("skill/references/safety-incidents.md", 15_929),
 ];
 
 const LINE_CEILING: usize = 2_000;

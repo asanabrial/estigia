@@ -83,3 +83,56 @@ the surviving executable or document owner changes.
 - Acceptance criteria exist before implementation. If absent, state a narrow defensible contract on
   the issue or return it to `analysis`; never reconstruct criteria around completed bytes, and never
   ship a partial fix as complete.
+
+## History moved out of the GitHub binding
+
+`bindings/github.md` is loaded on every activation and carries the instructions; the history that
+justified them is here.
+
+- **The instruction was present and the run never executed it.** *"not a missing permission, not an
+  unclear config, not a tracker limitation. The instruction was present and the run simply never
+  executed it."* A run moved labels correctly through the entire state machine and executed a mechanical
+  step zero times in a whole session. That is why the mechanical steps are tools.
+- **No interpreter on the path.** A script once shipped beside the contract, which was a second
+  implementation of every decision: one the agent ran and one the gate read, alive at the same time and
+  able to disagree about which comments name a claim, when a takeover's evidence is bound, and whether a
+  branch is linked. The operations answer in one place now.
+- **Exit codes.** Exit `3` is the one to read carefully: treating a timeout as a stand-down lets a flaky
+  network halt every run, and treating it as clearance lets a run write deaf, the defect the renewal
+  exists to close. `5` exists because `3`'s advice ("nothing was learned, retry") is wrong for a write,
+  which may have landed in the instant before the failure surfaced. `4` exists because an unhandled
+  exception would otherwise exit `1` with a traceback and no JSON, indistinguishable from a deliberate
+  STOP. `2` is about AUTHORITY: a malformed worktree template, a run ID that cannot name a directory or a
+  missing `Worktree location` change no authority, so a retry after fixing the configuration is the right
+  move, and reporting one as `1` costs a run its work in the direction that matters.
+- **Reading old markers.** Reading once fell back to the prose forms (`Claimed by <run-id>`) for comments
+  written before markers existed, deliberately narrow: a control message must both name the run-id and
+  instruct. A comment an older binary posted is read through the import under the same rules and, if
+  edited, becomes inert because GitHub no longer exposes its original bytes; corrections append a fresh
+  operation.
+- **A real claim race, 2026-07-22.** Claims were then recorded as comments. Today the store orders both
+  claims in one transaction and refuses the loser at once; the lesson about renewal stands.
+
+  | Time (UTC) | Event |
+  |---|---|
+  | 14:40:03 | `claude-code-cb8d3f2c` writes its claim comment |
+  | 14:40:08 | `claude-code-d7d8a22e` writes its claim comment, 5 s later, before the collision is visible |
+  | 14:40:41 | adjudication comment: the earliest claim wins, `claude-code-d7d8a22e` is told to stand down |
+  | 14:49-15:24 | `claude-code-d7d8a22e` posts heartbeats 1, 2 and 3 and keeps building; none of its writes re-read the timeline |
+  | 15:24:21 | the winner delivers |
+  | 15:28:52 | `claude-code-d7d8a22e` finally stands down, retracting a measurement taken on work it no longer held |
+
+  Under write-only heartbeats the stand-down sat unread for 48 minutes; `heartbeat` runs the renewal
+  before it records, so the loser's next heartbeat at 14:49:22 would have exited `1` instead of writing.
+- **Markdown bodies.** The tools remove the class of inline-body corruption rather than warning about it,
+  and answer it in one implementation rather than a PowerShell/bash pair: writing the fix in the language
+  that causes the bug, twice, would drift. It was once a script beside the contract, one implementation in
+  the wrong place.
+- **Project columns.** The label half of a transition was always verified; the project half is the one with
+  no other feedback loop, and a column nobody looks at stays wrong forever. Real projects do not label the
+  last column consistently: one described `Analysis` to `Blocked` with their exact `status:*` labels and
+  then described `Done` as `closed`, because that column also tracks the tracker's own closed flag. A
+  verifier demanding `status:done` there fails on the one transition that matters most.
+- **Installing `gh`.** `gh` is a separate install (`winget install GitHub.cli`, `brew install gh`,
+  `apt install gh`). An analyst reaching the API over HTTPS is as capable as one running `gh`, which is why
+  the analyst role was defined as network-only.

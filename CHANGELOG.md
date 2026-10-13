@@ -12,6 +12,11 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The GitHub binding drops what the tool schema already says.** Issue #4. `bindings/github.md` is loaded on
+  every activation; its operations table now names each tool's operation without repeating the flags the
+  MCP schema carries, the operations no tool exposes are one short list, and the history behind its rules
+  (the 2026-07-22 claim race, the retired script, the exit-code rationale, the legacy prose markers) moved to
+  `references/safety-incidents.md`. Every instruction stayed.
 - **The shipped skill names only tools the server exposes.** Issue #4. `repair_rounds`, `review_findings`,
   `review_transaction`, `review_payload_membership`, `spend_summary`, `list_identities`, `inspect_candidate`
   and the capture-only recorders were absorbed into `review_status`, `review_read` and `list_state`, but
