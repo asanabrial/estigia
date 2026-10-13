@@ -12,6 +12,11 @@ the workflow, it holds the tools.
 
 ### The harness
 
+- **The loop rows name every adapter that reads them.** Issue #2. The `Goal loop plugin` explanation told a Pi operator
+  the row concerned OpenCode only; it now names `goal-loop.js` and Pi's `estigia-goal-loop.ts`, and the `Loop plugin`
+  explanation names Claude Code's `/flow-loop` and `/flow-status` commands and `Stop` hook. The two rows' one-line
+  descriptions, and their Spanish, no longer name a subset of adapters at all. Which rows each agent is
+  offered and what `setup` writes are unchanged.
 - **The Pi system section no longer changes with the queued-write count.** Issue #20. The text `estigia session
   start` serves to Pi stated "N GitHub writes are queued", so every write made while the git operation window
   was closed rewrote the leading prompt and defeated prompt caching. It now says "GitHub writes are queued"; the

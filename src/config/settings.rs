@@ -554,11 +554,11 @@ impl Setting {
             Self::Summary => "the language the summary sentence at the top of an issue is in",
             Self::Body => "the language the rest of an issue body is written in",
             Self::LoopPlugin => {
-                "whether OpenCode gets the plugin, and Codex the Stop and SessionStart hooks, that \
-                 continue a session while the run still holds its issue or another is claimable"
+                "whether this agent gets the loop that continues a session while the run still \
+                 holds its issue or another is claimable"
             }
             Self::GoalLoopPlugin => {
-                "whether OpenCode also gets the generic plugin that offers `/goal` and `/loop`, \
+                "whether this agent also gets the generic plugin that offers `/goal` and `/loop`, \
                  which consults no tracker and runs no Estigia command"
             }
         }
@@ -808,14 +808,15 @@ impl Setting {
                 "a published package version cannot be reused, so it needs asking again"
             }
             (Self::LoopPlugin, "on") => {
-                "OpenCode loads `flow-loop.js`, Pi loads `estigia-loop.ts` and Codex runs a \
-                 `Stop` and a `SessionStart` hook; each continues a session while `estigia goal` says the run is live or the \
-                 queue holds claimable work"
+                "Claude Code gets `/flow-loop` and `/flow-status` and a `Stop` hook, OpenCode loads \
+                 `flow-loop.js`, Pi loads `estigia-loop.ts` and Codex runs a `Stop` and a \
+                 `SessionStart` hook; each continues a session while `estigia goal` says the run \
+                 is live or the queue holds claimable work"
             }
             (Self::LoopPlugin, "off") => "no loop plugin or loop hook is written or read",
             (Self::GoalLoopPlugin, "on") => {
-                "OpenCode loads `goal-loop.js`, which offers `/goal` and `/loop` and never runs \
-                 an Estigia command"
+                "OpenCode loads `goal-loop.js` and Pi loads `estigia-goal-loop.ts`; each offers \
+                 `/goal` and `/loop` and never runs an Estigia command"
             }
             (Self::GoalLoopPlugin, "off") => "no goal and loop plugin is written or read",
             (Self::Summary | Self::Body, _) => "the language that text is written in",

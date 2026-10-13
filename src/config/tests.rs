@@ -2602,3 +2602,48 @@ fn a_github_remote_names_its_repository_in_every_shape_git_writes_it() {
         assert!(RepoRef::from_github_remote(url).is_none(), "{url:?}");
     }
 }
+
+#[test]
+fn the_loop_rows_name_every_adapter_that_reads_them() {
+    let loop_on = Setting::LoopPlugin
+        .means("on")
+        .expect("the loop row explains on");
+    for fragment in [
+        "`/flow-loop`",
+        "`/flow-status`",
+        "`Stop`",
+        "`flow-loop.js`",
+        "`estigia-loop.ts`",
+        "Codex",
+    ] {
+        assert!(
+            loop_on.contains(fragment),
+            "{fragment} missing from {loop_on:?}"
+        );
+    }
+
+    let goal_loop_on = Setting::GoalLoopPlugin
+        .means("on")
+        .expect("the goal and loop row explains on");
+    for fragment in ["`goal-loop.js`", "`estigia-goal-loop.ts`", "Pi", "OpenCode"] {
+        assert!(
+            goal_loop_on.contains(fragment),
+            "{fragment} missing from {goal_loop_on:?}"
+        );
+    }
+}
+
+#[test]
+fn the_loop_rows_describe_themselves_without_naming_a_subset_of_adapters() {
+    for setting in [Setting::LoopPlugin, Setting::GoalLoopPlugin] {
+        let about = setting.about();
+        for adapter in ["OpenCode", "Codex", "Pi", "Claude Code"] {
+            assert!(
+                !about.contains(adapter),
+                "{setting:?} names {adapter} and will go stale: {about:?}"
+            );
+        }
+    }
+    assert!(Setting::GoalLoopPlugin.about().contains("`/goal`"));
+    assert!(Setting::LoopPlugin.about().contains("claimable"));
+}
