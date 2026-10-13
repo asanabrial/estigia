@@ -366,9 +366,12 @@ other command error fails closed. When repository policy names workflow job ids 
 checks, resolve each id through `jobs.<id>.name` in the workflow file at the captured head SHA before
 comparing; never compare ids directly with `gh pr checks.name`. Each expected visible name must be
 present exactly once with `bucket=pass`; `skipping`, `cancel`, a missing name or an unexpected
-duplicate is not green. Re-read both SHAs afterwards; if either changed, discard review and CI.
+duplicate is not green. Re-read both SHAs afterwards; if the head changed, or the base moved other than as `merge` allows, discard review and CI.
 
-**`merge`.** Require `reviewed head/base == CI head/base == current headRefOid/baseRefOid`, then run
+**`merge`.** Require `reviewed head == CI head == current headRefOid`, and `baseRefOid` either the
+reviewed base or a descendant of it that GitHub reports `MERGEABLE` and not `DIRTY`: `review_status`
+answers `released` only then, and stops while GitHub is still computing it (unknown is never
+clean), so ask again. CI is not repeated on an advanced base. Then run
 `gh pr merge <pr> --merge --match-head-commit <head-sha>`. Never use `--admin` or `--delete-branch`:
 deletion can fail after a successful API merge in a multi-worktree checkout and make the result look
 retryable. If a merge queue owns delivery, first prove its configured method preserves merge commits

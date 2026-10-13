@@ -42,6 +42,10 @@ const FRESH_APPROVED_MOVED: &str = "the pull request's head or base is not the o
     record the defect the verdict did not weigh against this receipt with `record_review_finding` \
     and publish again, which admits the publication; when the move is the base's own advance, \
     `publish_review` integrates it";
+const MERGEABILITY_UNKNOWN: &str = "the head is the reviewed one and the base advanced past the \
+    reviewed base, but GitHub is still computing whether the pull request merges: its mergeability \
+    is unknown, and unknown is not clean. Ask again once GitHub has answered; nothing is merged, \
+    published or reviewed meanwhile";
 const DEFAULT_MOVED: &str = "the pull request's head or base is not the one the newest publication \
     recorded: read the pull request, then publish it again deliberately with `publish_review`";
 
@@ -103,7 +107,9 @@ pub fn review_status(context: &Context, issue: u64) -> Result<Value, Failure> {
             if let Some(held) = escalation {
                 held
             } else {
-                if !on_receipt(&pull, receipt) {
+                let approved = standing.standing == Standing::Approved;
+                let placement = placement(context, &pull, receipt, approved)?;
+                if placement == Placement::Moved {
                     moved_off_receipt(context, issue, receipt, &comments, &standing)?
                 } else {
                     let bound = binding(issue, receipt);
@@ -113,8 +119,10 @@ pub fn review_status(context: &Context, issue: u64) -> Result<Value, Failure> {
                                 refused_approval(context, issue, receipt, &comments, &standing)?
                             {
                                 next
+                            } else if placement == Placement::Computing {
+                                halt("mergeability-unknown", MERGEABILITY_UNKNOWN)
                             } else if pull.get("isDraft").and_then(Value::as_bool) == Some(false) {
-                                halt("released", &released_continuation(receipt))
+                                halt("released", &released_continuation(receipt, &pull))
                             } else {
                                 execute("release_ci", "approved", bound)
                             }
@@ -159,27 +167,84 @@ fn delivered_continuation() -> String {
     )
 }
 
-fn released_continuation(receipt: &ReviewTransaction) -> String {
+fn released_continuation(receipt: &ReviewTransaction, pull: &Value) -> String {
+    let advanced = pull
+        .get("baseRefOid")
+        .and_then(Value::as_str)
+        .filter(|base| *base != receipt.base)
+        .map(|base| {
+            format!(
+                ". The base has since advanced to {base}, which descends from the reviewed base, \
+                 and GitHub reports the pull request mergeable: the receipt stays live, and CI \
+                 green on the reviewed head is not asked again on the new base"
+            )
+        })
+        .unwrap_or_default();
     format!(
-        "CI is released for this receipt. When CI is green on this exact head and base, the run \
-         holding this receipt merges it with `gh pr merge {pr} --merge --match-head-commit {head}` \
-         if `Delivery authorisation` authorises this run, and otherwise asks first, naming the \
-         reviewed head {head} and base {base}",
+        "CI is released for this receipt. When CI is green on this exact head, the run holding \
+         this receipt merges it with `gh pr merge {pr} --merge --match-head-commit {head}` if \
+         `Delivery authorisation` authorises this run, and otherwise asks first, naming the \
+         reviewed head {head} and base {base}{advanced}",
         pr = receipt.pr,
         head = receipt.head,
         base = receipt.base,
     )
 }
 
-fn on_receipt(pull: &Value, receipt: &ReviewTransaction) -> bool {
+#[derive(Debug, PartialEq, Eq)]
+enum Placement {
+    Exact,
+    Advanced,
+    Computing,
+    Moved,
+}
+
+fn placement(
+    context: &Context,
+    pull: &Value,
+    receipt: &ReviewTransaction,
+    carries_an_advanced_base: bool,
+) -> Result<Placement, Failure> {
     let current = |key: &str| pull.get(key).and_then(Value::as_str);
-    current("headRefOid") == Some(receipt.head.as_str())
-        && current("baseRefOid") == Some(receipt.base.as_str())
+    if current("headRefOid") != Some(receipt.head.as_str()) {
+        return Ok(Placement::Moved);
+    }
+    let Some(base) = current("baseRefOid") else {
+        return Ok(Placement::Moved);
+    };
+    if base == receipt.base {
+        return Ok(Placement::Exact);
+    }
+    let mergeable = current("mergeable");
+    let state = current("mergeStateStatus");
+    if !carries_an_advanced_base
+        || pull.get("isDraft").and_then(Value::as_bool) != Some(false)
+        || !matches!(mergeable, Some("MERGEABLE" | "UNKNOWN"))
+        || state == Some("DIRTY")
+    {
+        return Ok(Placement::Moved);
+    }
+    let descends = super::super::target::is_ancestor(&context.repo_dir, &receipt.base, base)
+        .map_err(|failure| {
+            Failure::Read(format!(
+                "whether the pull request's base {base} descends from the reviewed base {} is \
+                 unknown, so the receipt is not carried over it: {}",
+                receipt.base,
+                failure.detail()
+            ))
+        })?;
+    Ok(if !descends {
+        Placement::Moved
+    } else if mergeable == Some("UNKNOWN") || state == Some("UNKNOWN") {
+        Placement::Computing
+    } else {
+        Placement::Advanced
+    })
 }
 
 /// The issue's newest publication, only when it is still the live one: confirmed, approved and
-/// not escalated, on an open pull request whose head and base are the receipt's. Anything else
-/// answers `None`, never a receipt that has moved.
+/// not escalated, on an open pull request at the receipt's head whose base is the receipt's or has
+/// advanced cleanly past it. Anything else answers `None`, never a receipt that has moved.
 pub(crate) fn current_review_transaction(
     context: &Context,
     issue: u64,
@@ -196,8 +261,14 @@ pub(crate) fn current_review_transaction(
         return Ok(None);
     }
     let pull = view_pr(context, latest.receipt.pr)?;
-    let open = pull.get("state").and_then(Value::as_str) == Some("OPEN");
-    Ok((open && on_receipt(&pull, &latest.receipt)).then_some(latest.receipt))
+    if pull.get("state").and_then(Value::as_str) != Some("OPEN") {
+        return Ok(None);
+    }
+    let live = matches!(
+        placement(context, &pull, &latest.receipt, true)?,
+        Placement::Exact | Placement::Advanced
+    );
+    Ok(live.then_some(latest.receipt))
 }
 
 fn republish(issue: u64, receipt: &ReviewTransaction, reason: &str) -> Value {

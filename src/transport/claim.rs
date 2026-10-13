@@ -9140,7 +9140,7 @@ pub(crate) fn view_pr(context: &Context, number: u64) -> Result<serde_json::Valu
             "view",
             &number.to_string(),
             "--json",
-            "number,url,headRefOid,baseRefOid,state,isDraft",
+            "number,url,headRefOid,baseRefOid,state,isDraft,mergeable,mergeStateStatus",
         ],
         Some(&context.repo_dir),
     )?

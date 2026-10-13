@@ -224,8 +224,8 @@ releasing ownership.
 
 ## Merge and publish versions
 
-Merge only when current head/base equal the reviewed and green head/base, and bind the operation to
-that head. Use the configured strategy and verify the delivered revision's topology rather than
+Merge only when the head is the reviewed, green head and the base is the reviewed one or a cleanly
+advanced one (binding `merge`), and bind the operation to that head. Use the configured strategy and verify the delivered revision's topology rather than
 trusting the requested flag. A topology-preserving strategy retains branch ancestry; squash or rebase
 creates different history and is valid only when repository policy selected it before review.
 
