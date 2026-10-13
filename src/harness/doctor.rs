@@ -1030,35 +1030,27 @@ fn gate_age_verdict(
     )
 }
 
-/// Lockfile basenames `doctor` offers a declaration for, each with the argv that regenerates it.
-const LOCKFILES: &[(&str, &[&str])] = &[
-    ("Cargo.lock", &["cargo", "generate-lockfile"]),
-    (
-        "package-lock.json",
-        &["npm", "install", "--package-lock-only"],
-    ),
-    (
-        "npm-shrinkwrap.json",
-        &["npm", "install", "--package-lock-only"],
-    ),
-    ("yarn.lock", &["yarn", "install"]),
-    ("pnpm-lock.yaml", &["pnpm", "install", "--lockfile-only"]),
-    ("bun.lock", &["bun", "install", "--lockfile-only"]),
-    ("bun.lockb", &["bun", "install"]),
-    ("poetry.lock", &["poetry", "lock"]),
-    ("uv.lock", &["uv", "lock"]),
-    ("Pipfile.lock", &["pipenv", "lock"]),
-    ("go.sum", &["go", "mod", "tidy"]),
-    ("composer.lock", &["composer", "update", "--lock"]),
-    ("Gemfile.lock", &["bundle", "lock"]),
-    ("Podfile.lock", &["pod", "install"]),
-    ("pubspec.lock", &["dart", "pub", "get"]),
-    ("mix.lock", &["mix", "deps.get"]),
-    ("flake.lock", &["nix", "flake", "lock"]),
-    (
-        "gradle.lockfile",
-        &["./gradlew", "dependencies", "--write-locks"],
-    ),
+/// Lockfile basenames `doctor` offers a declaration for. None carries a regenerating command: each
+/// common one re-resolves dependencies rather than reproducing the committed file.
+const LOCKFILES: &[&str] = &[
+    "Cargo.lock",
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "bun.lock",
+    "bun.lockb",
+    "poetry.lock",
+    "uv.lock",
+    "Pipfile.lock",
+    "go.sum",
+    "composer.lock",
+    "Gemfile.lock",
+    "Podfile.lock",
+    "pubspec.lock",
+    "mix.lock",
+    "flake.lock",
+    "gradle.lockfile",
 ];
 
 fn toml_string(text: &str) -> String {
@@ -1066,7 +1058,7 @@ fn toml_string(text: &str) -> String {
 }
 
 /// The `lockfiles` row: tracked lockfiles `estigia.generated.toml` does not declare, each with the
-/// lines to add. Absent when there is nothing to say; advisory when there is, because the operator
+/// entry to complete. Absent when there is nothing to say; advisory when there is, because the operator
 /// decides what is generated and the row never writes the declaration.
 pub fn lockfiles(repo_dir: &Path) -> Option<Check> {
     let output = Command::new("git")
@@ -1086,16 +1078,13 @@ pub fn lockfiles(repo_dir: &Path) -> Option<Check> {
                 .collect()
         })
         .unwrap_or_default();
-    let mut found: Vec<(String, &[&str])> = String::from_utf8_lossy(&output.stdout)
+    let mut found: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .split('\0')
         .filter(|path| !path.is_empty() && !path.chars().any(char::is_control))
         .filter(|path| !declared.iter().any(|declared| declared == path))
         .filter_map(|path| {
             let name = path.rsplit('/').next().unwrap_or(path);
-            LOCKFILES
-                .iter()
-                .find(|(known, _)| *known == name)
-                .map(|(_, argv)| (path.to_owned(), *argv))
+            LOCKFILES.contains(&name).then(|| path.to_owned())
         })
         .collect();
     if found.is_empty() {
@@ -1104,21 +1093,23 @@ pub fn lockfiles(repo_dir: &Path) -> Option<Check> {
     found.sort();
     let mut detail = format!(
         "{} tracked lockfile{} not declared in estigia.generated.toml, so a change to {} reaches \
-         every reviewer in full; to have it checked by reproduction instead, add",
+         every reviewer in full; to have it checked by reproduction instead, declare it with",
         found.len(),
         if found.len() == 1 { " is" } else { "s are" },
         if found.len() == 1 { "it" } else { "one" },
     );
     let margin = format!("\n{}", " ".repeat(13));
-    for (path, argv) in found {
-        let command: Vec<String> = argv.iter().map(|part| toml_string(part)).collect();
+    for path in found {
         detail.push_str(&format!("{margin}[[generated]]"));
         detail.push_str(&format!("{margin}path = {}", toml_string(&path)));
-        detail.push_str(&format!("{margin}command = [{}]", command.join(", ")));
         if let Some((directory, _)) = path.rsplit_once('/') {
             detail.push_str(&format!("{margin}cwd = {}", toml_string(directory)));
         }
     }
+    detail.push_str(&format!(
+        "{margin}and a `command` you have verified reproduces the file byte for byte; none is \
+         suggested here, because the usual ones re-resolve dependencies instead"
+    ));
     Some(Check {
         name: "lockfiles",
         about: "whether a tracked lockfile is sent to every reviewer in full because nothing declares it generated",
@@ -4031,7 +4022,7 @@ mod tests {
     }
 
     #[test]
-    fn an_undeclared_tracked_lockfile_is_named_with_the_line_to_add() {
+    fn an_undeclared_tracked_lockfile_is_named_with_its_path_and_no_command() {
         let repo = git_repo();
         track(
             repo.path(),
@@ -4045,9 +4036,7 @@ mod tests {
         for line in [
             "[[generated]]",
             "path = \"Cargo.lock\"",
-            "command = [\"cargo\", \"generate-lockfile\"]",
             "path = \"web/package-lock.json\"",
-            "command = [\"npm\", \"install\", \"--package-lock-only\"]",
             "cwd = \"web\"",
         ] {
             assert!(
@@ -4055,6 +4044,18 @@ mod tests {
                 "{line:?} is not a line of {detail}"
             );
         }
+        for command in ["generate-lockfile", "npm install", "package-lock-only"] {
+            assert!(
+                !detail.contains(command),
+                "{command:?} is named in {detail}"
+            );
+        }
+        assert!(
+            !detail
+                .lines()
+                .any(|line| line.trim().starts_with("command =")),
+            "{detail}"
+        );
     }
 
     #[test]
