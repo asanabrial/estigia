@@ -9954,6 +9954,7 @@ pub fn release_ci(
     )
     .map(|_| ());
     ready_outcome(ready_write, view_pr(context, release.pr), &supplied)?;
+    let (lane, next) = ci_outlook(context, release.head, release.pr);
     Ok(serde_json::json!({
         "ok": true,
         "issue": release.issue,
@@ -9964,8 +9965,40 @@ pub fn release_ci(
         "digest": release.digest,
         "basis": basis.word(),
         "draft": false,
-        "ci_released": true,
+        "ci_released": next == "ci_status",
+        "lane": lane,
+        "next": next,
     }))
+}
+
+/// What a run does once `release_ci` has marked the pull request ready: the
+/// publication lane read for the head, and the step that follows it. `merge`
+/// only where the lane says no CI can run; `ci_status` for every other
+/// reading, an unreadable one included.
+fn ci_outlook(context: &Context, head: &str, pr: u64) -> (serde_json::Value, &'static str) {
+    match publication_lane(context, head, Some(pr)) {
+        Ok(lane) => {
+            let next = next_after_release(&lane);
+            (lane, next)
+        }
+        Err(failure) => (
+            serde_json::json!({
+                "ok": false,
+                "state": "unreadable",
+                "action": "the publication lane could not be read, so whether CI will run is \
+                           unknown; treat it as running and use ci_status",
+                "detail": failure.envelope(),
+            }),
+            "ci_status",
+        ),
+    }
+}
+
+fn next_after_release(lane: &serde_json::Value) -> &'static str {
+    match lane.get("state").and_then(serde_json::Value::as_str) {
+        Some("not-consulted" | "disabled" | "never-ran") => "merge",
+        _ => "ci_status",
+    }
 }
 
 fn require_pr_matches(
