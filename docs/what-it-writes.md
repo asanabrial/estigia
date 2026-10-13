@@ -559,7 +559,9 @@ marker).
 
 - `/goal <condition> [--max <n>]` stores the condition for the session, in the location it was asked
   in, and enqueues a first prompt. After every `session.execution.succeeded` for that session the
-  plugin asks an evaluator whether the condition holds. **Met** stops the goal with a visible message.
+  plugin counts the turn, and on every third turn (`JUDGE_EVERY`) and on the turn that reaches the cap
+  asks an evaluator whether the condition holds; the turns between enqueue the condition and "Keep
+  working toward it" without asking (issue #3). **Met** stops the goal with a visible message.
   **Not met** enqueues another prompt carrying the condition and the evaluator's reason, until the
   turn cap (default 25, `--max` overrides) stops it. Bare `/goal` prints the condition, the turns,
   the last judgement and whether it stopped; `/goal clear` stops it.
@@ -573,7 +575,8 @@ OpenCode 2.0.20's `POST /api/session/:sessionID/generate`, whose own description
 transient text from the current session context without mutating session history", with a
 `{ prompt }` payload and a `{ data: { text } }` response. That is the honest fit: the judge sees
 the transcript the session already holds, no child session is created and none is left behind, and
-nothing is added to the history the next turn reads. The prompt asks for `MET` or `NOT MET` on the
+nothing is added to the history the next turn reads. The host builds that context itself, so on
+OpenCode only the cadence bounds what a judgement costs; the plugin cannot cut it. The prompt asks for `MET` or `NOT MET` on the
 first line and a reason on the second; the plugin reads the first line case-insensitively, ignoring trailing punctuation, and **anything
 else, an empty answer, a thrown error or a missing method stops the goal** — never continues it.
 The answer is read as `{ text }` or `{ data: { text } }`, since which of the two the plugin
@@ -831,8 +834,10 @@ bare `/goal` to report, `/goal clear`, `/loop [interval] <prompt> [--max n]` and
 
 Four things differ from OpenCode by design. The judge is the session's model, asked through
 `ctx.modelRegistry.streamSimple` with a plain-text rendering of the session's user, assistant and
-tool-result messages (tool output cut at 2,000 characters, the whole at 120,000) and the OpenCode
-judgement prompt; the call carries an `AbortSignal` that fires after 120 seconds, and a timeout, a thrown
+tool-result messages (a user or assistant message cut at 4,000 characters, tool output at 2,000, the
+whole at 20,000 keeping the newest) and the OpenCode judgement prompt, asked on every third turn
+(`JUDGE_EVERY`) and on the turn that reaches the cap as for OpenCode, with the turns between continuing
+the goal without a call (issue #3); the call carries an `AbortSignal` that fires after 120 seconds, and a timeout, a thrown
 error, a stop reason of `error`, no model or an answer whose first line is neither `MET` nor `NOT MET`
 stops the goal and says so. A goal continues on `agent_settled` only while `ctx.isIdle()`, and a turn Pi
 reports as aborted stops the goal and a self-paced loop; an interval loop runs on its timer and ignores

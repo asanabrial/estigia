@@ -13020,9 +13020,22 @@ const summary = (w) => ({
   timers: live().map((timer) => timer.ms),
 });
 
-const turnEnds = async (w, count) => {
+const silentTurns = async (w, count) => {
+  for (let i = 0; i < count; i++) {
+    const before = w.prompts.length;
+    w.turn();
+    await until(() => w.prompts.length > before, `silent turn ${i + 1}`);
+  }
+};
+
+const reachJudge = async (w, count) => {
+  await silentTurns(w, 2);
   w.turn();
   await until(() => w.generated.length >= count, `judgement ${count}`);
+};
+
+const turnEnds = async (w, count) => {
+  await reachJudge(w, count);
   await settle();
 };
 
@@ -13047,9 +13060,11 @@ const cases = {};
 {
   const w = await world({ answers: [{ text: "NOT MET\nno" }, { text: "NOT MET\nstill no" }, { text: "NOT MET\nnever" }] });
   await w.run(0, "goal", "--max 2 all tests pass");
-  await turnEnds(w, 1);
+  await silentTurns(w, 1);
   const first = summary(w);
-  await turnEnds(w, 2);
+  w.turn();
+  await until(() => w.generated.length >= 1, "cap: the judgement");
+  await settle();
   cases.cap = { first, second: summary(w) };
   w.turn();
   await settle();
@@ -13095,17 +13110,13 @@ for (const [name, answer] of [
 {
   const w = await world({ answers: [{ text: "MET\nyes" }], directories: ["/tmp/goal-a", "/tmp/goal-b"] });
   await w.run(0, "goal", "all tests pass");
-  w.turn();
-  await until(() => w.generated.length >= 1, "foreign: the judgement");
-  await settle();
+  await turnEnds(w, 1);
   cases.foreign = summary(w);
 }
 {
   const w = await world({ answers: [{ text: "NOT MET\nno" }], directories: ["/tmp/goal-b", "/tmp/goal-a", "/tmp/goal-c"] });
   await w.run(1, "goal", "all tests pass");
-  w.turn();
-  await until(() => w.prompts.length >= 2, "owner second: the continuation");
-  await settle();
+  await turnEnds(w, 1);
   cases.owner_second = summary(w);
 }
 {
@@ -13160,8 +13171,7 @@ for (const [name, text] of [["short", "5s check"], ["long", "25d check"], ["bare
 {
   const w = await world({ answers: [{ text: "NOT MET\nno", delay: 200 }] });
   await w.run(0, "goal", "all tests pass");
-  w.turn();
-  await until(() => w.generated.length >= 1, "race clear: the judgement in flight");
+  await reachJudge(w, 1);
   await w.run(0, "goal", "clear");
   await new Promise((resolve) => realSetTimeout(resolve, 400));
   cases.race_clear = summary(w);
@@ -13169,8 +13179,7 @@ for (const [name, text] of [["short", "5s check"], ["long", "25d check"], ["bare
 {
   const w = await world({ answers: [{ text: "NOT MET\nno", delay: 200 }] });
   await w.run(0, "goal", "the first condition");
-  w.turn();
-  await until(() => w.generated.length >= 1, "race replace: the judgement in flight");
+  await reachJudge(w, 1);
   await w.run(0, "goal", "the second condition");
   await new Promise((resolve) => realSetTimeout(resolve, 400));
   cases.race_replace = summary(w);
@@ -13183,6 +13192,28 @@ for (const [name, text] of [["short", "5s check"], ["long", "25d check"], ["bare
   };
   await fire();
   cases.race_loop = summary(w);
+}
+{
+  const w = await world({ answers: [{ text: "NOT MET\nno" }] });
+  await w.run(0, "goal", "all tests pass");
+  await silentTurns(w, 1);
+  cases.cadence_first = summary(w);
+  await silentTurns(w, 1);
+  cases.cadence_second = summary(w);
+  w.turn();
+  await until(() => w.generated.length >= 1, "cadence: the third turn is judged");
+  await settle();
+  cases.cadence_third = summary(w);
+}
+{
+  const w = await world({ answers: [{ text: "NOT MET\nno" }] });
+  await w.run(0, "goal", "--max 2 all tests pass");
+  await silentTurns(w, 1);
+  cases.capturn_before = summary(w);
+  w.turn();
+  await until(() => w.generated.length >= 1, "cap turn: the judgement");
+  await settle();
+  cases.capturn_at = summary(w);
 }
 {
   const w = await world({});
@@ -13252,15 +13283,15 @@ fn the_generic_goal_continues_on_an_unmet_judgement_and_stops_on_a_met_one() {
     let cases = run_goal_loop_driver();
 
     let unmet = &cases["unmet"];
-    assert_eq!(unmet["prompts"].as_array().expect("prompts").len(), 2);
+    assert_eq!(unmet["prompts"].as_array().expect("prompts").len(), 4);
     assert!(
-        unmet["prompts"][1]
+        unmet["prompts"][3]
             .as_str()
             .is_some_and(|text| text.contains("all tests pass") && text.contains("still fail")),
         "the continuation did not carry the condition and the reason: {unmet}"
     );
     assert_eq!(unmet["goal"]["stopped"], serde_json::Value::Null);
-    assert_eq!(unmet["goal"]["turns"], 1);
+    assert_eq!(unmet["goal"]["turns"], 3);
     assert!(
         unmet["asked"][0]
             .as_str()
@@ -13269,7 +13300,7 @@ fn the_generic_goal_continues_on_an_unmet_judgement_and_stops_on_a_met_one() {
     );
 
     let met = &cases["met"];
-    assert_eq!(met["prompts"].as_array().expect("prompts").len(), 1);
+    assert_eq!(met["prompts"].as_array().expect("prompts").len(), 3);
     assert!(is_stopped(met, "goal", "judged met"), "{met}");
     assert!(said(met).contains("Goal met"), "{met}");
     assert_eq!(met["resumes"], serde_json::json!([false]));
@@ -13303,7 +13334,7 @@ fn the_generic_goal_stops_at_its_turn_cap() {
         shown(&cap["second"]).contains("turn cap (2)"),
         "a goal stop's reason was not in the description OpenCode shows: {cap}"
     );
-    assert_eq!(cases["cap_after"]["generated"], 2);
+    assert_eq!(cases["cap_after"]["generated"], 1);
     assert_eq!(
         cases["refused_max"]["goal"]["stopped"]["reason"],
         "the operator cleared the goal"
@@ -13318,7 +13349,7 @@ fn the_generic_goal_stops_on_an_evaluator_answer_it_cannot_read() {
         let case = &cases[format!("unreadable_{name}")];
         assert_eq!(
             case["prompts"].as_array().expect("prompts").len(),
-            1,
+            3,
             "{name}: an unreadable answer continued the goal: {case}"
         );
         assert!(
@@ -13340,17 +13371,17 @@ fn a_stop_or_a_replacement_that_lands_mid_judgement_is_not_overwritten() {
     let count = |case: &serde_json::Value| case["prompts"].as_array().expect("prompts").len();
 
     let clear = &cases["race_clear"];
-    assert_eq!(count(clear), 1, "a cleared goal was continued: {clear}");
+    assert_eq!(count(clear), 3, "a cleared goal was continued: {clear}");
     assert_eq!(
         clear["goal"]["stopped"]["reason"], "the operator cleared the goal",
         "the judgement in flight overwrote the clear: {clear}"
     );
-    assert_eq!(clear["goal"]["turns"], 0, "{clear}");
+    assert_eq!(clear["goal"]["turns"], 2, "{clear}");
 
     let replace = &cases["race_replace"];
-    assert_eq!(count(replace), 2, "{replace}");
+    assert_eq!(count(replace), 4, "{replace}");
     assert!(
-        replace["prompts"][1]
+        replace["prompts"][3]
             .as_str()
             .is_some_and(|text| text.contains("the second condition")),
         "{replace}"
@@ -13407,7 +13438,7 @@ fn the_generic_goal_reports_clears_and_is_owned_by_its_location() {
             .as_array()
             .expect("prompts")
             .len(),
-        1
+        3
     );
 
     let second = &cases["owner_second"];
@@ -13417,9 +13448,44 @@ fn the_generic_goal_reports_clears_and_is_owned_by_its_location() {
     );
     assert_eq!(
         second["prompts"].as_array().expect("prompts").len(),
-        2,
+        4,
         "{second}"
     );
+}
+
+/// The evaluator is asked on every third turn, not on every turn: the turns
+/// between continue the goal without a judge call.
+#[test]
+fn the_generic_goal_judges_every_third_turn_and_continues_the_others_unasked() {
+    let cases = run_goal_loop_driver();
+    let count = |case: &serde_json::Value| case["prompts"].as_array().expect("prompts").len();
+    for name in ["cadence_first", "cadence_second"] {
+        let case = &cases[name];
+        assert_eq!(case["generated"], 0, "{name}: the judge was called: {case}");
+        let last = case["prompts"].as_array().expect("prompts").last().cloned();
+        assert!(
+            last.as_ref()
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|text| text.contains("all tests pass")
+                    && text.contains("Keep working toward it")
+                    && !text.contains("judged not yet met")),
+            "{name}: the unjudged turn did not continue the goal: {case}"
+        );
+    }
+    assert_eq!(count(&cases["cadence_second"]), 3);
+    let third = &cases["cadence_third"];
+    assert_eq!(third["generated"], 1, "{third}");
+    assert_eq!(count(third), 4, "{third}");
+}
+
+/// The turn that reaches the cap is judged even when it is not a third turn.
+#[test]
+fn the_generic_goal_judges_the_turn_that_reaches_its_cap() {
+    let cases = run_goal_loop_driver();
+    assert_eq!(cases["capturn_before"]["generated"], 0);
+    let at = &cases["capturn_at"];
+    assert_eq!(at["generated"], 1, "the cap turn was not judged: {at}");
+    assert!(is_stopped(at, "goal", "turn cap (2)"), "{at}");
 }
 
 #[test]
@@ -18372,7 +18438,7 @@ const TRANSCRIPT = [
 ];
 
 let runs = 0;
-const world = async ({ answers = [], header = {}, model = { id: "judge" }, file = "pi-goal-loop.mjs" } = {}) => {
+const world = async ({ answers = [], header = {}, model = { id: "judge" }, file = "pi-goal-loop.mjs", transcript = TRANSCRIPT } = {}) => {
   held.length = 0;
   const handlers = {};
   const commands = {};
@@ -18400,7 +18466,7 @@ const world = async ({ answers = [], header = {}, model = { id: "judge" }, file 
     sessionManager: {
       getSessionId: () => state.id,
       getHeader: () => state.header,
-      buildSessionProjection: () => ({ messages: TRANSCRIPT }),
+      buildSessionProjection: () => ({ messages: transcript }),
     },
     modelRegistry: {
       streamSimple: (model, context, options) => {
@@ -18442,9 +18508,20 @@ const summary = (w) => ({
   asked: w.generated.map((entry) => entry.context.messages.map((message) => message.content).join("\n")),
   timers: live().map((timer) => timer.ms),
 });
-const turnEnds = async (w, count) => {
+const silentTurns = async (w, count) => {
+  for (let i = 0; i < count; i++) {
+    const before = w.sent.length;
+    w.turn();
+    await until(() => w.sent.length > before, `silent turn ${i + 1}`);
+  }
+};
+const reachJudge = async (w, count) => {
+  await silentTurns(w, 2);
   w.turn();
   await until(() => w.generated.length >= count, `judgement ${count}`);
+};
+const turnEnds = async (w, count) => {
+  await reachJudge(w, count);
   await settle();
 };
 const report = async (w, name) => {
@@ -18488,9 +18565,11 @@ const cases = {};
 {
   const w = await world({ answers: [{ text: "NOT MET\nno" }, { text: "NOT MET\nstill no" }, { text: "NOT MET\nnever" }] });
   await w.run("goal", "--max 2 all tests pass");
-  await turnEnds(w, 1);
+  await silentTurns(w, 1);
   const first = summary(w);
-  await turnEnds(w, 2);
+  w.turn();
+  await until(() => w.generated.length >= 1, "cap: the judgement");
+  await settle();
   cases.cap = { first, second: summary(w), report: await report(w, "goal") };
   w.turn();
   await settle();
@@ -18516,6 +18595,7 @@ for (const [name, answer] of [
 {
   const w = await world({ model: null });
   await w.run("goal", "all tests pass");
+  await silentTurns(w, 2);
   w.turn();
   await settle();
   cases.no_model = { ...summary(w), report: await report(w, "goal") };
@@ -18523,12 +18603,52 @@ for (const [name, answer] of [
 {
   const w = await world({ answers: [{ hang: true }] });
   await w.run("goal", "all tests pass");
-  w.turn();
-  await until(() => w.generated.length >= 1, "timeout: the judgement in flight");
+  await reachJudge(w, 1);
   cases.timeout_signal = w.generated[0].options.signal instanceof AbortSignal;
   cases.timeout_armed = live().map((timer) => timer.ms);
   await fire(live()[0].ms);
   cases.timeout = { ...summary(w), report: await report(w, "goal") };
+}
+{
+  const w = await world({ answers: [{ text: "NOT MET\nno" }] });
+  await w.run("goal", "all tests pass");
+  await silentTurns(w, 1);
+  cases.cadence_first = summary(w);
+  await silentTurns(w, 1);
+  cases.cadence_second = summary(w);
+  w.turn();
+  await until(() => w.generated.length >= 1, "cadence: the third turn is judged");
+  await settle();
+  cases.cadence_third = summary(w);
+}
+{
+  const w = await world({ answers: [{ text: "NOT MET\nno" }] });
+  await w.run("goal", "--max 2 all tests pass");
+  await silentTurns(w, 1);
+  cases.capturn_before = summary(w);
+  w.turn();
+  await until(() => w.generated.length >= 1, "cap turn: the judgement");
+  await settle();
+  cases.capturn_at = { ...summary(w), report: await report(w, "goal") };
+}
+{
+  const long = (marker) => marker + " " + "x".repeat(9999);
+  const transcript = [];
+  for (let i = 0; i < 30; i++) {
+    transcript.push({ role: "user", content: long("user-" + i) });
+    transcript.push({ role: "assistant", content: [{ type: "text", text: long("assistant-" + i) }] });
+  }
+  transcript.push({ role: "assistant", content: [{ type: "text", text: "NEWEST-MESSAGE" }] });
+  const w = await world({ answers: [{ text: "NOT MET\nno" }], transcript });
+  await w.run("goal", "all tests pass");
+  await turnEnds(w, 1);
+  const shown = summary(w).asked[0];
+  cases.bounded = {
+    length: shown.length,
+    newest: shown.includes("NEWEST-MESSAGE"),
+    oldest: shown.includes("user-0 "),
+    truncated: shown.includes("[truncated]"),
+  };
 }
 {
   const w = await world({ answers: [{ text: "NOT MET\nno" }] });
@@ -18561,8 +18681,7 @@ for (const [name, text] of [
 {
   const w = await world({ answers: [{ text: "NOT MET\nno", delay: 200 }] });
   await w.run("goal", "all tests pass");
-  w.turn();
-  await until(() => w.generated.length >= 1, "race clear: the judgement in flight");
+  await reachJudge(w, 1);
   await w.run("goal", "clear");
   await new Promise((resolve) => realSetTimeout(resolve, 400));
   cases.race_clear = { ...summary(w), report: await report(w, "goal") };
@@ -18570,8 +18689,7 @@ for (const [name, text] of [
 {
   const w = await world({ answers: [{ text: "NOT MET\nno", delay: 200 }] });
   await w.run("goal", "the first condition");
-  w.turn();
-  await until(() => w.generated.length >= 1, "race replace: the judgement in flight");
+  await reachJudge(w, 1);
   await w.run("goal", "the second condition");
   await new Promise((resolve) => realSetTimeout(resolve, 400));
   cases.race_replace = { ...summary(w), report: await report(w, "goal") };
@@ -18579,8 +18697,7 @@ for (const [name, text] of [
 {
   const w = await world({ answers: [{ text: "NOT MET\nno", delay: 200 }] });
   await w.run("goal", "all tests pass");
-  w.turn();
-  await until(() => w.generated.length >= 1, "session change: the judgement in flight");
+  await reachJudge(w, 1);
   w.state.id = "ses_other";
   await new Promise((resolve) => realSetTimeout(resolve, 400));
   cases.session_changed = summary(w);
@@ -18768,14 +18885,14 @@ fn the_pi_goal_continues_on_an_unmet_judgement_and_stops_on_a_met_one() {
     );
 
     let unmet = &cases["unmet"];
-    assert_eq!(pi_prompts(unmet).len(), 2, "{unmet}");
+    assert_eq!(pi_prompts(unmet).len(), 4, "{unmet}");
     assert!(
-        pi_prompts(unmet)[1].contains("all tests pass")
-            && pi_prompts(unmet)[1].contains("still fail"),
+        pi_prompts(unmet)[3].contains("all tests pass")
+            && pi_prompts(unmet)[3].contains("still fail"),
         "the continuation did not carry the condition and the reason: {unmet}"
     );
     assert_eq!(
-        unmet["options"][1],
+        unmet["options"][3],
         serde_json::json!({ "triggerTurn": true, "deliverAs": "followUp" })
     );
     let asked = unmet["asked"][0].as_str().expect("what was asked");
@@ -18793,13 +18910,13 @@ fn the_pi_goal_continues_on_an_unmet_judgement_and_stops_on_a_met_one() {
     );
     assert!(report_text(unmet).contains("Still running"), "{unmet}");
     assert!(
-        report_text(unmet).contains("Turns: 1 of at most 25"),
+        report_text(unmet).contains("Turns: 3 of at most 25"),
         "{unmet}"
     );
 
     let met = &cases["met"];
-    assert_eq!(pi_prompts(met).len(), 1, "a met goal continued: {met}");
-    assert!(pi_said(met).contains("Goal met after 1 turn"), "{met}");
+    assert_eq!(pi_prompts(met).len(), 3, "a met goal continued: {met}");
+    assert!(pi_said(met).contains("Goal met after 3 turns"), "{met}");
     assert!(
         report_text(met).contains("the condition was judged met"),
         "{met}"
@@ -18812,7 +18929,7 @@ fn the_pi_goal_continues_on_an_unmet_judgement_and_stops_on_a_met_one() {
     let blocks = &cases["blocks"];
     assert_eq!(
         pi_prompts(blocks).len(),
-        2,
+        4,
         "the thinking block was read as the answer: {blocks}"
     );
 }
@@ -18825,7 +18942,7 @@ fn the_pi_goal_stops_at_its_turn_cap() {
     assert_eq!(pi_prompts(&cap["second"]).len(), 2, "{cap}");
     assert!(pi_said(&cap["second"]).contains("Goal stopped"), "{cap}");
     assert!(report_text(cap).contains("turn cap (2)"), "{cap}");
-    assert_eq!(cases["cap_after"]["generated"], 2);
+    assert_eq!(cases["cap_after"]["generated"], 1);
     for name in [
         "refused_max",
         "bare_max",
@@ -18866,7 +18983,7 @@ fn the_pi_goal_stops_on_an_evaluator_answer_it_cannot_read() {
         let case = &cases[format!("unreadable_{name}")];
         assert_eq!(
             pi_prompts(case).len(),
-            1,
+            3,
             "{name}: an unreadable answer continued the goal: {case}"
         );
         assert!(
@@ -18894,7 +19011,7 @@ fn a_judgement_that_never_answers_is_bounded_and_read_as_no_answer() {
     assert_eq!(cases["timeout_signal"], true);
     assert_eq!(cases["timeout_armed"], serde_json::json!([120_000]));
     let timeout = &cases["timeout"];
-    assert_eq!(pi_prompts(timeout).len(), 1, "{timeout}");
+    assert_eq!(pi_prompts(timeout).len(), 3, "{timeout}");
     assert!(
         report_text(timeout).contains("could not be read"),
         "{timeout}"
@@ -18909,19 +19026,19 @@ fn a_stop_a_replacement_or_a_session_change_mid_judgement_is_not_overwritten() {
     let clear = &cases["race_clear"];
     assert_eq!(
         pi_prompts(clear).len(),
-        1,
+        3,
         "a cleared goal was continued: {clear}"
     );
     assert!(
         report_text(clear).contains("the operator cleared the goal"),
         "the judgement in flight overwrote the clear: {clear}"
     );
-    assert!(report_text(clear).contains("Turns: 0"), "{clear}");
+    assert!(report_text(clear).contains("Turns: 2"), "{clear}");
 
     let replace = &cases["race_replace"];
-    assert_eq!(pi_prompts(replace).len(), 2, "{replace}");
+    assert_eq!(pi_prompts(replace).len(), 4, "{replace}");
     assert!(
-        pi_prompts(replace)[1].contains("the second condition"),
+        pi_prompts(replace)[3].contains("the second condition"),
         "{replace}"
     );
     let text = report_text(replace);
@@ -18934,7 +19051,7 @@ fn a_stop_a_replacement_or_a_session_change_mid_judgement_is_not_overwritten() {
     assert!(text.contains("Still running"), "{replace}");
 
     let changed = &cases["session_changed"];
-    assert_eq!(pi_prompts(changed).len(), 1, "{changed}");
+    assert_eq!(pi_prompts(changed).len(), 3, "{changed}");
     assert!(
         !pi_said(changed).contains("Goal"),
         "a judgement that outlived its session said something: {changed}"
@@ -18984,6 +19101,53 @@ fn a_child_session_runs_neither_goal_nor_loop() {
         "{case}"
     );
     assert_eq!(case["timers"], serde_json::json!([]));
+}
+
+/// The evaluator is asked on every third turn, not on every turn.
+#[test]
+fn the_pi_goal_judges_every_third_turn_and_continues_the_others_unasked() {
+    let cases = run_pi_goal_loop_driver();
+    for name in ["cadence_first", "cadence_second"] {
+        let case = &cases[name];
+        assert_eq!(case["generated"], 0, "{name}: the judge was called: {case}");
+        let last = pi_prompts(case).last().copied().unwrap_or_default();
+        assert!(
+            last.contains("all tests pass")
+                && last.contains("Keep working toward it")
+                && !last.contains("judged not yet met"),
+            "{name}: the unjudged turn did not continue the goal: {case}"
+        );
+    }
+    assert_eq!(pi_prompts(&cases["cadence_second"]).len(), 3);
+    let third = &cases["cadence_third"];
+    assert_eq!(third["generated"], 1, "{third}");
+    assert_eq!(pi_prompts(third).len(), 4, "{third}");
+}
+
+/// The turn that reaches the cap is judged even when it is not a third turn.
+#[test]
+fn the_pi_goal_judges_the_turn_that_reaches_its_cap() {
+    let cases = run_pi_goal_loop_driver();
+    assert_eq!(cases["capturn_before"]["generated"], 0);
+    let at = &cases["capturn_at"];
+    assert_eq!(at["generated"], 1, "the cap turn was not judged: {at}");
+    assert!(report_text(at).contains("turn cap (2)"), "{at}");
+}
+
+/// The transcript handed to the evaluator is bounded as a whole and keeps the
+/// newest messages.
+#[test]
+fn the_pi_goal_bounds_the_transcript_the_evaluator_is_shown() {
+    let cases = run_pi_goal_loop_driver();
+    let bounded = &cases["bounded"];
+    let length = bounded["length"].as_u64().expect("the length");
+    assert!(
+        length <= 20_000 + 1_000,
+        "the evaluator was shown {length} characters"
+    );
+    assert_eq!(bounded["newest"], true, "the newest message was dropped");
+    assert_eq!(bounded["oldest"], false, "the oldest message was kept");
+    assert_eq!(bounded["truncated"], true, "a long message was not capped");
 }
 
 #[test]

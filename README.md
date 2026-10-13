@@ -347,7 +347,7 @@ honours. A turn that ends while the run still holds a claim is continued with on
 `/flow-loop` and `/flow-status`, named so that they never shadow the generic `/goal` and
 `/loop`. Pi gets it as an owned extension, `estigia-loop.ts`, that continues the session when Pi reports it settled and registers the same two commands; its goal lives in memory, so a restarted Pi forgets it. Codex gets the same loop as a `Stop` and a `SessionStart` hook entry under the same row, each trusted in `config.toml`, without `--wait`, `--max` or `/flow-status`. Claude Code gets it too: two slash commands under its `commands/` directory and a `Stop` entry, with the cap and `/flow-status`. The default `off` writes nothing. A separate `Goal loop plugin` row, also default `off`,
 writes a generic `goal-loop.js` for OpenCode, or `estigia-goal-loop.ts` for Pi, that offers `/goal <condition>` and `/loop [interval] <prompt>`
-with no Estigia command behind them: a model judges the transcript, and
+with no Estigia command behind them: a model judges the transcript, on every third turn and on the cap turn, and
 [`docs/honesty.md`](docs/honesty.md) says why that is never evidence. `estigia status` reports each agent's continuation word beside its harness line.
 
 ### The oath binds once sworn
