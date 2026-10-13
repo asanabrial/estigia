@@ -96,36 +96,36 @@ the workflow, it holds the tools.
   `Stop` hooks already send (`harness::loop_text::held`, filled by `hook::stop_block` and by both plugins),
   without the preamble or `/flow dev`; a live answer naming no issue stops the loop. The first turn and the
   turns that continue on claimable work are unchanged.
-- **No third-party project is named in the code, the tests or the shipped skill.** Issue #1234. The
+- **No third-party project is named in the code, the tests or the shipped skill.** The
   provenance prose in `skill/` is restated on its own terms; the MIT notice for the files derived from
   another project now travels in `THIRD_PARTY_NOTICES.md`, linked from the README. The Pi loop and
   goal-loop extensions no longer read `GENTLE_PI_AGENTS_CHILD`: a `parentSession` in the session header is
   the only signal that a session is a child, and `docs/honesty.md` records that a child started without
   that header is not recognised. The unknown-companion pipe test uses a neutral slug.
-- **`estigia doctor` names a command that gives the agent its own file.** Issue #1233. For an agent on a
+- **`estigia doctor` names a command that gives the agent its own file.** For an agent on a
   shared skill root that inherits a non-default agent-scoped row, the `contract` row used to name
   `config set --agent <slug> --contract …`, which rewrote the shared `SKILL.md` every agent there reads and
   created no `estigia.<slug>.md`. It now names the same set without `--contract`, and `config set --agent
   <slug> --contract` on an agent-scoped row of a shared root is refused (`contract-is-shared`) with that
   command as its resolution. An agent with a skill directory of its own still writes its `SKILL.md` with
   `--contract`; `repository-cannot-loosen` names the same agent-file command on a shared root.
-- **The gate plugins hand the input on standard input.** Issue #1230. `estigia gate <tool> --input -` reads
+- **The gate plugins hand the input on standard input.** `estigia gate <tool> --input -` reads
   the JSON from standard input (up to 32 MiB, refused when unreadable or not JSON); OpenCode's plugin and Pi's
   extension use it, so an input larger than the operating system's argument limit no longer fails to start the
-  binary and goes out unchecked. `--input <json>` is unchanged. Retires the #1182 oversized-payload entry in
+  binary and goes out unchecked. `--input <json>` is unchanged. Retires the oversized-payload entry in
   `docs/honesty.md`.
 - **The Pi review relay's deadline, aborted, no-`streamSimple`, session-less and no-model paths are driven.**
-  Issue #1202. Node cases cover both `reviewer-deadline` branches, `stopReason: "aborted"`, a registry that
+  Node cases cover both `reviewer-deadline` branches, `stopReason: "aborted"`, a registry that
   cannot complete, a blank and a throwing `getSessionId`, and `inherit` with no session model; a pipe test
   asserts `estigia review model`'s text output; `RELAY_EXIT_CLASS` is declared above its first user and
   the test that read its source text now drives both rendered relays. Tests only otherwise.
-- **Pi's `/goal` and `/loop` refuse a bare `--max`.** Issue #1207. `--max` with no value, or with an empty
+- **Pi's `/goal` and `/loop` refuse a bare `--max`.** `--max` with no value, or with an empty
   one (`--max=`), used to slip through as part of the goal's condition and enqueue a goal named `--max`; it is
   now refused like any `--max` that is not a whole number of at least 1. The Pi loop extension's timers
   take the extension instance that armed them rather than a module-level callback the default export rebinds,
   its `stop_after` branches are driven by node cases, and the Pi claim and doctor drivers give the short
   timeout only to the case that hangs. Tests only otherwise.
-- **Pi has `/estigia-doctor` and two prompt templates.** Issue #1205. The Pi gate extension registers
+- **Pi has `/estigia-doctor` and two prompt templates.** The Pi gate extension registers
   `/estigia-doctor`, which runs `estigia doctor` with a sixty-second bound and shows its report unchanged
   as a session entry that never reaches the model, or on standard output without a UI; a binary that
   is gone, a timeout or a silent exit is shown as `did not answer`, never as a report. Setup also writes
@@ -134,7 +134,7 @@ the workflow, it holds the tools.
   uninstall removes only those two, and a template of the same name that Estigia did not write is left
   alone. The prompt directories join the control surface. No `flow` template: Pi's `/skill:flow` covers
   it. Not observed on a live Pi.
-- **Pi follows `PI_CODING_AGENT_DIR`.** Issue #1182. Setup, uninstall, `status` and `doctor` resolve Pi's
+- **Pi follows `PI_CODING_AGENT_DIR`.** Setup, uninstall, `status` and `doctor` resolve Pi's
   directive, tool-server entry, extensions and agent definitions from the directory that variable names
   (a leading `~` is the home), falling back to `~/.pi/agent`, through one resolver; the directory is
   followed outside the home, since a launcher that relocates Pi puts it there on purpose. A relative value is
@@ -145,20 +145,20 @@ the workflow, it holds the tools.
   session id on the Pi gate, the refusal of `--scope=workspace` for Pi, and the `exposure` field being
   Pi's alone across the whole adapter table. The `pi-config` row also reports an `AGENTS.override.md` in the
   agent directory, which Pi reads in place of the `AGENTS.md` that carries the directive. Not observed on a live Pi.
-- **Pi's settings are control surface, and `doctor` reads them.** Issue #1182. `~/.pi/agent/settings.json`,
+- **Pi's settings are control surface, and `doctor` reads them.** `~/.pi/agent/settings.json`,
   the project's `.pi/settings.json`, `.pi/mcp.json` and `.pi/extensions/` join the paths a write to which
   is a boundary: an `extensions` exclusion or a project `mcp.json` override unloads Estigia's gate or tool
   server without touching a file it owns. The new `pi-config` row of `doctor` is broken when such an
   entry names the gate or the review relay (or `-builtin:mcp`), or turns the `estigia` server off or away
   from `direct`; it only reads. The Pi gate also reads at most eight mebibytes from the binary and blocks
   an answer larger than that, saying so, where it used to count it as no answer. Not observed on a live Pi.
-- **The Pi gate covers tools by input shape and is bounded.** Issue #1182. The Pi extension now sends
+- **The Pi gate covers tools by input shape and is bounded.** The Pi extension now sends
   any tool whose input has a string `command` to the gate as `bash` (gentle-shell's `bash_background`
   and `monitor`, and Pi's `powershell`, which the POSIX shell classifier reads imperfectly), and a
   `path` with `content` or `edits` as `write` or `edit`. The gate call is asynchronous with a
   thirty-second bound; a timeout is "the gate did not answer", not a refusal. With a UI, a write that
   went out unchecked is also shown through `ctx.ui.notify`. Not observed on a live Pi.
-- **Pi can ask.** Issue #1204. With `Unclaimed write policy: ask`, a Pi write the binary would ask about
+- **Pi can ask.** With `Unclaimed write policy: ask`, a Pi write the binary would ask about
   now shows `ctx.ui.confirm` with the binary's text in the terminal UI, and goes ahead only on an
   explicit yes; a decline, no UI, `rpc`, `json` or print mode, or a dialog that throws blocks it.
   `estigia gate` takes a new `--can-ask`, honoured with `--runtime pi` only, and answers such a decision
@@ -166,20 +166,20 @@ the workflow, it holds the tools.
   longer lets a call through on an exit code it cannot read: a numeric code other than `0`, `1`, `2`
   and `4` blocks, and a binary that is gone, a timeout or a signal still goes out `unchecked`.
   Not observed on a live Pi.
-- **Pi is told what a Claude Code session is told.** Issue #1204. Pi has no `SessionStart` hook, so the
+- **Pi is told what a Claude Code session is told.** Pi has no `SessionStart` hook, so the
   gate extension now runs the new `estigia session start` before each agent run and appends the text to
   the prompt's `sections`, without replacing the prompt: the run id, what it holds, the `Issue
   requirement` note and the queue, or `Estigia: session context unknown (...)` when the binary does not
   answer. A session started by `/fork` or `/new` from one that holds an issue is told so and told the
   command that puts it down; the claim is never moved. `session_shutdown` runs `estigia session end`,
   which forgets the pointer only when the session is really over, not when it is replaced or reloaded.
-- **Pi shows the claim and draws a refusal.** Issue #1178. With a UI, the Pi gate extension keeps a
+- **Pi shows the claim and draws a refusal.** With a UI, the Pi gate extension keeps a
   status line with the issue this session holds and its state, read from `estigia goal --json`
   and cleared when the session holds none, and shows `claim unknown` when the binary does not answer.
   A refused write is also drawn as a card carrying the binary's reason unchanged, as a session entry
   that never reaches the model. Both are display only; the block is still the returned
   `{ block: true, reason }`.
-- **A Pi subagent is measured against its parent's claim.** Issue #1178. Pi's subagent extensions start
+- **A Pi subagent is measured against its parent's claim.** Pi's subagent extensions start
   a child `pi` whose gate extension asked with a session id of its own, a run that holds nothing, so the
   child wrote inside the claimed worktree unmeasured. The gate extension now exports the root session id
   in the environment a child inherits and hands it to the child's gate call as `--parent-session-id`;
@@ -189,11 +189,11 @@ the workflow, it holds the tools.
   `tools`, and `model` when one is named), as for OpenCode; the `tools` line is the example
   extension's `--tools` allowlist, and removing the role or uninstalling takes back exactly the files
   setup wrote.
-- **Pi sees Estigia's tools.** Issue #1178. Pi's default MCP `exposure` is `codemode`, which hides a
+- **Pi sees Estigia's tools.** Pi's default MCP `exposure` is `codemode`, which hides a
   server's tools from the model, so `estigia setup pi` now writes `exposure: "direct"` on the
   `mcp.json` entry. An entry from an earlier setup is rewritten on the next one; no other adapter's
   entry changes.
-- **Pi gets `/goal` and `/loop`.** Issue #1178. With the `Goal loop plugin` row `on`, `estigia setup pi`
+- **Pi gets `/goal` and `/loop`.** With the `Goal loop plugin` row `on`, `estigia setup pi`
   writes `~/.pi/agent/extensions/estigia-goal-loop.ts`, the counterpart of OpenCode's `goal-loop.js`. A
   model judges the session's transcript on Pi's `agent_settled` event, asked through
   `ctx.modelRegistry.streamSimple` under a 120-second timeout, and an answer that does not come or cannot
@@ -202,7 +202,7 @@ the workflow, it holds the tools.
   `uninstall` removes exactly that file. `docs/what-it-writes.md` describes it and `docs/honesty.md` what
   was read, not observed.
 
-- **Pi runs the loop.** Issue #1178. With the `Loop plugin` row `on`, `estigia setup pi` writes
+- **Pi runs the loop.** With the `Loop plugin` row `on`, `estigia setup pi` writes
   `~/.pi/agent/extensions/estigia-loop.ts`, which registers `/flow-loop` and `/flow-status` and
   continues the session on Pi's `agent_settled` event while `estigia goal --runtime pi` says the run has
   work. The binary is called asynchronously with a timeout; a timeout or a missing exit code stops the
@@ -211,29 +211,28 @@ the workflow, it holds the tools.
   Pi forgets it. The `Loop plugin` row is now offered for Pi.
   `docs/what-it-writes.md` describes the extension and `docs/honesty.md` what was read, not observed.
 
-- **The reviewer prompt no longer asks for prose its answer format discards.** Issue #1189. The
+- **The reviewer prompt no longer asks for prose its answer format discards.** The
   Findings lens definitions ended with "State plainly when the sweep found nothing", and
   `answer_section` told the same reviewer that any text around the JSON object makes the answer
   unreadable; a lens that obeyed the first had its answer refused as `reviewer-result-malformed`
-  (`review-risk` on PR #1188, three of three). The five Findings lenses now say an empty `findings`
+  (`review-risk` on one pull request, three of three). The five Findings lenses now say an empty `findings`
   list is how the sweep reports nothing, and the answer format states once, for every role, that it
   overrides any instruction above to state, say or explain something. The parser is unchanged. The
   previous lens definitions are recognised as ours, so an installed copy upgrades.
 
-- **A pull request's first publication records no parent from another pull request.** Issue #1186.
-  The parent a publication records fell back to the issue's newest publication when its own pull
+- **A pull request's first publication records no parent from another pull request.** The parent a publication records fell back to the issue's newest publication when its own pull
   request had none, so a chained slice or a replacement pull request inherited another pull
   request's findings, repair notice and tier. The pull request is the lineage boundary: the parent
   is the newest publication on the same pull request, and a first publication records none.
 
-- **A failed targeted validator reads the correction limit.** Issue #1137. A conclusive
+- **A failed targeted validator reads the correction limit.** A conclusive
   `original_criteria_failed` or `correction_regression_failed` escalated the receipt whatever
   `Corrections per lineage` said. With a correction left the receipt now stands rejected, the computed
   verdict names the failure as an open `validator` entry, and `review_status` answers `correction-due`
   with a plain `why`; at the limit it escalates as before. An inconclusive validator and
   `validator-delta-carries-upstream` still escalate.
 
-- **Corrections per lineage is a setting, and defaults to 3.** Issue #1135. The count a review lineage
+- **Corrections per lineage is a setting, and defaults to 3.** The count a review lineage
   may spend was the constant `CORRECTIONS_PER_LINEAGE = 1`; it is now the `Corrections per lineage`
   row, a positive whole number read by `correction-already-spent` at publication, by the
   `correction-spent` escalation in `review_status`, and by `repair_rounds`' `correction_limit`. A
@@ -241,27 +240,24 @@ the workflow, it holds the tools.
   from gentle-ai v4's limit of 1 (`docs/parity.md`); the size budget and the path scope are unchanged.
   `0`, a negative number and a non-integer are refused. See `docs/configuration.md`.
 
-- **The `delivered` stop names the post-merge tail.** Issue #1103. It told the run that a person closes
+- **The `delivered` stop names the post-merge tail.** It told the run that a person closes
   the issue and no Estigia command applies, against Developer step 6 and `closing::FOLLOW_UP`. It now
   hands the run holding the receipt that same constant: `transition --to done`, then `release`.
 
-- **A branch with a separator gets a worktree path instead of a refusal.** Issue #1089:
-  `separator-in-branch-component` refused any branch carrying `/` or `\`, which refused the common
+- **A branch with a separator gets a worktree path instead of a refusal.** `separator-in-branch-component` refused any branch carrying `/` or `\`, which refused the common
   `<type>/<issue>-<slug>` convention. `worktree::branch_component` now encodes `<branch>` injectively
   with `+` as the escape (`+` to `+p`, `/` to `+s`, `\` to `+b`), so `docs/931-hold` lands in
   `docs+s931-hold` and no two branches share a directory. A branch with none of the three characters
   keeps its path byte for byte. The refusal code is retired. See
   `skill/bindings/github/delivery.md`.
 
-- **Generated churn no longer licenses lenses or spends the correction budget.** Issue #1086, third
-  slice. `review_tier` leaves a path the payload shows as a manifest line out of `changed_lines` and
+- **Generated churn no longer licenses lenses or spends the correction budget.** `review_tier` leaves a path the payload shows as a manifest line out of `changed_lines` and
   the content scan, and names it in the new `generated_paths` field; the correction budget leaves it
   out of the original count and of each repair's charge. Both use `generated::manifested_paths`, the
   manifest's own eligibility. Finding anchors still read the real diff. A change of nothing but
   generated files reads `medium`. See `docs/generated-files.md`.
 
-- **A declared generated file is reviewed by reproduction, and approval needs it to match.** Issue
-  #1086, second slice. The review payload shows a path `estigia.generated.toml` declares on the base,
+- **A declared generated file is reviewed by reproduction, and approval needs it to match.** The review payload shows a path `estigia.generated.toml` declares on the base,
   when the change adds or modifies it as a regular file, as its `diff --git` header and one
   `# estigia-generated` line instead of its hunks, so a lockfile past the 256 KiB payload ceiling no
   longer refuses `review-payload-too-large`; the ceiling applies after the substitution and a
@@ -271,8 +267,7 @@ the workflow, it holds the tools.
   A validator's delta payload honours only the declaration the receipt's base holds, and the reviewer
   prompt says a manifest line is not to be reviewed by reading. See `docs/generated-files.md`.
 
-- **A generated file can be checked by running the command that makes it.** Issue #1086, first slice.
-  A repository lists such files in `estigia.generated.toml`, read only from the base commit, and
+- **A generated file can be checked by running the command that makes it.** A repository lists such files in `estigia.generated.toml`, read only from the base commit, and
   `review_read` with `view: verdict` now answers `generated_files`: for each declared path the change
   touches, `match`, `mismatch` (`generated-reproduction-mismatch`), `unavailable`
   (`generated-reproduction-unavailable`) or a fall back to hunks for a deletion or mode change. A
@@ -281,23 +276,22 @@ the workflow, it holds the tools.
   from the scratch checkout first, so a command that writes nothing is `unavailable`. Nothing reads the result yet: the
   payload, digest, tier and verdict are unchanged. See `docs/generated-files.md`.
 
-- **The `released` stop names the holder's merge.** Issue #1083. It told the run that a person
+- **The `released` stop names the holder's merge.** It told the run that a person
   merges and no Estigia command applies, against the delivery binding and the gate. It now names the
   merge command with the receipt's pull request and head, for a run `Delivery authorisation`
   authorises, and otherwise asks first with the reviewed head and base.
 
-- **A `claim` restores the review transaction a release removed.** Issue #1083. After publish,
+- **A `claim` restores the review transaction a release removed.** After publish,
   approval, `release_ci` and `release`, a later `claim` left a pointer with no transaction, so
   `gh pr merge` was refused `complete-review-transaction-missing` and nothing could restore it. The
   `claim` answer now carries the newest publication as `review_transaction` when it is approved,
   unescalated, open and still on its head and base, and the pointer adopts it.
 
-- **The home screen of `estigia tui` shows Tantan.** Issue #1076. The kitten from the README cover is
+- **The home screen of `estigia tui` shows Tantan.** The kitten from the README cover is
   drawn in braille beside the menu, banded from cyan to deep blue, when the terminal is about 105
   columns by 43 rows or larger; smaller terminals keep the wordmark, then the menu alone, as before.
 
-- **The MCP tool surface is consolidated from fifty-one advertised names to thirty-two.** Issue
-  #1054. Every host that loads the schemas up front paid ~76 KB of `tools/list` per session, and
+- **The MCP tool surface is consolidated from fifty-one advertised names to thirty-two.** Every host that loads the schemas up front paid ~76 KB of `tools/list` per session, and
   seven of the names could not act at all. `record_review_verdict` is retired; the three
   capture-only recorders (`record_lens_report`, `record_refutation`, `record_validator_result`) and
   the three `NOT_EXPOSED` names (`last_activity`, `publish_version`, `close`) are gone; and
@@ -312,7 +306,7 @@ the workflow, it holds the tools.
   `record_computed_verdict` takes no outcome, and assisted mode refuses every tracker writer.
   `NOT_EXPOSED` keeps only `reclaim`, as a declaration for the seam test rather than an advertised
   schema, and `docs/review-cost.md` records the before-and-after `tools/list` measurement.
-- **The flow steps always called together are single calls.** Issue #1052. `claim` takes
+- **The flow steps always called together are single calls.** `claim` takes
   `transition_to`, so the `claim` then `transition` pair is one call; `publish_review` and
   `republish_review` take `with_review`, so the tier, its forecast and the first `review_status`
   ride back with the publication instead of a second round trip; and `release` takes
@@ -321,15 +315,13 @@ the workflow, it holds the tools.
   refused; each new argument is optional, so the separate calls still work. The skill now says the
   gate performs the pre-write verification, so an explicit `verify_claim` before the first write is
   no longer owed.
-- **A high-tier review launches and collects every offered slot in one call.** Issue #1051.
-  `launch_review_input` and `collect_review_input` take `names`, an array of slot names, alongside the
+- **A high-tier review launches and collects every offered slot in one call.** `launch_review_input` and `collect_review_input` take `names`, an array of slot names, alongside the
   single `name`: one call starts every lens a tier licenses and one call records every answer, so a
   `high` review spends two calls where it spent eight. Each slot keeps its own per-write claim check,
   and a batch reports a slot a running job already holds (`capture-already-running`) or one still
   running (`capture-running`) rather than refusing the whole call. `record_computed_verdict` and
   `release_ci` are unchanged and stay separate calls.
-- **The four single-valued settings rows are gone, and their behaviour is hard-coded.** Issue #1044.
-  `Delivery route`, `Review delegation`, `Merge strategy` and `Review protocol` each had exactly one
+- **The four single-valued settings rows are gone, and their behaviour is hard-coded.** `Delivery route`, `Review delegation`, `Merge strategy` and `Review protocol` each had exactly one
   answer, so the row recorded a choice nothing could make. They leave `SETTINGS`, which now holds
   twenty-one rows: delivery is direct, delivery merges with a merge commit, every review is
   receipt-driven over `protocols/rdd.md`, and a run acquires its reviewers without asking. Each
@@ -338,14 +330,14 @@ the workflow, it holds the tools.
   `review-protocol-retired` — rather than reporting an unknown row. The `is_fixed` predicate and the
   interactive surface's read-only-line rendering go with them, and `docs/honesty.md`'s read-by-nobody
   list is empty.
-- **A review waits for its reviewers instead of polling.** Issue #1045. `collect_review_input`
+- **A review waits for its reviewers instead of polling.** `collect_review_input`
   takes an optional `wait_seconds`: when a lens, the refuter or the validator job is still
   running, the call blocks up to that many seconds (capped at 900 and never past the point the job
   would be abandoned) for it to finish before answering `capture-running`, so a `high` review no
   longer spends a full-context turn asking after every running lens. Admission, per-write claim
   verification and recorded findings are unchanged, and `wait_seconds` absent or zero keeps the
   one-shot check exactly as it was.
-- **The store snapshots itself, and refuses a network filesystem.** Issue #1026. The write path
+- **The store snapshots itself, and refuses a network filesystem.** The write path
   (`Ledger::open`) takes a SQLite `VACUUM INTO` snapshot under `~/.estigia/snapshots/` when the
   newest is a day old or older, keeps the newest three, and counts a snapshot that could not be
   written rather than failing the operation; `doctor`'s `store` row reports the newest snapshot's
@@ -356,7 +348,7 @@ the workflow, it holds the tools.
   is not refused, and `docs/honesty.md` says so. Uninstall takes the snapshots with the rest of
   `~/.estigia`.
 - **A correction that merges a moved base is validated instead of escalated, an escalation says why
-  in plain words, and recovering it takes one short command.** Issue #1035. When the one correction
+  in plain words, and recovering it takes one short command.** When the one correction
   merges a base that moved and `git merge-tree` merges the parent head and that base cleanly, the
   publication records `delta-parent=integrated` and the targeted validator (and `inspect_candidate`)
   reads the correction's own diff from the merged tree to the head; a rewritten history or a merge
@@ -366,19 +358,18 @@ the workflow, it holds the tools.
   `--epoch` defaults to the issue's one escalated receipt (`recover-no-escalated-receipt` and
   `recover-epoch-ambiguous` refuse otherwise) and `--authorized-by` to the login `gh` is
   authenticated as (`recover-login-unresolved`); the role check and the long form stay.
-- **gentle-ai v4's ODD and RDD are adopted, with two pillars kept.** Initiative #720 is complete.
+- **gentle-ai v4's ODD and RDD are adopted, with two pillars kept.**
   `docs/parity.md` says so in one section and names the two declared divergences and what each
   costs: delivery stays gated on a computed verdict, and workflow authority stays in Estigia's local
   store rather than a checkout file.
-- **The loop names the unadmitted backlog instead of reporting no work.** Issue #1032. `estigia
+- **The loop names the unadmitted backlog instead of reporting no work.** `estigia
   goal` reports `unadmitted`, the open issues the local store has never admitted (`null` when the
   read failed, never `0`). With no live claim, nothing claimable or dischargeable and `unadmitted >
   0`, the Codex and Claude Code Stop hooks end the turn without ending the loop and the OpenCode
   plugin waits, each naming the count and saying to admit each issue with an explicit `transition`.
   Unadmitted issues are not counted as work and no `status:` label is read. With none unadmitted the
   stop reason is unchanged.
-- **The local store is the workflow authority, and the documents say so.** Issue #896, slice e,
-  which completes it. `README.md`, `AGENTS.md` (and `CLAUDE.md`, which is the same file), `skill/`,
+- **The local store is the workflow authority, and the documents say so.** `README.md`, `AGENTS.md` (and `CLAUDE.md`, which is the same file), `skill/`,
   `docs/parity.md` and the tool descriptions no longer name the tracker's timeline as the source of
   truth: claims, states, receipts, findings, verdicts, spend, tasks and `blocked-until` clauses are
   rows in `~/.estigia/state.db`, and GitHub keeps issues and their prose, pull requests, branches,
@@ -393,7 +384,7 @@ the workflow, it holds the tools.
   reads, GitHub's own open-or-closed object and that control channel, and `docs/honesty.md` says
   why the count is not zero. The closed-issue own-delivery proof has tests for the three ways it
   must refuse: no receipt in the store, another run's receipt, and a merge that does not match.
-- **The tool surface is renamed to the review-transaction vocabulary.** Issue #1026. The tool
+- **The tool surface is renamed to the review-transaction vocabulary.** The tool
   `publication_receipt`, its operation `publication-receipt` and the reader function were renamed
   `review_transaction`, matching the code's own `ReviewTransaction`; the old tool name is still
   accepted as an alias. Refusal codes that meant the review transaction — `published-receipt-*`,
@@ -405,20 +396,20 @@ the workflow, it holds the tools.
   `recover-receipt-not-escalated`) keep the word, because that is what they mean. The prose in the
   binding, the contract, `README.md` and the reference documents follows.
 - **A `claim` refuses a projection the store cannot explain, and `reclaim` is the override.**
-  Issue #1026. A claim reads GitHub's own `dev:*` labels and assignee (`gh issue view --json
+  A claim reads GitHub's own `dev:*` labels and assignee (`gh issue view --json
   assignees,labels`) before it opens the store transaction and refuses `foreign-projection` when a
   `dev:<runtime>` label names no ownership event on the store's timeline and no legacy holder, or
   when an assignee is not the authenticated login: two machines with separate stores can each hold
   one issue and neither was told. The refusal writes nothing, and `reclaim` — the explicit override
   the design names — does not run the check.
-- **A fresh `claim` that loses the race rolls its marker back.** Issue #1026. Two runs claiming one
+- **A fresh `claim` that loses the race rolls its marker back.** Two runs claiming one
   issue serialise on the store's `BEGIN IMMEDIATE` transaction and the first committed holds; the
   second wrote its marker, read the timeline, found itself not the holder, and used to leave that
   marker and a `dev:` label behind. It now returns `lost-claim-race` with the world unchanged and
   rolls the marker back, so the store keeps only the winner's row. `reclaim` adjudicates after its
   transaction commits, so a `lost-reclaim-race` loser's row still stays, and `docs/honesty.md` says
   both.
-- **`estigia store import` admits every open issue the store has never touched.** Issue #1026. The
+- **`estigia store import` admits every open issue the store has never touched.** The
   operator's own bulk import: it reads the open issues from the one REST list the queues already
   use, opens `~/.estigia/state.db` once, and imports each issue the store does not hold from its
   `gh issue view --json body,labels,comments` payload, oldest first. An issue the store already
@@ -426,7 +417,7 @@ the workflow, it holds the tools.
   naming it, leaving every earlier admission committed and that issue untouched, because each
   import is its own transaction. `--json` reports `admitted` and `already_held`.
 - **The review family writes only the local store, and no `issue-flow` marker reaches GitHub.**
-  Issue #896, slice d1b. `publish_review`/`republish_review` (the `published` receipt and its
+  `publish_review`/`republish_review` (the `published` receipt and its
   unconfirmed form), `handoff_review`, the recorders of finding, lens report, refutation,
   disposition, validator result, spend and computed verdict, and the `review-receipt` marker of an
   approval or an escalation record in `~/.estigia/state.db` and post no comment; the shared
@@ -438,7 +429,7 @@ the workflow, it holds the tools.
   failed `dev:` label makes the label again. The stand-in `gh` refuses any body bound for GitHub
   that carries a marker, which sweeps every test that drives it. A binary from before this change
   cannot see these markers: `docs/honesty.md` records the cost.
-- **The claim family writes only the local store.** Issue #896, slice d1a. `claim`, `reclaim`,
+- **The claim family writes only the local store.** `claim`, `reclaim`,
   `unassign`, `heartbeat`/`progress`/`blocked` and the `branch` marker of `start-branch` record their
   marker in `~/.estigia/state.db` and post no comment to GitHub, with no human sentence beside it
   either; the `dev:` label, the assignee and the develop link are still written after the local
@@ -449,7 +440,7 @@ the workflow, it holds the tools.
   `heartbeat` answer says `recorded` where it said `posted`. A binary from before this change cannot
   see these markers: `docs/honesty.md` records the cost.
 - **The dedup identity, the `blocked-until` clauses and the ODD checklist are recorded in the local
-  store, not on GitHub.** Issue #896, slice c6. Migration 8 adds `tasks` to `~/.estigia/state.db`.
+  store, not on GitHub.** Migration 8 adds `tasks` to `~/.estigia/state.db`.
   `create` records the identity and any `blocked_until` clauses in the transaction that admits the
   issue and no longer writes an `analysis` or `blocked-until` marker into the body (a `review`
   marker, with `--epoch`, moved in slice d1b); a body that still carries one is read through the import,
@@ -460,7 +451,7 @@ the workflow, it holds the tools.
   `task-incomplete` and `task-done-without-commit`. `skill/SKILL.md` now records a clause with
   `blocked_until` and the checklist with `task`, not a `comment`; `docs/honesty.md` records what a
   store that is the only copy costs.
-- **OpenCode relays a sealed reviewer when no reviewer CLI is installed.** Issue #718. A second
+- **OpenCode relays a sealed reviewer when no reviewer CLI is installed.** A second
   OpenCode plugin, `estigia-review-relay.js`, hooks the sub-agent tool: `launch_review_input`
   records the relay job and answers `relay: true`, the plugin asks `estigia review prompt` for the
   exact prompt the binary built and puts it in the task input, and `estigia review admit` reads the
@@ -471,19 +462,19 @@ the workflow, it holds the tools.
   answer apart from a moved receipt — the two v4 defects. `docs/what-it-writes.md` lists the plugin
   and its uninstall; `docs/honesty.md` says what the relay does not prove and records that ZCode,
   Cursor and DeepSeek Harness cannot relay.
-- **A transiently unread claim is retried before the loop stops.** Issue #1019. The shared loop
+- **A transiently unread claim is retried before the loop stops.** The shared loop
   decision (`cli::loop_stop::decide`, Codex's and Claude Code's `Stop`) reads an unconfirmed claim up
   to a bounded number of attempts, pausing between them, and the OpenCode loop plugin retries on its
   own wait timer the same way; a later confirmed read continues the loop, and only an exhausted retry
   stops — non-terminally for the decision, and with a resumable notice naming the retries for the
   plugin — rather than the old stop on a second read that ended the loop for good. `docs/honesty.md`
   records that the retry is bounded and that exhaustion is a stop, not a clearance.
-- **Read-only `git stash list` and `git stash show` are no longer writes.** Issue #1021. `REPOSITORY_SHELL`
+- **Read-only `git stash list` and `git stash show` are no longer writes.** `REPOSITORY_SHELL`
   matched the substring `git stash`, so inspecting the stash prompted the operator like `git stash pop`
   does. Every occurrence of the fragment is now checked, and only `list` and `show` are exempt: a
   compound line such as `git stash list && git stash drop` is still a write. Every other fragment is
   still matched on substrings.
-- **A bare `flow` is the combined analyst-developer, not a role the tracker picks.** Issue #15. The
+- **A bare `flow` is the combined analyst-developer, not a role the tracker picks.** The
   Decision Gates routing row read an omitted role word as a narrowing; the operator ruled that naming
   neither role means both. Bare `flow` loads both rule books, each bar governing its own half and
   neither relaxed, and the tracker chooses the work rather than the remit: this run's held issue, else
@@ -496,7 +487,7 @@ the workflow, it holds the tools.
   triages. `skill/SKILL.md`, `skill/references/domain-composition.md`,
   `skill/references/runtime-notes.md` and `docs/what-it-writes.md` say so.
 - **The decision and role histories moved into the local store, and the age prune replaced
-  rotation.** Issue #8. `harness::session::record` and `record_role` append a row to `state.db`
+  rotation.** `harness::session::record` and `record_role` append a row to `state.db`
   rather than a line to `decisions.jsonl`/`roles.jsonl`; a rotation two runs raced could lose the
   history one of them had just set aside, and a store append cannot. Records older than thirty days
   are deleted by a prune that runs on `SessionStart` at most once a day, an existing JSONL history
@@ -504,22 +495,21 @@ the workflow, it holds the tools.
   `doctor` rather than discarded — a failed import keeps its file and leaves the one-time marker
   unset rather than deleting the only copy. `docs/honesty.md` says what the prune and the one-time
   import do not establish.
-- **One managed block per runtime, with relay wording gated.** Issue #715. Every adapter's instruction
+- **One managed block per runtime, with relay wording gated.** Every adapter's instruction
   file carries exactly one fenced directive, replaced in place over an older one, and the directive
   stays a pointer to the skill rather than a copy of the ODD and review rules. A new
-  `Capabilities::review_relay` (`false` everywhere until #718, which sets it for OpenCode) is checked against the canonical table,
+  `Capabilities::review_relay` (`false` everywhere until the OpenCode relay plugin sets it) is checked against the canonical table,
   and a test fails when a runtime without a relay is rendered relay wording in its directive or in
   OpenCode's review section. `docs/what-it-writes.md` and `docs/parity.md` say why this differs from
   gentle-ai v4's per-runtime block.
-- **`Model routing` takes `by task`.** Issue #37. The row's third value, beside `unset` and the
+- **`Model routing` takes `by task`.** The row's third value, beside `unset` and the
   `key=model` pairs, says the shape of the work decides the model and the effort rather than a
   role's name; it names no route, installs no definition, and a cell mixing it with pairs is
   refused. The contract emits one policy sentence when it is set, and a launch whose `Agent`/`Task`
   input names a `model` or `effort` records them on the role entry in the store's `roles` table — a
   declaration the launcher made, not a check Estigia performed. `unset` and the pairs render byte
   for byte as before, and the spelling is not `auto`, which already means permission.
-- **The validator capture's offer, recovery and diff are honest.** Issue #1005, the review warnings on
-  #1002 (#776 slice S3d). `skill/SKILL.md` and `skill/policies/blind-judges.md` now say the targeted
+- **The validator capture's offer, recovery and diff are honest.** `skill/SKILL.md` and `skill/policies/blind-judges.md` now say the targeted
   validator is offered as soon as the correction's receipt exists and its result is owed, in the same
   `collect` as any of the correction's missing lens reports, rather than after the panel has reported
   — it reads neither their output nor the panel's. A store error writing the `escalated` receipt the
@@ -532,15 +522,14 @@ the workflow, it holds the tools.
   or a merge — and `computed_verdict` escalates that receipt instead of offering the validator.
   `docs/honesty.md` binds the validator's diff to the two heads and stops overstating what
   `reviewer-payload-mismatch` means for it. No publication gate was widened.
-- **`review_status` knows which reviewers are running.** Issue #776 S6c. Each `collect` input is read
+- **`review_status` knows which reviewers are running.** Each `collect` input is read
   against the job table and the job's lock: no job names `launch_review_input`; a finished job, a dead
   runner or one a minute past its deadline names `collect_review_input` with its `job`; a running one
   has `capture: null` and `running {job, deadline_at}`, because collecting it would be refused
   `capture-running`. When every input is running, `next.ask_after` is the earliest `deadline_at`; the
   `kind` and every `reason_code` are unchanged. A pipe test crosses the whole path over the real MCP
   server with a two second stand-in reviewer.
-- **The queues, the dedup keys and the completion count decide from the local store.** Issue #896
-  slice c. `list-state`, `list-identities` and `completed_count` read the open issues from one REST
+- **The queues, the dedup keys and the completion count decide from the local store.** `list-state`, `list-identities` and `completed_count` read the open issues from one REST
   list with no label filter, and then decide each issue's state, holder, identity and dedup key from
   `~/.estigia/state.db`: a `status:` label never decides, and an open issue the store has never
   admitted is reported under `unadmitted` rather than placed in a state. `blocked` clauses come from
@@ -553,22 +542,21 @@ the workflow, it holds the tools.
   user name: measured, `env -i PATH HOME TERM CLAUDE_CONFIG_DIR=<profile> claude -p ok` prints
   "Not logged in" and prints "ok" with `USER` added. Without them every reviewer launched from a
   personal-profile session came back `reviewer-unavailable`.
-- **`capture_review_input` is replaced by `launch_review_input` and `collect_review_input`.** Issue #776
-  S6b. A launch runs the checks a capture ran up to the reviewer, writes the job, records it against its
+- **`capture_review_input` is replaced by `launch_review_input` and `collect_review_input`.** A launch runs the checks a capture ran up to the reviewer, writes the job, records it against its
   slot and returns `{job, deadline_at}` without waiting; a slot a running job holds is refused
   `capture-already-running`. A collect, by the launching run only, re-reads `review_status`, refuses
   `capture-running` before the deadline plus a minute, `capture-runner-lost`, `capture-result-stale` or
   `capture-job-missing`, passes a reviewer refusal through under its own code, and otherwise admits the
   answer once through the unchanged recorders. The validator's attempt is frozen at launch. The tool count
   is forty-five.
-- **A reviewer can now run detached from the call that started it.** Issue #776 S6a. Migration 5
+- **A reviewer can now run detached from the call that started it.** Migration 5
   adds `review_jobs` to `~/.estigia/state.db` with a unique index that admits one running or
   admitting job per review slot, and the hidden `estigia __review-job <dir>` subcommand runs a
   reviewer under a held lock and leaves `result.json`, never touching the ledger. `job_status`
   reads running, finished or lost from the lock and the file alone. No tool starts a job yet, so
   `capture_review_input` is unchanged; that is S6b.
 - **A lens report, a refutation batch and a validator result can no longer be recorded by hand.**
-  Issue #776 S5b. `record_lens_report`, `record_refutation` and `record_validator_result` are refused
+  `record_lens_report`, `record_refutation` and `record_validator_result` are refused
   `recorded-by-capture-only` at the transport dispatch, before an argument is read, and so is a
   `record_review_finding` that names a `lens`; a judge's finding, which names none, records as before.
   `capture_review_input` calls the recorders directly and is unchanged. Without this, a lens left
@@ -577,7 +565,7 @@ the workflow, it holds the tools.
   "unknown tool". The refusals that told an agent to record each lens report now name `review_status`
   and `capture_review_input`; `docs/honesty.md` corrects the validator digest and the codex session
   claims; `README.md` says the reviewer CLI is `claude`, then `codex`, with no setting.
-- **The documents say who launches a reviewer.** Issue #776 S5. `README.md` and
+- **The documents say who launches a reviewer.** `README.md` and
   `docs/configuration.md` no longer say Estigia runs no model: it launches the reviewer CLI for a
   lens, the refuter and the validator through `capture_review_input`, and nothing else.
   `skill/references/runtime-notes.md` scopes the `review-blind` preflight to the two judges and tells
@@ -585,7 +573,7 @@ the workflow, it holds the tools.
   names the `refutation-batch` input for the refuter, and `docs/lifecycle.md` counts the seven
   templates as embedded, not installed. A pipe test now links a quota failure on a lens to a refused
   `release_ci`.
-- **Setup installs two reviewer definitions, not nine.** Issue #776 S4b. `capture_review_input`
+- **Setup installs two reviewer definitions, not nine.** `capture_review_input`
   launches every sealed lens, the refuter and the validator from templates embedded in the binary and
   never reads `~/.claude/agents`, so `setup` stops installing `review-lens`, `review-risk`,
   `review-readability`, `review-reliability`, `review-readback`, `review-refuter` and
@@ -595,8 +583,7 @@ the workflow, it holds the tools.
   seven names stay reserved: a project definition under one is still refused as a shadow, and a hand
   `Task` launch of one is refused `reviewer-launched-by-the-binary`, naming `capture_review_input`
   rather than `estigia setup --all`. No gate was widened.
-- **`review_status` stops name an action the gate admits, or the person who acts.** Issue #987, the
-  review warnings on #710 S2b. A moved pull request over an unrecovered escalation now answers
+- **`review_status` stops name an action the gate admits, or the person who acts.** A moved pull request over an unrecovered escalation now answers
   `escalated`, not `pull-request-moved`, so the person's `estigia recover` is not hidden; an
   unconfirmed duplicate publication is refused `publication-unconfirmed` before either answer. The
   moved stop's continuation branches on the receipt's standing: `publish_review` for a rejected
@@ -612,7 +599,7 @@ the workflow, it holds the tools.
   widened.
 
 - **The documents say ordinary review is lenses only, and the last per-judge text is per context.**
-  Issue #994, S2. The README, `docs/configuration.md`, `docs/review-cost.md`, `docs/what-it-writes.md`,
+  The README, `docs/configuration.md`, `docs/review-cost.md`, `docs/what-it-writes.md`,
   `docs/honesty.md` and `docs/honesty-review-tier.md` no longer say a tier acquires judges; they say
   the lens count and that judges exist only as Judgment Day. `Review budget`'s purpose string, its
   Spanish key and `docs/configuration.md`'s row are per review context, not per judge. The
@@ -623,7 +610,7 @@ the workflow, it holds the tools.
   `docs/configuration.md` too.
 
 - **Judgment Day carries v4's contract, less its artifact store, and no document tells ordinary review to launch a judge.**
-  Issue #994, S1b. `skill/policies/blind-judges.md` adds the rest of gentle-ai v4's Judgment Day to the
+  `skill/policies/blind-judges.md` adds the rest of gentle-ai v4's Judgment Day to the
   four rules: only a severe finding every judge reports is fixed, a lone judge's is a suspect and
   warnings and suggestions are info; the operator is asked before round one and the fix role is the
   `developer` definition or the orchestrator's own writer, scoped to the confirmed IDs; at most two fix
@@ -645,7 +632,7 @@ the workflow, it holds the tools.
   introduced or worsened findings and says where an unpublished target's directories come from.
 
 - **Ordinary review licenses lenses only; judges are Judgment Day's, and Judgment Day is opt-in.**
-  Issue #994, S1. `RiskLevel::judges()` and `judges_spelled()` are gone, and `review_tier` and
+  `RiskLevel::judges()` and `judges_spelled()` are gone, and `review_tier` and
   `review_tier_for_repair` answer no `judges` key at any tier, delta-lens repairs included. The
   `forecast` line counts lenses alone, so a medium review forecasts one context's budget rather than
   three. The rendered contract and the OpenCode block name lenses only; the tool descriptions and the
@@ -659,7 +646,7 @@ the workflow, it holds the tools.
   documents are swept in a following slice.
 
 - **The binary runs the validator a `review_status` collect offers, and records its inspection.**
-  Issue #776, slice S3d. `capture_review_input` now accepts `review-validator` when the `collect`
+  `capture_review_input` now accepts `review-validator` when the `collect`
   offers it: it rebuilds the correction's diff over its parent (`parent.head..head`, the range
   `inspect_candidate` reads) and not the whole change, hands the reviewer that diff with the parent
   receipt's severe findings, and records the answer with one `record_validator_result` call. The attempt
@@ -672,8 +659,7 @@ the workflow, it holds the tools.
   launch does not prove and the one code, `invalid-validator-result`, that cannot tell a shape from an
   attempt.
 
-- **The binary runs the refuter a `review_status` collect offers, and records its batch.** Issue #776,
-  slice S3c. `capture_review_input` now accepts `refutation-batch` when the `collect` offers it: it
+- **The binary runs the refuter a `review_status` collect offers, and records its batch.** `capture_review_input` now accepts `refutation-batch` when the `collect` offers it: it
   resolves the offered finding ids from the timeline, launches the reviewer as `review-refuter` with
   exactly those findings, and records the answer as one `record_refutation` batch. The answer must
   name each offered finding once and nothing else, or it is `reviewer-result-malformed` and nothing is
@@ -688,8 +674,7 @@ the workflow, it holds the tools.
   `pre-existing` or `base-only` inferential severe finding is offered too and the review cannot loop on
   `refutation-batch-incomplete`. `docs/honesty.md` says what the launch does not prove.
 
-- **The binary runs the lens a `review_status` collect offers, and records what it answered.** Issue
-  #776, slice S3b. `capture_review_input` re-reads `review_status` and refuses
+- **The binary runs the lens a `review_status` collect offers, and records what it answered.** `capture_review_input` re-reads `review_status` and refuses
   `capture-input-not-offered`, before any reviewer runs, unless the answer is a `collect` offering that
   name and the name is a lens role. It rebuilds the diff from the receipt the `collect` names, held
   to the publication's recorded `payload-digest`, verifies the claim, launches the first installed
@@ -704,7 +689,7 @@ the workflow, it holds the tools.
   so `READ_BY_THE_TRANSPORT` names it. `docs/honesty.md` says what the capture does not prove.
 
 - **A side-branch merge no longer mislabels itself a base advance, and an integrated round admits
-  only what the integration actually needs.** Issue #977, the follow-ups to #716 slice S4. A merge
+  only what the integration actually needs.** A merge
   commit in `parent_head..head` with the fork point still inside `parent_head`'s history — a side
   branch merged back with `--no-ff` — now answers `whole_change_reason: "merged-range"` rather than
   `"base-advanced"`; only a fork point that actually moved is a base advance, and both are read
@@ -721,20 +706,18 @@ the workflow, it holds the tools.
   destination is admitted only by the rename clause — and corrects `blind-judges.md`, which still
   described the old "every advance path" rule.
 
-- **A recorder refusal of a parsed reviewer answer is an unusable answer.** Issue #776, S3.
-  `reviewer::launch_recorded` runs `launch` and hands the parsed answer to a recorder
+- **A recorder refusal of a parsed reviewer answer is an unusable answer.** `reviewer::launch_recorded` runs `launch` and hands the parsed answer to a recorder
   that answers `Recording`. Only the recorder's explicit `AnswerRejected`, for an unstarted write, is
   `reviewer-result-malformed`, naming the recorder's code and message; every other refusal, a person's
   stop and a closed issue included, passes through with its own code, class, outcome and resolution.
   Nothing in the lifecycle calls it yet.
 
-- **`review_status` no longer names a command that is refused for a stale approval.** Issue #710, S2b.
-  An approval whose ledger or tier moved is answered `publish_review` only when a finding was recorded
+- **`review_status` no longer names a command that is refused for a stale approval.** An approval whose ledger or tier moved is answered `publish_review` only when a finding was recorded
   after the verdict, the one cause a publication over an approval admits; otherwise it is a
   `verdict-stale` stop naming a person. A legacy approval with no computed marker is answered with the
   recording or inputs that clear it.
 
-- **`review_status`: the one next step of a review.** Issue #710, slice S2b. A read-only MCP tool and
+- **`review_status`: the one next step of a review.** A read-only MCP tool and
   transport operation (`review-status --issue <n>`, no claim) that answers `execute` (a tool and its
   exact arguments), `collect` (inputs to obtain, each with the tool that records it) or `stop` (a coded
   reason), with the `receipt` it was read against and a `partial` or `terminal` forecast horizon. It is
@@ -746,8 +729,7 @@ the workflow, it holds the tools.
   never a state. The taxonomy is in `docs/review-status.md`; `SKILL.md` step 5 tells the orchestrator
   to follow it.
 
-- **A delta-lens repair can record the computed verdict its delivery requires.** Issue #944.
-  `record_lens_report` accepts `review-lens`, and `ReviewLensReport::from_marker` no longer drops
+- **A delta-lens repair can record the computed verdict its delivery requires.** `record_lens_report` accepts `review-lens`, and `ReviewLensReport::from_marker` no longer drops
   it, because a `warning`/`suggestion`-cleared narrow repair's panel is that lens alone and its
   report is the only completion event the round can produce. The computed verdict's licensed roles
   now come from the panel that sized the review — `review_tier_for_repair` over the receipt's own
@@ -757,7 +739,7 @@ the workflow, it holds the tools.
   still records the whole change's tier. The recomputation is deterministic over the receipt's own
   frozen object ids; a disagreement with the recorded range is refused
   `repair-range-disagrees-with-recorded-lineage`.
-- **The retired aggregate verdict's follow-ups from issue #775.** Issue #935. The distinct-refuter
+- **The retired aggregate verdict's follow-ups.** The distinct-refuter
   check is documented for what it compares — the caller-supplied `refuter` label, never the recording
   `run_id` — in `docs/parity.md`, and the choice to correct the sentence rather than bind the check to
   `run_id` is recorded in `docs/honesty.md`. An abandoned pull request's unresolved handoff keeps
@@ -766,8 +748,7 @@ the workflow, it holds the tools.
   `review-verdict-retired` and named in `ignored`. New tests hold the requester arm of the
   distinctness rule and the stale receipt through `record_refutation`.
 
-- **A store-only timeline read, and an expected-epoch check on publication.** Issue #710, slice S2a,
-  the two things `status` stands on. `Ledger::read_timeline_at` reads an issue's timeline from the local
+- **A store-only timeline read, and an expected-epoch check on publication.** `Ledger::read_timeline_at` reads an issue's timeline from the local
   store alone, with no GitHub read, import or sync, and never creates the store; an issue it does not
   hold is `review-status-issue-not-in-store` and an unreadable or foreign-schema store is
   `review-status-store-unreadable`, both `unavailable`. `publish_review` and `republish_review` take an
@@ -775,8 +756,7 @@ the workflow, it holds the tools.
   anything is pushed when the newest publication on the branch's pull request is another. Internal API
   only; `status` itself is S2b.
 
-- **A moved base no longer resets the correction budget or narrows its review.** Issue #716, slice S4,
-  resolving #302 and #548. When the base advanced past the parent publication's and the branch merged
+- **A moved base no longer resets the correction budget or narrows its review.** When the base advanced past the parent publication's and the branch merged
   or rebased it in, the round is measured against `git merge-tree --write-tree <parent head> <new
   base>` rather than starting a new genesis at zero: the frozen budget and genesis scope carry over,
   the cumulative is carried, the paths the advance changed are admitted, the author's conflict
@@ -787,7 +767,7 @@ the workflow, it holds the tools.
   content, and `delta-range-reason` agrees. `budget-refrozen` remains only for a base that did not
   advance past the parent's. See `docs/honesty.md` and `docs/parity.md`.
 
-- **Every refusal carries a class.** Issue #710, slice S1. `Refusal` gains `class`: `unavailable` (the
+- **Every refusal carries a class.** `Refusal` gains `class`: `unavailable` (the
   control surface could not be read), `stale` (a receipt, head or authority moved), `refused` (the
   rule says no) or `unknown` (a write may have landed, which is never reported as a named state). It
   is in `--json` and is one line of the hook and tool-server text, rendered by one function now
@@ -800,8 +780,7 @@ the workflow, it holds the tools.
   `verdict-bound-to-other-repository` (`refused`). `docs/refusal-classes.md` has the rules and every ambiguous placement. `status`
   is the next slice.
 
-- **An agent can no longer declare a stand-down by command or by file.** Issues #959 and #965.
-  `estigia stand-down` is classified first in every shell arm (`harness::person_only`) and refused
+- **An agent can no longer declare a stand-down by command or by file.** `estigia stand-down` is classified first in every shell arm (`harness::person_only`) and refused
   with `stand-down-is-for-a-person` on every host, plain, compound, argv, wrapped or path-spelled.
   A write naming `~/.estigia/stand-down.json` is refused with the same code: a file tool, an
   `apply_patch` body, or a shell line that writes a file and names it (redirect, `tee`, `cp`,
@@ -825,7 +804,7 @@ the workflow, it holds the tools.
   `stand-down`, such as a commit message, `rg` or `git grep`; see `docs/honesty.md`.
 
 - **A closing keyword naming another issue is refused after the push with the same cause the
-  standalone check reports.** Issue #838, following #575. `publish_review`'s post-push arm in
+  standalone check reports.** `publish_review`'s post-push arm in
   `published` (`src/transport/claim.rs`) copied `assess_autoclose`'s verdict whole into its refusal,
   so a keyword that arrived from the remote side of a reused pull request and named another issue
   carried `"cause": "branch-link"` beside `"reason": "closing-keyword-live"` — while
@@ -836,21 +815,19 @@ the workflow, it holds the tools.
   false reddens it; `skill/bindings/github/delivery.md` states the cause both refusals share.
 
 - **A reviewer CLI that is a Windows `.cmd` shim is launched by the standard library's batch-file
-  handling, not by a port of gentle-ai v4's.** Issue #776, slice S4a. Rust's `Command` already runs a
+  handling, not by a port of gentle-ai v4's.** Rust's `Command` already runs a
   `.bat` or `.cmd` program through `cmd.exe /e:ON /v:OFF /d /c` with its own quoting, and refuses an
   argument it cannot pass as `reviewer-launch-failed`. `docs/parity.md` and `docs/honesty.md` record
   the decision and what is not measured on Windows. No code changes.
 
-- **A reviewer can be launched as one call, and a validator can inspect a correction.** Issue #776,
-  slice S2b. `reviewer::launch` builds the prompt, runs one adapter and reads the answer as the
+- **A reviewer can be launched as one call, and a validator can inspect a correction.** `reviewer::launch` builds the prompt, runs one adapter and reads the answer as the
   role's; every refusal on the way passes through under its own code, and a diff that is not the
   published one refuses before the adapter is called. `inspect_candidate` is a read-only tool that
   resolves a recorded publication by epoch and inspects the correction between its recorded parent's
   head and its own (`name-status`, `numstat`, `stat`, `patch` or one `object`); a first publication
   or a recovered successor refuses `inspect-parent-missing`. Nothing in the lifecycle calls `launch` yet.
 
-- **A reviewer's prompt, answer and inspection are defined, and nothing calls them yet.** Issue #776,
-  slice S2a. `reviewer::Receipt` now carries `pr` and `payload_digest` beside the manifest `digest`.
+- **A reviewer's prompt, answer and inspection are defined, and nothing calls them yet.** `reviewer::Receipt` now carries `pr` and `payload_digest` beside the manifest `digest`.
   `reviewer::prompt::build` makes the bytes a role is handed: its embedded template without
   frontmatter or the `WebSearch` rule (this reviewer has no tools), then the receipt, criteria,
   findings as JSON lines and the exact diff, then the answer shape. It refuses a diff that does not hash
@@ -869,13 +846,12 @@ the workflow, it holds the tools.
   `reviewer-inspect-unreadable`. No command, tool or setting
   changes.
 
-- **A reviewer can be launched by the binary, and nothing launches one yet.** Issue #776, slice S1.
-  `src/reviewer/` holds an `Adapter` that runs `claude --print --output-format json` or `codex exec`
+- **A reviewer can be launched by the binary, and nothing launches one yet.** `src/reviewer/` holds an `Adapter` that runs `claude --print --output-format json` or `codex exec`
   with no tools, no session and no user settings, in a fresh private empty directory, with the
   prompt on standard input and a cleared environment plus an allow-list. Claude is isolated by
   `--tools ""`; Codex by a read-only sandbox and a deny-list of tool-granting features, which
   `docs/honesty.md` says a later Codex can outgrow. Claude runs with `--output-format json` rather
-  than the `text` issue #776 quoted, because `claude -p` can exit 0 with an API error as its text:
+  than `text`, because `claude -p` can exit 0 with an API error as its text:
   only a result object whose `is_error` is false is an answer, and an error result refuses as
   unavailable or `reviewer-error-result`. Failure text is read from the end of stderr with the echoed
   prompt removed (anchored on the prompt's last 256 bytes, and not at all for a prompt under 32), so a prompt that mentions a login is not read as an outage. Raw output is capped at 4 MiB
@@ -888,7 +864,7 @@ the workflow, it holds the tools.
   `src/reviewer/process_tree.rs`, its behaviour unchanged.
 
 - **Claude Code gets the `Loop plugin` loop: `/flow-loop`, `/flow-status` and a `Stop` that
-  continues.** Issue #891. With the row `on` for Claude Code, `setup` writes `flow-loop.md` and
+  continues.** With the row `on` for Claude Code, `setup` writes `flow-loop.md` and
   `flow-status.md` under its `commands/` directory and registers its `Stop` entry as
   `hook stop --agent claude-code --dialect claude-code` (180 s), leaving `SessionStart` and
   `SessionEnd` unchanged; with the row `off` its output is byte for byte what it was. A stored loop
@@ -900,8 +876,7 @@ the workflow, it holds the tools.
   request a previous loop left, and `estigia goal` reports its objective, last outcome and stop
   reason. Codex is unchanged.
 
-- **The documentation stops presenting a retired adapter as installable.** Issue #727, fifth of the
-  series #721 opened. Continue, Cline, Qwen, Gemini CLI, Crush and Windsurf are retired: `setup`
+- **The documentation stops presenting a retired adapter as installable.** Continue, Cline, Qwen, Gemini CLI, Crush and Windsurf are retired: `setup`
   refuses them and `uninstall` is the only path that still reaches what an earlier build wrote.
   `README.md`'s no-agent refusal lists the seven adapters `setup` installs into, and
   `the_readme_names_every_supported_agent_and_no_retired_one_as_an_install_target` crosses that list
@@ -909,12 +884,11 @@ the workflow, it holds the tools.
   drops the entries that described a retired host as gated or advised setting one up, and narrows the
   counts and coverage sentences that still held for a kept host.
 
-- **A dry run reads the lifecycle state a real run reads.** Issue #713. `setup --dry-run` and
+- **A dry run reads the lifecycle state a real run reads.** `setup --dry-run` and
   `sync --dry-run` used to return before the lifecycle preflight, so a build the real run refuses
   (`source-build-not-allowed`, `recorded-downgrade-blocked`, unreadable lifecycle evidence) previewed
   as a success. The read now runs and its refusal surfaces; it still writes nothing.
-- **A person can recover an escalated review, and the successor is reviewed again.** Issue #716,
-  slice S3. `estigia recover <issue> --epoch <epoch> --authorized-by <login> --reason <text>` asks
+- **A person can recover an escalated review, and the successor is reviewed again.** `estigia recover <issue> --epoch <epoch> --authorized-by <login> --reason <text>` asks
   GitHub whether the login holds the `admin` or `maintain` role (`role_name`, since `permission` never
   says `maintain`) and records the recovery locally, posting nothing; an unanswered read is a refusal.
   It is deliberately not an MCP tool, and the gate denies an agent's shell line for it on every host as
@@ -929,8 +903,7 @@ the workflow, it holds the tools.
   validator step for a correction only, `invalid-validator-result` names `attempt`, and a validator
   replay verifies the claim before it writes.
 
-- **A correction is read by a targeted validator, and its computed verdict waits for it.** Issue #716,
-  slice S2. The new read-only `review-validator` role checks a correction against its parent's frozen
+- **A correction is read by a targeted validator, and its computed verdict waits for it.** The new read-only `review-validator` role checks a correction against its parent's frozen
   findings (`original_criteria`) and the corrected paths (`correction_regression`), and
   `record_validator_result` stores its answer as a local record, posting nothing. A correction's
   computed verdict is `incomplete` until a pass stands, never approves over an open severe finding,
@@ -938,12 +911,12 @@ the workflow, it holds the tools.
   `correction_regression_failed`, which `release_ci` refuses. An `unavailable` inspection spends
   nothing and the third escalates it as `validator_inconclusive`. Refusals added:
   `invalid-validator-result`, `validator-transaction-not-a-correction`,
-  `validator-result-already-recorded`, `validator-attempts-exhausted`. Two #716 S1 warnings closed:
+  `validator-result-already-recorded`, `validator-attempts-exhausted`. Two review warnings closed:
   a receipt's standing now fails closed on an unreadable timeline or an unknown publisher, and the
   recorded parent comes from the publication's own pull request. The tool count is 40 and the
   reserved reviewers nine.
 
-- **`Repair ceiling` is retired as a setting.** Issue #716, slice S1. The advisory count of repair
+- **`Repair ceiling` is retired as a setting.** The advisory count of repair
   rounds, default 3, refused nothing; a lineage now gets one correction and the second is refused at
   publication, so nothing is left for a number to bound. An installed row still loads, changes
   nothing and is reported as `repair-ceiling-retired` in the shared table, an agent file,
@@ -951,7 +924,7 @@ the workflow, it holds the tools.
   setup screen, the settings table and the skill. `repair_rounds` reads no setting, so the transport
   reads five rows where it read six.
 
-- **A lineage gets one correction, and the second is refused.** Issue #716, slice S1. A lineage is an
+- **A lineage gets one correction, and the second is refused.** A lineage is an
   original candidate and its repairs on one pull request; a publication over a parent that stands
   rejected or escalated is a correction, and `publish_review` refuses the second as
   `correction-already-spent` before pushing, mirroring v4's `MaxCompactCorrectionAttempts = 1`. The
@@ -963,11 +936,9 @@ the workflow, it holds the tools.
   an approved receipt is a new candidate and a new lineage: it spends no correction but stays
   bounded by its pull request's correction budget and scope. `elective-repair-refused` is
   renamed `approved-republish-without-cause`, and its moved-base exemption is now direction-aware —
-  the parent's base must be a proper ancestor of the new one — where it read inequality alone before
-  (#552).
+  the parent's base must be a proper ancestor of the new one — where it read inequality alone before.
 
-- **A judge's severe finding is settled by the ledger at every tier, and the guard holds it.** Issue
-  #775 follow-ups. The both-judges-confirm rule is gone from every agent-executed text, including
+- **A judge's severe finding is settled by the ledger at every tier, and the guard holds it.** The both-judges-confirm rule is gone from every agent-executed text, including
   `docs/configuration.md`, and `no_shipped_text_states_the_retired_judge_unanimity_rule` sweeps
   `skill/**/*.md`, the README and that document for it and its paraphrases, and asserts the settlement
   order positively. Any distinct `rejected` aggregate verdict holds `legacy-verdict-rejected`, the
@@ -976,7 +947,7 @@ the workflow, it holds the tools.
   `release_ci` does. `review_lens_report` joins the operations a binding must map.
 
 - **A review transaction now ends in a terminal receipt, and the computed verdict records it.**
-  Issue #896, slice b2. An `approved` computed verdict records an `approved` `review-receipt` in the
+  An `approved` computed verdict records an `approved` `review-receipt` in the
   local store, so the terminal state lives where the workflow state does and is never posted to
   GitHub; the new `escalate_review` operation records an `escalated` one naming the person who takes a
   decision the repair ceiling forced, gated on `repair_rounds` answering `at_ceiling`, and writes no
@@ -987,8 +958,7 @@ the workflow, it holds the tools.
   a run that is neither the publisher nor a requester supersedes it, and the publisher's own does not.
   Replaying an `approved` computed verdict records a missing receipt.
 
-- **A verdict can be computed from the finding ledger, and `release_ci` reads it.** Issue #775,
-  first two slices. `computed_verdict` settles each severe finding by v4's ordered table over its
+- **A verdict can be computed from the finding ledger, and `release_ci` reads it.** `computed_verdict` settles each severe finding by v4's ordered table over its
   evidence class, cause and refuter outcome, and answers `escalated` over `rejected` over
   `approved`; `approved` needs every lens the receipt's tier licenses to have filed the new
   `review_lens_report`, so a `medium` or `high` receipt with an empty ledger is `incomplete` rather
@@ -1004,8 +974,7 @@ the workflow, it holds the tools.
   override either once one exists. `medium` lens reports that name different focuses escalate.
   A second refutation batch on one receipt is now refused instead of overriding the first.
 
-- **Only a computed `approved` releases; the aggregate verdict is retired.** Issue #775, slice S3.
-  `release_ci` and `goal_completion` no longer accept a distinct judge's `accepted` verdict: a
+- **Only a computed `approved` releases; the aggregate verdict is retired.** `release_ci` and `goal_completion` no longer accept a distinct judge's `accepted` verdict: a
   `medium` or `high` receipt needs every licensed lens report and a recorded computed verdict that
   agrees with the recomputation, and a `low` receipt releases on the recomputed approval with or
   without a marker. A retired `review-verdict` marker still parses; an `accepted` one clears nothing
@@ -1022,8 +991,7 @@ the workflow, it holds the tools.
   `reviewer`. `skill/SKILL.md` developer step 5 now runs lens reports, judge findings, the computed
   verdict, then `release_ci`, with judges opt-in.
 
-- **The path-check entry's count is crossed, and its read generalisation is marked as read.** Issue
-  #376. `docs/honesty.md`'s entry on `setup`'s reserved-name path check said "a loop of eight passes,
+- **The path-check entry's count is crossed, and its read generalisation is marked as read.** `docs/honesty.md`'s entry on `setup`'s reserved-name path check said "a loop of eight passes,
   one per `RESERVED_REVIEWERS` row" and "the six rows after it never run", and nothing crossed
   either. `number_before` (`tests/honesty.rs`) reaches the first now, through the phrase "passes,
   one per" added to `the_number_of_reserved_reviewers_is_the_number_every_document_claims`'s probe
@@ -1041,7 +1009,7 @@ the workflow, it holds the tools.
   long comments are many and unrelated, so sweeping them is its own change rather than two trims
   here.
 
-- **Review consent is replaced by a one-line forecast.** Issue #775, slice S5. `Review delegation:
+- **Review consent is replaced by a one-line forecast.** `Review delegation:
   ask` and `Review protocol: standard` are retired on the `Planning` precedent: an installed `ask`
   (or `ask 30m`) reads as `auto` and is reported as `review-delegation-ask-retired`, an installed
   `standard` reads as `receipt-driven` and is reported as `review-protocol-standard-retired`, and a
@@ -1051,8 +1019,7 @@ the workflow, it holds the tools.
   `Review budget` — which `skill/SKILL.md` step 5 has the run say before launching a lens or a judge,
   asking nobody for approval. `invalid-review-authority` is gone with the row it refused.
 
-- **The superseded-reviewer ledger is crossed against the templates it lists.** Issue #290.
-  `REVIEWER_TEMPLATES_SUPERSEDED` (`src/setup/mod.rs`) freezes every previous `review-blind.md` and
+- **The superseded-reviewer ledger is crossed against the templates it lists.** `REVIEWER_TEMPLATES_SUPERSEDED` (`src/setup/mod.rs`) freezes every previous `review-blind.md` and
   lens body so an install still carrying one upgrades instead of being refused as foreign, and
   nothing crossed it: commenting out an entry left the suite green while every operator carrying
   that body met a refusal. `every_frozen_reviewer_template_is_a_member_of_the_superseded_ledger`
@@ -1061,7 +1028,7 @@ the workflow, it holds the tools.
   `src/setup/` to be declared. `docs/honesty.md` records the half it cannot reach — a freeze that
   never happened.
 
-- **The review tier's boundary claim is corrected on every shipped surface.** Issue #309. Four
+- **The review tier's boundary claim is corrected on every shipped surface.** Four
   surfaces denied that a change's line count is a tier input while `is_inspectable_stat` reads the per-path
   authored line count at zero, so a zero-byte `.github/workflows/*.yml` never reaches the
   shell-source producer and answers `medium` where the same path with one line answers `high`. The
@@ -1069,21 +1036,19 @@ the workflow, it holds the tools.
   boundaries — the changed-path count at zero, the per-path authored line count at zero, and the
   summed candidate blob bytes against `SCAN_BYTE_BUDGET` — and `is_inspectable_stat`'s own doc names
   the gate where the function is. Nothing crosses the prose, which `docs/honesty.md` records.
-- **The residuals of the git-fixture closure are settled.** Issue #830, the four findings #476's
-  panel left. The entries #476 wrote counted the fixtures' call sites in one unit while naming
+- **The residuals of the git-fixture closure are settled.** The entries the closure wrote counted the fixtures' call sites in one unit while naming
   another, and the count measured skip blocks that no longer exist, so it is dropped rather than
   restated: a number here is one no test can cross. A guard,
   `the_last_two_git_fixtures_cannot_answer_that_they_did_not_run` in `tests/guards.rs`, holds the
   `git_repo()`/`release_repo()` signatures and their panic, which nothing held before. And the
-  inline skips #476 did not reach — the `git init` that
+  inline skips it did not reach — the `git init` that
   `full_reports_the_home_it_was_given_and_softens_the_push_guard_there` wrote by hand, the
   commit-failure skips that printed `SKIPPED:` and returned, and the inline `git` setup
   `the_narrowing_resolves_to_the_worktree_the_call_is_adjudicated_in` stood down on — now use
   `git_repo()` or panic, so the last places a machine without a usable `git` was reported as a pass
   are closed too.
 
-- **The loop can be asked to stop after the current task, and a live claim keeps it going.** Issue
-  #890. `estigia goal stop-after [--reason <text>]` records a one-shot per-run request beside the
+- **The loop can be asked to stop after the current task, and a live claim keeps it going.** `estigia goal stop-after [--reason <text>]` records a one-shot per-run request beside the
   run pointers under `~/.estigia/` rather than on the pointer itself, because `estigia release`
   forgets the pointer and the loop reads the request only after the claim is released — a flag on the
   pointer would be gone before the loop could act on it. `estigia goal` carries it as `stop_after`;
@@ -1095,7 +1060,7 @@ the workflow, it holds the tools.
   with the request set, unset and behind a live claim, and the plugin driver's `stop_after`,
   `stop_after_live` and `stale_request` cases hold the same three on the generated JavaScript.
 
-- **Review evidence decides from the local store.** Issue #896, slice b1. The review readers and
+- **Review evidence decides from the local store.** The review readers and
   recorders, `release_ci`, `goal_completion` and the review queue read the ledger instead of the
   GitHub timeline, so another run's marker still arrives through the REST sync and no `gh issue
   view` GraphQL read is made for an issue the store holds. The in-flight review identity is
@@ -1103,14 +1068,14 @@ the workflow, it holds the tools.
   alias of `review_transaction`.
 
 - **`review_tier` licenses the source project's `0`/`1`/`4` lenses and names them.**
-  Issue #714, second slice. `high` is four lenses (`review-risk`, `review-readback` in the
+  `high` is four lenses (`review-risk`, `review-readback` in the
   resilience slot, `review-readability`, `review-reliability`), `medium` is the one lens a new
   `focus` argument names (`reliability` by default), and the answer carries `lens_roles`. `review-lens`
   stays shipped for the delta-lens repair round and leaves the tier allocation. The four lens
   definitions carry the source project's `LensMandate` text. The judge count is unchanged.
 
 - **`review_tier` reads the bytes a change adds: a process spawn or a dangerous sink is `high`.**
-  Issue #714, first slice. `src/transport/tier/content_scan.rs` ports `processBoundaryRiskReasons`
+  `src/transport/tier/content_scan.rs` ports `processBoundaryRiskReasons`
   and the ten-family dangerous-sink catalogue of `risk_dangerous_sink.go` (TLS verification off,
   unsafe deserialisation, eval, shell composition, weak credential hash, credentialed CORS,
   world-writable modes, unverified JWT, CSRF opt-outs, XXE). New reasons: `process_boundary`,
@@ -1123,7 +1088,7 @@ the workflow, it holds the tools.
   gone. Where this differs from the source project is in `docs/honesty-review-tier.md`.
 
 - **Crush and Windsurf lose their install code, and the library `setup` refuses every retired
-  adapter.** Issue #726, fourth of the series #721 opened. `setup`, `setup_into`,
+  adapter.** `setup`, `setup_into`,
   `setup_into_evidenced` and `setup_adapter_into` (the entry `sync` shares) answer a retired adapter
   with `agent-retired` before writing anything, where only the CLI did before. `render_crush_hooks`,
   `render_windsurf_hooks`, `McpFormat::CrushStdio` and `GateSpec::event_is_the_tool_name` are gone;
@@ -1136,8 +1101,7 @@ the workflow, it holds the tools.
   uninstall tests on Gemini CLI. `AgentAdapter::instruction_directory_fragment` is removed and
   `windsurf/memories/` is a `CONTROL_SURFACE` literal beside the other two, so no gate answer moves;
   `docs/honesty.md` names what that loses.
-- **Gemini CLI is dropped from the tests that treated it as a supported agent.** Issue #724, third of
-  the series #721 opened. Gemini CLI stays a retired adapter: its rows and the `GeminiCli` hook dialect
+- **Gemini CLI is dropped from the tests that treated it as a supported agent.** Gemini CLI stays a retired adapter: its rows and the `GeminiCli` hook dialect
   remain so `uninstall`, `doctor` and the gate still reach an earlier install and a stale hook.
   The tests that used it as the example of an installable settings-envelope agent now use Claude
   Code, Codex, Cursor or the neutral root, and no test asserts a resolution naming `estigia setup`
@@ -1145,8 +1109,7 @@ the workflow, it holds the tools.
   it is retired-only; the tests that cover it stay on Gemini CLI and say so in their names. The README
   no longer lists `gemini-cli` among the slugs `setup` takes, and `docs/what-it-writes.md` marks its
   rows retired.
-- **`config set`, `config edit` and `config list` refuse a retired `--agent` slug.** Issue #904, a
-  gap #721 left: those three resolved the slug through `find_agent`, which since #721 also finds the
+- **`config set`, `config edit` and `config list` refuse a retired `--agent` slug.** Those three resolved the slug through `find_agent`, which now also finds the
   six retired adapters, so `config set … --agent qwen` wrote `estigia.qwen.md` into the neutral skill
   root. They now resolve through `find_installable_agent` and refuse with `agent-retired`, naming
   `estigia uninstall <slug>`, and write nothing. `config list` refuses too, though it only reads:
@@ -1154,13 +1117,13 @@ the workflow, it holds the tools.
   `uninstall` still removes an `estigia.<slug>.md` an earlier build wrote, and a test now pins that.
 
 - **The gate's derived rules directory is Windsurf's alone; Continue's and Cline's are literals
-  again.** Issue #722, second of the series #721 opened. `instruction_directory_fragment` answers
+  again.** `instruction_directory_fragment` answers
   `true` only for Windsurf, and `.continue/rules/` and `.cline/rules/` return to `CONTROL_SURFACE`, so
   a retired install stays gated exactly as before. New tests pin both literals and pin the gate's walk
   over `RETIRED_AGENTS`; tests that treated a retired slug as installable use a supported agent.
 
 - **Six agent adapters are retired to an uninstall-only path: Gemini CLI, Continue, Cline, Crush,
-  Windsurf and Qwen.** Issue #721, first of a series that drops them. Their entries move from `AGENTS`
+  Windsurf and Qwen.** Their entries move from `AGENTS`
   to `RETIRED_AGENTS`, keeping the paths and strip functions an earlier build wrote with. `setup` and
   `sync` refuse a retired slug with `agent-retired`, naming `estigia uninstall <slug>`; `uninstall`,
   and `uninstall --all`, still take an earlier install back out. `doctor` reports a retired agent that
@@ -1169,7 +1132,7 @@ the workflow, it holds the tools.
   answer. An uninstall keeps the shared state and the shared skill while a retired agent is still
   installed. Tests walk `RETIRED_AGENTS` and pin the six slugs, so a dropped row cannot shrink coverage.
 - **The git operation window gates the branch creation its own spellings hid, and stops refusing one
-  that creates nothing.** Issue #544, folding #545 and #546. `is_branch_creation`
+  that creates nothing.** `is_branch_creation`
   (`src/harness/operation_window.rs`) listed `-c`/`--copy` as non-creating flags, so `git branch -c
   old new` left the gate as nothing at all while creating a ref exactly as the plain `git branch
   <name>` does. It now reads the copy spelling as creation, and the long forms `git checkout
@@ -1178,20 +1141,19 @@ the workflow, it holds the tools.
   `REPOSITORY_SHELL`. The opposite error is gone too: `-u`/`--set-upstream-to` (and its `--no-`
   spelling) is read as the non-creating flag it is, so `git branch -u origin/main` no longer reads as
   a branch named after the upstream. `docs/configuration.md` names the covered spellings.
-- **`git switch --orphan` is classified as the branch creation it is.** Issue #888. The operation
+- **`git switch --orphan` is classified as the branch creation it is.** The operation
   window's classifier read `git checkout --orphan`, `git switch --create`/`--force-create` and
   `git worktree add --orphan`, but not `git switch --orphan`, which creates a local ref exactly as
   they do — so with the window enabled a branch could be created outside the permitted period through
   the one spelling the classifier missed. `protected_write_target` now answers `git switch -c` for it
   and it joined `REPOSITORY_SHELL`; `docs/configuration.md` names it among the covered spellings.
-- **The gate refuses unclaimed writes under a read-only tracker.** Issue #847 follow-up. In a
+- **The gate refuses unclaimed writes under a read-only tracker.** In a
   repository whose own file sets `Tracker linear` with `Workflow: assisted`, an unsworn `git commit`
   or `git push` was not refused and `Issue requirement` was off, because both checks required a
   tracking transport. They now ask whether a run can hold a claim there, which an assisted run can
   and no other workflow does, so they hold as under GitHub only there. Linear without `assisted`
   stands down, and `estigia guard` says so rather than promising a refusal it does not make.
-- **Under `assisted`, an agent can publish its branch as a draft pull request: `draft_pr`.** Issue
-  #844, third of three changes. The new `draft_pr` tool, offered only where `Workflow` is `assisted`,
+- **Under `assisted`, an agent can publish its branch as a draft pull request: `draft_pr`.** The new `draft_pr` tool, offered only where `Workflow` is `assisted`,
   pushes the branch the run's assisted pointer names fast-forward, opens a draft with the title and
   body as given, and reads it back as open, a draft and at the pushed head. It writes nothing to the
   tracker: no marker, no receipt, no `Refs` line, no comment. A closing keyword in the title, the
@@ -1205,8 +1167,7 @@ the workflow, it holds the tools.
   command the gate cannot place is no longer blamed on a write tool, and a push line with no remote
   ref has its own refusal; `git push origin HEAD` is refused, and the branch is pushed by name.
 
-- **Under `assisted`, a person can hand an agent an issue, and the claim is local.** Issue #844,
-  second of three changes. The new `assist` tool, offered only where `Workflow` is `assisted`, reads
+- **Under `assisted`, a person can hand an agent an issue, and the claim is local.** The new `assist` tool, offered only where `Workflow` is `assisted`, reads
   the issue and makes the isolated checkout through the same local reservation `start_branch` uses,
   and writes nothing to the tracker: no claim, no label, no comment, no sidebar link. The claim is
   the run pointer alone, confined to that worktree: a write elsewhere in the repository is refused
@@ -1221,8 +1182,7 @@ the workflow, it holds the tools.
   paths fail closed on it. `draft_pr` and the skill's assisted path are the third change;
   `docs/honesty.md` says what the local claim cannot tell.
 
-- **A repository can say its team coordinates, and Estigia stops writing its tracker.** Issue #844,
-  first of three changes. `Workflow` is `autonomous` (the default) or `assisted`, answered only by a
+- **A repository can say its team coordinates, and Estigia stops writing its tracker.** `Workflow` is `autonomous` (the default) or `assisted`, answered only by a
   repository's own file like `Issue requirement`. Under `assisted` every tool that writes the tracker
   or the repository host is refused with `workflow-assisted-writes-no-tracker`, naming the row, the
   value and the command that lifts it, and `estigia goal` reports no claimable or dischargeable work so
@@ -1233,7 +1193,7 @@ the workflow, it holds the tools.
   exception to the tighten-only rule.
 
 - **A branch differing from a registered one only by case is refused, not misread as an orphan.**
-  Issue #764: `worktree_path` composes `<branch>~<run-id>` and lowercases the run ID by construction,
+  `worktree_path` composes `<branch>~<run-id>` and lowercases the run ID by construction,
   but only separator-checks the branch — so `Fix-1-a` and `fix-1-a` under one run ID compose two
   strings that are one directory on a case-insensitive filesystem (default APFS on macOS, NTFS on
   Windows). The second run's path then exists as the first run's checkout, while the registry key
@@ -1245,8 +1205,7 @@ the workflow, it holds the tools.
   volume too — the conservative direction. The composed `<branch>~<run-id>` shape and `SCOPE_JOIN`
   are unchanged.
 
-- **A branch differing from a registered one only by Unicode normalization is refused too.** Issue
-  #840: the collision check folded case only, so `café` as U+00E9 and `café` as `e`+U+0301 composed
+- **A branch differing from a registered one only by Unicode normalization is refused too.** The collision check folded case only, so `café` as U+00E9 and `café` as `e`+U+0301 composed
   two byte sequences that default APFS treats as one directory (it is normalization-insensitive), and
   the registry key (hex of the bytes) missed for the same reason it misses for case. The same orphan
   diagnosis — `worktree-path-occupied` with `occupied_by_branch: null` — was reachable through an
@@ -1255,7 +1214,7 @@ the workflow, it holds the tools.
   The second pass composes a capital base that lowercasing first makes composable (`J`+U+030C against `ǰ`).
 
 - **A closing keyword that names another issue is refused, not only one naming the issue under
-  delivery.** Issue #575. `keywords_naming` (`src/transport/closing.rs`) reported only references to
+  delivery.** `keywords_naming` (`src/transport/closing.rs`) reported only references to
   the issue it was handed, and `publish_review`'s pre-push scan and `check-closing-keywords` both used
   it, so a body saying `close #464, #469, #473 and #474` published clean and GitHub closed #464 on
   merge — skipping #464's `done` transition — with nothing objecting. The scan is now one walk
@@ -1265,8 +1224,7 @@ the workflow, it holds the tools.
   body and a commit message naming another issue through `publish_review` before the push, and
   `docs/honesty.md` records the case `assess_autoclose` still cannot see.
 
-- **A global option between `estigia` and its verb no longer hides a disarm.** Issue #533.
-  `without_leading_options` (`src/harness/mod.rs`) moved options out of the way only after seeing
+- **A global option between `estigia` and its verb no longer hides a disarm.** `without_leading_options` (`src/harness/mod.rs`) moved options out of the way only after seeing
   `git` or `gh`, so `estigia --json config edit` — the same handler and the same write as the listed
   `estigia config edit`, because `--json` is a clap global arg — contained no listed fragment and
   classified `Untouched`, outside the gate. The walk now recognises an `estigia` word by its
@@ -1277,8 +1235,7 @@ the workflow, it holds the tools.
   reads.
 
 - **A reclaim the fold discards while it leaves no holder names its condition, and the
-  reclaim-discard vocabulary's counts agree.** Issue #513, folding #509, #511, #512, #514, #515 and
-  #517. `won_the_reclaim` (`src/transport/claim.rs`) consulted `ownership::discarded_reclaim` only on
+  reclaim-discard vocabulary's counts agree.** `won_the_reclaim` (`src/transport/claim.rs`) consulted `ownership::discarded_reclaim` only on
   the foreign-holder branch, so a fresh reclaim the fold discarded while it displaced nobody — its
   target scrolled out of the fetched window, the cause `target-missing` itself names — answered only
   that the write's fate was unknown, and the caller could not learn which check dropped it. The
@@ -1291,11 +1248,10 @@ the workflow, it holds the tools.
   `reclaim` row names the reader-level conditions a fresh write cannot carry and what it answers
   instead. A unit test drives a discarded reclaim with no live holder through `won_the_reclaim`, a
   second pins the malformed-before-reserved precedence, and an end-to-end `reclaim` over the MCP door
-  answers `reclaim-discarded` with `target-missing`. The #417 entry below is scoped to a takeover
+  answers `reclaim-discarded` with `target-missing`. The entry below is scoped to a takeover
   rather than a forced one and its mutation claim now matches the mutations run.
 
-- **The last two git fixtures stop spelling a skip as a pass.** Issue #476, the residual #12's own
-  panel recorded as `two-more-git-fixtures-still-spell-a-skip-as-pass` and filed. `git_repo()`
+- **The last two git fixtures stop spelling a skip as a pass.** `git_repo()`
   (`src/harness/doctor.rs`) and `release_repo()` (`src/cli/tests.rs`) answered
   `Option<tempfile::TempDir>` over a single `git init --quiet`, and every call site that reached
   them opened with a `let … else { eprintln!("SKIPPED: …"); return; }` — so a machine where git
@@ -1304,13 +1260,11 @@ the workflow, it holds the tools.
   `repository_with_commit()` already got. Measured with a failing `git` first on `PATH`:
   `gate_version_reports_a_row_against_a_real_checkout` reported `ok` before and panics after, and
   `forgetting_a_pointer_the_tracker_says_holds_no_epoch_removes_it` the same. The third fixture the
-  issue named, `two_holders_with_worktrees`, had already stopped answering one in #12's own
+  issue named, `two_holders_with_worktrees`, had already stopped answering one in its own
   follow-up. `tests/guards.rs`'s skip-as-a-pass guard no longer names any fixture as still answering
   one, and `docs/honesty.md`'s entry records the closure. No behaviour changed outside the fixtures.
 
-- **The relocated-root check is anchored to a path boundary and agrees across both roads.** Issues
-  #455 and #456, two residuals of the resolved-root check #428 added.
-  `matches_relocated_claude_config` (`src/harness/mod.rs`) matched the resolved `$CLAUDE_CONFIG_DIR`
+- **The relocated-root check is anchored to a path boundary and agrees across both roads.** `matches_relocated_claude_config` (`src/harness/mod.rs`) matched the resolved `$CLAUDE_CONFIG_DIR`
   with `path.find(root)`, a **substring**: a path that merely carried the root's text mid-segment —
   the root's own text under an unrelated prefix — answered `Boundary` though it did not land under
   the root. And the shell road hands the matcher the view `text_names_path` builds, where every
@@ -1323,8 +1277,7 @@ the workflow, it holds the tools.
   requirement is dropped, and `a_relocated_claude_config_dir_with_a_space_is_a_boundary_on_both_roads`
   reddens when the folded spelling is dropped. Unset, every classification is byte-identical to before.
 
-- **A relocated root spelled with an escaped space is a boundary on the shell road.** Issue #828, a
-  warning #456's own panel recorded and filed separately. `matches_relocated_claude_config`
+- **A relocated root spelled with an escaped space is a boundary on the shell road.** `matches_relocated_claude_config`
   (`src/harness/mod.rs`) asked the shell road's folded spelling of the resolved `$CLAUDE_CONFIG_DIR`
   beside the root itself, which closed the quoted and bare spellings of a root whose name carries a
   space. The **escaped** spelling — `/tmp/estigia\ relocated/settings.json` — leaves the folded byte
@@ -1335,9 +1288,7 @@ the workflow, it holds the tools.
   `a_relocated_claude_config_dir_with_a_space_is_a_boundary_on_both_roads` now crosses all four and
   reddens when the doubled spelling is dropped.
 
-- **A Codex uninstall refuses an unparseable `config.toml` before removing anything.** Issue #759, the
-  `uninstall-aborts-midway-on-unparseable-config` severe #648's panel recorded and filed separately.
-  `uninstall_from` (`src/setup/mod.rs`) removed the skill, directive, `hooks.json` and the gate and
+- **A Codex uninstall refuses an unparseable `config.toml` before removing anything.** `uninstall_from` (`src/setup/mod.rs`) removed the skill, directive, `hooks.json` and the gate and
   loop plugins, and only then reached the MCP step, where `codex_trust::without_trust` parses
   `~/.codex/config.toml` to take Estigia's trust out. A config that is not TOML failed there, leaving
   a half-uninstalled agent whose retry failed the same way. The uninstall now parses the config —
@@ -1346,9 +1297,7 @@ the workflow, it holds the tools.
   and holds the config, the hooks file, the directive and the skill untouched. No exit code, outcome,
   replay or resolution changed.
 
-- **The OpenCode review section names the disabled lane as a launch state.** Issue #742, the
-  `stale-opencode-lane-list` severe #528's panel recorded and filed separately.
-  `opencode_review_section()` (`src/setup/mod.rs`) restated the panel-launch condition as "green,
+- **The OpenCode review section names the disabled lane as a launch state.** `opencode_review_section()` (`src/setup/mod.rs`) restated the panel-launch condition as "green,
   never-ran, absent, or has no lane at all" and omitted `disabled`, while
   `skill/references/runtime-notes.md` and `skill/SKILL.md` both name it. An OpenCode host with Actions
   off read no branch that matched its lane and could withhold or stall the panel where the contract
@@ -1360,12 +1309,12 @@ the workflow, it holds the tools.
   in its own words and is not crossed by that test.
 
 - **The exit-code fallback says which codes it reaches, and the sentences beside it match the code.**
-  Issue #383, nine findings #381's panel left beside its verdicts. `translate` computes the fallback
+  `translate` computes the fallback
   message before it matches `answer.code`, so the field dump replaces the exit-code sentence for
   **every** code whose envelope carries no `detail`, not only `2`; `Failure::envelope` always writes
   one for `Read`, `Timeout` and `Write`, so `3`/`4`/`5` are unreached, but a code-1 `Stop` payload
   with a field beside `ok`, `reason`, `action` and `world` is not. That reach is now in `translate`'s
-  own doc and in `docs/honesty.md`'s #381 entry. The entry's claim that the message repeats a field
+  own doc and in `docs/honesty.md`'s entry on it. The entry's claim that the message repeats a field
   beside the reason is narrowed to a **scalar-valued** field beside the ones the refusal is built
   from, and a new test,
   `an_envelope_field_that_is_not_scalar_is_dropped_and_a_scalar_is_repeated`, holds both directions:
@@ -1381,7 +1330,7 @@ the workflow, it holds the tools.
   `skill/bindings/github.md` at 109,222 bytes. No exit code, outcome, replay or resolution changed.
 
 - **A health row stops denying the population it cannot see, its token has one spelling, and its
-  test discriminates.** Issue #348, four findings from #80's panel. `own_delivery_close`
+  test discriminates.** `own_delivery_close`
   (`src/harness/doctor.rs`) matched a `closed-by-own-delivery` literal that `src/transport/claim.rs`
   wrote as a second, uncrossed copy; both now read one const, `OWN_DELIVERY_CLOSE_PREFIX`, and
   `OWN_DELIVERY_CLOSE_SPELLING_POPULATION` reopens `tests/guards.rs` when the token moves. The
@@ -1397,20 +1346,20 @@ the workflow, it holds the tools.
   `docs/honesty.md` counts nineteen declared populations.
 
 - **The ten branches that answer a tracker with no executable transport are named, not left
-  unchecked.** Issue #346: `Tracker` has one variant and `Tracker::transport()` answers `Some` for
+  unchecked.** `Tracker` has one variant and `Tracker::transport()` answers `Some` for
   it, so every `is_none()`/`is_some()`/`?` arm that reads its absence is unreachable —
   `cli::doctor`'s sentence, `cli::inert_tracker`, `harness::doctor::stale_run_pointers`'s `Skipped`
   row, `harness::issue_requirement::in_force`, `harness::mcp::run_tool`'s tracker arm,
   `harness::decide_observing`'s `NoTracker` aside, `harness::tracker_answer_for_pointer`,
   `harness::queue_read`, `harness::completed_work` and `harness::unclaimed::applies`. They are kept
-  as the seam a second tracker variant would use (issue #180), and
+  as the seam a second tracker variant would use, and
   `TRACKER_TRANSPORT_ABSENT_POPULATION` in `src/config/mod.rs` binds to `Tracker`'s own variants, so
   adding one reopens the claim and sends a reader to each site. Deleting the declaration reddens
   `tests/guards.rs`, and so does adding a second variant; a call site added before one lands is the
   escape the population names. `docs/honesty.md` counts eighteen declared populations.
 
 - **The MCP handshake and the TUI banner answer this build's identity, not the crate version every
-  build shares.** Issue #329: four surfaces answer "which build is this", and two of them — the MCP
+  build shares.** Four surfaces answer "which build is this", and two of them — the MCP
   `serverInfo.version` (`src/harness/mcp/mod.rs`) and the TUI banner (`src/tui.rs`) — read
   `env!("CARGO_PKG_VERSION")`, the bare `0.1.0` every build this crate has produced answers with.
   Both now read `crate::build_info::VERSION`, the `0.1.0 (<commit>[, dirty])` the `--version` and
@@ -1421,7 +1370,7 @@ the workflow, it holds the tools.
   second field is needed. `docs/honesty.md` narrows the unasserted-identity gap to `status --json`.
 
 - **A command line carrying two or more irreversible fragments of one tier is refused, not ranked.**
-  Issue #325: `classify_observing` records one fragment per line, chosen by `delivery_tier`, so when
+  `classify_observing` records one fragment per line, chosen by `delivery_tier`, so when
   every fragment was the same tier the key tied and resolved by lowest index — `git merge origin/main
   && git tag v1` recorded the merge and never adjudicated the tag, and `git push && gh pr create`
   recorded the push and reached no delivery check. A line whose built-in `IRREVERSIBLE` fragments put
@@ -1429,10 +1378,9 @@ the workflow, it holds the tools.
   `several-irreversible-fragments-on-one-line`, which names the fragments rather than any one of them;
   a line carrying exactly one fragment answers as it did. Operator-declared fragments are not counted,
   for the reason `DELIVERS_POPULATION` excludes them from `DELIVERS`. `docs/honesty-review-tier.md`
-  narrows the #69 residue this closes.
+  narrows the residue this closes.
 
-- **The merge-commit topology rule now asks what a delivering run can guarantee.** Issue #287:
-  `skill/SKILL.md` step 6 required the delivered SHA's exact parents to be the reviewed base and head,
+- **The merge-commit topology rule now asks what a delivering run can guarantee.** `skill/SKILL.md` step 6 required the delivered SHA's exact parents to be the reviewed base and head,
   but a delivering run checks the base and GitHub merges non-atomically, so a concurrent merge can move
   the first parent while the reviewed bytes arrive intact. The rule now requires the second parent to
   be exactly the reviewed head and the reviewed base to be an **ancestor** of the first parent, and
@@ -1443,8 +1391,7 @@ the workflow, it holds the tools.
   narrowed rule no longer proves.
 
 - **The inline-write record is called a target, and a blank `agent_type` no longer turns a
-  delegate's write into this run's own.** Issue #253, folding two findings from #49's panel.
-  `Run.inline_writes` holds `Action::subject()` — a path for a write tool, but the matched fragment
+  delegate's write into this run's own.** `Run.inline_writes` holds `Action::subject()` — a path for a write tool, but the matched fragment
   (`git commit`), the verb (`chmod`) or the tool name for a shell write — while the `SessionStart`
   message, `session.rs`'s doc, `docs/honesty.md` and `SKILL.md` all called the elements files. All
   four now say **target**, and the field's doc names what the element can be. Separately, a
@@ -1455,8 +1402,8 @@ the workflow, it holds the tools.
   file, and the three drifted `hook.rs`/`cli/mod.rs` citations in `docs/honesty.md` are re-derived.
 
 - **The receipt rule lives in one function again, and two non-handoff callers stop claiming a handoff.**
-  Issue #216: #44 removed the publisher comparison that had been the only thing distinguishing
-  `recorded_receipt` from `require_latest_receipt`, leaving both building the same
+  The publisher comparison that had been the only thing distinguishing
+  `recorded_receipt` from `require_latest_receipt` was removed, leaving both building the same
   `published-transaction-mismatch` envelope word for word. `require_latest_receipt` is now the only
   construction site and takes the blocked operation's action tail; `recorded_receipt` is a thin `pub`
   wrapper passing `cannot release CI`, so `release_ci`'s missing-receipt answer is unchanged. The two
@@ -1466,7 +1413,7 @@ the workflow, it holds the tools.
   the six-field `recorded` object (including `run_id`) are unchanged.
 
 - **`doctor`'s reinstall command is the checkout's own and names its shell, and the source scan reads
-  or names every `Resolution::run` argument.** Issues #104 and #103. `reinstall_command` printed
+  or names every `Resolution::run` argument.** `reinstall_command` printed
   `cargo install --path . --force` (or, on Windows, a bare `Stop-Process …; cargo install …`), but
   `repo_dir` is the process's current directory and cargo does not search upward for a manifest — so
   from `<checkout>/src` the row could report `Broken` and the command it named would fail there, and
@@ -1483,7 +1430,7 @@ the workflow, it holds the tools.
   written. `tests/build_install.rs`'s order check matched a bare `doctor` anywhere in the log — which
   this worktree's own path contains — and now matches the logged step.
 
-- **A boundary with a reason is now delivered on the surface the agent touches.** Issue #93: `NOT_EXPOSED`
+- **A boundary with a reason is now delivered on the surface the agent touches.** `NOT_EXPOSED`
   wrote why each of the contract's unexposed operations has no tool, but nothing in the runtime read
   it — only two tests did. `tools/list` answered from `TOOLS` alone, so `close` was never advertised
   and the client dropped the name with `No such tool available`, indistinguishable from a typo; the
@@ -1496,7 +1443,7 @@ the workflow, it holds the tools.
   Four new tests hold it: every reason reaches `tools/list` and every call, a name that only refuses
   refuses whatever it is given, and the advertised count is the acting tools plus the refusing names.
 
-- **The role a delegated context ran as now outlives the session that observed it.** Issue #29: the
+- **The role a delegated context ran as now outlives the session that observed it.** The
   gate wrote each distinct `agent_type` into the run pointer, which `SessionEnd` removes, so no run
   could be audited for it afterwards. A second append-only history, the store's `roles` table —
   separate from the decision history, which is a history of adjudications and not a place for an
@@ -1518,19 +1465,19 @@ the workflow, it holds the tools.
   `Boundary`. A consumer's own root instruction files join that count, and that read per write is the
   cost this entry moves onto them.
 - **A branch whose separators the worktree path flattened could share a directory with another.**
-  Issue #23: the isolated checkout's path folded every `/` and `\` in the branch to `-`, so
+  The isolated checkout's path folded every `/` and `\` in the branch to `-`, so
   `fix/1-a`, `fix-1-a`, `fix//1-a` and `fix\1-a` — four branches taking four different branch locks
   — all composed one path, and the second run found a registered worktree carrying what looked like
   its own branch at what looked like its own directory. The branch is now validated rather than
   flattened, exactly as the run ID already was: a branch carrying `/` or `\` is refused with
-  `separator-in-branch-component` (retired by #1089, which encodes the separator instead), and a branch with no separator is injective and is accepted
+  `separator-in-branch-component` (since retired: the separator is encoded instead), and a branch with no separator is injective and is accepted
   unchanged by this rule.
   The repository name and the issue number stay flattened, for the reasons `worktree_path`'s own doc
   records.
 
 - **`release` finishes putting its own checkout down on a retry, from outside it, and says which half
-  stayed.** Issue #22, folding #559: three defects in the #21 checkout retirement, plus the reviewer
-  directories #21 left unowned. A release that found its own unassign marker already on the issue —
+  stayed.** Three defects in the checkout retirement, plus the reviewer
+  directories it left unowned. A release that found its own unassign marker already on the issue —
   the retried release — answered without a `checkout` key and never attempted retirement, so a first
   release that posted its marker and then failed before cleanup left a delivered checkout with no
   record and no report; both paths now return through one `release_answer`, and
@@ -1553,7 +1500,7 @@ the workflow, it holds the tools.
   directories belong under the configured `Worktree location` at all is recorded as unsettled.
 
 - **A membership answer means every line was published somewhere, not that the text is faithful.**
-  Issue #355, extending #341: `review_payload_membership` builds one set over the whole payload, so a
+  `review_payload_membership` builds one set over the whole payload, so a
   candidate assembled entirely from real lines can be reordered, duplicated or cross-spliced between
   files and still answer `ok: true` — the passing answer a caller reads as "this payload is faithful"
   is only "every line was published somewhere". The limit is now stated in `docs/honesty.md` with a
@@ -1562,8 +1509,7 @@ the workflow, it holds the tools.
   which builds all three shapes from the fixture's own payload bytes and asserts each answer. Nothing
   about what `publish_review` records, or the payload itself, changed.
 
-- **A never-ran lane could be cleared with the word `n/a` as its evidence.** Issue #349, extending
-  #339: the `--never-ran-evidence-file` that stands in for a lane that did not run was refused only
+- **A never-ran lane could be cleared with the word `n/a` as its evidence.** The `--never-ran-evidence-file` that stands in for a lane that did not run was refused only
   when it was empty or whitespace-only, so `n/a` cleared the one place a verdict moves past unread
   CI. The check now runs `says_nothing`, the same predicate that decides a verdict's `basis` and a
   finding's `evidence` and `impact`, and the word list moved out of the function into
@@ -1571,27 +1517,27 @@ the workflow, it holds the tools.
   subject moved to the list so `tests/guards.rs` still fingerprints the words, and adding or
   removing one reopens the claim. `says_nothing` is `pub(crate)` now, having no caller outside the
   transport. The honest short answer — `nothing was executed` — still clears the lane. The
-  carve-outs #339 left are recorded rather than closed: a finding's `id` still takes filler, and
+  carve-outs that remain are recorded rather than closed: a finding's `id` still takes filler, and
   because the checks run before the tracker read, a replay of a marker written before the predicate
   existed, carrying filler, is refused rather than read back. See
   [`docs/honesty.md`](docs/honesty.md).
 
-- **SDD is gone: the protocol, its five phase agents and the `Planning` setting.** Issue #704: the
+- **SDD is gone: the protocol, its five phase agents and the `Planning` setting.** The
   planning protocol `skill/protocols/sdd.md`, the five `sdd-*.md` phase definitions and the
   `Planning` row are deleted, along with the `PlanningPhase` model-routing kind and the phase keys
   `explore`, `propose`, `spec`, `design` and `tasks`. A stored `Planning: sdd*` row still reads as
-  `direct` and reports `planning-protocol-retired` once — issue #703's promise, kept as the setting
+  `direct` and reports `planning-protocol-retired` once — the earlier promise, kept as the setting
   itself goes — and an owned `sdd-*.md` is still retracted through the retired-names list in
   `src/skill.rs`. A stored `Model routing` cell naming a phase key is dropped by the tolerant read
   and named in a report, and the strict read refuses it. `docs/configuration.md`,
   `docs/honesty.md`, `docs/parity.md`, `docs/what-it-writes.md`, `docs/lifecycle.md` and
   `README.md` move with it.
-- **The configuration screen no longer offers a planning protocol.** Issue #705: the `Planning` row
+- **The configuration screen no longer offers a planning protocol.** The `Planning` row
   and the planning-phase model targets are removed from the screen and its help text.
-  `Model routing` still projects `orchestrate`, `apply` and the delegated roles. Issue #704 removes
+  `Model routing` still projects `orchestrate`, `apply` and the delegated roles. A later change removes
   the setting, the protocol and the `PlanningPhase` type the screen used to offer, and with them the
   retired phase routing keys.
-- **A repository can require an issue before a run changes it.** Issue #667: a plain-text request with
+- **A repository can require an issue before a run changes it.** A plain-text request with
   no `flow` edited the primary checkout with no issue filed. The new `Issue requirement` row, answered
   only by the repository's own file, takes `ask` (the default), `off` and `required`. A run holding no
   claim is refused a routine write with `issue-required` under `required`, and asked under `ask` where
@@ -1599,24 +1545,24 @@ the workflow, it holds the tools.
   reads, writes outside the checkout and claimed runs are unchanged. See
   [`docs/honesty.md`](docs/honesty.md) for what the hook cannot see and for the approval it cannot
   read back.
-- **The OpenCode loop plugin is `flow-loop.js`, with commands `/flow-loop` and `/flow-status`.** Issue #659: the
+- **The OpenCode loop plugin is `flow-loop.js`, with commands `/flow-loop` and `/flow-status`.** The
   commands and the plugin id were named `estigia-loop` and `estigia-status`, which read as the tool and
   not as the workflow they drive. `estigia setup` writes `flow-loop.js` and removes an Estigia-owned
   `estigia-loop.js` left by an earlier build, and `uninstall` removes both; a file of that name Estigia
   did not write is left alone.
-- **An unclaimed run can no longer commit or push where the push guard is installed.** Issue #652: a
+- **An unclaimed run can no longer commit or push where the push guard is installed.** A
   run holding no claim could `git commit` on the default branch and push it with nothing refusing
   either. With the guard installed, the agent gate refuses every commit-creating command and every
   `git push` while no claim holds the checkout (`unclaimed-commit`), and the `pre-push` hook refuses
   the same push; the way out is `claim`, then `start_branch`. A checkout without the guard is
   unchanged. See [`docs/honesty.md`](docs/honesty.md) for what it does not hold.
-- **Both OpenCode loop plugins show their messages.** Issue #650: OpenCode 2.0.20 renders a
+- **Both OpenCode loop plugins show their messages.** OpenCode 2.0.20 renders a
   synthetic message's `description` and never its `text`, and the Estigia loop and the generic goal
   plugin sent a constant one, so `/estigia-status`, `/goal`, stops and refusals showed only "Estigia
   loop" or "Goal loop". Each message now goes out in `description` as well as `text`, prefixed only
   when it does not already name the plugin. Read from the binary, not observed on a live host; see
   [`docs/honesty.md`](docs/honesty.md).
-- **The Estigia loop runs on Codex, behind the same `Loop plugin` row.** Issue #637: with the row
+- **The Estigia loop runs on Codex, behind the same `Loop plugin` row.** With the row
   `on` for Codex, `estigia setup codex` registers a `Stop` and a `SessionStart` hook beside the gate,
   each with its trust entry, and takes both back when the row is `off`. `SessionStart` announces
   `Run id codex-…`. `Stop` blocks with the claim reason while the run holds a live claim, and
@@ -1631,21 +1577,21 @@ the workflow, it holds the tools.
   A hook payload whose `transcript_path` is `null`, which Codex's schema allows, was read as
   unreadable and stood aside; it now parses.
 
-- **`/estigia-loop` text is prefixed with `/flow`, not `/flow dev`.** Issue #646: free text such as
+- **`/estigia-loop` text is prefixed with `/flow`, not `/flow dev`.** Free text such as
   `only Alicante and Murcia` was sent as `/flow dev only Alicante and Murcia`, which skipped the
   routing and made the text a dev domain rule. It is now `/flow only Alicante and Murcia`, which routes
   from the tracker, so an empty queue triages the text first. A bare `/estigia-loop` is still
   `/flow dev`. `skill/SKILL.md` says that text after a bare `flow` is the analyst's conditions on
   triage and the dev's domain rules on dev.
 
-- **`/estigia-loop` runs `/flow dev` by default.** Issue #642: with no text, or with only `--max` and
+- **`/estigia-loop` runs `/flow dev` by default.** With no text, or with only `--max` and
   `--wait`, the command returned without saying anything. It now stores and enqueues `/flow dev`.
   Text that begins with the word `/flow` or `flow` is used as given, and any other text is prefixed
-  (with `/flow`, see #646). The stored
+  (with `/flow`). The stored
   goal, every re-enqueue and `/estigia-status` carry the prefixed text; `stop` is unchanged.
 
 - **`setup codex` trusts the gate it registers, and `doctor` says `live` only while Codex would run
-  it.** Issue #641: codex-cli 0.159 runs a user hook only when `config.toml` holds
+  it.** codex-cli 0.159 runs a user hook only when `config.toml` holds
   `[hooks.state."<key>"] trusted_hash` equal to the hook's current hash, and skips any other without
   a word, so the gate `setup codex` registered decided nothing while `doctor` reported `1 live`.
   Setup now writes that entry for each Estigia-owned Codex hook, with Codex's own key and hash
@@ -1658,7 +1604,7 @@ the workflow, it holds the tools.
   every hook after it.
 
 - **The Estigia loop plugin's commands are `/estigia-loop` and `/estigia-status`, and a generic
-  `/goal` and `/loop` plugin is a separate row.** Issue #639: the plugin registered `loop` and `goal`,
+  `/goal` and `/loop` plugin is a separate row.** The plugin registered `loop` and `goal`,
   which shadowed the commands those names mean to a person and to other tools. It now registers
   `estigia-loop` and `estigia-status`, and `/estigia-status <text>` refuses visibly. A new `Goal loop
   plugin` row (default `off`, OpenCode only) writes `goal-loop.js`, which offers `/goal <condition>`
@@ -1666,9 +1612,9 @@ the workflow, it holds the tools.
   command. Its evaluator is `ctx.session.generate`; an answer that cannot be read stops the goal, and
   `docs/honesty.md` says the judgement is a model's, never Estigia evidence.
 
-- **`setup` folds the retired `Delegated workers` row instead of refusing it.** Issue #616: the
+- **`setup` folds the retired `Delegated workers` row instead of refusing it.** The
   installed-contract read went through the strict chain, which refuses a contract still carrying the
-  row the #45 restructure deleted — so `estigia setup` and `setup --all`, the commands an upgrade
+  row an earlier restructure deleted — so `estigia setup` and `setup --all`, the commands an upgrade
   runs, exited 1 without writing, and every later run refused the same row identically. The read now
   folds the retired row the way `config set` already did — each name it held becomes an `inherit` in
   `Model routing` — and carries the row it folded so `setup` prints it as a note. A row a person
@@ -1676,7 +1622,7 @@ the workflow, it holds the tools.
   `config list` and `doctor` read the same fold, so a contract `sync` can rewrite no longer reads as
   *not understood*. `docs/honesty.md` states what the fold does not measure.
 
-- **The loop's `--max` counts completed issues, not turns.** Issue #606: `--max <n>` stopped the
+- **The loop's `--max` counts completed issues, not turns.** `--max <n>` stopped the
   loop after `n` turns, so a session that drained its queue slowly hit the cap early and one that
   delivered several issues could exceed it. The plugin now stops when the run's **completed issues**
   reach `n`: it asks `estigia goal --completed`, whose count is enumerated from the tracker — the
@@ -1685,14 +1631,13 @@ the workflow, it holds the tools.
   completion count Estigia cannot report stops the loop rather than reading as zero. A squash or
   rebase delivery is a floor for that proof, so the cap can run past it; `docs/honesty.md` says so.
   The plugin's `node` test gains the completion-cap and unreadable-count exits.
-- **The OpenCode loop stops when Estigia cannot confirm the run's claim.** Issue #608: the loop
+- **The OpenCode loop stops when Estigia cannot confirm the run's claim.** The loop
   decided on `live` and `claimable` alone, so a turn whose `estigia goal` answer read
   `standing: "unread"` — the tracker could not be read for this run's claim — continued on claimable
   work. An unknown result is not clearance: the loop now continues on a non-live answer only when the
   standing is a definite `stopped` or `nothing-sworn`, and stops on `unread` or `unreadable` whatever
   the queue says. The plugin's `node` test gains that exit.
-- **A run can record progress or blocked activity, and ask whether its goal is complete.** Issue #4:
-  the second half of `loop-goal-adjudication`. The timeline's activity markers gain `progress` and
+- **A run can record progress or blocked activity, and ask whether its goal is complete.** The second half of `loop-goal-adjudication`. The timeline's activity markers gain `progress` and
   `blocked`, both of which renew a claim exactly as `heartbeat` does, and the one renewal writer now
   records the kind it is asked for, refusing any word but `heartbeat`, `progress` or `blocked` —
   `branch` and `published` are activity too but each has a writer of its own. `estigia goal progress
@@ -1703,15 +1648,13 @@ the workflow, it holds the tools.
   accepted verdict and a lane the gate would clear — not red, and finished. It writes nothing and exits 0 for a read answer, and
   it re-reads the receipt and the lane at call time — `docs/honesty.md` says what it cannot prove
   about the work, the merge, or the honesty of the run's own claim.
-- **The `gate-version` fixture picks its assertion branch from the binary it asserts on.** Issue
-  #280: `tests/pipe.rs` chose the branch with `estigia::build_info::dirty()`, a constant compiled
+- **The `gate-version` fixture picks its assertion branch from the binary it asserts on.** `tests/pipe.rs` chose the branch with `estigia::build_info::dirty()`, a constant compiled
   into the test target's own copy of the library, while asserting on what the spawned binary printed
   — the only way the row could be checked against a shape the binary was not in. It now reads the
   binary's own identity from `estigia --version`, and the three *cannot tell* branches are unchanged.
   The reported disagreement did not reproduce when re-measured — one `cargo test` links one library
   rlib — and `docs/honesty.md` records that as a fact distinct from the stale-`dirty` flag.
-- **The OpenCode loop plugin goes on to the next task instead of stopping with the first.** Issue
-  #603: the plugin continued a session only while `estigia goal` said the run still held its issue,
+- **The OpenCode loop plugin goes on to the next task instead of stopping with the first.** The plugin continued a session only while `estigia goal` said the run still held its issue,
   so a completed task ended the loop. It now continues while the run holds a live claim **or**
   another issue is claimable by it: `estigia goal` gained a `claimable` count — the unassigned issues
   in the `review` and `ready` states, summed, read through the transport's own `list-state` and only
@@ -1719,13 +1662,13 @@ the workflow, it holds the tools.
   that could not be read answers `null`, never zero, so the loop stops on the fault rather than
   reading it as no work. `docs/what-it-writes.md`, `docs/configuration.md` and `docs/honesty.md`
   state the new condition and what the plugin still cannot prove.
-- **A fresh installation ships the balanced posture, in one word.** Issue #24: the portable table
+- **A fresh installation ships the balanced posture, in one word.** The portable table
   shipped `ask` for all three authorisations, so an installation that wanted Estigia to work
   unattended moved five rows by hand and had to know which five. The new `Profile` row names the
   whole posture — `balanced` makes `Delivery authorisation`, `Review delegation` and `Transition
   authorisation` `auto`, and `cautious` makes all three `ask` — and is derived over those rows
   rather than stored, so an explicit authorisation written after it wins. `Config::default()` is the
-  balanced posture now. `Blind judges` was removed by #246 and the panel is fixed at two judges
+  balanced posture now. `Blind judges` has been removed and the panel is fixed at two judges
   (one sealed, one unsealed) at `medium`/`high` and one at `low`, so the judge half of the issue has
   no row to carry. On the model half, where `Model routing` is unset and the adapter has a reviewed
   `balanced` preset, `setup` renders that preset's phases into the definitions instead of `inherit`;
@@ -1735,7 +1678,7 @@ the workflow, it holds the tools.
   stays the literal `model: inherit` its byte-comparison and reserved-role uniqueness depend on.
   An installation that carries its own table keeps every row it wrote; a table missing a row takes
   the new value on the next read.
-- **The OpenCode loop plugin is an operator setting, not a setup flag.** Issue #600: the optional
+- **The OpenCode loop plugin is an operator setting, not a setup flag.** The optional
   loop plugin was reachable only by a `--loop` flag on `estigia setup`, which the TUI never showed
   and `scripts/build-install.sh`'s non-interactive `setup --all` could not reach. It is now the
   `Loop plugin` row — `on`/`off`, default `off`, agent-scoped — edited in the TUI and honoured by
@@ -1746,8 +1689,7 @@ the workflow, it holds the tools.
   by reading its path, and a foreign `estigia-loop.js` is neither replaced nor removed. The flag,
   its `conflicts_with = "all"`, and the `loop-plugin-unsupported` refusal are gone, so nothing
   names a command that no longer exists.
-- **OpenCode gets an optional loop plugin, and Estigia adjudicates its completion.** Issue #598:
-  when the `Loop plugin` row is `on`, `estigia setup opencode` writes `estigia-loop.js` beside the
+- **OpenCode gets an optional loop plugin, and Estigia adjudicates its completion.** When the `Loop plugin` row is `on`, `estigia setup opencode` writes `estigia-loop.js` beside the
   gate plugin, marked `estigia:loop`; the default `off` writes nothing new. The plugin continues a
   session while `estigia goal` — a new read-only verb that answers
   whether this session's run still holds a live claim, reusing the gate's one identity rule and
@@ -1759,8 +1701,7 @@ the workflow, it holds the tools.
   optional install and how uninstall takes it back, and `docs/honesty.md` states what the loop does
   not prove — that the host fired the event, that the enqueued prompt was delivered, and that the
   agent did any work between turns.
-- **`Model routing` is two sections, and a role's presence in it is what installs it.** Issue #45.
-  The flat `key=model` row mixed four kinds of target — orchestration, planning phases, roles Estigia
+- **`Model routing` is two sections, and a role's presence in it is what installs it.** The flat `key=model` row mixed four kinds of target — orchestration, planning phases, roles Estigia
   installs, and names another orchestrator's — and hid the effort behind a slash inside the model
   value. The row now presents a phases section and a roles section, and the `Delegated workers` row is
   deleted: naming a role in the roles section installs its definition and removing the entry retracts
@@ -1777,8 +1718,7 @@ the workflow, it holds the tools.
   `README.md`, `docs/honesty.md`, `skill/SKILL.md`, `skill/references/runtime-notes.md`,
   `docs/what-it-writes.md` and the interactive surface move with it.
 
-- **The direct route's review granularity is written down: the candidate is the publication.** Issue
-  #589: `SKILL.md`'s `Change size` rule and `skill/references/repository-delivery.md`'s review-unit
+- **The direct route's review granularity is written down: the candidate is the publication.** `SKILL.md`'s `Change size` rule and `skill/references/repository-delivery.md`'s review-unit
   section now state that a commit is not a review candidate and that no review is due before a
   publication — a verdict binds the epoch, PR, head, base and digest `publish_review` mints, so
   there is nothing to record one against earlier, and reviewing a unit on its own would mean
@@ -1786,7 +1726,7 @@ the workflow, it holds the tools.
   read is added: `review_tier`, `review_tier_for_repair` and `repair_rounds` answer the questions
   that exist. This settles the last difference `docs/parity.md` listed.
 
-- **`Review protocol` defaults to `receipt-driven`.** Issue #588: the default was `standard`, the
+- **`Review protocol` defaults to `receipt-driven`.** The default was `standard`, the
   weaker of the two protocols the row admits, while `skill/protocols/rdd.md` argues that review is
   not switchable off and that a verdict binds the bytes it was given rather than the commit SHA that
   happened to carry them — a mode change, a symlink, or an uncommitted edit all ship without moving
@@ -1795,7 +1735,7 @@ the workflow, it holds the tools.
   installation whose table already names `standard` keeps it, because the default moves for a table
   Estigia writes, not for one it reads back. `docs/configuration.md` names the default on the row.
 
-- **The delegated worker `implementer` is renamed `developer`.** Issue #578. The worker definition
+- **The delegated worker `implementer` is renamed `developer`.** The worker definition
   (`skill/agents/developer.md`), the `Delegated workers` value, the `Model routing` key, the
   `record_spend` phase vocabulary (`SPEND_PHASES`, now `review|developer|analyst|orchestrator`) and
   the example topology label all take the role's own word. `implementer` is refused rather than kept
@@ -1805,8 +1745,7 @@ the workflow, it holds the tools.
   `issue_totals` still sums it; nothing rewrites a marker. `docs/honesty.md` and `docs/review-cost.md`
   keep the past-tense uses that name what a past run recorded.
 - **A non-severe finding is informational: `release_ci` no longer owes a disposition for a `warning`
-  or a `suggestion`.** Issue #565, widened by the operator to full parity with `gentle-ai`'s
-  direction. Three shipped surfaces disagreed about the same class: step 5 of `skill/SKILL.md` gave
+  or a `suggestion`.** Three shipped surfaces disagreed about the same class: step 5 of `skill/SKILL.md` gave
   every `warning` and `suggestion` one `record_disposition` answer — `acted-on`, `filed` or
   `declined` — while `skill/policies/blind-judges.md` and the `elective-repair-refused` row of
   `skill/bindings/github.md` still said a non-blocking finding "owes its own tracker issue" and was
@@ -1822,8 +1761,7 @@ the workflow, it holds the tools.
   this removes is named where it stood: `disposition-missing` is retired, and a `severe` finding whose
   `causal_disposition` reads `pre-existing` or `base-only` still owes its own issue, because no gate
   blocks on one.
-- **A delivering run puts its own checkout down, and the merged branch goes with the merge.** Issue
-  #21. `release` — the one step the delivery sequence runs after the close — now removes the isolated
+- **A delivering run puts its own checkout down, and the merged branch goes with the merge.** `release` — the one step the delivery sequence runs after the close — now removes the isolated
   worktree and local branch `start_branch` created, and only on proof: the tracker must recognise the
   issue's close as this run's own delivery (`own_delivery_close`: the run's `published` marker, the
   closing pull request, and a merge whose parents are the reviewed base and head), the checkout's
@@ -1835,7 +1773,7 @@ the workflow, it holds the tools.
   accumulated were swept — 165 remote, plus 27 local worktrees with their branches, returning about
   64.7 GB to the worktree volume. `tests/pipe.rs` drives both directions end to end.
 - **A base movement classified `compatible` is spent as a repair-shaped republish rather than a full
-  panel, and a round the base forced is not charged to `Repair ceiling`.** Issue #124: three surfaces
+  panel, and a round the base forced is not charged to `Repair ceiling`.** Three surfaces
   contradicted each other about the same event. The transport classified later base movement and
   answered `"integrate": false` for a compatible movement — disjoint paths, conflict-free merge —
   while the routed contract spent every classification as a full re-freeze and re-review, and the
@@ -1858,9 +1796,8 @@ the workflow, it holds the tools.
   bounds a base-movement storm, and the honest bound there is the base itself — and it records the
   live measurement that the setting is off today.
 - **A run id is held to the one shape `session::run_id` mints, and `create`'s runtime to the same
-  component, so no label is minted from text this crate could not have written.** Issue #234, the
-  three doors #48's three rounds left. `codex-01k4-9f2a` — what the contract's own instruction
-  produces on a host whose session ids carry a dash — passed #48's alphabet because the last-dash
+  component, so no label is minted from text this crate could not have written.** `codex-01k4-9f2a` — what the contract's own instruction
+  produces on a host whose session ids carry a dash — passed the alphabet check because the last-dash
   split reads the well-formed runtime `codex-01k4`, and minted the permanent repository-level label
   `dev:codex-01k4`, which `gh issue list --label dev:codex` never finds. Every run-id refusal read
   `Value::as_str`, so a JSON number answered `None` to all four at once and `flags_for` rendered it
@@ -1880,25 +1817,22 @@ the workflow, it holds the tools.
   argument, because the two values the gate reads rather than renders are the two it now reads as
   arguments; labels already minted are left alone, since this repairs what is written next rather
   than migrating the residue.
-- **`build.rs`'s envelope carve-out ends where its extractor stops reading, and two sentences issue
-  #225 made false are cut or corrected.** Issue #237, the warnings #225's delivery left unrepaired.
-  The guard that clears a non-literal `"reason":` in `Failure::envelope` ended its window at the next
+- **`build.rs`'s envelope carve-out ends where its extractor stops reading, and two sentences that had become false are cut or corrected.** The guard that clears a non-literal `"reason":` in `Failure::envelope` ended its window at the next
   column-zero `fn` while `extract_constructed` stopped at the function's first four-space closing
   brace — in `src/transport/mod.rs` those two ends sat seventy-one lines apart — so a `"reason":`
   written between them cleared the guard and reached no vocabulary, which is the collapse the guard
   exists to refuse. Both now read one window, derived once in `envelope_window`; measured by writing
   such a `"reason":` into `mod.rs`, where the build succeeds at this branch's merge base and aborts at
   this head. `AGENTS.md`'s sentence claiming that `build.rs` reads the transport's sources without
-  stripping them — false since #225 strips once at the read — is cut, and `docs/honesty.md`'s account
-  of the eleven reasons that joined its undocumented list under #225 now decomposes them as the eight
+  stripping them — false now that it strips once at the read — is cut, and `docs/honesty.md`'s account
+  of the eleven reasons that joined its undocumented list at that point now decomposes them as the eight
   `operation_marker`'s two `format!`-built expressions spelled and the three of
   `branch_identity_verdict`'s four incoherent verdicts that `checkout_identity` passed through a
   `&'static str`. `tests/guards.rs` holds the guard and the extractor to the one window, and
   `three_heads_have_to_tell_one_story` already pinned the four verdicts the corrected sentence
   counts.
 - **`estigia config edit` and `estigia config forget` are gated as the harness-disarming writes
-  they are, and the crossing that should have caught them now reaches subcommands.** Issue #331,
-  found by the enumeration #303 required. Between them they cover what the listed `estigia config
+  they are, and the crossing that should have caught them now reaches subcommands.** Between them they cover what the listed `estigia config
   set` writes — `edit` the installed contract, `forget` the repository's own file — and neither
   matched any population, so the gate answered `Untouched`: `Outside(NotWatched)`, no gate at all
   rather than a weaker one.
@@ -1912,7 +1846,7 @@ the workflow, it holds the tools.
   state: `config set` and `config edit` both reach the tracker and are denied by its answer.
   `docs/honesty.md` records what the widened crossing still does not reach: a new top-level verb.
 - **`publication_lane` answers `disabled` when the repository cannot run Actions, and delivery
-  states what it records instead.** Issue #425: a head with no check runs used to answer `absent`
+  states what it records instead.** A head with no check runs used to answer `absent`
   whether no lane was configured or Actions was switched off, so a run delivering where CI could
   never run had to decide from the repository's own prose — measured on another repository, where one run
   held the merge for a day while five PRs merged with zero CI. The advisory answer now reads
@@ -1924,8 +1858,7 @@ the workflow, it holds the tools.
   issue before merging. The gate is unchanged: `record_review_verdict` still clears an empty
   check-run listing, and a run that executed and failed or was `cancelled` still refuses
   `publication-lane-red`.
-- **BSD `script`'s trailing command is read by the gate.** Issue #452, closing the spelling #332
-  left open. util-linux's `script -c '…'` quotes its command, so #332 read it through the code
+- **BSD `script`'s trailing command is read by the gate.** util-linux's `script -c '…'` quotes its command, so the earlier fix read it through the code
   flag; darwin's `script` has no `-c`: `man script` gives
   `script [-aeFkqr] [-t time] [file [command ...]]`, and the trailing words are the command.
   Measured on 2026-09-27: `script -q /dev/null echo BSD_SCRIPT_RAN_A_COMMAND` printed the
@@ -1938,8 +1871,7 @@ the workflow, it holds the tools.
   the new entry is removed. `docs/honesty.md` records what this leaves: a typescript file named
   after a write reads as one.
 - **Five more refusals reached after their own write stop claiming nothing was written, and a retried
-  operation is told the write had landed rather than which call made it.** Issue #419,
-  closing the class #416 opened. `claim-operation-no-longer-current` is reached when the claim marker
+  operation is told the write had landed rather than which call made it.** `claim-operation-no-longer-current` is reached when the claim marker
   was read visible and then left the timeline before adjudication read again, and the projection
   loop's four stops — `ownership-changed-projections-repaired`, `holder-runtime-missing`,
   `ownership projection write did not read back exactly` and
@@ -1955,7 +1887,7 @@ the workflow, it holds the tools.
   the stops reachable after a write, because reachability is a property of the interleaving — and
   names the sites this sweep found and left silent rather than implying the class is closed.
 - **A takeover the ownership fold discards says which condition dropped it, instead of reporting a
-  race it never ran.** Issue #417. A takeover the ownership fold refused — a malformed marker, forced
+  race it never ran.** A takeover the ownership fold refused — a malformed marker, forced
   evidence that did not bind to that takeover, a comment the tracker did not attribute to this run or
   that was edited, an operation id first reserved at another marker, an epoch the takeover cannot
   displace, a live holder taken without `--force` — answered `lost-reclaim-race` naming the old
@@ -1975,7 +1907,7 @@ the workflow, it holds the tools.
   reordering the two checks reddens that test alone. The tenth — a legacy takeover, which no caller
   can address by operation id — is tested at the fold.
 - **The OpenCode plugin hands the gate the session's identity, so a shared base stops refusing
-  parallel work.** Issue #502. Both host generations hand the plugin a session id — OpenCode 1 in
+  parallel work.** Both host generations hand the plugin a session id — OpenCode 1 in
   the `tool.execute.before` hook's input, OpenCode 2 in the `execute.before` event — and the
   rendered module forwarded neither it nor a run id, so every call was adjudicated by which oath
   covered the directory it ran in. A session rooted at the shared base is covered by every live run
@@ -1989,8 +1921,7 @@ the workflow, it holds the tools.
   under a hand-minted id is not found by the derivation and its calls are answered `outside`, which permits —
   `docs/honesty.md` records that trade, and the contract's Runtime identity derivation pins the shape
   an agent must mint.
-- **The gate refuses a round nobody elected, and the Stop hook stops paying for a poll.** Issue #482,
-  slice one of the overhead issue. `publish_review` and `republish_review` over a parent on the same
+- **The gate refuses a round nobody elected, and the Stop hook stops paying for a poll.** `publish_review` and `republish_review` over a parent on the same
   pull request whose latest verdict was `accepted` are refused `elective-repair-refused` before
   anything is pushed, unless a `review_finding` has been recorded against that exact parent receipt
   since the verdict — the author's declaration of a defect the panel did not weigh — or the base moved
@@ -2009,9 +1940,8 @@ the workflow, it holds the tools.
   turn. `docs/honesty.md` records what neither reader proves.
   The remaining acceptance items — the tool answers' size with byte counts, the implementer brief's
   anchors, the round-trip measurement, the lens route for a post-acceptance repair, the orchestrator
-  spend record and the re-measurement against the baseline — stay on issue #482.
-- **The `blocked` qualifier says what it means, and the pointer names a step that exists.** Issue #20:
-  three contract sentences were only correct read beside their neighbour, as a blind reviewer found.
+  spend record and the re-measurement against the baseline — stay outstanding.
+- **The `blocked` qualifier says what it means, and the pointer names a step that exists.** Three contract sentences were only correct read beside their neighbour, as a blind reviewer found.
   The decision-gate row, `repository-delivery.md`'s handoff paragraph and `safety-incidents.md`'s I09
   row scoped `blocked` to adjudication "outside" the ordinary gates, while the flagship input — two
   blind judges contradicting each other about the same bytes — arises *at* the review gate; read as
@@ -2024,7 +1954,7 @@ the workflow, it holds the tools.
   "permission" in one row — is not repaired in place: the row that carried it is gone from `skill/`
   rather than corrected, and the held-restatement paragraph under `docs/honesty.md`'s
   `## The control surface and what it records` says which copies a test holds.
-- **Four actions stop declaring Node 20, and the guard reads every action.** Issue #18: raising
+- **Four actions stop declaring Node 20, and the guard reads every action.** Raising
   `actions/checkout` to `v7` left four `node20` actions printing GitHub's deprecation warning on
   every run — **all four in `release.yml`**, which runs on a tag and cannot be retried by pushing a
   fix, and one of them also in `ci.yml`. `setup-node@v4 → v5`, `upload-artifact@v4 → v6`,
@@ -2037,7 +1967,7 @@ the workflow, it holds the tools.
   inventing an unlisted action, which the completeness check refuses; the composite's own major is
   floored too, so a revert to the `node20`-pinning `@v2` reddens, though the commits it pins remain
   unbound and `docs/honesty.md` says so.
-- **Two more fixtures stop spelling a skip as a pass.** Issue #12: `repository()` in
+- **Two more fixtures stop spelling a skip as a pass.** `repository()` in
   `src/harness/guard/tests.rs` and `repository_with_commit` in `src/test_env.rs` both returned
   `Option<tempfile::TempDir>` and answered `None` when `git` was unusable, so their **twenty-three**
   call sites reported `ok` to every ordinary run having installed nothing — the push guard's fixtures
@@ -2045,9 +1975,9 @@ the workflow, it holds the tools.
   panic, naming the command that clears it, when git is absent or a git call fails: the same repair
   `tracker_rig` got, and the opposite policy this crate held for one condition. `repository_with_commit`
   also stops tolerating *any* failure — a signing machine or a rejecting hook used to take the whole
-  of issue #30's acceptance evidence to green having measured nothing. `docs/honesty.md` records what
+  of the acceptance evidence to green having measured nothing. `docs/honesty.md` records what
   closed and what `tests/pipe.rs`'s seven read-only and git skip sites still leave open.
-- **An out-of-scope finding goes to an analyst, not to the tracker.** Issue #14: a developer run that
+- **An out-of-scope finding goes to an analyst, not to the tracker.** A developer run that
   tripped over a defect its issue did not cover filed it itself, mid-task, with the context that made
   it look important and an interest in its being real; the contract had no rule for the case and no
   bound like triage's *at most one evidenced issue*. The Developer execution steps now say the
@@ -2059,17 +1989,17 @@ the workflow, it holds the tools.
   `docs/honesty.md` records that nothing observes the handoff. No gate, tool or setting changed:
   `analyst` already ships behind the `Delegated workers` row.
 
-- **The gate now reads `CLAUDE_CONFIG_DIR` too.** Issue #427 made `setup`, `sync`, `doctor` and
+- **The gate now reads `CLAUDE_CONFIG_DIR` too.** `setup`, `sync`, `doctor` and
   `config` resolve Claude Code's roots under `$CLAUDE_CONFIG_DIR` when it is set, but the gate itself
   did not: `definition_for` never searched `$CLAUDE_CONFIG_DIR/agents`, so a sub-agent definition
-  written exactly where `setup` puts it answered `Ok(None)` — every tool allowed, the loosening the
-  #34 asymmetry exists to refuse. `authorize_review_blind_launch` proved the canonical
+  written exactly where `setup` puts it answered `Ok(None)` — every tool allowed, the loosening that
+  asymmetry exists to refuse. `authorize_review_blind_launch` proved the canonical
   `review-blind`/`review-blind-sealed` reviewer against `~/.claude/agents` alone, so a session
   running under a relocated configuration was refused `reviewer-canonical-unavailable` against the
   *other* profile's tree or an empty one — measured live on 2026-09-18 against a real two-profile
   machine. And the control-surface fragments `.claude/settings` and `.claude/agents/` never matched a
   relocated root at all, because they carry the `.claude` directory name inside the fragment and
-  `$CLAUDE_CONFIG_DIR` names an arbitrary directory. Filed as issue #428.
+  `$CLAUDE_CONFIG_DIR` names an arbitrary directory.
 
   `definition_for` now also searches `$CLAUDE_CONFIG_DIR/agents`, beside the home root rather than
   instead of it. `authorize_review_blind_launch` proves the canonical reviewer against
@@ -2080,10 +2010,9 @@ the workflow, it holds the tools.
   and asks whether a target lands under it, on one of the names `settings.json`, `agents`, `skills`,
   `.claude.json`, `CLAUDE.md` or `CLAUDE.local.md` — rather than a spelling that would have to name
   every possible relocated directory to be safe. Unset, every classification and every root is
-  byte-identical to before. `docs/honesty.md`'s entry on issue #427 carries the full account.
+  byte-identical to before. `docs/honesty.md`'s entry on `CLAUDE_CONFIG_DIR` carries the full account.
 
-- **A run that inherits an issue is told which checkout holds its branch.** Issue #415:
-  `start_branch` resolves the worktree path from the run id, so a successor never lands on the
+- **A run that inherits an issue is told which checkout holds its branch.** `start_branch` resolves the worktree path from the run id, so a successor never lands on the
   path its predecessor made — `may_occupy` is asked about a directory that does not exist,
   answers *fresh*, and `git worktree add` is then asked for a branch another worktree already
   holds. Git refuses with `fatal: '<branch>' is already used by worktree at '<path>'` and exit
@@ -2097,7 +2026,7 @@ the workflow, it holds the tools.
   the worktree is the unit of task identity here, and resuming another run's directory would
   decide that for the operator rather than telling them.
 
-- **A refusal that wrote before it refused says so.** Issue #416: `adjudicate`'s `lost-claim-race`
+- **A refusal that wrote before it refused says so.** `adjudicate`'s `lost-claim-race`
   and `won_the_reclaim`'s `lost-reclaim-race` are reached only after this run's own control marker is
   on the issue, and their payloads carried no world, so every caller that lost a race was told the
   world was untouched while its marker sat on the timeline — invisible to it. Both now carry
@@ -2107,15 +2036,15 @@ the workflow, it holds the tools.
   table defer to the refusal. `docs/honesty.md` records that nothing enumerates the class, and what
   the mis-reporting cost on another repository's #318.
 
-- **`Publication lane` can be switched off.** Issue #192: `on` (default) keeps
+- **`Publication lane` can be switched off.** `on` (default) keeps
   accepted verdicts gated on the head's check runs; `off` skips the check-run
   read, answers `classification: not-consulted` on the verdict, and makes
   `publication_lane` answer the same. A disabled workflow's `HTTP 422` stays
   `Absent`. Cancellation is still not never-ran clearance when the gate is on.
 
 - **A sealed reviewer's copy is now crossed against what was published, rather than trusted on say-so.**
-  Issue #341: nothing anywhere read a candidate reviewer-facing text against the payload
-  `publish_review` actually bound. Measured against a delivered publication of issue #267: four of six
+  Nothing anywhere read a candidate reviewer-facing text against the payload
+  `publish_review` actually bound. Measured against a delivered publication: four of six
   sampled lines this run had handed a sealed judge did not exist in that receipt's payload — multi-line
   enum declarations collapsed onto one line and annotated with prose that appears nowhere in the
   repository, in the same brief that told the judge no retyping had happened. `review_payload_membership`
@@ -2130,11 +2059,11 @@ the workflow, it holds the tools.
   answers `payload-line-not-found`, naming its position; a passing answer carries `omitted`, so a brief
   can state its own subset honestly.
 
-- **The delta a re-review reads absorbed the base after a rebase.** Issue #267: four shipped
+- **The delta a re-review reads absorbed the base after a rebase.** Four shipped
   surfaces named `parent-head..head` as the range a repair's re-review should read, with no
   condition attached. Once a branch is rebased onto an advanced base that range also carries every
   commit the base gained, and nothing in it marks which half belongs to somebody else. Measured on
-  issue #248's own repair: 1,205 insertions where the repair was 562. Taking the merge-base instead
+  a real repair: 1,205 insertions where the repair was 562. Taking the merge-base instead
   — the repair anybody reaches for first — answers 2,991, so it is worse than the defect.
   `review_tier_for_repair` already decided this correctly and nothing else could ask it; the
   decision now has one home, `repair_range`, and a publication calls it and records the answer as
@@ -2143,7 +2072,7 @@ the workflow, it holds the tools.
   before they existed still parses. Deleting the ancestry branch answers `low` where the same
   input is `medium`, which is the under-rating the check exists to prevent.
 
-- **A guard that decides was never shown able to say no.** Issue #340: `review_tier` derives its
+- **A guard that decides was never shown able to say no.** `review_tier` derives its
   level twice, from the diff and from the reasons it publishes, and refuses the answer when the
   two disagree. That refusal shipped with the feature, and its message occurred once in the whole
   tree — at the production site — so nothing had ever made it fire. It still cannot through the
@@ -2156,7 +2085,7 @@ the workflow, it holds the tools.
   block reddens that test. Its `Population` declares `FailClosed` and states the boundary as it is:
   no reaching input is known to exist.
 
-- **A verdict could rest on the word `n/a`.** Issue #339: `record_review_verdict` refused a
+- **A verdict could rest on the word `n/a`.** `record_review_verdict` refused a
   `basis` that was empty or whitespace-only and accepted `n/a`, `TODO`, `pass` and `placeholder`,
   recording them as the grounds a verdict rests on; a finding's `evidence` and `impact` were
   required to be present and never examined. One predicate now decides all three, matching the
@@ -2170,8 +2099,7 @@ the workflow, it holds the tools.
   and carried through the real MCP call end to end. A finding's `id` keeps the plain blank check,
   being an identifier rather than a declaration.
 
-- **A reviewer was required to state a field its own instructions never named.** Issue #285:
-  `record_review_finding` refuses a `severe` finding that is new to a repair round and names no
+- **A reviewer was required to state a field its own instructions never named.** `record_review_finding` refuses a `severe` finding that is new to a repair round and names no
   parent unless it carries `origin` — `introduced` if the repair created the defect, `exposed` if the
   repair made an existing one reachable — and not one of the seven reviewer definitions that record
   findings mentioned it. `causal_disposition`'s five values were taught and `origin`'s two were not;
@@ -2185,7 +2113,7 @@ the workflow, it holds the tools.
   them against `FINDING_CLASSES`, `FINDING_ORIGINS`, `FINDING_EVIDENCE_CLASSES` and
   `FINDING_CAUSAL_DISPOSITIONS` read from the `pub const`s rather than retyped — against each
   definition's own bytes, with the number of definitions walked pinned. (The rendered-body half of
-  the vocabulary crossing was removed by #343, which found it could never fail where the template
+  the vocabulary crossing was removed because it could never fail where the template
   half passed.) It reddens when the sentence is removed and when a value spelled
   unlike anything already in the document is added to a vocabulary; both were run. It is a presence
   check and not a structural one, and `docs/honesty.md` states the three things that follow —
@@ -2197,7 +2125,7 @@ the workflow, it holds the tools.
   transport.
 
 - **`mandatory_follow_up` named `transition --to done` and stopped there, one step short of the
-  contract's own close-and-release — until now.** Issue #81: `check_closing_keywords`'s branch-link
+  contract's own close-and-release — until now.** `check_closing_keywords`'s branch-link
   answer (`src/transport/commands.rs`) and `publish_review`'s branch-linked receipt
   (`src/transport/claim.rs`) each restated the post-merge follow-up in its own prose, and both were
   silent about `release`, which `skill/SKILL.md`'s step 6 names as last and not optional. A field
@@ -2209,27 +2137,26 @@ the workflow, it holds the tools.
   three separate texts of one rule — the third being `closing.rs`'s own module doc, which now names
   the constant instead of restating it.
 
-- **A second spelling of a gated verb reached the same commit unwatched — until now.** Issue #303:
-  `IRREVERSIBLE` matched seven exact literals and `git pull` was not among them, though
+- **A second spelling of a gated verb reached the same commit unwatched — until now.** `IRREVERSIBLE` matched seven exact literals and `git pull` was not among them, though
   `git pull --no-rebase` performs the merge internally. It classified `Action::Untouched` — the gate
   standing aside entirely — so a run refused on one spelling reached the identical commit by writing
-  the other, which is what happened on issue #277 and was reported rather than done quietly. The
+  the other, which is what happened once and was reported rather than done quietly. The
   fragment now joins `IRREVERSIBLE` and **deliberately not `DELIVERS`**: it reaches a boundary, so the
   claim is verified and the line cannot ride the renewal window, but `stale_verdict` and
   `out_of_phase` do not read it, because pulling is an integration step rather than a landing one —
   `DELIVERS` holds the spellings that end a delivery — and refusing it would refuse the contract's
   own *integrate before publishing* default. **The substitution still
   completes**, and `docs/honesty.md` says so rather than implying the route is closed; what answers
-  that route is #131, the session-cwd attribution defect that produced the original refusal.
+  that route is the session-cwd attribution defect that produced the original refusal.
   Classifying by direction instead was rejected because it widens: merging `origin/main` into a
   feature branch is an integration but merging `origin/<feature>` into `main` is a delivery, and the
   distinction is not readable from the arguments. Because exact-literal matching guarantees something
   is always unmatched, the six matchers were read and what they leave is enumerated in
   `docs/honesty.md` in two halves — never matched, and matched but never read as a delivery — with
-  two further families filed as #331 and #332 rather than declared.
+  two further families filed separately rather than declared.
 
 - **A tool answer named no build, and a stale gate could not be told apart from a current one — until
-  now.** Issue #318: `gate_age_verdict` (`src/harness/doctor.rs`) already decided whether this
+  now.** `gate_age_verdict` (`src/harness/doctor.rs`) already decided whether this
   binary is current against the checkout it runs in, but only `doctor`'s own row surfaced it, and
   nothing runs `doctor` before a gate call. The MCP server's `answer_text` (`src/harness/mcp/mod.rs`) now inserts a
   `build` object — the commit and dirty flag from `src/build_info.rs` — into a successful tool
@@ -2241,7 +2168,7 @@ the workflow, it holds the tools.
   does not, when that count can be read, through a new `git rev-list --count` helper beside
   `git_is_ancestor`, and says the count could not be read when it cannot. `docs/honesty.md` names what this leaves open.
 
-- **A mistaken blocking finding cost a whole repair round — until now.** Issue #158: a
+- **A mistaken blocking finding cost a whole repair round — until now.** A
   `review-refuter` reserved role, sealed and holding no `Read`, adjudicates a panel's own standing
   severe findings before a rejection rests on them. `review_refutation` records the whole batch in
   **one** call — `corroborated`, `refuted` or `inconclusive` per finding, never one task per
@@ -2258,7 +2185,7 @@ the workflow, it holds the tools.
   **lens** finding already gets is a separate question this change deliberately leaves open, and
   `docs/honesty.md` records it as open.
 
-- **A second delivery on one line travelled on the first one's label — until now.** Issue #69: a
+- **A second delivery on one line travelled on the first one's label — until now.** A
   command line was classified by the first `IRREVERSIBLE` fragment present *in list order*, and both
   delivery checks then read that one recorded fragment — `stale_verdict` and `out_of_phase` each
   return early unless `DELIVERS` contains it. `git push` is on `IRREVERSIBLE` and deliberately not on
@@ -2273,8 +2200,7 @@ the workflow, it holds the tools.
   every ordinary topic push. `docs/honesty.md` carries what this leaves open and one thing the
   repair measured that no document said before.
 
-- **A compound shell line answered without the control-surface question being asked — until now.** Issue #85:
-  `REPOSITORY_SHELL`'s arm returned on the first of its own fragments found in a command, before the
+- **A compound shell line answered without the control-surface question being asked — until now.** `REPOSITORY_SHELL`'s arm returned on the first of its own fragments found in a command, before the
   control-surface and repository-configuration questions the two arms below it ask — so
   `git stash; rm ~/.claude/settings.json` rode the renewal window the same way a bare `git stash`
   does, because `REPOSITORY_SHELL` matched `git stash` first and returned before
@@ -2287,7 +2213,7 @@ the workflow, it holds the tools.
   `Routine`, unchanged, because neither line names `estigia/{LOCAL_FILE}` or a `CONTROL_SURFACE`
   fragment reaching the bare directory.
 
-- **A frozen manifest too large to record failed after the push — until now.** Issue #271: `publish_with`
+- **A frozen manifest too large to record failed after the push — until now.** `publish_with`
   freezes the original candidate's own changed-path manifest onto the published marker as
   `budget-genesis-paths`, `\u{1f}`-joined, and nothing bounded it — the marker lands in a GitHub
   issue comment, which caps at 65,536 characters, and the marker was assembled after `push_to_origin`
@@ -2303,8 +2229,7 @@ the workflow, it holds the tools.
   open: `topology` and `topology_reason` are caller free text with no length limit of their own, so
   bounding the manifest does not bound the comment.
 
-- **A base that moved after the rebase inverted into the payload — until now.** Issue #277:
-  `publish_with` resolved `--base <branch>` to the branch's current tip and materialised a two-dot
+- **A base that moved after the rebase inverted into the payload — until now.** `publish_with` resolved `--base <branch>` to the branch's current tip and materialised a two-dot
   `base..head` diff before checking that `base` was still an ancestor of `head`. When the base tip
   moved after a branch was rebased onto it and before the call, that diff carried everything the
   base gained in the interval inverted into what read as this change's own deletions — measured
@@ -2316,8 +2241,7 @@ the workflow, it holds the tools.
   `merge_base` between them when it is not. An unreadable answer from `git` is a failed read, never
   treated as "not an ancestor." `docs/honesty.md` says what the audit did and did not settle.
 
-- **A finding is written and no operation reads it back — until now.** Issue #293:
-  `record_review_finding` wrote an observation against a review transaction and nothing answered
+- **A finding is written and no operation reads it back — until now.** `record_review_finding` wrote an observation against a review transaction and nothing answered
   it, which blocked porting a refuter — a reviewer whose whole job is to judge findings it was
   handed — because the transport held no evidence one was ever shown any. `review_findings`
   (`claim.rs`, dispatched as `review-findings`) is read-only, takes no `run_id` and no claim, the
@@ -2338,12 +2262,12 @@ the workflow, it holds the tools.
   all; an `--id` naming no finding on the resolved receipt refuses `finding-id-unknown` — both list
   what the timeline actually holds. An empty ledger answers `ok: true` with `findings: []`, and an
   unreadable timeline is a failed read, never the same answer.
-- **The tier scales the acquired judge panel.** Issue #292: `medium` and `high` still acquire two
+- **The tier scales the acquired judge panel.** `medium` and `high` still acquire two
   judges, one sealed and one unsealed; `low` now acquires one, the unsealed judge, rather than the
   same two — a `low` change is prose the tier has already proven passive, judged against code the
   diff does not carry, and a sealed judge holds only the diff and a web search, so sealing buys
   nothing there either. `RiskLevel::judges` derives the count from the tier alone, the same way
-  `RiskLevel::lenses` already did, and it is **not** the mechanism issue #246 deleted: that
+  `RiskLevel::lenses` already did, and it is **not** the mechanism that was deleted: that
   `RiskLevel::judges` read an operator's `Blind judges` row and could not tell a written row from a
   rendered default; this one reads no configuration at all, because there is no such row left in the
   model. `low` never answers `0`: the source project this binding ports `review_tier` from closes a
@@ -2359,16 +2283,16 @@ the workflow, it holds the tools.
   count for its own `Task` launches, and the completeness sweep now calls it directly and checks
   what it renders, since it is a `src/` surface the `skill/` file walk cannot reach.
 
-  **Issue #296, in the same change: a repair round is sized by its own delta, not by the whole
+  **A repair round is sized by its own delta, not by the whole
   change.** `review_tier` used to answer `base..head` on a repair exactly as it did on a first
   publication, so correcting a sentence was sized as the code change the correction sat on top of —
-  measured as this repository's single largest review cost (#131: 8 judges, 3 rejections, zero code
+  measured as this repository's single largest review cost (8 judges, 3 rejections, zero code
   defects, on prose alone). The first design, `review_tier_over_trees`, read two frozen tree object
-  ids instead, believing that excluded base movement; the panel reviewing pull request #297 proved
+  ids instead, believing that excluded base movement; the panel reviewing it proved
   it did not — a candidate tree is the tree *of a commit*, and `git diff tree(A) tree(B)` is the
   same diff as `git diff A B`, so that pair *was* `parent-head..head` under a different name, the
-  exact range issue #267 had already measured folding `main`'s own advance into the repair's
-  apparent size (1,205 insertions where the repair was 562, on issue #248's own repair). Freezing
+  exact range an earlier measurement had already shown folding `main`'s own advance into the repair's
+  apparent size (1,205 insertions where the repair was 562, on a real repair). Freezing
   the id never froze the range. The replacement, `review_tier_for_repair`, takes commit-ish
   arguments and an ancestry guard: when the parent publication's own head is still an ancestor of
   this one and the narrower range touches at least one path, the answer reads
@@ -2376,7 +2300,7 @@ the workflow, it holds the tools.
   `base..head` with `range: "whole-change"` and a `whole_change_reason` — `"history-rewritten"`
   when the base moved and the branch was rebased onto it, which branch protection here forces
   whenever `main` advances during review, or `"empty-repair-range"` when the narrower range
-  touched nothing at all. The second review round on pull request #297 rejected the first shape
+  touched nothing at all. The second review round on it rejected the first shape
   of this guard too: `git merge-base --is-ancestor A A` exits `0`, so an identical-bytes republish
   (`parent-head == head`, a real input the contract itself names) made the ancestry check alone
   wave through an empty diff and derive a tier from nothing — a probe answered `low` over the
@@ -2402,7 +2326,7 @@ the workflow, it holds the tools.
   judges`, `two contexts` — within 120 bytes of a panel noun, catching a new absolute by default;
   only a specific, enumerated occurrence with a stated reason for still being true is let through.
 
-- **A row that decides nothing here now says so.** Issue #58: `Applies::Inert` had no producer —
+- **A row that decides nothing here now says so.** `Applies::Inert` had no producer —
   `AgentAdapter::applies` derived every row from `can_gate_tools()` alone, so `Delegated workers`
   read `Held` even on adapters with no host-routable agent-definitions surface, where the row's
   entire effect is an installed agent definition. `AgentAdapter::agent_definitions_root`
@@ -2437,9 +2361,7 @@ the workflow, it holds the tools.
   `Asked`; `docs/honesty.md` names the imprecision rather than hiding it.
 
 - **The correction budget ports as the source's own machine: two frozen Git tree object ids, never a
-  payload and never a mutable ref.** Issue #248, the sixth attempt after five rounds of severe
-  findings against payload-diff and commit-range designs — every one of them measured a repair
-  against something that could move under it. `publish_review`/`republish_review` now freeze
+  payload and never a mutable ref.** `publish_review`/`republish_review` now freeze
   `budget-genesis-tree`, `budget-genesis-paths`, `budget-original-lines` and `budget` on a repair's
   first round, from the original candidate's own merge base rather than its recorded (and possibly
   advanced) base; every later repair only grows `budget-cumulative`, read back from the parent
@@ -2472,7 +2394,7 @@ the workflow, it holds the tools.
   budget entirely; it now selects the newest publication on this pull request from the whole
   timeline instead of checking whether the issue's newest happens to be one.
 
-- **The `tasks` phase's output has an owner, in prose.** Issue #57: `skill/protocols/sdd.md`'s phase
+- **The `tasks` phase's output has an owner, in prose.** `skill/protocols/sdd.md`'s phase
   table already named `tasks` as leaving behind "the ordered work, each item independently
   checkable", but nothing said where that work must land once produced, or who answers for it
   reaching the issue when no phase produced one at all — measured against this checkout, zero of 131
@@ -2490,7 +2412,7 @@ the workflow, it holds the tools.
   one clause: that artifact is produced later, by whoever holds the issue, once the design is
   understood, not by the analyst filing it and not as a section every issue would carry.
 
-- **A filed finding names its receipt.** Issue #53: `blind-judges.md` said a warning or a suggestion
+- **A filed finding names its receipt.** `blind-judges.md` said a warning or a suggestion
   is filed as its own tracker issue, but only in the branch where the publication carried no severe
   finding, and said nothing about a `severe` finding recorded `pre-existing` or `base-only` — the one
   class a reviewer thought serious enough to block on. Both are now one rule, unconditional on the
@@ -2504,11 +2426,11 @@ the workflow, it holds the tools.
   and a dedicated test proves a body carrying one leaves the adjudicated holder unchanged. Filing
   remains asked for, not adjudicated: Estigia cannot see whether a caller ever calls `create`, nor
   that a named epoch or finding really exists. See `docs/honesty.md` for what that costs, measured
-  against this repository's own open issues — including #31, #54 and #76, three filings by three runs
+  against this repository's own open issues — including three filings by three runs
   across five days over two overlapping counts, with nothing but a 2026-09-06 prose comment linking
   them.
 
-- **The lens is launched.** Issue #251: five sealed lens definitions shipped, `RiskLevel::lenses`
+- **The lens is launched.** Five sealed lens definitions shipped, `RiskLevel::lenses`
   answered `0`/`1`/`5`, and nothing acquired one — `skill/SKILL.md` developer step 5 now does, beside
   the two judges and scaled by `review_tier`'s own count, in two waves: every acquired lens runs
   concurrently first, sealed and holding no `Read`; then the two judges run with the merged list of
@@ -2526,10 +2448,10 @@ the workflow, it holds the tools.
   See `docs/honesty.md` for what remains unproved.
 
 - **`review_tier` stops answering a judge count, and `Blind judges` stops being a setting.**
-  Issue #246: the source project this crate ports `review_tier` from counts lenses in Go
+  The source project this crate ports `review_tier` from counts lenses in Go
   (`SelectReviewLenses`, `risk.go:120-154`) and states judge counts in prose
   (`internal/assets/skills/judgment-day/SKILL.md`) — no Go of theirs counts judges at all. Wiring
-  their `0`/`1`/`4` lens dial to this binding's judge count, as issue #243 below did, put a number
+  their `0`/`1`/`4` lens dial to this binding's judge count, as an entry below did, put a number
   in code where they keep it in prose; `RiskLevel::judges` and the `"judges"` key in `review_tier`'s
   answer are deleted rather than replaced with a constant, because a hardcoded `2` in Rust is still
   counting judges in code. `Config::judges`, the `Judges` enum and the `Blind judges` row are gone
@@ -2543,7 +2465,7 @@ the workflow, it holds the tools.
   `single`'s tier-reduced panel are both gone with the setting that chose between them. `verdict.basis`
   no longer records a configured panel or a number of judges acquired.
 
-- **`review_tier` answers a lens count alongside its judge count.** Issue #243's first change:
+- **`review_tier` answers a lens count alongside its judge count.** The first change:
   `RiskLevel::lenses` reads `0` for `low`, `1` for `medium` and `high` alike — a lens count is
   questions whose subject the change contains, not opinions that scale with risk, so risk buys more
   judges and never more copies of the one lens question a `medium` or `high` change has a subject
@@ -2552,29 +2474,29 @@ the workflow, it holds the tools.
   answer, the MCP tool description and `skill/bindings/github.md`'s row all state the mapping, and
   `tests/honesty.rs` crosses both prose surfaces against `RiskLevel::lenses()` directly. Nothing
   launched a lens with it at the time: panel composition, `blind-judges.md`'s routing and
-  `record_review_finding` were all unchanged, and acquiring what this answers was separate work —
-  issue #251, below. See `docs/honesty.md` for why a lens count is not a risk dial. **Superseded above,
-  in this same unreleased entry:** the `judges` half issue #246 deleted was exactly the mistake this
+  `record_review_finding` were all unchanged, and acquiring what this answers was separate work,
+  described below. See `docs/honesty.md` for why a lens count is not a risk dial. **Superseded above,
+  in this same unreleased entry:** the `judges` half that was deleted was exactly the mistake this
   bullet described without naming — a lens dial wired to a judge count that the source project never
   derives from code at all.
 
 - **A third reserved reviewer role, `review-lens`, joins `review-blind` and `review-blind-sealed`.**
-  Issue #222 stage 3: a lens is sealed and carries one narrow question — does any sentence a change
+  A lens is sealed and carries one narrow question — does any sentence a change
   adds contradict any code the same change adds? — over the diff alone, rather than a judge's open
   scope. `RESERVED_REVIEWERS` now carries each row's own template beside its name and seal, and
   `skill/agents/review-lens.md` ships as its own asset. Nothing launched a lens at the time: panel
   composition and the finding gate were unchanged then, and this stage was the reserved name
   and the rendered definition alone — `review_tier` changed next, above. See `docs/honesty.md` for
-  what sealing a lens costs, contrasted with what sealing a judge cost on issue #48.
+  what sealing a lens costs, contrasted with what sealing a judge cost earlier.
 
 - **Four more sealed lenses ship, and `high` answers all five.**
-  Issue #246's remaining changes, beside the `judges` deletion and the lens-count answer above.
+  The remaining changes, beside the `judges` deletion and the lens-count answer above.
   `review-risk`, `review-readability`, `review-reliability` and `review-readback` join `review-lens`
   as reserved, sealed reviewer definitions — seven reserved names in total, alongside `review-blind`
   and `review-blind-sealed` — each carrying its own template and its own one-question scope; none is
   launched by this change. `RiskLevel::High.lenses()` moves from `1` to `5`: every sealed lens this
   build ships, not five copies of `medium`'s one question, because risk evidence gives each of them a
-  subject at once. **Supersedes, in this same unreleased entry:** issue #243's own bullet reads
+  subject at once. **Supersedes, in this same unreleased entry:** the earlier bullet reads
   `1` for `medium` and `high` alike, which was true when it was written and stops being true here. The
   severity floor the source project states in prose — only a finding that
   survives adversarial verification enters the fix loop, everything else is reported once and never
@@ -2588,7 +2510,7 @@ the workflow, it holds the tools.
   conflicting definition before upgrading.
 
 - **A severe finding's location must contain the whole claimed span, not merely overlap the change.**
-  Issue #182: `record_review_finding` checked a `severe`/`introduced`-or-`worsened` finding's
+  `record_review_finding` checked a `severe`/`introduced`-or-`worsened` finding's
   `path:start-end` location by overlap — the claim settled if *any one* of its lines fell in *any
   one* changed hunk, so `changed.rs:1-10` against a hunk of `5..=5` was admitted with nine of its
   ten lines never touched by the change being blamed. The predicate is containment now: one hunk's
@@ -2601,7 +2523,7 @@ the workflow, it holds the tools.
   for what the check does and does not still prove.
 
 - **Fifteen refusals that collapsed to `transport-refused` now arrive under their own name.**
-  Issue #225: `operation_marker`'s two `format!("{kind}-operation-conflict")`/
+  `operation_marker`'s two `format!("{kind}-operation-conflict")`/
   `format!("{kind}-metadata-mismatch")` constructors, `start_branch` handing `checkout_identity`'s
   bare `verdict` variable to the envelope, and `claim.rs`'s `require_pr_matches` choosing its
   `"reason"` with an inline `if`/`else` all built a value `build.rs`'s extractor cannot see — a
@@ -2622,7 +2544,7 @@ the workflow, it holds the tools.
   a literal nor one of the two recognised bound shapes, so the next one this class describes is
   caught here rather than found by accident, the way these four were.
 
-- **`create` no longer prepends the identity to the title it was handed.** Issue #230: 172 issues
+- **`create` no longer prepends the identity to the title it was handed.** 172 issues
   filed on this tracker average 194 characters per title, 168 of them slug-prefixed and 108 doubled
   — `<slug>: <slug>: <sentence>` — because `src/transport/commands.rs`'s `create` composed
   `format!("{identity}: {title}")` before ever calling `gh issue create`, and nothing in the crate
@@ -2637,7 +2559,7 @@ the workflow, it holds the tools.
   restating it, since `publish_review`/`republish_review` compose PR titles under the same rule.
 
 - **The runtime is attribution, recorded in every marker and compared as an identity nowhere.**
-  Issue #48: `claim`/`reclaim`, `unassign` and `handoff-review` pushed
+  `claim`/`reclaim`, `unassign` and `handoff-review` pushed
   `session::DEFAULT_RUNTIME` (`claude`) as the `--runtime` flag over MCP whatever agent ran, so
   every marker these three write recorded `runtime=claude` regardless of the caller. A new
   `session::runtime_of` derives the true value from the run id itself, split on the *last* `-` so a
@@ -2662,7 +2584,7 @@ the workflow, it holds the tools.
   (`src/transport/claim/tests.rs:308-325`) now asserts release succeeds regardless of what `dev:`
   labels are present, iterating an empty projection first.
 
-- **The sealed reviewer grant now names a tool a host can resolve.** Issue #213: `render_reviewer_agent`'s
+- **The sealed reviewer grant now names a tool a host can resolve.** `render_reviewer_agent`'s
   `Seal::Sealed` arm rendered `tools: none`, which seven one-shot Claude Code sub-agent launches
   probed on 2026-09-02 showed refuses at the launch boundary itself rather than merely denying every
   call — a sealed judge, as this crate rendered it, could not run on Claude Code at all. The arm now
@@ -2682,13 +2604,13 @@ the workflow, it holds the tools.
   rather than each hard-coding `Seal::Unsealed` or the literal `"review-blind"`;
   `authorize_review_blind_launch` takes the launched name and proves it against that name's own
   canonical path, so a project or user duplicate of either reserved name still refuses the launch
-  exactly as before. Issue #240 later folded both reserved names and their seals into one list,
+  exactly as before. A later change folded both reserved names and their seals into one list,
   `harness::roles::RESERVED_REVIEWERS`, read by setup's preflight, install and uninstall loops and
   by `reserved_reviewer` alike, so a third reserved name needs one row rather than four call sites
   kept in step by hand — the renderer's unconditional substitution above is what makes that row
   installable without widening `render_reviewer_agent`'s own match on `Seal` again.
 
-- **`release_ci` accepts a byte-exact receipt from a run that did not publish it.** Issue #44: a
+- **`release_ci` accepts a byte-exact receipt from a run that did not publish it.** A
   run pointer is deleted at `SessionEnd` while the tracker's own publication comment is not, so a run
   that resumed an issue, held the live `review` claim and supplied the timeline's own latest receipt
   used to be refused `published-transaction-mismatch` on the publisher field alone, even when every other
@@ -2700,8 +2622,7 @@ the workflow, it holds the tools.
   receipt no longer depends on who asks. See `docs/honesty.md` for what this restore does and does
   not prove.
 
-- **The review transaction records the execution topology a run declares.** Issue #97:
-  `publish_review`/`republish_review` take `--topology` and `--topology-reason`, write them to the
+- **The review transaction records the execution topology a run declares.** `publish_review`/`republish_review` take `--topology` and `--topology-reason`, write them to the
   `published` marker and echo them in the answer — recorded, not bound, since Estigia cannot observe
   how an agent wrote code, only what it declares. A `topology: inline` declared, trimmed and
   case-insensitively, at or past `SKILL.md`'s Direct Work Delegation writing threshold refuses unless
@@ -2711,7 +2632,7 @@ the workflow, it holds the tools.
   `record_review_verdict`'s evidence already is. See `docs/honesty.md` for what a declared topology
   still cannot prove.
 
-- **`review-blind`'s review contract is adapted from `gentle-ai`'s judge definition.** Issue #191
+- **`review-blind`'s review contract is adapted from `gentle-ai`'s judge definition.** It
   restructures the body's flat prose into `## Rules` and `## Review contract`, taking sweep budget
   and the precision gate's shape from `internal/assets/claude/agents/jd-judge-a.md` (MIT, Copyright
   (c) 2025 Gentleman Programming) in `gentle-ai`, adapted to this repository's own tooling, evidence
@@ -2729,20 +2650,19 @@ the workflow, it holds the tools.
   repository's own agents execute, not on staleness, and it does not reach a stale comment or a
   stale document the never-`severe` rule above already covers.
 
-- **A review now acquires fewer judges when `review_tier` answers `low` or `medium`.** Issue #196:
-  developer step 5 in `skill/SKILL.md` reads `review_tier` for the same base and head before
+- **A review now acquires fewer judges when `review_tier` answers `low` or `medium`.** Developer step 5 in `skill/SKILL.md` reads `review_tier` for the same base and head before
   acquiring, and acquires the smaller of its `judges` and the configured panel, never fewer than
   one. A `low` tier's `0` still acquires one reviewer, because `release_ci` refuses
   `qualifying-review-verdict-missing` without a distinct accepted verdict and a panel of none can
   never record one. A failed read, or a `null` `judges`, acquires the configured panel unreduced,
   since an unread tier is not clearance to reduce. The verdict's `basis` records the tier, the
   answered `judges`, the configured panel and the number acquired. `review_tier` itself is
-  unchanged — issue #189 delivered it unread, and against three real deliveries of this repository
+  unchanged — it was delivered unread, and against three real deliveries of this repository
   it answered `medium`/1 where the configured panel was `two blind`/2; that saving had never been
   taken.
 
 - **`review_tier` derives a review tier from the change itself, so panel size can be routed on
-  evidence instead of being fixed.** Issue #189 ports `ClassifyRisk` from `gentle-ai`
+  evidence instead of being fixed.** It ports `ClassifyRisk` from `gentle-ai`
   (`internal/reviewtransaction/risk.go`, MIT, Copyright (c) 2025 Gentleman Programming): three
   tiers, closed by construction, and the property that makes them worth having — **change size is
   read at a boundary, not as a magnitude**. A five-thousand-line documentation change and a
@@ -2788,9 +2708,7 @@ the workflow, it holds the tools.
   against, every one through `src/transport/claim.rs` — a 7,163-line module touched in 32 of this
   repository's last 40 commits, which made the classifier a constant function on this repository's
   own history. Dropping the busiest file would optimise the metric against the safety the rule
-  exists for: `claim.rs` is where `record_review_verdict` and `release_ci` live. Issue #51, splitting
-  that module, is what would let this producer be ported faithfully; until then it stays out rather
-  than shipped as a rule that always fires. Also not ported: the source project's content scan for a
+  exists for: `claim.rs` is where `record_review_verdict` and `release_ci` live. Also not ported: the source project's content scan for a
   shebang or a `subprocess`/`execute_process`/`exec` construct (`processBoundaryRiskReasons`) — it
   reads bytes through a `git grep` shape none of the other producers need. Both gaps narrow what
   reaches `high`, never what reaches `low`. One widening runs the other way and is named rather than
@@ -2804,9 +2722,9 @@ the workflow, it holds the tools.
   routes on this operation's answer yet; that is a separate decision.
 
 - **The repair ceiling counts what actually spends the budget: rejections plus author-elected
-  repairs, not rejections alone.** Issue #154 measured two cases in opposite directions: PR #152
+  repairs, not rejections alone.** Two cases were measured in opposite directions: one pull request
   ran six repair rounds with zero rejected verdicts, because every round was elected by the author
-  after a panel accepted, and the ceiling's counter never moved; PR #186 ran two rejections and zero
+  after a panel accepted, and the ceiling's counter never moved; another ran two rejections and zero
   elected rounds. Counting only rejections misses the first; counting only publications would have
   fired on the second at the round that succeeded. `repair_rounds` is a new read-only operation,
   no claim required, that derives the sum from the timeline. **Both terms are counted only for the
@@ -2818,25 +2736,25 @@ the workflow, it holds the tools.
   `rejected` is not author-elected, `rejections` already counts it; a parent on a different pull
   request is the previous work on the issue rather than a round this author elected; and a first
   publication with no parent counts as neither. Scoping one term and not the other was published
-  once and rejected by two judges — running the operation against issue #171's own timeline is what
+  once and rejected by two judges — running the operation against a real timeline is what
   found it, after a sweep of the documents had missed it. `rounds` is the sum, `ceiling` mirrors the
   configured `Repair ceiling` row when it can be read and is `null` when it cannot, and `at_ceiling`
   is `false` whenever the ceiling is off or unreadable. Nothing here refuses a publication, a
   verdict or a delivery; the escalation the ceiling triggers stays the orchestrator's own read of
   the answer, exactly as before. `docs/honesty.md`'s entry recording that nothing enforces the
   ceiling is narrower now — a run can ask for the number — and still stands: nothing makes it obey.
-  Run against issue #38's live timeline — the issue PR #152 published on — the
+  Run against a live timeline — the issue the first pull request published on — the
   operation answers `rounds 4, rejections 2, author_elected 2, ceiling "3", at_ceiling
-  true`; those figures are scoped to the pull request #38's latest publication names, not to
-  PR #152. A test replays PR #152's own shape — every round author-elected, no
+  true`; those figures are scoped to the pull request the issue's latest publication names, not to
+  the first one. A test replays the first pull request's own shape — every round author-elected, no
   rejection anywhere — and restoring the sum this replaces, rejections alone, turns
   it red at `rounds 0, at_ceiling false`.
 
 - **`publish_review` and `republish_review` omit the payload by default; `inline_payload: true`
   asks for it.** The answer used to carry `payload.text` unconditionally, with no argument to
-  suppress it. Measured on this repository, twice: issue #95's publication (PR #167) put
+  suppress it. Measured on this repository, twice: one publication put
   `payload_bytes` at 145,756, and the MCP answer was refused at 151,889 characters — the publishing
-  run could not read its own receipt back. Issue #171's publication (PR #184, head
+  run could not read its own receipt back. Another publication (head
   `1a1bb08f1755b931401c0a59c13b6dbe83c8a422`) put it at 73,272, refused at 76,588 characters — about
   half the first case, so the ceiling is reached by an ordinary change, not only a large one; that
   run recovered `epoch`, `head`, `base` and `digest` from the spill file by hand. The default is now
@@ -2847,12 +2765,12 @@ the workflow, it holds the tools.
   points at a checkout — it names no way to fetch the text afterwards, because publishing again to
   collect it would mint a new epoch and void every verdict recorded against the first. The payload is
   still never truncated, whether it is asked for or not. Asking for it inline does not make an
-  arbitrarily large answer deliverable: what refused the read-back at issue #95's size was the host's
+  arbitrarily large answer deliverable: what refused the read-back at that size was the host's
   own result cap and not `REVIEW_PAYLOAD_CEILING` — that payload was 145,756 bytes, under the
   262,144 the ceiling allows, which is why it materialised at all. The cap measures the whole JSON
   answer, which is the reconstruction — nobody measured the difference — offered for how those
   145,756 bytes became the 151,889 characters that were refused, once the diff's newlines and
-  quotes were escaped and the receipt fields added. Issue #168.
+  quotes were escaped and the receipt fields added.
 
 - **A publication lane whose run never executed a step is told apart from one that ran and
   failed.** A billing or spending-limit failure on the account running Actions answers every check
@@ -2865,7 +2783,7 @@ the workflow, it holds the tools.
   annotation, and clears only when the caller supplies `--never-ran-evidence-file` — read back
   verbatim on the same footing as `basis`, never re-run. The advisory `publication_lane` answers
   `never-ran` through the identical classification, so a run following Step 5's lane guidance
-  before ever reaching `record_review_verdict` sees the same state. Issue #95.
+  before ever reaching `record_review_verdict` sees the same state.
 
 - **`skill/bindings/github.md` is split into a binding and four conditionally-routed companions.**
   At 95,498 bytes it was the largest single item an activation paying for tracker work loaded whole.
@@ -2877,13 +2795,13 @@ the workflow, it holds the tools.
   every refusal untouched in place. The auto-close section keeps the hazard a dev must know before
   pushing and the `check_closing_keywords` pointer; the mechanics behind it — scan timing, the
   keyword list, the incidents — moved to `delivery.md`, split at the paragraph that names the tool.
-  No operation, refusal, marker, state name or capability mapping changed. Issue #89.
+  No operation, refusal, marker, state name or capability mapping changed.
 
 - **`review-blind` carries the severity decision rule, not only the three class names.** The
   definition named `severe`, `warning` and `suggestion` and which one blocks, and never said how to
   choose. The rule was routed to whoever runs the panel — `skill/policies/blind-judges.md` in full,
   `skill/SKILL.md` step 5 in part — and never to the judge, whose starting context the definition
-  itself limits to that definition and the launch prompt. Issue #131 is the measurement this closes:
+  itself limits to that definition and the launch prompt. The measurement this closes:
   four publications, eight blind judges, three rejected verdicts, zero code defects found; every
   blocking finding was prose a launch prompt happened not to paste the rule for.
 
@@ -2891,7 +2809,7 @@ the workflow, it holds the tools.
   on Claude Code alone, so on every other adapter that document is the only copy the machine gets and
   an orchestrator there pastes the rule into the launch prompt itself. Two copies is the smallest
   number that reaches a judge on one host and an orchestrator on the rest; the definition is the
-  authority if they disagree. Issue #144.
+  authority if they disagree.
 
 - **`expected_target` can omit its manifest; `audit_board` caps `foreign`.** Both sized themselves by
   the repository rather than by the caller, and neither had a way to ask for less. `expected_target`
@@ -2919,9 +2837,9 @@ the workflow, it holds the tools.
   proposed, and at the time it was unsafe: the queue read passed no ordering argument, the endpoint
   answered newest-first, and the transport then sorted each partition oldest-first over whatever
   arrived — so a smaller ceiling dropped the oldest issues while still presenting an oldest-first
-  list. Filed as issue #161 and fixed there; the default still stays 200.
+  list. The default still stays 200.
 
-- **The queue read asks for the oldest issues, not the newest.** Issue #161: `list_state` read
+- **The queue read asks for the oldest issues, not the newest.** `list_state` read
   `gh api … issues?state=open&labels=status:<s>&per_page=100` and cut it to `--limit`, and the REST
   endpoint answers newest-first by default — so a cut answer held the newest N and the transport then
   presented it under an oldest-first heading, with `at_limit` saying the list was cut but nothing
@@ -2968,7 +2886,7 @@ the workflow, it holds the tools.
   landing the identity-restricted road was reached by nothing that shipped: the only shipped adapter
   that calls `estigia gate`, the OpenCode plugin, carried no run id and exported no `ESTIGIA_RUN_ID`,
   so on an unmodified install every call it made took the road that cannot tell one task's identity
-  from another's. Issue #502 has the plugin forward the session id its host hands the hook, so a call
+  from another's. The plugin forwards the session id its host hands the hook, so a call
   carrying one takes the identity-restricted road from there on.
 
 - **The instruction surface has a registered byte ceiling.** `tests/instruction_ceiling.rs`
@@ -2977,8 +2895,7 @@ the workflow, it holds the tools.
   rows are named exceptions. It counts bytes, not whether the prose agrees with the gate, and
   it cannot see conditional routing.
 
-- **A repository can declare a daily range for commits, pushes, and branch creation.** Issue #10:
-  `Git operation window` is disabled by default and accepts one value such as `enabled 09:00-17:00`
+- **A repository can declare a daily range for commits, pushes, and branch creation.** `Git operation window` is disabled by default and accepts one value such as `enabled 09:00-17:00`
   or `enabled 22:00-06:00 inverted` — a half-open `[start, end)` range in this machine's local time,
   a start later than the end crossing midnight, equal endpoints invalid. Outside the permitted period
   the gate denies `git commit`, every ordinary `git push`, plain and porcelain `git branch` creation,
@@ -2996,8 +2913,7 @@ the workflow, it holds the tools.
   Delivery still requires an accepted verdict. Twenty-four typed settings. Reading the table
   produces a valid configuration or a refusal.
 
-- **`Review budget` names the per-judge token figure a review is reported against.** Issue #171:
-  defaults to `150000` and accepts `none`, following `Repair ceiling`'s own shape — a number with an
+- **`Review budget` names the per-judge token figure a review is reported against.** Defaults to `150000` and accepts `none`, following `Repair ceiling`'s own shape — a number with an
   off value. 150,000 is an inherited comparison target, not a number derived from the distribution;
   what is measured is the rate against it — twenty-eight judges across five issues, read from
   harness completion reports, put the minimum at 96,073, the median at 127,025 and the maximum at
@@ -3100,7 +3016,7 @@ the workflow, it holds the tools.
   never reads, now costs one tracker read on every write like the other
   five do. `estigia config set --repo` writes this file directly, outside
   any gated tool, and is unaffected. `docs/honesty.md` carries the full
-  account of all six cuts and the payload each one died on. Issue #32.
+  account of all six cuts and the payload each one died on.
 
 - **A run whose own claim lapsed can take the issue back through `claim`,
   without releasing it first.** `claim` and `reclaim` both reuse the operation
@@ -3369,7 +3285,7 @@ the workflow, it holds the tools.
   well. `docs/honesty.md` carries what that still leaves empty.
 
   **It is not an audit trail.** The pointer is keyed on the session and `SessionEnd` removes it, so no
-  later run reads it; that change’s criterion asking for one is split out as #29. One publication
+  later run reads it; that change’s criterion asking for one is split out separately. One publication
   claimed otherwise and two judges disproved it through the built binary; `docs/honesty.md` carries
   the measurement rather than a correction made quietly.
 
@@ -3999,7 +3915,7 @@ the workflow, it holds the tools.
   value) but not for a flag whose value is free text that itself happens to start with `--` — exactly
   what `basis` can send. A basis beginning with `--` was read as though `--basis` carried no value at
   all, `f.get("basis")` answered `None` for a caller that had supplied one, and the blank-basis
-  refusal — which exists to tell absent and empty apart — never saw either (issue #35). `SWITCHES` now
+  refusal — which exists to tell absent and empty apart — never saw either. `SWITCHES` now
   names every flag this transport reads with `on` rather than `get`/`need`/`number`/`path`, and
   `a_switch_nobody_passed_is_off` checks that list against the file's own `.on("...")` calls; every
   other flag now takes the next word as its value unconditionally, whatever that word looks like.
@@ -4010,7 +3926,7 @@ the workflow, it holds the tools.
   close is the hazard on its own terms: `markers::parse` scans forward from any `<!--` to the *first*
   `-->` it finds, wherever that is, so an unclosed opener in a caller's body borrows the next real
   marker's own close, reads everything in between — including that marker's opener — as one long
-  comment, and lets `parse` resume past a verdict or claim nothing ever read (issue #35). Every
+  comment, and lets `parse` resume past a verdict or claim nothing ever read. Every
   caller that escapes before posting or hashing runs it: `comment` escapes directly before appending
   its marker, `heartbeat` does the same, `protocol_body` runs it for the three review writers
   (handoff, finding, verdict) over the prose and the handoff's own `blocker`/`discharger`, and a
@@ -4019,7 +3935,7 @@ the workflow, it holds the tools.
   unclosed opener there is visible in the posted text too, not only in the digest.
 
 - **The lapsed-self exception now reaches an acquisition a foreign `reclaim` pushed out of the live
-  epoch.** Issue #83: #36 taught `claim` to recognise a reused id naming a **stale** acquisition of
+  epoch.** `claim` already recognised a reused id naming a **stale** acquisition of
   its own run, but that check read `holding().stale` only, and `reduce_ownership` truncates the
   timeline at the last takeover. A run whose own claim had lapsed and was then reclaimed **and
   released** by another run therefore sat in neither `live` nor `stale`, and the reused id met the
@@ -4032,8 +3948,8 @@ the workflow, it holds the tools.
   nothing, and `reclaim` is untouched.
 
 - **A neutralising verb now reads the repository's own configuration, closing the last shell road
-  that did not.** Issue #87: #32 gated every write to `.git/estigia/estigia.local.md`, and #85 made
-  the `REPOSITORY_SHELL` and `shell::writes_a_file` arms ask that file's question beside the
+  that did not.** Every write to `.git/estigia/estigia.local.md` was gated, and the
+  `REPOSITORY_SHELL` and `shell::writes_a_file` arms asked that file's question beside the
   control-surface one — but the `NEUTRALISES_A_FILE` arm asked `surface_of` alone, so
   `chmod 000 .git/estigia/estigia.local.md` answered `Untouched` while the same line on a control
   surface was a `Boundary`. The three verbs now ask `names_a_boundary` — the control surface, or the
@@ -4044,13 +3960,13 @@ the workflow, it holds the tools.
 
 ### Setup
 
-- **Pi is an adapter.** Issue #1178. `estigia setup pi` fences the directive into
+- **Pi is an adapter.** `estigia setup pi` fences the directive into
   `~/.pi/agent/AGENTS.md`, registers the MCP server in `~/.pi/agent/mcp.json` and writes the owned
   gate extension `~/.pi/agent/extensions/estigia-workflow-authority.ts`, whose `tool_call` handler
   hands `edit`, `write` and `bash` to `estigia gate --runtime pi` and blocks on a refusal. Skills
   come from the neutral `~/.agents/skills`. What was read from Pi 1.1.0 rather than observed in a model turn is in `docs/honesty.md`.
 
-- **Pi relays a sealed reviewer in process.** Issue #1178. `estigia setup pi` also writes
+- **Pi relays a sealed reviewer in process.** `estigia setup pi` also writes
   `~/.pi/agent/extensions/estigia-review-relay.ts`, which registers one tool, `estigia_review_lens`.
   Pi has no sub-agent tool to intercept, so the tool asks `estigia review prompt` for the prompt and
   the new `estigia review model` for the model the `reviewer` routing row named, runs one tool-free
@@ -4063,7 +3979,7 @@ the workflow, it holds the tools.
   observed live.
 
 - **A shared-screen save reaches every installed contract, and a per-agent screen offers only the
-  agent's own rows.** Issue #266. `config set` carried a row that is not per-agent — about the
+  agent's own rows.** `config set` carried a row that is not per-agent — about the
   repository or about this machine — into every installed contract, while the guided screen behind
   `config edit` wrote only the target it was opened on: a machine-wide answer the screen saved
   stayed in one root and the others kept the old value. `cli::write_edited_table` now carries every
@@ -4075,7 +3991,7 @@ the workflow, it holds the tools.
   `docs/honesty.md` no longer records the gap.
 
 - **`status` says why the tools half is off, and separates an impossible registration from a missing
-  one.** Issue #116. `tools off` was one word for four states — an adapter with no verified
+  one.** `tools off` was one word for four states — an adapter with no verified
   registration site, one whose site is known and simply not written yet, a file that cannot be read
   or parsed, and an entry under a key this build does not look under — and the only prose on the row
   answered the *gate* half, so the operator who asked why Estigia's MCP was absent in ZCode had to
@@ -4091,8 +4007,7 @@ the workflow, it holds the tools.
   `docs/lifecycle.md` now say the tools half can be permanently unavailable.
 
 - **A substitution is named wherever it moved a root, `paths::covers` compares both sides in one
-  vocabulary, and `DSH_HOME` is read.** Issues #73, #74 and #108, folding three consequences of the
-  #34 containment rule. `sync` with no adapter named built its target list from `is_present`, which
+  vocabulary, and `DSH_HOME` is read.** `sync` with no adapter named built its target list from `is_present`, which
   reads the *substituted* root, so the adapter the substitution moved was the one it could not find
   — and the note that would have explained the omission was attached only to an adapter that was a
   target, so it was lost with it; with no other adapter installed the run refused with `no agent has
@@ -4109,9 +4024,9 @@ the workflow, it holds the tools.
   one outside it is dropped in favour of `~/.dsh` and reported as the per-adapter note.
   `docs/honesty.md` and `docs/what-it-writes.md` move with all three.
 
-- **OpenCode receives the two delegated workers, in OpenCode's own dialect.** Issue #579: `Delegated
+- **OpenCode receives the two delegated workers, in OpenCode's own dialect.** `Delegated
   workers` was `Applies::Inert` on OpenCode — `agent_definitions_root` answered `None`, so the TUI
-  rendered it `(no effect)` and refused to edit it — and the absence was deliberate (#58), but only
+  rendered it `(no effect)` and refused to edit it — and the absence was deliberate, but only
   about reusing Claude Code's renderer rather than having OpenCode's. OpenCode now has a root at
   `$XDG_CONFIG_HOME/opencode/agents`, falling back to `~/.config/opencode/agents`, resolved per
   adapter rather than from the Claude configuration directory the old code hard-coded — a root under
@@ -4127,7 +4042,7 @@ the workflow, it holds the tools.
   `docs/honesty.md`, `README.md` and `skill/references/runtime-notes.md` move with it.
 
 - **The installed contract's model-routing sentence stops naming the portable routing, and names
-  Claude Code instead of "this host".** Issue #39: `Model routing` is `Scope::Agent`, so an adapter's
+  Claude Code instead of "this host".** `Model routing` is `Scope::Agent`, so an adapter's
   own `estigia.<slug>.md` may move the row, while `selected_documents` renders its sentence once into
   a contract every adapter sharing a skill root reads — the sentence cannot follow the override. On a
   host whose effective routing was `unset` (inherit), the contract still ordered the agent to hand
@@ -4141,7 +4056,7 @@ the workflow, it holds the tools.
   needing a second place an agent reads guidance from, and the rule here is to remove a copy
   rather than add one.
 
-- **The OpenCode gate loads on OpenCode 2.** Issue #498: `setup opencode` rendered an OpenCode 1
+- **The OpenCode gate loads on OpenCode 2.** `setup opencode` rendered an OpenCode 1
   plugin — a named function export returning a `tool.execute.before` hook — and OpenCode 2 refuses
   any module without a default definition carrying an `id` and a `setup`/`effect`, so after a host
   upgrade the file stayed on disk, `status`/`doctor` went on reporting the OpenCode gate as live
@@ -4159,7 +4074,7 @@ the workflow, it holds the tools.
   2.0.16: the module loads with no `failed to load plugin` warning, a refusing gate blocks the call,
   and an allowing one lets it through.
 
-- **Planning phases persist their own artifacts and return a result contract.** Issue #204: with
+- **Planning phases persist their own artifacts and return a result contract.** With
   the artifacts on the issue, `spec`, `design` and `tasks` render with the tracker's `comment`
   operation in their tool list (`mcp__estigia__comment`) instead of depending on the orchestrator
   to copy the artifact by hand; with the artifacts under `openspec/` they keep the `Write` they
@@ -4171,10 +4086,10 @@ the workflow, it holds the tools.
   artifact lives on the tracker.
 
 - **`setup` no longer refuses a reviewer definition it wrote itself, and stops needing a hand-frozen
-  body per template edit.** Issue #256. Ownership of `~/.claude/agents/review-blind.md` and its six
+  body per template edit.** Ownership of `~/.claude/agents/review-blind.md` and its six
   sibling reserved reviewers was decided by byte-matching the installed file against a list of every
   body Estigia had ever shipped — `reviewer_is_static` for the current renderings, the
-  `REVIEWER_TEMPLATE_BEFORE_*` ledger issue #137 added for the older ones. That list has to be
+  `REVIEWER_TEMPLATE_BEFORE_*` ledger added for the older ones. That list has to be
   extended by hand *before* a template change ships, and `src/setup/tests.rs` records this
   repository's own decision not to extend it for an in-flight repair round, on the reasoning that
   nobody runs those bytes. `--allow-source-build` is the flag that makes that false: it installs
@@ -4398,8 +4313,7 @@ the workflow, it holds the tools.
 
 ### Refusals
 
-- **A near-miss integration names the shape, not a delivery reason that is false for it.** Issue
-  #917: a `git merge` in the run's own checkout whose shape the integration exemption does not prove
+- **A near-miss integration names the shape, not a delivery reason that is false for it.** A `git merge` in the run's own checkout whose shape the integration exemption does not prove
   — a pipe, a redirect, a second command, a quoted ref — fell through to `out-of-phase` in
   `in-progress`, or to `verdict-bound-to-other-bytes` when the checkout head had moved, and neither
   said the shape was the problem; a run measured on 2026-10-06 read both as "the merge is forbidden"
@@ -4410,18 +4324,16 @@ the workflow, it holds the tools.
   `publication-base-not-ancestor`'s `action` and the `skill/bindings/github.md` row now name the same
   literal and the `in-progress` requirement.
 - **The caller's own fields are bounded by the comment they land in, before any remote write.**
-  Issue #307: `run-id`, `topology` and `topology_reason` are caller-supplied and reach the published
+  `run-id`, `topology` and `topology_reason` are caller-supplied and reach the published
   comment — `run-id` on the marker, the topology on the marker and in the prose — so any could grow
   it past its 65,536-character cap after the branch was pushed. `publication-comment-too-large` now
   refuses them before the fetch, against the cap less an enumerated fixed overhead, the
   genesis-manifest ceiling and the publication lane's own measured width.
-- **The blank-topology-reason refusal names the topology it is refusing a reason for.** Issue #409:
-  the `blank-topology-reason` action assumed `topology: inline` and mentioned "past the threshold",
+- **The blank-topology-reason refusal names the topology it is refusing a reason for.** The `blank-topology-reason` action assumed `topology: inline` and mentioned "past the threshold",
   which is wrong for any other declared topology and for none. It now names the declared value, or
   says no topology was declared when there is none, and only an `inline` declaration is told to say
   why it needed no delegation — a delegated topology needs no reason at all.
-- **The base-advance refusal names both recoveries, and the operation that clears each.** Issues
-  #305 and #553: `publication-base-not-ancestor` told a run to "rebase ... and publish again", but a
+- **The base-advance refusal names both recoveries, and the operation that clears each.** `publication-base-not-ancestor` told a run to "rebase ... and publish again", but a
   rebase rewrites the parent head and the ordinary push is then a non-fast-forward, so on any
   publication after the first the named recovery landed on a second refusal and `republish_review` —
   the leased push that clears it — went unnamed. The `action` and the `skill/bindings/github.md` row
@@ -4433,14 +4345,14 @@ the workflow, it holds the tools.
   reason — the two others that name a rebase (`publication-unconfirmed`,
   `publication-readback-disagrees`) already name `republish_review`.
 - **A `published` marker whose fields are present but unreadable is refused by name rather than read
-  as an absent one.** Issue #272: `ReviewReceipt::from_marker` and `CorrectionState::from_marker`
+  as an absent one.** `ReviewReceipt::from_marker` and `CorrectionState::from_marker`
   both answered `Option`, so a corrupt publication was dropped from the lineage by `all_publications`
   and a half-written correction budget reset the lineage's cumulative to zero in silence. Both readers
   now answer absent, present-and-valid, or present-but-unreadable, the third refused as
   `published-transaction-unparseable` or `correction-state-unparseable`, naming the marker's `epoch` and
   the first offending `field`, before anything remote moves. A marker carrying *none* of the budget
   fields is the pre-budget migration path and is still admitted. Measured against this repository's
-  own timeline: the oldest surviving `published` marker (issue #50, 2026-08-23) is complete and none
+  own timeline: the oldest surviving `published` marker (2026-08-23) is complete and none
   of the 649 recorded is malformed, so no legitimate marker is turned unreadable.
 - **A `delivery-pr-unidentified` refusal says which byte disqualified the merge
   command, and the number must precede the flags.** `pr_merge_target` retains
@@ -4479,7 +4391,7 @@ the workflow, it holds the tools.
 
 ### Guards
 
-- **The four `judge-workspaces` input refusals are held by tests.** Issue #948: `judge_workspaces`
+- **The four `judge-workspaces` input refusals are held by tests.** `judge_workspaces`
   declares four refusals on caller input — an absent or `unset` `Worktree location`, a relative
   `--worktree-root`, a `--count` of zero and a count above `MAX_JUDGES` — and none was exercised, so
   deleting or inverting any guard left the suite green. Four tests now hold them, each asserting the
@@ -4492,8 +4404,7 @@ the workflow, it holds the tools.
   Production behaviour is unchanged: no refusal reason, wording or envelope moved.
 
 - **An integration line's clearance is pinned by its consequence, and the criterion that explained
-  the `DELIVERS` exclusion now matches the list it explains.** Issue #335, four findings #303's panel
-  delivered. `docs/honesty.md` and `CHANGELOG.md` justified keeping `git pull` out of `DELIVERS` with
+  the `DELIVERS` exclusion now matches the list it explains.** `docs/honesty.md` and `CHANGELOG.md` justified keeping `git pull` out of `DELIVERS` with
   "an integration lands nothing on a shared ref", which separates nothing: `git merge` is in
   `DELIVERS` and also lands nothing on a shared ref, while `git push` lands on one and is excluded.
   Both now use the wording `tests/guards.rs` already carried — an integration step rather than a
@@ -4504,8 +4415,8 @@ the workflow, it holds the tools.
   `an_integration_clears_stale_verdict_rather_than_being_refused_as_a_delivery`, demonstrated by
   running that mutation. The classification itself is unchanged.
 
-- **The envelope fallback's evidence delivery is held by acceptance tests.** Issue #90: `translate`
-  repeated a refusal envelope's scalar fields in the fallback message (issue #381, `envelope_detail`),
+- **The envelope fallback's evidence delivery is held by acceptance tests.** `translate`
+  repeated a refusal envelope's scalar fields in the fallback message (`envelope_detail`),
   but the four criteria that issue set were never tested — the last-resort string was written and
   unobserved, and no test drove a `Failure::Stop` payload carrying the `review-target-mismatch` lists.
   Two tests now hold it: `a_stop_that_names_evidence_and_no_detail_hands_the_lists_to_the_agent`
@@ -4513,10 +4424,9 @@ the workflow, it holds the tools.
   `differing` reach the refusal's own text while `code`, `outcome`, `replay` and `resolution` render
   unchanged, and `a_stop_with_nothing_scalar_falls_back_to_the_context_and_the_code` pins the last
   resort. The first reddens with `expected_target: the transport exited 1` when the fallback is
-  reverted to the pre-#381 form.
+  reverted to its earlier form.
 
-- **The isolated-payload crosses build their comparison side fenced, not from the machine.** Issue
-  #359: `review_payload_bounded` builds its diff in an isolated `GIT_DIR` with the child's
+- **The isolated-payload crosses build their comparison side fenced, not from the machine.** `review_payload_bounded` builds its diff in an isolated `GIT_DIR` with the child's
   environment replaced, and the tests that cross that payload against a diff they build themselves
   built the comparison ambient. Before isolation both sides were ambient, so the cross was
   insensitive to the machine; after it, an attributes file marking every path `-diff` — through a
@@ -4531,7 +4441,7 @@ the workflow, it holds the tools.
   unfenced diff collapses and the fenced one stays byte-identical to the isolated payload.
   `review_payload_bounded`'s own behaviour is unchanged.
 
-- **The document byte registry checks drift, not only growth.** Issue #278: `DOCUMENTS` in
+- **The document byte registry checks drift, not only growth.** `DOCUMENTS` in
   `tests/instruction_ceiling.rs` was checked in one direction. `documents_stay_under_their_registered_byte_ceilings`
   refused a file above its entry, but an entry left *above* its file passed silently and handed back
   that much growth with no review-visible edit — exactly the gap the registry exists to close, and the
@@ -4544,7 +4454,7 @@ the workflow, it holds the tools.
   `skill/protocols/sdd.md` (8,697→8,692) and `skill/references/safety-incidents.md` (11,709→11,647).
 
 - **Three checks in the reviewer-vocabulary crossing asserted less than the prose beside them
-  claimed.** Issue #343: the crossing asserted each accepted vocabulary value against a reviewer's
+  claimed.** The crossing asserted each accepted vocabulary value against a reviewer's
   own template bytes and then again against its rendered body. `render_reviewer_agent` only
   substitutes `{{TOOLS}}`, `{{DISCIPLINE}}` and the name line, none of which any value is a substring
   of, so the rendered assertion could never fail where the template one passed — it is removed, and
@@ -4559,14 +4469,14 @@ the workflow, it holds the tools.
   for another reddens naming both, and removing a field name from one template reddens naming the
   template.
 - **The base-ancestry refusal's placement above the payload materialisation is held by a test.**
-  Issue #306: a comment, the refusal table row and a `docs/honesty.md` paragraph called the order
+  A comment, the refusal table row and a `docs/honesty.md` paragraph called the order
   load-bearing, but moving the `is_ancestor` block below `review_payload` left the whole suite green —
   an oversize corrupted diff would be measured against `review-payload-too-large` before being
   refused. `the_base_ancestry_refusal_precedes_the_payload_materialisation`
   (`src/transport/target/tests.rs`) binds the order through `source_text::code_of`, so the comment
   above the call cannot move the boundary, and the mutation was run: moving the block below
   `review_payload` reddens it with the ordering named.
-- **The control-surface registry now holds the matcher, not only the list.** Issue #13: the
+- **The control-surface registry now holds the matcher, not only the list.** The
   `control-surface` declaration fingerprints `CONTROL_SURFACE`, a list, so a change to the code that
   decides against it never reopened the claim. Three such changes rode through one pull request with
   the registry green — honouring a trailing `/` as a directory, anchoring fragments that begin with
@@ -4581,11 +4491,11 @@ the workflow, it holds the tools.
   `tests/guards.rs`'s module documentation no longer says the matcher is outside the registry.
 
 - **The symbols `skill/` names are crossed against the code that owns them, for three of the five
-  classes issue #52 enumerates.** `skill/` is instruction an agent installs and obeys, not
+  classes it enumerates.** `skill/` is instruction an agent installs and obeys, not
   documentation about the product, and nothing checked that the symbols it names exist. Three
   crossings now do, and the corpus behind each is **extracted from the Markdown on every run rather
   than enumerated in a list somebody must remember to extend** — the property whose absence cost
-  issue #137 four recurrences before #256 undid it. `crate::markdown::markdown_inline_code_spans`
+  four recurrences before it was undone. `crate::markdown::markdown_inline_code_spans`
   reads every inline code span, skipping fenced blocks entirely, so a prose mention never enters the
   corpus and a symbol inside a fence never does either.
   **Refusal codes** gain the direction nothing crossed before: the existing test asks whether every
@@ -4755,7 +4665,7 @@ the workflow, it holds the tools.
 
 ### Documentation
 
-- **The GitHub binding loads a quarter of what it did.** Issue #1047. `skill/bindings/github.md` fell
+- **The GitHub binding loads a quarter of what it did.** `skill/bindings/github.md` fell
   from 113,675 bytes to 27,486: the per-code refusal table moved to
   `skill/bindings/github/refusals.md`, loaded when a refusal is not self-explanatory; the operations
   table's guarantee column moved to `skill/bindings/github/operations-guarantees.md`; and the
@@ -4763,29 +4673,27 @@ the workflow, it holds the tools.
   detail the tools already carry moved out — and four operations-table rows that had carried an
   unescaped pipe inside a flag list now escape it, so they render as cells.
 - **The reason three sentences give for `world: committed` no longer says the marker is present,
-  which is false for one of the refusals they name.** Issue #519, from all three review contexts of
-  #419. The `adjudicate` doc (`src/transport/claim.rs`), `Answer::already_wrote`'s doc
+  which is false for one of the refusals they name.** The `adjudicate` doc (`src/transport/claim.rs`), `Answer::already_wrote`'s doc
   (`src/harness/tracker.rs`) and the `resumed_reclaim` retry test's doc comment said the post-write
   refusals carry `world: committed` because the marker is on the timeline;
   `claim-operation-no-longer-current` and `reclaim-operation-no-longer-current` fire exactly when the
-  marker left it, and `CHANGELOG.md`'s own #419 entry already described that path as "read visible
+  marker left it, and `CHANGELOG.md`'s own entry already described that path as "read visible
   and then left the timeline before adjudication read again". All three now say the write had already
   landed — read visible by the visibility loop or found by the retry's first read — so the flag
   reports the landing, not the marker's survival. No behaviour changed; no refusal changes its world
   value.
 
 - **Three documents that still said a plugin host has no session identity to give are corrected.**
-  Issue #504, folding #505 and #506. The `gate` command's `--run-id` doc (`src/cli/args.rs`) and
+  The `gate` command's `--run-id` doc (`src/cli/args.rs`) and
   `holders_of`'s doc (`src/harness/guard.rs`) both described the optional identity as the road an
-  agent with no session id takes; #502 had already taught the OpenCode plugin to forward the host's
+  agent with no session id takes; the OpenCode plugin already forwards the host's
   session id as `--session-id` with `--runtime`, so both now say the identity may be derived and only
   a call with none is found by asking which oath covers the checkout. `docs/review-cost.md` said in
   the present tense that the only shipped caller passed none, with a dead `src/setup/plugin.rs:97`
   citation; it now says the adapter passed none at the time and takes the derived-identity road when
   the host supplies one. No code or behaviour changed.
 
-- **A count that was never measured, and the third copy the fix left behind.** Issue #351, folding two
-  findings #340's panel delivered. `docs/honesty.md` said "four tests drive `review_tier` end to
+- **A count that was never measured, and the third copy the fix left behind.** `docs/honesty.md` said "four tests drive `review_tier` end to
   end"; the file holds 21 `review_tier` / `review_tier_for_repair` call sites across at least 17
   distinct `#[test]` functions, so the number was invented and understated by more than four times.
   The sentence now names no count, and the parallel `CHANGELOG.md` sentence — which already carried
@@ -4798,27 +4706,25 @@ the workflow, it holds the tools.
   refused by `explained_matches_level`. The classification is unchanged.
 
 - **The containment entry names the ordering precondition, `--no-textconv`, the safe direction, and a
-  fused range for what it is.** Issue #239, folding five findings the #182 panel delivered. The
+  fused range for what it is.** The
   paragraph said `first_unchanged_line`'s walk holds because consecutive new-side ranges are pairwise
   separated, but the walk also needs them **ascending** — which git's new-side order supplies and the
   entry now says. The four pinned things that keep a fused range from forming now include
   `--no-textconv` beside the `--no-ext-diff` already cited, because a `gitattributes` textconv driver
   makes `git diff` diff converted text and the `@@` new-side numbers stop naming source lines. The
   paragraph names which of its two failure directions is safe (**too strict**), and a fused range is no
-  longer called "the overlap defect" — that named a predicate #182 removed, where the fused case is a
+  longer called "the overlap defect" — that named a predicate since removed, where the fused case is a
   defect of the ranges. The three stale code citations beside them are re-derived, and
   `repo_with_head_text`'s doc comment no longer claims every changed-line fixture below while
   `repo_with_one_deleted_line` now uses it instead of copying its setup. No behaviour changed.
 
-- **Two `docs/honesty.md` enumerations that named the wrong call sites are gone.** Issue #104, from
-  the judges of #60's last round: the `build_info`-regression paragraph listed a guarded early return
+- **Two `docs/honesty.md` enumerations that named the wrong call sites are gone.** The `build_info`-regression paragraph listed a guarded early return
   "outside `src/`" that exists only inside it, and the deferred three-state paragraph named
   `gate_age_verdict` and `status --json`'s field as readers of `build_info::dirty()` when the former
   takes a `bool` and the latter reads `VERSION`. Both conclusions stand without the lists, so both
   lists are deleted rather than maintained against the code.
 
-- **Four claims beside the verdict-basis crossing test now agree with the code, or are gone.** Issue
-  #101, from the two judges of #35's publication. The `CHANGELOG.md` crossing-test paragraph claimed
+- **Four claims beside the verdict-basis crossing test now agree with the code, or are gone.** The `CHANGELOG.md` crossing-test paragraph claimed
   the test checks the one physical line on "the two of those six where a whole-file `contains` would
   have let the requirement drift to some other paragraph of the same document" — but the policy
   document, `skill/SKILL.md` and the `review_verdict` row are three where a whole-file `contains` could
@@ -4833,7 +4739,7 @@ the workflow, it holds the tools.
   `VERDICT_BASIS_REQUIREMENT` byte, or crossing assertion changed.
 
 - **The payload-membership row and doc comment state the limit the tool description already did.**
-  Issue #753, from the #355 panel: `skill/bindings/github.md`'s `review_payload_membership` row called
+  `skill/bindings/github.md`'s `review_payload_membership` row called
   a passing answer a "genuine subset" and stopped at "every non-empty line must be a line somewhere in
   the payload", and the `///` on `review_payload_membership` said the same and no more. Both now carry
   the limit the MCP tool description states — membership checks presence only, never order,
@@ -4844,10 +4750,10 @@ the workflow, it holds the tools.
   and what `publish_review` records, are unchanged.
 
 - **The never-ran binding row and the id-collation sentence name the behaviour and the function they
-  meant.** Issue #751, from the #349 panel: `skill/bindings/github.md`'s `blank-never-ran-evidence`
+  meant.** `skill/bindings/github.md`'s `blank-never-ran-evidence`
   row still said `--never-ran-evidence-file` is refused only when "empty or whitespace-only", and its
   `review_verdict` row said the reason fires "when blank", so an agent reading the contract believed a
-  one-word file clears the lane — the behaviour #349 changed. The row now names filler (`n/a`, `TODO`,
+  one-word file clears the lane — the behaviour that has since changed. The row now names filler (`n/a`, `TODO`,
   `placeholder`, and their kin) beside the empty and whitespace-only cases, matching the sibling
   `blank-review-basis` row, and the reason reads "blank or filler". `docs/honesty.md`'s `id`-collation
   sentence named `record_review_finding`, which contains no such grouping; the grouping is `by_id`
@@ -4855,8 +4761,7 @@ the workflow, it holds the tools.
   function. The binding's byte figure moved with the edit: its `tests/instruction_ceiling.rs` ceiling
   and the `docs/honesty.md` "Measured at this HEAD" cell both now read 106,428.
 
-- **The comparator section's qualifiers are narrowed to what its source supports.** Issue #366,
-  folding #153: nine observations three panels left standing on `docs/review-cost.md`'s `## What the
+- **The comparator section's qualifiers are narrowed to what its source supports.** Nine observations three panels left standing on `docs/review-cost.md`'s `## What the
   comparison is between` are answered in one change, preferring deletion to explanation. The task-flow
   layer no longer names *review transactions* among the members with no counterpart, since the
   comparison project carries a review-receipt schema; the blind-judges row now says what launches that
@@ -4866,44 +4771,42 @@ the workflow, it holds the tools.
   count is stated as *non-test lines of Go source*; the per-judge figures' `shape` is defined at its
   introduction as the handing, not the rubric; the C2 row's `--run-id` citation points at the
   disclosure it meant; and the closed-role-vocabulary fact is left in `docs/review-cost.md` and this
-  changelog, its `docs/honesty.md` copy removed. From #153: the review-cost entry's superlative
+  changelog, its `docs/honesty.md` copy removed. The review-cost entry's superlative
   regains its `cost` scope, the `before this fix` phrase loses the count that did not resolve, and the
   sentence enumerating the judge's own definition no longer claims to enumerate it. The comparator
   table, the layer decision and the figures are unchanged in substance.
 
-- **Which runtimes Estigia adapts, and on what evidence, is written down.** Issue #590:
-  `docs/what-it-writes.md` gains the admission rule — a runtime is adapted when the instruction file
+- **Which runtimes Estigia adapts, and on what evidence, is written down.** `docs/what-it-writes.md` gains the admission rule — a runtime is adapted when the instruction file
   its host loads and where it discovers a skill are verified from what the runtime itself ships —
   together with what a listed adapter does and does not promise (a gate only where the runtime can
   refuse a tool call) and what an unadapted runtime gets (nothing, and no invented command). The
-  rule answers #62 rather than the asking, and names the count drift it carries (#31, #54, #76).
+  rule gives its answer rather than the asking, and names the count drift it carries.
   `docs/parity.md` settles adapter coverage the same way, and `AGENTS.md`'s enumeration of `docs/`
   names the parity document.
 
-- **The review-tier run of the honesty contract has its own document.** Issue #581: `docs/honesty.md`
+- **The review-tier run of the honesty contract has its own document.** `docs/honesty.md`
   had reached 7,827 lines, and its last run — "The review tier, the lens and the finding", 1,214
   lines — now lives in [`docs/honesty-review-tier.md`](docs/honesty-review-tier.md). The entries keep
   the order they were written; the run stays last and nothing follows it. `docs/honesty.md` keeps its
   `##` table of contents, loses that one entry, and points at the new document, which
   `docs/README.md`'s map now names. No entry was rewritten or removed, and the six pointers that
-  crossed the new boundary — a "new entry below", a "fix-delta-digest entry above", the issue #95
+  crossed the new boundary — a "new entry below", a "fix-delta-digest entry above", a further
   entry, a refusal test named above, the `build.rs` vocabulary pointer, and a neighbouring "above" —
   now name the document they point at; one already-stale `docs/honesty.md` coordinate is re-aimed at
   the entry it meant. `tests/honesty.rs`, `src/config/tests.rs` and `src/setup/tests.rs` read the two documents
   rather than one path; the rest of the ledger is unchanged, and extracting it further is left to a
   later change.
 
-- **The parity target has a document and a revision.** Issue #587: `docs/parity.md` fixes which
+- **The parity target has a document and a revision.** `docs/parity.md` fixes which
   `gentle-ai` release Estigia is compared against (`v3.7.0`, 2026-09-23), names the layer that is in
   scope — claim and gate, the state contract, independent review, the planning binding, adapter
   registration, the installer lifecycle — and records each ecosystem component Estigia deliberately
   does not carry, with where it lives instead. `docs/honesty.md`'s `a537c63e` citations stay as the
   checkout those measurements were read from, which the new document states rather than silently
-  re-pointing. The shared layer's remaining differences are an ordered list naming their issues
-  (#588, #589, #590); model routing is left to the issues that already hold it, and the SDD phase set
+  re-pointing. The shared layer's remaining differences are an ordered list; model routing is left to the work that already holds it, and the SDD phase set
   is recorded as a decision rather than a defect.
 
-- **The comparator behind the review-cost figures is written down.** Issue #362: `docs/review-cost.md`
+- **The comparator behind the review-cost figures is written down.** `docs/review-cost.md`
   gets a closing section naming which of the two review stacks' four reviewer layers — lens, refuter,
   targeted validator, blind judges — exist on each side, citing each from its own checkout: the lens
   and the refuter exist on both, the targeted validator has no counterpart here, and nothing in the
@@ -4916,7 +4819,7 @@ the workflow, it holds the tools.
   discarded. `docs/honesty.md` records that no judge-versus-judge figure exists on either side, and
   that no figure in `docs/review-cost.md` measures a whole delivery.
 
-- **A lens now states the two words the routing already read.** Issue #258: every shipped lens
+- **A lens now states the two words the routing already read.** Every shipped lens
   definition now asks a lens for a class and, on a `severe` finding, for `evidence_class` and
   `causal_disposition` — the two fields `record_review_finding`'s routing and
   `skill/policies/blind-judges.md`'s own prose already read off a finding, which no lens
@@ -4930,7 +4833,7 @@ the workflow, it holds the tools.
   whatever the orchestrator passes, and the five new prose copies of the stale-prose rule are
   crossed by nothing.
 
-- **A third limit on sealed judges is recorded.** Issue #255: the payload a sealed judge reviews is
+- **A third limit on sealed judges is recorded.** The payload a sealed judge reviews is
   a copy the orchestrator re-emitted into its launch prompt, which no digest binds and no grant that
   judge holds could check against the receipt. `skill/policies/blind-judges.md` no longer calls that
   evidence checkable against the receipt, `docs/review-cost.md` now names the handing an instruction
@@ -4940,12 +4843,12 @@ the workflow, it holds the tools.
   lens, the orchestrator mistyped one registered byte count, every receipt identifier in that brief
   stayed correct, and nothing but a re-read caught it.
 
-- **`docs/review-cost.md` measures what a blind review costs, against the target issue #38 named.**
-  Two panels launched concurrently over PR #142 (issue #131) — Estigia's shipped `review-blind`
+- **`docs/review-cost.md` measures what a blind review costs, against a real review target.**
+  Two panels launched concurrently over one pull request — Estigia's shipped `review-blind`
   brief and a comparison rubric — came within 8.7% on tokens and 13.7% on
   latency. One behavioural finding, graded `severe` under one brief and not filed at all under
   the other though both panels read the same bytes, is what would force a repair round: the
-  missing choosing rule between `severe` and `warning` (issue #144), not judge reading speed.
+  missing choosing rule between `severe` and `warning`, not judge reading speed.
   `docs/honesty.md` records what the measurement does not close. A second measurement beside it
   runs the compared project's own binary against a real review transaction and reports what each
   system sends a reviewer, how many it selects and how many corrections it permits; no reviewer
@@ -4953,7 +4856,7 @@ the workflow, it holds the tools.
 
 ### Removed
 
-- **The `Project board` setting.** Issue #610, third of a chain: whether the workflow state was
+- **The `Project board` setting.** Whether the workflow state was
   mirrored onto a GitHub Project was decided by a `Project board` row holding `owner/number` or
   `none`, and the mirror targeted that one board. The row and `BoardRef` are gone; `create` and
   `transition` read the projects an issue belongs to — its own `projectItems` — and set the `Status`
@@ -4963,11 +4866,11 @@ the workflow, it holds the tools.
   row, `doctor`'s `inert_for_this_tracker` and `setup::needs_operator_answer` go with it, and
   `skill/bindings/github/board.md` is retired.
 
-- **The `list-boards` operation.** Issue #610, second of a chain: the paged listing that fed the
+- **The `list-boards` operation.** The paged listing that fed the
   setup screen's board picker is gone, with the picker itself and the TUI state behind it. Nothing
   else read it, so `Project board` is typed directly until the row itself is removed.
 
-- **The `audit-board` operation.** Issue #610, first of a chain: the paginated pass that compared
+- **The `audit-board` operation.** The paginated pass that compared
   every card's column against its `status:*` label — and `--fix` to repair it — is gone. The mirror
   in `create` and `transition` and its read-back are unchanged; what leaves is the standalone drift
   audit and its four answer lists (`drift`, `missing_column`, `foreign`, `unread_labels`), with the
@@ -4976,7 +4879,7 @@ the workflow, it holds the tools.
   `list-state`'s `unchecked`.
 
 - **This repository's own `openspec/` tree is retired; the `Planning` axis it is written under
-  stays.** Issues #557 and #570: the tree held this repository's own planning artifacts, and it is
+  stays.** The tree held this repository's own planning artifacts, and it is
   gone — the README, `AGENTS.md`, `docs/README.md` and the documentation-link walk no longer point
   at it. What did *not* change is the option itself: `Planning` still accepts `direct`, `sdd`,
   `sdd lite`, `sdd openspec` and `sdd lite openspec`, a repository that chooses `sdd openspec` still
