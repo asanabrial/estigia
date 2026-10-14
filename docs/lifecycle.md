@@ -147,6 +147,41 @@ estigia release --run-id claude-0198fe1c
 the latter. `estigia prune` is the operator-invoked sweep for what no delivery owned; the contract's
 delivery reference has the rules, and [`honesty.md`](honesty.md) what neither can see.
 
+Work is lost by being forgotten more often than by being deleted, so `estigia changes [--json]` reads
+every checkout git has registered for the repository, and every one a run pointer names, and reports
+what each holds that no commit does. It is read-only and Git is its only source:
+
+- the path, and the branch (`detached`, or `no commits yet`, when there is none);
+- the uncommitted files, each with a marker (`M` modified, `A` added, `D` deleted, `R` renamed, `U`
+  untracked) and its added and removed line counts where Git or the file can say;
+- the commits not on the upstream, when it has one, and the newest modification among the files;
+- the run and issue whose pointer names the checkout, and `orphan` when no readable pointer does.
+
+A checkout git cannot be read in, or does not answer within fifteen seconds, is reported
+`unreadable` with the reason, never omitted. `estigia prune` lists every checkout it keeps with its
+reason, an unmerged and unclosed branch included, and names the uncommitted files it carries; what
+`--confirm` removes is unchanged. What `changes` does not yet do is in [`honesty.md`](honesty.md).
+
+Three notices carry the same reading to a session, each naming the checkouts and `estigia changes`:
+
+- **At session start**, in the text every runtime already receives (Claude Code, Codex, OpenCode and
+  Pi): the linked checkouts no readable run pointer holds that carry uncommitted files, with their
+  branch and file count. The base checkout is not named. The read stops after three seconds and says how
+  many checkouts it did not reach, since one not read is not a clean one.
+- **At `done` and `release`**, appended to the tool answer: the files the run's own checkout still
+  holds uncommitted. It is a notice and never a refusal. `release` already keeps a checkout that
+  carries them, `done` removes nothing, and refusing would block delivery on files the person may mean
+  to leave. A checkout git cannot be read in, or that `release` took down, says nothing.
+- **In Pi**, `/estigia-changes` shows the listing to the person as a session entry that never reaches
+  the model, and a widget counts the checkouts that hold uncommitted work from `estigia changes
+  --json`, at session start and after each settled turn.
+- **In Claude Code**, `/estigia-changes` is a slash command `setup` writes on every install; it asks
+  the agent to run `estigia changes` and show the output unchanged (see
+  [`what-it-writes.md`](what-it-writes.md) for both).
+
+Codex has no surface of its own beyond the session-start text, and OpenCode and Claude Code have no
+indicator beyond it either; [`honesty.md`](honesty.md) says what is not built.
+
 An agent does this through the MCP tools instead. `estigia status` reports both halves separately,
 because "the agent was told about Estigia" and "Estigia can stop it" are different answers and an
 operator looking at a run that wrote without a claim needs the second one:

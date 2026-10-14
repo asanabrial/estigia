@@ -499,6 +499,12 @@ writes two slash commands under `$CLAUDE_CONFIG_DIR/commands/` — `flow-loop.md
 Estigia-owned command is taken back; a command Estigia did not write is neither replaced nor removed,
 and a plain uninstall removes them.
 
+On every install, whatever that row says, `estigia setup claude-code` also writes one more slash
+command, `estigia-changes.md` in the same directory, carrying the same marker. It is a prompt that
+asks Claude Code to run `estigia changes` and show the output unchanged, and not to act on it. It
+follows the same ownership rule: a file Estigia did not write is neither replaced nor removed, and a
+plain uninstall takes back one it did.
+
 - `/flow-loop [objective] [--max n]` stores the loop for the session's run
   (`estigia goal start`), applying the same objective rule OpenCode's plugin does — no text is
   `/flow dev`, text already naming `/flow` is used as given, anything else is prefixed — and records
@@ -796,8 +802,19 @@ session entry `estigia-doctor` through `pi.appendEntry` and drawn by a renderer 
 Pi without `appendEntry` gets the whole text through `ctx.ui.notify` instead. Without a UI the
 report goes to standard output. A binary that is gone, a timeout, a signal, an output larger than the
 extension can read, or an exit with nothing printed is never shown as a report: the text reads
-`estigia doctor did not answer (<why>)` and is drawn as an error. The command decides nothing and
+`estigia doctor did not answer (<why>)` and is drawn as an error. A second command,
+`/estigia-changes`, does the same with `estigia changes` and draws the same entry; it reads the
+listing and decides nothing. The command decides nothing and
 changes nothing; the report is the binary's.
+
+The extension also keeps a widget, `estigia-changes`, through `ctx.ui.setWidget`, refreshed at
+session start and after each settled turn. It runs `estigia changes --json` in `ctx.cwd` with a
+twenty-second bound and counts the entries: `uncommitted work in N checkouts`, with `, M unreadable`
+when git could not be read in some, and `N checkouts unreadable` when that is all there is, each
+followed by `/estigia-changes`. A repository with nothing uncommitted and nothing unreadable clears
+the widget. A binary that is gone, a timeout, a signal or output that is not the listing shows
+`uncommitted work unknown`, never a count. Without a UI, or on a Pi whose `ctx.ui` has no
+`setWidget`, nothing is run. The widget counts and decides nothing.
 
 Setup also writes two prompt templates into `~/.pi/agent/prompts/`: `claim.md` and `review-status.md`,
 each a markdown file with a `description` and an `argument-hint` in its frontmatter and a body of

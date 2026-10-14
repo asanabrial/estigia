@@ -4460,8 +4460,9 @@ pointer that leaves it names the document it points at.
     and nothing else, so the two together still leave a hand-pushed head behind. `estigia prune` is
     what catches it later, and only when the operator confirms.
   - **What the prune sweep cannot see.** It attributes a head or checkout to an issue by the
-    `issue-<n>-…` convention in a branch name or by a run pointer, so one that names no issue and
-    carries no pointer is listed only when it is merged into the base or detached. Its "a live claim
+    `issue-<n>-…` convention in a branch name or by a run pointer, so a head that names no issue
+    and carries no pointer is listed only when it is merged into the base, while a checkout is always
+    listed, kept when nothing says it is finished. Its "a live claim
     holds it" answer is a readable run pointer whose issue the tracker still reports open, not a
     re-read of the claim itself: a pointer a run left behind reads as live, and a claim the pointer
     never recorded reads as unheld. Both directions are fail-safe — a false "held" keeps a branch, and
@@ -10005,3 +10006,41 @@ tests that script each lane reading and the one that scripts a failed read. What
 - **No end-to-end release against a lane that is off.** The `release_ci` payload is asserted through the pipe only
   for an unreadable lane; the off, `disabled` and `never-ran` branches are asserted on the function that builds the
   answer, not on the whole operation.
+
+## What `estigia changes` does not do
+
+`estigia changes` is the one read of uncommitted work per checkout, and `estigia prune` lists every
+checkout it keeps. What this measures is the unit tests that build real repositories with a dirty
+orphan checkout, a held one, a directory git cannot read and a repository with no commits, and one pipe
+test that drives the binary. What it does not measure:
+
+- **Two surfaces render the listing, and neither has run live.** The Pi `/estigia-changes` command and
+  the Pi widget (`ctx.ui.setWidget`, a count of checkouts from `estigia changes --json`) are driven by
+  node against a stand-in binary, never by a live Pi; the stand-in's `setWidget` is a recorder, so
+  how Pi lays a widget out above the editor is not measured. The Claude Code `/estigia-changes` slash
+  command is tested as a file `setup` writes and removes by the ownership rule, not as a command Claude
+  Code ran: whether the agent shows the output unchanged, as the prompt asks, is its own behaviour and
+  is not measured. Not built: the OpenCode TUI plugin (indicator and command) — `setup` writes nothing
+  to `tui.json` today and no pattern for it exists to follow — the Claude Code status-line segment, whose
+  setting is the person's and which `setup` does not write, and a Codex notice of its own. OpenCode,
+  Claude Code and Codex see the session-start notice and nothing else, apart from the Claude Code
+  command, and none of it has run in a live session.
+- **The session-start notice is the binary's text, not a per-runtime surface.** It reaches Claude Code,
+  Codex, OpenCode and Pi because they all inject `SessionStart` text; no live session of any of them has
+  shown it. It counts uncommitted files with one `git status` per linked checkout under a three-second
+  budget and names what it did not reach; the base checkout is never named, and a checkout a pointer
+  names but git does not register is not read.
+- **The `done`/`release` notice is tested on its function, not through a tracker.** The helper that
+  decides whether to append it is unit-tested against a dirty repository; the wiring in `run_tool` is
+  not driven end to end, because a `transition` or `release` needs a scripted tracker. It reads the
+  pointer's checkout, so a run whose pointer recorded none gets no notice. It is a notice only; the
+  decision not to refuse is documented in `lifecycle.md`.
+- **No session-end notice.** `SessionEnd` answers `{}` and no runtime is known to show that output to the
+  person, so a session that leaves its checkout dirty is told nothing at its end; only the next session's
+  start reports it, as an orphan.
+- **`orphan` is a readable run pointer, not the claim.** A pointer a run left behind reads as held,
+  and a claim whose pointer never recorded a checkout reads as an orphan. The issue's state is not read.
+- **Line counts are Git's, and partial.** An untracked file is counted only when it is a text file of at
+  most one mebibyte; a binary file, or one counted against a checkout with no commits, has none. An
+  unmerged path is marked `M`.
+- **Fifteen seconds is the bound on each Git call**, chosen rather than measured.

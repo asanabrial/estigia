@@ -40,6 +40,7 @@ use crate::outcome::{
 use population::{Disposition, Population};
 
 pub mod assisted;
+pub mod changes;
 pub mod doctor;
 pub mod guard;
 pub mod hook;

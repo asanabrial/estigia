@@ -1984,8 +1984,8 @@ pub fn sweep(
                     about,
                     health: Health::Fine {
                         detail: format!(
-                            "no merged or closed branch or checkout is unowned; {} kept for a \
-                             live claim or unpublished work",
+                            "no merged or closed branch or checkout is unowned; {} listed and kept \
+                             (live claim, unpublished work, or not yet merged or closed)",
                             swept.len()
                         ),
                     },

@@ -672,6 +672,14 @@ fn queue_paragraph(context: &GateContext, with_count: bool) -> String {
     queue_note(context, with_count).map_or_else(String::new, |note| format!("\n\n{note}"))
 }
 
+fn orphan_paragraph(context: &GateContext) -> String {
+    let transport =
+        crate::transport::Context::live(context.skill_root.clone(), context.repo_dir.clone(), None);
+    let holdings = session::holdings(&context.state_root);
+    super::changes::orphan_notice(&transport, &holdings)
+        .map_or_else(String::new, |note| format!("\n\n{note}"))
+}
+
 /// The context injected when a session begins.
 pub fn session_start_response(context: &GateContext, run: &session::Run) -> Value {
     session_start_body(context, run, true)
@@ -808,10 +816,11 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
                 "additionalContext": format!(
                     "## Estigia
 
-This session carries no identity Estigia can derive a run id from, so nothing can be sworn here: a claim needs one run to bind to, and every session in this state would share the same name. Reads go through untouched, and a write is held to `Issue requirement` where the repository sets one.{}{}{}",
+This session carries no identity Estigia can derive a run id from, so nothing can be sworn here: a claim needs one run to bind to, and every session in this state would share the same name. Reads go through untouched, and a write is held to `Issue requirement` where the repository sets one.{}{}{}{}",
                     drift_note(context),
                     build_note(context),
-                    queue_paragraph(context, with_count)
+                    queue_paragraph(context, with_count),
+                    orphan_paragraph(context)
                 ),
             }
         });
@@ -822,11 +831,12 @@ This session carries no identity Estigia can derive a run id from, so nothing ca
             "additionalContext": format!(
                 "## Estigia
 
-Run id `{}`. {held}{isolation}{dirt}{delegated}{inline}{}{}{}",
+Run id `{}`. {held}{isolation}{dirt}{delegated}{inline}{}{}{}{}",
                 run.run_id,
                 drift_note(context),
                 build_note(context),
-                queue_paragraph(context, with_count)
+                queue_paragraph(context, with_count),
+                orphan_paragraph(context)
             ),
         }
     })
@@ -3970,6 +3980,58 @@ mod tests {
 
     fn flush_requests() -> u32 {
         FLUSH_REQUESTS.with(std::cell::Cell::get)
+    }
+
+    #[test]
+    fn the_session_start_text_names_a_dirty_orphan_checkout_and_the_command_that_lists_it() {
+        let root = tempfile::tempdir().expect("a root");
+        let main = root.path().join("main");
+        std::fs::create_dir_all(&main).unwrap();
+        let git = |at: &std::path::Path, arguments: &[&str]| {
+            let done = std::process::Command::new("git")
+                .args(arguments)
+                .current_dir(at)
+                .status()
+                .expect("git runs");
+            assert!(done.success(), "git {arguments:?}");
+        };
+        git(&main, &["init", "--quiet", "-b", "main"]);
+        git(&main, &["config", "user.email", "e@example.invalid"]);
+        git(&main, &["config", "user.name", "E"]);
+        git(&main, &["commit", "--quiet", "--allow-empty", "-m", "one"]);
+        let tree = root.path().join("issue-9-parked");
+        git(
+            &main,
+            &[
+                "worktree",
+                "add",
+                "--quiet",
+                "-b",
+                "issue-9-parked",
+                tree.to_str().unwrap(),
+            ],
+        );
+        let context = GateContext {
+            repo_dir: main,
+            state_root: root.path().join("state"),
+            skill_root: root.path().join("skill"),
+            ..nowhere()
+        };
+        let run = session::Run::new("claude-abcd1234".to_owned());
+        let clean = session_start_text(&context, &run, None);
+        assert!(!clean.contains("estigia changes"), "{clean}");
+
+        std::fs::write(tree.join("parked.txt"), "x\n").unwrap();
+        for text in [
+            session_start_text(&context, &run, None),
+            session_start_response(&context, &run)["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .expect("context")
+                .to_owned(),
+        ] {
+            assert!(text.contains("issue-9-parked"), "{text}");
+            assert!(text.contains("`estigia changes`"), "{text}");
+        }
     }
 
     #[test]

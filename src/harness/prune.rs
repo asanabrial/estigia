@@ -10,6 +10,10 @@
 //! deletes on its own, because deleting what no claim owns without a person
 //! deciding is a write nobody asked for.
 //!
+//! **Nothing is dropped from the listing.** A checkout whose branch is neither
+//! merged nor closed is listed as kept, with its reason and the uncommitted
+//! files it carries, so the sweep never hides work it declines to delete.
+//!
 //! Two rules are never relaxed, and they are the whole reason the decision is a
 //! pure function: nothing deletes a branch or checkout a live claim holds, and
 //! nothing deletes one that carries commits not on the remote.
@@ -72,8 +76,10 @@ pub struct Observed {
     /// Why it is worth sweeping at all. `None` when it is not — a branch still
     /// open, a checkout a delivery has not finished with.
     pub sweepable: Option<String>,
-    /// Whether it carries commits reachable from no remote.
+    /// Whether it carries commits reachable from no remote, or uncommitted work.
     pub unpublished: bool,
+    /// The uncommitted files, each as `<marker> <path>`.
+    pub uncommitted: Vec<String>,
     /// The run a live claim attributes it to, when one does.
     pub held: Option<String>,
 }
@@ -84,13 +90,20 @@ pub struct Observed {
 /// it is also held, because the two reasons point at the same outcome and the
 /// stronger one is the one worth naming.
 pub fn decide(observed: Observed) -> Option<Swept> {
-    let why = observed.sweepable?;
+    if observed.sweepable.is_none() && observed.kind != Kind::Worktree {
+        return None;
+    }
     let (delete, reason) = if observed.unpublished {
-        (false, "carries commits not on the remote".to_owned())
+        (false, carries(&observed.uncommitted))
     } else if let Some(holder) = observed.held {
         (false, format!("a live claim holds it ({holder})"))
-    } else {
+    } else if let Some(why) = observed.sweepable {
         (true, why)
+    } else {
+        (
+            false,
+            "its branch is neither merged nor closed on this tracker".to_owned(),
+        )
     };
     Some(Swept {
         kind: observed.kind,
@@ -100,6 +113,28 @@ pub fn decide(observed: Observed) -> Option<Swept> {
         delete,
         reason,
     })
+}
+
+const NAMED_FILES: usize = 5;
+
+fn carries(uncommitted: &[String]) -> String {
+    if uncommitted.is_empty() {
+        return "carries commits not on the remote".to_owned();
+    }
+    let named: Vec<&str> = uncommitted
+        .iter()
+        .take(NAMED_FILES)
+        .map(String::as_str)
+        .collect();
+    let more = match uncommitted.len().saturating_sub(NAMED_FILES) {
+        0 => String::new(),
+        rest => format!(", and {rest} more"),
+    };
+    format!(
+        "carries {} uncommitted file(s): {}{more}",
+        uncommitted.len(),
+        named.join(", ")
+    )
 }
 
 /// Everything the sweep reads against.
@@ -152,7 +187,7 @@ fn observe_worktrees(
         let branch = entry.branch.clone();
         let issue = branch.as_deref().and_then(issue_of_branch);
         let held = held_worktree(view, &entry.path, states);
-        let unpublished = worktree_unpublished(&entry.path);
+        let (unpublished, uncommitted) = worktree_unpublished(&entry.path);
         let sweepable = match &branch {
             Some(branch) => {
                 let merged = merged(view.context, &format!("refs/heads/{branch}"), view.base);
@@ -180,6 +215,7 @@ fn observe_worktrees(
             issue,
             sweepable,
             unpublished,
+            uncommitted,
             held,
         });
     }
@@ -243,6 +279,7 @@ fn observe_heads(
             sweepable,
             // A head is on the remote by definition.
             unpublished: false,
+            uncommitted: Vec::new(),
             held,
         });
     }
@@ -406,21 +443,25 @@ fn merged(context: &Context, reference: &str, base: &str) -> Option<bool> {
     }
 }
 
-/// Whether a checkout carries work the remote does not have: uncommitted or
-/// untracked bytes, or commits reachable from no remote-tracking ref. A failed
-/// read is **true**, the safe direction.
-fn worktree_unpublished(path: &Path) -> bool {
-    let dirty = run(
-        &["git", "status", "--porcelain"],
-        Some(path),
-        How::tolerated(),
-    );
-    if !matches!(dirty, Ok(output) if output.stdout.trim().is_empty()) {
-        return true;
+/// Whether a checkout carries work the remote does not have, and the
+/// uncommitted files it names: uncommitted or untracked bytes, or commits
+/// reachable from no remote-tracking ref. A failed read is **true**, the safe
+/// direction.
+fn worktree_unpublished(path: &Path) -> (bool, Vec<String>) {
+    let files = match super::changes::uncommitted(path) {
+        Ok(files) => files,
+        Err(_) => return (true, Vec::new()),
+    };
+    if !files.is_empty() {
+        let named = files
+            .iter()
+            .map(|change| format!("{} {}", change.marker, change.path))
+            .collect();
+        return (true, named);
     }
     // `HEAD`, not `--all`: a commit one checkout has not pushed is not a reason
     // to keep every other checkout in the repository.
-    match run(
+    let unpushed = match run(
         &["git", "rev-list", "--count", "HEAD", "--not", "--remotes"],
         Some(path),
         How::tolerated(),
@@ -432,7 +473,8 @@ fn worktree_unpublished(path: &Path) -> bool {
             .map(|n| n > 0)
             .unwrap_or(true),
         Err(_) => true,
-    }
+    };
+    (unpushed, Vec::new())
 }
 
 /// Removes every swept entry marked for deletion, reading each one back.

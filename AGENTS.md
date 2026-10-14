@@ -124,7 +124,7 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Sixty-eight tests **require** `node` on the path, and all sixty-eight drive the OpenCode plugins and
+   --no-deps`. Seventy tests **require** `node` on the path, and all seventy drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
    let a gate defect stand. Four are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
@@ -156,8 +156,10 @@ a second copy that will disagree.
    `the_pi_extension_puts_a_question_to_a_person_only_in_the_tui_and_blocks_on_any_code_it_cannot_read`,
    `the_pi_extension_hands_the_binary_the_root_session_only_from_a_process_that_inherited_one`
    and `the_pi_extension_links_a_child_by_its_parent_header_whatever_its_pid`;
-   one drives its `/estigia-doctor` command through `run_pi_claim_driver`,
-   `the_pi_extension_shows_estigia_doctor_unchanged_to_the_person_and_asks_the_model_for_nothing`;
+   three drive its `/estigia-doctor` and `/estigia-changes` commands and its uncommitted-work widget through `run_pi_claim_driver`,
+   `the_pi_extension_shows_estigia_doctor_unchanged_to_the_person_and_asks_the_model_for_nothing`,
+   `the_pi_extension_shows_estigia_changes_to_the_person_and_asks_the_model_for_nothing` and
+   `the_pi_extension_shows_a_widget_counting_the_checkouts_that_hold_uncommitted_work`;
    six drive the Pi gate extension's session context through `drive_pi_session` —
    `the_pi_extension_appends_the_binarys_session_context_to_the_prompt_sections_and_replaces_nothing`,
    `the_pi_extension_forwards_why_a_session_started_and_which_session_it_came_from`,
@@ -198,7 +200,7 @@ a second copy that will disagree.
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that sixty-eight tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that seventy tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here

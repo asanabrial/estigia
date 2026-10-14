@@ -768,6 +768,7 @@ pub fn run_tool(
     let runtime = named.as_ref().map_or("", |run| run.runtime);
     let issue = arguments.get("issue").and_then(Value::as_u64).unwrap_or(0);
     let mut run = session::load(&context.state_root, run_id);
+    let claim_worktree = run.worktree.clone();
 
     // `repo_dir`, not `covered().count()` — the worktree is the *additional*
     // directory a claim covers, never the one that says where it was sworn.
@@ -1200,6 +1201,10 @@ pub fn run_tool(
         ))
     };
     let mut text = answer_text(answer.body);
+    if let Some(notice) = checkout_notice(tool.operation, arguments, claim_worktree.as_deref()) {
+        text.push_str("\n\n");
+        text.push_str(&notice);
+    }
     // The tracker write landed, so this is not a reason to call the
     // operation failed — but the gate reads the pointer and not the tracker,
     // so an unwritten one has to be said: `session::update` used to answer
@@ -1220,6 +1225,20 @@ estigia: this happened on the tracker and could not be written to this run's    
         }],
         "isError": false,
     }))
+}
+
+/// The notice `done` and `release` append when the run's own checkout still
+/// holds uncommitted files. Read after the call, so a checkout `release` took
+/// down is gone and says nothing; it never changes the answer's outcome.
+fn checkout_notice(
+    operation: &str,
+    arguments: &Value,
+    worktree: Option<&std::path::Path>,
+) -> Option<String> {
+    let putting_down = operation == "unassign"
+        || (operation == "transition"
+            && arguments.get("to").and_then(Value::as_str) == Some("done"));
+    super::changes::held_notice(worktree.filter(|_| putting_down)?)
 }
 
 /// The text of a successful tool answer.

@@ -3784,6 +3784,23 @@ fn setup_into_with_skill(
             }
         }
 
+        if let Some(directory) = paths.commands.as_ref() {
+            for (name, source) in plugin::CHANGES_COMMANDS {
+                let file = directory.join(name);
+                let existing = step!(read_optional(&file));
+                if existing.is_none() || plugin::command_is_ours(existing.as_deref()) {
+                    actions.push(write_step!(write_file(
+                        &file,
+                        existing.as_deref(),
+                        source,
+                        ActionKind::Command,
+                        options.dry_run,
+                    )));
+                    pending.insert(file, Some(as_the_file_was(existing.as_deref(), source)));
+                }
+            }
+        }
+
         if let Some(directory) = paths.prompts.as_ref() {
             for (name, source) in plugin::PI_PROMPTS {
                 let file = directory.join(name);
@@ -4229,6 +4246,17 @@ pub fn uninstall_from(
     // them: a command left behind would call a binary an uninstall removed.
     if let Some(directory) = paths.commands.as_ref() {
         for (name, _) in plugin::LOOP_COMMANDS {
+            let file = directory.join(name);
+            if let Some(existing) = read_optional(&file)?
+                && plugin::command_is_ours(Some(&existing))
+            {
+                actions.push(discard(&file, ActionKind::Command, options.dry_run)?);
+            }
+        }
+    }
+
+    if let Some(directory) = paths.commands.as_ref() {
+        for (name, _) in plugin::CHANGES_COMMANDS {
             let file = directory.join(name);
             if let Some(existing) = read_optional(&file)?
                 && plugin::command_is_ours(Some(&existing))
