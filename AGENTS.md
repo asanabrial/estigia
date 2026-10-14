@@ -124,7 +124,7 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Seventy-six tests **require** `node` on the path, and all seventy-six drive the OpenCode plugins and
+   --no-deps`. Eighty-four tests **require** `node` on the path, and all eighty-four drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
    let a gate defect stand. Eight are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
@@ -201,12 +201,21 @@ a second copy that will disagree.
    `the_pi_goal_judges_every_third_turn_and_continues_the_others_unasked`,
    `the_pi_goal_judges_the_turn_that_reaches_its_cap`,
    `the_pi_goal_bounds_the_transcript_the_evaluator_is_shown` and
-   `the_pi_loop_repeats_on_an_interval_and_after_each_turn_and_stops`.
+   `the_pi_loop_repeats_on_an_interval_and_after_each_turn_and_stops`; and eight drive the Pi subagent
+   runner through `run_pi_agents_driver`, on Unix only, since the stand-in `pi` is an executable script —
+   `the_pi_subagent_runner_links_the_child_to_the_parent_and_shows_what_the_events_say`,
+   `a_child_refused_by_the_gate_shows_the_refusal_on_its_card_unchanged`,
+   `stopping_a_pi_subagent_terminates_its_process_and_answers_the_tool`,
+   `a_pi_subagent_is_not_given_work_unless_it_loaded_the_gate_and_is_linked_to_a_session`,
+   `the_pi_subagent_view_lists_children_and_shows_each_transcript_with_no_model_call`,
+   `a_running_pi_subagent_is_steered_from_the_view_and_a_finished_one_is_not`,
+   `the_pi_subagent_view_stops_one_child_and_stops_all_only_after_a_confirm` and
+   `finished_pi_subagent_tasks_are_kept_as_session_entries_and_never_sent_to_the_model`.
    None skips when `node` is missing; all fail and say so, since a skip
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that seventy-six tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that eighty-four tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here
