@@ -336,9 +336,23 @@ pub(crate) fn overridden_program(program: &str) -> Option<(PathBuf, Vec<(String,
 }
 
 #[cfg(test)]
+const REVIEWER_LAUNCH_VARIABLES: [&str; 7] = [
+    "ESTIGIA_FAKE_ARGV_LOG",
+    "ESTIGIA_FAKE_BIG_STDOUT",
+    "ESTIGIA_FAKE_DELAY_MS",
+    "ESTIGIA_FAKE_ENV_NAMES",
+    "ESTIGIA_FAKE_EXIT_WITHOUT_READING",
+    "ESTIGIA_FAKE_STDIN_LOG",
+    "ESTIGIA_FAKE_WRITE_ARG_FILE",
+];
+
+#[cfg(test)]
 fn apply_process_override(command: &mut Command) {
     PROCESS_OVERRIDE.with(|slot| {
         if let Some(installed) = slot.borrow().as_ref() {
+            for name in REVIEWER_LAUNCH_VARIABLES {
+                command.env_remove(name);
+            }
             for (name, value) in &installed.envs {
                 command.env(name, value);
             }

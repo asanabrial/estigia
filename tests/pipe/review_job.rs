@@ -22,7 +22,7 @@ fn invocation() -> Invocation {
     }
 }
 
-fn stand_in_claude(bin: &std::path::Path, delay: u32) {
+fn stand_in_claude(bin: &std::path::Path, release: &std::path::Path) {
     let said = serde_json::json!({
         "type": "result",
         "subtype": "success",
@@ -33,7 +33,10 @@ fn stand_in_claude(bin: &std::path::Path, delay: u32) {
     let program = bin.join("claude");
     std::fs::write(
         &program,
-        format!("#!/bin/sh\n/bin/cat > /dev/null\n/bin/sleep {delay}\nprintf '%s' '{said}'\n"),
+        format!(
+            "#!/bin/sh\n/bin/cat > /dev/null\nn=0\nwhile [ ! -e '{}' ] && [ $n -lt 300 ]; do /bin/sleep 0.1; n=$((n+1)); done\nprintf '%s' '{said}'\n",
+            release.display()
+        ),
     )
     .expect("the stand-in claude");
     std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755))
@@ -46,23 +49,23 @@ fn a_detached_runner_returns_before_a_slow_reviewer_finishes_and_leaves_its_answ
     let home = root.path().join("home");
     let bin = root.path().join("bin");
     std::fs::create_dir_all(&bin).expect("bin");
-    stand_in_claude(&bin, 2);
+    let release = root.path().join("release");
+    stand_in_claude(&bin, &release);
     let dir = root.path().join("job");
     write_job(&dir, &invocation()).expect("the job is written");
 
-    let began = Instant::now();
     let spawner = Detached::of(env!("CARGO_BIN_EXE_estigia"))
         .with_env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
         .with_env("HOME", &home);
     let pid = spawner.start(&dir).expect("the runner starts");
-    let returned_in = began.elapsed();
 
     assert!(pid > 0);
-    assert!(
-        returned_in < Duration::from_millis(1500),
-        "the launch waited for the reviewer: {returned_in:?}"
+    assert_eq!(
+        job_status(&dir).expect("status"),
+        JobStatus::Running,
+        "the launch waited for the reviewer, which was still held back"
     );
-    assert_eq!(job_status(&dir).expect("status"), JobStatus::Running);
+    std::fs::write(&release, "").expect("the reviewer is released");
 
     let until = Instant::now() + Duration::from_secs(20);
     let result = loop {

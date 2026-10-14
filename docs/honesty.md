@@ -140,6 +140,30 @@ pointer that leaves it names the document it points at.
   counter, so no two calls in a process share a path. Not measured: a staging path that survives a
   crash is still named by process id and counter, so a recycled process id can land on a leftover.
 
+- **Three more load flakes: one traced to a fixture variable, one to a timing bound, one not
+  reproduced.** Issue #63. `harness::tests::no_compound_or_redirected_merge_earns_the_integration_exemption`
+  failed once with `gh api … returned nothing`. It never failed in 200 runs alone under thirty busy
+  loops, which fits the cause: `with_fake_clis` sets `ESTIGIA_FAKE_EXIT_WITHOUT_READING` on the
+  whole process, the stand-in `gh` exits 0 with no output when it sees it, and a scripted-`gh` test on
+  another thread inherited it for as long as that window was open. A red test holds the variable
+  and asks a scripted `gh` for a comment list: it read `None` before the change. The transport's test
+  override now removes the seven reviewer-launch variables from a child unless the fixture sets one itself.
+  `launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_real_mcp_server` failed
+  6 of 20 runs alone under the same load, `a launch waited for the two second reviewer` at 1.9 s to
+  3.6 s: the launch bound was shorter than the cost of starting an MCP server under load, so the
+  test, not the product, was wrong. The stand-in reviewer now waits for a file the test writes, the
+  launch is held to not having read the prompt, and the wait is bounded at thirty seconds. `tests/pipe/review_job.rs`
+  `a_detached_runner_returns_before_a_slow_reviewer_finishes_and_leaves_its_answer` held the same
+  kind of bound, `1500 ms` against a two second reviewer, and now uses the same release file: the
+  launch is held to leaving the job `Running`. With the launch made to join the runner the test
+  fails in 33 s on `the launch waited for the reviewer, which was still held back`, `left:
+  Finished(…)`, `right: Running`. Not closed: the reviewer's own thirty second wait for the file
+  is the bound on a launch that waits, so that failure is slow rather than instant. It passed 100 of 100 loaded runs; the old bound was not
+  seen to fail under load, so that run shows no regression, not a measured improvement.
+  `transport::claim::tests::two_runs_claiming_one_issue_at_once_leave_exactly_one_winner_decided_by_the_store`
+  (`read-failed`, expected `lost-claim-race`) did not fail in 200 runs alone under the same load, so
+  it has no cause here; the store's five second busy wait is the suspect and is unmeasured.
+
 ## Comments, instructions and the build
 
 - **The instruction-surface ceiling counts bytes, not whether the prose agrees with the gate.**
@@ -1639,7 +1663,8 @@ pointer that leaves it names the document it points at.
   distinguished) and `pipe` `part_09`'s
   `launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_real_mcp_server`,
   which did not fail in 30 runs alone or 15 runs of the whole module at load average 11 to 25, so
-  its report in the issue has no cause and no fix.
+  its report in the issue has no cause and no fix. Issue #63 later reproduced it under thirty busy
+  loops and fixed it, in the #63 entry after the #30 one.
 
   Deterministic tests replaced the measurements. The staging name is built by
   `staged_name`, and a test holds two drafts of one branch to distinct names whose cleanups do not

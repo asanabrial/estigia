@@ -3213,8 +3213,10 @@ fn launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_r
     .to_string();
     std::fs::write(reviewer.path().join("said.json"), said).expect("the canned answer");
     let launched = reviewer.path().join("prompt.txt");
+    let release = reviewer.path().join("release");
     let script = format!(
-        "#!/bin/sh\n/bin/sleep 2\n/bin/cat > '{}'\n/bin/cat '{}'\n",
+        "#!/bin/sh\nn=0\nwhile [ ! -e '{}' ] && [ $n -lt 300 ]; do /bin/sleep 0.1; n=$((n+1)); done\n/bin/cat > '{}'\n/bin/cat '{}'\n",
+        release.display(),
         launched.display(),
         reviewer.path().join("said.json").display()
     );
@@ -3295,15 +3297,13 @@ fn launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_r
     };
     assert!(verified_at().is_null(), "the fixture pointer was verified");
 
-    let began = std::time::Instant::now();
     let started = ask(
         "launch_review_input",
         serde_json::json!({"issue": 12, "run_id": run_id, "name": name}),
     );
     assert!(
-        began.elapsed() < std::time::Duration::from_millis(1900),
-        "a launch waited for the two second reviewer: {:?}",
-        began.elapsed()
+        !launched.exists(),
+        "a launch waited for the reviewer, which was still held back: {started}"
     );
     assert!(
         verified_at().is_number(),
@@ -3340,6 +3340,7 @@ fn launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_r
     assert_eq!(early["isError"], true, "{early}");
     let said = early["content"][0]["text"].as_str().unwrap_or_default();
     assert!(said.contains("capture-running"), "{early}");
+    std::fs::write(&release, "").expect("the reviewer is released");
     let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
     let mut offered = text_of(&ask("review_status", serde_json::json!({"issue": 12})));
     while offered["next"]["inputs"][0]["capture"] != "collect_review_input"
