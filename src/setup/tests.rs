@@ -19742,6 +19742,7 @@ const path = require("node:path");
 const verb = path.basename(process.argv[1] ?? "");
 if (verb === "goal" || verb === "gate" || verb === "doctor" || verb === "changes") {
   const entry = { args: [verb, ...process.argv.slice(2)], cwd: process.cwd() };
+  if (process.env.STUB_CASE) entry.case = process.env.STUB_CASE;
   if (verb === "gate") {
     try { entry.stdin = fs.readFileSync(0, "utf8"); } catch { entry.stdin = ""; }
   }
@@ -19821,22 +19822,15 @@ const status = async (label, event, ctx, env, wait = 3000, via = handlers) => {
   return { label, returned: returned ?? null, statuses: statuses.slice(before), calls: calls().slice(spawned).filter((call) => call.args[0] !== "changes") };
 };
 
-const settled = async () => {
-  for (let seen = ""; seen !== `${calls().length}/${shelf.length}`; ) {
-    seen = `${calls().length}/${shelf.length}`;
-    await pause(150);
-  }
-};
-
 const widget = async (label, event, ctx, env, wait = 3000, via = handlers) => {
-  await settled();
-  answer(env);
+  answer({ ...env, STUB_CASE: label });
   const before = shelf.length;
-  const spawned = calls().length;
   await via[event]({ type: event }, ctx);
   for (let waited = 0; waited < wait && shelf.length === before; waited += 20) await pause(20);
   if (shelf.length === before) await pause(150);
-  return { label, widgets: shelf.slice(before), calls: calls().slice(spawned).filter((call) => call.args[0] === "changes") };
+  const own = calls().filter((call) => call.case === label && call.args[0] === "changes");
+  delete process.env.STUB_CASE;
+  return { label, widgets: shelf.slice(before), calls: own.map(({ case: _, ...call }) => call) };
 };
 
 const checkout = (path, files, unreadable = null) => ({ path, files: files.map((name) => ({ marker: "U", path: name, added: 1, removed: null })), unreadable });
