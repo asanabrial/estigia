@@ -1038,6 +1038,29 @@ fn a_fragment_named_file_that_cannot_be_read_refuses_the_notes_and_names_it() {
 }
 
 #[test]
+fn a_changes_entry_the_listing_cannot_read_is_a_read_failure_and_not_an_omission() {
+    let root = tempfile::tempdir().expect("a repository");
+    let fragment = root.path().join("7-seven.md");
+    std::fs::write(&fragment, "section: The harness\n\n- x\n").expect("a fragment");
+    let listing = vec![
+        Ok(("7-seven.md".to_owned(), fragment)),
+        Err(std::io::Error::other("an entry went away mid-listing")),
+    ];
+
+    let Err(failure) = fragments_among(listing.into_iter()) else {
+        panic!("a fragment whose entry could not be read was silently omitted");
+    };
+
+    assert!(
+        matches!(&failure, Failure::Read(message)
+            if message.contains("an entry of changes/ could not be read")
+                && message.contains("went away")),
+        "{}",
+        failure.envelope()
+    );
+}
+
+#[test]
 fn a_changes_that_is_a_file_refuses_the_notes_as_unreadable() {
     let root = tempfile::tempdir().expect("a repository");
     std::fs::write(root.path().join("CHANGELOG.md"), NOTES_CHANGELOG).expect("the changelog");
