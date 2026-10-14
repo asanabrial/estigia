@@ -158,6 +158,13 @@ fn install_options(
     })
 }
 
+fn with_installed_pi(options: SetupOptions) -> SetupOptions {
+    SetupOptions {
+        pi_version: setup::installed_pi_version(),
+        ..options
+    }
+}
+
 fn dispatch(cli: &Cli) -> Result<(), Refusal> {
     match &cli.command {
         Command::RecordInstall => record_install(cli.json),
@@ -170,7 +177,7 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             require_terminal(Resolution::run(
                 "estigia setup --all   # or estigia setup <agent>",
             ))?;
-            guided(&SetupOptions::default(), cli.json)
+            guided(&with_installed_pi(SetupOptions::default()), cli.json)
         }
 
         Command::Setup {
@@ -210,6 +217,7 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             if *uninstall {
                 take_out(&targets, &options, cli.json)
             } else {
+                let options = with_installed_pi(options);
                 lifecycle_preflight(
                     &options,
                     *allow_source_build,
@@ -241,7 +249,12 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             scope,
             workspace,
         } => {
-            let options = install_options(*dry_run, *scope, workspace.clone(), "sync")?;
+            let options = with_installed_pi(install_options(
+                *dry_run,
+                *scope,
+                workspace.clone(),
+                "sync",
+            )?);
             let (targets, notes) = match agent {
                 Some(slug) => (vec![setup::find_installable_agent(slug)?], Vec::new()),
                 None => (configured(&options), setup::substitution_notes(&options)),

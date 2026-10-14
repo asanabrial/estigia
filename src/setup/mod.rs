@@ -28,6 +28,7 @@ use crate::skill;
 mod capabilities;
 mod codex_trust;
 mod companion;
+mod pi_version;
 pub(crate) mod plugin;
 mod render;
 pub mod wiring;
@@ -37,6 +38,7 @@ pub use render::NotEditable;
 
 pub(crate) use companion::resolve_on_path;
 pub use companion::{COMPANIONS, Companion, CompanionState, find_companion, probe_companion};
+pub use pi_version::{DEFERRED_FROM, PiExposure, PiVersion, installed_pi_version};
 pub use render::SERVER_NAME;
 use render::{
     Envelope, McpFormat, is_estigia_hook, render_cursor_hooks, render_hooks, render_mcp,
@@ -735,6 +737,9 @@ pub struct SetupOptions {
     pub claude_config_dir: Option<PathBuf>,
     /// Override `$PI_CODING_AGENT_DIR`.
     pub pi_agent_dir: Option<PathBuf>,
+    /// The version of the Pi this install is for; nothing means unknown, which is written as the
+    /// exposure every Pi can use.
+    pub pi_version: Option<PiVersion>,
     /// Where this install writes: the machine's home, or one workspace.
     pub scope: InstallScope,
     /// The workspace a [`InstallScope::Workspace`] install is rooted at.
@@ -3834,7 +3839,15 @@ fn setup_into_with_skill(
                 trusted.as_deref().or(existing.as_deref()),
                 &executable,
                 adapter.mcp_format(),
+                PiExposure::for_version(options.pi_version),
             ));
+            if options.dry_run && adapter.mcp_format() == McpFormat::PiMcpServers {
+                notes.push(format!(
+                    "MCP exposure: {} ({})",
+                    PiExposure::for_version(options.pi_version).word(),
+                    pi_version::why(options.pi_version)
+                ));
+            }
             // The guard covers the MCP edit in the same file, not only the trust.
             if let Some((entries, _)) = codex_trust.as_ref() {
                 step!(codex_trust::verify(config, &desired, entries));

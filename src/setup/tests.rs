@@ -15901,6 +15901,60 @@ fn setup_declares_the_tools_to_pi_directly() {
     assert!(exposes_tools(agent("pi"), &options));
 }
 
+fn pi_entry_for(version: Option<PiVersion>) -> Value {
+    let (_home, mut options) = sandbox();
+    options.pi_version = version;
+    setup(agent("pi"), &Config::default(), &options).expect("setup succeeds");
+    let servers: Value =
+        serde_json::from_str(&fs::read_to_string(pi_mcp_json(&options)).expect("the servers read"))
+            .expect("the servers parse");
+    servers["mcpServers"][SERVER_NAME].clone()
+}
+
+fn pi_at(major: u64, minor: u64, patch: u64) -> Option<PiVersion> {
+    Some(PiVersion {
+        major,
+        minor,
+        patch,
+    })
+}
+
+#[test]
+fn setup_defers_the_tools_on_a_pi_that_can_and_declares_them_directly_on_one_that_cannot() {
+    for version in [pi_at(1, 2, 0), pi_at(1, 3, 4), pi_at(2, 0, 0)] {
+        let entry = pi_entry_for(version);
+        assert_eq!(entry["exposure"], "deferred", "{version:?}: {entry:#}");
+        let description = entry["description"].as_str().expect("a description");
+        assert!(description.contains("workflow"), "{description}");
+    }
+    for version in [pi_at(1, 1, 9), pi_at(1, 1, 0), pi_at(0, 99, 0), None] {
+        let entry = pi_entry_for(version);
+        assert_eq!(entry["exposure"], "direct", "{version:?}: {entry:#}");
+        assert!(entry.get("description").is_none(), "{entry:#}");
+    }
+}
+
+#[test]
+fn a_pi_dry_run_says_which_exposure_it_would_write_and_why() {
+    for (version, exposure, reason) in [
+        (pi_at(1, 2, 0), "deferred", "Pi 1.2.0"),
+        (pi_at(1, 1, 0), "direct", "predates"),
+        (None, "direct", "not read"),
+    ] {
+        let (_home, mut options) = sandbox();
+        options.pi_version = version;
+        options.dry_run = true;
+        let result = setup(agent("pi"), &Config::default(), &options).expect("setup succeeds");
+        let note = result
+            .notes
+            .iter()
+            .find(|note| note.contains("exposure"))
+            .unwrap_or_else(|| panic!("no exposure note: {:?}", result.notes));
+        assert!(note.contains(exposure), "{note}");
+        assert!(note.contains(reason), "{note}");
+    }
+}
+
 #[test]
 fn setup_migrates_a_pi_entry_written_without_an_exposure_and_a_second_run_changes_nothing() {
     let (_home, options) = sandbox();
@@ -15954,6 +16008,7 @@ fn no_other_adapter_is_given_an_exposure_in_its_mcp_entry() {
             None,
             std::path::Path::new("estigia"),
             adapter.mcp_format(),
+            PiExposure::Deferred,
         )
         .expect("renders");
         assert_eq!(
