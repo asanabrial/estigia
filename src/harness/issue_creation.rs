@@ -93,7 +93,8 @@ pub fn refusal(literal: Option<&str>) -> Option<Refusal> {
                 NoCommandReason::OperatorKnowledge,
                 "the issue body filled from the analyst issue template and filed with the \
                  `create` tool, which refuses a body that does not follow it before anything \
-                 is filed",
+                 is filed; for another repository, the same call with `repo` set to its \
+                 `owner/name`",
             ),
         )
     })

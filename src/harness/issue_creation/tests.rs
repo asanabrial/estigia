@@ -122,6 +122,25 @@ fn the_refusal_names_the_create_tool_as_the_way_out() {
 }
 
 #[test]
+fn the_refusal_names_the_repo_argument_for_filing_in_another_repository() {
+    for line in [
+        "gh issue create --title x",
+        "gh issue create --repo o/b --title x",
+        "gh -R o/b issue create -t x",
+    ] {
+        let refusal = refusal(Some(line)).expect("refused");
+        assert_eq!(refusal.code, CODE, "{line}");
+        let said = refusal.to_string();
+        assert!(
+            said.contains("`create` tool")
+                && said.contains("`repo`")
+                && said.contains("owner/name"),
+            "`{line}` was refused without naming the supported path to another repository: {said}"
+        );
+    }
+}
+
+#[test]
 fn gh_issue_create_is_a_classified_write_not_an_untouched_call() {
     let (action, how) = classify_with(
         "Bash",

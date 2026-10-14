@@ -107,7 +107,7 @@ store, and queue the write they would have made: this is the offline mode. `tran
 labels and the board per issue, answering `"projection":"deferred"` and `"queued":<seq>`.
 `comment` queues the escaped body and answers `"queued":<seq>`. `create` records the issue under a
 provisional number — far above any number GitHub issues — queues the filing and one convergence, and
-answers `"provisional":true` with `"url":null`. `claim`, `claim --takeover` and `unassign` record
+answers `"provisional":true` with `"url":null`; with `repo` it records and queues that under the other repository, whose queue a `flush` run from a checkout of it sends. `claim`, `claim --takeover` and `unassign` record
 the ownership in the store as they always do, queue one convergence of the assignee and the `dev:`
 label, and answer `"projection":"deferred"`; an `unassign` that carries `--evidence-file` queues the
 evidence as a comment. A provisional issue is claimed, given tasks and heartbeats, verified and

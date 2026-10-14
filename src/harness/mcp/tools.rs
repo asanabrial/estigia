@@ -183,6 +183,11 @@ const RUN_ID: Argument = Argument::required(
     "This run's id, as SessionStart reported it.",
 );
 const ISSUE: Argument = Argument::required("issue", "integer", "Issue number.").counting_from(1);
+const FILING_REPO: Argument = Argument::optional(
+    "repo",
+    "string",
+    "Repository to file in, `owner/name`; defaults to this checkout's. Starts unclaimed.",
+);
 const RECEIPT_EPOCH: Argument = Argument::required("epoch", "string", "Publication epoch.");
 const RECEIPT_PR: Argument =
     Argument::required("pr", "integer", "Pull request number.").counting_from(1);
@@ -989,6 +994,7 @@ pub const TOOLS: &[Tool] = &[
                  without `epoch` — a finding identity means nothing without the receipt it was \
                  recorded against.",
             ),
+            FILING_REPO,
         ],
         effect: PointerEffect::None,
         writes: true,
@@ -1415,7 +1421,10 @@ pub fn unexposed_reason(name: &str) -> Option<&'static str> {
 /// Passing one through would make the transport reject the whole call for an
 /// unknown option; they exist because the run pointer has to follow what
 /// became true, and the transport has no reason to care whose run asked.
+/// `create`'s `repo` is the other kind: this server reads it to choose the
+/// repository the transport is pointed at, so the transport never sees it.
 pub const POINTER_ONLY: &[(&str, &str)] = &[
+    ("create", "repo"),
     ("claim", "state"),
     ("transition", "run_id"),
     ("draft_pr", "run_id"),
