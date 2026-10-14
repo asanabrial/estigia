@@ -7260,7 +7260,7 @@ pointer that leaves it names the document it points at.
   no transport could again be decided by a second, drifting implementation, and nothing in this suite
   would catch it until the guard is rewritten against that tracker's actual shape.
 
-- **`doctor` checks nineteen things, not everything.** Skill, installed skill assets, `gh`
+- **`doctor` checks twenty things, not everything.** Skill, installed skill assets, `gh`
   authentication, a git remote, this repository's push guard, the contract each configured agent
   reads, whether the root the gate decides in carries the rows those agents read, whether the gate
   each of them registers would actually run, whether the tool server each
@@ -7271,8 +7271,9 @@ pointer that leaves it names the document it points at.
   gate and gone undecided, whether the binary answering this command is the checkout's own
   build, whether the local workflow store opens, whether Pi's own settings exclude Estigia's
   extensions or override its tool server, whether the Pi subagent runners installed give their children
-  the gate, and whether a tracked lockfile is sent to every reviewer in full because
-  `estigia.generated.toml` does not declare it (an advisory row that is absent when there is nothing to name). It does not check the tracker's labels, or whether the
+  the gate, whether a tracked lockfile is sent to every reviewer in full because
+  `estigia.generated.toml` does not declare it (an advisory row that is absent when there is nothing to name), and which permission mode each of
+  Claude Code, Codex, OpenCode and Pi is configured with (see the entry below). It does not check the tracker's labels, or whether the
   repository it found is the one the issues live in.
 
   The skill comparison is against this binary's embedded copy, so a stale binary reports its own
@@ -7280,6 +7281,33 @@ pointer that leaves it names the document it points at.
   operator table no build recognises reports unreadable rather than current, and the remedy names
   the row rather than `sync`. Same mechanism as the installed judge definition, which is
   linked rather than restated.
+
+- **A host's automatic mode keeping Estigia's gate is pinned by tests and measured live on three hosts of four.**
+  The rule: an automatic mode approves the host's own prompts, and Estigia's decisions are never
+  among them. Checked on 2026-10-14 in a scratch repository with no claim held and `Issue
+  requirement` at `ask`, asking the model to write `hello.txt`: OpenCode v2.0.26 under `opencode run
+  --auto` and Claude Code 2.1.296 under `claude -p --permission-mode bypassPermissions` both refused
+  `issue-required` and created no file, and Pi 1.1.0 has no permission prompts at all, so its gate
+  was unchanged and a subagent child's writes were refused too. **Codex 0.159.2 was not run:** the
+  local install was not signed in (`401 Unauthorized`), so nothing here says what Codex does under
+  `--full-auto` or the `never` approval policy, and the Codex check stays open until a signed-in run
+  records it. What the suite pins instead is the part Estigia owns: with the mode's fields in the
+  hook payload (`permission_mode` of `bypassPermissions`, `auto`, `dontAsk`, `acceptEdits`;
+  `approval_policy` of `never`), the answer is byte-identical to the answer without them, a
+  deny where the requirement is `required` and, where it is `ask`, an `ask` on Claude Code and a deny
+  on Codex; and the generated OpenCode plugin throws on exits `1` and `2` with automatic-mode fields on
+  the hook input, in both generations of its loader, and registers no permission hook. What no test
+  can pin is the host's own ordering: a host release that put its permission layer before hooks or
+  plugins would turn a refusal into an approval, and only a live run against that release would see
+  it. Under `ask`, Claude Code's hook answers `ask`, and the live run saw the file not created; it
+  did not separate a host that put the question to nobody from one that refused it. The `permission` row
+  of `doctor` reads the setting from the host's settings files only (`permissions.defaultMode` for
+  Claude Code, project then user; `permission` in `opencode.json`; `approval_policy` and
+  `sandbox_mode` at the top level of `~/.codex/config.toml`), so a mode chosen on a command line
+  (`--auto`, `--permission-mode`, `--full-auto`), a Codex profile, a managed policy file or an
+  environment variable is invisible to it, and `no permission mode is set` means the files say
+  nothing, not that the host runs its default. A file that does not parse is reported as unread, not as
+  a mode. Other hosts get no row.
 
 - **Installed-asset staleness is a recorded digest comparison, and a mismatch is Broken with `sync`.**
   Every install records an aggregate digest of the embedded skill assets — sorted
@@ -8162,7 +8190,7 @@ pointer that leaves it names the document it points at.
   consequence: it is no longer git's own text that answers. The recovery is the same
   `git worktree remove`, and it is written in the binding rather than enforced here. Measured by the blind reviewer of receipt
   `6b192e0ee94f11004b621c06c8e8e5dd` across twenty-four template shapes.
-- **Four of the nineteen are about the past.** `silence`: a call the gate cannot decide on — a
+- **Four of the twenty are about the past.** `silence`: a call the gate cannot decide on — a
   payload it cannot parse, or one that never arrived — is waved through, and that is the right
   answer: a schema this build does not know could be wrapping a read as easily as a write. What is
   wrong is doing it quietly. Both leave a ledger line, and `doctor` is what reads those lines back,

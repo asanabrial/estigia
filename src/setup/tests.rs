@@ -6257,6 +6257,91 @@ console.log(JSON.stringify([
     }
 }
 
+/// OpenCode's automatic mode answers the host's permission requests; the plugin
+/// refuses through `tool.execute.before` and registers nothing on that path.
+///
+/// Drives the generated plugin under `node` the way both OpenCode generations
+/// load it, with the host's automatic-mode fields on the hook input, and fails
+/// rather than skips when `node` is missing.
+#[test]
+fn the_plugin_refuses_under_the_hosts_automatic_mode_and_registers_no_permission_hook() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    std::fs::write(
+        root.path().join("estigia-workflow-authority.mjs"),
+        crate::setup::plugin::source(std::path::Path::new("/opt/estigia")),
+    )
+    .expect("the plugin writes");
+    std::fs::write(
+        root.path().join("drive.mjs"),
+        r#"import plugin, { EstigiaWorkflowAuthority } from "./estigia-workflow-authority.mjs";
+
+const stub = (code) => () => ({
+  cwd() { return this; },
+  quiet() { return this; },
+  nothrow() { return Promise.resolve({ exitCode: code, stderr: "estigia: issue-required" }); },
+});
+const modes = { auto: true, permission: "allow", approval: "auto" };
+const attempt = async (call) => {
+  try { await call(); return "allowed"; } catch (error) { return "refused"; }
+};
+const results = [];
+for (const code of [1, 2]) {
+  const hooks = await EstigiaWorkflowAuthority({ $: stub(code), directory: "/tmp", worktree: "/tmp" });
+  results.push({
+    label: `v1-${code}`,
+    keys: Object.keys(hooks),
+    outcome: await attempt(() => hooks["tool.execute.before"]({ tool: "write", sessionID: "s", ...modes }, { args: {} })),
+  });
+  globalThis.Bun = { $: stub(code) };
+  const registered = [];
+  const ctx = { location: { directory: "/tmp" }, tool: { hook: async (name, handler) => registered.push({ name, handler }) } };
+  await plugin.setup(ctx);
+  results.push({
+    label: `v2-${code}`,
+    keys: registered.map((entry) => entry.name),
+    outcome: await attempt(() => registered[0].handler({ tool: "write", input: {}, sessionID: "s", ...modes })),
+  });
+}
+console.log(JSON.stringify(results));
+"#,
+    )
+    .expect("the driver writes");
+
+    let ran = match std::process::Command::new("node")
+        .arg(root.path().join("drive.mjs"))
+        .current_dir(root.path())
+        .output()
+    {
+        Ok(ran) => ran,
+        Err(error) => panic!(
+            "this test drives the generated plugin, which is JavaScript, and \
+             `node` could not be run ({error}). Install Node and re-run; it is \
+             not skipped, because a plugin nothing executes is a gate nothing \
+             measures."
+        ),
+    };
+    assert!(
+        ran.status.success(),
+        "the plugin would not load: {}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    let results: Vec<serde_json::Value> =
+        serde_json::from_slice(&ran.stdout).expect("the driver prints JSON");
+    assert_eq!(results.len(), 4, "{results:?}");
+    for result in &results {
+        assert_eq!(result["outcome"], "refused", "{result}");
+    }
+    for result in &results {
+        let label = result["label"].as_str().expect("a label");
+        let expected = if label.starts_with("v1") {
+            serde_json::json!(["tool.execute.before"])
+        } else {
+            serde_json::json!(["execute.before"])
+        };
+        assert_eq!(result["keys"], expected, "{result}");
+    }
+}
+
 /// The plugin distinguishes a refusal from the gate not answering.
 ///
 /// It caught every failure of the call and threw it as a refusal, so a binary
@@ -20592,6 +20677,53 @@ fn doctor_follows_the_agent_directory_pi_is_told_to_read() {
         "the pi-config row read the default directory: {:?}",
         pi_config(&after)
     );
+}
+
+#[test]
+fn doctor_reports_the_permission_mode_of_every_configured_host_it_can_read() {
+    let (home, options) = sandbox();
+    let repo = tempfile::tempdir().expect("a repository");
+    for slug in ["claude-code", "codex", "opencode", "pi"] {
+        setup(agent(slug), &Config::default(), &options).expect("setup succeeds");
+    }
+    fs::create_dir_all(repo.path().join(".claude")).expect("a project settings directory");
+    fs::write(
+        repo.path().join(".claude").join("settings.json"),
+        r#"{"permissions":{"defaultMode":"bypassPermissions"}}"#,
+    )
+    .expect("a project settings file");
+    fs::create_dir_all(home.path().join(".codex")).expect("a codex directory");
+    fs::write(
+        home.path().join(".codex").join("config.toml"),
+        "approval_policy = [",
+    )
+    .expect("a broken codex config");
+
+    let skill_root = resolve_paths(agent("claude-code"), &options)
+        .expect("paths resolve")
+        .skill_root;
+    let rows: Vec<crate::harness::doctor::Check> = crate::harness::doctor::full(
+        Some(&skill_root),
+        repo.path(),
+        &Config::default().tracker,
+        &options,
+    )
+    .into_iter()
+    .filter(|check| check.name == "permission")
+    .collect();
+    let text = |slug: &str| {
+        rows.iter()
+            .map(|check| format!("{:?}", check.health))
+            .find(|health| {
+                health.contains(&format!("{slug}:")) || health.contains(&format!("{slug} has"))
+            })
+            .unwrap_or_else(|| panic!("no permission row for {slug}: {rows:?}"))
+    };
+    assert!(text("claude-code").contains("bypassPermissions"));
+    assert!(text("codex").contains("could not be read"));
+    assert!(text("pi").contains("no permission prompts"));
+    assert!(text("opencode").contains("no permission mode"));
+    assert_eq!(rows.len(), 4, "{rows:?}");
 }
 
 #[test]

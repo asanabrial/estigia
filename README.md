@@ -117,10 +117,18 @@ Look before you leap, at any time:
 ```sh
 estigia setup claude-code --dry-run   # exactly what would change, writes nothing
 estigia status                        # what is installed, where, and what runs still hold
-estigia doctor                        # skill, skill-assets, gh, remote, guard, prune, pi-subagents, lockfiles — read-only
+estigia doctor                        # skill, skill-assets, gh, remote, guard, prune, pi-subagents, lockfiles, permission — read-only
 estigia prune                         # branches and checkouts no delivery owns; --confirm removes
 estigia flush --status               # the GitHub writes a closed git operation window queued; plain `flush` sends them
 ```
+
+A host's automatic permission mode approves the host's own prompts. It does not approve Estigia's
+decisions: a refusal stays a refusal and a question stays a question under Claude Code's
+`bypassPermissions` and `auto`, OpenCode's `--auto` and Codex's `never` approval policy, because the
+gate answers before the host's permission layer is asked and nothing in the gate reads the mode.
+Tests hold the hook and plugin answers equal with and without the mode, and `estigia doctor` prints the
+mode each of Claude Code, Codex, OpenCode and Pi is configured with. What was run live, and what was
+not, is in [`docs/honesty.md`](docs/honesty.md).
 
 `setup` installs three core things: the skill an agent reads, a short directive in that agent's
 always-loaded instruction file, and the lifecycle hooks that make the authority mechanical rather than

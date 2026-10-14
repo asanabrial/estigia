@@ -384,6 +384,10 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         // Skipped here for the same reason; reported against real runners in
         // `harness::doctor`'s own module.
         "pi-subagents",
+        // Never broken: it reports a mode the operator chose, and an unreadable
+        // file is `skipped`. Both outcomes are measured in `harness::doctor`'s
+        // own module.
+        "permission",
         // Forced broken in step 9 above, against a directory standing where
         // the database file belongs.
         "store",
