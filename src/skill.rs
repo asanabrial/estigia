@@ -1357,14 +1357,24 @@ pub fn repository_config_path(repo_dir: &Path) -> PathBuf {
 }
 
 /// The top level of the checkout `dir` is inside: `dir` or its nearest ancestor
-/// that holds a `.git`, whether a directory or the `gitdir:` file of a linked
-/// worktree or submodule. `None` for a directory inside no checkout.
+/// whose `.git` is a directory or a readable `gitdir: <path>` file, as a linked
+/// worktree or submodule keeps. A `.git` that is neither — a dangling symlink, an
+/// empty or unrelated file — is not a checkout, and the walk goes on above it.
+/// `None` for a directory inside no checkout.
 pub fn checkout_root(dir: &Path) -> Option<PathBuf> {
     dir.ancestors()
-        .find(|candidate| {
-            !candidate.as_os_str().is_empty() && candidate.join(".git").symlink_metadata().is_ok()
-        })
+        .find(|candidate| !candidate.as_os_str().is_empty() && is_checkout(candidate))
         .map(Path::to_path_buf)
+}
+
+fn is_checkout(candidate: &Path) -> bool {
+    let dot_git = candidate.join(".git");
+    dot_git.is_dir()
+        || fs::read_to_string(&dot_git).is_ok_and(|text| {
+            text.trim()
+                .strip_prefix("gitdir:")
+                .is_some_and(|pointed| !pointed.trim().is_empty())
+        })
 }
 
 /// The git directory shared by a checkout and every worktree linked to it.
@@ -1393,11 +1403,9 @@ pub fn checkout_root(dir: &Path) -> Option<PathBuf> {
 /// is the checkout, as git itself finds it, so a session working from
 /// `apps/engine` reads the rows of the repository it is inside.
 ///
-/// Anything else — no `.git` in `repo_dir` or above it, an unreadable one, a
-/// file that does not say `gitdir:` — resolves to `<top level>/.git`, which is
-/// where every ordinary checkout keeps it and where every file written before
-/// this existed still is. A directory inside no checkout resolves to its own
-/// `.git`, which does not exist, and so has no layer.
+/// Anything else — no `.git` in `repo_dir` or above it, or only ones that
+/// [`checkout_root`] does not take for a checkout — resolves to `repo_dir`'s own
+/// `.git`, which does not exist as a directory, and so has no layer.
 fn git_common_dir(repo_dir: &Path) -> PathBuf {
     let repo_dir = checkout_root(repo_dir).unwrap_or_else(|| repo_dir.to_path_buf());
     let repo_dir = repo_dir.as_path();
@@ -2323,19 +2331,22 @@ fn read_optional(path: &Path) -> Result<Option<String>> {
 #[cfg(test)]
 mod tests {
 
-    fn repository_with_rows(rows: &str) -> (tempfile::TempDir, PathBuf) {
-        let repository = tempfile::tempdir().expect("a repository");
-        std::fs::create_dir_all(repository.path().join(".git")).expect("a checkout");
-        let file = repository_config_path(repository.path());
+    fn write_repository_rows(file: &Path, rows: &str) {
         std::fs::create_dir_all(file.parent().expect("a parent")).expect("the directory");
         fs::write(
-            &file,
+            file,
             format!(
                 "{}\n| Setting | Value here | Skill default |\n|---|---|---|\n{rows}{}\n",
                 CONFIG_FENCE.begin, CONFIG_FENCE.end
             ),
         )
         .expect("the repository layer is written");
+    }
+
+    fn repository_with_rows(rows: &str) -> (tempfile::TempDir, PathBuf) {
+        let repository = tempfile::tempdir().expect("a repository");
+        std::fs::create_dir_all(repository.path().join(".git")).expect("a checkout");
+        write_repository_rows(&repository_config_path(repository.path()), rows);
         let path = repository.path().to_path_buf();
         (repository, path)
     }
@@ -2647,7 +2658,7 @@ mod tests {
     }
 
     #[test]
-    fn a_subdirectory_of_a_submodule_answers_for_the_submodule() {
+    fn a_subdirectory_of_a_submodule_reads_the_submodules_rows() {
         let outside = tempfile::tempdir().expect("somewhere to build a checkout");
         let parent = outside.path().join("parent");
         let module = parent.join(".git").join("modules").join("child");
@@ -2659,12 +2670,82 @@ mod tests {
             format!("gitdir: {}\n", module.display()),
         )
         .expect("the submodule's pointer");
-
-        assert_eq!(
-            repository_config_path(&child.join("src")),
-            repository_config_path(&child)
+        write_repository_rows(
+            &repository_config_path(&parent),
+            "| Integration | trunk | branch |\n",
         );
-        assert!(repository_config_path(&child.join("src")).starts_with(&module));
+        write_repository_rows(
+            &module.join("estigia").join(crate::config::LOCAL_FILE),
+            "| Integration | branch | branch |\n",
+        );
+
+        let (found, text) = repository_rows(&child.join("src"))
+            .expect("the rows read")
+            .expect("the submodule subdirectory found no repository file");
+
+        assert!(found.starts_with(&module), "{}", found.display());
+        assert!(
+            text.contains("| Integration | branch |"),
+            "the parent's rows were read for the submodule:\n{text}"
+        );
+    }
+
+    #[test]
+    fn a_nested_git_entry_that_is_not_a_checkout_does_not_hide_the_outer_checkout() {
+        let broken = [
+            "a file that does not say gitdir",
+            "an empty file",
+            "a gitdir line that names nothing",
+            "a dangling symlink",
+        ];
+        for which in broken {
+            let (_repository, path) = repository_with_rows("| Integration | trunk | branch |\n");
+            let nested = path.join("vendor").join("lib");
+            std::fs::create_dir_all(nested.join("src")).expect("a nested directory");
+            let at = nested.join(".git");
+            match which {
+                "a file that does not say gitdir" => {
+                    std::fs::write(&at, "not a gitdir pointer").expect("the garbage marker");
+                }
+                "an empty file" => std::fs::write(&at, "").expect("the empty marker"),
+                "a gitdir line that names nothing" => {
+                    std::fs::write(&at, "gitdir:\n").expect("the empty pointer");
+                }
+                _ => {
+                    #[cfg(unix)]
+                    std::os::unix::fs::symlink(nested.join("gone"), &at)
+                        .expect("the dangling symlink");
+                    #[cfg(not(unix))]
+                    std::fs::write(&at, "").expect("the stand-in marker");
+                }
+            }
+
+            assert_eq!(
+                checkout_root(&nested.join("src")),
+                Some(path.clone()),
+                "{which} was taken for a checkout"
+            );
+            let (found, text) = repository_rows(&nested.join("src"))
+                .expect("the rows read")
+                .unwrap_or_else(|| panic!("{which} hid the outer checkout's repository file"));
+            assert_eq!(found, repository_config_path(&path), "{which}");
+            assert!(text.contains("Integration"), "{which}");
+        }
+    }
+
+    #[test]
+    fn a_nested_git_entry_that_is_not_a_checkout_leaves_no_checkout_when_none_is_above() {
+        let outside = tempfile::tempdir().expect("a directory with no checkout above it");
+        let nested = outside.path().join("lib");
+        std::fs::create_dir_all(nested.join("src")).expect("a nested directory");
+        std::fs::write(nested.join(".git"), "not a gitdir pointer").expect("the garbage marker");
+
+        assert_eq!(checkout_root(&nested.join("src")), None);
+        assert!(
+            repository_rows(&nested.join("src"))
+                .expect("the rows read")
+                .is_none()
+        );
     }
 
     /// Registering one checkout does not forget another that is merely away.
