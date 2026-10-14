@@ -67,8 +67,8 @@ fn a_closing_keyword_naming_this_issue_is_found_in_every_spelling() {
 
 #[test]
 fn a_reference_that_is_not_a_closing_keyword_is_left_alone() {
-    // The live case this exists for: issue #118's body opened with
-    // `Refs #118 — deliberately NOT a closing keyword` while the reference was
+    // The live case this exists for: an issue body that opened with
+    // `Refs #<n> — deliberately NOT a closing keyword` while the reference was
     // live anyway. Reporting that as "fix the PR body" sends a run to edit prose
     // that never contained the keyword.
     for text in [
