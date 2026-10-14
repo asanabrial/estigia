@@ -19821,7 +19821,15 @@ const status = async (label, event, ctx, env, wait = 3000, via = handlers) => {
   return { label, returned: returned ?? null, statuses: statuses.slice(before), calls: calls().slice(spawned).filter((call) => call.args[0] !== "changes") };
 };
 
+const settled = async () => {
+  for (let seen = ""; seen !== `${calls().length}/${shelf.length}`; ) {
+    seen = `${calls().length}/${shelf.length}`;
+    await pause(150);
+  }
+};
+
 const widget = async (label, event, ctx, env, wait = 3000, via = handlers) => {
+  await settled();
   answer(env);
   const before = shelf.length;
   const spawned = calls().length;
