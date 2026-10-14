@@ -18409,6 +18409,57 @@ fn a_recorded_raise_lifts_the_tier_the_gate_reads_and_an_unknown_word_lifts_noth
 }
 
 #[test]
+fn a_raised_repair_is_judged_by_the_whole_high_panel_and_not_the_delta_lens() {
+    let (_root, context, parent, repair) = delta_lens_repair_world();
+    let mut comments = vec![
+        published(&parent),
+        computed_by("codex-b", &parent, "approved"),
+        recorded_finding_on(&parent, 6, "f-1", "suggestion", None, None),
+        wrote(
+            "3",
+            super::super::markers::render(
+                "published",
+                &[
+                    ("run-id", "claude-a"),
+                    ("epoch", &repair.epoch),
+                    ("pr", &repair.pr.to_string()),
+                    ("head", &repair.head),
+                    ("base", &repair.base),
+                    ("digest", &repair.digest),
+                    ("parent", &parent.epoch),
+                    ("parent-pr", &parent.pr.to_string()),
+                    ("parent-head", &parent.head),
+                    ("parent-base", &parent.base),
+                    ("parent-digest", &parent.digest),
+                    ("delta", &"0".repeat(64)),
+                    ("delta-range", "parent-head..head"),
+                    ("computed-level", "medium"),
+                    ("raise", "authorization"),
+                    ("raise-reason", "the diff cannot show who may call this"),
+                ],
+            )
+            .expect("a raised repair marker"),
+        ),
+    ];
+    comments.push(recorded_lens_report_for(&repair, 3, "review-lens", None));
+    let (level, verdict) = computed::computed_for(&context, &comments, &repair, None)
+        .expect("the repair's panel reads");
+    assert_eq!(level, RiskLevel::High, "{verdict:?}");
+    assert_ne!(verdict.outcome, ComputedOutcome::Approved, "{verdict:?}");
+    for role in [
+        "review-risk",
+        "review-readback",
+        "review-readability",
+        "review-reliability",
+    ] {
+        assert!(
+            verdict.missing_roles.iter().any(|missing| missing == role),
+            "a raised repair was not owed `{role}`: {verdict:?}"
+        );
+    }
+}
+
+#[test]
 fn a_successor_is_reviewed_through_the_focus_its_predecessor_froze() {
     let (scene, successor) = successor_scene("medium", "risk");
     let mut comments = scene.comments;
