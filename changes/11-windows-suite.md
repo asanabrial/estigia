@@ -5,6 +5,7 @@ section: The harness
   `SystemRoot`, and `PATHEXT` and `COMSPEC` were never on it. It now uses the tracker transport's own
   case-insensitive list for those names, which adds `PATHEXT`, `COMSPEC`, `SYSTEMDRIVE` and `WINDIR`; `GH_TOKEN` is
   still dropped and `OPENAI_API_KEY` still kept (`docs/honesty.md`).
-- **The suite runs on Windows.** Issue #11. `ci.yml` runs `cargo test` on `windows-latest` and `release.yml` runs it on
-  the Windows targets, after the fixtures that assumed POSIX paths, shells and separators were made portable
-  (`test_env::shell_path`, `test_env::outside_the_checkout`).
+- **Most of the suite now passes on Windows; the lane still skips it.** Issue #11, first slice. The fixtures that
+  assumed POSIX paths, shells and separators go through `test_env::shell_path` and `test_env::outside_the_checkout`.
+  On a Windows runner every integration target now passes and 13 lib tests still fail, down from 55, so `ci.yml` and
+  `release.yml` keep skipping the Windows test step until those are settled (`docs/honesty.md`).
