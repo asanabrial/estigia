@@ -1031,6 +1031,9 @@ pub struct Start<'a> {
     pub repo_name: &'a str,
     /// The state this run believes the issue is in.
     pub expect_state: &'a str,
+    /// Whether the branch is linked to the issue natively. `false` is the slice
+    /// that is not the last of its chain.
+    pub link: bool,
     /// The moment the timeline is judged against.
     ///
     /// **Read from the machine, never from the run being judged.** The binding
@@ -1195,7 +1198,8 @@ fn reserve_checkout(
 }
 
 /// `start-branch` — verify the claim, reserve the checkout locally, then link
-/// the branch.
+/// the branch, unless `what.link` is off: that answers `skipped` and makes no
+/// call.
 pub fn start_branch(
     context: &Context,
     what: &Start<'_>,
@@ -1221,7 +1225,9 @@ pub fn start_branch(
     // Everything above can refuse, and refusing before this is the whole
     // ordering guarantee: a run that loses the race or cannot prove it owns its
     // own directory leaves nothing behind on GitHub.
-    let develop = if super::outbox::is_closed(context) {
+    let develop = if !what.link {
+        serde_json::json!({ "linked": false, "outcome": "skipped" })
+    } else if super::outbox::is_closed(context) {
         super::outbox::queue_link(context, what.number()?, what.branch, what.base, what.now)?
     } else {
         develop_link(context, what.number()?, what.branch, what.base)?

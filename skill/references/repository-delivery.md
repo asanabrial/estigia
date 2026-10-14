@@ -40,7 +40,7 @@ is a coherent unit that can land on its own; its boundary is recorded on the iss
 write, with the commits it will carry. Each slice publishes on its own — its own receipt, its own
 review and its own `release_ci` — under the one claim that covers the issue, and the transport keys
 a receipt to its own pull request, so an earlier slice's receipt stays usable after a later one
-publishes, and each slice's first publication records no lineage from another. Only `stacked-to-main` is taken: every slice's base is the default branch, and a chain
+publishes, and each slice's first publication records no lineage from another. Every slice but the last starts its branch with `no_link: true`, so its merge does not close the issue. Only `stacked-to-main` is taken: every slice's base is the default branch, and a chain
 targeting another branch is declined because it conflicts with the merge-parents rule and
 `target`'s base. `Change size` stays a planning heuristic, and a single larger coherent pull
 request remains the ordinary answer when splitting would reduce review quality.

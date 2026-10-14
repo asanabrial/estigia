@@ -480,8 +480,10 @@ commit whose second parent is the reviewed head and whose first parent descends 
 refusal names the merge commit and its parents. It runs after the merge and `record_spend`, needs no closing
 reference, and the answer carries `delivery` (pull request, merge commit, parents). No receipt, no check.
 
-That is the **final-delivery** path. An intermediate slice of a retained issue must not borrow it:
-record the workflow state that should survive before merging, renew with
+That is the **final-delivery** path. An intermediate slice of a retained issue must not borrow it.
+Start its branch with `start_branch` `no_link: true` (`--no-link`): nothing links the branch, its merge
+leaves the issue open, and `check_closing_keywords` answers `will_autoclose: false`. The last slice
+starts linked. For a slice whose branch is already linked: record the workflow state that should survive before merging, renew with
 `verify-claim --allow-closed-by-pr <pr>` after the linked PR closes the issue, reopen it with
 `gh issue reopen <n>`, then transition from `review` into that recorded retained state and read it
 back. Never transition an intermediate slice to `done`. A different closer, truncated connection,

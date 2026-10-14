@@ -620,4 +620,68 @@ fn a_provisional_issue_gets_a_branch_while_closed() {
     assert_eq!(rig.writes(), Vec::<String>::new());
 }
 
+fn asked(rig: &Rig) -> String {
+    std::fs::read_to_string(&rig.log).unwrap_or_default()
+}
+
+fn no_link(mut flags: Vec<&str>) -> Vec<&str> {
+    flags.push("--no-link");
+    flags
+}
+
+#[test]
+fn a_branch_started_without_the_link_issues_no_develop_and_says_skipped() {
+    let rig = repository_rig();
+    let root = rig.path("worktrees/<branch>");
+    let answer = rig
+        .open("start-branch", &no_link(start_flags("12", "fix-12", &root)))
+        .expect("a start that skips the link");
+
+    assert_eq!(answer["natively_linked"], false, "{answer}");
+    assert_eq!(answer["link_outcome"], "skipped", "{answer}");
+    assert!(answer.get("link_queued").is_none(), "{answer}");
+    assert!(
+        std::path::Path::new(answer["worktree"].as_str().expect("a path")).is_dir(),
+        "{answer}"
+    );
+    assert!(!asked(&rig).contains("develop"), "{}", asked(&rig));
+    assert_eq!(rig.writes(), Vec::<String>::new());
+    assert_eq!(rig.queue(), Vec::<(OutboxKind, u64)>::new());
+    assert!(!remote_has(&rig, "fix-12"), "the branch reached the remote");
+}
+
+#[test]
+fn a_branch_started_without_the_link_while_closed_queues_no_link() {
+    let rig = repository_rig();
+    let root = rig.path("worktrees/<branch>");
+    let answer = rig
+        .closed("start-branch", &no_link(start_flags("12", "fix-12", &root)))
+        .expect("a start that skips the link while closed");
+
+    assert_eq!(answer["natively_linked"], false, "{answer}");
+    assert_eq!(answer["link_outcome"], "skipped", "{answer}");
+    assert!(answer.get("link_queued").is_none(), "{answer}");
+    assert_eq!(rig.queue(), Vec::<(OutboxKind, u64)>::new());
+}
+
+#[test]
+fn a_branch_started_by_default_still_issues_develop_and_links() {
+    let mut rig = repository_rig();
+    let repo = rig.context.repo_dir.clone();
+    git(&repo, &["branch", "fix-12", "HEAD"]);
+    git(&repo, &["push", "--quiet", "origin", "--", "fix-12"]);
+    rig.script = crate::test_env::answers(&[
+        crate::test_env::live_holder_issue("claude-a", 12, "in-progress"),
+        serde_json::json!({ "matches": "issue develop", "stdout": "", "status": 0 }),
+    ]);
+    let root = rig.path("worktrees/<branch>");
+    let answer = rig
+        .open("start-branch", &start_flags("12", "fix-12", &root))
+        .expect("a default start");
+
+    assert_eq!(answer["natively_linked"], true, "{answer}");
+    assert_eq!(answer["link_outcome"], "created", "{answer}");
+    assert!(asked(&rig).contains("issue develop 12"), "{}", asked(&rig));
+}
+
 mod engine;
