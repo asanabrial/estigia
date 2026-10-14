@@ -7908,16 +7908,6 @@ fn ready_outcome(
     }
 }
 
-/// The changed-file count at which `SKILL.md`'s Direct Work Delegation table
-/// asks a writer to delegate — the table's own words, `"2+ non-trivial files
-/// delegate one writer"`. What crosses it refuses a bare `topology: inline`
-/// with no stated reason; see `publish_with`.
-///
-/// `pub(crate)` so `config::tests::direct_work_delegation_thresholds_match_the_writing_refusal`
-/// can cross this number against the writing row it already pins, rather than
-/// carrying a second, unlinked copy of `2`.
-pub(crate) const TOPOLOGY_WRITE_THRESHOLD: usize = 2;
-
 /// `publish-review` — establish draft isolation, then push and publish a receipt.
 ///
 /// A resumed issue **reuses its existing open PR**; creating a duplicate is not
@@ -7976,10 +7966,8 @@ pub struct Publication<'a> {
     /// rendered, read back by nothing) rather than becoming a fifth required
     /// field there.
     pub topology: Option<&'a str>,
-    /// Why this delivery declares `topology: inline` despite the changed-file
-    /// count crossing this crate's writing threshold. Read only when
-    /// `topology` is exactly `"inline"` and that count is met; a departure
-    /// from `inline` is accepted without one, whatever it says.
+    /// Why this delivery declared the topology it did. Recorded beside
+    /// `topology`; given without a topology it is refused. Nothing reads it back to decide.
     pub topology_reason: Option<&'a str>,
     /// The epoch the caller believes is the newest publication on this branch's
     /// pull request, or `none` for a branch with no publication yet. `None`
@@ -8235,7 +8223,7 @@ fn remote_branch_head(context: &Context, branch: &str) -> Result<String, Failure
 /// The declared execution topology, trimmed and checked at the boundary.
 ///
 /// One decision for all three surfaces: the trimmed values are what the
-/// predicate decides on, the marker records, and the answer echoes, so they
+/// marker records and the answer echoes, so they
 /// cannot diverge by construction. A blank declaration is refused rather than
 /// recorded, the way `--basis` is — a caller that sent nothing and a caller
 /// that sent emptiness said different things. A reason with no topology is
@@ -8261,7 +8249,7 @@ fn normalize_topology<'a>(
         let action = match topology.map(str::trim) {
             Some(value) if value.eq_ignore_ascii_case("inline") => format!(
                 "the declared topology `{value}` carries a blank --topology-reason: say why it \
-                 needed no delegation past the writing threshold, or omit --topology-reason \
+                 needed no delegation, or omit --topology-reason \
                  entirely"
             ),
             Some(value) => format!(
@@ -8529,40 +8517,6 @@ fn publish_with_sleep(
     }
 
     let payload = super::target::review_payload(at, payload_base, payload_head)?;
-
-    // The topology refusal. `SKILL.md`'s Direct Work Delegation table asks a
-    // writer to delegate past `TOPOLOGY_WRITE_THRESHOLD` non-trivial files;
-    // Estigia can count files and cannot judge non-trivial (`docs/honesty.md`
-    // says so), so what this gates is not the choice but the silence — a bare
-    // `inline` declared over that count with nothing said about why. Placed
-    // here because `payload` now exists and nothing remote has been touched:
-    // `Stop` below is honestly *nothing was written*.
-    let changed_files = super::target::changed_file_count(&payload.text);
-    if topology
-        .map(str::trim)
-        .is_some_and(|value| value.eq_ignore_ascii_case("inline"))
-        && changed_files >= TOPOLOGY_WRITE_THRESHOLD
-        && topology_reason
-            .map(str::trim)
-            .unwrap_or_default()
-            .is_empty()
-    {
-        return Err(Failure::Stop(serde_json::json!({
-            "ok": false,
-            "reason": "topology-inline-over-threshold",
-            "changed_files": changed_files,
-            "threshold": TOPOLOGY_WRITE_THRESHOLD,
-            "action": format!(
-                "this publication declares `topology: inline` over {changed_files} changed \
-                 files, at or past SKILL.md's Direct Work Delegation writing threshold of \
-                 {TOPOLOGY_WRITE_THRESHOLD}+ non-trivial files, with no stated reason. Estigia \
-                 counts files; it cannot judge non-trivial, so this refusal over-fires by \
-                 design \u{2014} pass --topology-reason with one sentence, or declare the \
-                 topology that actually wrote the change. Nothing has been pushed and no pull \
-                 request was opened",
-            ),
-        })));
-    }
 
     // The closing-keyword refusal, where it can be true. A `Stop` here reads
     // *nothing was written*, and a run believing that leaves the branch and PR

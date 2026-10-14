@@ -333,17 +333,11 @@ fn publish_review_carries_the_payload_only_when_asked_and_never_truncates_it() {
     }
 }
 
-/// The topology refusal, proved by mutation: a bare `topology: inline`
-/// declared over the changed-file count refuses before anything is pushed and
-/// names the count and the threshold, the identical call with a stated reason
-/// succeeds, and a departure from `inline` needs no reason at all.
-///
-/// The revised criteria: the count is a **file** count, not the
-/// contract's "non-trivial" threshold, so this is exactly where the refusal
-/// over-fires by design — the fixture changes two one-line files, and the
-/// refusal fires anyway.
+/// A declared `topology: inline` is recorded whatever the changed-file count:
+/// nothing refuses it, with or without a reason, and a departure from `inline`
+/// is recorded as typed.
 #[test]
-fn publish_review_refuses_a_bare_inline_declaration_over_the_writing_threshold() {
+fn publish_review_records_a_bare_inline_declaration_over_any_file_count() {
     let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     let trace = tempfile::tempdir().expect("a trace directory");
@@ -391,9 +385,6 @@ fn publish_review_refuses_a_bare_inline_declaration_over_the_writing_threshold()
     ]);
     git(&["push", "-q", "origin", "main"]);
 
-    // Two changed files — one already meets `SKILL.md`'s writing threshold —
-    // and each is one line, which is the point: this refusal cannot see that
-    // and fires anyway.
     git(&["checkout", "-q", "-b", branch]);
     std::fs::write(repo.join("one.txt"), "changed one\n").expect("the change");
     std::fs::write(repo.join("two.txt"), "changed two\n").expect("the change");
@@ -459,17 +450,7 @@ fn publish_review_refuses_a_bare_inline_declaration_over_the_writing_threshold()
     .expect("the fake tracker script serialises");
 
     // One call per declared topology, against the one fixture: the branch
-    // never moves, so every call reaches the identical reused PR. A refusal
-    // renders as prose, not the raw JSON a success answers with — the same
-    // reason every other refusal test here reads `text` by substring rather
-    // than parsing it.
-    //
-    // `log` receives the scripted `gh` trace for this one call, cleared first:
-    // the refusal's own words say *nothing was written*, and an unmatched `gh`
-    // invocation in this fixture is success with empty output
-    // (`examples/fake_process.rs:15-17`), so the sentence can be true of the
-    // answer and false of the world. Reading the trace back is what tells them
-    // apart.
+    // never moves, so every call reaches the identical reused PR.
     // `temp` isolates each call's own staged scratch files — the `published`
     // comment `stage`s before posting it — so a successful call's own marker
     // can be read back afterward the same way `staged_receipt` reads it
@@ -552,49 +533,17 @@ fn publish_review_refuses_a_bare_inline_declaration_over_the_writing_threshold()
     let bare_log = trace.path().join("bare-calls.log");
     let (bare_is_error, bare) = call(arguments(&[("topology", "inline")]), &bare_log);
     assert!(
-        bare_is_error,
-        "a bare `topology: inline` over the writing threshold was not refused: {bare}"
+        !bare_is_error,
+        "a bare `topology: inline` must be recorded, not refused: {bare}"
     );
     assert!(
-        bare.contains("topology-inline-over-threshold"),
-        "the refusal did not name its reason: {bare}"
+        !bare.contains("topology-inline-over-threshold"),
+        "the retired file-count refusal returned: {bare}"
     );
+    let bare_receipt = staged_receipt(home, 13);
     assert!(
-        bare.contains("this publication declares `topology: inline` over 2 changed files"),
-        "the refusal did not name the count: {bare}"
-    );
-    assert!(
-        bare.contains("writing threshold of 2+ non-trivial files"),
-        "the refusal did not name the threshold: {bare}"
-    );
-    assert!(
-        bare.contains("--topology-reason"),
-        "the refusal's action does not name a way out: {bare}"
-    );
-    assert!(
-        bare.contains("nothing was written") && bare.contains("Nothing has been pushed"),
-        "a refusal in this window must honestly say nothing was written: {bare}"
-    );
-    // The world, not the sentence: an unmatched `gh` call in this fixture is
-    // success with empty output, so the refusal's own words would still read
-    // *nothing was written* even if the reused PR had already been rewritten.
-    // The fixture supplies `pr_body_file`, so a `gh pr edit` on the reused PR
-    // #13 is exactly the write this refusal must land above.
-    // The fake on `PATH` is `gh`; `git` is real, so the push the refusal lands
-    // above is outside this log by construction — this reads the `gh` writes,
-    // not the remote's state.
-    let bare_calls = std::fs::read_to_string(&bare_log).unwrap_or_default();
-    assert!(
-        !bare_calls.is_empty(),
-        "the refused publication left no `gh` trace to read: {bare_log:?}"
-    );
-    assert!(
-        !bare_calls.contains("pr edit")
-            && !bare_calls.contains("pr ready")
-            && !bare_calls.contains("pr create")
-            && !bare_calls.contains("workflow run")
-            && !bare_calls.contains("issue comment"),
-        "the refused publication reached the pull request: {bare_calls}"
+        bare_receipt.contains("topology=inline") && !bare_receipt.contains("topology-reason="),
+        "the staged receipt does not carry the bare declaration: {bare_receipt}"
     );
 
     let reasoned_log = trace.path().join("reasoned-calls.log");
@@ -642,31 +591,15 @@ fn publish_review_refuses_a_bare_inline_declaration_over_the_writing_threshold()
         "no reason was given and none should be recorded: {delegated_receipt}"
     );
 
-    // The predicate compares the value it was handed, not the value a reader
-    // would take it to mean: a byte-exact `topology == Some("inline")` lets a
-    // capitalised or padded declaration skip the refusal while still recording
-    // a string a reader reads as `inline`. Trimmed and case-insensitive closes
-    // both.
     let cased_log = trace.path().join("cased-calls.log");
     let (cased_is_error, cased) = call(arguments(&[("topology", "Inline")]), &cased_log);
     assert!(
-        cased_is_error,
-        "a capitalised `Inline` over the writing threshold was not refused: {cased}"
+        !cased_is_error,
+        "a capitalised `Inline` must be recorded: {cased}"
     );
     assert!(
-        cased.contains("topology-inline-over-threshold"),
-        "the capitalised refusal did not name its reason: {cased}"
-    );
-
-    let padded_log = trace.path().join("padded-calls.log");
-    let (padded_is_error, padded) = call(arguments(&[("topology", "inline  ")]), &padded_log);
-    assert!(
-        padded_is_error,
-        "a padded `inline  ` over the writing threshold was not refused: {padded}"
-    );
-    assert!(
-        padded.contains("topology-inline-over-threshold"),
-        "the padded refusal did not name its reason: {padded}"
+        staged_receipt(home, 13).contains("topology=Inline"),
+        "the declaration is kept as typed"
     );
 }
 

@@ -235,7 +235,7 @@ at the top of this document, and the symbol or file is the citation that holds.
 - **The delegation table's first row is v4's evidence budget:** `internal/agents/capabilitymanifest/manifest.go`,
   lines 214-236. File counts are no longer a delegation trigger in v4
   (`manifest.go`, lines 83-85), and the writing row's `2+ non-trivial files` is the one file-count
-  boundary v4 keeps. Estigia keeps exactly that boundary and no other.
+  boundary v4 keeps. Estigia no longer keeps it: its writing row delegates for a named reason only.
 - **The ODD protocol's seven steps:** `internal/components/agentguidance/routing.go`, lines 33-48,
   adapted to Estigia's two kept pillars (the claimed issue is the record of the work, and the
   publication is the review candidate), as the section above settles.

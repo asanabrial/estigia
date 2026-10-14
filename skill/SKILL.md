@@ -37,13 +37,15 @@ one of these boundaries:
 
 | Work | Stay inline | Delegate |
 |---|---|---|
-| One batch of reads or lookups | At most 3 calls and about 10k tokens stays inline | More than about 5 sequential lookups delegates one explorer with a ~2k-token handoff |
-| Reading for a write or broad research | - | Delegate reading that prepares a write, broad research, or context compression |
-| Writing | One already-understood mechanical file may stay inline | 2+ non-trivial files delegate one writer |
+| One batch of reads or lookups | At most 3 calls and about 10k tokens stays inline, even when it prepares a write | More than about 5 sequential lookups delegates one explorer with a ~2k-token handoff |
+| Broad research or context compression | - | Delegate broad research or context compression |
+| Writing | A small understood change stays inline whatever its file count | Delegate one writer only for a named reason: independent units that can proceed in parallel, or the parent's context limit |
 
-The topology actually used is recorded at publication, not merely required here: `publish_review`/`republish_review` take `--topology` and refuse a bare `inline` declared past this table's writing row with no stated reason. See the binding contract for the exact mechanics and what it cannot prove.
+Past about 150k tokens of parent context, hand the next unit to a fresh worker. Pass a worker the spec verbatim, by reference, never paraphrased. A worker's check of its own work gets one correction batch for all of its blockers, a recheck limited to those blockers, and then it stops and asks.
 
-The writing row's threshold itself is **stated, not adjudicated**: no gate can judge "non-trivial", so nothing refuses a write that crosses it. What the gate does record, independent of the declaration above, is narrower: when a call's `agent_type` shows this run's own context wrote after a delegated one had already run this session, that target is named at `SessionStart` for the rest of the session and is gone at `SessionEnd` — a floor, since a write before that first delegated call is recorded as neither this run's own nor a delegate's.
+The topology actually used is recorded at publication, not merely required here: `publish_review`/`republish_review` take `--topology` and `--topology-reason` and record them on the marker, and nothing refuses a declaration. See the binding contract for the exact mechanics and what it cannot prove.
+
+The writing row's reasons are **stated, not adjudicated**: no gate can judge whether a change is understood or its units independent, so nothing refuses a write that ignores them. What the gate does record, independent of the declaration above, is narrower: when a call's `agent_type` shows this run's own context wrote after a delegated one had already run this session, that target is named at `SessionStart` for the rest of the session and is gone at `SessionEnd` — a floor, since a write before that first delegated call is recorded as neither this run's own nor a delegate's.
 
 Tests, builds, installs, and native review actions may each use a fresh per-action worker without changing the route. Child workers do not gain orchestration authority.
 

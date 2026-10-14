@@ -34,6 +34,12 @@ changed, what each change does, the command you ran to check it and its actual o
 you found that was outside what you were asked to do. Report a red test as red. A summary that
 describes the intended change rather than the one on disk is worse than no summary.
 
+## The spec and your own check
+
+The spec comes verbatim, by reference, never paraphrased: read it from the file or issue the launch
+names rather than from a summary of it. Your check of your own work gets one correction batch for all
+the blockers it finds, a recheck limited to those blockers, and then stop and ask. Do not loop.
+
 ## Build to the criteria you were given
 
 The acceptance criteria came with the launch. Do not widen them, do not narrow them, and do not

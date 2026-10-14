@@ -1215,7 +1215,7 @@ fn the_retired_phase_routing_keys_are_dropped_and_named() {
 }
 
 #[test]
-fn direct_work_delegation_thresholds_match_the_writing_refusal() {
+fn direct_work_delegation_delegates_a_writer_for_a_reason_and_not_for_a_file_count() {
     let contract = include_str!("../../skill/SKILL.md");
     let section = contract
         .split_once("## Direct Work Delegation\n")
@@ -1239,45 +1239,22 @@ fn direct_work_delegation_thresholds_match_the_writing_refusal() {
     assert_eq!(
         rows.get("One batch of reads or lookups"),
         Some(&(
-            "At most 3 calls and about 10k tokens stays inline",
+            "At most 3 calls and about 10k tokens stays inline, even when it prepares a write",
             "More than about 5 sequential lookups delegates one explorer with a ~2k-token handoff"
         ))
     );
     assert_eq!(
-        rows.get("Reading for a write or broad research"),
-        Some(&(
-            "-",
-            "Delegate reading that prepares a write, broad research, or context compression"
-        ))
+        rows.get("Broad research or context compression"),
+        Some(&("-", "Delegate broad research or context compression"))
     );
     assert_eq!(
         rows.get("Writing"),
         Some(&(
-            "One already-understood mechanical file may stay inline",
-            "2+ non-trivial files delegate one writer"
+            "A small understood change stays inline whatever its file count",
+            "Delegate one writer only for a named reason: independent units that can proceed in parallel, or the parent's context limit"
         ))
     );
     assert_eq!(rows.len(), 3, "the threshold table gained a second policy");
-
-    // The writing threshold has two copies — this prose row and
-    // `claim::TOPOLOGY_WRITE_THRESHOLD`, which the refusal's own sentence
-    // attributes to `SKILL.md` — and nothing before this crossed them. A prose
-    // row edited to `3+` reddens the byte-exact assertion above and never
-    // reaches here; what this catches is the const moving while the prose does
-    // not, leaving the refusal's citation false.
-    let writing_delegate = rows.get("Writing").expect("the writing row exists").1;
-    let threshold: usize = writing_delegate
-        .split(|c: char| !c.is_ascii_digit())
-        .find(|segment| !segment.is_empty())
-        .and_then(|digits| digits.parse().ok())
-        .unwrap_or_else(|| {
-            panic!("the writing row's delegate cell holds no digit run: {writing_delegate}")
-        });
-    assert_eq!(
-        threshold,
-        crate::transport::claim::TOPOLOGY_WRITE_THRESHOLD,
-        "SKILL.md's writing threshold and claim::TOPOLOGY_WRITE_THRESHOLD disagree"
-    );
 
     let normalize = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     let expected = concat!(
@@ -1285,11 +1262,12 @@ fn direct_work_delegation_thresholds_match_the_writing_refusal() {
         "one of these boundaries:\n",
         "| Work | Stay inline | Delegate |\n",
         "|---|---|---|\n",
-        "| One batch of reads or lookups | At most 3 calls and about 10k tokens stays inline | More than about 5 sequential lookups delegates one explorer with a ~2k-token handoff |\n",
-        "| Reading for a write or broad research | - | Delegate reading that prepares a write, broad research, or context compression |\n",
-        "| Writing | One already-understood mechanical file may stay inline | 2+ non-trivial files delegate one writer |\n",
-        "The topology actually used is recorded at publication, not merely required here: `publish_review`/`republish_review` take `--topology` and refuse a bare `inline` declared past this table's writing row with no stated reason. See the binding contract for the exact mechanics and what it cannot prove.\n",
-        "The writing row's threshold itself is **stated, not adjudicated**: no gate can judge \"non-trivial\", so nothing refuses a write that crosses it. What the gate does record, independent of the declaration above, is narrower: when a call's `agent_type` shows this run's own context wrote after a delegated one had already run this session, that target is named at `SessionStart` for the rest of the session and is gone at `SessionEnd` — a floor, since a write before that first delegated call is recorded as neither this run's own nor a delegate's.\n",
+        "| One batch of reads or lookups | At most 3 calls and about 10k tokens stays inline, even when it prepares a write | More than about 5 sequential lookups delegates one explorer with a ~2k-token handoff |\n",
+        "| Broad research or context compression | - | Delegate broad research or context compression |\n",
+        "| Writing | A small understood change stays inline whatever its file count | Delegate one writer only for a named reason: independent units that can proceed in parallel, or the parent's context limit |\n",
+        "Past about 150k tokens of parent context, hand the next unit to a fresh worker. Pass a worker the spec verbatim, by reference, never paraphrased. A worker's check of its own work gets one correction batch for all of its blockers, a recheck limited to those blockers, and then it stops and asks.\n",
+        "The topology actually used is recorded at publication, not merely required here: `publish_review`/`republish_review` take `--topology` and `--topology-reason` and record them on the marker, and nothing refuses a declaration. See the binding contract for the exact mechanics and what it cannot prove.\n",
+        "The writing row's reasons are **stated, not adjudicated**: no gate can judge whether a change is understood or its units independent, so nothing refuses a write that ignores them. What the gate does record, independent of the declaration above, is narrower: when a call's `agent_type` shows this run's own context wrote after a delegated one had already run this session, that target is named at `SessionStart` for the rest of the session and is gone at `SessionEnd` — a floor, since a write before that first delegated call is recorded as neither this run's own nor a delegate's.\n",
         "Tests, builds, installs, and native review actions may each use a fresh per-action worker without changing the route. Child workers do not gain orchestration authority.\n",
         "Two definitions ship for exactly this: `developer`, which writes and runs the suite inside the checkout its launch names, and `analyst`, which is repository-read-only. Handing a bounded piece of work to a fresh context happens under every run. Each is installed only where `Model routing` names its role, so no definition is there to launch until the routing names it, and the brief is composed in the prompt until then; naming the role installs it, and the model beside it says only what it runs on. The row's other value, `by task`, names no role and installs nothing: the shape of the work decides the model and the effort, and the launcher records what it chose. A delegated context is measured against **this** run's claim, so what the definition tells it not to do is a rule the launch keeps rather than one the gate enforces on it separately.\n",
         "Crossing a threshold selects delegated work only. Size, file count, and risk do not select a protocol."
@@ -1299,6 +1277,20 @@ fn direct_work_delegation_thresholds_match_the_writing_refusal() {
         normalize(expected),
         "the direct-work owner section changed without updating its semantic binding"
     );
+}
+
+#[test]
+fn the_developer_definition_carries_the_spec_and_correction_rules() {
+    let definition = include_str!("../../skill/agents/developer.md");
+    let flat = definition.split_whitespace().collect::<Vec<_>>().join(" ");
+    for needle in [
+        "verbatim, by reference, never paraphrased",
+        "one correction batch for all the blockers",
+        "limited to those blockers",
+        "then stop and ask",
+    ] {
+        assert!(flat.contains(needle), "developer.md lost: {needle}");
+    }
 }
 
 #[test]

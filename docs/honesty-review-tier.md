@@ -811,7 +811,7 @@
   rather than retyped); the shipped configuration block's row labels are real `Setting` labels
   (new); the four finding vocabularies against every reviewer definition that records a finding,
   both judge seals and the five sealed lenses (new, this change); MCP operation names, agent
-  definition names, lens/reviewer counts, the `2+` writing threshold and the per-file byte ceiling
+  definition names, lens/reviewer counts and the per-file byte ceiling
   are each crossed elsewhere in this crate, named above. Asked for and not adjudicated by anything:
   the gate's own ~28 refusal codes against `skill/` (undocumented, not merely uncrossed); the
   `SCRIPT`-verb-to-dispatcher crossing and the transport CLI flags inside `bindings/github.md`; the
