@@ -692,14 +692,26 @@ extension written before this flag never receives `4`. On `4` the extension show
 decline, a cancelled dialog, a `confirm` that throws, and a `4` it did not ask for all return
 `{ block: true, reason }` with the binary's text.
 
-Pi has no subagents of its own: the extensions that add them start a child `pi` process, which loads
-this same extension and so asks the gate with a session id that holds no claim. The extension therefore
-exports `ESTIGIA_PI_PARENT_SESSION` (its session id) and `ESTIGIA_PI_PARENT_PID` (its process id) into
-`process.env` on `session_start` and on every `tool_call`, so a switched session re-exports, and a child spawned
-afterwards inherits both. A process whose id differs from the exported pid and whose session id differs
-from the exported session adds `--parent-session-id <exported id>` to the gate call; the binary then
-decides it as the run derived from that id, the parent's, exactly as a Claude Code subagent is. The
-exporting process never names its own session as a parent.
+Pi has no subagents of its own: the extensions that add them start a child `pi` process, or run a child
+session inside Pi's own process. The gate extension links a child to its parent in two ways. A session
+whose header names a `parentSession` is a child of that session, in this process or another, and
+the gate call carries `--parent-session-id <the parent's session id>`: the id exported as
+`ESTIGIA_PI_PARENT_SESSION` when there is one that is not the child's own, and otherwise the `id` in the
+parent's session file, or failing that the id in its file name. A session with no such header falls back
+to the pid: the extension exports `ESTIGIA_PI_PARENT_SESSION` (its session id) and `ESTIGIA_PI_PARENT_PID`
+(its process id) into `process.env` on `session_start` and on every `tool_call` of a session that is not a
+child, so a switched session re-exports and a child `pi` spawned afterwards inherits both, and a process
+whose id differs from the exported pid and whose session id differs from the exported session adds
+`--parent-session-id <exported id>`. The binary then decides the child as the run derived from that id,
+the parent's, exactly as a Claude Code subagent is. A child never exports anything, and the exporting
+process never names its own session as a parent.
+
+`estigia doctor`'s `pi-subagents` row names the Pi subagent runners it can see, from a `packages` entry
+of the user or project `settings.json` or an extension in either `extensions/` directory whose name
+says subagent, and says whether their children load the gate. A runner that starts children with
+`--no-extensions`, or runs them inside Pi's process, or whose source cannot be read, is reported like a
+skipped check with `WARNING` and its name; it installs and rewrites nothing. What it cannot tell is in
+[`honesty.md`](honesty.md).
 
 The same file also draws two things for the person, and neither decides anything. When `ctx.hasUI`
 is true it keeps a status line, key `estigia-claim`, through `ctx.ui.setStatus`: on `session_start`,

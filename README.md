@@ -117,7 +117,7 @@ Look before you leap, at any time:
 ```sh
 estigia setup claude-code --dry-run   # exactly what would change, writes nothing
 estigia status                        # what is installed, where, and what runs still hold
-estigia doctor                        # skill, skill-assets, gh, remote, guard, prune, lockfiles — read-only
+estigia doctor                        # skill, skill-assets, gh, remote, guard, prune, pi-subagents, lockfiles — read-only
 estigia prune                         # branches and checkouts no delivery owns; --confirm removes
 estigia flush --status               # the GitHub writes a closed git operation window queued; plain `flush` sends them
 ```

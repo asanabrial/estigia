@@ -5870,6 +5870,24 @@ pointer that leaves it names the document it points at.
   only a `parentSession` in the session header marks one, and a child started without that header is not
   recognised as a child. A loop only
   exists where `/flow-loop` was typed, which is what keeps a child from running one in practice.
+- **A Pi child is linked by its session header, with the pid as the fallback; the live check ran without
+  a claim and under `-p` only.** Reproduced first: an in-process child (the parent's pid, a header
+  naming its parent) was decided as an unrelated session and overwrote the exported root, so a later
+  separate-process child inherited the wrong parent; `the_pi_extension_links_a_child_by_its_parent_header_whatever_its_pid`
+  fails against that code. The id of the parent is the exported root, else the `id` in the parent's
+  session file, else the part of its file name after the first `_`; none of the three is
+  authenticated, as with the flag. The live check, 2026-10-14, in an isolated Pi home: a child `pi`
+  started by Pi's `subagent` example was another process (parent pid 43006, child pid 55301), and every
+  `write` and `bash` from it reached the gate with `--parent-session-id` equal to the parent's session.
+  The write was refused `issue-required` because no claim was held, so what a child is *allowed* under a
+  held claim was not observed there; and it ran under `-p` only, never in the terminal UI or RPC mode.
+  A forked or new session also carries a `parentSession`, and is read as a child of the session it came
+  from. The `pi-subagents` row of `doctor` reads names and source text, not behaviour: a runner is
+  recognised only when `subagent` is in its package source or extension name, its children are judged
+  by whether its source mentions `--no-extensions`, an in-process session constructor, or a spawn, an
+  npm or git package is unread because the row does not know where Pi unpacks it (only an absolute local
+  path and the extension directories are read), and whether a runner replaces the environment its
+  child inherits is not examined. The next entry is the earlier measurement.
 - **A Pi subagent is linked to its parent by an environment variable and an unauthenticated flag; no
   live Pi child has run it.** Reproduced first: a child `--session-id CHILD --runtime pi`
   writing in a claimed worktree is answered `outside` / `nothing-sworn`, because its derived run holds no
@@ -7222,7 +7240,7 @@ pointer that leaves it names the document it points at.
   no transport could again be decided by a second, drifting implementation, and nothing in this suite
   would catch it until the guard is rewritten against that tracker's actual shape.
 
-- **`doctor` checks eighteen things, not everything.** Skill, installed skill assets, `gh`
+- **`doctor` checks nineteen things, not everything.** Skill, installed skill assets, `gh`
   authentication, a git remote, this repository's push guard, the contract each configured agent
   reads, whether the root the gate decides in carries the rows those agents read, whether the gate
   each of them registers would actually run, whether the tool server each
@@ -7231,8 +7249,9 @@ pointer that leaves it names the document it points at.
   *does* parse still names an issue the tracker holds open, whether branches and checkouts no
   delivery owns have accumulated, whether any call has reached that
   gate and gone undecided, whether the binary answering this command is the checkout's own
-  build, whether the local workflow store opens, and whether Pi's own settings exclude Estigia's
-  extensions or override its tool server, and whether a tracked lockfile is sent to every reviewer in full because
+  build, whether the local workflow store opens, whether Pi's own settings exclude Estigia's
+  extensions or override its tool server, whether the Pi subagent runners installed give their children
+  the gate, and whether a tracked lockfile is sent to every reviewer in full because
   `estigia.generated.toml` does not declare it (an advisory row that is absent when there is nothing to name). It does not check the tracker's labels, or whether the
   repository it found is the one the issues live in.
 
@@ -8123,7 +8142,7 @@ pointer that leaves it names the document it points at.
   consequence: it is no longer git's own text that answers. The recovery is the same
   `git worktree remove`, and it is written in the binding rather than enforced here. Measured by the blind reviewer of receipt
   `6b192e0ee94f11004b621c06c8e8e5dd` across twenty-four template shapes.
-- **Four of the eighteen are about the past.** `silence`: a call the gate cannot decide on — a
+- **Four of the nineteen are about the past.** `silence`: a call the gate cannot decide on — a
   payload it cannot parse, or one that never arrived — is waved through, and that is the right
   answer: a schema this build does not know could be wrapping a read as easily as a write. What is
   wrong is doing it quietly. Both leave a ledger line, and `doctor` is what reads those lines back,

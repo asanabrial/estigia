@@ -381,6 +381,9 @@ fn a_row_that_is_broken_comes_out_of_the_report_broken() {
         // Skipped here: no Pi is configured. Broken against real settings files in
         // `harness::doctor`'s own module (`pi_settings_that_exclude_the_extension_or_the_server_are_broken`).
         "pi-config",
+        // Skipped here for the same reason; reported against real runners in
+        // `harness::doctor`'s own module.
+        "pi-subagents",
         // Forced broken in step 9 above, against a directory standing where
         // the database file belongs.
         "store",
