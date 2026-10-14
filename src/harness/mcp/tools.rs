@@ -205,6 +205,7 @@ const ISSUE_ANY: Argument = Argument::required(
 // reason `choices` above points at `STATES` instead of a literal list.
 const FINDING_CLASSES: &[&str] = crate::transport::claim::FINDING_CLASSES;
 const REVIEW_FOCUSES: &[&str] = crate::transport::tier::REVIEW_FOCUSES;
+const RISK_ITEMS: &[&str] = crate::transport::tier::RISK_ITEMS;
 const FINDING_ORIGINS: &[&str] = crate::transport::claim::FINDING_ORIGINS;
 const FINDING_EVIDENCE_CLASSES: &[&str] = crate::transport::claim::FINDING_EVIDENCE_CLASSES;
 const FINDING_CAUSAL_DISPOSITIONS: &[&str] = crate::transport::claim::FINDING_CAUSAL_DISPOSITIONS;
@@ -222,6 +223,26 @@ const TOPOLOGY_REASON: Argument = Argument::optional(
     "topology_reason",
     "string",
     "Why this topology was declared. Recorded beside `topology`; refused alone.",
+);
+const FOCUS: Argument = Argument::optional(
+    "focus",
+    "string",
+    "The lens a `medium` change runs: risk, resilience, readability or reliability. \
+     Defaults to reliability; `high` runs all four regardless.",
+)
+.of(REVIEW_FOCUSES);
+const FOCUS_REASON: Argument =
+    Argument::optional("focus_reason", "string", "Why that focus; needs `focus`.");
+const RAISE: Argument = Argument::optional(
+    "raise",
+    "string",
+    "A risk the diff cannot show. Raises the tier to `high`, never lowers it.",
+)
+.of(RISK_ITEMS);
+const RAISE_REASON: Argument = Argument::optional(
+    "raise_reason",
+    "string",
+    "Why the `raise` applies; required with it.",
 );
 const EXPECTED_EPOCH: Argument = Argument::optional(
     "expected_epoch",
@@ -1037,6 +1058,10 @@ pub const TOOLS: &[Tool] = &[
             INLINE_PAYLOAD,
             TOPOLOGY,
             TOPOLOGY_REASON,
+            FOCUS,
+            FOCUS_REASON,
+            RAISE,
+            RAISE_REASON,
             EXPECTED_EPOCH,
             WITH_REVIEW,
         ],
@@ -1076,6 +1101,10 @@ pub const TOOLS: &[Tool] = &[
             INLINE_PAYLOAD,
             TOPOLOGY,
             TOPOLOGY_REASON,
+            FOCUS,
+            FOCUS_REASON,
+            RAISE,
+            RAISE_REASON,
             EXPECTED_EPOCH,
             WITH_REVIEW,
         ],
@@ -1258,13 +1287,10 @@ pub const TOOLS: &[Tool] = &[
             )
             .of(FINDING_CLASSES),
             Argument::optional("worktree", "string", "The isolated checkout."),
-            Argument::optional(
-                "focus",
-                "string",
-                "The lens a `medium` change runs: risk, resilience, readability or reliability. \
-                 Defaults to reliability; `high` runs all four regardless.",
-            )
-            .of(REVIEW_FOCUSES),
+            FOCUS,
+            FOCUS_REASON,
+            RAISE,
+            RAISE_REASON,
         ],
         effect: PointerEffect::None,
         writes: false,

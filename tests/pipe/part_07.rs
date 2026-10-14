@@ -613,6 +613,41 @@ fn publish_review_records_a_bare_inline_declaration_over_any_file_count() {
         padded_receipt.contains("topology=inline -->"),
         "the padded declaration was not recorded trimmed: {padded_receipt}"
     );
+
+    let raised_log = trace.path().join("raised-calls.log");
+    let (raised_is_error, raised) = call(
+        arguments(&[
+            ("raise", "authorization"),
+            ("raise_reason", "a new caller reaches this path"),
+            ("focus", "risk"),
+            ("focus_reason", "failure is the point"),
+        ]),
+        &raised_log,
+    );
+    assert!(!raised_is_error, "a valid raise must publish: {raised}");
+    let raised_receipt = staged_receipt(home, 13);
+    for expected in [
+        "raise=authorization",
+        "raise-reason=a%20new%20caller%20reaches%20this%20path",
+        "focus=risk",
+        "focus-reason=failure%20is%20the%20point",
+        "computed-level=",
+    ] {
+        assert!(
+            raised_receipt.contains(expected),
+            "the staged receipt lacks `{expected}`: {raised_receipt}"
+        );
+    }
+
+    let refused_log = trace.path().join("refused-calls.log");
+    let (refused_is_error, refused) = call(
+        arguments(&[("raise_reason", "no item named")]),
+        &refused_log,
+    );
+    assert!(
+        refused_is_error && refused.contains("risk-raise-reason-without-raise"),
+        "a reason with no raise was not refused with its own reason: {refused}"
+    );
 }
 
 /// The lane refusal refuses, and the two lenient states publish — through the

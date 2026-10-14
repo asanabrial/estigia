@@ -1257,3 +1257,11 @@
   fail closed on a failed read — an unreadable transcript keeps the turn, and a timeline that will not
   read refuses the publication.
 
+
+- **A `raise` is a declaration, recorded at publication and not checked.** `publish_review` and
+  `republish_review` record the raise, its reason, the focus, its reason and the computed tier on the published
+  marker, `review_read` with `view: transaction` answers them, and `policy_for` lifts the gate's tier to `high`
+  for a recorded item from the list. Nothing checks that the item applies to the diff. A raise made on
+  `review_tier` alone is not stored; only the publication carries it. A repair publication that does not repeat the
+  raise is sized by its diff alone, since the declaration is read from the receipt's own marker and not from its
+  parent's, and a raise on a repair takes the whole change's `high` panel rather than the narrower repair panel.

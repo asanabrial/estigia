@@ -2555,6 +2555,14 @@ struct LatestPublication {
     /// on any publication that declared none.
     topology: Option<String>,
     topology_reason: Option<String>,
+    /// The raise-only risk declaration, the tier it was computed against and
+    /// the focus with its reason, as the marker recorded them. All absent on a
+    /// publication that declared none.
+    computed_level: Option<String>,
+    raise: Option<String>,
+    raise_reason: Option<String>,
+    focus: Option<String>,
+    focus_reason: Option<String>,
     /// What starting the publication lane answered: `started`, `absent`,
     /// `unknown`, in the reviewer-facing prose `published` wrote, and which
     /// workflows started. Absent lane state means the marker predates this
@@ -3194,6 +3202,11 @@ fn all_publications(comments: &[ownership::Comment]) -> Result<Vec<LatestPublica
                 url: marker.get("url").cloned().unwrap_or_default(),
                 topology: marker.get("topology").cloned(),
                 topology_reason: marker.get("topology-reason").cloned(),
+                computed_level: marker.get("computed-level").cloned(),
+                raise: marker.get("raise").cloned(),
+                raise_reason: marker.get("raise-reason").cloned(),
+                focus: marker.get("focus").cloned(),
+                focus_reason: marker.get("focus-reason").cloned(),
                 lane_note: marker.get("lane-note").cloned(),
                 lane_workflows: marker
                     .get("lanes")
@@ -4505,6 +4518,11 @@ pub fn review_transaction(
         "url": publication.url,
         "topology": publication.topology,
         "topology_reason": publication.topology_reason,
+        "computed_level": publication.computed_level,
+        "raise": publication.raise,
+        "raise_reason": publication.raise_reason,
+        "focus": publication.focus,
+        "focus_reason": publication.focus_reason,
         "parent": publication.lineage.as_ref().map(|lineage| &lineage.parent.epoch),
         "parent_pr": publication.lineage.as_ref().map(|lineage| lineage.parent.pr),
         "parent_head": publication.lineage.as_ref().map(|lineage| &lineage.parent.head),
@@ -7970,6 +7988,12 @@ pub struct Publication<'a> {
     /// Why this delivery declared the topology it did. Recorded beside
     /// `topology`; given without a topology it is refused. Nothing reads it back to decide.
     pub topology_reason: Option<&'a str>,
+    /// The lens focus this delivery asks for; recorded with `declaration`, and
+    /// refused when it is not one of [`crate::transport::tier::REVIEW_FOCUSES`].
+    pub focus: Option<&'a str>,
+    /// The raise and the reasons declared beside the focus, validated by the
+    /// same rule `review_tier` applies and recorded on the marker.
+    pub declaration: super::tier::Declaration<'a>,
     /// The epoch the caller believes is the newest publication on this branch's
     /// pull request, or `none` for a branch with no publication yet. `None`
     /// asks nothing. Any other newest publication refuses the call before
@@ -8321,13 +8345,19 @@ fn lane_comment_bytes(context: &Context) -> usize {
         .saturating_add(LANE_SENTENCE_CEILING)
 }
 
-/// The bytes the caller's own fields — `run-id`, `topology` and
-/// `topology-reason` — add to the published comment. None is bounded by a
+/// The bytes the caller's own fields — `run-id`, `topology`,
+/// `topology-reason` and the declared risk and focus — add to the published comment. None is bounded by a
 /// constant: `run-id` is **not** bounded by the run-pointer filename, since
 /// `session::store` is best-effort. The marker half renders the marker and
 /// subtracts the empty marker's own width; the prose half is [`topology_line`].
-fn caller_comment_bytes(run_id: &str, topology: Option<&str>, reason: Option<&str>) -> usize {
+fn caller_comment_bytes(
+    run_id: &str,
+    topology: Option<&str>,
+    reason: Option<&str>,
+    declared: &[(&str, String)],
+) -> usize {
     let mut fields: Vec<(&str, &str)> = vec![("run-id", run_id)];
+    fields.extend(declared.iter().map(|(name, value)| (*name, value.as_str())));
     if let Some(value) = topology {
         fields.push(("topology", value));
     }
@@ -8417,6 +8447,8 @@ fn publish_with_sleep(
         inline_payload,
         topology,
         topology_reason,
+        focus,
+        declaration,
         expected_epoch,
         now,
     } = *what;
@@ -8432,7 +8464,13 @@ fn publish_with_sleep(
     // bounds, so it is measured before the first remote write. The budget also
     // reserves the manifest's ceiling and the lane's measured width, or no single
     // bound bounds the comment. The enumeration is in `docs/honesty.md`.
-    let caller_bytes = caller_comment_bytes(run_id, topology, topology_reason);
+    let declared = declaration.resolve(focus)?;
+    let caller_bytes = caller_comment_bytes(
+        run_id,
+        topology,
+        topology_reason,
+        &declared.marker_fields(Some(super::tier::RiskLevel::Medium)),
+    );
     let lane_bytes = lane_comment_bytes(context);
     let budget = COMMENT_BODY_CEILING
         .saturating_sub(PUBLICATION_FIXED_OVERHEAD)
@@ -8449,7 +8487,7 @@ fn publish_with_sleep(
             "manifest_ceiling": GENESIS_MANIFEST_CEILING,
             "lane_overhead": lane_bytes,
             "action": format!(
-                "--run-id, --topology and --topology-reason are rendered into the one published \
+                "--run-id, --topology, --topology-reason and the risk and focus declarations are rendered into the one published \
                  comment and together would leave no room under GitHub's \
                  {COMMENT_BODY_CEILING}-character cap once the rest of the comment is counted. \
                  Shorten them; nothing has been pushed and no pull request was opened"
@@ -8843,6 +8881,17 @@ fn publish_with_sleep(
         ));
     }
 
+    let computed = if declared.raises() {
+        Some(super::tier::tier_level(
+            context,
+            payload_base,
+            payload_head,
+            Some(at),
+        )?)
+    } else {
+        None
+    };
+    let declared_fields = declared.marker_fields(computed);
     let answer = published(
         context,
         issue,
@@ -8858,6 +8907,7 @@ fn publish_with_sleep(
         inline_payload,
         topology,
         topology_reason,
+        &declared_fields,
         lineage,
         this_candidate_tree,
         budget,
@@ -9330,6 +9380,9 @@ fn published(
     // the refusal over it already ran, in `publish_with`.
     topology: Option<&str>,
     topology_reason: Option<&str>,
+    // The validated risk and focus declaration as marker fields, with the
+    // computed tier a raise was made against; see [`tier::Resolved::marker_fields`].
+    declared: &[(&'static str, String)],
     lineage: Option<PublicationLineage>,
     candidate_tree: String,
     budget: CorrectionCheck,
@@ -9612,6 +9665,7 @@ fn published(
     if let Some(value) = topology_reason {
         fields.push(("topology-reason", value));
     }
+    fields.extend(declared.iter().map(|(name, value)| (*name, value.as_str())));
     let note = publication_note(
         url,
         &epoch,

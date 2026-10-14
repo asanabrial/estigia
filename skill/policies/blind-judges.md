@@ -25,7 +25,9 @@ them and what a correction costs; none of them convenes a judge.
 verification table: `low` is structural readback only and acquires none; `medium` acquires one lens, the `focus`'s —
 `risk`, `resilience`, `readability` or `reliability`, default `reliability`, with `resilience` filled by
 `review-readback`; `high` acquires four lenses, `review-risk`, `review-readback`,
-`review-readability` and `review-reliability`. A tier that cannot be read is `high`, never
+`review-readability` and `review-reliability`. `review_tier`'s `raise` lifts a tier to `high` for a risk the
+diff cannot show and never lowers one: `authorization`, `migration`, `input`, `concurrency`, `irreversibility` or
+`contract`, with a reason, the binary (`RISK_ITEMS`) being the authority on the list. `publish_review` records the raise and the gate reads it. A tier that cannot be read is `high`, never
 permission to acquire less. `review-lens` is in no tier's allocation: only the delta-lens republish
 below launches it. A lens is not a judge, and no tier acquires a judge. The one round that runs fewer lenses than
 the tier's own is the republish licensed by a `warning` or a `suggestion` the repair-loop section

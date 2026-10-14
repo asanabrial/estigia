@@ -503,7 +503,8 @@ pub(super) fn computed_for(
 /// The narrower lens roles one receipt's review was sized by, when it was
 /// reviewed as a repair rather than as the whole change.
 ///
-/// A first publication — and any publication whose recorded lineage does not
+/// A first publication, a publication that recorded a raise (whose `high` tier
+/// keeps its own panel) — and any publication whose recorded lineage does not
 /// name an honest narrow repair range — answers `None`, so the computed verdict
 /// reads the whole change's tier roles exactly as before. A repair whose
 /// publication recorded the honest `parent-head..head` range answers what
@@ -528,7 +529,9 @@ fn licensed_lens_roles(
     focus: ReviewFocus,
     worktree: Option<&Path>,
 ) -> Result<Option<Vec<String>>, Failure> {
-    if super::recover::inherited_policy(comments, receipt)?.is_some() {
+    if super::recover::inherited_policy(comments, receipt)?.is_some()
+        || recorded_raise(comments, receipt)?
+    {
         return Ok(None);
     }
     let Some(publication) = super::all_publications(comments)?
@@ -588,6 +591,10 @@ pub(super) fn policy_for(
     worktree: Option<&Path>,
 ) -> Result<InheritedPolicy, Failure> {
     let tier = tier_level(context, &receipt.base, &receipt.head, worktree)?;
+    let tier = match recorded_raise(comments, receipt)? {
+        true => tier.max(RiskLevel::High),
+        false => tier,
+    };
     Ok(match inherited_policy(comments, receipt)? {
         Some(inherited) => InheritedPolicy {
             level: inherited.level.max(tier),
@@ -604,6 +611,19 @@ pub(super) fn policy_for(
             InheritedPolicy { level: tier, focus }
         }
     })
+}
+
+/// Whether the receipt's publication recorded a raise from the fixed risk list.
+/// A word outside it counts for nothing: the raise only ever lifts a tier.
+fn recorded_raise(
+    comments: &[ownership::Comment],
+    receipt: &ReviewTransaction,
+) -> Result<bool, Failure> {
+    Ok(super::all_publications(comments)?
+        .iter()
+        .find(|found| found.receipt == *receipt)
+        .and_then(|found| found.raise.as_deref())
+        .is_some_and(|item| crate::transport::tier::RISK_ITEMS.contains(&item)))
 }
 
 /// Whether the receipt carries any computed-verdict marker or lens report, so

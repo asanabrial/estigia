@@ -491,7 +491,12 @@ change, and this count does not measure that: `medium` answers one lens, the `--
 the read); `high` answers four lenses, `review-risk`, `review-readback` (the resilience slot),
 `review-readability` and `review-reliability`, whatever the focus; `low` answers zero, since nothing
 authored leaves that one question a subject. `lens_roles` names the reserved reviewers the count
-licenses. `review-lens` is in no tier's allocation; only the delta-lens repair below launches it. An unreadable byte in
+licenses. `--raise` with `--raise-reason` lifts the tier to `high` for one of six risk items the refusal
+`invalid-risk-raise` lists, and never lowers it; `computed_level` keeps the derived tier. `--focus-reason`
+is answered back. `review_tier` stores nothing; `publish_review`/`republish_review` take the same `--raise`,
+`--raise-reason`, `--focus` and `--focus-reason` and record them with the computed tier on the
+published marker, and the tier `review_status`, the computed verdict and `release_ci` derive then reads a
+recorded raise as `high`, never below the computed one. A publication that declares no raise is sized by the diff alone. `review-lens` is in no tier's allocation; only the delta-lens repair below launches it. An unreadable byte in
 `git diff`'s output, a tier its reasons do not explain, a path this port cannot normalise, or a raw
 diff record it cannot parse are all read failures, not `medium`. Three conditions fail closed into a
 tier rather than into a read failure: an over-budget passive-content scan, whose every deferred

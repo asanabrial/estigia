@@ -154,6 +154,117 @@ impl ReviewFocus {
     }
 }
 
+/// The risk items a caller may declare to raise a tier, each naming a
+/// consequence the diff signals cannot see. Any one raises the tier to `high`.
+pub const RISK_ITEMS: &[&str] = &[
+    "authorization",
+    "migration",
+    "input",
+    "concurrency",
+    "irreversibility",
+    "contract",
+];
+
+/// What a caller declares beside a tier request. A `raise` can only move the
+/// computed tier up; the reasons are free text the answer carries back.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Declaration<'a> {
+    /// One of [`RISK_ITEMS`].
+    pub raise: Option<&'a str>,
+    /// Why the item applies; required with `raise`.
+    pub raise_reason: Option<&'a str>,
+    /// Why the `focus` was chosen; requires a `focus`.
+    pub focus_reason: Option<&'a str>,
+}
+
+pub(crate) struct Resolved {
+    focus: ReviewFocus,
+    focus_named: bool,
+    raise: Option<(&'static str, String)>,
+    focus_reason: Option<String>,
+}
+
+impl Resolved {
+    pub(crate) fn marker_fields(&self, computed: Option<RiskLevel>) -> Vec<(&'static str, String)> {
+        let mut fields = Vec::new();
+        if let (Some((item, reason)), Some(computed)) = (&self.raise, computed) {
+            fields.push(("computed-level", computed.as_str().to_owned()));
+            fields.push(("raise", (*item).to_owned()));
+            fields.push(("raise-reason", reason.clone()));
+        }
+        if self.focus_named {
+            fields.push(("focus", self.focus.word().to_owned()));
+        }
+        if let Some(reason) = &self.focus_reason {
+            fields.push(("focus-reason", reason.clone()));
+        }
+        fields
+    }
+
+    pub(crate) fn raises(&self) -> bool {
+        self.raise.is_some()
+    }
+}
+
+fn reason_of(text: Option<&str>) -> Option<&str> {
+    text.map(str::trim).filter(|text| !text.is_empty())
+}
+
+impl Declaration<'_> {
+    pub(crate) fn resolve(&self, focus: Option<&str>) -> Result<Resolved, Failure> {
+        let raise = match self.raise.map(str::trim) {
+            None => {
+                if self.raise_reason.is_some() {
+                    return Err(Failure::ConfigDefect(
+                        serde_json::json!({"ok": false, "reason": "risk-raise-reason-without-raise", "action": "name the risk item the reason explains with `raise`, or omit `raise_reason`", "expected": RISK_ITEMS}),
+                    ));
+                }
+                None
+            }
+            Some(word) => {
+                if ["low", "medium", "none"].contains(&word) {
+                    return Err(Failure::ConfigDefect(
+                        serde_json::json!({"ok": false, "reason": "risk-raise-lowers", "action": "a raise only moves a tier up; omit it to keep the computed tier", "value": word}),
+                    ));
+                }
+                let Some(item) = RISK_ITEMS.iter().find(|item| **item == word) else {
+                    return Err(Failure::ConfigDefect(
+                        serde_json::json!({"ok": false, "reason": "invalid-risk-raise", "action": "name one of the risk items listed, or omit the raise", "value": word, "expected": RISK_ITEMS}),
+                    ));
+                };
+                let Some(reason) = reason_of(self.raise_reason) else {
+                    return Err(Failure::ConfigDefect(
+                        serde_json::json!({"ok": false, "reason": "risk-raise-reason-missing", "action": "say in one sentence why the item applies with `raise_reason`", "value": word}),
+                    ));
+                };
+                Some((*item, reason.to_owned()))
+            }
+        };
+        let focus_reason = match self.focus_reason {
+            None => None,
+            Some(_) if focus.is_none() => {
+                return Err(Failure::ConfigDefect(
+                    serde_json::json!({"ok": false, "reason": "focus-reason-without-focus", "action": "name the `focus` the reason explains, or omit `focus_reason`"}),
+                ));
+            }
+            Some(text) => match reason_of(Some(text)) {
+                Some(reason) => Some(reason.to_owned()),
+                None => {
+                    return Err(Failure::ConfigDefect(
+                        serde_json::json!({"ok": false, "reason": "blank-focus-reason", "action": "say why this focus was chosen, or omit `focus_reason`"}),
+                    ));
+                }
+            },
+        };
+        Ok(Resolved {
+            focus: ReviewFocus::parse(focus)?,
+            focus_named: focus.is_some(),
+            raise,
+            focus_reason,
+        })
+    }
+}
+
 /// The three tiers, closed by construction — no fourth arm exists to reach.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RiskLevel {
@@ -320,7 +431,27 @@ pub fn review_tier(
     worktree: Option<&Path>,
     focus: Option<&str>,
 ) -> Result<serde_json::Value, Failure> {
-    let focus = ReviewFocus::parse(focus)?;
+    review_tier_declared(
+        context,
+        base,
+        head,
+        worktree,
+        focus,
+        &Declaration::default(),
+    )
+}
+
+/// [`review_tier`] with the caller's [`Declaration`]: a raise that can only
+/// move the tier up, and the reason the focus was chosen.
+pub fn review_tier_declared(
+    context: &Context,
+    base: &str,
+    head: &str,
+    worktree: Option<&Path>,
+    focus: Option<&str>,
+    declaration: &Declaration<'_>,
+) -> Result<serde_json::Value, Failure> {
+    let resolved = declaration.resolve(focus)?;
     let at = worktree.unwrap_or(&context.repo_dir);
     let base_oid = resolve_commit(at, base)?;
     let head_oid = resolve_commit(at, head)?;
@@ -333,7 +464,7 @@ pub fn review_tier(
         head_oid,
         stats,
         RangeAnswer::Plain,
-        focus,
+        &resolved,
     )?;
     Ok(with_forecast(answer, context))
 }
@@ -611,7 +742,32 @@ pub fn review_tier_for_repair(
     clearing_finding: Option<&str>,
     focus: Option<&str>,
 ) -> Result<serde_json::Value, Failure> {
-    let focus = ReviewFocus::parse(focus)?;
+    review_tier_for_repair_declared(
+        context,
+        base,
+        parent_head,
+        head,
+        worktree,
+        clearing_finding,
+        focus,
+        &Declaration::default(),
+    )
+}
+
+/// [`review_tier_for_repair`] with the caller's [`Declaration`]. A raise to
+/// `high` keeps the tier's own panel, as a `high` repair level always does.
+#[allow(clippy::too_many_arguments)]
+pub fn review_tier_for_repair_declared(
+    context: &Context,
+    base: &str,
+    parent_head: &str,
+    head: &str,
+    worktree: Option<&Path>,
+    clearing_finding: Option<&str>,
+    focus: Option<&str>,
+    declaration: &Declaration<'_>,
+) -> Result<serde_json::Value, Failure> {
+    let resolved = declaration.resolve(focus)?;
     if let Some(class) = clearing_finding
         && !super::claim::FINDING_CLASSES.contains(&class)
     {
@@ -630,7 +786,7 @@ pub fn review_tier_for_repair(
             let stats = diff_stats(at, &base_oid, &head_oid, DiffIsolation::Ambient)?;
             let answer = RangeAnswer::WholeChange(reason);
             let authority = base_oid.clone();
-            review_tier_answer(at, &authority, base_oid, head_oid, stats, answer, focus)?
+            review_tier_answer(at, &authority, base_oid, head_oid, stats, answer, &resolved)?
         }
         RepairRange::Narrow => {
             let repair_stats = diff_stats(at, &parent_head_oid, &head_oid, DiffIsolation::Ambient)?;
@@ -641,7 +797,7 @@ pub fn review_tier_for_repair(
                 head_oid,
                 repair_stats,
                 RangeAnswer::Repair,
-                focus,
+                &resolved,
             )?;
             if let Some(class) = clearing_finding
                 && class != "severe"
@@ -706,7 +862,7 @@ fn review_tier_answer(
     head_oid: String,
     mut stats: Vec<DiffStat>,
     range: RangeAnswer,
-    focus: ReviewFocus,
+    declared: &Resolved,
 ) -> Result<serde_json::Value, Failure> {
     let generated = super::generated::manifested_paths(at, authority, &base_oid, &head_oid)?;
     stats.retain(|stat| !generated.contains(&stat.path));
@@ -716,6 +872,11 @@ fn review_tier_answer(
     let (only_passive, touches_configuration) = passive_and_configuration(&stats, &active_content);
     let level = classify_risk(&stats, &reasons, only_passive, touches_configuration);
     explained_matches_level(level, &reasons)?;
+    let computed_level = level;
+    let level = match declared.raise {
+        Some(_) => computed_level.max(RiskLevel::High),
+        None => computed_level,
+    };
 
     let mut answer = serde_json::json!({
         "ok": true,
@@ -723,11 +884,19 @@ fn review_tier_answer(
         "head": head_oid,
         "level": level.as_str(),
         "lenses": level.lenses(),
-        "lens_roles": level.lens_roles(focus),
+        "lens_roles": level.lens_roles(declared.focus),
         "changed_lines": count_changed_lines(&stats),
         "generated_paths": generated,
         "reasons": reasons.iter().map(reason_json).collect::<Vec<_>>(),
     });
+    if let Some((item, reason)) = &declared.raise {
+        answer["computed_level"] = serde_json::json!(computed_level.as_str());
+        answer["raise"] = serde_json::json!(item);
+        answer["raise_reason"] = serde_json::json!(reason);
+    }
+    if let Some(reason) = &declared.focus_reason {
+        answer["focus_reason"] = serde_json::json!(reason);
+    }
     match range {
         RangeAnswer::Plain => {}
         RangeAnswer::Repair => {

@@ -5058,6 +5058,8 @@ fn a_base_that_advanced_past_the_branchs_own_rebase_is_refused_before_the_payloa
         inline_payload: false,
         topology: None,
         topology_reason: None,
+        focus: None,
+        declaration: Default::default(),
         expected_epoch: None,
         now: "2026-01-01T00:05:00Z",
     };
@@ -5224,6 +5226,8 @@ fn a_branch_link_publication_keeps_the_follow_up_out_of_its_answer() {
         inline_payload: false,
         topology: None,
         topology_reason: None,
+        focus: None,
+        declaration: Default::default(),
         expected_epoch: None,
         now: "2026-01-01T00:05:00Z",
     };
@@ -5710,8 +5714,8 @@ fn the_fixed_overhead_bounds_the_widest_published_marker() {
 /// filename, so the caller bound has to count it.
 #[test]
 fn the_caller_bound_counts_the_run_id() {
-    let short = super::caller_comment_bytes("claude-abc", None, None);
-    let long = super::caller_comment_bytes(&"r".repeat(40_000), None, None);
+    let short = super::caller_comment_bytes("claude-abc", None, None, &[]);
+    let long = super::caller_comment_bytes(&"r".repeat(40_000), None, None, &[]);
     assert!(
         long >= 40_000 && long > short,
         "a 40,000-character run-id must be measured as such: {long} against {short}"
@@ -5801,6 +5805,8 @@ fn a_blank_topology_is_refused_before_anything_is_written() {
         inline_payload: false,
         topology: Some(""),
         topology_reason: None,
+        focus: None,
+        declaration: Default::default(),
         expected_epoch: None,
         now: "2026-01-01T00:05:00Z",
     };
@@ -6210,6 +6216,8 @@ impl RepublishWorld {
             inline_payload: false,
             topology: None,
             topology_reason: None,
+            focus: None,
+            declaration: Default::default(),
             expected_epoch,
             now: "2026-01-01T00:05:00Z",
         };
@@ -6734,6 +6742,8 @@ fn a_push_whose_readback_disagrees_leaves_a_republishable_lease_target() {
         inline_payload: false,
         topology: None,
         topology_reason: None,
+        focus: None,
+        declaration: Default::default(),
         expected_epoch: None,
         now: "2026-01-01T00:05:00Z",
     };
@@ -7061,6 +7071,8 @@ fn a_readback_that_settles_elsewhere_says_the_head_moved() {
         inline_payload: false,
         topology: None,
         topology_reason: None,
+        focus: None,
+        declaration: Default::default(),
         expected_epoch: None,
         now: "2026-01-01T00:05:00Z",
     };
@@ -12194,6 +12206,11 @@ fn published_with_detail(
                 ("delta-range", "parent-head..head"),
                 ("topology", "developer:1"),
                 ("topology-reason", "one writer"),
+                ("computed-level", "low"),
+                ("raise", "contract"),
+                ("raise-reason", "a wire format other readers depend on"),
+                ("focus", "risk"),
+                ("focus-reason", "the change is all about failure"),
                 ("autoclose-json", autoclose_json),
                 ("mandatory-follow-up", mandatory_follow_up),
             ],
@@ -12255,6 +12272,17 @@ fn review_transaction_answers_a_repairs_lineage_and_lane_and_autoclose() {
     assert_eq!(answer["delta_range"], "parent-head..head", "{answer}");
     assert_eq!(answer["topology"], "developer:1", "{answer}");
     assert_eq!(answer["topology_reason"], "one writer", "{answer}");
+    assert_eq!(answer["computed_level"], "low", "{answer}");
+    assert_eq!(answer["raise"], "contract", "{answer}");
+    assert_eq!(
+        answer["raise_reason"], "a wire format other readers depend on",
+        "{answer}"
+    );
+    assert_eq!(answer["focus"], "risk", "{answer}");
+    assert_eq!(
+        answer["focus_reason"], "the change is all about failure",
+        "{answer}"
+    );
     assert_eq!(
         answer["delta_range_reason"],
         serde_json::Value::Null,
@@ -14926,6 +14954,8 @@ fn publish_what() -> Publication<'static> {
         inline_payload: false,
         topology: None,
         topology_reason: None,
+        focus: None,
+        declaration: Default::default(),
         expected_epoch: None,
         now: "2026-06-01T00:00Z",
     }
@@ -18330,6 +18360,105 @@ fn a_successor_lineage_keeps_the_predecessors_tier_and_focus_and_owes_a_fresh_re
     );
 }
 
+fn raised_published(receipt: &ReviewTransaction, raise: &str) -> ownership::Comment {
+    wrote(
+        "9",
+        super::super::markers::render(
+            "published",
+            &[
+                ("run-id", "claude-a"),
+                ("epoch", &receipt.epoch),
+                ("pr", &receipt.pr.to_string()),
+                ("head", &receipt.head),
+                ("base", &receipt.base),
+                ("digest", &receipt.digest),
+                ("computed-level", "low"),
+                ("raise", raise),
+                ("raise-reason", "the diff cannot show who may call this"),
+            ],
+        )
+        .expect("a published marker"),
+    )
+}
+
+#[test]
+fn a_recorded_raise_lifts_the_tier_the_gate_reads_and_an_unknown_word_lifts_nothing() {
+    let world_scene = escalated_world();
+    let head = world_scene.world.commit("notes.md", 1);
+    let receipt = world_scene.world.receipt('4', &head);
+    let context = context_of(&world_scene);
+    let level_of = |comment: Option<ownership::Comment>| {
+        let mut comments = world_scene.comments.clone();
+        comments.extend(comment);
+        computed::policy_for(&context, &comments, &receipt, None)
+            .expect("the policy reads")
+            .level
+    };
+    let computed = level_of(None);
+    assert!(computed < crate::transport::tier::RiskLevel::High);
+    assert_eq!(
+        level_of(Some(raised_published(&receipt, "authorization"))),
+        crate::transport::tier::RiskLevel::High,
+        "a recorded raise is not read by the gate"
+    );
+    assert_eq!(
+        level_of(Some(raised_published(&receipt, "low"))),
+        computed,
+        "a word outside the list lifted the tier"
+    );
+}
+
+#[test]
+fn a_raised_repair_is_judged_by_the_whole_high_panel_and_not_the_delta_lens() {
+    let (_root, context, parent, repair) = delta_lens_repair_world();
+    let mut comments = vec![
+        published(&parent),
+        computed_by("codex-b", &parent, "approved"),
+        recorded_finding_on(&parent, 6, "f-1", "suggestion", None, None),
+        wrote(
+            "3",
+            super::super::markers::render(
+                "published",
+                &[
+                    ("run-id", "claude-a"),
+                    ("epoch", &repair.epoch),
+                    ("pr", &repair.pr.to_string()),
+                    ("head", &repair.head),
+                    ("base", &repair.base),
+                    ("digest", &repair.digest),
+                    ("parent", &parent.epoch),
+                    ("parent-pr", &parent.pr.to_string()),
+                    ("parent-head", &parent.head),
+                    ("parent-base", &parent.base),
+                    ("parent-digest", &parent.digest),
+                    ("delta", &"0".repeat(64)),
+                    ("delta-range", "parent-head..head"),
+                    ("computed-level", "medium"),
+                    ("raise", "authorization"),
+                    ("raise-reason", "the diff cannot show who may call this"),
+                ],
+            )
+            .expect("a raised repair marker"),
+        ),
+    ];
+    comments.push(recorded_lens_report_for(&repair, 3, "review-lens", None));
+    let (level, verdict) = computed::computed_for(&context, &comments, &repair, None)
+        .expect("the repair's panel reads");
+    assert_eq!(level, RiskLevel::High, "{verdict:?}");
+    assert_ne!(verdict.outcome, ComputedOutcome::Approved, "{verdict:?}");
+    for role in [
+        "review-risk",
+        "review-readback",
+        "review-readability",
+        "review-reliability",
+    ] {
+        assert!(
+            verdict.missing_roles.iter().any(|missing| missing == role),
+            "a raised repair was not owed `{role}`: {verdict:?}"
+        );
+    }
+}
+
 #[test]
 fn a_successor_is_reviewed_through_the_focus_its_predecessor_froze() {
     let (scene, successor) = successor_scene("medium", "risk");
@@ -18864,6 +18993,11 @@ fn budget_parent(base: &str, head: &str) -> LatestPublication {
         url: String::new(),
         topology: None,
         topology_reason: None,
+        computed_level: None,
+        raise: None,
+        raise_reason: None,
+        focus: None,
+        focus_reason: None,
         lane_note: None,
         lane_workflows: Vec::new(),
         autoclose: String::new(),

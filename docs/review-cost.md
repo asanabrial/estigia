@@ -330,6 +330,19 @@ The one-lens figure is rounded because which lens a `medium` tier selects was ne
 measured prompts span 46 bytes. `review_tier` now names it: the `focus` argument, `reliability` by
 default, as in the source project.
 
+`review_tier` also takes a `raise`: one of six risk items (`authorization`, `migration`,
+`input`, `concurrency`, `irreversibility`, `contract`) with a reason. A raise lifts
+the tier to `high` and cannot lower it, so it can only buy the four lenses above where the diff signals
+bought fewer; the answer keeps the derived tier as `computed_level` and echoes the item and reason.
+`focus_reason` is echoed beside a `focus` the same way. `review_tier` itself
+is read-only and stores nothing; `publish_review` and `republish_review` take the same declaration and record the
+raise, its reason, the focus, its reason and the computed tier on the published marker, which `review_read` with
+`view: transaction` answers. The tier the gate derives (`review_status`, the computed verdict, `release_ci`) takes the
+larger of the diff's tier and `high` when a recorded raise names one of the six items, so a raise buys the four lenses
+and never fewer; the lens counts per tier are unchanged. The limit is that a raise is a caller's word: it can add
+review and nothing checks that the item applies. [`honesty-review-tier.md`](honesty-review-tier.md) says what else
+it does not cover.
+
 The orchestrator hands a judge the receipt's payload as primary evidence — Estigia materialises it
 and answers `--inline-payload`; the handing is an instruction — and names the claims the change
 makes about text the payload does not show, reserving the checkout for those; see
@@ -539,6 +552,8 @@ the exact bytes a client receives for the table.
 | After — the consolidated table, `NOT_EXPOSED` no longer advertised | 32 | 55,381 |
 | Later — descriptions trimmed, from 56,133 at that head | 32 | 44,325 |
 | Issue #5, `TOOLS` at 33 — shared argument text, no refusal-code lists, no `lens` argument; context unreadable | 33 | 42,643 |
+| Issue #69, `review_tier` gains `raise`, `raise_reason` and `focus_reason` (ceiling set to the measured size) | 33 | 43,055 |
+| Issue #69, `publish_review` and `republish_review` take the same four arguments (ceiling set to the measured size) | 33 | 44,277 |
 
 Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
 retired aggregate verdict and the three `NOT_EXPOSED` names were removed outright; `reclaim`,
