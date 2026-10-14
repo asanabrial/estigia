@@ -1,5 +1,6 @@
 use std::fmt;
-use std::process::Command;
+use std::path::PathBuf;
+use std::time::Duration;
 
 use super::companion::resolve_on_path;
 
@@ -78,8 +79,23 @@ impl PiExposure {
 
 /// The version of the `pi` on `PATH`, or nothing when it is absent or does not say.
 pub fn installed_pi_version() -> Option<PiVersion> {
-    let program = resolve_on_path("pi")?;
-    let output = Command::new(program).arg("--version").output().ok()?;
+    version_of(resolve_on_path("pi")?, VERSION_PROBE_TIMEOUT)
+}
+
+const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
+fn version_of(program: PathBuf, timeout: Duration) -> Option<PiVersion> {
+    let output = crate::bounded::run(
+        "pi --version",
+        program,
+        vec!["--version".to_owned()],
+        timeout,
+        None,
+    )
+    .ok()?;
+    if !output.status.success() {
+        return None;
+    }
     PiVersion::parse(&String::from_utf8_lossy(&output.stdout))
         .or_else(|| PiVersion::parse(&String::from_utf8_lossy(&output.stderr)))
 }
@@ -134,5 +150,40 @@ mod tests {
         assert_eq!(PiExposure::for_version(at(1, 2, 0)), PiExposure::Deferred);
         assert_eq!(PiExposure::for_version(at(2, 0, 0)), PiExposure::Deferred);
         assert_eq!(PiExposure::for_version(None), PiExposure::Direct);
+    }
+
+    #[cfg(unix)]
+    fn stub_pi(dir: &std::path::Path, body: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join("pi");
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_version_probe_reads_stdout_or_stderr_and_gives_up_on_failure_or_a_hang() {
+        let dir = tempfile::tempdir().unwrap();
+        let short = Duration::from_millis(500);
+        let on_stdout = stub_pi(dir.path(), "echo 'pi 1.2.3'");
+        assert_eq!(
+            version_of(on_stdout, short).map(|v| v.to_string()),
+            Some("1.2.3".to_owned())
+        );
+        let on_stderr = stub_pi(dir.path(), "echo '1.2.0' >&2");
+        assert_eq!(
+            version_of(on_stderr, short).map(|v| v.to_string()),
+            Some("1.2.0".to_owned())
+        );
+        let failing = stub_pi(dir.path(), "echo '1.2.0'; exit 3");
+        assert_eq!(version_of(failing, short), None);
+        let hanging = stub_pi(dir.path(), "sleep 30");
+        let started = std::time::Instant::now();
+        assert_eq!(version_of(hanging, short), None);
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the probe waited on a hung pi"
+        );
     }
 }
