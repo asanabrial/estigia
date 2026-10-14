@@ -1008,9 +1008,6 @@ runner calls no other method that could (`sendMessage`, `sendUserMessage`). On `
 runner reads them back from `ctx.sessionManager.getEntries()` so a resumed session lists them in the view,
 with the task and answer as the transcript.
 
-Not built yet: nothing from the issue's list is left except what [`honesty.md`](honesty.md) says was not
-run.
-
 ## What setup writes into Codex's configuration
 
 A Codex that enforces hook trust (0.159 measured; the `trusted_hash` field exists from 0.129) runs a hook from the user's `hooks.json` only when it is trusted, and skip an

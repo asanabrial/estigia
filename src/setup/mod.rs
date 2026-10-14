@@ -3727,12 +3727,13 @@ fn setup_into_with_skill(
                     if !others.is_empty() {
                         notes.push(format!(
                             "another Pi subagent runner is present ({}); Estigia's runner \
-                             `estigia_subagent` is installed beside it, so both answer a delegation",
+                             `{}` is installed beside it, so both answer a delegation",
                             others
                                 .iter()
                                 .map(|(name, _)| name.as_str())
                                 .collect::<Vec<_>>()
-                                .join(", ")
+                                .join(", "),
+                            plugin::PI_AGENTS_TOOL
                         ));
                     }
                 }

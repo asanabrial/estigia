@@ -27,6 +27,7 @@ const KEEP_FINISHED_ROWS = 3;
 const SETUP_TIMEOUT_MS = 30000;
 const KILL_GRACE_MS = 3000;
 const REDRAW_MS = 1000;
+const LISTING_WIDTH = 120;
 const DIALOGS = ["select", "confirm", "input", "editor"];
 
 const runs = new Map();
@@ -335,7 +336,7 @@ const steer = async (run, ctx) => {
   const message = await ctx.ui.input(`Follow-up for ${run.label}`, "");
   if (!filled(message)) return;
   send(run, { type: "steer", message });
-  note(run, `you: ${message}`);
+  note(run, `you (sent, not confirmed): ${message}`);
 };
 
 const openView = (ctx) =>
@@ -370,7 +371,7 @@ const handle = async (args, ctx) => {
   const live = [...runs.values()].filter((run) => run.status === "running");
   if (words[0] !== "stop") {
     if (ctx?.hasUI && typeof ctx.ui.custom === "function") return openView(ctx);
-    say(rowsOf(Date.now()).length ? render(120).join("\n") : "estigia: no subagents are running");
+    say(rowsOf(Date.now()).length ? render(LISTING_WIDTH).join("\n") : "estigia: no subagents are running");
     return;
   }
   const targets = words[1] === "all" ? live : live.filter((run) => run.id === words[1]);

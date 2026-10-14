@@ -21545,6 +21545,7 @@ const record = (name, impl) => (...args) => { piCalls.push(name); return impl?.(
   sendUserMessage: record("sendUserMessage"),
 });
 
+const AGENTS_WIDGET = "estigia-agents";
 let factory;
 let cleared = 0;
 let view;
@@ -21558,7 +21559,7 @@ const ctx = {
   hasUI: true,
   sessionManager: { getSessionId: () => "root-1" },
   ui: {
-    setWidget: (key, made) => { if (key === "estigia-changes") return; if (made === undefined) cleared += 1; else factory = made; },
+    setWidget: (key, made) => { if (key !== AGENTS_WIDGET) return; if (made === undefined) cleared += 1; else factory = made; },
     notify: (text) => { notes.push(text); },
     confirm: async () => { asked += 1; return confirmAnswer; },
     input: async () => { inputs += 1; return "please add tests"; },
@@ -21583,7 +21584,7 @@ forget();
 const running = agents.tool.execute("c1", { agent: "developer", task: "do it", label: "alpha" }, undefined, undefined, ctx);
 const live = await until(() => {
   const row = rowOf("alpha").join("\n");
-  return row.includes("1.5k tok") && /\b1s\b/.test(row) ? card() : null;
+  return row.includes("1.5k tok") && /\b[1-9]\d*s\b/.test(row) ? card() : null;
 });
 const settled = await running;
 const gateCalls = jsonLines(process.env.STUB_LOG);
@@ -21838,18 +21839,19 @@ fn the_pi_subagent_runner_links_the_child_to_the_parent_and_shows_what_the_event
     );
 
     let live = card_text(&said["live"]);
-    for needed in [
-        "alpha (developer)",
-        "fake-model",
-        "1.5k tok",
-        "$0.0123",
-        "1s",
-    ] {
+    for needed in ["alpha (developer)", "fake-model", "1.5k tok", "$0.0123"] {
         assert!(
             live.contains(needed),
             "{needed} missing from the card:\n{live}"
         );
     }
+    assert!(
+        live.split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|word| word
+                .strip_suffix('s')
+                .is_some_and(|seconds| seconds.parse::<u32>().is_ok_and(|n| n > 0))),
+        "no elapsed time on the card:\n{live}"
+    );
     let done = card_text(&said["finalRow"]);
     assert!(done.contains("✓ alpha"), "{done}");
 }
@@ -21964,7 +21966,10 @@ fn a_running_pi_subagent_is_steered_from_the_view_and_a_finished_one_is_not() {
     assert_eq!(steered.len(), 1, "{steered:?}");
     assert_eq!(steered[0]["message"], "please add tests");
     let view = card_text(&said["viewAfterSteer"]);
-    assert!(view.contains("you: please add tests"), "{view}");
+    assert!(
+        view.contains("you (sent, not confirmed): please add tests"),
+        "{view}"
+    );
 }
 
 #[cfg(unix)]

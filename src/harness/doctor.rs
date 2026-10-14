@@ -2679,8 +2679,9 @@ pub fn pi_subagents(agent_dir: Option<&Path>, repo_dir: &Path) -> Check {
     if let Some(own) = own_reading {
         detail.push_str(&format!(
             "; {own} beside {} other runner(s), so a delegation can reach either: name \
-             `estigia_subagent` when it is Estigia's to run",
-            found.len()
+             `{}` when it is Estigia's to run",
+            found.len(),
+            crate::setup::plugin::PI_AGENTS_TOOL
         ));
     }
     let health = if warnings.is_empty() {
