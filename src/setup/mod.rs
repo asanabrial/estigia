@@ -956,6 +956,8 @@ pub enum ActionKind {
     LoopPlugin,
     /// The OpenCode review relay plugin, written on every OpenCode install.
     ReviewPlugin,
+    /// The Pi subagent runner extension, written on every Pi install.
+    AgentsExtension,
     /// One of the loop's slash commands, for a runtime that reads them.
     Command,
     /// One of the prompt templates written for Pi on every install.
@@ -3716,6 +3718,35 @@ fn setup_into_with_skill(
             }
         }
 
+        if let Some(file) = agents_extension_path(adapter, &paths) {
+            let existing = step!(read_optional(&file));
+            if existing.is_none() || plugin::agents_is_ours(existing.as_deref()) {
+                let desired = plugin::pi_agents_source();
+                if let Some(root) = file.parent().and_then(Path::parent) {
+                    let others = crate::harness::doctor::pi_other_runners(&[root.to_path_buf()]);
+                    if !others.is_empty() {
+                        notes.push(format!(
+                            "another Pi subagent runner is present ({}); Estigia's runner \
+                             `estigia_subagent` is installed beside it, so both answer a delegation",
+                            others
+                                .iter()
+                                .map(|(name, _)| name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ));
+                    }
+                }
+                actions.push(write_step!(write_file(
+                    &file,
+                    existing.as_deref(),
+                    &desired,
+                    ActionKind::AgentsExtension,
+                    options.dry_run,
+                )));
+                pending.insert(file, Some(as_the_file_was(existing.as_deref(), &desired)));
+            }
+        }
+
         // The loop plugin follows the `Loop plugin` setting: `on` writes it,
         // `off` takes back one Estigia wrote, and a file Estigia did not write
         // is left alone either way. The path only says where it lands.
@@ -4214,6 +4245,17 @@ pub fn uninstall_from(
         && plugin::review_relay_is_ours(Some(&existing))
     {
         actions.push(discard(&file, ActionKind::ReviewPlugin, options.dry_run)?);
+    }
+
+    if let Some(file) = agents_extension_path(adapter, &paths)
+        && let Some(existing) = read_optional(&file)?
+        && plugin::agents_is_ours(Some(&existing))
+    {
+        actions.push(discard(
+            &file,
+            ActionKind::AgentsExtension,
+            options.dry_run,
+        )?);
     }
 
     // The loop plugin too, whether or not this install was the one that asked
@@ -5682,6 +5724,18 @@ pub fn review_plugin_path(adapter: &AgentAdapter, paths: &AgentPaths) -> Option<
         _ => return None,
     };
     paths.plugin.as_ref().map(|file| file.with_file_name(name))
+}
+
+/// The Pi subagent runner's path, beside the gate extension that exports the
+/// session it links its children to. `None` for every other adapter.
+pub fn agents_extension_path(adapter: &AgentAdapter, paths: &AgentPaths) -> Option<PathBuf> {
+    match adapter.instructions {
+        InstructionFile::Pi => paths
+            .plugin
+            .as_ref()
+            .map(|file| file.with_file_name(plugin::PI_AGENTS_FILE)),
+        _ => None,
+    }
 }
 
 /// Whether a review relay is installed on this machine, for any host that has one.

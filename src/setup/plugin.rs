@@ -1268,6 +1268,35 @@ export default function (pi) {
 }
 "#;
 
+/// The subagent runner extension Estigia writes for Pi on every install.
+pub const PI_AGENTS_FILE: &str = "estigia-agents.ts";
+
+/// The marker that says the Pi subagent runner is Estigia's.
+pub const AGENTS_MARKER: &str = "estigia:agents";
+
+/// The one tool the Pi subagent runner registers.
+pub const PI_AGENTS_TOOL: &str = "estigia_subagent";
+
+/// Whether the Pi subagent runner file is Estigia's, somebody else's, or absent.
+pub fn agents_is_ours(existing: Option<&str>) -> bool {
+    existing.is_some_and(|text| text.contains(AGENTS_MARKER))
+}
+
+/// The subagent runner extension source for Pi.
+///
+/// It starts each worker as its own `pi --mode rpc` process, draws a card per
+/// worker above the editor, and stops one on request. It decides nothing: the
+/// child inherits the environment the gate extension exported, and the binary
+/// decides every write the child makes.
+pub fn pi_agents_source() -> String {
+    PI_AGENTS_TEMPLATE
+        .replace("__MARKER__", AGENTS_MARKER)
+        .replace("__PI__", "pi")
+        .replace("__TOOL__", PI_AGENTS_TOOL)
+}
+
+const PI_AGENTS_TEMPLATE: &str = include_str!("pi_agents.js");
+
 /// The marker inside one of the loop's slash commands. An HTML comment, so it
 /// renders as nothing where the command's prompt is read.
 pub const COMMAND_MARKER: &str = "<!-- estigia:loop-command -->";

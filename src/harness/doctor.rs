@@ -2571,6 +2571,37 @@ fn pi_runner_name(entry: &serde_json::Value) -> Option<(String, Option<std::path
     Some((source.to_owned(), path))
 }
 
+/// The Pi subagent runners other than Estigia's own that the settings and extension directories under
+/// `roots` name, each with its source path when it is on disk.
+pub fn pi_other_runners(roots: &[std::path::PathBuf]) -> Vec<(String, Option<std::path::PathBuf>)> {
+    let mut found: Vec<(String, Option<std::path::PathBuf>)> = Vec::new();
+    for root in roots {
+        if let Some(entries) = pi_json(&root.join("settings.json"))
+            .and_then(|value| value.get("packages").cloned())
+            .and_then(|value| value.as_array().cloned())
+        {
+            found.extend(entries.iter().filter_map(pi_runner_name));
+        }
+    }
+    for directory in roots.iter().map(|root| root.join("extensions")) {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        let mut paths: Vec<_> = entries.flatten().map(|entry| entry.path()).collect();
+        paths.sort();
+        for path in paths {
+            let name = path
+                .file_name()
+                .map(|name| name.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_default();
+            if name.contains("subagent") || name.contains("sub-agent") {
+                found.push((path.display().to_string(), Some(path)));
+            }
+        }
+    }
+    found
+}
+
 /// Whether the Pi subagent runners installed would give their children Estigia's gate.
 ///
 /// Read only, and advisory: a runner is named from a `packages` entry of the user or project
@@ -2589,42 +2620,31 @@ pub fn pi_subagents(agent_dir: Option<&Path>, repo_dir: &Path) -> Check {
         };
     };
     let project = repo_dir.join(".pi");
-    let mut found: Vec<(String, Option<std::path::PathBuf>)> = Vec::new();
-    for settings in [
-        agent_dir.join("settings.json"),
-        project.join("settings.json"),
-    ] {
-        if let Some(entries) = pi_json(&settings)
-            .and_then(|value| value.get("packages").cloned())
-            .and_then(|value| value.as_array().cloned())
-        {
-            found.extend(entries.iter().filter_map(pi_runner_name));
-        }
-    }
-    for directory in [agent_dir.join("extensions"), project.join("extensions")] {
-        let Ok(entries) = std::fs::read_dir(&directory) else {
-            continue;
-        };
-        let mut paths: Vec<_> = entries.flatten().map(|entry| entry.path()).collect();
-        paths.sort();
-        for path in paths {
-            let name = path
-                .file_name()
-                .map(|name| name.to_string_lossy().to_ascii_lowercase())
-                .unwrap_or_default();
-            if name.contains("subagent") || name.contains("sub-agent") {
-                found.push((path.display().to_string(), Some(path)));
-            }
-        }
-    }
+    let found = pi_other_runners(&[agent_dir.to_path_buf(), project.clone()]);
+    let own: Vec<std::path::PathBuf> = [agent_dir.join("extensions"), project.join("extensions")]
+        .into_iter()
+        .map(|directory| directory.join(crate::setup::plugin::PI_AGENTS_FILE))
+        .filter(|file| {
+            std::fs::read_to_string(file)
+                .is_ok_and(|text| crate::setup::plugin::agents_is_ours(Some(&text)))
+        })
+        .collect();
+    let own_reading = own
+        .first()
+        .map(|file| format!("Estigia's own runner {} is installed", file.display()));
     if found.is_empty() {
         return Check {
             name: "pi-subagents",
             about,
             health: Health::Fine {
-                detail: "no Pi subagent runner is installed in the settings or extension \
+                detail: own_reading.map_or_else(
+                    || {
+                        "no Pi subagent runner is installed in the settings or extension \
                          directories it reads"
-                    .to_owned(),
+                            .to_owned()
+                    },
+                    |own| format!("{own}, and no other Pi subagent runner is"),
+                ),
             },
         };
     }
@@ -2654,6 +2674,13 @@ pub fn pi_subagents(agent_dir: Option<&Path>, repo_dir: &Path) -> Check {
             "{} start{} a separate pi that loads the gate",
             gated.join(", "),
             if gated.len() == 1 { "s" } else { "" }
+        ));
+    }
+    if let Some(own) = own_reading {
+        detail.push_str(&format!(
+            "; {own} beside {} other runner(s), so a delegation can reach either: name \
+             `estigia_subagent` when it is Estigia's to run",
+            found.len()
         ));
     }
     let health = if warnings.is_empty() {
@@ -2702,6 +2729,7 @@ fn pi_extension_exclusions(settings: &Path) -> Vec<String> {
     let estigia_files = [
         crate::setup::plugin::PI_FILE,
         crate::setup::plugin::PI_REVIEW_FILE,
+        crate::setup::plugin::PI_AGENTS_FILE,
     ];
     let Some(entries) = pi_json(settings)
         .and_then(|value| value.get("extensions").cloned())
@@ -3104,6 +3132,11 @@ mod tests {
                 r#"{"extensions":["-extensions/estigia-review-relay.ts"]}"#,
                 "estigia-review-relay.ts",
             ),
+            (
+                "agent",
+                r#"{"extensions":["-extensions/estigia-agents.ts"]}"#,
+                "estigia-agents.ts",
+            ),
             ("agent", r#"{"extensions":["-builtin:mcp"]}"#, "builtin:mcp"),
             (
                 "project",
@@ -3197,6 +3230,45 @@ mod tests {
         );
         assert!(!detail.contains("unrelated"), "{detail}");
         assert!(detail.contains("subagent-loud"), "{detail}");
+    }
+
+    #[test]
+    fn estigias_own_runner_is_named_alone_and_beside_another_one() {
+        let (agent, repo) = pi_dirs();
+        let extensions = agent.path().join("extensions");
+        std::fs::create_dir_all(&extensions).expect("an extensions directory");
+        std::fs::write(
+            extensions.join(crate::setup::plugin::PI_AGENTS_FILE),
+            crate::setup::plugin::pi_agents_source(),
+        )
+        .expect("the runner");
+        let Health::Fine { detail } = pi_subagents(Some(agent.path()), repo.path()).health else {
+            panic!("the runner alone left the row unfine");
+        };
+        assert!(detail.contains("Estigia's own runner"), "{detail}");
+        assert!(detail.contains("no other Pi subagent runner"), "{detail}");
+
+        std::fs::write(
+            extensions.join("subagent-loud.ts"),
+            "spawn(\"pi\", [\"-p\", task]);\n",
+        )
+        .expect("another runner");
+        let Health::Fine { detail } = pi_subagents(Some(agent.path()), repo.path()).health else {
+            panic!("two runners that load the gate left the row unfine");
+        };
+        assert!(detail.contains("subagent-loud.ts"), "{detail}");
+        assert!(detail.contains("Estigia's own runner"), "{detail}");
+        assert!(detail.contains("either"), "{detail}");
+
+        std::fs::write(
+            extensions.join(crate::setup::plugin::PI_AGENTS_FILE),
+            "somebody else's file\n",
+        )
+        .expect("a foreign file");
+        let Health::Fine { detail } = pi_subagents(Some(agent.path()), repo.path()).health else {
+            panic!("row unfine");
+        };
+        assert!(!detail.contains("Estigia's own runner"), "{detail}");
     }
 
     #[test]

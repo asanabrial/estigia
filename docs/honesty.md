@@ -5935,6 +5935,47 @@ pointer that leaves it names the document it points at.
   only a `parentSession` in the session header marks one, and a child started without that header is not
   recognised as a child. A loop only
   exists where `/flow-loop` was typed, which is what keeps a child from running one in practice.
+- **The Pi subagent runner has been driven against a stand-in `pi`, never a live one, and it is the first
+  slice of the issue.** Reproduced first: each of the four runner tests fails when the piece it names
+  is removed. Spawning the child without the parent's environment, zeroing the tokens, the cost or the
+  elapsed time on the card, dropping the refusal lines, making the stop a no-op, skipping the check that
+  the child loaded the gate, and skipping the check that the parent session was exported each turn one of
+  them red. The stand-in `pi` speaks only the RPC records the runner reads (`get_commands`, `get_state`,
+  `prompt`, then `tool_execution_*`, `message_update`, `message_end`, `agent_settled`) and loads the real
+  generated gate extension, with a logging stand-in for the binary, so what is measured is the argument
+  list the child's gate call carries. Not measured: a real Pi child, Pi's own RPC event shapes beyond the
+  documented ones, whether Pi's `setWidget` accepts the component the runner returns, a UI at all (the
+  tests pass a `ctx.ui` that records), a child that is slow to answer `get_commands`, the stall
+  watchdog (there is none: a child that never settles runs until stopped, and only the thirty-second
+  deadline for its first answer is enforced), and Windows (the runner kills the child, not its group,
+  and the tests are Unix-only because the stand-in is an executable script). The card truncates by code
+  units, not columns, so a wide character can overflow a row. The check that the child
+  loaded the gate starts the process and sends it one command before the prompt; it is not a refusal to
+  launch. A child that lists `estigia-doctor` from another extension passes it. The tool is named
+  `estigia_subagent`, not `subagent`, so it cannot replace another runner's tool of that name, which means the
+  issue's wording is not met literally.
+- **The Pi subagent view, steering and history have been driven against recorded stand-ins for Pi's UI and
+  session API, never a live Pi.** Reproduced first: each of the four view tests and the three `doctor`
+  and setup tests fails when its piece is removed. Dropping the transcript, the `steer` send, the stop
+  confirmation, the `appendEntry` call, the read-back of history on `session_start`, the
+  `doctor` naming of Estigia's own runner, the `pi-config` exclusion of `estigia-agents.ts`
+  and the setup note each turn one red; a `sendMessage` added beside `appendEntry` turns the history test red,
+  which is the whole of "never sent to the model" as measured: the test records every method the runner
+  calls on the host and allows only registering and `appendEntry`. Not measured: that `ctx.ui.custom`
+  with `overlay: true` opens an overlay in a real Pi, that the component's `render` and `handleInput` match
+  what Pi's TUI calls (the key bytes for the arrows are the usual ANSI ones, not read from Pi), that
+  `registerShortcut("ctrl+alt+a")` is free in a real session, that `getEntries()` returns entries as
+  `{ type: "custom", customType, data }` and that Pi keeps them out of the model's context (the
+  runner's part, calling only `appendEntry`, is measured; Pi's is not), that RPC `steer` is accepted by a
+  real child (the stand-in only records it, and a steer the child refuses is not shown), and any
+  rendering of the overlay on a screen. The transcript is only what the runner saw in events, capped at
+  two hundred lines of two thousand characters, so a child's thinking and long tool output are cut. A
+  resumed session lists earlier children but cannot stop or steer them. The view's row ids restart at
+  `a1` each process, so a restored entry can share an id with a live one. `doctor` and setup find
+  another runner by the word `subagent` in its name, as before, so a runner called otherwise is not
+  named; the row stays fine, not a warning, when Estigia's own runner sits beside a gated one. The setup
+  note is advisory. A step the issue names that is still not met literally: the tool is `estigia_subagent`,
+  not `subagent`.
 - **A Pi child is linked by its session header, with the pid as the fallback; the live check ran without
   a claim and under `-p` only.** Reproduced first: an in-process child (the parent's pid, a header
   naming its parent) was decided as an unrelated session and overwrote the exported root, so a later

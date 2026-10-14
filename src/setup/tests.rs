@@ -21378,3 +21378,687 @@ fn the_opencode_plugin_leaves_the_mailbox_unread_when_the_host_offers_no_way_to_
         "a host with neither prompt nor synthetic had its mailbox read, so the rows would be stamped delivered and lost"
     );
 }
+
+#[test]
+fn pi_installs_reports_and_removes_the_subagent_runner_on_every_install() {
+    let (home, options) = sandbox();
+    let adapter = agent("pi");
+    let file = pi_goal_directory(home.path()).join(plugin::PI_AGENTS_FILE);
+
+    let dry = SetupOptions {
+        dry_run: true,
+        ..options.clone()
+    };
+    let reported = setup(adapter, &Config::default(), &dry).expect("the dry run succeeds");
+    assert!(
+        reported
+            .actions
+            .iter()
+            .any(|action| action.kind == ActionKind::AgentsExtension && action.path == file),
+        "{:?}",
+        reported.actions
+    );
+    assert!(!file.exists(), "the dry run wrote the runner");
+
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    let written = fs::read_to_string(&file).expect("the runner reads");
+    assert_eq!(written, plugin::pi_agents_source());
+    assert!(plugin::agents_is_ours(Some(&written)));
+    assert!(!written.contains("__"), "a placeholder was left unfilled");
+
+    let again = setup(adapter, &Config::default(), &options).expect("the second setup succeeds");
+    assert!(
+        again
+            .actions
+            .iter()
+            .all(|action| action.change == Change::Unchanged),
+        "{:?}",
+        again.actions
+    );
+
+    uninstall(adapter, &options).expect("uninstall succeeds");
+    assert!(!file.exists(), "uninstall left the runner behind");
+}
+
+#[test]
+fn a_pi_subagent_runner_estigia_did_not_write_is_neither_replaced_nor_removed() {
+    let (home, options) = sandbox();
+    let adapter = agent("pi");
+    let file = pi_goal_directory(home.path()).join(plugin::PI_AGENTS_FILE);
+    fs::create_dir_all(file.parent().expect("a parent")).expect("create the dir");
+    let theirs = "export default function () {}\n";
+    fs::write(&file, theirs).expect("write their extension");
+
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    assert_eq!(fs::read_to_string(&file).expect("it survives"), theirs);
+    uninstall(adapter, &options).expect("uninstall succeeds");
+    assert_eq!(fs::read_to_string(&file).expect("it survives"), theirs);
+}
+
+#[cfg(unix)]
+const PI_AGENTS_FAKE_PI: &str = r##"#!__NODE__
+import { appendFileSync, writeFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+import { pathToFileURL } from "node:url";
+
+writeFileSync(process.env.FAKE_PID, String(process.pid));
+appendFileSync(process.env.FAKE_SEEN, JSON.stringify({ argv: process.argv.slice(2) }) + "\n");
+const out = (record) => process.stdout.write(JSON.stringify(record) + "\n");
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const handlers = {};
+const commands = [];
+if (!process.env.FAKE_NO_GATE) {
+  (await import(pathToFileURL(process.env.GATE).href)).default({
+    on: (name, handler) => { handlers[name] = handler; },
+    registerCommand: (name) => { commands.push(name); },
+    registerEntryRenderer: () => {},
+    appendEntry: () => {},
+    sendMessage: () => {},
+    sendUserMessage: () => {},
+  });
+}
+const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => "child-7" } };
+
+const work = async () => {
+  await handlers.session_start?.({ type: "session_start" }, ctx);
+  const decided = await handlers.tool_call?.({ toolName: "write", input: { path: "a.rs", content: "x" } }, ctx);
+  out({ type: "tool_execution_start", toolCallId: "t1", toolName: "write", args: { path: "a.rs" } });
+  out({
+    type: "tool_execution_end",
+    toolCallId: "t1",
+    toolName: "write",
+    isError: Boolean(decided?.block),
+    result: { content: [{ type: "text", text: decided?.block ? decided.reason : "written" }] },
+  });
+  out({ type: "message_update", usage: { totalTokens: 700, cost: { total: 0.005 } }, assistantMessageEvent: { type: "text_delta", delta: "d" } });
+  out({
+    type: "message_end",
+    message: { role: "assistant", content: [{ type: "text", text: "all done" }], usage: { totalTokens: 1500, cost: { total: 0.0123 } } },
+  });
+  if (process.env.FAKE_HANG) {
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  }
+  await pause(Number(process.env.FAKE_HOLD_MS ?? 0));
+  out({ type: "agent_settled" });
+  process.exit(0);
+};
+
+const lines = createInterface({ input: process.stdin });
+for await (const line of lines) {
+  const command = JSON.parse(line);
+  appendFileSync(process.env.FAKE_SEEN, JSON.stringify({ type: command.type, message: command.message }) + "\n");
+  if (command.type === "get_commands") {
+    out({ id: command.id, type: "response", command: "get_commands", success: true, data: { commands: commands.map((name) => ({ name, source: "extension" })) } });
+  } else if (command.type === "get_state") {
+    out({ id: command.id, type: "response", command: "get_state", success: true, data: { model: { id: "fake-model" } } });
+  } else if (command.type === "prompt") {
+    out({ id: command.id, type: "response", command: "prompt", success: true, data: { disposition: "started" } });
+    work();
+  }
+}
+"##;
+
+#[cfg(unix)]
+const PI_AGENTS_DRIVER: &str = r##"import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+writeFileSync(process.env.STUB_LOG, "");
+process.env.NODE_OPTIONS = `--require "${process.env.STUB_PATH}"`;
+process.env.PI_CODING_AGENT_DIR = process.env.AGENT_DIR;
+delete process.env.ESTIGIA_PI_PARENT_SESSION;
+delete process.env.ESTIGIA_PI_PARENT_PID;
+
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const until = async (check, ms = 8000) => {
+  for (let waited = 0; waited < ms; waited += 25) {
+    const found = check();
+    if (found) return found;
+    await pause(25);
+  }
+  return null;
+};
+const jsonLines = (file) => readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+
+const gate = {};
+(await import("./gate.mjs")).default({
+  on: (name, handler) => { gate[name] = handler; },
+  registerCommand: () => {},
+  registerEntryRenderer: () => {},
+  appendEntry: () => {},
+  sendMessage: () => {},
+  sendUserMessage: () => {},
+});
+
+const agents = {};
+const piCalls = [];
+const appended = [];
+agents.on = {};
+const record = (name, impl) => (...args) => { piCalls.push(name); return impl?.(...args); };
+(await import("./agents.mjs")).default({
+  registerTool: record("registerTool", (tool) => { agents.tool = tool; }),
+  registerCommand: record("registerCommand", (name, options) => { agents.command = { name, ...options }; }),
+  registerShortcut: record("registerShortcut", (key, options) => { agents.shortcut = { key, ...options }; }),
+  on: record("on", (name, handler) => { agents.on[name] = handler; }),
+  appendEntry: record("appendEntry", (type, data) => { appended.push({ type, data }); }),
+  sendMessage: record("sendMessage"),
+  sendUserMessage: record("sendUserMessage"),
+});
+
+let factory;
+let cleared = 0;
+let view;
+let closed = 0;
+let confirmAnswer = true;
+let asked = 0;
+let inputs = 0;
+const notes = [];
+const ctx = {
+  cwd: process.env.PROJECT,
+  hasUI: true,
+  sessionManager: { getSessionId: () => "root-1" },
+  ui: {
+    setWidget: (key, made) => { if (key === "estigia-changes") return; if (made === undefined) cleared += 1; else factory = made; },
+    notify: (text) => { notes.push(text); },
+    confirm: async () => { asked += 1; return confirmAnswer; },
+    input: async () => { inputs += 1; return "please add tests"; },
+    custom: (make) => { view = make({ requestRender() {} }, {}, {}, () => { closed += 1; }); return Promise.resolve(); },
+  },
+};
+const card = () => (factory ? factory({ requestRender() {} }, {}).render(200) : []);
+const rowOf = (label) => card().filter((line) => line.includes(`${label} (developer)`));
+
+const seen = () => jsonLines(process.env.FAKE_SEEN);
+const forget = () => writeFileSync(process.env.FAKE_SEEN, "");
+const settings = (env) => {
+  for (const key of ["FAKE_HOLD_MS", "FAKE_HANG", "FAKE_NO_GATE", "STUB_GATE_EXIT", "STUB_GATE_ERR"]) delete process.env[key];
+  Object.assign(process.env, env);
+};
+
+await gate.session_start({ type: "session_start" }, ctx);
+const exported = process.env.ESTIGIA_PI_PARENT_SESSION;
+
+settings({ FAKE_HOLD_MS: "1600", STUB_GATE_EXIT: "0" });
+forget();
+const running = agents.tool.execute("c1", { agent: "developer", task: "do it", label: "alpha" }, undefined, undefined, ctx);
+const live = await until(() => {
+  const row = rowOf("alpha").join("\n");
+  return row.includes("1.5k tok") && /\b1s\b/.test(row) ? card() : null;
+});
+const settled = await running;
+const gateCalls = jsonLines(process.env.STUB_LOG);
+const childArgv = seen().filter((entry) => entry.argv).map((entry) => entry.argv);
+const finalRow = rowOf("alpha");
+
+settings({ FAKE_HOLD_MS: "300", STUB_GATE_EXIT: "1", STUB_GATE_ERR: "estigia: refused: no live claim\n  run `claim` first\nsecond clause" });
+const refusedRun = agents.tool.execute("c2", { agent: "developer", task: "write", label: "beta" }, undefined, undefined, ctx);
+const refused = await until(() => (rowOf("beta").length > 0 && card().join("\n").includes("second clause") ? card() : null));
+await refusedRun;
+
+settings({ FAKE_HANG: "1", STUB_GATE_EXIT: "0" });
+const hanging = agents.tool.execute("c3", { agent: "developer", task: "wait", label: "gamma" }, undefined, undefined, ctx);
+await until(() => rowOf("gamma").join("\n").includes("1.5k tok"));
+const pid = Number(readFileSync(process.env.FAKE_PID, "utf8"));
+const aliveBefore = (() => { try { process.kill(pid, 0); return true; } catch { return false; } })();
+await agents.command.handler("stop all", ctx);
+const stopped = await Promise.race([hanging, pause(6000).then(() => ({ content: [{ type: "text", text: "still running" }], details: { status: "running" } }))]);
+const gone = await until(() => { try { process.kill(pid, 0); return null; } catch { return true; } }, 6000);
+
+const timeout = pause(6000).then(() => ({ content: [{ type: "text", text: "still running" }], details: { status: "running" } }));
+const press = async (...keys) => { for (const key of keys) await view.handleInput(key); };
+const steers = () => seen().filter((entry) => entry.type === "steer");
+
+settings({ FAKE_HANG: "1", STUB_GATE_EXIT: "0" });
+forget();
+const zeta = agents.tool.execute("c7", { agent: "developer", task: "look", label: "omega" }, undefined, undefined, ctx);
+await until(() => rowOf("omega").join("\n").includes("1.5k tok"));
+await agents.command.handler("", ctx);
+const viewAtStart = view.render(200);
+await press("j");
+const viewOnFinished = view.render(200);
+await press("f");
+const steersOnFinished = steers().length;
+const inputsOnFinished = inputs;
+await press("k", "f");
+const steered = await until(() => (steers().length > 0 ? steers() : null));
+const viewAfterSteer = view.render(200);
+const promptsWhileViewing = seen().filter((entry) => entry.type === "prompt").length;
+await press("s");
+const zetaStopped = await Promise.race([zeta, timeout]);
+asked = 0;
+
+forget();
+const eta = agents.tool.execute("c8", { agent: "developer", task: "more", label: "iota" }, undefined, undefined, ctx);
+await until(() => rowOf("iota").join("\n").includes("1.5k tok"));
+confirmAnswer = false;
+await press("x");
+const askedWhenDeclined = asked;
+const etaWhenDeclined = rowOf("iota").join("\n");
+confirmAnswer = true;
+await press("x");
+const etaStopped = await Promise.race([eta, timeout]);
+await press("q");
+const closedAfterQ = closed;
+
+const entries = [
+  { type: "custom", customType: "estigia-agent", data: { id: "a99", agent: "analyst", label: "old-one", status: "done", model: "m", tokens: 2000, cost: 0.5, startedAt: 1000, endedAt: 61000, task: "old task", text: "yesterday" } },
+  ...appended.map((entry) => ({ type: "custom", customType: entry.type, data: entry.data })),
+  { type: "custom", customType: "something-else", data: { id: "a98", agent: "x", label: "decoy", status: "done", tokens: 0, cost: 0, startedAt: 0, endedAt: 1, task: "t", text: "t" } },
+  { type: "message" },
+];
+agents.on.session_start({ type: "session_start" }, { sessionManager: { getEntries: () => entries } });
+await agents.command.handler("", ctx);
+await press(...Array(40).fill("j"));
+const resumed = view.render(200);
+await press("q");
+
+settings({ FAKE_NO_GATE: "1" });
+forget();
+const ungated = await agents.tool.execute("c4", { agent: "developer", task: "x", label: "delta" }, undefined, undefined, ctx);
+const ungatedSeen = seen();
+
+settings({});
+forget();
+const exportedSession = process.env.ESTIGIA_PI_PARENT_SESSION;
+delete process.env.ESTIGIA_PI_PARENT_SESSION;
+const unlinked = await agents.tool.execute("c5", { agent: "developer", task: "x", label: "eps" }, undefined, undefined, ctx);
+const unlinkedSeen = seen();
+process.env.ESTIGIA_PI_PARENT_SESSION = exportedSession;
+const missing = await agents.tool.execute("c6", { agent: "nobody", task: "x" }, undefined, undefined, ctx);
+
+try { process.kill(pid, "SIGKILL"); } catch {}
+console.log(JSON.stringify({
+  exported,
+  live,
+  settled: settled.content[0].text,
+  gateCalls,
+  childArgv,
+  finalRow,
+  refused,
+  stopped: stopped.content[0].text,
+  stoppedStatus: stopped.details.status,
+  aliveBefore,
+  gone: gone === true,
+  ungated: ungated.content[0].text,
+  ungatedSeen,
+  unlinked: unlinked.content[0].text,
+  unlinkedSeen,
+  missing: missing.content[0].text,
+  command: agents.command.name,
+  shortcut: agents.shortcut.key,
+  viewAtStart,
+  viewOnFinished,
+  viewAfterSteer,
+  steersOnFinished,
+  inputsOnFinished,
+  steered,
+  promptsWhileViewing,
+  zetaStopped: zetaStopped.details.status,
+  askedWhenDeclined,
+  etaWhenDeclined,
+  asked,
+  etaStopped: etaStopped.details.status,
+  closedAfterQ,
+  closed,
+  appended,
+  piCalls,
+  resumed,
+}));
+"##;
+
+#[cfg(unix)]
+fn run_pi_agents_driver() -> &'static serde_json::Value {
+    use std::os::unix::fs::PermissionsExt;
+    static SAID: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+    SAID.get_or_init(|| {
+        let node = node_executable();
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let base = root.path().canonicalize().expect("the directory resolves");
+        let project = base.join("project");
+        let agent_dir = base.join("agent");
+        fs::create_dir_all(&project).expect("the project directory");
+        fs::create_dir_all(agent_dir.join("agents")).expect("the agents directory");
+        fs::write(
+            agent_dir.join("agents").join("developer.md"),
+            "---\nname: developer\ndescription: d\nmodel: provider/model-x\ntools: read, write\n---\n\nYou are the developer.\n",
+        )
+        .expect("the definition writes");
+        fs::write(
+            base.join("gate.mjs"),
+            plugin::pi_source(std::path::Path::new(&node)),
+        )
+        .expect("the gate extension writes");
+        let runner = plugin::pi_agents_source();
+        let fake = base.join("pi");
+        let pointed = runner.replace(
+            "const PI_COMMAND = \"pi\";",
+            &format!("const PI_COMMAND = {};", serde_json::to_string(&fake).unwrap()),
+        );
+        assert_ne!(runner, pointed, "the pi command constant is not where the test looks");
+        fs::write(base.join("agents.mjs"), pointed).expect("the runner writes");
+        fs::write(&fake, PI_AGENTS_FAKE_PI.replace("__NODE__", &node)).expect("the stand-in pi writes");
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).expect("executable");
+        fs::write(
+            base.join("stub.cjs"),
+            r#"const fs = require("node:fs");
+const path = require("node:path");
+if (path.basename(process.argv[1] ?? "") === "gate") {
+  fs.appendFileSync(process.env.STUB_LOG, JSON.stringify(process.argv.slice(3)) + "\n");
+  fs.writeSync(2, process.env.STUB_GATE_ERR ?? "");
+  process.exit(Number(process.env.STUB_GATE_EXIT ?? 0));
+}
+"#,
+        )
+        .expect("the gate stand-in writes");
+        fs::write(base.join("drive.mjs"), PI_AGENTS_DRIVER).expect("the driver writes");
+        let ran = std::process::Command::new(&node)
+            .arg(base.join("drive.mjs"))
+            .current_dir(&base)
+            .env("STUB_LOG", base.join("calls.log"))
+            .env(
+                "STUB_PATH",
+                base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
+            )
+            .env("FAKE_PID", base.join("pi.pid"))
+            .env("FAKE_SEEN", base.join("seen.log"))
+            .env("GATE", base.join("gate.mjs"))
+            .env("AGENT_DIR", &agent_dir)
+            .env("PROJECT", &project)
+            .env_remove("NODE_OPTIONS")
+            .output()
+            .expect("node runs");
+        assert!(
+            ran.status.success(),
+            "the driver failed: {}\n{}",
+            String::from_utf8_lossy(&ran.stderr),
+            String::from_utf8_lossy(&ran.stdout)
+        );
+        serde_json::from_slice(&ran.stdout).expect("the driver prints JSON")
+    })
+}
+
+#[cfg(unix)]
+fn card_text(value: &serde_json::Value) -> String {
+    value
+        .as_array()
+        .expect("a card")
+        .iter()
+        .map(|line| line.as_str().unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(unix)]
+#[test]
+fn the_pi_subagent_runner_links_the_child_to_the_parent_and_shows_what_the_events_say() {
+    let said = run_pi_agents_driver();
+    assert_eq!(said["exported"], "root-1");
+    assert_eq!(said["command"], "estigia-agents");
+    assert_eq!(said["settled"], "all done");
+
+    let calls = said["gateCalls"].as_array().expect("gate calls");
+    assert!(
+        !calls.is_empty(),
+        "the child never reached the gate: {said}"
+    );
+    let first: Vec<String> = serde_json::from_value(calls[0].clone()).expect("an argument list");
+    assert!(
+        first
+            .windows(2)
+            .any(|pair| pair == ["--parent-session-id", "root-1"]),
+        "the child's gate call named no parent: {first:?}"
+    );
+    assert!(
+        first
+            .windows(2)
+            .any(|pair| pair == ["--session-id", "child-7"]),
+        "{first:?}"
+    );
+
+    let argv: Vec<String> = serde_json::from_value(said["childArgv"][0].clone()).expect("argv");
+    assert_eq!(&argv[..2], ["--mode", "rpc"], "{argv:?}");
+    assert!(
+        argv.windows(2)
+            .any(|pair| pair == ["--model", "provider/model-x"]),
+        "{argv:?}"
+    );
+    assert!(
+        argv.windows(2)
+            .any(|pair| pair == ["--tools", "read, write"]),
+        "{argv:?}"
+    );
+    assert!(
+        argv.iter()
+            .any(|word| word.contains("You are the developer.")),
+        "{argv:?}"
+    );
+    assert!(
+        !argv.iter().any(|word| word == "--no-extensions"),
+        "{argv:?}"
+    );
+
+    let live = card_text(&said["live"]);
+    for needed in [
+        "alpha (developer)",
+        "fake-model",
+        "1.5k tok",
+        "$0.0123",
+        "1s",
+    ] {
+        assert!(
+            live.contains(needed),
+            "{needed} missing from the card:\n{live}"
+        );
+    }
+    let done = card_text(&said["finalRow"]);
+    assert!(done.contains("✓ alpha"), "{done}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_child_refused_by_the_gate_shows_the_refusal_on_its_card_unchanged() {
+    let said = run_pi_agents_driver();
+    let card = card_text(&said["refused"]);
+    assert!(card.contains("estigia: refused: no live claim"), "{card}");
+    assert!(card.contains("  run `claim` first"), "{card}");
+    assert!(card.contains("second clause"), "{card}");
+}
+
+#[cfg(unix)]
+#[test]
+fn stopping_a_pi_subagent_terminates_its_process_and_answers_the_tool() {
+    let said = run_pi_agents_driver();
+    assert_eq!(said["aliveBefore"], true, "{said}");
+    assert_eq!(said["gone"], true, "the child outlived the stop: {said}");
+    assert_eq!(said["stoppedStatus"], "stopped");
+    assert!(
+        said["stopped"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("stopped")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_pi_subagent_is_not_given_work_unless_it_loaded_the_gate_and_is_linked_to_a_session() {
+    let said = run_pi_agents_driver();
+    assert!(
+        said["ungated"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("did not load the gate"),
+        "{said}"
+    );
+    let types: Vec<&str> = said["ungatedSeen"]
+        .as_array()
+        .expect("what the child saw")
+        .iter()
+        .filter_map(|entry| entry["type"].as_str())
+        .collect();
+    assert!(
+        !types.contains(&"prompt"),
+        "work reached a child without the gate: {types:?}"
+    );
+    assert!(
+        said["unlinked"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("was not launched"),
+        "{said}"
+    );
+    assert_eq!(
+        said["unlinkedSeen"],
+        serde_json::json!([]),
+        "a child was spawned unlinked"
+    );
+    assert!(
+        said["missing"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("no agent definition nobody")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn the_pi_subagent_view_lists_children_and_shows_each_transcript_with_no_model_call() {
+    let said = run_pi_agents_driver();
+    assert_eq!(said["shortcut"], "ctrl+alt+a");
+    let start = card_text(&said["viewAtStart"]);
+    for needed in [
+        "> a",
+        "omega (developer)",
+        "task: look",
+        "tool: write",
+        "assistant: all done",
+    ] {
+        assert!(
+            start.contains(needed),
+            "{needed} missing from the view:\n{start}"
+        );
+    }
+    assert!(
+        start.contains("alpha (developer)"),
+        "a finished child is not listed:\n{start}"
+    );
+    let finished = card_text(&said["viewOnFinished"]);
+    assert!(finished.contains("task: wait"), "{finished}");
+    assert!(!finished.contains("task: look"), "{finished}");
+    assert_eq!(
+        said["promptsWhileViewing"], 1,
+        "the view sent a prompt to a child"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_running_pi_subagent_is_steered_from_the_view_and_a_finished_one_is_not() {
+    let said = run_pi_agents_driver();
+    assert_eq!(said["steersOnFinished"], 0, "{said}");
+    assert_eq!(
+        said["inputsOnFinished"], 0,
+        "a finished child was offered a follow-up"
+    );
+    let steered = said["steered"].as_array().expect("what the child received");
+    assert_eq!(steered.len(), 1, "{steered:?}");
+    assert_eq!(steered[0]["message"], "please add tests");
+    let view = card_text(&said["viewAfterSteer"]);
+    assert!(view.contains("you: please add tests"), "{view}");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_pi_subagent_view_stops_one_child_and_stops_all_only_after_a_confirm() {
+    let said = run_pi_agents_driver();
+    assert_eq!(said["zetaStopped"], "stopped", "{said}");
+    assert_eq!(said["askedWhenDeclined"], 1, "{said}");
+    assert!(
+        said["etaWhenDeclined"]
+            .as_str()
+            .unwrap_or_default()
+            .contains('●'),
+        "a declined confirm still stopped the child: {said}"
+    );
+    assert_eq!(said["etaStopped"], "stopped", "{said}");
+    assert_eq!(said["asked"], 2, "{said}");
+    assert_eq!(said["closedAfterQ"], 1, "{said}");
+}
+
+#[cfg(unix)]
+#[test]
+fn finished_pi_subagent_tasks_are_kept_as_session_entries_and_never_sent_to_the_model() {
+    let said = run_pi_agents_driver();
+    let entries = said["appended"].as_array().expect("appended entries");
+    let alpha = entries
+        .iter()
+        .find(|entry| entry["data"]["label"] == "alpha")
+        .expect("the finished child was not kept");
+    assert_eq!(alpha["type"], "estigia-agent");
+    assert_eq!(alpha["data"]["status"], "done");
+    assert_eq!(alpha["data"]["text"], "all done");
+    assert_eq!(alpha["data"]["tokens"], 1500);
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry["data"]["label"] == "gamma" && entry["data"]["status"] == "stopped"),
+        "a stopped child was not kept: {entries:?}"
+    );
+
+    let calls: Vec<&str> = said["piCalls"]
+        .as_array()
+        .expect("the calls on the host")
+        .iter()
+        .filter_map(|call| call.as_str())
+        .collect();
+    assert!(calls.contains(&"appendEntry"), "{calls:?}");
+    for call in &calls {
+        assert!(
+            [
+                "registerTool",
+                "registerCommand",
+                "registerShortcut",
+                "on",
+                "appendEntry"
+            ]
+            .contains(call),
+            "the runner called {call}, which can reach the model: {calls:?}"
+        );
+    }
+
+    let resumed = card_text(&said["resumed"]);
+    assert!(resumed.contains("old-one (analyst)"), "{resumed}");
+    assert!(resumed.contains("task: old task"), "{resumed}");
+    assert!(resumed.contains("assistant: yesterday"), "{resumed}");
+    assert!(!resumed.contains("decoy"), "{resumed}");
+}
+
+#[test]
+fn setup_says_so_when_another_pi_subagent_runner_is_present_and_still_installs_its_own() {
+    let (home, options) = sandbox();
+    let adapter = agent("pi");
+    let alone = setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    assert!(
+        !alone
+            .notes
+            .iter()
+            .any(|note| note.contains("another Pi subagent runner")),
+        "{:?}",
+        alone.notes
+    );
+
+    let directory = pi_goal_directory(home.path());
+    fs::write(
+        directory.join("subagent-other.ts"),
+        "spawn(\"pi\", args);\n",
+    )
+    .expect("a runner");
+    let beside = setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    let note = beside
+        .notes
+        .iter()
+        .find(|note| note.contains("another Pi subagent runner"))
+        .expect("setup did not say another runner is present");
+    assert!(note.contains("subagent-other.ts"), "{note}");
+    assert!(directory.join(plugin::PI_AGENTS_FILE).is_file());
+}

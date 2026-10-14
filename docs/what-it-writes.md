@@ -645,11 +645,11 @@ the relay does not prove is in [`honesty.md`](honesty.md).
 ## The Pi gate extension
 
 Every `~/.pi/agent` below is Pi's agent directory: `$PI_CODING_AGENT_DIR` when that is set to an absolute path
-(or one starting with `~`), `~/.pi/agent` otherwise. `estigia setup pi` writes six things: the fenced directive into `~/.pi/agent/AGENTS.md`, the skill
+(or one starting with `~`), `~/.pi/agent` otherwise. `estigia setup pi` writes seven things: the fenced directive into `~/.pi/agent/AGENTS.md`, the skill
 into the shared `~/.agents/skills` tree, Estigia's server into `~/.pi/agent/mcp.json` under
-`mcpServers` (`command`, `args: ["mcp"]`, an `exposure` and, on a Pi that defers, a `description`; see below), and two
+`mcpServers` (`command`, `args: ["mcp"]`, an `exposure` and, on a Pi that defers, a `description`; see below), and three
 extensions: `~/.pi/agent/extensions/estigia-workflow-authority.ts`, marked `estigia:workflow-authority`
-like OpenCode's plugin, and the review relay described in the next section; and two prompt templates,
+like OpenCode's plugin, the review relay and the subagent runner, both described in the sections after the loop extensions; and two prompt templates,
 described after the extension. Where `Model routing` names
 `developer` or `analyst`, setup also writes `~/.pi/agent/agents/developer.md` and `analyst.md`, under
 the ownership record every delegated definition shares (see the agent-definitions section below). Pi loads the extension through its own TypeScript loader with no build step;
@@ -732,7 +732,10 @@ of the user or project `settings.json` or an extension in either `extensions/` d
 says subagent, and says whether their children load the gate. A runner that starts children with
 `--no-extensions`, or runs them inside Pi's process, or whose source cannot be read, is reported like a
 skipped check with `WARNING` and its name; it installs and rewrites nothing. What it cannot tell is in
-[`honesty.md`](honesty.md).
+[`honesty.md`](honesty.md). Estigia's own runner (see *The Pi subagent runner extension* below) is named in the same row: alone,
+as installed, or beside any other runner it found, in which case the row says a delegation can reach
+either. `estigia setup pi` says the same in a note when it finds another runner while installing its
+own; it does not refuse and does not skip the install.
 
 The same file also draws two things for the person, and neither decides anything. When `ctx.hasUI`
 is true it keeps a status line, key `estigia-claim`, through `ctx.ui.setStatus`: on `session_start`,
@@ -950,6 +953,63 @@ the end, so a binary that exits before reading the answer does not hide the reas
 installed for any host, it records the relay job and answers `relay: true`; with neither, it is refused `unavailable` naming the CLI to install. `estigia uninstall pi` removes the file;
 a file carrying no `estigia:review-relay` marker is neither replaced nor removed. What the relay does not
 prove is in [`honesty.md`](honesty.md).
+
+## The Pi subagent runner extension
+
+`estigia setup pi` also writes `~/.pi/agent/extensions/estigia-agents.ts`, marked `estigia:agents`,
+**ungated** and written on every install, like the review relay beside it. `--dry-run` reports it,
+`estigia uninstall pi` removes it, and a file carrying no `estigia:agents` marker is neither replaced nor
+removed. The file is plain JavaScript, which is also valid TypeScript.
+
+It registers one tool, `estigia_subagent` (`agent`, `task`, optional `label`), and the command
+`/estigia-agents`. The tool reads `<agent dir>/agents/<agent>.md`, the definition setup writes for
+`developer` and `analyst`, and starts `pi --mode rpc --session-dir <temporary directory>` with that
+definition's `model` and `tools` when it names them and its body as `--append-system-prompt`, in its own
+process group, **inheriting the environment unchanged**. The gate extension has exported
+`ESTIGIA_PI_PARENT_SESSION` by then, so the child's own gate extension adds `--parent-session-id` and the
+binary decides every write the child makes as the parent's run. The runner decides nothing about authority;
+it spawns, relays and draws. Two checks come before any work is sent:
+
+- the tool is refused, and nothing is spawned, when the gate extension has not exported
+  `ESTIGIA_PI_PARENT_SESSION`, because the child could not be linked to a claim;
+- the child is asked for its commands (`get_commands`) and must list `estigia-doctor`, a command only the
+  gate extension registers. A child that does not is stopped before it receives the prompt, and the tool
+  answers that it did not load the gate. The runner never passes `--no-extensions`.
+
+The tool's answer is the child's last assistant text once `agent_settled` arrives. A dialog the child asks
+for is cancelled, since a child in RPC mode has nobody to ask.
+
+The **card** is drawn with `ctx.ui.setWidget("estigia-agents", …)` when the session has a UI: one row per
+running child, then the three most recent finished ones for sixty seconds, each `label (agent) model
+tokens tok $cost elapsed activity`. The model is from `get_state`; tokens and cost are the sum of the
+`usage` on each finished assistant message plus the one in flight; the activity is the last tool. A tool
+that ends in error shows its result text, which is the binary's refusal for a gated write, on following
+lines unchanged. Rows are redrawn once a second while anything is shown, and the widget is cleared when
+nothing is. Drawing makes no model call.
+
+`/estigia-agents` lists the card, `/estigia-agents stop <id>` stops one child and `/estigia-agents stop
+all` asks for confirmation when there is a UI. A stop sends `SIGTERM` to the child's process group and
+`SIGKILL` three seconds later; the tool then answers that the child was stopped. Aborting the tool call
+stops it the same way.
+
+The **view** is `/estigia-agents` with no argument when the session has a UI, and the shortcut
+`ctrl+alt+a`: a `ui.custom` overlay listing running children first, then finished ones, then the tasks
+kept from earlier in the session's history, with the selected child's transcript below. The transcript
+is what the runner already read from the child's events: the task, each tool started, each result or
+refusal, each assistant message and each follow-up sent, the last two hundred lines. Keys: up/down or
+`k`/`j` select, `s` stops the selected child, `x` stops every running child after a confirmation, `f`
+asks for a follow-up and sends it to the selected running child as an RPC `steer`, `q` or escape closes.
+The view is redrawn once a second while open and calls no model.
+
+**History.** When a child finishes, fails or is stopped, the runner appends one `estigia-agent` entry
+with `pi.appendEntry`: id, agent, label, status, model, tokens, cost, times, the task and the answer
+(first 4000 characters). Pi keeps such entries in the session and never sends them to the model; the
+runner calls no other method that could (`sendMessage`, `sendUserMessage`). On `session_start` the
+runner reads them back from `ctx.sessionManager.getEntries()` so a resumed session lists them in the view,
+with the task and answer as the transcript.
+
+Not built yet: nothing from the issue's list is left except what [`honesty.md`](honesty.md) says was not
+run.
 
 ## What setup writes into Codex's configuration
 
