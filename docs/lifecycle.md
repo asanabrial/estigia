@@ -166,8 +166,9 @@ Three notices carry the same reading to a session, each naming the checkouts and
 
 - **At session start**, in the text every runtime already receives (Claude Code, Codex, OpenCode and
   Pi): the linked checkouts no readable run pointer holds that carry uncommitted files, with their
-  branch and file count. The base checkout is not named. The read stops after three seconds and says how
-  many checkouts it did not reach, since one not read is not a clean one.
+  branch and file count. The base checkout is not named, and neither is a bare repository registered
+  as one. The read stops after three seconds and says how many checkouts it did not reach, since one
+  not read is not a clean one.
 - **At `done` and `release`**, appended to the tool answer: the files the run's own checkout still
   holds uncommitted. It is a notice and never a refusal. `release` already keeps a checkout that
   carries them, `done` removes nothing, and refusing would block delivery on files the person may mean

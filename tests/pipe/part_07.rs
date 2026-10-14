@@ -631,7 +631,7 @@ fn publish_review_records_a_bare_inline_declaration_over_any_file_count() {
         "raise-reason=a%20new%20caller%20reaches%20this%20path",
         "focus=risk",
         "focus-reason=failure%20is%20the%20point",
-        "computed-level=",
+        "computed-level=medium",
     ] {
         assert!(
             raised_receipt.contains(expected),

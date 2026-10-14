@@ -1031,6 +1031,7 @@ mod missing_fixture_message_tests {
 mod fake_cli_default_tests {
     use super::with_fake_clis;
     use std::ffi::{OsStr, OsString};
+    use std::path::Path;
 
     fn stdin_log() -> Option<OsString> {
         std::env::var_os("ESTIGIA_FAKE_STDIN_LOG")
@@ -1073,6 +1074,66 @@ mod fake_cli_default_tests {
                 );
             },
         );
+    }
+
+    #[test]
+    fn a_scripted_gh_sees_none_of_the_seven_held_variables_and_every_one_its_fixture_sets() {
+        let scratch = tempfile::tempdir().unwrap();
+        let path = |name: &str| scratch.path().join(name).into_os_string();
+        let names_file = path("names.txt");
+        let argv_file = path("argv.txt");
+        let held_names = path("held_names.txt");
+        let held_argv = path("held_argv.txt");
+        let held_stdin = path("held_stdin.txt");
+        let flag = OsString::from("1");
+        with_fake_clis(
+            &[],
+            &[
+                ("ESTIGIA_FAKE_ARGV_LOG", held_argv.as_os_str()),
+                ("ESTIGIA_FAKE_BIG_STDOUT", flag.as_os_str()),
+                ("ESTIGIA_FAKE_DELAY_MS", flag.as_os_str()),
+                ("ESTIGIA_FAKE_ENV_NAMES", held_names.as_os_str()),
+                ("ESTIGIA_FAKE_EXIT_WITHOUT_READING", flag.as_os_str()),
+                ("ESTIGIA_FAKE_STDIN_LOG", held_stdin.as_os_str()),
+                ("ESTIGIA_FAKE_WRITE_ARG_FILE", flag.as_os_str()),
+            ],
+            |_| {
+                let bin = super::scripted_gh();
+                let ask = |own: &[(&str, OsString)]| {
+                    super::with_scripted_gh_window(bin.path(), "[]", own, || {
+                        let _ = crate::transport::gh_json(&["api", "repos/{owner}/{repo}"], None);
+                    });
+                };
+                ask(&[("ESTIGIA_FAKE_ENV_NAMES", names_file.clone())]);
+                ask(&[("ESTIGIA_FAKE_ARGV_LOG", argv_file.clone())]);
+            },
+        );
+        let seen = std::fs::read_to_string(&names_file).expect("the fixture's own log was written");
+        let seen: Vec<&str> = seen.lines().collect();
+        assert!(seen.contains(&"ESTIGIA_FAKE_ENV_NAMES"), "{seen:?}");
+        for removed in [
+            "ESTIGIA_FAKE_ARGV_LOG",
+            "ESTIGIA_FAKE_BIG_STDOUT",
+            "ESTIGIA_FAKE_DELAY_MS",
+            "ESTIGIA_FAKE_EXIT_WITHOUT_READING",
+            "ESTIGIA_FAKE_STDIN_LOG",
+            "ESTIGIA_FAKE_WRITE_ARG_FILE",
+        ] {
+            assert!(
+                !seen.contains(&removed),
+                "{removed} reached the child: {seen:?}"
+            );
+        }
+        assert!(
+            Path::new(&argv_file).is_file(),
+            "the fixture's own variable was not passed"
+        );
+        assert!(
+            !Path::new(&held_names).exists(),
+            "a held ENV_NAMES reached the child"
+        );
+        assert!(!Path::new(&held_argv).exists());
+        assert!(!Path::new(&held_stdin).exists());
     }
 
     #[test]

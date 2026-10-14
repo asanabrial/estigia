@@ -2407,6 +2407,82 @@ fn changes_lists_a_dirty_orphan_checkout_and_writes_nothing() {
     );
 }
 
+/// A linked checkout a run pointer names is listed as held, one no pointer
+/// names as an orphan, and both carry what they hold uncommitted.
+#[test]
+fn changes_tells_a_held_linked_checkout_from_an_orphan_one() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    let held = home.join("held-checkout");
+    let orphan = home.join("orphan-checkout");
+    for (branch, path) in [("issue-30-held", &held), ("issue-31-orphan", &orphan)] {
+        checked_git(repo, &["branch", branch, "HEAD"]);
+        checked_git(
+            repo,
+            &[
+                "worktree",
+                "add",
+                "--",
+                path.to_str().expect("the fixture path is UTF-8"),
+                branch,
+            ],
+        );
+    }
+    std::fs::write(held.join("held-work.txt"), "a\nb\n").expect("held work");
+    std::fs::write(orphan.join("orphan-work.txt"), "a\n").expect("orphan work");
+    estigia::harness::session::update(
+        &home.join(".estigia").join("runs"),
+        "claude-held5678",
+        |run| {
+            run.issue = Some(estigia::identity::Identity::Number(30));
+            run.state = Some("in-progress".to_owned());
+            run.repo_dir = Some(repo.to_path_buf());
+            run.worktree = Some(held.clone());
+        },
+    );
+
+    let (said, err, ok) = run_with_tracker(home, repo, bin, "[]", &["changes", "--json"], "");
+    let told = format!("{said}{err}");
+    assert!(ok, "changes was refused: {told}");
+    let listed: serde_json::Value = serde_json::from_str(said.trim())
+        .unwrap_or_else(|_| panic!("the changes answer is JSON: {told}"));
+    let holding = |file: &str| {
+        listed["worktrees"]
+            .as_array()
+            .expect("a worktrees array")
+            .iter()
+            .find(|tree| {
+                tree["files"]
+                    .as_array()
+                    .is_some_and(|files| files.iter().any(|entry| entry["path"] == file))
+            })
+            .unwrap_or_else(|| panic!("the checkout holding {file} was omitted: {told}"))
+    };
+    let held_tree = holding("held-work.txt");
+    assert_eq!(held_tree["orphan"], serde_json::json!(false), "{told}");
+    assert_eq!(held_tree["run"], serde_json::json!("claude-held5678"));
+    assert_eq!(held_tree["issue"], serde_json::json!(30));
+    assert_eq!(held_tree["branch"], serde_json::json!("issue-30-held"));
+    assert_eq!(held_tree["files"][0]["marker"], serde_json::json!("U"));
+    assert_eq!(held_tree["files"][0]["added"], serde_json::json!(2));
+    let orphan_tree = holding("orphan-work.txt");
+    assert_eq!(orphan_tree["orphan"], serde_json::json!(true), "{told}");
+    assert_eq!(orphan_tree["run"], serde_json::Value::Null);
+    assert_eq!(orphan_tree["branch"], serde_json::json!("issue-31-orphan"));
+
+    let (text, _, ok) = run_with_tracker(home, repo, bin, "[]", &["changes"], "");
+    assert!(ok, "{text}");
+    assert!(
+        text.contains("[issue-30-held]  held by claude-held5678")
+            && text.contains("[issue-31-orphan]  orphan"),
+        "{text}"
+    );
+    assert!(
+        held.join("held-work.txt").exists() && orphan.join("orphan-work.txt").exists(),
+        "the listing removed a file"
+    );
+}
+
 /// A release whose unassign marker is already on the
 /// issue — the retried release — must retire the checkout too. Before this, the
 /// resumed path answered without a `checkout` key and never attempted

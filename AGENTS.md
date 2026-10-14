@@ -123,16 +123,17 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Eighty-seven tests **require** `node` on the path, and all eighty-seven drive the OpenCode plugins and
+   --no-deps`. Eighty-eight tests **require** `node` on the path, and all eighty-eight drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
-   let a gate defect stand. Eight are on the gate plugin,
+   let a gate defect stand. Nine are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
    `the_plugin_hands_the_gate_the_directory_every_write_lands_in`,
    `the_opencode_plugin_hands_an_oversized_input_to_the_gate_on_standard_input`,
-   `the_plugin_says_so_when_the_gate_returns_no_exit_code`, and four that drive its mail delivery,
+   `the_plugin_says_so_when_the_gate_returns_no_exit_code`, and five that drive its mail delivery,
    `the_opencode_plugin_appends_waiting_mail_to_a_tool_result_after_registering_the_session`,
    `the_opencode_plugin_steers_mail_in_through_the_service_prompt_when_it_answers`,
-   `the_opencode_plugin_falls_back_to_a_synthetic_message_when_the_prompt_fails_or_is_absent` and
+   `the_opencode_plugin_falls_back_to_a_synthetic_message_when_the_prompt_fails_or_is_absent`,
+   `the_opencode_plugin_says_on_standard_error_that_mail_is_lost_when_both_hand_overs_fail` and
    `the_opencode_plugin_leaves_the_mailbox_unread_when_the_host_offers_no_way_to_hand_mail_over`; two drive the Pi gate extension's display,
 `the_pi_extension_shows_the_claim_the_binary_reports_and_clears_it_when_there_is_none` and
 `the_pi_extension_draws_a_refusal_card_with_the_binarys_words_and_asks_the_model_for_nothing`; seven drive the optional loop
@@ -217,7 +218,7 @@ a second copy that will disagree.
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that eighty-seven tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that eighty-eight tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here
