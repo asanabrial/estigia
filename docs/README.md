@@ -18,7 +18,6 @@ the document that owns it, and follows that document's own links from there.
 | [`honesty.md`](honesty.md) | What this instrument does **not** check, each gap with the measurement that found it | you are about to believe a claim |
 | [`honesty-review-tier.md`](honesty-review-tier.md) | What the review tier, the lens and the finding do not establish — the last run of the ledger above | you are reading a tier, a lens or a finding claim |
 | [`parity.md`](parity.md) | Which `gentle-ai` revision Estigia measures against, and which layer is in scope | you are asking whether Estigia is at parity |
-| [`changelog-fragments.md`](changelog-fragments.md) | Where a change records itself, the fragment format, and how a version cut folds fragments into the changelog | you are recording a change, or cutting a version |
 | [`AGENTS.md`](../AGENTS.md) | How an agent works in this repository, and what it owes the documentation | you are about to change this repository |
 | [`CHANGELOG.md`](../CHANGELOG.md) | What changed, released version by released version | you need the history of a behaviour |
 

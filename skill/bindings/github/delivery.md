@@ -424,7 +424,8 @@ SCRIPT changelog-notes --version <new> --file <component-changelog> --out <notes
 
 It **fails closed** when the version has no entry, or has a heading with nothing under it. That is
 not an obstacle to route around: the entry is part of what "delivered" means, and a tag is immutable,
-so notes improvised at tag time are permanent. Write the entry first.
+so notes improvised at tag time are permanent. Write the entry first: the agent cutting the version writes
+it, a few one-line bullets, from the pull requests merged since the previous tag.
 
 The extraction anchors on the version OPENING the heading, which matters more than it sounds. Seen
 live: an entry headed `### 2026-07-25 — (sin bump de versión) … (sigue en v6.9.8)` — whose entire

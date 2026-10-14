@@ -1,3 +1,0 @@
-section: The harness
-
-- **`estigia changes` lists the uncommitted work in every checkout, and `estigia prune` no longer drops one from its listing.** Issue #70. The new read-only command reports each registered checkout and each one a run pointer names: branch, uncommitted files by marker with line counts, commits not on the upstream, the holding run and issue, and `orphan` when no readable pointer holds it; a checkout git cannot be read in is reported `unreadable`, not omitted (`docs/lifecycle.md`). `prune` now lists a checkout whose branch is neither merged nor closed as kept, with its reason and the uncommitted files it carries; what `--confirm` removes is unchanged. The runtime surfaces and the session notices are not built yet (`docs/honesty.md`).

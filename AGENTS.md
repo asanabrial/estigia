@@ -45,7 +45,6 @@ audience is whoever reads this repository next, and they may not share your lang
 | `src/transport/` | The tracker transport, ported from the retired Python. Nothing crosses it against a second implementation any more — the corpus that did is deleted, and `docs/honesty.md` says what that cost |
 | `src/setup/` | Registering Estigia in somebody else's agent, and taking it back out |
 | `skill/` | The contract an agent reads, embedded and installed unchanged |
-| `changes/` | One fragment per change not yet in `CHANGELOG.md`; absent when every fragment has been assembled |
 | `README.md` | What this does |
 | `docs/` | The reference documents, mapped in [`docs/README.md`](docs/README.md): what is not measured, the settings table, what setup writes, the binary lifecycle, what a blind review costs, what parity is read against |
 
@@ -262,11 +261,9 @@ a second copy that will disagree.
    --lib doctor` on a cold worktree fails the same way a filtered `cargo test --test pipe` does, and
    for the same reason — the fixture is not built, and the failure names the command that builds it
    rather than reporting a pass that measured nothing.
-5. **Record the change as a fragment, not in `CHANGELOG.md`.** A change adds one file,
-   `changes/<issue>-<slug>.md`, whose first line is `section: <the ### heading it belongs under>`
-   and whose body is the bullet. Two branches then add two different files and cannot conflict; the
-   fragments are folded into `CHANGELOG.md` when a version is cut. Format, assembly and the release
-   order are in [`docs/changelog-fragments.md`](docs/changelog-fragments.md).
+5. **A change does not edit `CHANGELOG.md`.** The agent cutting a version writes that version's entry
+   from the pull requests merged since the previous tag, as in
+   [Version tags](skill/bindings/github/delivery.md#version-tags).
 
 ## What not to do
 

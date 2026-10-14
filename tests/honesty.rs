@@ -92,111 +92,6 @@ fn configuration() -> String {
     text
 }
 
-/// The documents plus the changelog's unreleased entry and the `changes/` fragments, for the counts alone.
-///
-/// Separate from [`documented`], and the separation is the point. Eight guards
-/// read that one, including one asking *does the documentation still name this
-/// mechanism?* — and a changelog is **append-only**, so a name recorded there
-/// answers that question for ever. A reviewer measured exactly that: with the
-/// widening in place, deleting a mechanism from the README and from every file
-/// in `docs/` left that guard green.
-///
-/// A count is different. The unreleased entry describes the crate as it is now,
-/// so a number in it is a claim like any other, and one sat at eighteen settings
-/// while the code held nineteen because nothing reached it.
-///
-/// **Unreleased only, and the filter is real this time.** The first version took
-/// everything before the second `## ` heading and there is only one, so it
-/// pushed the whole file while its own comment, its variable and its failure
-/// message all said otherwise. Now the heading has to say so: a released entry
-/// is a record of what shipped then, and holding it to today's counts would
-/// force a document to lie about history to pass a test about the present.
-fn counted() -> String {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let changelog = std::fs::read_to_string(root.join("CHANGELOG.md"))
-        .expect("CHANGELOG.md ships with the crate");
-    let mut all = documented();
-    let Some(rest) = changelog.split_once("\n## ").map(|(_, rest)| rest) else {
-        return all;
-    };
-    let (heading, body) = match rest.split_once('\n') {
-        Some(pair) => pair,
-        None => return all,
-    };
-    if !heading.to_ascii_lowercase().contains("unreleased") {
-        return all;
-    }
-    all.push_str(body.split("\n## ").next().unwrap_or(body));
-    all.push_str(&fragments(&root));
-    all
-}
-
-/// The `changes/` fragments, which are unreleased entries not yet in the changelog.
-fn fragments(root: &std::path::Path) -> String {
-    let Ok(entries) = std::fs::read_dir(root.join("changes")) else {
-        return String::new();
-    };
-    let mut paths: Vec<_> = entries.flatten().map(|entry| entry.path()).collect();
-    paths.sort();
-    paths
-        .iter()
-        .map(|path| {
-            format!(
-                "\n{}",
-                std::fs::read_to_string(path).expect("a readable fragment")
-            )
-        })
-        .collect()
-}
-
-/// The present-tense reader does not carry the changelog.
-///
-/// [`documented`] answers *does the documentation still say this?* and
-/// [`counted`] answers *is this number right?*. Only the second direction was
-/// held: a pair in the count guard keys on a changelog sentence, so narrowing
-/// `counted()` reddens. Re-widening `documented()` reddened **nothing** — every
-/// count in the unreleased entry agrees with the code today, so the guards that
-/// ask a present-tense question would go on passing while being answered from a
-/// record of what shipped. A blind judge measured it against the published head
-/// and this is the assertion that was missing.
-///
-/// Asserted from the same extraction `counted` performs, rather than a phrase
-/// copied out of the changelog: a literal here would be a second place holding
-/// one fact, and it would rot the first time that entry was edited.
-///
-/// **What it does not reach.** The witness is one line of the unreleased entry,
-/// so a widening that carried some *other* slice of the changelog would pass
-/// here. That is not constructible today — the file holds exactly one `## `
-/// heading, which makes the unreleased entry effectively the whole of it — and
-/// it stops being true the moment a second heading lands. A judge measured the
-/// gap; it is recorded rather than closed, because closing it means asserting
-/// against a released entry this guard deliberately does not read.
-#[test]
-fn the_present_tense_reader_does_not_carry_the_changelog() {
-    let carried = counted();
-    let present = documented();
-    let unreleased = carried.strip_prefix(present.as_str()).expect(
-        "counted() is documented() plus a suffix, or this guard is reading the wrong thing",
-    );
-    assert!(
-        !unreleased.trim().is_empty(),
-        "counted() added nothing to documented(), so the unreleased filter has stopped matching \
-         and every count guard reading it is now passing over a document it never sees"
-    );
-    // One line is enough to prove the concatenation, and the first non-empty
-    // one is stable against the entry being reordered below it.
-    let witness = unreleased
-        .lines()
-        .map(str::trim)
-        .find(|line| line.len() > 40)
-        .expect("the unreleased entry has a line long enough to identify it");
-    assert!(
-        !present.contains(witness),
-        "documented() carries the changelog again, so a guard asking whether the documentation \
-         still names a mechanism can be answered out of an append-only history: {witness:?}"
-    );
-}
-
 fn documented() -> String {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut all = readme();
@@ -426,13 +321,13 @@ fn number_before(text: &str, phrase: &str) -> Option<usize> {
 /// So the property is asserted instead of promised — but **only as far as the
 /// admission test reaches**, and saying more than that is how the three sweeps
 /// before it were believed. What it checks: a function whose text carries
-/// `documented()` or `counted()` may not attribute a claim to the README in any
+/// `documented()` may not attribute a claim to the README in any
 /// non-comment line. What it does not: a reader reached some other way, a
 /// misdirection phrased without one of the attributing verbs, and any file but
 /// this one.
 ///
 /// Two judges wrote past the first version — one restored the removed message
-/// into the count guard, which binds `counted()` and was skipped; the other
+/// into the count guard, which was skipped; the other
 /// wrote `README.md counts` where it had said `the README counts`. A third
 /// renamed the helper and left the guard reporting success over nothing, which
 /// is what the floor below is for. Guards that read `readme()` are untouched:
@@ -474,13 +369,11 @@ fn no_guard_reading_every_document_blames_the_readme() {
         let name = rest.split('(').next().unwrap_or_default().trim().to_owned();
         // Both readers, and neither spelled with its semicolon. The first
         // version admitted on `documented();`, which excluded the one function
-        // this guard was written for: the count guard binds `counted()`, the
+        // this guard was written for: the count guard binds `documented()`, the
         // widest reader of all, and a judge put the removed message back into it
         // with the whole target green. `documented().to_string()` slipped
         // through the same way.
-        let reads = function
-            .iter()
-            .any(|line| line.contains("documented()") || line.contains("counted()"));
+        let reads = function.iter().any(|line| line.contains("documented()"));
         if !reads || name == "no_guard_reading_every_document_blames_the_readme" {
             continue;
         }
@@ -992,13 +885,11 @@ fn every_count_a_document_claims_is_one_the_crate_has() {
     enum Source {
         Readme,
         Documented,
-        Counted,
     }
     fn source_text(source: Source) -> String {
         match source {
             Source::Readme => readme(),
             Source::Documented => documented(),
-            Source::Counted => counted(),
         }
     }
 
@@ -1014,37 +905,31 @@ fn every_count_a_document_claims_is_one_the_crate_has() {
 
     for (source, phrase, actual, what) in [
         (
-            Source::Counted,
+            Source::Documented,
             "settings, all typed",
             settings,
             "settings, in the second sentence of the configuration reference",
         ),
         (
-            Source::Counted,
+            Source::Documented,
             "typed settings, read from one table",
             settings,
             "settings, in the sentence that opens the configuration reference",
         ),
         (
-            Source::Counted,
+            Source::Documented,
             "typed settings, in",
             settings,
             "settings, in the sentence that opens the README's configuration section",
         ),
         (
-            Source::Counted,
+            Source::Documented,
             "rows and `config list` reports",
             settings,
             "rows, in the sentence about what `config list` reports",
         ),
         (
-            Source::Counted,
-            "typed settings. Reading the table",
-            settings,
-            "settings, in the changelog's unreleased entry",
-        ),
-        (
-            Source::Counted,
+            Source::Documented,
             "adapters share `~/.agents/skills`",
             adapters,
             "adapters sharing the neutral root",

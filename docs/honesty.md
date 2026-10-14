@@ -329,7 +329,7 @@ pointer that leaves it names the document it points at.
   instruction and says what each half builds; the reason none holds it is this entry.
 
 - **The old-reference guard sees only numbers above a ceiling.** `tests/issue_references.rs` fails on
-  a `#N` in the shipped text (`AGENTS.md`, `README.md`, `CHANGELOG.md`, `docs/`, `skill/`, `changes/`
+  a `#N` in the shipped text (`AGENTS.md`, `README.md`, `CHANGELOG.md`, `docs/`, `skill/`
   and the string literals of `src/` through `source_text::code_of`) when `N` exceeds
   `PUBLIC_ISSUES_THROUGH`, which is raised by hand when the public tracker passes it. An old reference whose number is at or below that
   ceiling is indistinguishable from a public one, so it passes; the guard also does not read `tests/`,
@@ -1960,7 +1960,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 39,453 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 39,572 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
