@@ -301,21 +301,6 @@ fn payload_declared_at(
     })
 }
 
-/// How many paths a unified diff touches.
-///
-/// One `diff --git a/<path> b/<path>` header per path — [`review_payload_bounded`]
-/// runs `--no-renames`, so a rename never collapses two paths into one header —
-/// and every path git can report gets one: an add, a delete, a mode-only change
-/// and a binary file all open a header with no hunk beneath it, so counting
-/// hunks would undercount them. A content line inside the diff body is prefixed
-/// `+`, `-` or a space and so never opens at column zero, which is what makes
-/// `starts_with` safe against a file whose own content is itself a diff.
-pub(crate) fn changed_file_count(diff: &str) -> usize {
-    diff.lines()
-        .filter(|line| line.starts_with("diff --git "))
-        .count()
-}
-
 pub(crate) fn merge_base(at: &std::path::Path, one: &str, two: &str) -> Result<String, Failure> {
     let oid = run(&["git", "merge-base", one, two], Some(at), How::read())?
         .stdout

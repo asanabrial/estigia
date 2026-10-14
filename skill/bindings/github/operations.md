@@ -93,11 +93,9 @@ epoch, which one backfilled marker could claim. A first publication carries none
 Delegation table — on the published marker as `topology`, answered back by `review_read` with `view: transaction`
 rather than by `publish_review`'s own answer; unlike `head`/`base`/`digest` it is **recorded, not
 bound**, the same standing `payload-digest` already has, because Estigia cannot observe how an agent
-wrote code. Before `open_prs` and before any remote write, a payload-derived changed-file count at
-or past the table's writing threshold refuses `topology-inline-over-threshold` when
-`--topology inline` carries no `--topology-reason`; any other declared topology, or one below the
-threshold, is accepted without argument, and this refusal counts files only — it cannot judge
-"non-trivial" and over-fires by design. The same point also measures the caller's own fields: a
+wrote code. No declared topology is refused for its value: `inline` over any number of changed files is
+recorded as typed, with or without a `--topology-reason`, because a file count cannot judge the
+table's writing row. The same point also measures the caller's own fields: a
 `--run-id`/`--topology`/`--topology-reason` whose marker-and-prose renderings would leave no room
 under GitHub's 65,536-character comment cap — the frozen genesis manifest's own ceiling and the
 publication lane's own measured width reserved — refuses `publication-comment-too-large` before any

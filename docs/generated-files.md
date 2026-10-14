@@ -100,8 +100,7 @@ diff --git a/<path> b/<path>
 ```
 
 `base-blob` is all zeros for a file the change adds. The values are JSON, so a quote or newline in a
-value cannot forge a line. The header keeps `changed_file_count`, which the delegation topology
-refusal reads, unchanged. A deletion, a mode or type change and any undeclared path keep their hunks,
+value cannot forge a line. The header keeps one `diff --git` line per path, unchanged. A deletion, a mode or type change and any undeclared path keep their hunks,
 and a declaration the change itself adds is not read, so it cannot hide its own content.
 
 The ceiling is measured after the substitution, which is how a regenerated lockfile past it publishes.

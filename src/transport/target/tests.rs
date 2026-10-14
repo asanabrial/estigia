@@ -593,37 +593,6 @@ fn review_target_mismatch_still_fires_over_the_narrow_modes_inputs() {
     );
 }
 
-/// One header per path, whichever way that path changed — added, deleted,
-/// mode-only or binary — and never a false count from a diff whose *content*
-/// is itself a patch.
-#[test]
-fn changed_file_count_reads_one_header_per_path_and_not_diff_shaped_content() {
-    assert_eq!(changed_file_count(""), 0, "no diff, no paths");
-
-    // Every fixture below is one `\n`-escaped literal rather than backslash
-    // line-continuation: continuation strips the *following* line's leading
-    // whitespace, which would silently eat the one leading space this test
-    // exists to prove `changed_file_count` sees.
-    let two_text_files = "diff --git a/one.txt b/one.txt\nindex aaa..bbb 100644\n--- a/one.txt\n+++ b/one.txt\n@@ -1 +1 @@\n-old\n+new\ndiff --git a/two.txt b/two.txt\nindex ccc..ddd 100644\n--- a/two.txt\n+++ b/two.txt\n@@ -1 +1 @@\n-old\n+new\n";
-    assert_eq!(changed_file_count(two_text_files), 2);
-
-    // Mode-only and binary changes carry a header with no hunk beneath it —
-    // undercounting these is exactly what counting `@@` hunks instead would do.
-    let mode_and_binary = "diff --git a/run.sh b/run.sh\nold mode 100644\nnew mode 100755\ndiff --git a/pic.png b/pic.png\nindex eee..fff 100644\nBinary files a/pic.png and b/pic.png differ\n";
-    assert_eq!(changed_file_count(mode_and_binary), 2);
-
-    // A diff whose changed *content* is itself a patch must not inflate the
-    // count: the content line below is a **context** line, prefixed with the
-    // single leading space unified diff gives every unchanged line, so it
-    // never starts at column zero the way a real header does.
-    let diff_of_a_diff = "diff --git a/patch.diff b/patch.diff\nindex 111..222 100644\n--- a/patch.diff\n+++ b/patch.diff\n@@ -1,2 +1,2 @@\n diff --git a/x b/x\n-index 111..222 100644\n+index 333..444 100644\n";
-    assert_eq!(
-        changed_file_count(diff_of_a_diff),
-        1,
-        "a content line starting with the header's own words must not count as a second path"
-    );
-}
-
 #[test]
 fn merge_base_is_the_fork_point_until_the_branch_merges_it() {
     let root = tempfile::tempdir().expect("a repository");
@@ -838,7 +807,7 @@ fn a_newly_added_declared_file_is_a_manifest_with_an_empty_base_blob() {
 }
 
 #[test]
-fn substituting_a_manifest_does_not_change_the_changed_file_count() {
+fn substituting_a_manifest_does_not_change_the_changed_paths() {
     let declared = generated_repo();
     let at = declared.path();
     let base = commit_all(
@@ -862,7 +831,16 @@ fn substituting_a_manifest_does_not_change_the_changed_file_count() {
     let payload = review_payload(at, &base, &head).expect("a payload");
 
     assert_eq!(manifest_lines(&payload.text).len(), 1);
-    assert_eq!(changed_file_count(&payload.text), 2, "{}", payload.text);
+    assert_eq!(
+        payload
+            .text
+            .lines()
+            .filter(|line| line.starts_with("diff --git "))
+            .count(),
+        2,
+        "{}",
+        payload.text
+    );
     assert!(payload.text.contains("+two\n"));
 }
 

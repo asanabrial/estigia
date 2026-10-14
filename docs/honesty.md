@@ -4068,9 +4068,10 @@ pointer that leaves it names the document it points at.
     see.
 
     **A gate cannot judge "non-trivial", and this adds none.** Nothing here refuses an inline write,
-    whatever `SKILL.md`'s Direct Work Delegation table says crossed it — the entry above already
-    measured that a mechanical proxy (changed-file count) over-fires on this repository's own
-    history, and a second gate scoring the same judgement would fare no better. `SessionStart` names
+    whatever `SKILL.md`'s Direct Work Delegation table says crossed it — the topology entry
+    below measured that a mechanical proxy (changed-file count) over-fired on this repository's own
+    history, and the refusal built on it is gone; a second gate scoring the same judgement would fare no
+    better. `SessionStart` names
     the targets; nothing stops the next one from writing more.
 
     **And it says nothing about which model wrote them.** The record is which *context* wrote and
@@ -6385,16 +6386,15 @@ pointer that leaves it names the document it points at.
     `publish_review` sees a topology field. Neither watches which contexts a run launched. A run that
     types `--topology developer:3` having launched nothing is indistinguishable on the timeline from
     one that actually delegated — the same standing a lens report has for a lens nobody launched.
-  - **The refusal counts files, not the contract's threshold.** `skill/SKILL.md` reads *"2+ non-trivial
-    files delegate one writer"*; the code (`TOPOLOGY_WRITE_THRESHOLD`, `claim.rs`) counts every path a
-    unified diff touches, which is not the same measure. It **over-fires by design**: a change touching
-    two trivial files is refused for a bare `inline` exactly as one touching two delicate ones is, and
-    the only cost of clearing it is one sentence in `--topology-reason`, accepted without argument.
-    Measured against this repository's own last twenty merges (`git log --format=%H --merges -20 main`,
-    changed files per merge against its first parent): every one of the twenty touched at least 3 files,
-    the range running 3–26 and the median 11. So on this repository's own history the refusal would ask
-    for that sentence on every delivery that declared itself `inline` — which is the honest shape of a
-    rule that cannot tell trivial from not, not a defect to quietly narrow.
+  - **There is no refusal, because the proxy that stood in for one could not judge the row.** An
+    earlier version refused a bare `inline` over two changed files. The contract's writing row now
+    delegates a writer for a named reason — independent units, or the parent's context limit — and a
+    file count says neither. Measured against this repository's own last twenty merges
+    (`git log --format=%H --merges -20 main`, changed files per merge against its first parent), every
+    one touched at least 3 files, the range running 3–26 and the median 11, so the refusal would have
+    asked for a sentence on every delivery that declared itself `inline`. It was removed rather than
+    raised: a higher number is still a file count. The declaration is recorded as typed and the gate
+    gains no authority from it.
   - **Estigia already holds half of an *observed* topology, and this field is not it.** `Run.roles`
     (`src/harness/session.rs`) records which roles this run's delegated contexts actually ran
     as — observed from tool calls, not declared in a launch prompt — and this document's own earlier
@@ -6404,22 +6404,17 @@ pointer that leaves it names the document it points at.
     for. A reader who finds a *declared* topology field on the review transaction should know the
     crate holds half of an *observed* one elsewhere, unconnected to it — wiring the two together is a
     separate issue, not this one.
-  - **Saying nothing is still free, and that is the limit that bears on the issue's own purpose.** The
-    refusal fires on a trimmed, case-insensitive `inline` past the count; a publication that passes no
-    `--topology` at all is not refused, and its marker carries no topology key. A report was filed
-    because *"nobody can tell 'judged the table and departed with reasons' apart from 'never read the
-     table'"*, and against a run that simply omits the argument that is still true — **this gate reaches
-     the run honest enough to declare `inline`, and no other.** It is what the issue's own approach
-     specified, and it is a narrower thing than the issue's problem statement; making the field required
-     would refuse every caller that predates it, which is a decision this change did not have. What it
-     buys is real and smaller than it looks: a declaration, once made, is on the timeline for good.
+  - **Saying nothing is free, and so is saying `inline`.** A publication that passes no `--topology`
+    carries no topology key, and one that passes `inline` carries exactly that string. A report was
+    filed because *"nobody can tell 'judged the table and departed with reasons' apart from 'never
+    read the table'"*, and nothing here closes that: the field is a record a reader can weigh against
+    the diff, not a check. Making it required would refuse every caller that predates it.
 
   The three ways a declaration could differ across the note, the marker and the
   answer were closed: a blank `--topology` or `--topology-reason` is refused rather than recorded, a reason with
-  no topology is refused as incomplete, and both values are trimmed once before the predicate, the
+  no topology is refused as incomplete, and both values are trimmed once before the
   marker and the answer see them — so the three surfaces agree by construction. Case is preserved as
-  typed: with nothing reading the field back, folding it would lose information for nothing, and the
-  predicate folds only for its own comparison.
+  typed: with nothing reading the field back, folding it would lose information for nothing.
 - **A republish cannot lease against a receipt published from a different GitHub account.**
   `latest_publication` keeps only comments the authenticated identity authored, because a marker this
   identity did not write is one anybody could have forged. The consequence is narrow and worth naming

@@ -216,14 +216,12 @@ const TOPOLOGY: Argument = Argument::optional(
     "string",
     "How this delivery was executed: `inline`, `analyst`, `developer:<n>` or free text, per \
      SKILL.md's Direct Work Delegation table. Declared, not observed; read back through \
-     `review_read` (`view: transaction`). A bare `inline` at or past the writing threshold \
-     refuses unless `topology_reason` accompanies it.",
+     `review_read` (`view: transaction`).",
 );
 const TOPOLOGY_REASON: Argument = Argument::optional(
     "topology_reason",
     "string",
-    "Why `topology: inline` stands despite the changed-file count reaching SKILL.md's writing \
-     threshold. Read only in that case.",
+    "Why this topology was declared. Recorded beside `topology`; refused alone.",
 );
 const EXPECTED_EPOCH: Argument = Argument::optional(
     "expected_epoch",

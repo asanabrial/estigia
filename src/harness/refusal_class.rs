@@ -406,7 +406,6 @@ const REFUSED: &[&str] = &[
     "task-incomplete",
     "tool-arguments-invalid",
     "tool-outside-declared-role",
-    "topology-inline-over-threshold",
     "topology-reason-without-topology",
     "tracker-has-no-transport",
     "transport-refused",
