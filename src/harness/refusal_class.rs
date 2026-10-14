@@ -272,10 +272,12 @@ const REFUSED: &[&str] = &[
     "invalid-task",
     "invalid-unassign-target",
     "invalid-validator-result",
+    "issue-creation-outside-flow",
     "issue-has-no-number",
     "issue-not-a-number",
     "issue-not-blocked",
     "issue-not-open",
+    "issue-required",
     "judge-workspaces-count-too-large",
     "judge-workspaces-inside-the-claimed-checkout",
     "judge-workspaces-uncreatable",
@@ -409,6 +411,7 @@ const REFUSED: &[&str] = &[
     "tracker-has-no-transport",
     "transport-refused",
     "unassembled-changelog-fragments",
+    "unclaimed-commit",
     "unflagged-on-trunk",
     "unknown-operation",
     "unsafe-run-id",
@@ -454,7 +457,9 @@ pub fn classified() -> impl Iterator<Item = (&'static str, RefusalClass)> {
 /// `unavailable` for a code it does not name.
 ///
 /// Unnamed is never `refused`, which would claim a rule said no that nobody
-/// wrote down; the crossing tests make an unnamed code fail the build anyway.
+/// wrote down. The crossing tests name the codes they reach: the transport's
+/// vocabulary and every literal code the crate's sources spell. A code a
+/// refusal receives through a variable other than `CODE` is not crossed.
 pub fn class_of_code(code: &str) -> RefusalClass {
     class_of(code).unwrap_or(RefusalClass::Unavailable)
 }
@@ -501,6 +506,17 @@ mod tests {
             unclassed.is_empty(),
             "unclassed transport codes: {unclassed:?}"
         );
+    }
+
+    #[test]
+    fn a_refusal_the_gate_builds_for_a_rule_that_said_no_is_refused() {
+        for code in [
+            "issue-required",
+            "issue-creation-outside-flow",
+            "unclaimed-commit",
+        ] {
+            assert_eq!(class_of_code(code), RefusalClass::Refused, "`{code}`");
+        }
     }
 
     #[test]

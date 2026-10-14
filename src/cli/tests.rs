@@ -54,6 +54,13 @@ fn inventory() -> Vec<Refusal> {
             target: crate::harness::person_only::COMMANDS[1].target.to_owned(),
         })
         .expect("a person-only target is refused"),
+        crate::harness::issue_requirement::refusal(
+            false,
+            crate::config::IssueRequirement::Required,
+        ),
+        crate::harness::unclaimed::not_claimed(false),
+        crate::harness::issue_creation::refusal(Some("gh issue create"))
+            .expect("a line that files an issue is refused"),
         // The role gate's only refusal, by its real constructor.
         crate::harness::roles::out_of_role(
             "builder",
@@ -2217,7 +2224,7 @@ fn an_unreadable_contract_narrows_the_reviewers_grant() {
 }
 
 /// The first string literal after each `Refusal::not_started(`, `Refusal::stale(`,
-/// `Refusal::unavailable(` or `code:`.
+/// `Refusal::unavailable(`, `code:` or `const CODE: &str =`.
 fn codes_in(source: &str) -> Vec<String> {
     let mut codes = Vec::new();
     codes.extend(codes_named_by_a_code_method(source));
@@ -2226,6 +2233,7 @@ fn codes_in(source: &str) -> Vec<String> {
         "Refusal::stale(",
         "Refusal::unavailable(",
         "code: ",
+        "const CODE: &str = ",
     ] {
         let mut rest = source;
         while let Some(position) = rest.find(marker) {

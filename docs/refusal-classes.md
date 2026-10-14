@@ -28,7 +28,7 @@ reviewer. `Refusal::not_started` takes its class from it, so a site cannot defau
 omission; a struct literal takes it from the same table by its literal code. A code the table does
 not name is `unavailable`, never `refused`: an unnamed refusal must not claim a rule said no. A test
 (`every_code_the_crate_raises_has_a_class_and_the_class_agrees_with_the_outcome`) makes an unnamed
-code a failure anyway, and another that nothing named `unreadable`, `unavailable` or `unparseable` is
+code a failure anyway, another that nothing named `unreadable`, `unavailable` or `unparseable` is
 anything but `unavailable`.
 
 For a refusal that came through the transport, the exit code decides first
@@ -118,6 +118,8 @@ or broke a rule it can be told. That includes:
   `recorded-by-capture-only` (a hand call to `record_lens_report`, `record_refutation` or
   `record_validator_result`, or to `record_review_finding` naming a `lens`: only `collect_review_input`
   writes those, after the binary ran the reviewer),
+  `issue-required`, `issue-creation-outside-flow` and `unclaimed-commit` (the gate read the claim and a
+  rule said no: replaying cannot succeed until the claim exists, so these are not `unavailable`),
   `computed-verdict-rejected` and `-escalated`, every `invalid-*`, `blank-*`, `malformed-argument`,
   `missing-argument`;
 - **`*-missing`, `*-not-found`, `*-unknown*`, `finding-citation-unresolvable`,

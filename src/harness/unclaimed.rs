@@ -78,20 +78,27 @@ pub fn refusal(
     if !applies(context, repo_dir) {
         return None;
     }
-    let way_in = if context.workflow == Some(crate::config::Workflow::Assisted) {
+    Some(not_claimed(
+        context.workflow == Some(crate::config::Workflow::Assisted),
+    ))
+}
+
+/// The refusal for a commit or a push made without a claim.
+pub fn not_claimed(assisted: bool) -> Refusal {
+    let way_in = if assisted {
         "a local claim taken with `assist` in a worktree, which gives the isolated checkout to \
          commit and push from"
     } else {
         "an issue claimed with `claim`, then a branch started with `start_branch`, which \
          gives the isolated checkout to commit and push from"
     };
-    Some(Refusal::not_started(
+    Refusal::not_started(
         CODE,
         "this run holds no issue, and the push guard installed in this checkout means work here \
          goes through a claim: a commit or a push without one skips every check that follows"
             .to_owned(),
         Resolution::no_command(NoCommandReason::OperatorKnowledge, way_in),
-    ))
+    )
 }
 
 #[cfg(test)]
