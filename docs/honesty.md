@@ -6120,9 +6120,12 @@ pointer that leaves it names the document it points at.
   which is the gap that was closed. For a delivery `gh pr merge` boundary only, a linked sibling
   sharing the pointer checkout's Git common directory can reach that verification. The classifier
   first retains one positive numeric PR only from one literal `gh pr merge <number> ...`; malformed,
-  omitted, URL, branch, long, leading-zero, attached and bundled uppercase-`R` foreign-repository
-  options, duplicate, compound and shell-evaluated targets remain irreversible boundaries but cannot
-  select sibling evidence. A command the byte filter disqualifies — quoting, escaping, expansion, a
+  omitted, URL, branch, long, leading-zero, duplicate, compound and shell-evaluated targets remain
+  irreversible boundaries but cannot select sibling evidence. So does any merge that names a
+  repository — `--repo`, `--repo=` or a short option bundle containing `R` — even for the run's own
+  receipt: the line is refused as `delivery-pr-repository-option`, which names the option and says to
+  run the merge from the checkout without it, because the number is there and the gate reads one
+  spelling only. A command the byte filter disqualifies — quoting, escaping, expansion, a
   redirect — is refused as `delivery-pr-unidentified` with the disqualifying byte named in the
   resolution, so a `2>&1` redirect reads as what it is rather than as a claim that the command names
   no PR. Candidate pointers are then filtered by complete `receipt.pr == command PR`, exactly one
@@ -6132,10 +6135,11 @@ pointer that leaves it names the document it points at.
   but cannot qualify PR-targeted sibling delivery because it carries no PR, epoch, base or digest.
   Ambiguous candidates and unreadable pointers select no holder, including for ledger attribution; the
   recorded holder comes from the same adjudication as the decision rather than a later directory
-  scan. An unrelated or unreadable checkout named with that run can answer five ways: a checkout
+  scan. An unrelated or unreadable checkout named with that run can answer six ways: a checkout
   that is not a checkout of the reviewed repository, or a PR head the tracker reports that has moved
   from the reviewed head, is `verdict-bound-to-other-bytes`; a command whose identity the byte
-  filter disqualified is `delivery-pr-unidentified`; a merge whose PR differs from the receipt's is
+  filter disqualified is `delivery-pr-unidentified`; a merge naming a repository is
+  `delivery-pr-repository-option`; a merge whose PR differs from the receipt's is
   `delivery-pr-mismatch`; and a pointer carrying only a legacy head is
   `complete-review-transaction-missing`; a linked sibling that selects no unique holder is
   `complete-review-transaction-not-selected`. A sessionless call in an unrelated clone has no local holder
