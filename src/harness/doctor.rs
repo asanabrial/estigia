@@ -2394,13 +2394,24 @@ enum RunnerChildren {
 }
 
 const RUNNER_SOURCE_LIMIT: u64 = 1 << 20;
+const RUNNER_SOURCE_DEPTH: usize = 3;
+const RUNNER_SOURCE_EXTENSIONS: [&str; 4] = ["ts", "js", "mjs", "cjs"];
+const RUNNER_SPAWN_CALLS: [&str; 3] = ["spawn(", "execFile(", "spawnSync("];
+const RUNNER_PI_COMMAND: &str = "pi";
 
-fn pi_runner_sources(path: &Path, depth: usize, out: &mut Vec<String>, budget: &mut u64) {
+struct RunnerSources {
+    texts: Vec<String>,
+    complete: bool,
+}
+
+fn pi_runner_sources(path: &Path, depth: usize, out: &mut RunnerSources, budget: &mut u64) {
     if path.is_dir() {
         if depth == 0 {
+            out.complete = false;
             return;
         }
         let Ok(entries) = std::fs::read_dir(path) else {
+            out.complete = false;
             return;
         };
         let mut paths: Vec<_> = entries.flatten().map(|entry| entry.path()).collect();
@@ -2416,33 +2427,67 @@ fn pi_runner_sources(path: &Path, depth: usize, out: &mut Vec<String>, budget: &
     let readable = path
         .extension()
         .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| matches!(extension, "ts" | "js" | "mjs" | "cjs"));
-    let Ok(metadata) = std::fs::metadata(path) else {
-        return;
-    };
-    if !readable || metadata.len() > *budget {
+        .is_some_and(|extension| RUNNER_SOURCE_EXTENSIONS.contains(&extension));
+    if !readable {
         return;
     }
-    if let Ok(text) = std::fs::read_to_string(path) {
-        *budget -= metadata.len();
-        out.push(text);
+    let Ok(metadata) = std::fs::metadata(path) else {
+        out.complete = false;
+        return;
+    };
+    if metadata.len() > *budget {
+        out.complete = false;
+        return;
+    }
+    match std::fs::read_to_string(path) {
+        Ok(text) => {
+            *budget -= metadata.len();
+            out.texts.push(text);
+        }
+        Err(_) => out.complete = false,
     }
 }
 
+fn spawns_pi(text: &str) -> bool {
+    RUNNER_SPAWN_CALLS.iter().any(|call| {
+        text.match_indices(call).any(|(at, _)| {
+            let argument = text[at + call.len()..].trim_start();
+            let Some(quote) = argument
+                .chars()
+                .next()
+                .filter(|c| matches!(c, '"' | '\'' | '`'))
+            else {
+                return false;
+            };
+            let Some(end) = argument[1..].find(quote) else {
+                return false;
+            };
+            let command = &argument[1..=end];
+            command == RUNNER_PI_COMMAND
+                || command
+                    .strip_suffix(RUNNER_PI_COMMAND)
+                    .is_some_and(|head| head.ends_with('/'))
+        })
+    })
+}
+
 fn pi_runner_children(path: Option<&Path>) -> RunnerChildren {
-    let mut sources = Vec::new();
+    let mut sources = RunnerSources {
+        texts: Vec::new(),
+        complete: true,
+    };
     let mut budget = RUNNER_SOURCE_LIMIT;
     if let Some(path) = path {
-        pi_runner_sources(path, 3, &mut sources, &mut budget);
+        pi_runner_sources(path, RUNNER_SOURCE_DEPTH, &mut sources, &mut budget);
     }
-    let text = sources.join("\n");
+    let text = sources.texts.join("\n");
     if text.contains("--no-extensions") || text.contains("--no-extension\"") {
         return RunnerChildren::SkipTheGate("starts its children with `--no-extensions`");
     }
     if text.contains("createAgentSession") || text.contains("new AgentSession") {
         return RunnerChildren::SkipTheGate("runs its children inside Pi's own process");
     }
-    if text.contains("spawn(") || text.contains("execFile(") || text.contains("spawnSync(") {
+    if sources.complete && spawns_pi(&text) {
         return RunnerChildren::LoadTheGate;
     }
     RunnerChildren::Unread
@@ -2528,7 +2573,8 @@ pub fn pi_subagents(agent_dir: Option<&Path>, repo_dir: &Path) -> Check {
                 "{name} {how}, so its children write with no Estigia gate"
             )),
             RunnerChildren::Unread => warnings.push(format!(
-                "{name} could not be read, so whether its children load the gate is unknown"
+                "{name} could not be read in full or does not visibly start `pi`, so whether its children \
+                 load the gate is unknown"
             )),
         }
     }
@@ -2904,6 +2950,54 @@ mod tests {
         );
         assert!(!detail.contains("unrelated"), "{detail}");
         assert!(detail.contains("subagent-loud"), "{detail}");
+    }
+
+    #[test]
+    fn a_pi_runner_is_gated_only_when_it_is_read_in_full_and_visibly_starts_pi() {
+        let unknown = |files: &[(&str, String)]| {
+            let (agent, repo) = pi_dirs();
+            let runner = agent.path().join("extensions").join("subagent-x");
+            std::fs::create_dir_all(&runner).expect("a runner directory");
+            for (name, body) in files {
+                std::fs::write(runner.join(name), body).expect("a runner file");
+            }
+            pi_subagents(Some(agent.path()), repo.path()).health
+        };
+        let spawn_pi = ("index.ts", "spawn(\"pi\", [\"-p\", task]);\n".to_owned());
+
+        assert!(matches!(
+            unknown(std::slice::from_ref(&spawn_pi)),
+            Health::Fine { .. }
+        ));
+        assert!(matches!(
+            unknown(&[(
+                "index.ts",
+                "spawn(\"/usr/local/bin/pi\", args);\n".to_owned()
+            )]),
+            Health::Fine { .. }
+        ));
+
+        let Health::Skipped { detail } =
+            unknown(&[("index.ts", "spawn(\"git\", [\"status\"]);\n".to_owned())])
+        else {
+            panic!("a runner that spawns something else was called gated");
+        };
+        assert!(detail.contains("unknown"), "{detail}");
+        assert!(matches!(
+            unknown(&[("index.ts", "spawn(binary, args);\n".to_owned())]),
+            Health::Skipped { .. }
+        ));
+
+        let oversized = "x".repeat(RUNNER_SOURCE_LIMIT as usize + 1);
+        let Health::Skipped { detail } = unknown(&[spawn_pi.clone(), ("big.js", oversized)]) else {
+            panic!("a runner with a file left unread was called gated");
+        };
+        assert!(detail.contains("unknown"), "{detail}");
+
+        assert!(matches!(
+            unknown(&[spawn_pi, ("notes.md", "not source".to_owned())]),
+            Health::Fine { .. }
+        ));
     }
 
     #[test]

@@ -261,6 +261,9 @@ const sessionOf = (ctx) => {
 
 const filled = (value) => typeof value === "string" && value.trim() !== "";
 
+const REPLACEMENT_REASONS = new Set(["new", "fork", "resume", "reload"]);
+const replaced = new Set();
+
 const parentFileOf = (ctx) => {
   try {
     const named = ctx?.sessionManager?.getHeader?.()?.parentSession;
@@ -277,14 +280,15 @@ const idInName = (file) => {
 };
 
 // A session whose header names a parent is that parent's child, in this process or
-// another. Only a session without one falls back to the pid: the first process to
+// another, unless it began as a replacement of the session before it (new, fork,
+// resume, reload), which is a root whatever its header says. Only a session without one falls back to the pid: the first process to
 // see it exports its id and pid, a child pi inherits both through process.env, and
 // a process whose pid is not the exported one is that child. A process never
 // names its own session as its parent and never overwrites a root it did not set.
 const rootOf = (own, ctx) => {
   if (!filled(own)) return undefined;
   const exported = process.env[ROOT_SESSION];
-  const named = parentFileOf(ctx);
+  const named = replaced.has(own) ? undefined : parentFileOf(ctx);
   if (named !== undefined) {
     if (filled(exported) && exported !== own) return exported;
     const id = header(named) ?? idInName(named);
@@ -572,6 +576,7 @@ export default function (pi) {
   });
   pi.on("session_start", async (event, ctx) => {
     const session = sessionOf(ctx);
+    if (filled(session) && REPLACEMENT_REASONS.has(event?.reason)) replaced.add(session);
     rootOf(session, ctx);
     if (filled(session)) {
       started.set(session, { reason: event?.reason, previous: header(event?.previousSessionFile) });

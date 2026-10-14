@@ -16552,9 +16552,10 @@ if (path.basename(process.argv[1] ?? "") === "gate") {
 process.env.NODE_OPTIONS = `--require "${process.env.STUB_PATH}"`;
 const handlers = {};
 (await import("./gate.mjs")).default({ on: (name, handler) => { handlers[name] = handler; } });
-for (const { session, parent } of JSON.parse(process.env.SESSIONS)) {
+for (const { session, parent, reason } of JSON.parse(process.env.SESSIONS)) {
   const header = parent ? { parentSession: `${process.cwd()}/${parent}` } : {};
   const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => session, getHeader: () => header } };
+  if (reason) await handlers.session_start({ type: "session_start", reason }, ctx);
   await handlers.tool_call({ toolName: "write", input: { path: "a.rs", content: "x" } }, ctx);
 }
 const logged = readFileSync(process.env.STUB_LOG, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
@@ -16666,6 +16667,41 @@ console.log(JSON.stringify({ logged, exported: process.env.ESTIGIA_PI_PARENT_SES
         "the parent id was not read from the session file name: {calls:?}"
     );
     assert_eq!(exported, serde_json::Value::Null);
+
+    for reason in ["new", "fork", "resume", "reload"] {
+        let (calls, exported) = drive(
+            serde_json::json!([
+                {"session": "root-1"},
+                {"session": "next-4", "parent": "2026-10-14T00-00-00_root-1.jsonl", "reason": reason},
+                {"session": "next-4", "parent": "2026-10-14T00-00-00_root-1.jsonl"}
+            ]),
+            None,
+        );
+        assert_eq!(calls.len(), 3, "{calls:?}");
+        assert_eq!(
+            parent_flag(&calls[1]),
+            None,
+            "a session begun by `{reason}` was read as a child of the one before it: {calls:?}"
+        );
+        assert_eq!(parent_flag(&calls[2]), None, "{calls:?}");
+        assert_eq!(
+            exported, "next-4",
+            "`{reason}` did not export itself as root"
+        );
+    }
+
+    let (calls, _) = drive(
+        serde_json::json!([
+            {"session": "root-1"},
+            {"session": "child-3", "parent": "2026-10-14T00-00-00_root-1.jsonl", "reason": "startup"}
+        ]),
+        None,
+    );
+    assert_eq!(
+        parent_flag(&calls[1]).as_deref(),
+        Some("root-1"),
+        "a child that began at startup lost its parent: {calls:?}"
+    );
 }
 
 fn drive_pi_session(

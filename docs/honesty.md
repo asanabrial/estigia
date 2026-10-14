@@ -5881,10 +5881,17 @@ pointer that leaves it names the document it points at.
   `write` and `bash` from it reached the gate with `--parent-session-id` equal to the parent's session.
   The write was refused `issue-required` because no claim was held, so what a child is *allowed* under a
   held claim was not observed there; and it ran under `-p` only, never in the terminal UI or RPC mode.
-  A forked or new session also carries a `parentSession`, and is read as a child of the session it came
-  from. The `pi-subagents` row of `doctor` reads names and source text, not behaviour: a runner is
-  recognised only when `subagent` is in its package source or extension name, its children are judged
-  by whether its source mentions `--no-extensions`, an in-process session constructor, or a spawn, an
+  A forked or new session also carries a `parentSession`, but Pi starts it with the reason `new`,
+  `fork`, `resume` or `reload`, and the extension reads a session so started as a root whatever its
+  header says; a child that began at `startup` is linked by the header. Only the start reason
+  separates the two, and a replacement session started inside a separate child process is still
+  linked by the pid. The `pi-subagents` row of `doctor` reads names and source text, not behaviour: a
+  runner is recognised only when `subagent` is in its package source or extension name, its children
+  are judged by whether its source mentions `--no-extensions` or an in-process session constructor,
+  and it is called gating only when every `.ts`/`.js`/`.mjs`/`.cjs` file within three directory
+  levels was read inside a 1 MiB budget and a `spawn(`, `execFile(` or `spawnSync(` call visibly
+  takes `pi` (or a path ending in `/pi`) as a string literal first argument; a command held in a
+  variable, a file skipped for size or depth, or a spawn of anything else is answered unknown. An
   npm or git package is unread because the row does not know where Pi unpacks it (only an absolute local
   path and the extension directories are read), and whether a runner replaces the environment its
   child inherits is not examined. The next entry is the earlier measurement.
