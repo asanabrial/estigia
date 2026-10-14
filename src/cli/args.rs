@@ -184,10 +184,10 @@ pub enum Command {
 
     /// Sweep branches and checkouts no delivery owns.
     ///
-    /// Read-only until `--confirm`. It lists every remote head and registered
-    /// checkout that is merged or closed, keeps any a live claim holds or that
-    /// carries commits the remote does not have, and removes the rest only when
-    /// the operator confirms.
+    /// Read-only until `--confirm`. It lists every remote head that is merged or
+    /// closed and every registered checkout, keeps any a live claim holds or that
+    /// carries uncommitted work or commits the remote does not have, and removes
+    /// the rest only when the operator confirms.
     Prune {
         /// Remove what the sweep lists, rather than only listing it.
         #[arg(long)]
@@ -197,6 +197,14 @@ pub enum Command {
         #[arg(long, default_value = "main")]
         base: String,
     },
+
+    /// List the uncommitted work in every checkout of this repository.
+    ///
+    /// Read-only. Reports each registered checkout and each one a run pointer
+    /// names: branch, uncommitted files by marker with line counts, commits not
+    /// on the upstream, the run that holds it, and whether it is an orphan. A
+    /// checkout git cannot be read in is reported unreadable, never omitted.
+    Changes,
 
     /// Admit every open issue the local store has never touched.
     ///

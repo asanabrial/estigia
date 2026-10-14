@@ -521,7 +521,7 @@ fn setup_installs_the_skill_and_fences_the_directive() {
     let config = Config::default();
 
     let result = setup(adapter, &config, &options).expect("setup succeeds");
-    assert_eq!(result.changed_files(), skill::FILES.len() + 6);
+    assert_eq!(result.changed_files(), skill::FILES.len() + 7);
     assert!(is_configured(adapter, &options));
 
     let paths = resolve_paths(adapter, &options).expect("paths resolve");
@@ -1868,6 +1868,68 @@ fn claude_installs_the_loop_commands_only_when_the_setting_is_on() {
             file.display()
         );
     }
+}
+
+#[test]
+fn claude_installs_the_changes_command_whatever_the_loop_setting_says() {
+    let (_home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let directory = resolve_paths(adapter, &options)
+        .expect("paths resolve")
+        .commands
+        .expect("Claude Code names a commands directory");
+    let files: Vec<std::path::PathBuf> = plugin::CHANGES_COMMANDS
+        .iter()
+        .map(|(name, _)| directory.join(name))
+        .collect();
+    assert_eq!(files.len(), 1);
+
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    for (file, (_, source)) in files.iter().zip(plugin::CHANGES_COMMANDS) {
+        let written = fs::read_to_string(file).expect("the command reads");
+        assert_eq!(written, *source);
+        assert!(
+            written.contains(plugin::COMMAND_MARKER),
+            "{}",
+            file.display()
+        );
+        assert!(written.contains("estigia changes"), "{}", file.display());
+    }
+
+    setup(adapter, &loop_on(), &options).expect("the loop install succeeds");
+    setup(adapter, &Config::default(), &options).expect("switching the loop off succeeds");
+    for file in &files {
+        assert!(
+            file.exists(),
+            "switching the loop off took back {}",
+            file.display()
+        );
+    }
+
+    uninstall(adapter, &options).expect("uninstall succeeds");
+    for file in &files {
+        assert!(!file.exists(), "uninstall left {}", file.display());
+    }
+}
+
+#[test]
+fn a_changes_command_estigia_did_not_write_is_neither_replaced_nor_removed() {
+    let (_home, options) = sandbox();
+    let adapter = agent("claude-code");
+    let directory = resolve_paths(adapter, &options)
+        .expect("paths resolve")
+        .commands
+        .expect("Claude Code names a commands directory");
+    fs::create_dir_all(&directory).expect("create the commands directory");
+    let theirs = "---\ndescription: theirs\n---\n\ntheir own command\n";
+    let file = directory.join(plugin::CHANGES_COMMANDS[0].0);
+    fs::write(&file, theirs).expect("write their command");
+
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    assert_eq!(fs::read_to_string(&file).expect("theirs survives"), theirs);
+
+    uninstall(adapter, &options).expect("uninstall succeeds");
+    assert_eq!(fs::read_to_string(&file).expect("theirs survives"), theirs);
 }
 
 #[test]
@@ -6872,7 +6934,7 @@ fn taking_estigia_out_of_a_full_machine_leaves_theirs_and_none_of_its_own() {
         let Ok(text) = fs::read_to_string(file) else {
             continue;
         };
-        if plugin::prompt_is_ours(Some(&text)) {
+        if plugin::prompt_is_ours(Some(&text)) || plugin::command_is_ours(Some(&text)) {
             continue;
         }
         let name = file.to_string_lossy().to_ascii_lowercase();
@@ -19678,8 +19740,9 @@ fn a_routing_reports_each_foreign_model_once() {
 const PI_CLAIM_STUB: &str = r#"const fs = require("node:fs");
 const path = require("node:path");
 const verb = path.basename(process.argv[1] ?? "");
-if (verb === "goal" || verb === "gate" || verb === "doctor") {
+if (verb === "goal" || verb === "gate" || verb === "doctor" || verb === "changes") {
   const entry = { args: [verb, ...process.argv.slice(2)], cwd: process.cwd() };
+  if (process.env.STUB_CASE) entry.case = process.env.STUB_CASE;
   if (verb === "gate") {
     try { entry.stdin = fs.readFileSync(0, "utf8"); } catch { entry.stdin = ""; }
   }
@@ -19733,15 +19796,19 @@ const quickHandlers = {};
 });
 
 const statuses = [];
-const ctxOf = (session, hasUI = true) => ({
+const shelf = [];
+const ctxOf = (session, hasUI = true, widgets = true) => ({
   cwd: process.env.PROJECT,
   hasUI,
   sessionManager: { getSessionId: () => session },
-  ui: { setStatus: (key, text) => { statuses.push({ key, text: text ?? null }); } },
+  ui: {
+    setStatus: (key, text) => { statuses.push({ key, text: text ?? null }); },
+    ...(widgets ? { setWidget: (key, content) => { shelf.push({ key, content: content ?? null }); } } : {}),
+  },
 });
 
 const answer = (env) => {
-  for (const key of ["STUB_GOAL_MODE", "STUB_GOAL_OUT", "STUB_GOAL_EXIT", "STUB_GATE_ERR", "STUB_GATE_EXIT", "STUB_DOCTOR_MODE", "STUB_DOCTOR_OUT", "STUB_DOCTOR_ERR", "STUB_DOCTOR_EXIT"]) delete process.env[key];
+  for (const key of ["STUB_GOAL_MODE", "STUB_GOAL_OUT", "STUB_GOAL_EXIT", "STUB_GATE_ERR", "STUB_GATE_EXIT", "STUB_DOCTOR_MODE", "STUB_DOCTOR_OUT", "STUB_DOCTOR_ERR", "STUB_DOCTOR_EXIT", "STUB_CHANGES_MODE", "STUB_CHANGES_OUT", "STUB_CHANGES_ERR", "STUB_CHANGES_EXIT"]) delete process.env[key];
   Object.assign(process.env, env);
 };
 
@@ -19752,8 +19819,22 @@ const status = async (label, event, ctx, env, wait = 3000, via = handlers) => {
   const returned = await via[event]({ type: event }, ctx);
   for (let waited = 0; waited < wait && statuses.length === before; waited += 20) await pause(20);
   if (statuses.length === before) await pause(150);
-  return { label, returned: returned ?? null, statuses: statuses.slice(before), calls: calls().slice(spawned) };
+  return { label, returned: returned ?? null, statuses: statuses.slice(before), calls: calls().slice(spawned).filter((call) => call.args[0] !== "changes") };
 };
+
+const widget = async (label, event, ctx, env, wait = 3000, via = handlers) => {
+  answer({ ...env, STUB_CASE: label });
+  const before = shelf.length;
+  await via[event]({ type: event }, ctx);
+  for (let waited = 0; waited < wait && shelf.length === before; waited += 20) await pause(20);
+  if (shelf.length === before) await pause(150);
+  const own = calls().filter((call) => call.case === label && call.args[0] === "changes");
+  delete process.env.STUB_CASE;
+  return { label, widgets: shelf.slice(before), calls: own.map(({ case: _, ...call }) => call) };
+};
+
+const checkout = (path, files, unreadable = null) => ({ path, files: files.map((name) => ({ marker: "U", path: name, added: 1, removed: null })), unreadable });
+const tally = (...worktrees) => JSON.stringify({ worktrees });
 
 const held = JSON.stringify({ run_id: "r", issue: "#42", state: "in-progress", standing: "passed", live: true });
 const none = JSON.stringify({ run_id: "r", issue: null, state: null, standing: "nothing-sworn", live: false });
@@ -19772,6 +19853,19 @@ out.push(await status("headless", "session_start", ctxOf("sess-1", false), { STU
 process.env.ESTIGIA_PI_PARENT_SESSION = "root-9";
 process.env.ESTIGIA_PI_PARENT_PID = "1";
 out.push(await status("child", "session_start", ctxOf("child-3"), { STUB_GOAL_OUT: held }));
+
+const shelved = [
+  await widget("started", "session_start", ctxOf("sess-1"), { STUB_CHANGES_OUT: tally(checkout("/a", ["x"]), checkout("/b", []), checkout("/c", ["y", "z"])) }),
+  await widget("one", "agent_settled", ctxOf("sess-1"), { STUB_CHANGES_OUT: tally(checkout("/a", ["x"])) }),
+  await widget("mixed", "agent_settled", ctxOf("sess-1"), { STUB_CHANGES_OUT: tally(checkout("/a", ["x"]), checkout("/b", [], "not a git repository")) }),
+  await widget("unreadable_only", "agent_settled", ctxOf("sess-1"), { STUB_CHANGES_OUT: tally(checkout("/b", [], "not a git repository")) }),
+  await widget("clean", "agent_settled", ctxOf("sess-1"), { STUB_CHANGES_OUT: tally(checkout("/a", []), checkout("/b", [])) }),
+  await widget("silent", "session_start", ctxOf("sess-1"), { STUB_CHANGES_EXIT: "3" }),
+  await widget("garbled", "session_start", ctxOf("sess-1"), { STUB_CHANGES_OUT: "not json" }),
+  await widget("slow", "session_start", ctxOf("sess-1"), { STUB_CHANGES_MODE: "sleep" }, 3000, quickHandlers),
+  await widget("headless", "session_start", ctxOf("sess-1", false), { STUB_CHANGES_OUT: tally(checkout("/a", ["x"])) }),
+  await widget("no_widget_surface", "session_start", ctxOf("sess-1", true, false), { STUB_CHANGES_OUT: tally(checkout("/a", ["x"])) }),
+];
 
 const refusal = async (label, ctx, tool, exit, err) => {
   answer({ STUB_GATE_EXIT: String(exit), STUB_GATE_ERR: err });
@@ -19808,7 +19902,7 @@ const present = await load("./gate.mjs");
 const absent = await load("./missing.mjs");
 const quick = await load("./quick.mjs");
 
-const doctor = async (label, seen, hasUI, env, args = "") => {
+const doctor = async (label, seen, hasUI, env, args = "", command = "estigia-doctor") => {
   answer(env);
   const logged = [];
   const errors = [];
@@ -19820,7 +19914,7 @@ const doctor = async (label, seen, hasUI, env, args = "") => {
   const spawned = calls().length;
   let returned;
   try {
-    returned = await seen.commands["estigia-doctor"]?.handler(args, {
+    returned = await seen.commands[command]?.handler(args, {
       cwd: process.env.PROJECT,
       hasUI,
       ui: { notify: (text, kind) => { notes.push({ text, kind }); }, setStatus: () => {} },
@@ -19844,11 +19938,21 @@ const doctors = [
   await doctor("headless", present, false, { STUB_DOCTOR_OUT: `${report}\n` }),
   await doctor("headless_missing", absent, false, {}),
 ];
+const listing = "estigia changes\n  /work/issue-5-parked  issue-5-parked  1 uncommitted\n    U new.txt";
+const changes = [
+  await doctor("listed", present, true, { STUB_CHANGES_OUT: `${listing}\n` }, "", "estigia-changes"),
+  await doctor("silent", present, true, { STUB_CHANGES_EXIT: "3" }, "", "estigia-changes"),
+  await doctor("missing", absent, true, {}, "", "estigia-changes"),
+  await doctor("headless", present, false, { STUB_CHANGES_OUT: `${listing}\n` }, "", "estigia-changes"),
+];
 const doctorCard = doctors[0].appended[0];
 const doctorLines = (width) => present.renderers[doctorCard.type](doctorCard, { expanded: false }, undefined).render(width);
 
 console.log(JSON.stringify({
   doctors,
+  changes,
+  listing,
+  shelved,
   doctorTypes: Object.keys(present.renderers),
   doctorWide: doctorCard ? doctorLines(200) : null,
   doctorNarrow: doctorCard ? doctorLines(10) : null,
@@ -19872,6 +19976,10 @@ fn run_pi_claim_driver(timeout_ms: u32) -> serde_json::Value {
     let quick = source.replace(
         "const STATUS_TIMEOUT_MS = 5000;",
         &format!("const STATUS_TIMEOUT_MS = {timeout_ms};"),
+    );
+    let quick = quick.replace(
+        "const CHANGES_TIMEOUT_MS = 20000;",
+        &format!("const CHANGES_TIMEOUT_MS = {timeout_ms};"),
     );
     assert_ne!(
         source, quick,
@@ -20510,6 +20618,127 @@ fn the_pi_extension_shows_estigia_doctor_unchanged_to_the_person_and_asks_the_mo
             .as_str()
             .is_some_and(|said| said.contains("did not answer")),
         "{gone}"
+    );
+}
+
+#[test]
+fn the_pi_extension_shows_a_widget_counting_the_checkouts_that_hold_uncommitted_work() {
+    let said = run_pi_claim_driver(400);
+    let case = |label: &str| {
+        said["shelved"]
+            .as_array()
+            .and_then(|all| all.iter().find(|one| one["label"] == label))
+            .unwrap_or_else(|| panic!("no result for {label}: {said}"))
+            .clone()
+    };
+    let shown = |label: &str| {
+        let case = case(label);
+        assert_eq!(case["widgets"].as_array().map(Vec::len), Some(1), "{case}");
+        assert_eq!(case["widgets"][0]["key"], "estigia-changes", "{case}");
+        case["widgets"][0]["content"].clone()
+    };
+
+    let started = case("started");
+    assert_eq!(
+        started["calls"],
+        serde_json::json!([{ "args": ["changes", "--json"], "cwd": said["project"] }]),
+        "{started}"
+    );
+    assert_eq!(
+        shown("started"),
+        serde_json::json!(["estigia: uncommitted work in 2 checkouts \u{b7} /estigia-changes"])
+    );
+    assert_eq!(
+        shown("one"),
+        serde_json::json!(["estigia: uncommitted work in 1 checkout \u{b7} /estigia-changes"])
+    );
+    assert_eq!(
+        shown("mixed"),
+        serde_json::json!([
+            "estigia: uncommitted work in 1 checkout, 1 unreadable \u{b7} /estigia-changes"
+        ])
+    );
+    assert_eq!(
+        shown("unreadable_only"),
+        serde_json::json!(["estigia: 1 checkout unreadable \u{b7} /estigia-changes"])
+    );
+    assert!(
+        shown("clean").is_null(),
+        "a clean repository clears the widget"
+    );
+    for label in ["silent", "garbled", "slow"] {
+        assert_eq!(
+            shown(label),
+            serde_json::json!(["estigia: uncommitted work unknown \u{b7} /estigia-changes"]),
+            "{label}"
+        );
+    }
+    for label in ["headless", "no_widget_surface"] {
+        let case = case(label);
+        assert_eq!(case["widgets"], serde_json::json!([]), "{case}");
+        assert_eq!(case["calls"], serde_json::json!([]), "{case}");
+    }
+}
+
+#[test]
+fn the_pi_extension_shows_estigia_changes_to_the_person_and_asks_the_model_for_nothing() {
+    let said = run_pi_claim_driver(400);
+    let case = |label: &str| {
+        said["changes"]
+            .as_array()
+            .and_then(|all| all.iter().find(|one| one["label"] == label))
+            .unwrap_or_else(|| panic!("no result for {label}: {said}"))
+            .clone()
+    };
+    let listing = said["listing"].as_str().expect("the listing");
+
+    let listed = case("listed");
+    assert_eq!(
+        listed["calls"],
+        serde_json::json!([{ "args": ["changes"], "cwd": said["project"] }]),
+        "{listed}"
+    );
+    assert_eq!(
+        listed["appended"].as_array().map(Vec::len),
+        Some(1),
+        "{listed}"
+    );
+    assert_eq!(listed["appended"][0]["data"]["text"], listing, "{listed}");
+    assert_eq!(listed["appended"][0]["data"]["answered"], true, "{listed}");
+    assert_eq!(
+        listed["sent"], 0,
+        "changes output must not reach the model: {listed}"
+    );
+    assert_eq!(listed["notes"], serde_json::json!([]), "{listed}");
+    assert!(
+        said["doctorTypes"]
+            .as_array()
+            .is_some_and(|types| types.contains(&listed["appended"][0]["type"])),
+        "{said}"
+    );
+
+    for label in ["silent", "missing"] {
+        let case = case(label);
+        let text = case["appended"][0]["data"]["text"]
+            .as_str()
+            .unwrap_or_default();
+        assert!(
+            text.contains("estigia changes did not answer"),
+            "{label}: {case}"
+        );
+        assert_eq!(
+            case["appended"][0]["data"]["answered"], false,
+            "{label}: {case}"
+        );
+        assert_eq!(case["sent"], 0, "{label}: {case}");
+    }
+
+    let headless = case("headless");
+    assert_eq!(headless["appended"], serde_json::json!([]), "{headless}");
+    assert_eq!(
+        headless["logged"],
+        serde_json::json!([listing]),
+        "{headless}"
     );
 }
 

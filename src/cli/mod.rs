@@ -312,6 +312,8 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
 
         Command::Prune { confirm, base } => prune(*confirm, base, cli.json),
 
+        Command::Changes => changes(cli.json),
+
         Command::Store { action } => match action {
             StoreAction::Import => store_import(cli.json),
         },
@@ -4233,6 +4235,89 @@ fn prune(confirm: bool, base: &str, json: bool) -> Result<(), Refusal> {
         say!("{deletable} would be removed; re-run with --confirm");
     }
     Ok(())
+}
+
+/// Lists the uncommitted work in every checkout. Writes nothing.
+fn changes(json: bool) -> Result<(), Refusal> {
+    let repo_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let context = crate::transport::Context::live(harness::control_surface(), repo_dir, None);
+    let holdings = harness::session::state_root(None)
+        .map(|root| harness::session::holdings(&root))
+        .unwrap_or_default();
+    let trees = harness::changes::survey(&context, &holdings).map_err(|failure| {
+        Refusal::not_started(
+            "read-failed",
+            format!(
+                "the checkouts could not be listed, so what they hold is unknown: {}",
+                failure.detail()
+            ),
+            Resolution::no_command(
+                crate::outcome::NoCommandReason::OperatorKnowledge,
+                "a git checkout",
+            ),
+        )
+    })?;
+    if json {
+        print_json(&serde_json::json!({
+            "worktrees": trees.iter().map(tree_json).collect::<Vec<_>>(),
+        }));
+        return Ok(());
+    }
+    for tree in &trees {
+        let head = match (&tree.branch, tree.head) {
+            (Some(branch), Some(harness::changes::Head::NoCommits)) => {
+                format!("{branch} (no commits yet)")
+            }
+            (Some(branch), _) => branch.clone(),
+            (None, Some(head)) => head.word().to_owned(),
+            (None, None) => "unknown".to_owned(),
+        };
+        let held = match &tree.holder {
+            Some(holder) => format!("held by {}", holder.run_id),
+            None => "orphan".to_owned(),
+        };
+        let ahead = tree
+            .ahead
+            .filter(|ahead| *ahead > 0)
+            .map(|ahead| format!(", {ahead} ahead"))
+            .unwrap_or_default();
+        say!("{}  [{head}]  {held}{ahead}", tree.path.display());
+        match &tree.unreadable {
+            Some(why) => say!("  unreadable: {why}"),
+            None => {
+                for change in &tree.files {
+                    let counts = match (change.added, change.removed) {
+                        (Some(added), Some(removed)) => format!("  +{added} -{removed}"),
+                        (Some(added), None) => format!("  +{added}"),
+                        _ => String::new(),
+                    };
+                    say!("  {}  {}{counts}", change.marker, change.path);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// One checkout, as JSON.
+fn tree_json(tree: &harness::changes::Tree) -> serde_json::Value {
+    serde_json::json!({
+        "path": tree.path.display().to_string(),
+        "branch": tree.branch,
+        "head": tree.head.map(harness::changes::Head::word),
+        "unreadable": tree.unreadable,
+        "files": tree.files.iter().map(|change| serde_json::json!({
+            "marker": change.marker.to_string(),
+            "path": change.path,
+            "added": change.added,
+            "removed": change.removed,
+        })).collect::<Vec<_>>(),
+        "ahead": tree.ahead,
+        "modified": tree.modified,
+        "run": tree.holder.as_ref().map(|holder| holder.run_id.clone()),
+        "issue": tree.holder.as_ref().and_then(|holder| holder.issue),
+        "orphan": tree.orphan,
+    })
 }
 
 /// One swept entry, as JSON.

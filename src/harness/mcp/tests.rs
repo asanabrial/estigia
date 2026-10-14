@@ -5725,3 +5725,28 @@ fn a_finding_cannot_name_a_lens_through_the_tool() {
     };
     assert!(message.contains("`lens`"), "{message}");
 }
+
+#[test]
+fn done_and_release_name_a_dirty_claim_checkout_and_other_calls_do_not() {
+    let repo = repository_with_commit();
+    std::fs::write(repo.path().join("parked.txt"), "x\n").unwrap();
+    let done = json!({"issue": 4, "to": "done"});
+    for (operation, arguments) in [("transition", &done), ("unassign", &json!({"issue": 4}))] {
+        let notice = super::checkout_notice(operation, arguments, Some(repo.path()))
+            .unwrap_or_else(|| panic!("{operation} said nothing about a dirty checkout"));
+        assert!(
+            notice.contains("parked.txt") && notice.contains("estigia changes"),
+            "{notice}"
+        );
+    }
+    let review = json!({"issue": 4, "to": "review"});
+    assert_eq!(
+        super::checkout_notice("transition", &review, Some(repo.path())),
+        None
+    );
+    assert_eq!(
+        super::checkout_notice("claim", &done, Some(repo.path())),
+        None
+    );
+    assert_eq!(super::checkout_notice("unassign", &done, None), None);
+}

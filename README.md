@@ -119,6 +119,7 @@ estigia setup claude-code --dry-run   # exactly what would change, writes nothin
 estigia status                        # what is installed, where, and what runs still hold
 estigia doctor                        # skill, skill-assets, gh, remote, guard, prune, pi-subagents, lockfiles, permission — read-only
 estigia prune                         # branches and checkouts no delivery owns; --confirm removes
+estigia changes                       # uncommitted work in every checkout, held or orphan — read-only
 estigia flush --status               # the GitHub writes a closed git operation window queued; plain `flush` sends them
 ```
 

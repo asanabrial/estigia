@@ -218,8 +218,10 @@ const PI_TEMPLATE: &str = r#"// __MARKER__ — managed by `estigia setup pi`
 // Refuses a repository write that no live claim authorises, puts to the person
 // a write the binary says needs asking (in the terminal UI only), gives each run the
 // context `SessionStart` gives other agents, shows the claim this session
-// holds, draws a refusal as a card, and offers `/estigia-doctor`, which shows
-// the person the report of `estigia doctor`. Those last three are display only.
+// holds, counts the checkouts that hold uncommitted work in a widget, draws a
+// refusal as a card, and offers `/estigia-doctor` and `/estigia-changes`, which
+// show the person the report of `estigia doctor` and the listing of
+// `estigia changes`. Those last five are display only.
 // Removed by `estigia uninstall pi`.
 import { execFile } from "node:child_process";
 import { closeSync, openSync, readSync } from "node:fs";
@@ -240,6 +242,10 @@ const TITLE = "Estigia";
 const ASKED = 4;
 const DOCTOR_COMMAND = "estigia-doctor";
 const DOCTOR_CARD = "estigia-doctor";
+const CHANGES_COMMAND = "estigia-changes";
+const WIDGET_KEY = "estigia-changes";
+const CHANGES_TIMEOUT_MS = 20000;
+const WIDGET_UNKNOWN = "uncommitted work unknown";
 const DOCTOR_TIMEOUT_MS = 60000;
 
 const unchecked = (tool, why, ctx) => {
@@ -489,6 +495,45 @@ const showClaim = async (ctx) => {
   } catch {}
 };
 
+const tallied = (answer) => {
+  const trees = answer?.worktrees;
+  if (!Array.isArray(trees)) return WIDGET_UNKNOWN;
+  const holding = trees.filter((tree) => !filled(tree?.unreadable) && Array.isArray(tree?.files) && tree.files.length > 0).length;
+  const unreadable = trees.filter((tree) => filled(tree?.unreadable)).length;
+  if (holding === 0 && unreadable === 0) return undefined;
+  const noun = (count) => `${count} checkout${count === 1 ? "" : "s"}`;
+  if (holding === 0) return `${noun(unreadable)} unreadable`;
+  return `uncommitted work in ${noun(holding)}${unreadable > 0 ? `, ${unreadable} unreadable` : ""}`;
+};
+
+const changesOf = (cwd) =>
+  new Promise((resolve) => {
+    execFile(
+      ESTIGIA,
+      ["changes", "--json"],
+      { cwd, encoding: "utf8", timeout: CHANGES_TIMEOUT_MS, maxBuffer: GATE_MAX_BUFFER, windowsHide: true },
+      (error, stdout) => {
+        if (error) return resolve(WIDGET_UNKNOWN);
+        try {
+          resolve(tallied(JSON.parse(stdout)));
+        } catch {
+          resolve(WIDGET_UNKNOWN);
+        }
+      },
+    );
+  });
+
+let newest = 0;
+const showChanges = async (ctx) => {
+  if (!ctx?.hasUI || typeof ctx?.ui?.setWidget !== "function") return;
+  const ticket = ++newest;
+  const text = await changesOf(ctx.cwd ?? process.cwd());
+  if (ticket !== newest) return;
+  try {
+    ctx.ui.setWidget(WIDGET_KEY, text === undefined ? undefined : [`estigia: ${text} \u00b7 /${CHANGES_COMMAND}`]);
+  } catch {}
+};
+
 const doctorFailure = (error) => {
   if (error?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
     return `its report was larger than ${GATE_MAX_BUFFER} bytes`;
@@ -499,11 +544,11 @@ const doctorFailure = (error) => {
   return String(error?.message ?? error).trim();
 };
 
-const askDoctor = (cwd) =>
+const askReport = (verb, cwd) =>
   new Promise((resolve) => {
     execFile(
       ESTIGIA,
-      ["doctor"],
+      [verb],
       { cwd, encoding: "utf8", timeout: DOCTOR_TIMEOUT_MS, maxBuffer: GATE_MAX_BUFFER, windowsHide: true },
       (error, stdout, stderr) => {
         const spoken = [String(stdout ?? "").replace(/\n+$/, ""), String(stderr ?? "").trim()]
@@ -511,10 +556,12 @@ const askDoctor = (cwd) =>
           .join("\n");
         const answered = !error || (typeof error.code === "number" && !error.killed);
         if (answered && spoken !== "") return resolve({ answered: true, text: spoken });
-        resolve({ answered: false, text: `estigia doctor did not answer (${doctorFailure(error ?? { code: 0 })})` });
+        resolve({ answered: false, text: `estigia ${verb} did not answer (${doctorFailure(error ?? { code: 0 })})` });
       },
     );
   });
+
+const askDoctor = (cwd) => askReport("doctor", cwd);
 
 const showDoctor = (pi, ctx, report) => {
   if (!ctx?.hasUI) {
@@ -574,6 +621,12 @@ export default function (pi) {
       showDoctor(pi, ctx, await askDoctor(ctx?.cwd ?? process.cwd()));
     },
   });
+  pi.registerCommand?.(CHANGES_COMMAND, {
+    description: "Show the uncommitted work in every checkout (shown to you, not sent to the model)",
+    handler: async (_args, ctx) => {
+      showDoctor(pi, ctx, await askReport("changes", ctx?.cwd ?? process.cwd()));
+    },
+  });
   pi.on("session_start", async (event, ctx) => {
     const session = sessionOf(ctx);
     if (filled(session) && REPLACEMENT_REASONS.has(event?.reason)) replaced.add(session);
@@ -582,6 +635,7 @@ export default function (pi) {
       started.set(session, { reason: event?.reason, previous: header(event?.previousSessionFile) });
     }
     void showClaim(ctx);
+    void showChanges(ctx);
   });
   pi.on("before_agent_start", async (event, ctx) => {
     const text = await sessionContext(sessionOf(ctx), ctx);
@@ -606,6 +660,7 @@ export default function (pi) {
   });
   pi.on("agent_settled", async (_event, ctx) => {
     void showClaim(ctx);
+    void showChanges(ctx);
   });
   pi.on("tool_result", async (_event, ctx) => {
     void showClaim(ctx);
@@ -1194,6 +1249,26 @@ pub const LOOP_COMMANDS: &[(&str, &str)] = &[
     ("flow-loop.md", FLOW_LOOP_COMMAND),
     ("flow-status.md", FLOW_STATUS_COMMAND),
 ];
+
+/// The Claude Code slash command that shows `estigia changes`, written on every
+/// install: `(file name, source)`.
+///
+/// A prompt that names the command and asks for its output unchanged; the listing
+/// is the binary's and nothing here reads or decides on it.
+pub const CHANGES_COMMANDS: &[(&str, &str)] = &[("estigia-changes.md", CHANGES_COMMAND)];
+
+const CHANGES_COMMAND: &str = r#"---
+description: Show the uncommitted work in every checkout of this repository
+---
+
+<!-- estigia:loop-command -->
+
+Run
+
+    estigia changes
+
+and show its output to me unchanged. It lists, for each checkout of this repository, the files it holds that no commit does, the run that holds it, and `orphan` when no run does. Do not act on the listing; I decide what to do with it.
+"#;
 
 const FLOW_LOOP_COMMAND: &str = r#"---
 description: Keep working this session's Estigia run until the tracker says it is done

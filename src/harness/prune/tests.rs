@@ -8,6 +8,7 @@ fn observed(kind: Kind, name: &str, sweepable: Option<&str>) -> Observed {
         issue: issue_of_branch(name),
         sweepable: sweepable.map(str::to_owned),
         unpublished: false,
+        uncommitted: Vec::new(),
         held: None,
     }
 }
@@ -277,11 +278,12 @@ fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
         find(Kind::Worktree, "issue-1-merged").delete,
         "a merged checkout was kept"
     );
+    let open = find(Kind::Worktree, "issue-2-open");
+    assert!(!open.delete, "an open checkout was swept");
     assert!(
-        !swept
-            .iter()
-            .any(|entry| entry.kind == Kind::Worktree && entry.name.contains("issue-2-open")),
-        "an open checkout was listed: {swept:?}"
+        open.reason.contains("neither merged nor closed"),
+        "the open checkout is kept without a reason: {}",
+        open.reason
     );
     assert!(
         !find(Kind::Worktree, "issue-3-closed").delete,
@@ -294,6 +296,56 @@ fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
     assert!(
         find(Kind::Worktree, "panel-1").delete,
         "a detached checkout no branch owns was kept"
+    );
+}
+
+#[test]
+fn a_kept_checkout_names_the_uncommitted_files_it_carries() {
+    let (root, clone, trees) = sweep_fixture();
+    let skill = root.path().join("skill");
+    std::fs::create_dir_all(&skill).expect("a skill root");
+    let context = crate::transport::Context::live(skill, clone, None);
+    std::fs::write(trees.join("issue-2-open").join("scratch.txt"), "x\n").expect("scratch");
+    let view = View {
+        context: &context,
+        base: "main",
+        holdings: &[],
+        root: Some(trees.as_path()),
+    };
+    let script = crate::test_env::answers(&[
+        crate::test_env::open_but_unmatched_issue(1),
+        crate::test_env::open_but_unmatched_issue(2),
+        crate::test_env::closed_issue(3),
+        crate::test_env::open_but_unmatched_issue(4),
+        serde_json::json!({ "matches": "pr list", "stdout": "[]", "status": 0 }),
+    ]);
+    let bin = crate::test_env::scripted_gh();
+    let swept = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        sweep(&view).expect("the sweep reads the fixture")
+    });
+    let open = swept
+        .iter()
+        .find(|entry| entry.name.contains("issue-2-open"))
+        .expect("an open checkout with work is listed");
+    assert!(!open.delete);
+    assert!(
+        open.reason.contains("scratch.txt") && open.reason.contains("uncommitted"),
+        "the reason does not name the file: {}",
+        open.reason
+    );
+}
+
+#[test]
+fn a_checkout_with_no_reason_to_sweep_is_still_listed_as_kept() {
+    let mut open = observed(Kind::Worktree, "/trees/issue-2-open", None);
+    open.uncommitted = vec!["M a.txt".to_owned()];
+    open.unpublished = true;
+    let listed = decide(open).expect("a checkout is always listed");
+    assert!(!listed.delete);
+    assert!(listed.reason.contains("a.txt"), "{}", listed.reason);
+    assert_eq!(
+        decide(observed(Kind::RemoteHead, "issue-2-open", None)),
+        None
     );
 }
 

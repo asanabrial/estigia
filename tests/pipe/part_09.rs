@@ -2371,6 +2371,42 @@ fn prune_lists_a_merged_head_and_confirm_deletes_it() {
     );
 }
 
+/// `estigia changes` is read-only and lists every checkout, the main one
+/// included, with the uncommitted files git reports.
+#[test]
+fn changes_lists_a_dirty_orphan_checkout_and_writes_nothing() {
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    std::fs::write(repo.join("forgotten.txt"), "one\ntwo\n").expect("a forgotten file");
+
+    let (said, err, ok) = run_with_tracker(home, repo, bin, "[]", &["changes", "--json"], "");
+    let told = format!("{said}{err}");
+    assert!(ok, "changes was refused: {told}");
+    let listed: serde_json::Value = serde_json::from_str(said.trim())
+        .unwrap_or_else(|_| panic!("the changes answer is JSON: {told}"));
+    let trees = listed["worktrees"].as_array().expect("a worktrees array");
+    let dirty = trees
+        .iter()
+        .find(|tree| {
+            tree["files"]
+                .as_array()
+                .is_some_and(|files| files.iter().any(|file| file["path"] == "forgotten.txt"))
+        })
+        .unwrap_or_else(|| panic!("the dirty checkout was omitted: {told}"));
+    assert_eq!(dirty["orphan"], serde_json::json!(true));
+    assert_eq!(dirty["files"][0]["marker"], serde_json::json!("U"));
+    assert!(
+        repo.join("forgotten.txt").exists(),
+        "the listing removed the file"
+    );
+
+    let (text, _, ok) = run_with_tracker(home, repo, bin, "[]", &["changes"], "");
+    assert!(
+        ok && text.contains("forgotten.txt") && text.contains("orphan"),
+        "{text}"
+    );
+}
+
 /// A release whose unassign marker is already on the
 /// issue — the retried release — must retire the checkout too. Before this, the
 /// resumed path answered without a `checkout` key and never attempted
