@@ -417,6 +417,237 @@ fn the_review_tier_answer_names_the_lens_roles_each_tier_licenses() {
     );
 }
 
+fn tier_fixtures() -> [(&'static str, tempfile::TempDir, String, String); 3] {
+    let low = repo();
+    let low_base = commit_file(low.path(), "docs/guide.md", b"start\n", false);
+    let low_head = commit_file(low.path(), "docs/guide.md", b"start\nmore prose\n", false);
+    let medium = repo();
+    let medium_base = commit_file(medium.path(), "src/lib.rs", b"fn main() {}\n", false);
+    let medium_head = commit_file(
+        medium.path(),
+        "src/lib.rs",
+        b"fn main() { let _ = 1; }\n",
+        false,
+    );
+    let high = repo();
+    let high_base = commit_file(high.path(), "src/auth.rs", b"fn check() {}\n", false);
+    let high_head = commit_file(
+        high.path(),
+        "src/auth.rs",
+        b"fn check() { verify(); }\n",
+        false,
+    );
+    [
+        ("low", low, low_base, low_head),
+        ("medium", medium, medium_base, medium_head),
+        ("high", high, high_base, high_head),
+    ]
+}
+
+fn declared(
+    at: &std::path::Path,
+    base: &str,
+    head: &str,
+    declaration: &Declaration<'_>,
+) -> Result<serde_json::Value, Failure> {
+    review_tier_declared(&test_context(at), base, head, None, None, declaration)
+}
+
+fn refusal_of(result: Result<serde_json::Value, Failure>) -> serde_json::Value {
+    match result {
+        Err(Failure::ConfigDefect(payload)) => payload,
+        other => panic!("expected a refusal, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_raise_never_answers_a_tier_below_the_computed_one() {
+    let rank = |word: &str| RiskLevel::parse(word).expect("a tier");
+    for (computed, root, base, head) in tier_fixtures() {
+        for item in RISK_ITEMS {
+            let answer = declared(
+                root.path(),
+                &base,
+                &head,
+                &Declaration {
+                    raise: Some(item),
+                    raise_reason: Some("it moves an authorisation boundary"),
+                    ..Declaration::default()
+                },
+            )
+            .expect("an answer");
+            let level = rank(answer["level"].as_str().expect("a level"));
+            assert!(
+                level >= rank(computed),
+                "{item} lowered {computed}: {answer}"
+            );
+            assert_eq!(answer["computed_level"], computed, "{answer}");
+            assert_eq!(answer["raise"], *item, "{answer}");
+            assert_eq!(
+                answer["raise_reason"], "it moves an authorisation boundary",
+                "{answer}"
+            );
+            assert_eq!(level, RiskLevel::High, "{item} over {computed}: {answer}");
+            assert_eq!(answer["lenses"], 4, "{answer}");
+        }
+    }
+}
+
+#[test]
+fn an_answer_without_a_declaration_is_the_computed_one_and_carries_none_of_it() {
+    for (computed, root, base, head) in tier_fixtures() {
+        let answer =
+            declared(root.path(), &base, &head, &Declaration::default()).expect("an answer");
+        assert_eq!(answer["level"], computed, "{answer}");
+        for key in ["computed_level", "raise", "raise_reason", "focus_reason"] {
+            assert!(answer.get(key).is_none(), "{key} on {answer}");
+        }
+    }
+}
+
+#[test]
+fn a_raise_that_would_lower_or_leaves_the_list_is_refused_with_its_own_reason() {
+    let [_, (_, root, base, head), _] = tier_fixtures();
+    for word in ["low", "medium", "none"] {
+        let refusal = refusal_of(declared(
+            root.path(),
+            &base,
+            &head,
+            &Declaration {
+                raise: Some(word),
+                raise_reason: Some("why"),
+                ..Declaration::default()
+            },
+        ));
+        assert_eq!(refusal["reason"], "risk-raise-lowers", "{word}: {refusal}");
+        assert!(refusal["action"].is_string(), "{refusal}");
+    }
+    let refusal = refusal_of(declared(
+        root.path(),
+        &base,
+        &head,
+        &Declaration {
+            raise: Some("vibes"),
+            raise_reason: Some("why"),
+            ..Declaration::default()
+        },
+    ));
+    assert_eq!(refusal["reason"], "invalid-risk-raise", "{refusal}");
+    assert_eq!(
+        refusal["expected"],
+        serde_json::json!(RISK_ITEMS),
+        "{refusal}"
+    );
+}
+
+#[test]
+fn a_raise_and_its_reason_travel_together() {
+    let [_, (_, root, base, head), _] = tier_fixtures();
+    for reason in [None, Some(""), Some("  ")] {
+        let refusal = refusal_of(declared(
+            root.path(),
+            &base,
+            &head,
+            &Declaration {
+                raise: Some("concurrency"),
+                raise_reason: reason,
+                ..Declaration::default()
+            },
+        ));
+        assert_eq!(refusal["reason"], "risk-raise-reason-missing", "{refusal}");
+    }
+    let refusal = refusal_of(declared(
+        root.path(),
+        &base,
+        &head,
+        &Declaration {
+            raise_reason: Some("why"),
+            ..Declaration::default()
+        },
+    ));
+    assert_eq!(
+        refusal["reason"], "risk-raise-reason-without-raise",
+        "{refusal}"
+    );
+}
+
+#[test]
+fn a_focus_reason_is_answered_back_and_needs_a_focus() {
+    let [_, (_, root, base, head), _] = tier_fixtures();
+    let context = test_context(root.path());
+    let answer = review_tier_declared(
+        &context,
+        &base,
+        &head,
+        None,
+        Some("risk"),
+        &Declaration {
+            focus_reason: Some("the diff edits a lock order"),
+            ..Declaration::default()
+        },
+    )
+    .expect("an answer");
+    assert_eq!(
+        answer["focus_reason"], "the diff edits a lock order",
+        "{answer}"
+    );
+    assert_eq!(
+        answer["lens_roles"],
+        serde_json::json!(["review-risk"]),
+        "{answer}"
+    );
+    let refusal = refusal_of(declared(
+        root.path(),
+        &base,
+        &head,
+        &Declaration {
+            focus_reason: Some("why"),
+            ..Declaration::default()
+        },
+    ));
+    assert_eq!(refusal["reason"], "focus-reason-without-focus", "{refusal}");
+    let refusal = refusal_of(review_tier_declared(
+        &context,
+        &base,
+        &head,
+        None,
+        Some("risk"),
+        &Declaration {
+            focus_reason: Some(" "),
+            ..Declaration::default()
+        },
+    ));
+    assert_eq!(refusal["reason"], "blank-focus-reason", "{refusal}");
+}
+
+#[test]
+fn a_raise_reaches_the_repair_answer_and_keeps_the_whole_panel() {
+    let root = repo();
+    let at = root.path();
+    let base = commit_file(at, "src/lib.rs", b"fn main() {}\n", false);
+    let parent = commit_file(at, "src/lib.rs", b"fn main() { let _ = 1; }\n", false);
+    let head = commit_file(at, "src/lib.rs", b"fn main() { let _ = 2; }\n", false);
+    let answer = review_tier_for_repair_declared(
+        &test_context(at),
+        &base,
+        &parent,
+        &head,
+        None,
+        Some("warning"),
+        None,
+        &Declaration {
+            raise: Some("migration"),
+            raise_reason: Some("it rewrites stored rows"),
+            ..Declaration::default()
+        },
+    )
+    .expect("an answer");
+    assert_eq!(answer["computed_level"], "medium", "{answer}");
+    assert_eq!(answer["level"], "high", "{answer}");
+    assert_eq!(answer["lenses"], 4, "{answer}");
+    assert!(answer.get("panel").is_none(), "{answer}");
+}
+
 #[test]
 fn the_review_tier_answer_states_the_forecast_line_for_each_tier() {
     let root = repo();

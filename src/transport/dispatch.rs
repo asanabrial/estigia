@@ -268,6 +268,7 @@ fn with_review_reads(
     issue: u64,
     worktree: Option<&Path>,
     with_review: bool,
+    (focus, declaration): (Option<&str>, super::tier::Declaration<'_>),
     mut answer: serde_json::Value,
 ) -> serde_json::Value {
     if !with_review {
@@ -275,7 +276,7 @@ fn with_review_reads(
     }
     let base = answer["base"].as_str().unwrap_or_default().to_owned();
     let head = answer["head"].as_str().unwrap_or_default().to_owned();
-    match super::tier::review_tier(context, &base, &head, worktree, None) {
+    match super::tier::review_tier_declared(context, &base, &head, worktree, focus, &declaration) {
         Ok(tier) => answer["tier"] = tier,
         Err(failure) => {
             answer["review_reads_unavailable"] = failure.envelope();
@@ -568,8 +569,13 @@ fn run_operation(
                      range it qualifies",
                 ));
             }
+            let declaration = super::tier::Declaration {
+                raise: f.get("raise"),
+                raise_reason: f.get("raise-reason"),
+                focus_reason: f.get("focus-reason"),
+            };
             match f.get("parent-head") {
-                Some(parent_head) => super::tier::review_tier_for_repair(
+                Some(parent_head) => super::tier::review_tier_for_repair_declared(
                     context,
                     f.need("base", operation)?,
                     parent_head,
@@ -577,13 +583,15 @@ fn run_operation(
                     f.path("worktree"),
                     f.get("clearing-finding"),
                     f.get("focus"),
+                    &declaration,
                 ),
-                None => super::tier::review_tier(
+                None => super::tier::review_tier_declared(
                     context,
                     f.need("base", operation)?,
                     f.need("head", operation)?,
                     f.path("worktree"),
                     f.get("focus"),
+                    &declaration,
                 ),
             }
         }
@@ -938,6 +946,12 @@ fn run_operation(
         ),
         "publish-review" => {
             let issue = issue()?;
+            let declaration = super::tier::Declaration {
+                raise: f.get("raise"),
+                raise_reason: f.get("raise-reason"),
+                focus_reason: f.get("focus-reason"),
+            };
+
             let answer = super::claim::publish_review(
                 context,
                 &super::claim::Publication {
@@ -959,6 +973,8 @@ fn run_operation(
                     // missing from it is simply read the ordinary way.
                     topology: f.get("topology"),
                     topology_reason: f.get("topology-reason"),
+                    focus: f.get("focus"),
+                    declaration,
                     expected_epoch: f.get("expected-epoch"),
                     now,
                 },
@@ -968,6 +984,7 @@ fn run_operation(
                 issue,
                 f.path("worktree"),
                 f.on("with-review"),
+                (f.get("focus"), declaration),
                 answer,
             ))
         }
@@ -978,6 +995,12 @@ fn run_operation(
         // arguments nothing checks.
         "republish-review" => {
             let issue = issue()?;
+            let declaration = super::tier::Declaration {
+                raise: f.get("raise"),
+                raise_reason: f.get("raise-reason"),
+                focus_reason: f.get("focus-reason"),
+            };
+
             let answer = super::claim::republish_review(
                 context,
                 &super::claim::Publication {
@@ -992,6 +1015,8 @@ fn run_operation(
                     inline_payload: f.on("inline-payload"),
                     topology: f.get("topology"),
                     topology_reason: f.get("topology-reason"),
+                    focus: f.get("focus"),
+                    declaration,
                     expected_epoch: f.get("expected-epoch"),
                     now,
                 },
@@ -1001,6 +1026,7 @@ fn run_operation(
                 issue,
                 f.path("worktree"),
                 f.on("with-review"),
+                (f.get("focus"), declaration),
                 answer,
             ))
         }
