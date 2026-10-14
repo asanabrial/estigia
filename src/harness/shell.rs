@@ -626,13 +626,17 @@ fn discarded_target(bytes: &[u8], from: usize) -> Option<usize> {
     is_discarded(word).then_some(end)
 }
 
+/// How many bytes of `path` are a drive letter and its colon, as in `C:/…`: two
+/// when a slash follows them, and none for `C:`, `C:name` or anything else.
+pub(crate) fn drive_prefix_len(path: &str) -> usize {
+    match path.as_bytes() {
+        [letter, b':', b'/', ..] if letter.is_ascii_alphabetic() => 2,
+        _ => 0,
+    }
+}
+
 fn is_absolute_literal(target: &str) -> bool {
-    let drive = target.as_bytes();
-    target.starts_with('/')
-        || (drive.len() > 2
-            && drive[0].is_ascii_alphabetic()
-            && drive[1] == b':'
-            && drive[2] == b'/')
+    target.starts_with('/') || drive_prefix_len(target) > 0
 }
 
 /// The target of a `cat` that writes one quoted heredoc to one literal absolute path, and nothing

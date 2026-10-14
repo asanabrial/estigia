@@ -2557,10 +2557,7 @@ fn directed_integration_merge(command: &str, literal: bool) -> (RunsIn, bool, St
             .iter()
             .find_map(|quote| word.strip_prefix(*quote)?.strip_suffix(*quote))
             .unwrap_or(word);
-        let after_drive = match unquoted.as_bytes() {
-            [letter, b':', b'/', ..] if letter.is_ascii_alphabetic() => &unquoted[2..],
-            _ => unquoted,
-        };
+        let after_drive = &unquoted[shell::drive_prefix_len(unquoted)..];
         (!unquoted.is_empty()
             && !unquoted.starts_with(['-', '~'])
             && after_drive

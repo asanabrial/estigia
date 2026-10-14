@@ -895,11 +895,11 @@ fn the_child_sees_only_the_allow_listed_environment() {
             let seen = std::fs::read_to_string(&names).unwrap();
             let seen: Vec<&str> = seen.lines().collect();
             let holds = |name: &str| {
-                seen.iter().any(|seen| {
+                seen.iter().any(|kept| {
                     if cfg!(windows) {
-                        seen.eq_ignore_ascii_case(name)
+                        kept.eq_ignore_ascii_case(name)
                     } else {
-                        *seen == name
+                        *kept == name
                     }
                 })
             };
