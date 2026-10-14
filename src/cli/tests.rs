@@ -3741,6 +3741,7 @@ fn both_doors_to_the_gate_read_one_payload_the_same_way() {
                 local_fast_forward_target: None,
                 is_exact_integration_merge: false,
                 runs_in: crate::harness::RunsIn::Session,
+                target: crate::harness::CommitTarget::Checkout,
             },
             "`{spelling}` is a push and this door does not see it"
         );

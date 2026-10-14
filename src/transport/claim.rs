@@ -1939,6 +1939,18 @@ fn exact_hex(value: &str, width: usize) -> bool {
 }
 
 impl ReviewTransaction {
+    /// The merge topology that proves a commit delivered this receipt: the
+    /// reviewed head is the merge's second parent and the receipt's base is an
+    /// ancestor of its first. The one rule the closed-issue renewal and the
+    /// harness's post-merge delivery steps both read.
+    pub(crate) fn delivered_by_merge(
+        &self,
+        second_parent: &str,
+        base_is_ancestor_of_first_parent: bool,
+    ) -> bool {
+        second_parent == self.head && base_is_ancestor_of_first_parent
+    }
+
     /// Three outcomes, not two: `Ok(None)` when the marker carries none of the
     /// receipt's own fields, `Ok(Some)` when all are present and well formed,
     /// and `Err` when any is present but does not parse or does not have the
