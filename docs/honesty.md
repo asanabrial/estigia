@@ -403,6 +403,14 @@ pointer that leaves it names the document it points at.
   owed. The relay's answer is still bound the way every capture is: the job's receipt is held
   against the one `review_status` offers at admission, and a result for a receipt the review has
   moved past is refused `capture-result-stale` with nothing recorded.
+
+  - **A relayed reviewer runs as the built-in `general` sub-agent, with its tool grant.** The
+    `relay: true` answer on an OpenCode run carries `launch`, naming `general` and the marker prompt
+    `<!-- estigia:review name=<role> -->`, because `estigia setup opencode` installs no reviewer agent
+    and a host naming a reserved one is refused `Unknown agent`. `general` carries OpenCode's write
+    tools (edit, write, bash), where the CLI's reviewer runs with none, so the relayed reviewer is
+    sealed by the prompt the plugin puts in, not by a tool grant: a weaker seal than the CLI's
+    tool-less reviewer. Nothing here removes the grant or reads what the sub-agent did with it.
   - **ZCode, Cursor and DeepSeek Harness cannot relay.** The canonical per-runtime table
     (`src/setup/capabilities.rs`) records no agent-definitions surface for any of the three
     (`agent_definitions: false`), so none can be routed to a reserved reviewer at all; and only
@@ -1913,7 +1921,7 @@ pointer that leaves it names the document it points at.
   | Surface | Bytes | How measured |
   |---|---:|---|
   | `skill/bindings/github.md` | 17,703 | file on disk |
-  | `skill/policies/blind-judges.md` | 41,870 | file on disk |
+  | `skill/policies/blind-judges.md` | 41,964 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
   | `skill/bindings/github/delivery.md` | 39,190 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |

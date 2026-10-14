@@ -20,6 +20,7 @@ mod recover;
 mod status;
 mod validator;
 
+pub use capture::opencode_relay_launch;
 pub use capture::{
     CaptureInput, collect_review_input, launch_review_input, relay_admit, relay_model, relay_prompt,
 };

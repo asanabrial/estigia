@@ -598,14 +598,18 @@ reviewer at all, and a machine with one reaches it only from an OpenCode run. No
 delegation` is `auto` and says nothing about which binary runs a reviewer, so a gate here would be a
 row that decides nothing.
 
-The plugin hooks OpenCode 2's `execute.before` and `execute.after` for the sub-agent tool. When the
+The plugin hooks OpenCode 2's `execute.before` and `execute.after` for the sub-agent tool, whether the host names it `task`, `agent` or `subagent`. When the
 host launches a task naming one of the seven reserved reviewers — `review-lens`, `review-risk`,
 `review-readability`, `review-reliability`, `review-readback`, `review-refuter`, `review-validator`
 — the plugin asks the binary for the exact prompt `launch_review_input` recorded and puts it in the
 task input; when the task finishes it hands the reviewer's raw output back to the binary for
 admission and replaces the result, so the orchestrator never receives the reviewer's answer. It also
-accepts a task whose input carries `estigia:review name=<role>`, for a host that has no reviewer
-agent of its own. A task naming a reserved reviewer is relayed when the plugin is installed.
+accepts a task of any sub-agent whose input carries `estigia:review name=<role>`, for a host that has
+no reviewer agent of its own. `estigia setup opencode` installs no reviewer agent, so the form a
+host launches is the second: the `relay: true` answer on an OpenCode run carries
+`launch: {agent, prompt}`, the built-in `general` sub-agent and the prompt
+`<!-- estigia:review name=<role> -->`, and the plugin replaces that prompt with the binary's. A task
+naming a reserved reviewer is relayed too, for a host that has defined one itself.
 
 `launch_review_input` selects the reviewer by the host that launched the run, read from the runtime
 its run id names. On an `opencode` run with this plugin installed it answers `relay: true` before it

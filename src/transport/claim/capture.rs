@@ -907,7 +907,9 @@ pub fn launch_review_input(
 /// are, so `estigia review prompt` can materialise the exact prompt and
 /// `estigia review admit` can bind the answer to the same receipt. The answer
 /// carries `relay: true`, which is what tells the host to launch the reviewer
-/// through its own sub-agent tool.
+/// through its own sub-agent tool. On an OpenCode run it also carries `launch`,
+/// the built-in sub-agent and the prompt marker the relay plugin intercepts, so
+/// the host names no reviewer agent it does not have.
 pub(super) fn launch_relay(
     context: &Context,
     input: &CaptureInput<'_>,
@@ -915,7 +917,19 @@ pub(super) fn launch_relay(
 ) -> Result<serde_json::Value, Failure> {
     let mut answer = launch_with(context, input, &job::Relayed, started_at)?;
     answer["relay"] = serde_json::Value::Bool(true);
+    if crate::reviewer::runs_on_opencode(input.run_id) {
+        answer["launch"] = opencode_relay_launch(input.name);
+    }
     Ok(answer)
+}
+
+/// The sub-agent launch an OpenCode host makes for one reviewer name: a built-in
+/// agent and the marker prompt the review relay plugin intercepts.
+pub fn opencode_relay_launch(name: &str) -> serde_json::Value {
+    serde_json::json!({
+        "agent": "general",
+        "prompt": format!("<!-- estigia:review name={name} -->"),
+    })
 }
 
 fn relay_store() -> Result<Store, Failure> {

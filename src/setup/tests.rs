@@ -15201,6 +15201,26 @@ const marked = {
 await before(marked);
 out.marker_injected = marked.input.prompt;
 
+state.answers = { prompt: { exitCode: 0, stdout: "PROMPT FOR THE ANSWER'S LAUNCH" } };
+const prescribed = JSON.parse(process.argv[2]);
+const launched = {
+  tool: "task",
+  sessionID: "ses_relay",
+  input: { subagent_type: prescribed.agent, description: "review", prompt: prescribed.prompt },
+};
+await before(launched);
+out.launch_injected = launched.input.prompt;
+out.launch_asked = state.calls.at(-1).values.includes("review-reliability");
+
+state.answers = { prompt: { exitCode: 0, stdout: "PROMPT FOR A SUBAGENT TOOL" } };
+const viaSubagent = {
+  tool: "subagent",
+  sessionID: "ses_relay",
+  input: { agent: prescribed.agent, prompt: prescribed.prompt },
+};
+await before(viaSubagent);
+out.subagent_injected = viaSubagent.input.prompt;
+
 state.answers = { admit: { exitCode: 0, stdout: "{\"ok\":true}" } };
 state.breakStdin = false;
 const admitted = {
@@ -15339,8 +15359,10 @@ fn run_review_relay_driver() -> serde_json::Value {
     .expect("the review relay plugin writes");
     let driver = root.path().join("drive-review-relay.mjs");
     std::fs::write(&driver, REVIEW_RELAY_DRIVER).expect("the driver writes");
+    let launch = crate::transport::claim::opencode_relay_launch("review-reliability");
     let ran = std::process::Command::new("node")
         .arg(&driver)
+        .arg(launch.to_string())
         .current_dir(root.path())
         .output();
     let ran = match ran {
@@ -15408,6 +15430,26 @@ fn the_review_relay_materialises_the_prompt_and_admits_the_answer() {
         v1,
         vec!["tool.execute.after", "tool.execute.before"],
         "the OpenCode 1 fallback does not carry both hooks: {v1:?}"
+    );
+}
+
+/// The launch `launch_review_input` prescribes on an OpenCode run, a built-in
+/// sub-agent with the marker prompt, is intercepted: the plugin asks the binary
+/// for the job's prompt and puts it in the task input.
+#[test]
+fn the_review_relay_intercepts_the_launch_the_relay_answer_prescribes() {
+    let cases = run_review_relay_driver();
+    assert_eq!(
+        cases["launch_injected"], "PROMPT FOR THE ANSWER'S LAUNCH",
+        "the launch the relay answer prescribes was not intercepted: {cases}"
+    );
+    assert_eq!(
+        cases["launch_asked"], true,
+        "the plugin did not ask the binary for the reviewer the marker names: {cases}"
+    );
+    assert_eq!(
+        cases["subagent_injected"], "PROMPT FOR A SUBAGENT TOOL",
+        "a host whose sub-agent tool is named `subagent` was not intercepted: {cases}"
     );
 }
 

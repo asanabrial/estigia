@@ -38,7 +38,7 @@ carries every byte a lens reviews. An `inferential` lens finding is answered by 
 
 The orchestrator calls `launch_review_input` for each lens slot `review_status` offers, as a `collect`
 input, for a lens a receipt still owes; the binary starts the reviewer process itself, from a template embedded in the binary — the first installed `claude` or `codex` CLI, with
-no tools (an OpenCode run with its relay plugin installed relays instead) — and records the findings and then the lens report, or records nothing when any finding is
+no tools (an OpenCode run with its relay plugin installed relays instead, launching the built-in sub-agent and marker prompt the `relay: true` answer's `launch` names) — and records the findings and then the lens report, or records nothing when any finding is
 outside the change. On Claude Code there is no hand launch: setup installs no lens definition and the
 launch gate refuses a `Task` launch of a lens name.
 

@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-const PUBLIC_ISSUES_THROUGH: u64 = 92;
+const PUBLIC_ISSUES_THROUGH: u64 = 93;
 
 const NOT_ISSUE_REFERENCES: &[(&str, u64, &str)] = &[
     ("CHANGELOG.md", 464, "`close #464, #469, #473 and #474`"),
