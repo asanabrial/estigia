@@ -2801,3 +2801,342 @@ fn a_pi_session_end_forgets_the_pointer_only_when_the_session_is_really_over() {
     );
     assert!(again, "a second end was refused");
 }
+
+fn listed_sessions(rig: &TrackerRig) -> Vec<serde_json::Value> {
+    let (said, stderr, ok) = pi_session_run(rig, &["sessions", "--json"]);
+    assert!(ok, "{said}{stderr}");
+    let parsed: serde_json::Value = serde_json::from_str(said.trim()).expect("sessions is JSON");
+    parsed["sessions"].as_array().expect("a list").clone()
+}
+
+fn session_named<'a>(listed: &'a [serde_json::Value], run_id: &str) -> &'a serde_json::Value {
+    listed
+        .iter()
+        .find(|row| row["run_id"] == run_id)
+        .unwrap_or_else(|| panic!("{run_id} is not listed: {listed:?}"))
+}
+
+#[test]
+fn sessions_lists_every_session_with_its_claim_and_marks_the_silent_and_the_ended() {
+    let rig = tracker_rig();
+    let start = |session: &str| {
+        let (said, _, ok) = pi_session_run(
+            &rig,
+            &[
+                "session",
+                "start",
+                "--session-id",
+                session,
+                "--runtime",
+                "pi",
+            ],
+        );
+        assert!(ok, "{said}");
+    };
+    start("alive");
+    start("crashed");
+    let crashed = hold_issue_as(&rig, "crashed", 12);
+    let unregistered = hold_issue_as(&rig, "neverseen", 13);
+    let alive = estigia::harness::session::run_id("pi", "alive");
+
+    let listed = listed_sessions(&rig);
+    let row = session_named(&listed, &alive);
+    assert_eq!(row["status"], "live", "{row}");
+    assert_eq!(row["runtime"], "pi", "{row}");
+    assert!(row["issue"].is_null() && row["last_seen"].is_u64(), "{row}");
+    assert_eq!(session_named(&listed, &crashed)["issue"], 12, "{listed:?}");
+    assert_eq!(
+        session_named(&listed, &unregistered)["status"],
+        "unregistered"
+    );
+
+    rusqlite::Connection::open(rig.home.path().join(".estigia").join("state.db"))
+        .expect("the store opens")
+        .execute(
+            "UPDATE sessions SET last_seen = 1 WHERE run_id = ?1",
+            [&crashed],
+        )
+        .expect("the row ages");
+    let listed = listed_sessions(&rig);
+    let row = session_named(&listed, &crashed);
+    assert_eq!(row["status"], "stale", "{row}");
+    assert_eq!(row["issue"], 12, "a stale session was hidden: {row}");
+
+    let (said, _, ok) = pi_session_run(
+        &rig,
+        &[
+            "session",
+            "end",
+            "--session-id",
+            "alive",
+            "--runtime",
+            "pi",
+            "--reason",
+            "quit",
+        ],
+    );
+    assert!(ok, "{said}");
+    let listed = listed_sessions(&rig);
+    assert_eq!(session_named(&listed, &alive)["status"], "ended");
+
+    let (plain, _, ok) = pi_session_run(&rig, &["sessions"]);
+    assert!(
+        ok && plain.contains(&crashed) && plain.contains("stale") && plain.contains("#12"),
+        "{plain}"
+    );
+}
+
+#[test]
+fn sessions_on_a_machine_that_never_registered_one_lists_none_and_creates_no_store() {
+    let rig = tracker_rig();
+    let (said, _, ok) = pi_session_run(&rig, &["sessions", "--json"]);
+    assert!(ok, "{said}");
+    let parsed: serde_json::Value = serde_json::from_str(said.trim()).expect("JSON");
+    assert_eq!(parsed["sessions"], serde_json::json!([]));
+    assert!(
+        !rig.home.path().join(".estigia").join("state.db").exists(),
+        "a read created the store"
+    );
+}
+
+fn pi_start(rig: &TrackerRig, session: &str) -> String {
+    let (said, _, ok) = pi_session_run(
+        rig,
+        &[
+            "session",
+            "start",
+            "--session-id",
+            session,
+            "--runtime",
+            "pi",
+        ],
+    );
+    assert!(ok, "{said}");
+    estigia::harness::session::run_id("pi", session)
+}
+
+fn send_from(rig: &TrackerRig, sender: &str, to: &str, text: &str) -> (String, String, bool) {
+    pi_session_run(
+        rig,
+        &[
+            "sessions",
+            "send",
+            to,
+            text,
+            "--session-id",
+            sender,
+            "--runtime",
+            "pi",
+        ],
+    )
+}
+
+fn deliver_to(rig: &TrackerRig, session: &str) -> String {
+    let (said, stderr, ok) = pi_session_run(
+        rig,
+        &[
+            "session",
+            "deliver",
+            "--session-id",
+            session,
+            "--runtime",
+            "pi",
+        ],
+    );
+    assert!(ok, "{said}{stderr}");
+    said
+}
+
+#[test]
+fn a_sent_message_waits_visibly_for_both_ends_until_the_recipient_takes_it_once() {
+    let rig = tracker_rig();
+    let alice = pi_start(&rig, "alice");
+    let bob = pi_start(&rig, "bob");
+
+    let (said, stderr, ok) = send_from(&rig, "alice", &bob, "please look at the migration");
+    assert!(ok, "{said}{stderr}");
+
+    let listed = listed_sessions(&rig);
+    assert_eq!(session_named(&listed, &bob)["waiting"], 1, "{listed:?}");
+    assert_eq!(
+        session_named(&listed, &alice)["undelivered_sent"],
+        1,
+        "{listed:?}"
+    );
+
+    let delivered = deliver_to(&rig, "bob");
+    assert!(
+        delivered.contains("please look at the migration") && delivered.contains(&alice),
+        "{delivered}"
+    );
+    let listed = listed_sessions(&rig);
+    assert_eq!(session_named(&listed, &bob)["waiting"], 0, "{listed:?}");
+    assert_eq!(
+        session_named(&listed, &alice)["undelivered_sent"],
+        0,
+        "{listed:?}"
+    );
+    assert_eq!(
+        deliver_to(&rig, "bob").trim(),
+        "",
+        "a message was delivered twice"
+    );
+}
+
+#[test]
+fn a_message_for_a_session_nobody_registered_is_refused_and_records_nothing() {
+    let rig = tracker_rig();
+    pi_start(&rig, "alice");
+    let (said, stderr, ok) = send_from(&rig, "alice", "pi-ghost", "hello?");
+    assert!(!ok, "{said}");
+    assert!(stderr.contains("message-recipient-unknown"), "{stderr}");
+    let listed = listed_sessions(&rig);
+    assert!(
+        listed
+            .iter()
+            .all(|row| row["waiting"] == 0 && row["undelivered_sent"] == 0),
+        "{listed:?}"
+    );
+}
+
+#[test]
+fn a_message_for_an_ended_session_is_kept_and_stays_visible_to_its_sender() {
+    let rig = tracker_rig();
+    let alice = pi_start(&rig, "alice");
+    let bob = pi_start(&rig, "bob");
+    let (said, _, ok) = pi_session_run(
+        &rig,
+        &[
+            "session",
+            "end",
+            "--session-id",
+            "bob",
+            "--runtime",
+            "pi",
+            "--reason",
+            "quit",
+        ],
+    );
+    assert!(ok, "{said}");
+
+    let (said, stderr, ok) = send_from(&rig, "alice", &bob, "too late");
+    assert!(ok, "{said}{stderr}");
+    assert!(said.contains("has ended"), "{said}");
+    let listed = listed_sessions(&rig);
+    assert_eq!(
+        session_named(&listed, &alice)["undelivered_sent"],
+        1,
+        "{listed:?}"
+    );
+}
+
+#[test]
+fn an_empty_message_and_a_message_longer_than_a_row_holds_are_refused() {
+    let rig = tracker_rig();
+    pi_start(&rig, "alice");
+    let bob = pi_start(&rig, "bob");
+    let (_, stderr, ok) = send_from(&rig, "alice", &bob, "   ");
+    assert!(!ok && stderr.contains("message-empty"), "{stderr}");
+    let (_, stderr, ok) = send_from(&rig, "alice", &bob, &"x".repeat(9000));
+    assert!(!ok && stderr.contains("message-too-long"), "{stderr}");
+}
+
+fn hook_payload(session: &str, repo: &std::path::Path, tool: &str, extra: &str) -> String {
+    format!(
+        "{{\"session_id\":\"{session}\",\"cwd\":\"{}\",\"tool_name\":\"{tool}\",\
+         \"tool_input\":{{\"file_path\":\"{}\"}}{extra}}}",
+        repo.display().to_string().replace('\\', "\\\\"),
+        repo.join("scratch.txt")
+            .display()
+            .to_string()
+            .replace('\\', "\\\\")
+    )
+}
+
+#[test]
+fn claude_code_and_codex_hooks_hand_a_waiting_message_to_the_agent_once() {
+    for agent in ["claude-code", "codex"] {
+        let rig = tracker_rig();
+        let runtime = estigia::harness::session::runtime_of_agent(Some(agent));
+        let recipient = estigia::harness::session::run_id(runtime, "recipient-1");
+        let hook = |event: &str, payload: &str| {
+            run_with_tracker(
+                rig.home.path(),
+                rig.repo.path(),
+                rig.bin.path(),
+                "[]",
+                &["hook", event, "--agent", agent, "--dialect", "claude-code"],
+                payload,
+            )
+        };
+        let (_, _, ok) = hook(
+            "session-start",
+            &format!(
+                "{{\"session_id\":\"recipient-1\",\"cwd\":\"{}\"}}",
+                rig.repo.path().display().to_string().replace('\\', "\\\\")
+            ),
+        );
+        assert!(ok);
+        let listed = listed_sessions(&rig);
+        assert_eq!(
+            session_named(&listed, &recipient)["runtime"],
+            runtime,
+            "{agent}: the hook did not register the session: {listed:?}"
+        );
+
+        let (said, stderr, ok) = pi_session_run(
+            &rig,
+            &["sessions", "send", &recipient, "rebase before you push"],
+        );
+        assert!(ok, "{said}{stderr}");
+
+        let (sub_agent, _, _) = hook(
+            "pre-tool-use",
+            &hook_payload(
+                "recipient-1",
+                rig.repo.path(),
+                "Read",
+                ",\"agent_type\":\"reader\"",
+            ),
+        );
+        assert!(
+            !sub_agent.contains("rebase before you push"),
+            "{agent}: a sub-agent's call took the session's mail: {sub_agent}"
+        );
+
+        let (first, _, _) = hook(
+            "pre-tool-use",
+            &hook_payload("recipient-1", rig.repo.path(), "Read", ""),
+        );
+        let parsed: serde_json::Value = serde_json::from_str(first.trim()).expect("JSON");
+        let context = parsed["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{agent}: no additionalContext: {first}"));
+        assert!(
+            context.contains("rebase before you push"),
+            "{agent}: {context}"
+        );
+        assert_eq!(
+            parsed["hookSpecificOutput"]["hookEventName"], "PreToolUse",
+            "{agent}: {first}"
+        );
+        assert!(
+            parsed["hookSpecificOutput"]
+                .get("permissionDecision")
+                .is_none(),
+            "{agent}: the mail decided a permission: {first}"
+        );
+
+        let (second, _, _) = hook(
+            "pre-tool-use",
+            &hook_payload("recipient-1", rig.repo.path(), "Read", ""),
+        );
+        assert_eq!(second.trim(), "{}", "{agent}: delivered twice: {second}");
+        let listed = listed_sessions(&rig);
+        assert_eq!(
+            session_named(&listed, &recipient)["waiting"],
+            0,
+            "{agent}: {listed:?}"
+        );
+    }
+}

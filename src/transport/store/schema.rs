@@ -169,4 +169,27 @@ pub(super) const MIGRATIONS: &[&str] = &[
             AND NEW.github_id IS OLD.github_id)
         BEGIN SELECT RAISE(ABORT, 'append-only'); END;
     ",
+    "
+    CREATE TABLE sessions (
+        run_id TEXT PRIMARY KEY,
+        runtime TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        repo_dir TEXT,
+        started_at INTEGER NOT NULL,
+        last_seen INTEGER NOT NULL,
+        ended_at INTEGER,
+        end_reason TEXT
+    );
+    ",
+    "
+    CREATE TABLE messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_run_id TEXT,
+        recipient_run_id TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        delivered_at INTEGER
+    );
+    CREATE INDEX messages_undelivered ON messages (recipient_run_id) WHERE delivered_at IS NULL;
+    ",
 ];

@@ -355,8 +355,16 @@ fn every_command_that_prints_honours_the_global_json_flag() {
         "`estigia session end --json` printed {out:?} or failed: {said}"
     );
 
+    let ended_session = estigia::harness::session::run_id("pi", "s");
+    #[rustfmt::skip]
+    let session_send = ["sessions", "send", ended_session.as_str(), "a note", "--json"];
+    #[rustfmt::skip]
+    let session_deliver = ["session", "deliver", "--session-id", "s", "--runtime", "pi", "--json"];
     for arguments in [
         vec!["status", "--json"],
+        vec!["sessions", "--json"],
+        session_send.to_vec(),
+        session_deliver.to_vec(),
         vec!["update", "--json"],
         vec!["doctor", "--json"],
         vec!["prune", "--json"],

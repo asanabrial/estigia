@@ -1,0 +1,3 @@
+section: The harness
+
+- **The OpenCode gate plugin registers its sessions and delivers the mailbox after each tool call.** Issue #67, third slice. OpenCode 1's `tool.execute.after` appends the waiting messages to the tool's string result; OpenCode 2's `execute.after` steers them in through `ctx.session.prompt` with `delivery: "steer"` and falls back to `ctx.session.synthetic` when the service is absent or throws, and reads nothing when the host offers neither. The plugin runs `estigia session start` the first time it sees a session so another session can address it. No accelerator wakes an idle session, OpenCode's `generate` is not used, Codex `turn/steer` is not built, and nothing was run against a live host (`docs/sessions.md`, `docs/honesty.md`).

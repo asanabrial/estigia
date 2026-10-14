@@ -1,0 +1,3 @@
+section: The harness
+
+- **`estigia sessions` lists the sessions this machine has seen, with the issue each holds, and marks the silent and the ended.** Issue #67, first slice. A `sessions` table in `state.db` (schema 10) is written by `estigia session start` and `estigia session end` and joined with the run pointers; a session silent for more than six hours is shown as `stale` with the claim its pointer still names, and a pointer with no registry row is shown as `unregistered`. The mailbox, delivery on each runtime and the OpenCode and Codex accelerators are not part of this change (`docs/sessions.md`, `docs/honesty.md`).

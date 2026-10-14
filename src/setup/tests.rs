@@ -6402,9 +6402,9 @@ console.log(JSON.stringify(results));
     for result in &results {
         let label = result["label"].as_str().expect("a label");
         let expected = if label.starts_with("v1") {
-            serde_json::json!(["tool.execute.before"])
+            serde_json::json!(["tool.execute.before", "tool.execute.after"])
         } else {
-            serde_json::json!(["execute.before"])
+            serde_json::json!(["execute.before", "execute.after"])
         };
         assert_eq!(result["keys"], expected, "{result}");
     }
@@ -16985,6 +16985,11 @@ const path = require("node:path");
 if (path.basename(process.argv[1] ?? "") === "session") {
   const plan = JSON.parse(process.env.STUB_PLAN);
   fs.appendFileSync(process.env.STUB_LOG, JSON.stringify(["session", ...process.argv.slice(2)]) + "\n");
+  if (process.argv[2] === "deliver") {
+    if (plan.deliver_exit) process.exit(plan.deliver_exit);
+    fs.writeSync(1, plan.deliver ?? "");
+    process.exit(0);
+  }
   if (plan.hang) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60000);
   else {
     if (plan.signal) process.kill(process.pid, plan.signal);
@@ -17058,8 +17063,8 @@ fn the_pi_extension_appends_the_binarys_session_context_to_the_prompt_sections_a
         None,
     );
     assert_eq!(
-        said["logged"],
-        serde_json::json!([[
+        said["logged"][0],
+        serde_json::json!([
             "session",
             "start",
             "--session-id",
@@ -17068,7 +17073,7 @@ fn the_pi_extension_appends_the_binarys_session_context_to_the_prompt_sections_a
             "pi",
             "--reason",
             "startup"
-        ]])
+        ])
     );
     let run = &said["results"][1];
     assert_eq!(run["sections"]["estigia"], "RUN CONTEXT");
@@ -17170,7 +17175,50 @@ fn the_pi_extension_asks_again_for_every_run_so_a_claim_made_since_is_never_stal
         serde_json::json!({"stdout": "X\n"}),
         None,
     );
-    assert_eq!(said["logged"].as_array().map(Vec::len), Some(2), "{said}");
+    assert_eq!(said["logged"].as_array().map(Vec::len), Some(4), "{said}");
+}
+
+#[test]
+fn the_pi_extension_delivers_waiting_mail_as_its_own_prompt_section_at_before_agent_start() {
+    let said = drive_pi_session(
+        serde_json::json!([["session_start", {"reason": "startup"}], ["before_agent_start", {}]]),
+        "sess-6",
+        serde_json::json!({"stdout": "RUN CONTEXT\n", "deliver": "MAIL TEXT\n"}),
+        None,
+    );
+    assert_eq!(
+        said["logged"][1],
+        serde_json::json!([
+            "session",
+            "deliver",
+            "--session-id",
+            "sess-6",
+            "--runtime",
+            "pi"
+        ])
+    );
+    let run = &said["results"][1];
+    assert_eq!(run["sections"]["estigia-mail"], "MAIL TEXT");
+    assert_eq!(run["sections"]["estigia"], "RUN CONTEXT");
+    assert_eq!(run["sections"]["other"], "kept");
+}
+
+#[test]
+fn the_pi_extension_adds_no_mail_section_when_nothing_waits_or_the_mailbox_cannot_be_read() {
+    for plan in [
+        serde_json::json!({"stdout": "RUN CONTEXT\n"}),
+        serde_json::json!({"stdout": "RUN CONTEXT\n", "deliver_exit": 3}),
+    ] {
+        let said = drive_pi_session(
+            serde_json::json!([["session_start", {"reason": "startup"}], ["before_agent_start", {}]]),
+            "sess-7",
+            plan,
+            None,
+        );
+        let sections = &said["results"][1]["sections"];
+        assert_eq!(sections["estigia"], "RUN CONTEXT");
+        assert!(sections.get("estigia-mail").is_none(), "{sections}");
+    }
 }
 
 #[test]
@@ -21126,5 +21174,207 @@ fn a_workspace_install_refuses_pi_and_writes_nothing_for_it() {
             .next()
             .is_none(),
         "a refused install left files in the workspace"
+    );
+}
+
+const OPENCODE_MAIL_DRIVER: &str = r#"import plugin, { EstigiaWorkflowAuthority } from "./estigia-workflow-authority.mjs";
+
+const stub = (mail, calls) => (strings, ...values) => {
+  const session = strings[1]?.trim() === "session";
+  const call = session
+    ? ["session", String(values[1]), "--session-id", String(values[2]), "--runtime", String(values[3])]
+    : ["gate", ...values.slice(1).map(String)];
+  const chain = {
+    cwd() { return chain; },
+    quiet() { return chain; },
+    nothrow() {
+      calls.push(call);
+      const taking = session && call[1] === "deliver";
+      return Promise.resolve({ exitCode: 0, stdout: taking ? (mail.shift() ?? "") : "" });
+    },
+  };
+  return chain;
+};
+
+const verbs = (calls) => calls.filter((call) => call[0] === "session");
+
+const seenV1 = [];
+const hooks = await EstigiaWorkflowAuthority({
+  $: stub(["WAKE UP\n", "", "LOST\n"], seenV1),
+  directory: "/p",
+});
+const first = { output: "file contents" };
+await hooks["tool.execute.after"]({ tool: "read", sessionID: "ses_a" }, first);
+const second = { output: "more" };
+await hooks["tool.execute.after"]({ tool: "read", sessionID: "ses_a" }, second);
+const structured = { output: { not: "text" } };
+await hooks["tool.execute.after"]({ tool: "read", sessionID: "ses_a" }, structured);
+
+const record = (handed, kind, fails) => async (argument) => {
+  handed.push([kind, argument]);
+  if (fails) throw new Error("the service did not answer");
+};
+
+const deliverTo = async (sessionID, mail, session, calls = []) => {
+  const registered = [];
+  globalThis.Bun = { $: stub(mail, calls) };
+  await plugin.setup({
+    location: { directory: "/p" },
+    tool: { hook: async (name, callback) => { registered.push([name, callback]); } },
+    session,
+  });
+  await registered.find(([name]) => name === "execute.after")[1]({ tool: "read", sessionID });
+};
+
+const steered = [];
+const steeredCalls = [];
+await deliverTo(
+  "ses_b",
+  ["STEER ME\n"],
+  { prompt: record(steered, "prompt", false), synthetic: record(steered, "synthetic", false) },
+  steeredCalls,
+);
+
+const refused = [];
+await deliverTo(
+  "ses_c",
+  ["FALL BACK\n"],
+  { prompt: record(refused, "prompt", true), synthetic: record(refused, "synthetic", false) },
+);
+
+const absent = [];
+await deliverTo("ses_d", ["NO PROMPT\n"], { synthetic: record(absent, "synthetic", false) });
+
+const bareCalls = [];
+await deliverTo("ses_e", ["KEEP ME\n"], {}, bareCalls);
+
+console.log(JSON.stringify({
+  bare: verbs(bareCalls),
+  v1: {
+    first: first.output,
+    second: second.output,
+    structured: structured.output,
+    asked: verbs(seenV1),
+  },
+  steered: { handed: steered, asked: verbs(steeredCalls) },
+  refused,
+  absent,
+}));
+"#;
+
+fn run_opencode_mail_driver() -> serde_json::Value {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    std::fs::write(
+        root.path().join("estigia-workflow-authority.mjs"),
+        crate::setup::plugin::source(std::path::Path::new("/opt/estigia")),
+    )
+    .expect("the plugin writes");
+    let driver = root.path().join("drive-mail.mjs");
+    std::fs::write(&driver, OPENCODE_MAIL_DRIVER).expect("the driver writes");
+    let ran = std::process::Command::new("node")
+        .arg(&driver)
+        .current_dir(root.path())
+        .output()
+        .unwrap_or_else(|error| {
+            panic!(
+                "this test drives the generated OpenCode plugin, which is JavaScript, and `node` \
+                 could not be run ({error}). Install Node and re-run; it is not skipped, because \
+                 a plugin nothing executes is a delivery nothing measures."
+            )
+        });
+    assert!(
+        ran.status.success(),
+        "the mail driver failed: {}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    serde_json::from_slice(&ran.stdout).expect("the driver prints JSON")
+}
+
+#[test]
+fn the_opencode_plugin_appends_waiting_mail_to_a_tool_result_after_registering_the_session() {
+    let said = run_opencode_mail_driver();
+    let v1 = &said["v1"];
+    let first = v1["first"].as_str().expect("the first result");
+    assert!(
+        first.starts_with("file contents\n\n") && first.ends_with("WAKE UP"),
+        "{first}"
+    );
+    assert_eq!(v1["second"], "more", "no mail changed the result: {v1}");
+    assert_eq!(
+        v1["structured"],
+        serde_json::json!({"not": "text"}),
+        "a result the plugin cannot append to was left alone"
+    );
+    assert_eq!(
+        v1["asked"],
+        serde_json::json!([
+            [
+                "session",
+                "start",
+                "--session-id",
+                "ses_a",
+                "--runtime",
+                "opencode"
+            ],
+            [
+                "session",
+                "deliver",
+                "--session-id",
+                "ses_a",
+                "--runtime",
+                "opencode"
+            ],
+            [
+                "session",
+                "deliver",
+                "--session-id",
+                "ses_a",
+                "--runtime",
+                "opencode"
+            ]
+        ]),
+        "a session is registered once, a mailbox is not read for a result that cannot carry it"
+    );
+}
+
+#[test]
+fn the_opencode_plugin_steers_mail_in_through_the_service_prompt_when_it_answers() {
+    let said = run_opencode_mail_driver();
+    let handed = said["steered"]["handed"]
+        .as_array()
+        .expect("what was handed");
+    assert_eq!(handed.len(), 1, "{handed:?}");
+    assert_eq!(handed[0][0], "prompt");
+    assert_eq!(handed[0][1]["sessionID"], "ses_b");
+    assert_eq!(handed[0][1]["delivery"], "steer");
+    assert_eq!(handed[0][1]["text"], "STEER ME");
+}
+
+#[test]
+fn the_opencode_plugin_falls_back_to_a_synthetic_message_when_the_prompt_fails_or_is_absent() {
+    let said = run_opencode_mail_driver();
+    for (case, text) in [("refused", "FALL BACK"), ("absent", "NO PROMPT")] {
+        let handed = said[case].as_array().expect("what was handed");
+        let kinds: Vec<&str> = handed.iter().filter_map(|h| h[0].as_str()).collect();
+        assert_eq!(kinds.last(), Some(&"synthetic"), "{case}: {handed:?}");
+        let last = handed.last().expect("a hand-over");
+        assert_eq!(last[1]["text"], text, "{case}");
+        assert_eq!(last[1]["resume"], false, "{case}");
+        assert!(
+            handed
+                .iter()
+                .all(|h| h[0] != "prompt" || h[1]["delivery"] == "steer"),
+            "{case}: {handed:?}"
+        );
+    }
+}
+
+#[test]
+fn the_opencode_plugin_leaves_the_mailbox_unread_when_the_host_offers_no_way_to_hand_mail_over() {
+    let said = run_opencode_mail_driver();
+    assert_eq!(
+        said["bare"],
+        serde_json::json!([]),
+        "a host with neither prompt nor synthetic had its mailbox read, so the rows would be stamped delivered and lost"
     );
 }

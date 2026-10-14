@@ -175,6 +175,15 @@ pub enum Command {
     /// Say what is installed, where, and whether it is current.
     Status,
 
+    /// List the sessions that registered on this machine, with the issue each
+    /// holds, and mark the silent and the ended ones. With `send`, put a
+    /// message in one of them.
+    Sessions {
+        /// What to do beyond listing.
+        #[command(subcommand)]
+        action: Option<SessionsAction>,
+    },
+
     /// Check that everything a run needs before it swears actually works.
     ///
     /// Read-only. A refusal otherwise arrives one edit at a time with no way to
@@ -546,6 +555,38 @@ pub enum Command {
     },
 }
 
+/// What `estigia sessions` does beyond listing.
+#[derive(Debug, Subcommand)]
+pub enum SessionsAction {
+    /// Put a message in another session's mailbox. It is delivered at that
+    /// session's next hook point and recorded as delivered when it is.
+    Send {
+        /// The recipient's run id, as `estigia sessions` lists it.
+        #[arg(value_parser = present)]
+        session: String,
+
+        /// The message.
+        #[arg(conflicts_with = "file", required_unless_present = "file")]
+        text: Option<String>,
+
+        /// Read the message from this file instead.
+        #[arg(long)]
+        file: Option<std::path::PathBuf>,
+
+        /// The sending run's id; the ambient `ESTIGIA_RUN_ID` when omitted.
+        #[arg(long, value_parser = present)]
+        run_id: Option<String>,
+
+        /// The sending session's id, from which its run id is derived.
+        #[arg(long, value_parser = session)]
+        session_id: Option<String>,
+
+        /// The runtime whose run ids `--session-id` derives.
+        #[arg(long, value_parser = runtime)]
+        runtime: Option<String>,
+    },
+}
+
 /// What `estigia session` does.
 #[derive(Debug, Subcommand)]
 pub enum SessionAction {
@@ -568,6 +609,17 @@ pub enum SessionAction {
         /// The session the host left to begin this one.
         #[arg(long, value_parser = session)]
         previous_session_id: Option<String>,
+    },
+    /// Print the messages other sessions left for this one, and record them as
+    /// delivered. Prints nothing when none wait.
+    Deliver {
+        /// The host's session id, from which the run id is derived.
+        #[arg(long, value_parser = session)]
+        session_id: String,
+
+        /// The runtime whose run ids `--session-id` derives.
+        #[arg(long, value_parser = runtime)]
+        runtime: String,
     },
     /// Forget the run's pointer, and only when the session is over. The claim
     /// on the tracker is untouched.

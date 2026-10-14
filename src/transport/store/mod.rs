@@ -15,9 +15,11 @@ mod filesystem;
 mod import;
 mod jobs;
 mod ledger;
+mod messages;
 mod outbox;
 mod records;
 mod schema;
+mod sessions;
 mod snapshot;
 
 #[cfg(test)]
@@ -33,8 +35,10 @@ pub(crate) use jobs::{Inserted, Job, NewJob};
 pub(crate) use ledger::{Ledger, store_path, viewer_login};
 #[cfg(test)]
 pub(crate) use ledger::{forget_scratch_store, local_bodies};
+pub(crate) use messages::{Message, MessageSent};
 pub(crate) use outbox::{OutboxKind, OutboxRow, OutboxState};
 pub(crate) use records::{Recorded, TaskChange, TaskRow};
+pub(crate) use sessions::{SessionRow, SessionSeen};
 pub(crate) use snapshot::{age_in_words, snapshot_age, snapshots_dir};
 
 const BUSY_WAIT: Duration = Duration::from_millis(5000);

@@ -23,7 +23,10 @@ use args::ScopeArg;
 pub(crate) mod args;
 mod loop_stop;
 
-pub use args::{Cli, Command, ConfigAction, GoalAction, ReviewAction, SessionAction, StoreAction};
+pub use args::{
+    Cli, Command, ConfigAction, GoalAction, ReviewAction, SessionAction, SessionsAction,
+    StoreAction,
+};
 
 /// A note for whoever is watching, on standard error.
 macro_rules! note {
@@ -43,6 +46,8 @@ macro_rules! say {
         }
     }};
 }
+
+mod sessions;
 
 /// The same line, into a string rather than onto the terminal.
 macro_rules! line {
@@ -305,6 +310,8 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
         }
 
         Command::Status => status(cli.json),
+
+        Command::Sessions { action } => sessions_command(action.as_ref(), cli.json),
 
         Command::Update => update(cli.json),
 
@@ -6021,6 +6028,37 @@ pub(crate) struct GoalReading {
     pub(crate) stop_after: Option<String>,
 }
 
+/// `estigia sessions`: the list, or `send`.
+fn sessions_command(action: Option<&SessionsAction>, json: bool) -> Result<(), Refusal> {
+    match action {
+        None => sessions::sessions(json),
+        Some(SessionsAction::Send {
+            session,
+            text,
+            file,
+            run_id,
+            session_id,
+            runtime,
+        }) => {
+            let ambient = std::env::var("ESTIGIA_RUN_ID").ok();
+            let sender = gate_identity(
+                "estigia sessions send <run-id> \"<text>\"",
+                run_id.as_deref(),
+                session_id.as_deref(),
+                runtime.as_deref(),
+                ambient.as_deref(),
+            )?;
+            sessions::send(
+                session,
+                text.as_deref(),
+                file.as_deref(),
+                sender.as_deref(),
+                json,
+            )
+        }
+    }
+}
+
 /// `estigia session`: the context a host's session starts with, and the end of it.
 fn session_lifecycle(action: &SessionAction, json: bool) -> Result<(), Refusal> {
     match action {
@@ -6033,6 +6071,7 @@ fn session_lifecycle(action: &SessionAction, json: bool) -> Result<(), Refusal> 
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let context = gate_context(&cwd.to_string_lossy())?;
             harness::session::maintain(&context.state_root);
+            harness::registry::record_start(&context.state_root, runtime, session_id, &cwd);
             let run = harness::session::load(
                 &context.state_root,
                 &harness::session::run_id(runtime, session_id),
@@ -6053,6 +6092,10 @@ fn session_lifecycle(action: &SessionAction, json: bool) -> Result<(), Refusal> 
             }
             Ok(())
         }
+        SessionAction::Deliver {
+            session_id,
+            runtime,
+        } => sessions::deliver(runtime, session_id, json),
         SessionAction::End {
             session_id,
             runtime,
@@ -6066,6 +6109,12 @@ fn session_lifecycle(action: &SessionAction, json: bool) -> Result<(), Refusal> 
             }
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let context = gate_context(&cwd.to_string_lossy())?;
+            harness::registry::record_end(
+                &context.state_root,
+                runtime,
+                session_id,
+                reason.as_deref(),
+            );
             harness::session::forget(
                 &context.state_root,
                 &harness::session::run_id(runtime, session_id),

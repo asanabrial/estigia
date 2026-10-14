@@ -1069,6 +1069,14 @@ pub fn run_as(
         Event::PrePush => json!({}),
         Event::SessionStart => {
             session::maintain(&context.state_root);
+            if !input.session_id.trim().is_empty() {
+                super::registry::record_start(
+                    &context.state_root,
+                    session::runtime_of_agent(host),
+                    &input.session_id,
+                    &context.repo_dir,
+                );
+            }
             let run = session::load(&context.state_root, &run_id);
             session_start_response(context, &run)
         }
@@ -1078,6 +1086,12 @@ pub fn run_as(
             // share rather than a run, and deleting it would be a destructive
             // act on an unknown identity.
             if !input.session_id.trim().is_empty() {
+                super::registry::record_end(
+                    &context.state_root,
+                    session::runtime_of_agent(host),
+                    &input.session_id,
+                    None,
+                );
                 session::forget(&context.state_root, &run_id);
             }
             json!({})
@@ -1348,9 +1362,26 @@ pub fn run_as(
                 &decision,
                 &[],
             );
-            response_in(dialect, &decision)
+            let answer = response_in(dialect, &decision);
+            if agent_absent && !input.session_id.trim().is_empty() {
+                return with_mail(context, dialect, &recorded, answer);
+            }
+            answer
         }
     }
+}
+
+fn with_mail(context: &GateContext, dialect: Dialect, run_id: &str, mut answer: Value) -> Value {
+    let decided = answer["hookSpecificOutput"]["permissionDecision"].as_str();
+    if dialect != Dialect::ClaudeCode || matches!(decided, Some("deny" | "ask")) {
+        return answer;
+    }
+    let Some(text) = super::mailbox::deliver(&context.state_root, run_id) else {
+        return answer;
+    };
+    answer["hookSpecificOutput"]["hookEventName"] = json!("PreToolUse");
+    answer["hookSpecificOutput"]["additionalContext"] = json!(text);
+    answer
 }
 
 /// The JSON a `Stop` hook returns to keep the turn going.
@@ -4183,5 +4214,71 @@ mod tests {
         at_minutes(20 * 60, || {
             assert_eq!(run(Event::Stop, &input, Some(&closed_context())), json!({}));
         });
+    }
+
+    #[test]
+    fn mail_rides_only_on_an_answer_that_decides_nothing_and_a_refusal_keeps_it_waiting() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let context = GateContext {
+            state_root: directory.path().join("runs"),
+            ..nowhere()
+        };
+        let path = crate::transport::store::beside(&context.state_root);
+        let store = crate::transport::store::Store::open(&path).expect("the store opens");
+        store
+            .message_sent(
+                &crate::transport::store::MessageSent {
+                    sender_run_id: None,
+                    recipient_run_id: "claude-aaaa",
+                    body: "wait for me",
+                },
+                10,
+            )
+            .expect("the message is recorded");
+
+        let refusal = crate::outcome::Refusal::not_started(
+            "unexpected-state",
+            "not now",
+            crate::outcome::Resolution::run("estigia status"),
+        );
+        for refused in [
+            Dialect::ClaudeCode.deny(&refusal),
+            Dialect::ClaudeCode.ask(&refusal),
+        ] {
+            assert_eq!(
+                with_mail(
+                    &context,
+                    Dialect::ClaudeCode,
+                    "claude-aaaa",
+                    refused.clone()
+                ),
+                refused
+            );
+        }
+        assert_eq!(
+            with_mail(&context, Dialect::Cursor, "claude-aaaa", json!({})),
+            json!({})
+        );
+        assert_eq!(
+            store
+                .messages_waiting_for()
+                .expect("counts")
+                .get("claude-aaaa"),
+            Some(&1)
+        );
+
+        let allowed = with_mail(
+            &context,
+            Dialect::ClaudeCode,
+            "claude-aaaa",
+            Dialect::ClaudeCode.allow("inside the claim"),
+        );
+        assert_eq!(allowed["hookSpecificOutput"]["permissionDecision"], "allow");
+        assert!(
+            allowed["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .is_some_and(|text| text.contains("wait for me")),
+            "{allowed}"
+        );
     }
 }
