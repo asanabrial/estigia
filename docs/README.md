@@ -12,6 +12,7 @@ the document that owns it, and follows that document's own links from there.
 | [`refusal-classes.md`](refusal-classes.md) | The four classes a refusal carries, what each tells the caller to do, and where every code sits | you are reading a refusal, or adding a code |
 | [`github-binding.md`](github-binding.md) | The incidents and arguments behind the GitHub binding's rules | you are asking why a binding rule exists |
 | [`review-status.md`](review-status.md) | What `review_status` answers for each state of a review, what it reads, and why a stale answer is refused | you are acting on, or changing, the next step of a review |
+| [`sessions.md`](sessions.md) | What the session registry and the mailbox record, what `estigia sessions` shows, where each runtime delivers, and which parts of issue #67 do not exist yet | you are asking which sessions are alive and what each holds |
 | [`generated-files.md`](generated-files.md) | How a repository declares a generated file, which commit the declaration is read from, and what reproducing it answers | you are declaring a lockfile, or reading `generated_files` |
 | [`review-cost.md`](review-cost.md) | What a blind review costs, measured, and what actually spends it | you are budgeting a review |
 | [`honesty.md`](honesty.md) | What this instrument does **not** check, each gap with the measurement that found it | you are about to believe a claim |

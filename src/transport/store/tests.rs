@@ -270,7 +270,7 @@ fn the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema() {
     assert_eq!(mode, "wal");
     assert_eq!(keys, 1);
     assert_eq!(synchronous, 2, "FULL");
-    assert_eq!(store.schema_version().expect("reads"), 9);
+    assert_eq!(store.schema_version().expect("reads"), 11);
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn reopening_keeps_the_schema_and_a_newer_one_is_refused() {
             .expect("reopens")
             .schema_version()
             .expect("reads"),
-        9
+        11
     );
 
     rusqlite::Connection::open(&path)
@@ -495,7 +495,7 @@ fn doctor_reports_the_path_the_schema_and_the_last_hours_calls() {
         panic!("a readable store is fine: {:?}", check.health);
     };
     assert!(
-        detail.contains("state.db") && detail.contains("schema 9"),
+        detail.contains("state.db") && detail.contains("schema 11"),
         "{detail}"
     );
     assert!(detail.contains("3 GraphQL, 0 REST"), "{detail}");
@@ -702,7 +702,7 @@ fn a_migration_another_opener_finished_while_this_one_waited_is_not_applied_twic
     })
     .expect("the slower opener finds the schema already laid down");
 
-    assert_eq!(slow.schema_version().expect("reads"), 9);
+    assert_eq!(slow.schema_version().expect("reads"), 11);
 }
 
 #[test]
@@ -1328,7 +1328,7 @@ fn recorded(inserted: super::jobs::Inserted) -> bool {
 #[test]
 fn migration_five_creates_the_review_jobs_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 9);
+    assert_eq!(store.schema_version().expect("a version"), 11);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('review_jobs')")
@@ -1364,7 +1364,7 @@ fn migration_five_creates_the_review_jobs_table() {
 #[test]
 fn migration_six_creates_the_blocked_clauses_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 9);
+    assert_eq!(store.schema_version().expect("a version"), 11);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('blocked_clauses')")
@@ -1381,7 +1381,7 @@ fn migration_six_creates_the_blocked_clauses_table() {
 #[test]
 fn migration_seven_creates_the_record_tables() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 9);
+    assert_eq!(store.schema_version().expect("a version"), 11);
     for (table, wanted) in [
         ("decisions", ["at", "body"].as_slice()),
         ("roles", ["at", "body"].as_slice()),
@@ -2568,4 +2568,151 @@ mod provisional_ledger {
             .expect("marked");
         assert_eq!(store.unsent_outbox().expect("counts"), 0);
     }
+}
+
+fn seen(store: &Store, run_id: &str, now: u64) {
+    store
+        .session_seen(
+            &super::SessionSeen {
+                run_id,
+                runtime: "pi",
+                session_id: "host-id",
+                repo_dir: Some("/work/repo"),
+            },
+            now,
+        )
+        .expect("the session is recorded");
+}
+
+#[test]
+fn a_session_seen_again_keeps_its_start_and_moves_its_last_seen() {
+    let (_directory, store) = open();
+    seen(&store, "pi-aaaa", 100);
+    seen(&store, "pi-aaaa", 250);
+
+    let rows = store.sessions().expect("the sessions read");
+    assert_eq!(rows.len(), 1);
+    assert_eq!((rows[0].started_at, rows[0].last_seen), (100, 250));
+    assert_eq!(rows[0].runtime, "pi");
+    assert_eq!(rows[0].repo_dir.as_deref(), Some("/work/repo"));
+    assert_eq!(rows[0].ended_at, None);
+}
+
+#[test]
+fn an_ended_session_stays_listed_and_a_restart_reopens_it() {
+    let (_directory, store) = open();
+    seen(&store, "pi-aaaa", 100);
+    store
+        .session_ended("pi-aaaa", Some("quit"), 300)
+        .expect("the end is recorded");
+
+    let rows = store.sessions().expect("the sessions read");
+    assert_eq!(rows[0].ended_at, Some(300));
+    assert_eq!(rows[0].end_reason.as_deref(), Some("quit"));
+
+    seen(&store, "pi-aaaa", 400);
+    let rows = store.sessions().expect("the sessions read");
+    assert_eq!((rows[0].ended_at, rows[0].end_reason.clone()), (None, None));
+}
+
+#[test]
+fn ending_a_session_nobody_registered_invents_no_row() {
+    let (_directory, store) = open();
+    store
+        .session_ended("pi-ghost", None, 300)
+        .expect("the end is a no-op");
+    assert!(store.sessions().expect("the sessions read").is_empty());
+}
+
+#[test]
+fn the_sessions_read_does_not_create_the_store() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("state.db");
+    assert!(
+        super::open_for_read(&path)
+            .expect("absent is an answer")
+            .is_none()
+    );
+    assert!(!path.exists());
+}
+
+fn mail(store: &Store, from: Option<&str>, to: &str, body: &str, now: u64) -> i64 {
+    store
+        .message_sent(
+            &super::MessageSent {
+                sender_run_id: from,
+                recipient_run_id: to,
+                body,
+            },
+            now,
+        )
+        .expect("the message is recorded")
+}
+
+#[test]
+fn migration_eleven_creates_the_messages_table() {
+    let (_directory, store) = open();
+    let columns: Vec<String> = store
+        .connection()
+        .prepare("SELECT name FROM pragma_table_info('messages')")
+        .expect("prepares")
+        .query_map([], |row| row.get(0))
+        .expect("queries")
+        .collect::<Result<_, _>>()
+        .expect("reads");
+    for wanted in [
+        "id",
+        "sender_run_id",
+        "recipient_run_id",
+        "body",
+        "created_at",
+        "delivered_at",
+    ] {
+        assert!(columns.iter().any(|name| name == wanted), "{columns:?}");
+    }
+}
+
+#[test]
+fn a_message_is_taken_once_in_the_order_it_was_sent_and_stamped_delivered() {
+    let (_directory, store) = open();
+    mail(&store, Some("claude-aaaa"), "pi-bbbb", "first", 100);
+    mail(&store, None, "pi-bbbb", "second", 110);
+    mail(&store, None, "pi-cccc", "someone else's", 120);
+
+    let taken = store.messages_taken("pi-bbbb", 200).expect("taken");
+    let bodies: Vec<&str> = taken.iter().map(|m| m.body.as_str()).collect();
+    assert_eq!(bodies, ["first", "second"]);
+    assert_eq!(taken[0].sender_run_id.as_deref(), Some("claude-aaaa"));
+    assert_eq!(taken[1].sender_run_id, None);
+
+    assert!(
+        store
+            .messages_taken("pi-bbbb", 300)
+            .expect("again")
+            .is_empty()
+    );
+    let stamped: Vec<Option<i64>> = store
+        .connection()
+        .prepare("SELECT delivered_at FROM messages ORDER BY id")
+        .expect("prepares")
+        .query_map([], |row| row.get(0))
+        .expect("queries")
+        .collect::<Result<_, _>>()
+        .expect("reads");
+    assert_eq!(stamped, [Some(200), Some(200), None]);
+}
+
+#[test]
+fn the_counts_name_what_waits_for_a_recipient_and_what_a_sender_still_has_undelivered() {
+    let (_directory, store) = open();
+    mail(&store, Some("claude-aaaa"), "pi-bbbb", "one", 100);
+    mail(&store, Some("claude-aaaa"), "pi-bbbb", "two", 101);
+    mail(&store, Some("claude-aaaa"), "pi-cccc", "three", 102);
+    store.messages_taken("pi-cccc", 150).expect("taken");
+
+    let waiting = store.messages_waiting_for().expect("counts");
+    assert_eq!(waiting.get("pi-bbbb"), Some(&2));
+    assert_eq!(waiting.get("pi-cccc"), None);
+    let undelivered = store.messages_undelivered_from().expect("counts");
+    assert_eq!(undelivered.get("claude-aaaa"), Some(&2));
 }

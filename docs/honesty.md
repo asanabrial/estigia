@@ -10044,3 +10044,64 @@ test that drives the binary. What it does not measure:
   most one mebibyte; a binary file, or one counted against a checkout with no commits, has none. An
   unmerged path is marked `M`.
 - **Fifteen seconds is the bound on each Git call**, chosen rather than measured.
+
+## The session registry
+
+`estigia sessions` lists the rows `estigia session start` and `estigia session end` write to the `sessions` table,
+joined with the run pointers. What this measures is two pipe tests that drive the binary — a started, a crashed,
+an unregistered and an ended session, with the crashed row aged in the store — and four store unit tests. What it
+does not measure:
+
+- **`last_seen` is refreshed by a session start and by a verified claim, not by every gated write.** A session
+  that holds no claim and runs past the six-hour bound reads `stale` while alive. The bound is a constant, chosen
+  to err toward showing a live session as stale rather than a dead one as live.
+- **Only sessions whose host calls `estigia session start` or fires a `SessionStart` hook Estigia registered are
+  registered.** Pi, Claude Code and Codex do; OpenCode's gate plugin registers a session the first time a tool call
+  of it completes, so an OpenCode session that has made none is unknown to the registry. The rest appear as
+  `unregistered`, and only while their pointer names an issue.
+- **A pointer is read through `holdings`, which finds a file only under the name its run id gives itself.** A run id
+  with an uppercase letter is filed under a digested name, so its pointer is not found and its issue is not shown.
+  Minted ids from the hosts measured here are lowercase; the case was found while writing the test and is not fixed.
+- **No pid, no host query.** Nothing asks a runtime whether a session is alive.
+
+## The session mailbox
+
+`estigia sessions send` writes a `messages` row, `estigia session deliver` takes and stamps the pending rows, and
+`before_agent_start` (Pi) and `PreToolUse` (Claude Code, Codex) call it. What this measures: store unit tests for the
+send, the single-statement take and the two counts; pipe tests that drive the binary through send, list, deliver,
+refusal and an ended recipient; one pipe test that drives the Claude Code and the Codex hook through the real
+binary and checks the answer carries the mail once and decides no permission; one unit test that a refusal keeps the
+mail waiting; and Node tests that drive the generated Pi extension. What it does not measure:
+
+- **No runtime was run live.** The Claude Code and Codex hook answers were read from this crate's own output, not
+  from a host. Whether Claude Code puts `hookSpecificOutput.additionalContext` of a `PreToolUse` answer in front of
+  the model, and whether the Codex build in use reads that field from `PreToolUse` at all, are taken from the hosts'
+  documentation and unverified. The Codex terminal UI and the Codex daemon were not driven: a Codex session that ignores the field
+  receives nothing, and the row is nonetheless stamped delivered, because the binary cannot tell.
+- **Pi's section lasts one turn.** The extension adds the text to that turn's prompt sections, which Pi rebuilds for
+  the next turn, so a model that does not act on it in that turn does not see it again. Whether this Pi version keeps
+  the section out of the stored conversation was not measured.
+- **No Claude Code or Codex hook other than `PreToolUse` delivers.** A session that makes no tool call is not
+  reached, on any runtime. `UserPromptSubmit` and `PostToolUse` are not registered by setup.
+- **OpenCode was driven under `node` against stubs, not against a host.** Three Node tests drive the generated
+  plugin: OpenCode 1's `tool.execute.after` appending to a string result, OpenCode 2's `execute.after` steering
+  through a stub `ctx.session.prompt`, and the fallback to `ctx.session.synthetic` when that throws or is absent.
+  Unverified: that OpenCode 1 puts `output.output` in front of the model, that OpenCode 2's `ctx.session.prompt`
+  accepts `delivery: "steer"` mid-turn (the loop plugin uses the same call with `queue`), and that every OpenCode 2
+  build has an `execute.after` hook. A result whose `output` is not a string is left alone and its mail stays pending,
+  and on OpenCode 2 the mailbox is not read at all when the host offers neither `ctx.session.prompt` nor
+  `ctx.session.synthetic`. A known loss window remains: when one of them exists and throws after the rows were taken,
+  the rows are stamped delivered that the host refused, the text goes to standard error, and the sender sees them as
+  delivered. No small fix exists, because the take and the stamp are one statement.
+- **OpenCode costs one extra process per tool call.** The gate asks only for writes; the mailbox is read after every
+  tool, and `estigia session deliver` answers from a read-only open of the store when nothing waits.
+- **No accelerator wakes an idle session, and none was run live.** OpenCode's `generate` is not used, nothing in
+  the plugin learns that a row was written, and Codex `turn/steer` (daemon threads) is not built. The Codex terminal
+  UI and the Codex daemon stay undriven (above).
+- **A delivery is stamped before the host acknowledges it.** A hook process killed between the stamp and the write to
+  standard output loses the message as delivered. The window is one statement wide and was not provoked.
+- **"Read" is not recorded.** `delivered_at` is the observable event; no host reports that the model read the text.
+- **The counts in `estigia sessions` belong to listed sessions.** A message whose sender has neither a registry row
+  nor a run pointer is counted in the table and shown against nobody.
+- **A message is text from another session.** Delivery says so in its first lines; nothing stops a model from acting
+  on it, and nothing here measures how the hosts' models treat it.

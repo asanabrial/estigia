@@ -138,21 +138,65 @@ const before = (tool, args, cwd, shell, session) => {{
   return gate(name, args, cwd, shell, session);
 }};
 
+const introduced = new Set();
+
+const mailOf = async (shell, cwd, session) => {{
+  if (typeof shell !== "function" || typeof session !== "string" || session.trim() === "") return "";
+  const ask = async (verb) => {{
+    try {{
+      const answer = await shell`${{ESTIGIA}} session ${{verb}} --session-id ${{session}} --runtime ${{RUNTIME}}`
+        .cwd(cwd)
+        .quiet()
+        .nothrow();
+      if (answer?.exitCode === 0) return String(answer.stdout ?? "").trim();
+      console.error(`estigia: session ${{verb}} did not answer (exit ${{answer?.exitCode}})`);
+    }} catch (error) {{
+      console.error(`estigia: session ${{verb}} could not be run (${{String(error?.message ?? error).trim()}})`);
+    }}
+    return "";
+  }};
+  if (!introduced.has(session)) {{
+    introduced.add(session);
+    await ask("start");
+  }}
+  return ask("deliver");
+}};
+
+const handOver = async (session, sessionID, text) => {{
+  try {{
+    if (typeof session?.prompt === "function") {{
+      await session.prompt({{ sessionID, text, delivery: "steer" }});
+      return;
+    }}
+  }} catch (error) {{
+    console.error(`estigia: the host would not steer a message in (${{String(error?.message ?? error).trim()}})`);
+  }}
+  try {{
+    await session.synthetic({{ sessionID, text, description: "Estigia mailbox", resume: false }});
+  }} catch (error) {{
+    console.error(
+      `estigia: a message taken from the mailbox could not be handed to the host ` +
+        `(${{String(error?.message ?? error).trim()}}) and is lost: ${{text}}`,
+    );
+  }}
+}};
+
 // OpenCode 1. `directory` and `worktree` arrive in the context, exactly as they
 // did for the function export older releases read; the session id arrives in the
 // hook's own input, where the host's published types carry it, and is forwarded
 // the same way OpenCode 2's event is. A hook input without one, with no run id
 // exported around the plugin, keeps the checkout road.
 export const EstigiaWorkflowAuthority = async ({{ $, directory, worktree }}) => {{
+  const cwd = worktree ?? directory ?? process.cwd();
   return {{
     "tool.execute.before": async (input, output) =>
-      before(
-        input?.tool,
-        output?.args,
-        worktree ?? directory ?? process.cwd(),
-        $,
-        input?.sessionID,
-      ),
+      before(input?.tool, output?.args, cwd, $, input?.sessionID),
+    "tool.execute.after": async (input, output) => {{
+      if (output === null || typeof output !== "object") return;
+      if (output.output !== undefined && typeof output.output !== "string") return;
+      const text = await mailOf($, cwd, input?.sessionID);
+      if (text) output.output = `${{output.output ?? ""}}\n\n${{text}}`;
+    }},
   }};
 }};
 
@@ -167,6 +211,15 @@ export default {{
     await ctx.tool.hook("execute.before", async (event) => {{
       await before(event?.tool, event?.input, cwd, globalThis.Bun?.$, event?.sessionID);
     }});
+    try {{
+      await ctx.tool.hook("execute.after", async (event) => {{
+        if (typeof ctx?.session?.prompt !== "function" && typeof ctx?.session?.synthetic !== "function") return;
+        const text = await mailOf(globalThis.Bun?.$, cwd, event?.sessionID);
+        if (text) await handOver(ctx?.session, event.sessionID, text);
+      }});
+    }} catch (error) {{
+      console.error(`estigia: this host takes no execute.after hook, so no mail is delivered (${{String(error?.message ?? error).trim()}})`);
+    }}
   }},
   // OpenCode 1 reads the default object and hands `server` the same context the
   // named export receives; measured on 1.17.13, 1.18.20 and 1.18.31, none of
@@ -237,6 +290,7 @@ const GATE_MAX_BUFFER = 8 * 1024 * 1024;
 const STATUS_TIMEOUT_MS = 5000;
 const SESSION_TIMEOUT_MS = 5000;
 const SECTION = "estigia";
+const MAIL_SECTION = "estigia-mail";
 const CARD = "estigia-refusal";
 const TITLE = "Estigia";
 const ASKED = 4;
@@ -646,6 +700,12 @@ export default function (pi) {
     }
     options.sections ??= {};
     options.sections[SECTION] = text;
+    const own = sessionOf(ctx);
+    if (filled(own) && !rootOf(own, ctx)) {
+      const mail = await askSession("deliver", own, [], ctx?.cwd ?? process.cwd());
+      if (mail.text) options.sections[MAIL_SECTION] = mail.text;
+      else if (mail.why) console.error(`estigia: the mailbox was not read (${mail.why})`);
+    }
     return undefined;
   });
   pi.on("session_shutdown", async (event, ctx) => {

@@ -166,7 +166,7 @@ Five invariants, and the tests are named after them:
 
    `~/.estigia/` splits the difference, and the line between the two halves is *live run state*
    against *what the person keeps*. The run pointers, `state.db` — which holds the decision history,
-   the durable role log and the per-issue workflow history — any stand-down record and the stop-after
+   the durable role log, the per-issue workflow history, the session registry and the mailbox — any stand-down record and the stop-after
    requests hold what and what was last asked: they go with the **last** agent, so `uninstall --all`
    with nothing left installed takes them — by name, and an empty directory only, so a file of the
    operator's own keeps the directory. Taking them at that point is the operator's recorded
@@ -593,6 +593,17 @@ unless it already begins `Goal`) as well as `text`, because OpenCode 2.0.20 rend
 `delivery: "queue"`, and state through `ctx.storage` under `goal-loop:goal:` and `goal-loop:loop:`.
 Ownership follows the stored `directory`, never the event's location, exactly as the Estigia loop
 plugin's does.
+
+## The OpenCode gate plugin's mailbox
+
+The gate plugin `estigia-workflow-authority.js` also delivers the session mailbox ([`sessions.md`](sessions.md)),
+and it decides nothing by doing so. After a tool call completes it asks `estigia session deliver --session-id <id>
+--runtime opencode`, and the first time it sees a session id it runs `estigia session start` for it, which registers
+the session so another session can address it. OpenCode 1's `tool.execute.after` appends the text to the tool's
+string result. OpenCode 2's `execute.after` hands it to `ctx.session.prompt` with `delivery: "steer"` and, when that
+is absent or throws, to `ctx.session.synthetic`. On OpenCode 2 it reads nothing when the host offers neither of those two functions, so the rows stay pending. A call the gate refused never reaches the after hook, so it takes no
+mail, and a result the plugin cannot append to is left without a read of the mailbox. Unlike the gate, this runs after
+every tool, not only the writes. A host without an `execute.after` hook keeps the gate and delivers nothing.
 
 ## The OpenCode review relay plugin
 

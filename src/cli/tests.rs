@@ -111,6 +111,12 @@ fn inventory() -> Vec<Refusal> {
         super::store_import_unreadable(crate::transport::Failure::Read(
             "the open issues and the local store could not be read".to_owned(),
         )),
+        super::sessions::unreadable("the local store could not be read"),
+        super::sessions::source_unreadable(std::path::Path::new("note.txt"), "no such file"),
+        crate::harness::mailbox::empty(),
+        crate::harness::mailbox::too_long(9000),
+        crate::harness::mailbox::recipient_unknown("pi-ghost"),
+        crate::harness::mailbox::unavailable("the local store could not be opened"),
         Refusal::not_started(
             "read-failed",
             "the reviewer's answer could not be read from standard input",

@@ -124,13 +124,17 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Seventy tests **require** `node` on the path, and all seventy drive the OpenCode plugins and
+   --no-deps`. Seventy-six tests **require** `node` on the path, and all seventy-six drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
-   let a gate defect stand. Four are on the gate plugin,
+   let a gate defect stand. Eight are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
    `the_plugin_hands_the_gate_the_directory_every_write_lands_in`,
-   `the_opencode_plugin_hands_an_oversized_input_to_the_gate_on_standard_input` and
-   `the_plugin_says_so_when_the_gate_returns_no_exit_code`; two drive the Pi gate extension's display,
+   `the_opencode_plugin_hands_an_oversized_input_to_the_gate_on_standard_input`,
+   `the_plugin_says_so_when_the_gate_returns_no_exit_code`, and four that drive its mail delivery,
+   `the_opencode_plugin_appends_waiting_mail_to_a_tool_result_after_registering_the_session`,
+   `the_opencode_plugin_steers_mail_in_through_the_service_prompt_when_it_answers`,
+   `the_opencode_plugin_falls_back_to_a_synthetic_message_when_the_prompt_fails_or_is_absent` and
+   `the_opencode_plugin_leaves_the_mailbox_unread_when_the_host_offers_no_way_to_hand_mail_over`; two drive the Pi gate extension's display,
 `the_pi_extension_shows_the_claim_the_binary_reports_and_clears_it_when_there_is_none` and
 `the_pi_extension_draws_a_refusal_card_with_the_binarys_words_and_asks_the_model_for_nothing`; seven drive the optional loop
    plugin (`the_loop_plugin_continues_while_estigia_says_there_is_work`,
@@ -160,12 +164,14 @@ a second copy that will disagree.
    `the_pi_extension_shows_estigia_doctor_unchanged_to_the_person_and_asks_the_model_for_nothing`,
    `the_pi_extension_shows_estigia_changes_to_the_person_and_asks_the_model_for_nothing` and
    `the_pi_extension_shows_a_widget_counting_the_checkouts_that_hold_uncommitted_work`;
-   six drive the Pi gate extension's session context through `drive_pi_session` —
+   eight drive the Pi gate extension's session context through `drive_pi_session` —
    `the_pi_extension_appends_the_binarys_session_context_to_the_prompt_sections_and_replaces_nothing`,
    `the_pi_extension_forwards_why_a_session_started_and_which_session_it_came_from`,
    `the_pi_extension_says_the_session_context_is_unknown_when_the_binary_does_not_answer`,
    `the_pi_extension_asks_again_for_every_run_so_a_claim_made_since_is_never_stale`,
-   `the_pi_extension_ends_the_session_once_even_when_shutdown_fires_twice` and
+   `the_pi_extension_ends_the_session_once_even_when_shutdown_fires_twice`,
+   `the_pi_extension_delivers_waiting_mail_as_its_own_prompt_section_at_before_agent_start`,
+   `the_pi_extension_adds_no_mail_section_when_nothing_waits_or_the_mailbox_cannot_be_read` and
    `a_pi_child_asks_about_the_root_session_and_never_ends_it`;
    and three drive the Pi review relay extension —
    `the_pi_review_relay_materialises_the_prompt_and_admits_the_answer`,
@@ -200,7 +206,7 @@ a second copy that will disagree.
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that seventy tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that seventy-six tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here

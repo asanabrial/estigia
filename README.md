@@ -117,6 +117,8 @@ Look before you leap, at any time:
 ```sh
 estigia setup claude-code --dry-run   # exactly what would change, writes nothing
 estigia status                        # what is installed, where, and what runs still hold
+estigia sessions                      # the sessions seen on this machine, the issue each holds, and which went silent
+estigia sessions send <run-id> "..."   # leave a message in another session's mailbox; its next hook point delivers it
 estigia doctor                        # skill, skill-assets, gh, remote, guard, prune, pi-subagents, lockfiles, permission — read-only
 estigia prune                         # branches and checkouts no delivery owns; --confirm removes
 estigia changes                       # uncommitted work in every checkout, held or orphan — read-only
