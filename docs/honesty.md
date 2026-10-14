@@ -4067,6 +4067,12 @@ pointer that leaves it names the document it points at.
     delegation entirely, the harder case the rule exists for, is exactly the one this record cannot
     see.
 
+    **A write outside the claimed checkout is not counted.** The record takes only a call the gate
+    answered `Allow`, and a routine write to an absolute path no covered checkout reaches (a scratchpad
+    file such as a PR body) is answered `Outside` at every age of the claim's verification, inside the
+    renewal window as well as after it. It used to be `Allow` inside the window and so was recorded
+    there only. A write that cannot be placed, and every relative path, is still read as inside.
+
     **A gate cannot judge "non-trivial", and this adds none.** Nothing here refuses an inline write,
     whatever `SKILL.md`'s Direct Work Delegation table says crossed it — the topology entry
     below measured that a mechanical proxy (changed-file count) over-fired on this repository's own

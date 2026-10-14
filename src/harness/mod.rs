@@ -3176,6 +3176,15 @@ fn decide_observing(
         return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
     }
 
+    // After the contract and the schedule, before the renewal window, and
+    // `Routine` only: a `Boundary` write is watched *because* of where it
+    // lands, so placing it outside must never be what waves it through. Above
+    // the window so a write outside the claim is `Outside` at every age of the
+    // verification, not `Allow` while it is fresh.
+    if how == Sensitivity::Routine && writes_outside_the_claim(run, action) {
+        return Decision::Outside(Aside::OutsideTheClaim);
+    }
+
     if how == Sensitivity::Routine && run.within_window(context.window) {
         return Decision::Allow(format!(
             "issue #{issue} was verified inside the renewal window"
@@ -3190,13 +3199,6 @@ fn decide_observing(
         .state
         .clone()
         .unwrap_or_else(|| "in-progress".to_owned());
-
-    // After the contract, and before the tracker, and `Routine` only: a
-    // `Boundary` write is watched *because* of where it lands, so placing it
-    // outside must never be what waves it through.
-    if how == Sensitivity::Routine && writes_outside_the_claim(run, action) {
-        return Decision::Outside(Aside::OutsideTheClaim);
-    }
 
     // Always pin or clear: a prior call's `Some` must not stick when this one
     // names none. Production is one invocation per process;

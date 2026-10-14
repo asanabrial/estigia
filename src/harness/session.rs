@@ -109,7 +109,9 @@ pub struct Run {
     /// gate allowed, while `roles` was non-empty. A set, for the reasons
     /// `roles` is one. The element is what `Action::subject` names, which is
     /// not always a path: a write tool names one, and a shell write names the
-    /// matched fragment, the verb, or the tool. A write before this run's
+    /// matched fragment, the verb, or the tool. A write the claim does not
+    /// cover, to an absolute path outside every covered checkout, is not
+    /// recorded. A write before this run's
     /// first delegated call, or on a host that never sends `agent_type` at
     /// all, is recorded as neither this run's own nor a delegate's;
     /// `docs/honesty.md` names that gap.

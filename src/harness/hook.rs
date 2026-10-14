@@ -3290,6 +3290,93 @@ mod tests {
     }
 
     #[test]
+    fn a_write_outside_the_claim_is_not_an_inline_write_inside_the_renewal_window() {
+        let root = tempfile::tempdir().expect("a state root");
+        let repo = root.path().join("repo");
+        std::fs::create_dir_all(&repo).expect("a repository directory");
+        let skill_root = root.path().join("skill");
+        std::fs::create_dir_all(&skill_root).expect("a skill root");
+        std::fs::write(skill_root.join(crate::skill::CONTRACT), "the contract\n")
+            .expect("the contract is installed");
+        let state_root = root.path().join("state");
+        let context = GateContext {
+            stand_down: None,
+            integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
+            flag: None,
+            skill_root,
+            repo_dir: repo.clone(),
+            state_root: state_root.clone(),
+            operation_window: Default::default(),
+            issue_requirement: crate::config::IssueRequirement::Off,
+            workflow: Some(crate::config::Workflow::Autonomous),
+            window: super::super::RENEWAL_WINDOW,
+            tracker: crate::config::Tracker::Github { repo: None },
+            repository_host: crate::config::RepositoryHost::Github { repo: None },
+            boundaries: Vec::new(),
+        };
+
+        let run_id = session::run_id(session::DEFAULT_RUNTIME, "abcd1234");
+        let mut run = session::Run::new(run_id.clone());
+        run.issue = Some(crate::identity::Identity::Number(12));
+        run.state = Some("in-progress".to_owned());
+        run.repo_dir = Some(repo.clone());
+        run.roles.insert("review-blind".to_owned());
+        run.mark_verified();
+        session::store(&state_root, &run).expect("the pointer writes");
+
+        let write_input = |target: &std::path::Path| Input {
+            agent_type: None,
+            tool_name: "Write".to_owned(),
+            tool_input: json!({"file_path": target.display().to_string()}),
+            session_id: "abcd1234".to_owned(),
+            ..Input::default()
+        };
+
+        let scratch = root.path().join("scratch").join("pr-body.md");
+        let outside = run_as(
+            Dialect::ClaudeCode,
+            Some("claude-code"),
+            Event::PreToolUse,
+            &write_input(&scratch),
+            Some(&context),
+        );
+        assert_ne!(
+            outside["hookSpecificOutput"]["permissionDecision"], "deny",
+            "a scratch write was refused: {outside}"
+        );
+        let after_scratch = session::load(&state_root, &run_id);
+        assert!(
+            after_scratch.within_window(super::super::RENEWAL_WINDOW),
+            "the fixture left the renewal window, so the case under test was never reached"
+        );
+        assert!(
+            after_scratch.inline_writes.is_empty(),
+            "a write outside the claimed checkout was recorded as inline: {:?}",
+            after_scratch.inline_writes
+        );
+
+        let claimed = repo.join("src").join("in_claim.rs");
+        let inside = run_as(
+            Dialect::ClaudeCode,
+            Some("claude-code"),
+            Event::PreToolUse,
+            &write_input(&claimed),
+            Some(&context),
+        );
+        assert_eq!(
+            inside["hookSpecificOutput"]["permissionDecision"], "allow",
+            "the fixture's own write was refused, so the case under test was never reached: {inside}"
+        );
+        let after_claimed = session::load(&state_root, &run_id);
+        assert_eq!(
+            after_claimed.inline_writes,
+            std::collections::BTreeSet::from([claimed.display().to_string()]),
+            "a write inside the claimed checkout after a delegated context was not recorded"
+        );
+    }
+
+    #[test]
     fn an_inline_target_is_named_a_target_whether_it_is_a_path_or_a_shell_command() {
         let run = session::Run {
             inline_writes: std::collections::BTreeSet::from([
