@@ -781,8 +781,9 @@ pointer that leaves it names the document it points at.
   `shell_environment_policy.inherit=none`. **A tool-granting feature a later Codex adds is not denied
   until it is added to that list**, and a read-only sandbox alone still lets a shell read files and
   print them as the answer. Nothing measures the list against the installed Codex. Both children get
-  a cleared environment plus a fixed allow-list (`PATH`, `HOME`, the platform's profile and temp
-  names, locale, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`,
+  a cleared environment plus a fixed allow-list, matched without regard to case as Windows spells
+  `Path` and `SystemRoot` (the names a spawned `git` needs, `PATH`, `PATHEXT`, `COMSPEC`, `SYSTEMROOT`, `WINDIR`
+  and the temp names, shared with the tracker transport; `HOME`, the platform's profile names, locale, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`,
   `ANTHROPIC_AUTH_TOKEN`, `CODEX_HOME`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`), so `GH_TOKEN` does not
   reach them. `AWS_*`, `GOOGLE_*` and the Bedrock and Vertex switches are not on it: a reviewer routed
   through either refuses as unavailable until that is decided. Claude runs with
@@ -1177,13 +1178,14 @@ pointer that leaves it names the document it points at.
   avoids. `outside_diff` is absent when either half is unknown — the log names no source path, or
   the diff cannot be read — so the refusal never invents a location from half the evidence.
 
-- **On Windows the crate is compiled and linted in CI, and its tests are not run.** Issue #11 owns
-  it. The `windows-latest` lane runs formatting, clippy, documentation and the release build, and
-  its `tests` step is skipped; `release.yml` skips its `Test` step on the Windows targets for the
-  same reason, so a Windows archive is published having compiled and nothing more. The suite first reached a Windows runner at run 38317428664, once
-  the crate compiled there, and **55 tests failed** on that first execution. Until #11 is done a
-  regression that only Windows can see passes this lane, and the platform-shaped assumptions behind
-  those 55 are unmeasured here.
+- **On Windows a POSIX absolute path in a shell line is not read as absolute, so the issue gate asks
+  where it would not on Unix.** Issue #11. `Path::new("/tmp/y").is_absolute()` is false there, and
+  under Git Bash `/tmp` and `/c/…` are msys mounts the gate cannot place without the mount table, so a
+  redirect or heredoc target spelled that way is read as inside the checkout and held under `ask`. That
+  is the safe direction, never a widening, and its cost is extra prompts. The tests that name an
+  outside target build it with `test_env::outside_the_checkout`, a drive-lettered path, so they measure
+  the rule rather than the spelling. The same reading refuses a POSIX `Worktree location`, which is
+  right for a drive-relative path.
 
 ## The OpenCode plugin, and what it knows about a call
 

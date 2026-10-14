@@ -300,7 +300,7 @@ fn a_failing_write_and_a_failing_read_are_not_the_same_answer() {
 #[test]
 fn a_live_call_carries_the_operators_own_files() {
     for (theirs, expected_worktree, expected_evidence) in [
-        (true, "/work/trees", "measuring"),
+        (true, crate::test_env::work_trees(), "measuring"),
         (false, "unset", "reading"),
     ] {
         let home = tempfile::tempdir().expect("a home");
@@ -314,8 +314,11 @@ fn a_live_call_carries_the_operators_own_files() {
             // want their answers rewritten by a `sync`.
             std::fs::write(
                 skill.join(crate::config::LOCAL_FILE),
-                "<!-- estigia:config:start -->\n| Setting | Value here |\n|---|---|\n\
-                 | Worktree location | /work/trees |\n<!-- estigia:config:end -->\n",
+                format!(
+                    "<!-- estigia:config:start -->\n| Setting | Value here |\n|---|---|\n\
+                     | Worktree location | {} |\n<!-- estigia:config:end -->\n",
+                    crate::test_env::work_trees()
+                ),
             )
             .expect("their file");
             // And in the repository, which is the other document `config list`

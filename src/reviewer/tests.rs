@@ -1,4 +1,4 @@
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -261,9 +261,9 @@ fn the_working_directory_is_a_fresh_scratch_directory_that_is_removed() {
                 .review(&invocation(b"p", None))
                 .unwrap();
             let cwd = PathBuf::from(read_argv(&log).cwd);
-            let temp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+            let temp = std::env::temp_dir();
             assert!(
-                cwd.starts_with(&temp),
+                crate::paths::same_directory(cwd.parent().unwrap(), &temp),
                 "{} is under {}",
                 cwd.display(),
                 temp.display()
@@ -1224,6 +1224,28 @@ fn the_reviewer_child_keeps_the_user_names_the_keychain_lookup_needs() {
             assert_eq!(value("USER"), Some("someone".into()));
             assert_eq!(value("LOGNAME"), Some("someone-else".into()));
         },
+    );
+}
+
+#[test]
+fn the_allow_list_matches_names_the_way_windows_spells_them() {
+    let ambient = [
+        "Path",
+        "SystemRoot",
+        "PathExt",
+        "ComSpec",
+        "OPENAI_API_KEY",
+        "GH_TOKEN",
+    ]
+    .map(|name| (OsString::from(name), OsString::from("v")));
+    let kept: Vec<String> = run::inherited_from(ambient)
+        .into_iter()
+        .map(|(name, _)| name.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(
+        kept,
+        ["Path", "SystemRoot", "PathExt", "ComSpec", "OPENAI_API_KEY"],
+        "{kept:?}"
     );
 }
 

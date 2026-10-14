@@ -18758,7 +18758,10 @@ fn an_approval_whose_declared_command_fails_is_refused_as_unavailable() {
 fn a_rejection_does_not_run_the_declared_command() {
     let marker_directory = tempfile::tempdir().expect("a directory outside the repository");
     let marker = marker_directory.path().join("ran");
-    let command = format!("printf ran > {}; {GENERATE_NOTES}", marker.display());
+    let command = format!(
+        "printf ran > {}; {GENERATE_NOTES}",
+        crate::test_env::shell_path(&marker)
+    );
     let (_root, context, receipt) = generated_change(&command, Some("old\n"), "generated\n");
     let finding = recorded_finding_on(
         &receipt,
