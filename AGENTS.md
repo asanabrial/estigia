@@ -124,7 +124,7 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Sixty-six tests **require** `node` on the path, and all sixty-six drive the OpenCode plugins and
+   --no-deps`. Sixty-seven tests **require** `node` on the path, and all sixty-seven drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
    let a gate defect stand. Four are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
@@ -145,15 +145,16 @@ a second copy that will disagree.
    `the_generic_goal_judges_the_turn_that_reaches_its_cap`; three drive the review relay plugin —
    `the_review_relay_materialises_the_prompt_and_admits_the_answer`,
    `the_review_relay_keeps_the_reason_when_the_relay_exits_before_reading_stdin` and
-   `the_review_relay_keeps_unavailable_and_stale_apart` — and reproduce the two v4 relay defects; eight drive
+   `the_review_relay_keeps_unavailable_and_stale_apart` — and reproduce the two v4 relay defects; nine drive
    the Pi gate extension, `the_pi_extension_blocks_on_one_and_two_and_lets_a_gate_that_did_not_answer_through_with_a_word`,
    `the_pi_extension_gates_a_tool_by_the_shape_of_its_input_and_not_only_by_its_name`,
    `the_pi_extension_bounds_the_gate_call_and_shows_the_person_a_write_that_went_out_unchecked`,
    `the_pi_extension_blocks_an_answer_larger_than_it_can_read_and_does_not_call_it_a_timeout`,
    `the_pi_extension_hands_an_oversized_input_to_the_gate_on_standard_input`,
    `the_pi_extension_lets_a_gate_that_cannot_be_started_through_with_a_word_whatever_the_ui_does`,
-   `the_pi_extension_puts_a_question_to_a_person_only_in_the_tui_and_blocks_on_any_code_it_cannot_read`
-   and `the_pi_extension_hands_the_binary_the_root_session_only_from_a_process_that_inherited_one`;
+   `the_pi_extension_puts_a_question_to_a_person_only_in_the_tui_and_blocks_on_any_code_it_cannot_read`,
+   `the_pi_extension_hands_the_binary_the_root_session_only_from_a_process_that_inherited_one`
+   and `the_pi_extension_links_a_child_by_its_parent_header_whatever_its_pid`;
    one drives its `/estigia-doctor` command through `run_pi_claim_driver`,
    `the_pi_extension_shows_estigia_doctor_unchanged_to_the_person_and_asks_the_model_for_nothing`;
    six drive the Pi gate extension's session context through `drive_pi_session` —
@@ -196,7 +197,7 @@ a second copy that will disagree.
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that sixty-six tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that sixty-seven tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here

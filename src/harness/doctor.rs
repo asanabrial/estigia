@@ -1148,7 +1148,7 @@ pub fn lockfiles(repo_dir: &Path) -> Option<Check> {
 }
 
 /// Everything `doctor` looks at, by the name it reports under. Three of the
-/// eighteen (`contract`, `gate`, `tools`) produce one row per configured agent.
+/// nineteen (`contract`, `gate`, `tools`) produce one row per configured agent.
 pub const CHECKS: &[&str] = &[
     "skill",
     "skill-assets",
@@ -1167,6 +1167,7 @@ pub const CHECKS: &[&str] = &[
     "gate-version",
     "store",
     "pi-config",
+    "pi-subagents",
     "lockfiles",
 ];
 
@@ -1427,6 +1428,7 @@ pub fn full(
         .and_then(|adapter| crate::setup::resolve_paths(adapter, options).ok())
         .and_then(|paths| paths.instructions.parent().map(Path::to_path_buf));
     checks.push(pi_config(pi_agent_dir.as_deref(), repo_dir));
+    checks.push(pi_subagents(pi_agent_dir.as_deref(), repo_dir));
     checks.extend(lockfiles(repo_dir));
 
     // Carried rather than defaulted: on an empty path the store's own path is
@@ -2384,6 +2386,224 @@ pub fn pi_config(agent_dir: Option<&Path>, repo_dir: &Path) -> Check {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RunnerChildren {
+    LoadTheGate,
+    SkipTheGate(&'static str),
+    Unread,
+}
+
+const RUNNER_SOURCE_LIMIT: u64 = 1 << 20;
+const RUNNER_SOURCE_DEPTH: usize = 3;
+const RUNNER_SOURCE_EXTENSIONS: [&str; 4] = ["ts", "js", "mjs", "cjs"];
+const RUNNER_SPAWN_CALLS: [&str; 3] = ["spawn(", "execFile(", "spawnSync("];
+const RUNNER_PI_COMMAND: &str = "pi";
+
+struct RunnerSources {
+    texts: Vec<String>,
+    complete: bool,
+}
+
+fn pi_runner_sources(path: &Path, depth: usize, out: &mut RunnerSources, budget: &mut u64) {
+    if path.is_dir() {
+        if depth == 0 {
+            out.complete = false;
+            return;
+        }
+        let Ok(entries) = std::fs::read_dir(path) else {
+            out.complete = false;
+            return;
+        };
+        let mut paths: Vec<_> = entries.flatten().map(|entry| entry.path()).collect();
+        paths.sort();
+        for entry in paths {
+            if entry.file_name().is_some_and(|name| name == "node_modules") {
+                continue;
+            }
+            pi_runner_sources(&entry, depth - 1, out, budget);
+        }
+        return;
+    }
+    let readable = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| RUNNER_SOURCE_EXTENSIONS.contains(&extension));
+    if !readable {
+        return;
+    }
+    let Ok(metadata) = std::fs::metadata(path) else {
+        out.complete = false;
+        return;
+    };
+    if metadata.len() > *budget {
+        out.complete = false;
+        return;
+    }
+    match std::fs::read_to_string(path) {
+        Ok(text) => {
+            *budget -= metadata.len();
+            out.texts.push(text);
+        }
+        Err(_) => out.complete = false,
+    }
+}
+
+fn spawns_pi(text: &str) -> bool {
+    RUNNER_SPAWN_CALLS.iter().any(|call| {
+        text.match_indices(call).any(|(at, _)| {
+            let argument = text[at + call.len()..].trim_start();
+            let Some(quote) = argument
+                .chars()
+                .next()
+                .filter(|c| matches!(c, '"' | '\'' | '`'))
+            else {
+                return false;
+            };
+            let Some(end) = argument[1..].find(quote) else {
+                return false;
+            };
+            let command = &argument[1..=end];
+            command == RUNNER_PI_COMMAND
+                || command
+                    .strip_suffix(RUNNER_PI_COMMAND)
+                    .is_some_and(|head| head.ends_with('/'))
+        })
+    })
+}
+
+fn pi_runner_children(path: Option<&Path>) -> RunnerChildren {
+    let mut sources = RunnerSources {
+        texts: Vec::new(),
+        complete: true,
+    };
+    let mut budget = RUNNER_SOURCE_LIMIT;
+    if let Some(path) = path {
+        pi_runner_sources(path, RUNNER_SOURCE_DEPTH, &mut sources, &mut budget);
+    }
+    let text = sources.texts.join("\n");
+    if text.contains("--no-extensions") || text.contains("--no-extension\"") {
+        return RunnerChildren::SkipTheGate("starts its children with `--no-extensions`");
+    }
+    if text.contains("createAgentSession") || text.contains("new AgentSession") {
+        return RunnerChildren::SkipTheGate("runs its children inside Pi's own process");
+    }
+    if sources.complete && spawns_pi(&text) {
+        return RunnerChildren::LoadTheGate;
+    }
+    RunnerChildren::Unread
+}
+
+fn pi_runner_name(entry: &serde_json::Value) -> Option<(String, Option<std::path::PathBuf>)> {
+    let source = entry
+        .as_str()
+        .or_else(|| entry.get("source").and_then(serde_json::Value::as_str))?;
+    let lowered = source.to_ascii_lowercase();
+    if !(lowered.contains("subagent") || lowered.contains("sub-agent")) {
+        return None;
+    }
+    let path = Path::new(source)
+        .is_absolute()
+        .then(|| std::path::PathBuf::from(source));
+    Some((source.to_owned(), path))
+}
+
+/// Whether the Pi subagent runners installed would give their children Estigia's gate.
+///
+/// Read only, and advisory: a runner is named from a `packages` entry of the user or project
+/// `settings.json`, or an extension file or directory, whose name says subagent. Its children are read
+/// from its source when that is on disk. A runner whose children skip the gate, or whose source cannot
+/// be read, is reported like a skipped check; nothing is installed or rewritten.
+pub fn pi_subagents(agent_dir: Option<&Path>, repo_dir: &Path) -> Check {
+    let about = "whether the Pi subagent runners installed give their children Estigia's gate";
+    let Some(agent_dir) = agent_dir else {
+        return Check {
+            name: "pi-subagents",
+            about,
+            health: Health::Skipped {
+                detail: "pi is not configured".to_owned(),
+            },
+        };
+    };
+    let project = repo_dir.join(".pi");
+    let mut found: Vec<(String, Option<std::path::PathBuf>)> = Vec::new();
+    for settings in [
+        agent_dir.join("settings.json"),
+        project.join("settings.json"),
+    ] {
+        if let Some(entries) = pi_json(&settings)
+            .and_then(|value| value.get("packages").cloned())
+            .and_then(|value| value.as_array().cloned())
+        {
+            found.extend(entries.iter().filter_map(pi_runner_name));
+        }
+    }
+    for directory in [agent_dir.join("extensions"), project.join("extensions")] {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        let mut paths: Vec<_> = entries.flatten().map(|entry| entry.path()).collect();
+        paths.sort();
+        for path in paths {
+            let name = path
+                .file_name()
+                .map(|name| name.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_default();
+            if name.contains("subagent") || name.contains("sub-agent") {
+                found.push((path.display().to_string(), Some(path)));
+            }
+        }
+    }
+    if found.is_empty() {
+        return Check {
+            name: "pi-subagents",
+            about,
+            health: Health::Fine {
+                detail: "no Pi subagent runner is installed in the settings or extension \
+                         directories it reads"
+                    .to_owned(),
+            },
+        };
+    }
+    let mut warnings: Vec<String> = Vec::new();
+    let mut gated: Vec<String> = Vec::new();
+    for (name, path) in &found {
+        match pi_runner_children(path.as_deref()) {
+            RunnerChildren::LoadTheGate => gated.push(name.clone()),
+            RunnerChildren::SkipTheGate(how) => warnings.push(format!(
+                "{name} {how}, so its children write with no Estigia gate"
+            )),
+            RunnerChildren::Unread => warnings.push(format!(
+                "{name} could not be read in full or does not visibly start `pi`, so whether its children \
+                 load the gate is unknown"
+            )),
+        }
+    }
+    let mut detail = String::new();
+    if !warnings.is_empty() {
+        detail.push_str(&format!("WARNING {}", warnings.join("; ")));
+    }
+    if !gated.is_empty() {
+        if !detail.is_empty() {
+            detail.push_str("; ");
+        }
+        detail.push_str(&format!(
+            "{} start{} a separate pi that loads the gate",
+            gated.join(", "),
+            if gated.len() == 1 { "s" } else { "" }
+        ));
+    }
+    let health = if warnings.is_empty() {
+        Health::Fine { detail }
+    } else {
+        Health::Skipped { detail }
+    };
+    Check {
+        name: "pi-subagents",
+        about,
+        health,
+    }
+}
+
 fn pi_json(path: &Path) -> Option<serde_json::Value> {
     serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
 }
@@ -2661,6 +2881,123 @@ mod tests {
                 "no command clears a hand-edited settings file: {resolution:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_pi_subagent_runner_whose_children_skip_the_gate_is_named_and_one_that_loads_it_is_not_a_warning()
+     {
+        let (agent, repo) = pi_dirs();
+        let verdict = |agent: &tempfile::TempDir, repo: &tempfile::TempDir| {
+            pi_subagents(Some(agent.path()), repo.path()).health
+        };
+        let Health::Fine { detail } = verdict(&agent, &repo) else {
+            panic!("no runner left the row fine");
+        };
+        assert!(detail.contains("no Pi subagent runner"), "{detail}");
+        assert!(matches!(
+            pi_subagents(None, repo.path()).health,
+            Health::Skipped { detail } if detail == "pi is not configured"
+        ));
+
+        let extensions = agent.path().join("extensions");
+        std::fs::create_dir_all(extensions.join("subagent-loud")).expect("a runner directory");
+        std::fs::write(
+            extensions.join("subagent-loud").join("index.ts"),
+            "import { spawn } from \"node:child_process\";\nspawn(\"pi\", [\"-p\", task]);\n",
+        )
+        .expect("a runner that starts pi");
+        let Health::Fine { detail } = verdict(&agent, &repo) else {
+            panic!("a runner whose children load the gate was warned about");
+        };
+        assert!(detail.contains("subagent-loud"), "{detail}");
+        assert!(detail.contains("loads the gate"), "{detail}");
+
+        std::fs::write(
+            extensions.join("subagent-quiet.ts"),
+            "spawn(\"pi\", [\"--no-extensions\", \"-p\", task]);\n",
+        )
+        .expect("a runner that disables extensions");
+        let package = repo.path().join("subagent-package");
+        std::fs::create_dir_all(&package).expect("a package directory");
+        std::fs::write(
+            package.join("index.js"),
+            "const { session } = await createAgentSession({});\n",
+        )
+        .expect("an in-process runner");
+        std::fs::write(
+            repo.path().join(".pi").join("settings.json"),
+            format!(
+                r#"{{"packages":["npm:pi-subagents","npm:unrelated",{{"source":{}}}]}}"#,
+                serde_json::to_string(&package.display().to_string()).expect("a path")
+            ),
+        )
+        .expect("a settings file");
+        let Health::Skipped { detail } = verdict(&agent, &repo) else {
+            panic!("runners whose children skip the gate were not reported");
+        };
+        assert!(detail.starts_with("WARNING"), "{detail}");
+        assert!(
+            detail.contains("subagent-quiet.ts") && detail.contains("--no-extensions"),
+            "{detail}"
+        );
+        assert!(
+            detail.contains("subagent-package") && detail.contains("inside Pi's own process"),
+            "{detail}"
+        );
+        assert!(
+            detail.contains("npm:pi-subagents") && detail.contains("unknown"),
+            "{detail}"
+        );
+        assert!(!detail.contains("unrelated"), "{detail}");
+        assert!(detail.contains("subagent-loud"), "{detail}");
+    }
+
+    #[test]
+    fn a_pi_runner_is_gated_only_when_it_is_read_in_full_and_visibly_starts_pi() {
+        let unknown = |files: &[(&str, String)]| {
+            let (agent, repo) = pi_dirs();
+            let runner = agent.path().join("extensions").join("subagent-x");
+            std::fs::create_dir_all(&runner).expect("a runner directory");
+            for (name, body) in files {
+                std::fs::write(runner.join(name), body).expect("a runner file");
+            }
+            pi_subagents(Some(agent.path()), repo.path()).health
+        };
+        let spawn_pi = ("index.ts", "spawn(\"pi\", [\"-p\", task]);\n".to_owned());
+
+        assert!(matches!(
+            unknown(std::slice::from_ref(&spawn_pi)),
+            Health::Fine { .. }
+        ));
+        assert!(matches!(
+            unknown(&[(
+                "index.ts",
+                "spawn(\"/usr/local/bin/pi\", args);\n".to_owned()
+            )]),
+            Health::Fine { .. }
+        ));
+
+        let Health::Skipped { detail } =
+            unknown(&[("index.ts", "spawn(\"git\", [\"status\"]);\n".to_owned())])
+        else {
+            panic!("a runner that spawns something else was called gated");
+        };
+        assert!(detail.contains("unknown"), "{detail}");
+        assert!(matches!(
+            unknown(&[("index.ts", "spawn(binary, args);\n".to_owned())]),
+            Health::Skipped { .. }
+        ));
+
+        let oversized = "x".repeat(RUNNER_SOURCE_LIMIT as usize + 1);
+        let Health::Skipped { detail } = unknown(&[spawn_pi.clone(), ("big.js", oversized)]) else {
+            panic!("a runner with a file left unread was called gated");
+        };
+        assert!(detail.contains("unknown"), "{detail}");
+
+        assert!(matches!(
+            unknown(&[spawn_pi, ("notes.md", "not source".to_owned())]),
+            Health::Fine { .. }
+        ));
     }
 
     #[test]

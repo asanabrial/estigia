@@ -16519,6 +16519,191 @@ console.log(JSON.stringify({ logged, exported: process.env.ESTIGIA_PI_PARENT_SES
     );
 }
 
+#[test]
+fn the_pi_extension_links_a_child_by_its_parent_header_whatever_its_pid() {
+    let node = node_executable();
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let base = root.path().canonicalize().expect("the directory resolves");
+    fs::write(
+        base.join("gate.mjs"),
+        plugin::pi_source(std::path::Path::new(&node)),
+    )
+    .expect("the extension writes");
+    fs::write(
+        base.join("2026-10-14T00-00-00_root-1.jsonl"),
+        "{\"type\":\"session\",\"id\":\"root-1\"}\n",
+    )
+    .expect("the parent session writes");
+    fs::write(
+        base.join("stub.cjs"),
+        r#"const fs = require("node:fs");
+const path = require("node:path");
+if (path.basename(process.argv[1] ?? "") === "gate") {
+  fs.appendFileSync(process.env.STUB_LOG, JSON.stringify(process.argv.slice(3)) + "\n");
+  process.exit(0);
+}
+"#,
+    )
+    .expect("the stand-in writes");
+    fs::write(
+        base.join("drive.mjs"),
+        r#"import { readFileSync } from "node:fs";
+
+process.env.NODE_OPTIONS = `--require "${process.env.STUB_PATH}"`;
+const handlers = {};
+(await import("./gate.mjs")).default({ on: (name, handler) => { handlers[name] = handler; } });
+for (const { session, parent, reason } of JSON.parse(process.env.SESSIONS)) {
+  const header = parent ? { parentSession: `${process.cwd()}/${parent}` } : {};
+  const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => session, getHeader: () => header } };
+  if (reason) await handlers.session_start({ type: "session_start", reason }, ctx);
+  await handlers.tool_call({ toolName: "write", input: { path: "a.rs", content: "x" } }, ctx);
+}
+const logged = readFileSync(process.env.STUB_LOG, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+console.log(JSON.stringify({ logged, exported: process.env.ESTIGIA_PI_PARENT_SESSION ?? null }));
+"#,
+    )
+    .expect("the driver writes");
+
+    let drive = |sessions: serde_json::Value, inherited: Option<(&str, &str)>| {
+        let log = base.join("calls.log");
+        fs::write(&log, "").expect("the log resets");
+        let mut command = std::process::Command::new(&node);
+        command
+            .arg(base.join("drive.mjs"))
+            .current_dir(&base)
+            .env("STUB_LOG", &log)
+            .env(
+                "STUB_PATH",
+                base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
+            )
+            .env("SESSIONS", sessions.to_string())
+            .env_remove("NODE_OPTIONS")
+            .env_remove("ESTIGIA_PI_PARENT_SESSION")
+            .env_remove("ESTIGIA_PI_PARENT_PID");
+        if let Some((id, pid)) = inherited {
+            command
+                .env("ESTIGIA_PI_PARENT_SESSION", id)
+                .env("ESTIGIA_PI_PARENT_PID", pid);
+        }
+        let ran = command.output().expect("node runs");
+        assert!(
+            ran.status.success(),
+            "the driver failed: {}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
+        let said: serde_json::Value =
+            serde_json::from_slice(&ran.stdout).expect("the driver prints JSON");
+        let calls: Vec<Vec<String>> =
+            serde_json::from_value(said["logged"].clone()).expect("calls");
+        (calls, said["exported"].clone())
+    };
+    let parent_flag = |call: &[String]| {
+        call.iter()
+            .position(|word| word == "--parent-session-id")
+            .map(|at| call[at + 1].clone())
+    };
+
+    let (calls, exported) = drive(
+        serde_json::json!([
+            {"session": "root-1"},
+            {"session": "child-3", "parent": "2026-10-14T00-00-00_root-1.jsonl"},
+            {"session": "root-1"}
+        ]),
+        None,
+    );
+    assert_eq!(calls.len(), 3, "{calls:?}");
+    assert_eq!(parent_flag(&calls[0]), None, "{calls:?}");
+    assert_eq!(
+        parent_flag(&calls[1]).as_deref(),
+        Some("root-1"),
+        "an in-process child was decided as an unrelated session: {calls:?}"
+    );
+    assert_eq!(
+        parent_flag(&calls[2]),
+        None,
+        "the parent was read as a child after the in-process child ran: {calls:?}"
+    );
+    assert_eq!(exported, "root-1", "the child overwrote the exported root");
+
+    let (calls, exported) = drive(
+        serde_json::json!([
+            {"session": "child-3", "parent": "2026-10-14T00-00-00_root-1.jsonl"}
+        ]),
+        None,
+    );
+    assert_eq!(
+        parent_flag(&calls[0]).as_deref(),
+        Some("root-1"),
+        "{calls:?}"
+    );
+    assert_eq!(
+        exported,
+        serde_json::Value::Null,
+        "a child exported itself as a root"
+    );
+
+    let (calls, exported) = drive(
+        serde_json::json!([
+            {"session": "child-3", "parent": "2026-10-14T00-00-00_gone-5.jsonl"}
+        ]),
+        Some(("root-1", "1")),
+    );
+    assert_eq!(
+        parent_flag(&calls[0]).as_deref(),
+        Some("root-1"),
+        "{calls:?}"
+    );
+    assert_eq!(exported, "root-1");
+
+    let (calls, exported) = drive(
+        serde_json::json!([
+            {"session": "child-3", "parent": "2026-10-14T00-00-00_gone-5.jsonl"}
+        ]),
+        None,
+    );
+    assert_eq!(
+        parent_flag(&calls[0]).as_deref(),
+        Some("gone-5"),
+        "the parent id was not read from the session file name: {calls:?}"
+    );
+    assert_eq!(exported, serde_json::Value::Null);
+
+    for reason in ["new", "fork", "resume", "reload"] {
+        let (calls, exported) = drive(
+            serde_json::json!([
+                {"session": "root-1"},
+                {"session": "next-4", "parent": "2026-10-14T00-00-00_root-1.jsonl", "reason": reason},
+                {"session": "next-4", "parent": "2026-10-14T00-00-00_root-1.jsonl"}
+            ]),
+            None,
+        );
+        assert_eq!(calls.len(), 3, "{calls:?}");
+        assert_eq!(
+            parent_flag(&calls[1]),
+            None,
+            "a session begun by `{reason}` was read as a child of the one before it: {calls:?}"
+        );
+        assert_eq!(parent_flag(&calls[2]), None, "{calls:?}");
+        assert_eq!(
+            exported, "next-4",
+            "`{reason}` did not export itself as root"
+        );
+    }
+
+    let (calls, _) = drive(
+        serde_json::json!([
+            {"session": "root-1"},
+            {"session": "child-3", "parent": "2026-10-14T00-00-00_root-1.jsonl", "reason": "startup"}
+        ]),
+        None,
+    );
+    assert_eq!(
+        parent_flag(&calls[1]).as_deref(),
+        Some("root-1"),
+        "a child that began at startup lost its parent: {calls:?}"
+    );
+}
+
 fn drive_pi_session(
     steps: serde_json::Value,
     session: &str,
