@@ -601,6 +601,18 @@ fn publish_review_records_a_bare_inline_declaration_over_any_file_count() {
         staged_receipt(home, 13).contains("topology=Inline"),
         "the declaration is kept as typed"
     );
+
+    let padded_log = trace.path().join("padded-calls.log");
+    let (padded_is_error, padded) = call(arguments(&[("topology", "inline  ")]), &padded_log);
+    assert!(
+        !padded_is_error,
+        "a padded `inline  ` must be recorded: {padded}"
+    );
+    let padded_receipt = staged_receipt(home, 13);
+    assert!(
+        padded_receipt.contains("topology=inline -->"),
+        "the padded declaration was not recorded trimmed: {padded_receipt}"
+    );
 }
 
 /// The lane refusal refuses, and the two lenient states publish — through the

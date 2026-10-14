@@ -3247,6 +3247,291 @@ mod tests {
         ));
     }
 
+    fn runner_health(populate: impl FnOnce(&Path)) -> Health {
+        let (agent, repo) = pi_dirs();
+        let runner = agent.path().join("extensions").join("subagent-x");
+        std::fs::create_dir_all(&runner).expect("a runner directory");
+        populate(&runner);
+        let health = pi_subagents(Some(agent.path()), repo.path()).health;
+        restore_directory_modes(&runner);
+        health
+    }
+
+    fn restore_directory_modes(root: &Path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o755));
+            if let Ok(entries) = std::fs::read_dir(root) {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() {
+                        restore_directory_modes(&entry.path());
+                    }
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        let _ = root;
+    }
+
+    fn starts_pi(health: &Health) -> bool {
+        matches!(health, Health::Fine { detail } if detail.contains("loads the gate"))
+    }
+
+    const SPAWNS_PI: &str = "spawn(\"pi\", [\"-p\", task]);\n";
+
+    #[test]
+    fn a_pi_runner_nested_deeper_than_the_depth_limit_is_not_read_in_full() {
+        let at_the_limit = runner_health(|runner| {
+            std::fs::create_dir_all(runner.join("a").join("b")).expect("nested directories");
+            std::fs::write(runner.join("a").join("b").join("index.ts"), SPAWNS_PI)
+                .expect("a source file at the limit");
+        });
+        assert!(starts_pi(&at_the_limit), "{at_the_limit:?}");
+
+        let beyond = runner_health(|runner| {
+            std::fs::write(runner.join("index.ts"), SPAWNS_PI).expect("a source file");
+            std::fs::create_dir_all(runner.join("a").join("b").join("c"))
+                .expect("a directory beyond the limit");
+        });
+        let Health::Skipped { detail } = beyond else {
+            panic!("a runner with a directory left unread was called gated: {beyond:?}");
+        };
+        assert!(detail.contains("unknown"), "{detail}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_pi_runner_with_a_directory_that_cannot_be_listed_is_not_called_gated() {
+        use std::os::unix::fs::PermissionsExt;
+        let health = runner_health(|runner| {
+            std::fs::write(runner.join("index.ts"), SPAWNS_PI).expect("a source file");
+            let sealed = runner.join("sealed");
+            std::fs::create_dir_all(&sealed).expect("a directory");
+            std::fs::set_permissions(&sealed, std::fs::Permissions::from_mode(0o000))
+                .expect("the directory is sealed");
+        });
+        let Health::Skipped { detail } = health else {
+            panic!(
+                "a runner with a directory that could not be listed was called gated: {health:?}"
+            );
+        };
+        assert!(detail.contains("unknown"), "{detail}");
+    }
+
+    #[test]
+    fn spawns_pi_reads_every_quote_style_and_every_spawn_call_and_nothing_near_them() {
+        for spawned in [
+            "spawn(\"pi\", args)",
+            "spawn('pi', args)",
+            "spawn(`pi`, args)",
+            "spawn( 'pi', args)",
+            "spawn(\n  \"pi\",\n  args)",
+            "execFile(\"pi\", args)",
+            "spawnSync('pi', args)",
+            "spawn(\"/usr/local/bin/pi\", args)",
+            "spawn('./node_modules/.bin/pi', args)",
+            "const first = spawn(\"git\"); spawn('pi', args)",
+        ] {
+            assert!(spawns_pi(spawned), "{spawned} was not read as starting pi");
+        }
+        for near in [
+            "spawn(\"pip\", args)",
+            "spawn(\"pi-subagent\", args)",
+            "spawn(\"api\", args)",
+            "spawn(\"/usr/bin/api\", args)",
+            "spawn(\"pi/\", args)",
+            "spawn(\"\", args)",
+            "spawn(\"pi', args)",
+            "spawn(\"pi, args)",
+            "spawn(pi, args)",
+            "spawn(binary, [\"pi\"])",
+            "exec(\"pi\", args)",
+            "fork(\"pi\", args)",
+            "spawn \"pi\"",
+            "const pi = \"pi\";",
+        ] {
+            assert!(!spawns_pi(near), "{near} was read as starting pi");
+        }
+    }
+
+    fn write_in(root: &Path, relative: &str, body: &str) -> PathBuf {
+        let file = root.join(relative);
+        std::fs::create_dir_all(file.parent().expect("a parent")).expect("a directory");
+        std::fs::write(&file, body).expect("a settings file");
+        file
+    }
+
+    #[test]
+    fn claude_code_settings_are_read_local_then_project_then_user_and_the_first_to_set_a_mode_wins()
+    {
+        let repo = tempfile::tempdir().expect("a repository");
+        let user = tempfile::tempdir().expect("a user directory");
+        let user_file = write_in(
+            user.path(),
+            "settings.json",
+            r#"{"permissions":{"defaultMode":"acceptEdits"}}"#,
+        );
+        let read = || read_permission_mode("claude-code", Some(&user_file), repo.path());
+        assert_eq!(
+            read(),
+            ModeReading::Set {
+                value: "acceptEdits".to_owned(),
+                file: user_file.clone()
+            }
+        );
+
+        let project = write_in(
+            repo.path(),
+            ".claude/settings.json",
+            r#"{"permissions":{"defaultMode":"plan"}}"#,
+        );
+        assert_eq!(
+            read(),
+            ModeReading::Set {
+                value: "plan".to_owned(),
+                file: project.clone()
+            }
+        );
+
+        let local = write_in(
+            repo.path(),
+            ".claude/settings.local.json",
+            r#"{"permissions":{"defaultMode":"bypassPermissions"}}"#,
+        );
+        assert_eq!(
+            read(),
+            ModeReading::Set {
+                value: "bypassPermissions".to_owned(),
+                file: local.clone()
+            }
+        );
+
+        std::fs::write(&local, r#"{"permissions":{}}"#).expect("a local file that sets nothing");
+        assert_eq!(
+            read(),
+            ModeReading::Set {
+                value: "plan".to_owned(),
+                file: project
+            }
+        );
+    }
+
+    #[test]
+    fn a_claude_code_or_opencode_file_that_cannot_be_parsed_is_unreadable_and_stops_the_search() {
+        let repo = tempfile::tempdir().expect("a repository");
+        let user = tempfile::tempdir().expect("a user directory");
+
+        let claude_user = write_in(
+            user.path(),
+            "claude.json",
+            r#"{"permissions":{"defaultMode":"plan"}}"#,
+        );
+        let claude_project = write_in(repo.path(), ".claude/settings.json", "{ not json");
+        let ModeReading::Unreadable { file, why } =
+            read_permission_mode("claude-code", Some(&claude_user), repo.path())
+        else {
+            panic!("a Claude Code settings file that does not parse was read past");
+        };
+        assert_eq!(file, claude_project);
+        assert!(!why.is_empty());
+
+        let opencode_user = write_in(
+            user.path(),
+            "opencode-user.json",
+            r#"{"permission":"allow"}"#,
+        );
+        let opencode_project = write_in(repo.path(), "opencode.json", "{ not json");
+        let ModeReading::Unreadable { file, why } =
+            read_permission_mode("opencode", Some(&opencode_user), repo.path())
+        else {
+            panic!("an OpenCode config that does not parse was read past");
+        };
+        assert_eq!(file, opencode_project);
+        assert!(!why.is_empty());
+
+        let broken_user = write_in(user.path(), "broken-user.json", "[");
+        let empty_repo = tempfile::tempdir().expect("a repository holding nothing");
+        assert!(matches!(
+            read_permission_mode("opencode", Some(&broken_user), empty_repo.path()),
+            ModeReading::Unreadable { file, .. } if file == broken_user
+        ));
+        assert_eq!(
+            read_permission_mode("opencode", None, empty_repo.path()),
+            ModeReading::Unset
+        );
+    }
+
+    fn permission_detail(slug: &'static str, reading: ModeReading) -> (bool, String) {
+        let rows = permission_modes(&[(slug, reading)]);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].name, "permission");
+        match &rows[0].health {
+            Health::Fine { detail } => (true, detail.clone()),
+            Health::Skipped { detail } => (false, detail.clone()),
+            other => panic!("the permission row is never broken: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_permission_row_notes_what_opencode_and_codex_cannot_tell_and_nothing_for_claude_code() {
+        let set = |value: &str| ModeReading::Set {
+            value: value.to_owned(),
+            file: PathBuf::from("/settings/file.json"),
+        };
+        let (fine, opencode) = permission_detail("opencode", set("allow"));
+        assert!(fine);
+        assert!(
+            opencode.starts_with("allow (/settings/file.json); opencode:")
+                && opencode.ends_with("`--auto` is a command-line flag and is not readable here"),
+            "{opencode}"
+        );
+        assert!(!opencode.contains("not measured live"), "{opencode}");
+
+        let (fine, codex) = permission_detail("codex", set("approval_policy = never"));
+        assert!(fine);
+        assert!(
+            codex.starts_with("approval_policy = never (/settings/file.json); codex:")
+                && codex.ends_with("; not measured live"),
+            "{codex}"
+        );
+        assert!(!codex.contains("--auto"), "{codex}");
+
+        let (fine, claude) = permission_detail("claude-code", set("bypassPermissions"));
+        assert!(fine);
+        assert!(
+            claude.ends_with("are not approved by it")
+                && !claude.contains("--auto")
+                && !claude.contains("not measured live"),
+            "{claude}"
+        );
+    }
+
+    #[test]
+    fn the_permission_row_of_an_unreadable_file_is_skipped_and_names_the_file_and_the_host() {
+        for slug in ["claude-code", "opencode", "codex"] {
+            let (fine, detail) = permission_detail(
+                slug,
+                ModeReading::Unreadable {
+                    file: PathBuf::from("/settings/broken.json"),
+                    why: "expected value".to_owned(),
+                },
+            );
+            assert!(!fine, "{slug}: an unreadable file was reported as read");
+            assert!(
+                detail.starts_with(&format!("{slug}: the mode could not be read"))
+                    && detail.contains("/settings/broken.json: expected value"),
+                "{detail}"
+            );
+        }
+        let (fine, unset) = permission_detail("claude-code", ModeReading::Unset);
+        assert!(fine);
+        assert!(unset.starts_with("no permission mode is set"), "{unset}");
+        let (fine, pi) = permission_detail("pi", ModeReading::NoPrompts);
+        assert!(fine);
+        assert!(pi.starts_with("pi has no permission prompts"), "{pi}");
+    }
+
     #[test]
     fn a_project_mcp_override_that_turns_the_server_off_or_hides_it_is_broken() {
         for body in [

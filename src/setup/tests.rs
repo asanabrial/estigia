@@ -20713,9 +20713,15 @@ fn doctor_reports_the_permission_mode_of_every_configured_host_it_can_read() {
     .collect();
     let text = |slug: &str| {
         rows.iter()
-            .map(|check| format!("{:?}", check.health))
-            .find(|health| {
-                health.contains(&format!("{slug}:")) || health.contains(&format!("{slug} has"))
+            .filter_map(|check| match &check.health {
+                crate::harness::doctor::Health::Fine { detail }
+                | crate::harness::doctor::Health::Skipped { detail } => Some(detail.as_str()),
+                _ => None,
+            })
+            .find(|detail| {
+                detail.starts_with(&format!("{slug}:"))
+                    || detail.starts_with(&format!("{slug} has"))
+                    || detail.contains(&format!("; {slug}:"))
             })
             .unwrap_or_else(|| panic!("no permission row for {slug}: {rows:?}"))
     };

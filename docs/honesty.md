@@ -7303,7 +7303,7 @@ pointer that leaves it names the document it points at.
   it. Under `ask`, Claude Code's hook answers `ask`, and the live run saw the file not created; it
   did not separate a host that put the question to nobody from one that refused it. The `permission` row
   of `doctor` reads the setting from the host's settings files only (`permissions.defaultMode` for
-  Claude Code, project then user; `permission` in `opencode.json`; `approval_policy` and
+  Claude Code, from the project's `settings.local.json`, then its `settings.json`, then the user's; `permission` in `opencode.json`; `approval_policy` and
   `sandbox_mode` at the top level of `~/.codex/config.toml`), so a mode chosen on a command line
   (`--auto`, `--permission-mode`, `--full-auto`), a Codex profile, a managed policy file or an
   environment variable is invisible to it, and `no permission mode is set` means the files say

@@ -5217,12 +5217,32 @@ fn the_silence_the_skill_states_is_the_one_ownership_applies() {
             "{path} does not state the silence window"
         );
     }
+    let binding = std::fs::read_to_string(root.join("skill/bindings/github.md"))
+        .expect("the github binding ships");
+    let binding = binding.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        binding.contains("at its horizon or four hours after trusted activity, whichever is later"),
+        "the github binding does not state the window as horizon-or-silence, whichever is later"
+    );
+    assert!(
+        !binding.contains("horizonless acquisitions expire"),
+        "the github binding limits the four-hour window to horizonless acquisitions"
+    );
     let notes = std::fs::read_to_string(root.join("skill/references/runtime-notes.md"))
         .expect("runtime-notes ships");
+    let rule = notes
+        .split("\n\n")
+        .find(|paragraph| paragraph.starts_with("A claim with a horizon stays live"))
+        .expect("runtime-notes states the rule in a paragraph that opens on the claim's horizon");
+    let rule = rule.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        rule.contains("four hours"),
+        "the rule paragraph does not state the silence window"
+    );
     for kind in estigia::transport::markers::ACTIVITY_KINDS {
         assert!(
-            notes.contains(&format!("`{kind}`")),
-            "runtime-notes.md does not name the activity kind `{kind}`"
+            rule.contains(&format!("`{kind}`")),
+            "the rule paragraph does not name the activity kind `{kind}`"
         );
     }
 }

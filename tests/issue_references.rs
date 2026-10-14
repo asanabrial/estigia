@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-const PUBLIC_ISSUES_THROUGH: u64 = 90;
+const PUBLIC_ISSUES_THROUGH: u64 = 92;
 
 const NOT_ISSUE_REFERENCES: &[(&str, u64, &str)] = &[
     ("CHANGELOG.md", 464, "`close #464, #469, #473 and #474`"),
@@ -18,12 +18,6 @@ const NOT_ISSUE_REFERENCES: &[(&str, u64, &str)] = &[
     ("docs/honesty.md", 464, "`close #464`"),
     ("docs/honesty.md", 464, "closed #464 on merge"),
     ("docs/honesty.md", 318, "another repository's #318"),
-    (
-        "skill/references/safety-incidents.md",
-        92,
-        "another repo's #92",
-    ),
-    ("skill/references/safety-incidents.md", 167, "PR #167"),
     ("skill/bindings/github/delivery.md", 464, "`close #464`"),
     (
         "skill/bindings/github/delivery.md",

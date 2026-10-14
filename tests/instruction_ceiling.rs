@@ -40,7 +40,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/references/domain-composition.md", 9_798),
     ("skill/references/repository-delivery.md", 21_155),
     ("skill/references/runtime-notes.md", 19_147),
-    ("skill/references/safety-incidents.md", 16_227),
+    ("skill/references/safety-incidents.md", 16_216),
 ];
 
 const LINE_CEILING: usize = 2_000;
