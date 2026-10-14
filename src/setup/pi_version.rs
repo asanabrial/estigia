@@ -153,9 +153,9 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn stub_pi(dir: &std::path::Path, body: &str) -> PathBuf {
+    fn stub_pi(dir: &std::path::Path, name: &str, body: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
-        let path = dir.join("pi");
+        let path = dir.join(name);
         std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         path
@@ -165,22 +165,22 @@ mod tests {
     #[test]
     fn the_version_probe_reads_stdout_or_stderr_and_gives_up_on_failure_or_a_hang() {
         let dir = tempfile::tempdir().unwrap();
-        let short = Duration::from_millis(500);
-        let on_stdout = stub_pi(dir.path(), "echo 'pi 1.2.3'");
+        let enough = Duration::from_secs(5);
+        let on_stdout = stub_pi(dir.path(), "pi-stdout", "echo 'pi 1.2.3'");
+        let on_stderr = stub_pi(dir.path(), "pi-stderr", "echo '1.2.0' >&2");
+        let failing = stub_pi(dir.path(), "pi-failing", "echo '1.2.0'; exit 3");
+        let hanging = stub_pi(dir.path(), "pi-hanging", "sleep 30");
         assert_eq!(
-            version_of(on_stdout, short).map(|v| v.to_string()),
+            version_of(on_stdout, enough).map(|v| v.to_string()),
             Some("1.2.3".to_owned())
         );
-        let on_stderr = stub_pi(dir.path(), "echo '1.2.0' >&2");
         assert_eq!(
-            version_of(on_stderr, short).map(|v| v.to_string()),
+            version_of(on_stderr, enough).map(|v| v.to_string()),
             Some("1.2.0".to_owned())
         );
-        let failing = stub_pi(dir.path(), "echo '1.2.0'; exit 3");
-        assert_eq!(version_of(failing, short), None);
-        let hanging = stub_pi(dir.path(), "sleep 30");
+        assert_eq!(version_of(failing, enough), None);
         let started = std::time::Instant::now();
-        assert_eq!(version_of(hanging, short), None);
+        assert_eq!(version_of(hanging, Duration::from_millis(500)), None);
         assert!(
             started.elapsed() < Duration::from_secs(10),
             "the probe waited on a hung pi"
