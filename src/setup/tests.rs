@@ -16716,7 +16716,7 @@ console.log(JSON.stringify({ logged, exported: process.env.ESTIGIA_PI_PARENT_SES
 fn the_pi_extension_links_a_child_by_its_parent_header_whatever_its_pid() {
     let node = node_executable();
     let root = tempfile::tempdir().expect("a temporary directory");
-    let base = root.path().canonicalize().expect("the directory resolves");
+    let base = node_safe_dir(root.path());
     fs::write(
         base.join("gate.mjs"),
         plugin::pi_source(std::path::Path::new(&node)),
@@ -17073,7 +17073,10 @@ fn the_pi_extension_forwards_why_a_session_started_and_which_session_it_came_fro
 fn the_pi_extension_says_the_session_context_is_unknown_when_the_binary_does_not_answer() {
     for (plan, why) in [
         (serde_json::json!({"exit": 3, "stderr": "boom"}), "exit 3"),
-        (serde_json::json!({"signal": "SIGKILL"}), "SIGKILL"),
+        (
+            serde_json::json!({"signal": "SIGKILL"}),
+            if cfg!(windows) { "exit 1" } else { "SIGKILL" },
+        ),
         (serde_json::json!({"hang": true}), "within 5s"),
     ] {
         let said = drive_pi_session(
@@ -18475,7 +18478,10 @@ fn the_pi_loop_stops_and_says_so_when_estigia_does_not_answer() {
     for (label, word) in [
         ("timeout", "gave no answer within 30 seconds"),
         ("no_exit_code", "no exit code"),
-    ] {
+    ]
+    .into_iter()
+    .filter(|(label, _)| !(cfg!(windows) && *label == "no_exit_code"))
+    {
         let case = &cases[label];
         assert_eq!(case["prompts"], 1, "{label} counted as work: {case}");
         assert_eq!(

@@ -98,9 +98,7 @@ jobs:
       # The suite runs on every target that can run it. A cross-built archive
       # is published having compiled and nothing more, and saying which is
       # which is the honest part.
-      # Windows targets skip the suite until issue #11, as `ci.yml` does.
       - name: Test
-        if: runner.os != 'Windows'
         run: cargo test --release --target ${{ matrix.target }}
 
       - name: Build

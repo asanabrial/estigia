@@ -89,12 +89,7 @@ jobs:
       # That is why `tests/pipe.rs` — the end-to-end evidence for the review
       # protocol — never ran on the Linux and macOS lanes the one time they went
       # red. It does not soften a red run; the job still fails.
-      #
-      # Windows is skipped until issue #11 is done: 13 lib tests still fail
-      # there (run 38602449958), down from 55 (run 38317428664). The lane still
-      # compiles and lints.
       - name: tests
-        if: matrix.os != 'windows-latest'
         run: cargo test --all-features --no-fail-fast --locked
 
       - name: documentation
