@@ -1813,6 +1813,36 @@ fn assist_reserves_the_checkout_and_asks_the_tracker_only_to_read() {
 }
 
 #[test]
+fn assist_never_links_the_branch_whatever_the_start_says() {
+    for link in [true, false] {
+        let rig = assist_rig();
+        let trees = rig.root.path().join("trees");
+        let trees = trees.to_string_lossy().into_owned();
+        let what = Start {
+            link,
+            ..start_what("issue-12", Some(&trees))
+        };
+        let bin = crate::test_env::scripted_gh();
+        let log = rig.root.path().join("gh.log");
+        let script = assist_answers(serde_json::json!({ "state": "OPEN", "title": "A title" }));
+        let answer = crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+            super::assist(&rig.context, &what, None)
+        })
+        .expect("the checkout is reserved");
+        assert_eq!(answer["tracker_written"], false, "link: {link}");
+        assert!(
+            answer.get("link_outcome").is_none(),
+            "link: {link}: {answer}"
+        );
+        let asked = std::fs::read_to_string(&log).expect("the fake gh logged its calls");
+        assert!(
+            !asked.contains("issue develop"),
+            "assist linked the branch with link: {link}: {asked}"
+        );
+    }
+}
+
+#[test]
 fn assist_stops_before_any_repository_write_when_the_issue_cannot_be_read() {
     let rig = assist_rig();
     let trees = rig.root.path().join("trees");
