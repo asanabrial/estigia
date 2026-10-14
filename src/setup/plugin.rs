@@ -761,7 +761,7 @@ const REVIEWERS = [
   "review-validator",
   "review-refuter",
 ];
-const SUBAGENT_TOOLS = ["task", "agent"];
+const SUBAGENT_TOOLS = ["task", "agent", "subagent"];
 const MARKER = /estigia:review(?:\s+name=([A-Za-z0-9_-]+))?/;
 
 const errorText = (error) => String(error?.message ?? error);

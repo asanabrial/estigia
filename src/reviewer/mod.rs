@@ -268,7 +268,7 @@ pub fn select_reviewer(run_id: &str) -> Result<Box<dyn Adapter>, Refusal> {
     }
 }
 
-fn runs_on_opencode(run_id: &str) -> bool {
+pub(crate) fn runs_on_opencode(run_id: &str) -> bool {
     use crate::harness::session::{RunIdShape, run_id_shape};
     matches!(
         run_id_shape(run_id),

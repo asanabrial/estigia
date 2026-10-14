@@ -517,12 +517,11 @@ fn published_with_payload(receipt: &ReviewTransaction, payload_digest: &str) -> 
 }
 
 fn capturable() -> World {
-    world_of(|receipt, payload| {
-        vec![
-            live_claim("claude-a"),
-            published_with_payload(receipt, payload),
-        ]
-    })
+    capturable_as("claude-a")
+}
+
+fn capturable_as(run_id: &'static str) -> World {
+    world_of(|receipt, payload| vec![live_claim(run_id), published_with_payload(receipt, payload)])
 }
 
 struct Stub {
@@ -988,11 +987,15 @@ fn a_receipt_that_moved_while_the_reviewer_ran_is_stale_and_records_nothing() {
 }
 
 fn relay_launch(world: &World, name: &str) -> Result<serde_json::Value, Failure> {
+    relay_launch_as(world, name, "claude-a")
+}
+
+fn relay_launch_as(world: &World, name: &str, run_id: &str) -> Result<serde_json::Value, Failure> {
     let bin = crate::test_env::scripted_gh();
     let script = script_for(world, lane_read_answers());
     let context = named(&world.context);
     crate::test_env::with_scripted_gh(bin.path(), &script, || {
-        super::super::capture::launch_relay(&context, &input_for(name, "claude-a"), LAUNCHED_AT)
+        super::super::capture::launch_relay(&context, &input_for(name, run_id), LAUNCHED_AT)
     })
 }
 
@@ -1003,6 +1006,27 @@ fn relay_admit_as(world: &World, name: &str, bytes: &[u8]) -> Result<serde_json:
     crate::test_env::with_scripted_gh(bin.path(), &script, || {
         super::super::relay_admit(&context, "claude-a", name, bytes, NOW)
     })
+}
+
+/// An OpenCode relay answer carries the launch the host makes: a built-in
+/// sub-agent and the marker prompt the relay plugin intercepts, never the
+/// reserved reviewer as an agent. Another host's answer carries none.
+#[test]
+fn an_opencode_relay_answer_carries_the_launch_the_plugin_intercepts() {
+    let world = capturable_as("opencode-ses12345deadbeef");
+    let launched = relay_launch_as(&world, RELIABILITY_LENS, "opencode-ses12345deadbeef")
+        .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+    assert_eq!(launched["relay"], true, "{launched}");
+    assert_eq!(launched["launch"]["agent"], "general", "{launched}");
+    assert_eq!(
+        launched["launch"]["prompt"],
+        format!("<!-- estigia:review name={RELIABILITY_LENS} -->"),
+        "{launched}"
+    );
+
+    let other = relay_launch(&capturable(), RELIABILITY_LENS)
+        .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+    assert!(other.get("launch").is_none(), "{other}");
 }
 
 /// A relayed answer is admitted against the job's own receipt: the host built no
