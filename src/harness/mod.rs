@@ -89,8 +89,10 @@ pub enum Action {
         /// payload was not narrow enough to prove, which refuses rather than
         /// exempts.
         is_exact_integration_merge: bool,
-        /// The directory a `git merge` runs in, as the line itself spells it.
+        /// The directory a git delivery runs in, as the line itself spells it.
         runs_in: RunsIn,
+        /// The commit a `git tag` or an exact `git merge --ff-only` acts on.
+        target: CommitTarget,
     },
     /// A write to GitHub that is no delivery boundary. The gate leaves it alone
     /// while the git operation window is open and denies it while it is closed.
@@ -102,7 +104,19 @@ pub enum Action {
     Untouched,
 }
 
-/// Where a `git merge` line says it runs.
+/// The commit a git delivery acts on, as far as the line spells it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommitTarget {
+    /// The line names no commit: the checkout's own `HEAD`, or a command that
+    /// acts on no commit at all.
+    Checkout,
+    /// A ref or SHA the line names as a plain word.
+    Named(String),
+    /// The line names a commit in a way that is not read without running it.
+    Unread,
+}
+
+/// Where a git delivery line says it runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunsIn {
     /// The line names no directory: the session's own.
@@ -1142,7 +1156,9 @@ fn pr_merge_target(command: &str) -> Option<u64> {
 ///
 /// `gh pr merge` is bound to the PR head `pr_head` reports, not to
 /// `checkout`'s own `HEAD`; every other delivery in `DELIVERS`
-/// still compares against `checkout`.
+/// still compares against `checkout`, where `checkout` is the directory a git
+/// command's own `cd` or `-C` names. A `git tag`, and an exact `git merge
+/// --ff-only`, are also admitted on the run's own merge commit.
 pub(crate) fn stale_verdict(
     action: &Action,
     run: &Run,
@@ -1262,7 +1278,43 @@ pub(crate) fn stale_verdict(
     if let Some(refusal) = checkout_refusal(relation, checkout) {
         return Some(refusal);
     }
-    if now.as_deref() == Some(reviewed) {
+    let head = now.as_deref().unwrap_or_default();
+    let receipt = run
+        .review_transaction
+        .as_ref()
+        .filter(|receipt| receipt.is_complete());
+    let delivers = |commit: &str| {
+        receipt.is_some_and(|receipt| is_the_receipts_merge(receipt, checkout, commit))
+    };
+    let (judged, accepted) = match action {
+        Action::Boundary {
+            command,
+            target: CommitTarget::Named(named),
+            ..
+        } if command == "git tag" => match commit_of(checkout, named) {
+            Some(commit) => {
+                let accepted = commit == reviewed || delivers(&commit);
+                (short(&commit), accepted)
+            }
+            None => (found, head == reviewed),
+        },
+        Action::Boundary {
+            command,
+            target: CommitTarget::Checkout,
+            ..
+        } if command == "git tag" => (found, head == reviewed || delivers(head)),
+        Action::Boundary {
+            command,
+            target: CommitTarget::Named(named),
+            local_fast_forward_target: Some(_),
+            ..
+        } if command == "git merge" => (
+            found,
+            head == reviewed || commit_of(checkout, named).is_some_and(|commit| delivers(&commit)),
+        ),
+        _ => (found, head == reviewed),
+    };
+    if accepted {
         return None;
     }
     Some(Refusal::stale(
@@ -1272,7 +1324,7 @@ pub(crate) fn stale_verdict(
              invalidates the verdict and the CI run that went with it",
             short(reviewed),
             checkout.display(),
-            found
+            judged
         ),
         Resolution::no_command(
             NoCommandReason::HumanAuthority,
@@ -1395,6 +1447,61 @@ fn repository_relation(left: &std::path::Path, right: &std::path::Path) -> Relat
         (Some(_), Some(_)) => Relation::Different,
         _ => Relation::Unreadable,
     }
+}
+
+/// The commit `revision` names in `directory`, when git will say; `None`
+/// rather than a guess.
+fn commit_of(directory: &std::path::Path, revision: &str) -> Option<String> {
+    let expression = format!("{revision}^{{commit}}");
+    let answer = proof_git_command(
+        directory,
+        &["rev-parse", "--verify", "--end-of-options", &expression],
+    )
+    .output()
+    .ok()
+    .filter(|answer| answer.status.success())?;
+    let oid = String::from_utf8(answer.stdout).ok()?.trim().to_owned();
+    (oid.len() == 40 && oid.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(oid)
+}
+
+/// Whether `commit` is the merge that delivered `receipt`: two parents, the
+/// second the reviewed head and the first a descendant of the receipt's base.
+/// Anything git cannot answer is `false`.
+fn is_the_receipts_merge(
+    receipt: &crate::transport::claim::ReviewTransaction,
+    directory: &std::path::Path,
+    commit: &str,
+) -> bool {
+    let Some(parents) = proof_git_command(
+        directory,
+        &[
+            "rev-list",
+            "--parents",
+            "-n",
+            "1",
+            "--end-of-options",
+            commit,
+        ],
+    )
+    .output()
+    .ok()
+    .filter(|answer| answer.status.success())
+    .and_then(|answer| String::from_utf8(answer.stdout).ok()) else {
+        return false;
+    };
+    let [listed, first, second] = parents.split_ascii_whitespace().collect::<Vec<_>>()[..] else {
+        return false;
+    };
+    listed == commit
+        && receipt.delivered_by_merge(
+            second,
+            proof_git_command(
+                directory,
+                &["merge-base", "--is-ancestor", &receipt.base, first],
+            )
+            .output()
+            .is_ok_and(|answer| answer.status.success()),
+        )
 }
 
 /// The first seven of a SHA, which is what a person reads.
@@ -1829,6 +1936,7 @@ pub fn classify_observing(
                     local_fast_forward_target: None,
                     is_exact_integration_merge: false,
                     runs_in: crate::harness::RunsIn::Session,
+                    target: crate::harness::CommitTarget::Checkout,
                 },
                 Sensitivity::Boundary,
                 // This arm searched `disarm_view` — `normalized` with every
@@ -1855,6 +1963,7 @@ pub fn classify_observing(
                     local_fast_forward_target: None,
                     is_exact_integration_merge: false,
                     runs_in: crate::harness::RunsIn::Session,
+                    target: crate::harness::CommitTarget::Checkout,
                 },
                 Sensitivity::Boundary,
                 CommandObserved {
@@ -1904,14 +2013,33 @@ pub fn classify_observing(
                 None
             };
             let disqualifying_byte = pr_unidentified_reason.clone();
-            let directed = if matched == "git merge" {
+            let directed = if DELIVERS.contains(&matched) && matched.starts_with("git ") {
                 let literal_text = command.literal.as_deref().ok();
                 directed_integration_merge(
                     literal_text.unwrap_or(command.text.as_str()),
                     literal_text.is_some(),
                 )
             } else {
-                (RunsIn::Session, false)
+                (RunsIn::Session, false, String::new())
+            };
+            let local_fast_forward_target = (matched == "git merge")
+                .then(|| {
+                    command
+                        .literal
+                        .as_deref()
+                        .ok()
+                        .and_then(exact_local_fast_forward_target)
+                })
+                .flatten();
+            let target = match matched {
+                "git tag" => match command.literal {
+                    Ok(_) => tag_target(&directed.2),
+                    Err(_) => CommitTarget::Unread,
+                },
+                "git merge" => local_fast_forward_target
+                    .clone()
+                    .map_or(CommitTarget::Checkout, CommitTarget::Named),
+                _ => CommitTarget::Checkout,
             };
             let boundary_source = if IRREVERSIBLE.contains(&matched) {
                 "irreversible"
@@ -1923,17 +2051,10 @@ pub fn classify_observing(
                     command: matched.to_owned(),
                     pr,
                     pr_unidentified_reason,
-                    local_fast_forward_target: (matched == "git merge")
-                        .then(|| {
-                            command
-                                .literal
-                                .as_deref()
-                                .ok()
-                                .and_then(exact_local_fast_forward_target)
-                        })
-                        .flatten(),
+                    local_fast_forward_target,
                     is_exact_integration_merge: directed.1,
                     runs_in: directed.0,
+                    target,
                 },
                 Sensitivity::Boundary,
                 CommandObserved {
@@ -2377,9 +2498,9 @@ fn exact_integration_merge(command: &str) -> bool {
 /// Reads one leading `cd <dir> &&` or one `git -C <dir>` and nothing else. A
 /// line that changes directory any other way is [`RunsIn::Unestablished`]; a
 /// payload that is not a literal is never an integration.
-fn directed_integration_merge(command: &str, literal: bool) -> (RunsIn, bool) {
+fn directed_integration_merge(command: &str, literal: bool) -> (RunsIn, bool, String) {
     if literal && exact_integration_merge(command) {
-        return (RunsIn::Session, true);
+        return (RunsIn::Session, true, command.trim().to_owned());
     }
     let plain_directory = |word: &str| {
         let unquoted = ['\'', '"']
@@ -2419,18 +2540,97 @@ fn directed_integration_merge(command: &str, literal: bool) -> (RunsIn, bool) {
     };
     if let Some((directory, merge, rest)) = named {
         if literal && exact_integration_merge(&merge) {
-            return (RunsIn::Named(directory), true);
+            return (RunsIn::Named(directory), true, merge);
         }
         return if changes_directory(&rest) {
-            (RunsIn::Unestablished, false)
+            (RunsIn::Unestablished, false, merge)
         } else {
-            (RunsIn::Named(directory), false)
+            (RunsIn::Named(directory), false, merge)
         };
     }
-    if changes_directory(trimmed) {
-        (RunsIn::Unestablished, false)
+    let trimmed = trimmed.to_owned();
+    if changes_directory(&trimmed) {
+        (RunsIn::Unestablished, false, trimmed)
     } else {
-        (RunsIn::Session, false)
+        (RunsIn::Session, false, trimmed)
+    }
+}
+
+/// The commit a literal `git tag` creating a tag names, read from the command
+/// with its directory change already taken off.
+///
+/// Only a command made of plain words is read: a flag outside the few that
+/// create a tag, a quoted space, any shell punctuation or a third positional is
+/// [`CommitTarget::Unread`], which the verdict check treats as a command it
+/// cannot attribute to a commit.
+fn tag_target(command: &str) -> CommitTarget {
+    let command = without_leading_options(command);
+    let unquote = |word: &str| {
+        ['\'', '"']
+            .iter()
+            .find_map(|quote| word.strip_prefix(*quote)?.strip_suffix(*quote))
+            .unwrap_or(word)
+            .to_owned()
+    };
+    let plain = |word: &str| {
+        !word.is_empty()
+            && word
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"-_./:=+~^".contains(&byte))
+    };
+    if !command
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || b" \t-_./:=+~^'\"".contains(&byte))
+    {
+        return CommitTarget::Unread;
+    }
+    let words: Vec<String> = command.split_ascii_whitespace().map(unquote).collect();
+    let [first, second, rest @ ..] = words.as_slice() else {
+        return CommitTarget::Unread;
+    };
+    if first != "git" || second != "tag" {
+        return CommitTarget::Unread;
+    }
+    let mut positionals = Vec::new();
+    let mut words = rest.iter();
+    let mut options_ended = false;
+    while let Some(word) = words.next() {
+        if options_ended || !word.starts_with('-') {
+            positionals.push(word.as_str());
+        } else if word == "--" {
+            options_ended = true;
+        } else if let Some(long) = word.strip_prefix("--") {
+            match long {
+                "annotate" | "sign" | "force" | "edit" | "no-sign" => {}
+                "message" | "file" | "local-user" => {
+                    if words.next().is_none() {
+                        return CommitTarget::Unread;
+                    }
+                }
+                _ if ["message=", "file=", "local-user=", "cleanup="]
+                    .iter()
+                    .any(|prefix| long.starts_with(prefix)) => {}
+                _ => return CommitTarget::Unread,
+            }
+        } else {
+            let cluster = &word[1..];
+            let takes_value = cluster.ends_with(['m', 'F', 'u']);
+            let flags = cluster.trim_end_matches(['m', 'F', 'u']);
+            if cluster.is_empty()
+                || !flags.chars().all(|flag| "asfe".contains(flag))
+                || flags.len() + usize::from(takes_value) != cluster.len()
+                || (takes_value && words.next().is_none())
+            {
+                return CommitTarget::Unread;
+            }
+        }
+    }
+    match positionals.as_slice() {
+        [name] if plain(name) => CommitTarget::Checkout,
+        [name, commit] if plain(name) && plain(commit) && !commit.starts_with('-') => {
+            CommitTarget::Named((*commit).to_owned())
+        }
+        _ => CommitTarget::Unread,
     }
 }
 

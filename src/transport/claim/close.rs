@@ -40,8 +40,7 @@ fn match_merge(
     base_is_ancestor_of_first_parent: bool,
 ) -> Option<OwnClose> {
     if delivering_sha.len() != 40
-        || second_parent != receipt.head
-        || !base_is_ancestor_of_first_parent
+        || !receipt.delivered_by_merge(second_parent, base_is_ancestor_of_first_parent)
     {
         return None;
     }

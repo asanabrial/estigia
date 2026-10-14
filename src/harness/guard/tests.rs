@@ -2041,6 +2041,7 @@ fn sibling_selection_binds_pr_before_head_and_attributes_no_ambiguous_holder() {
         local_fast_forward_target: None,
         is_exact_integration_merge: false,
         runs_in: crate::harness::RunsIn::Session,
+        target: crate::harness::CommitTarget::Checkout,
     };
     let selected = holders_for_action(state.path(), &sibling, &action);
     assert_eq!(selected.len(), 1);
@@ -2125,6 +2126,7 @@ fn an_unreadable_sibling_pointer_selects_no_readable_holder() {
             local_fast_forward_target: None,
             is_exact_integration_merge: false,
             runs_in: crate::harness::RunsIn::Session,
+            target: crate::harness::CommitTarget::Checkout,
         },
         Sensitivity::Boundary,
         &[],

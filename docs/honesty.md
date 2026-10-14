@@ -6109,7 +6109,8 @@ pointer that leaves it names the document it points at.
   the published head at the boundary that spends it, but not always against the
   same thing: a `git merge`, `git tag` or `gh release` from a run whose recorded review head is not
   the invoking checkout's own head is refused as `verdict-bound-to-other-bytes`, naming the path
-  inspected and the head found there. The invoking checkout is the covered directory the gate already
+  inspected and the head found there (the run's own merge commit is the exception the entry on
+  #58 below describes). The invoking checkout is the covered directory the gate already
   selected and verified for this call; it is not inferred again from the run pointer, whose worktree
   can be absent after a handoff. A `gh pr merge` is instead refused against the PR head the tracker
   reports — one `gh pr view <number>` read per merge attempt, naming the PR number, the reviewed head
@@ -8873,11 +8874,32 @@ pointer that leaves it names the document it points at.
     publication invalidates the verdict anyway.
   - **Still a delivery:** the same line in any other checkout, including the base checkout; a
     `git merge` with `--ff-only`, a second command, a redirect or an expansion; `git tag`;
-    `gh pr merge`, whose adjudication is unchanged.
+    `gh pr merge`, whose adjudication is unchanged. `git tag` and an exact `git merge --ff-only`
+    have one further road, below.
   - **Directory not readable:** a line that changes directory any way other than the leading `cd`
     or `-C` above (`cd $VAR`, a second `cd`, a subshell, `pushd`, `--git-dir`) is refused
-    `verdict-bound-to-other-bytes`, says the gate cannot tell which checkout it runs in, and does
-    not name the session directory. This applies only after a review is recorded.
+    `review-checkout-unreadable` (class `unavailable`; it used to be documented here as
+    `verdict-bound-to-other-bytes`, which the code never answered), says the gate cannot tell which
+    checkout it runs in, and does not name the session directory. This applies only after a review is
+    recorded, and since #58 to every git command in `DELIVERS`, `git tag` included: the directory
+    change is read for each of them, where it had been read for `git merge` alone and a `git -C
+    <dir> tag` was judged against the session's checkout.
+  - **The run's own merge commit (#58).** The prescribed `git tag -a "<tag>" -F "<notes-file>"
+    "<merge-sha>"` and the `git merge --ff-only origin/main` that brings the base checkout to the
+    delivered merge both act on a commit that is not the reviewed head, so the head comparison
+    refused them. The commit the line acts on — a tag's named commit, else the checkout's `HEAD`;
+    the fast-forward's named target, in addition to `HEAD` — is now also admitted when it is a
+    two-parent merge whose second parent is the receipt's head and whose first parent descends from
+    the receipt's base. That is the topology `match_own_close` applies to the merge readback, held
+    in one place (`ReviewTransaction::delivered_by_merge`) that both read. A tag line is read only
+    when it is plain words (`tag_target`); a quoted space, shell punctuation, a flag outside the few
+    that create a tag or a third positional leaves the commit unread and the comparison with the
+    checkout's `HEAD` as before. A tag that names a commit is judged on that commit, not on `HEAD`:
+    where the checkout sat at the reviewed head, a tag of some other commit used to pass. Not
+    covered: `git -C <dir> merge --ff-only ...` and `cd <dir> && git merge --ff-only ...` (not the
+    bare four-word shape `exact_local_fast_forward_target` reads), a merge whose base the checkout
+    cannot resolve (the ancestry question is then unanswered, which refuses), and a squash or
+    rebase merge, which has no second parent.
   What this does not prove: it does not check that the branch is the issue's own, nor that it is not
   the base branch, only that the checkout is the run's own worktree; that is the first entry above and
   it stands. A run whose worktree is itself on the base branch is not told apart.

@@ -75,6 +75,7 @@ fn push() -> Action {
         local_fast_forward_target: None,
         is_exact_integration_merge: false,
         runs_in: crate::harness::RunsIn::Session,
+        target: crate::harness::CommitTarget::Checkout,
     }
 }
 

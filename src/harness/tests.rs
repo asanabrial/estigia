@@ -1093,6 +1093,7 @@ fn a_payload_without_one_literal_command_refuses_the_integration_exemption() {
                     Action::Boundary {
                         is_exact_integration_merge: false,
                         runs_in: crate::harness::RunsIn::Session,
+                        target: crate::harness::CommitTarget::Checkout,
                         ..
                     }
                 ),
@@ -1621,6 +1622,7 @@ fn a_boundary_never_rides_on_the_window() {
         local_fast_forward_target: None,
         is_exact_integration_merge: false,
         runs_in: crate::harness::RunsIn::Session,
+        target: crate::harness::CommitTarget::Checkout,
     };
     let decision = gate(&context, &mut run, &action, Sensitivity::Boundary);
     assert!(
@@ -2967,6 +2969,7 @@ fn the_gate_honours_a_stand_down_and_stops_when_it_expires() {
             local_fast_forward_target: None,
             is_exact_integration_merge: false,
             runs_in: crate::harness::RunsIn::Session,
+            target: crate::harness::CommitTarget::Checkout,
         };
         gate(&context, &mut run, &action, Sensitivity::Boundary)
     };
@@ -4998,6 +5001,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
                 local_fast_forward_target: None,
                 is_exact_integration_merge: false,
                 runs_in: crate::harness::RunsIn::Session,
+                target: crate::harness::CommitTarget::Checkout,
             },
             &run,
             repo.path(),
@@ -5018,6 +5022,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
             local_fast_forward_target: None,
             is_exact_integration_merge: false,
             runs_in: crate::harness::RunsIn::Session,
+            target: crate::harness::CommitTarget::Checkout,
         },
         &unpublished,
         repo.path(),
@@ -5046,6 +5051,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
                     local_fast_forward_target: None,
                     is_exact_integration_merge: false,
                     runs_in: crate::harness::RunsIn::Session,
+                    target: crate::harness::CommitTarget::Checkout,
                 },
                 &run,
                 repo.path(),
@@ -5066,6 +5072,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
                 local_fast_forward_target: None,
                 is_exact_integration_merge: false,
                 runs_in: crate::harness::RunsIn::Session,
+                target: crate::harness::CommitTarget::Checkout,
             },
             &run,
             repo.path(),
@@ -5110,6 +5117,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
             local_fast_forward_target: None,
             is_exact_integration_merge: false,
             runs_in: crate::harness::RunsIn::Session,
+            target: crate::harness::CommitTarget::Checkout,
         },
         &run,
         &unrelated,
@@ -5137,6 +5145,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
             local_fast_forward_target: None,
             is_exact_integration_merge: false,
             runs_in: crate::harness::RunsIn::Session,
+            target: crate::harness::CommitTarget::Checkout,
         },
         &run,
         &unreadable,
@@ -5157,6 +5166,7 @@ fn a_delivery_on_a_moved_head_is_refused_and_the_push_that_moved_it_is_not() {
             local_fast_forward_target: None,
             is_exact_integration_merge: false,
             runs_in: crate::harness::RunsIn::Session,
+            target: crate::harness::CommitTarget::Checkout,
         },
         &run,
         &unreadable,
@@ -5412,6 +5422,290 @@ fn a_merge_whose_directory_cannot_be_read_names_that_and_not_the_session() {
     }
 }
 
+struct DeliveredRig {
+    _parent: tempfile::TempDir,
+    primary: std::path::PathBuf,
+    reviewed_worktree: std::path::PathBuf,
+    stale_worktree: std::path::PathBuf,
+    merge: String,
+    stranger: String,
+    run: Run,
+}
+
+fn delivered_rig() -> DeliveredRig {
+    let parent = tempfile::tempdir().expect("a parent for the checkouts");
+    let primary = parent.path().join("primary");
+    let reviewed_worktree = parent.path().join("reviewed");
+    let stale_worktree = parent.path().join("stale");
+    std::fs::create_dir(&primary).expect("the primary checkout directory");
+    let git = |directory: &std::path::Path, args: &[&str]| {
+        let answer = std::process::Command::new("git")
+            .arg("-C")
+            .arg(directory)
+            .args(["-c", "user.email=t@example.invalid", "-c", "user.name=t"])
+            .args(args)
+            .output()
+            .expect("git runs");
+        assert!(
+            answer.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&answer.stderr)
+        );
+        String::from_utf8_lossy(&answer.stdout).trim().to_owned()
+    };
+    let commit = |directory: &std::path::Path, file: &str, text: &str| {
+        std::fs::write(directory.join(file), text).expect("a file");
+        git(directory, &["add", "-A"]);
+        git(directory, &["commit", "-qm", text]);
+        git(directory, &["rev-parse", "HEAD"])
+    };
+    git(&primary, &["init", "-q", "-b", "main"]);
+    let base = commit(&primary, "a.txt", "base");
+    git(
+        &primary,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            stale_worktree.to_str().expect("utf-8 path"),
+        ],
+    );
+    git(
+        &primary,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "topic",
+            reviewed_worktree.to_str().expect("utf-8 path"),
+        ],
+    );
+    let head = commit(&reviewed_worktree, "b.txt", "reviewed");
+    commit(&primary, "c.txt", "base moved");
+    git(
+        &primary,
+        &["merge", "-q", "--no-ff", "-m", "merge", "topic"],
+    );
+    let merge = git(&primary, &["rev-parse", "HEAD"]);
+    assert_eq!(git(&primary, &["rev-parse", "HEAD^2"]), head);
+    git(&primary, &["branch", "other", &base]);
+    git(&primary, &["checkout", "-q", "other"]);
+    commit(&primary, "d.txt", "elsewhere");
+    git(&primary, &["checkout", "-q", "-b", "stranger-side", &base]);
+    let side = commit(&primary, "e.txt", "side");
+    git(&primary, &["checkout", "-q", "main"]);
+    git(
+        &primary,
+        &["merge", "-q", "--no-ff", "-m", "stranger", &side],
+    );
+    let stranger = git(&primary, &["rev-parse", "HEAD"]);
+    git(&primary, &["reset", "-q", "--hard", &merge]);
+
+    let mut run = Run::new("claude-abcd1234".to_owned());
+    run.repo_dir = Some(primary.clone());
+    run.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head,
+        base,
+        digest: "c".repeat(64),
+    });
+    DeliveredRig {
+        _parent: parent,
+        primary,
+        reviewed_worktree,
+        stale_worktree,
+        merge,
+        stranger,
+        run,
+    }
+}
+
+fn delivered_verdict(
+    rig: &DeliveredRig,
+    session: &std::path::Path,
+    command: &str,
+) -> Option<crate::outcome::Refusal> {
+    let (action, _) = classify("Bash", &json!({ "command": command }));
+    stale_verdict(&action, &rig.run, session, &|_| {
+        panic!("a git command never asks for the PR head")
+    })
+}
+
+#[test]
+fn a_tag_of_the_runs_own_merge_commit_is_not_a_stale_verdict() {
+    let rig = delivered_rig();
+    for command in [
+        format!("git tag -a v1.0 -F notes.txt {}", rig.merge),
+        format!("git tag -a \"v1.0\" -F \"notes.txt\" \"{}\"", rig.merge),
+        "git tag -a v1.0 -F notes.txt".to_owned(),
+        "git tag v1.0 main".to_owned(),
+    ] {
+        assert!(
+            delivered_verdict(&rig, &rig.primary, &command).is_none(),
+            "`{command}` tags the merge of the reviewed head from the checkout that is at it"
+        );
+    }
+    for command in [
+        format!(
+            "git -C {} tag -a v1.0 -F notes.txt {}",
+            rig.reviewed_worktree.display(),
+            rig.merge
+        ),
+        format!(
+            "git -C {} tag -a v1.0 -F notes.txt",
+            rig.reviewed_worktree.display()
+        ),
+        format!(
+            "cd {} && git tag -a v1.0 {}",
+            rig.reviewed_worktree.display(),
+            rig.merge
+        ),
+    ] {
+        assert!(
+            delivered_verdict(&rig, &rig.primary, &command).is_none(),
+            "`{command}` was judged against the session's checkout, not the directory it names"
+        );
+    }
+}
+
+#[test]
+fn a_tag_of_any_other_commit_is_still_a_stale_verdict() {
+    let rig = delivered_rig();
+    let mut moved_base = rig.run.clone();
+    moved_base
+        .review_transaction
+        .as_mut()
+        .expect("a receipt")
+        .base = rig.stranger.clone();
+    let cases = [
+        (rig.run.clone(), format!("git tag v1.0 {}", rig.stranger)),
+        (rig.run.clone(), "git tag v1.0 other".to_owned()),
+        (rig.run.clone(), "git tag v1.0 HEAD~1".to_owned()),
+        (
+            rig.run.clone(),
+            format!("git -C {} tag v1.0 {}", rig.primary.display(), rig.stranger),
+        ),
+        (moved_base, format!("git tag v1.0 {}", rig.merge)),
+    ];
+    for (run, command) in cases {
+        let (action, _) = classify("Bash", &json!({ "command": command }));
+        let refusal = stale_verdict(&action, &run, &rig.primary, &|_| {
+            panic!("a git command never asks for the PR head")
+        })
+        .unwrap_or_else(|| panic!("`{command}` tagged a commit that is not the run's merge"));
+        assert_eq!(refusal.code, "verdict-bound-to-other-bytes", "{command}");
+    }
+    let at_stranger = {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(&rig.primary)
+            .args(["reset", "-q", "--hard", &rig.stranger])
+            .output()
+            .expect("git runs");
+        delivered_verdict(&rig, &rig.primary, "git tag v1.0")
+    };
+    assert_eq!(
+        at_stranger
+            .expect("a merge of another head was accepted")
+            .code,
+        "verdict-bound-to-other-bytes"
+    );
+}
+
+#[test]
+fn a_fast_forward_to_the_runs_own_merge_is_not_a_stale_verdict() {
+    let rig = delivered_rig();
+    assert!(
+        delivered_verdict(&rig, &rig.stale_worktree, "git merge --ff-only main").is_none(),
+        "a fast-forward whose new head is the merge of the reviewed head was refused"
+    );
+    let refusal = delivered_verdict(&rig, &rig.stale_worktree, "git merge --ff-only other")
+        .expect("a fast-forward to a commit that is not the run's merge was accepted");
+    assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
+}
+
+#[test]
+fn a_tag_names_a_commit_only_when_the_line_is_plain_words() {
+    use super::CommitTarget::{Checkout, Named, Unread};
+    let target = |command: &str| {
+        let (action, _) = classify("Bash", &json!({ "command": command }));
+        match action {
+            Action::Boundary { target, .. } => target,
+            other => panic!("`{command}` was read as {other:?}"),
+        }
+    };
+    for (command, expected) in [
+        ("git tag -a v1 -F notes.txt abc123", Named("abc123".into())),
+        ("git tag -am 'x y' v1 abc123", Unread),
+        ("git tag -am x v1 abc123", Named("abc123".into())),
+        ("git tag --message x v1 main", Named("main".into())),
+        ("git --no-pager tag v1 main", Named("main".into())),
+        (
+            "git tag -a \"v1\" -F \"n.txt\" \"abc123\"",
+            Named("abc123".into()),
+        ),
+        ("git tag -a v1", Checkout),
+        ("git tag -a v1 --", Checkout),
+        ("git tag v1 a b", Unread),
+        ("git tag v1 abc123 && git push", Unread),
+        ("git tag v1 $(git rev-parse HEAD~1)", Unread),
+        ("git tag v1 --contains abc123", Unread),
+        ("git tag -a v1 -F", Unread),
+        (
+            "git merge --ff-only origin/main",
+            Named("origin/main".into()),
+        ),
+        ("git merge origin/main", Checkout),
+        ("gh release create v1", Checkout),
+    ] {
+        assert_eq!(target(command), expected, "{command}");
+    }
+}
+
+#[test]
+fn a_git_command_with_a_named_directory_is_judged_against_that_directory() {
+    let rig = delivered_rig();
+    let refusal = delivered_verdict(
+        &rig,
+        &rig.reviewed_worktree,
+        &format!("git -C {} tag v1.0", rig.stale_worktree.display()),
+    )
+    .expect("the session's checkout at the reviewed head spent a verdict for another directory");
+    assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
+    assert!(
+        refusal
+            .message
+            .contains(&rig.stale_worktree.display().to_string()),
+        "{}",
+        refusal.message
+    );
+}
+
+#[test]
+fn a_tag_whose_directory_cannot_be_read_names_that_and_not_the_session() {
+    let rig = delivered_rig();
+    for command in [
+        "cd $WORKTREE && git tag v1.0",
+        "git -C \"$WORKTREE\" tag v1.0",
+        "git -C ~/topic tag -a v1.0",
+        "cd a && cd b && git tag v1.0",
+        "(cd somewhere; git tag v1.0)",
+    ] {
+        let refusal = delivered_verdict(&rig, &rig.primary, command).unwrap_or_else(|| {
+            panic!("`{command}` was judged against a directory it may not run in")
+        });
+        assert_eq!(refusal.code, "review-checkout-unreadable", "{command}");
+        assert!(
+            !refusal.message.contains(&rig.primary.display().to_string()),
+            "{command} named the session directory: {}",
+            refusal.message
+        );
+    }
+}
+
 #[test]
 fn a_steered_environment_cannot_spend_another_checkout_s_verdict() {
     if std::env::var_os("ESTIGIA_STEERED_DELIVERY_CHILD").is_some() {
@@ -5514,6 +5808,7 @@ fn assert_steered_delivery_child() {
         local_fast_forward_target: None,
         is_exact_integration_merge: false,
         runs_in: crate::harness::RunsIn::Session,
+        target: crate::harness::CommitTarget::Checkout,
     };
     let reviewed_pr_head =
         |_: u64| -> Result<String, crate::transport::Failure> { Ok(reviewed.clone()) };
@@ -5591,6 +5886,7 @@ fn a_gh_pr_merge_is_bound_to_the_pr_head_the_tracker_reports_not_the_invoking_ch
         local_fast_forward_target: None,
         is_exact_integration_merge: false,
         runs_in: crate::harness::RunsIn::Session,
+        target: crate::harness::CommitTarget::Checkout,
     };
 
     let matches_reviewed =
@@ -5949,6 +6245,7 @@ fn a_claim_covers_the_work_happening_below_the_checkout_root() {
         local_fast_forward_target: None,
         is_exact_integration_merge: false,
         runs_in: crate::harness::RunsIn::Session,
+        target: crate::harness::CommitTarget::Checkout,
     };
     assert_ne!(
         gate(&context, &mut run, &push, Sensitivity::Boundary),

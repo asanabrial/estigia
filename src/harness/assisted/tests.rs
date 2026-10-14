@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::config::Workflow;
-use crate::harness::{Action, Aside, Decision, GateContext, RunsIn, Sensitivity, guard, session};
+use crate::harness::{
+    Action, Aside, CommitTarget, Decision, GateContext, RunsIn, Sensitivity, guard, session,
+};
 use crate::outcome::Observed;
 
 const RUN: &str = "claude-abcd1234";
@@ -107,6 +109,7 @@ fn boundary(command: &str) -> Action {
         local_fast_forward_target: None,
         is_exact_integration_merge: false,
         runs_in: RunsIn::Session,
+        target: CommitTarget::Checkout,
     }
 }
 

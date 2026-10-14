@@ -1097,6 +1097,7 @@ fn a_shell_call_is_read_whatever_shape_its_command_arrives_in() {
                 local_fast_forward_target: None,
                 is_exact_integration_merge: false,
                 runs_in: crate::harness::RunsIn::Session,
+                target: crate::harness::CommitTarget::Checkout,
             },
             "`{tool}` was handed a push in {input} and the gate saw nothing"
         );
