@@ -172,7 +172,10 @@ fn a_dirty_orphan_checkout_is_named_with_the_command_that_lists_it() {
     holder.worktree = Some(held);
 
     let notice = orphan_notice(&context(root.path(), &main), &[holder]).expect("a notice");
-    assert!(notice.contains(&dirty.display().to_string()), "{notice}");
+    assert!(
+        notice.contains(&crate::test_env::shell_path(&dirty)),
+        "{notice}"
+    );
     assert!(notice.contains("issue-5-dirty"), "{notice}");
     assert!(notice.contains("estigia changes"), "{notice}");
     assert!(!notice.contains("issue-6-clean"), "{notice}");
@@ -181,7 +184,7 @@ fn a_dirty_orphan_checkout_is_named_with_the_command_that_lists_it() {
         "a held checkout is not an orphan: {notice}"
     );
     assert!(
-        !notice.contains("base.txt") && !notice.contains(&main.display().to_string()),
+        !notice.contains("base.txt") && !notice.contains(&crate::test_env::shell_path(&main)),
         "{notice}"
     );
     drop(clean);
