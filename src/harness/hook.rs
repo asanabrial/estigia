@@ -911,9 +911,22 @@ fn drift_note(context: &GateContext) -> String {
 }
 
 /// What to say about the binary answering this session against the
-/// checkout it runs in, beside [`drift_note`] and for the same reason.
+/// checkout it runs in, beside [`drift_note`] and for the same reason. Silent
+/// where the build's commit is no object of that repository: no project but
+/// Estigia's holds it, and `doctor`'s `gate-version` row keeps the explanation.
 fn build_note(context: &GateContext) -> String {
-    render_build_note(&super::doctor::gate_version(&context.repo_dir).health)
+    build_note_for(
+        &context.repo_dir,
+        crate::build_info::commit(),
+        crate::build_info::dirty(),
+    )
+}
+
+fn build_note_for(repo_dir: &std::path::Path, commit: Option<&str>, dirty: bool) -> String {
+    if super::doctor::commit_is_foreign_to(repo_dir, commit, dirty) {
+        return String::new();
+    }
+    render_build_note(&super::doctor::gate_version_for(repo_dir, commit, dirty).health)
 }
 
 /// The pure half of [`build_note`]: a current build says nothing, so this
@@ -3657,6 +3670,81 @@ mod tests {
             .expect("context is injected");
         assert!(!injected.contains("estigia sync"), "{injected}");
         assert!(!injected.contains("No contract"), "{injected}");
+    }
+
+    fn commit_in(repo: &std::path::Path, message: &str) -> String {
+        let git = |args: &[&str]| -> String {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(repo)
+                .args(args)
+                .output()
+                .expect("this fixture needs a usable `git` on PATH");
+            assert!(
+                output.status.success(),
+                "`git {args:?}` failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
+        git(&["config", "user.email", "build-note@estigia.test"]);
+        git(&["config", "user.name", "estigia"]);
+        git(&["commit", "--quiet", "--allow-empty", "-m", message]);
+        git(&["rev-parse", "HEAD"])
+    }
+
+    fn repository_with_one_commit() -> (tempfile::TempDir, String) {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let init = std::process::Command::new("git")
+            .arg("-C")
+            .arg(directory.path())
+            .args(["init", "--quiet"])
+            .status()
+            .expect("this fixture needs a usable `git` on PATH");
+        assert!(init.success(), "`git init` failed");
+        let head = commit_in(directory.path(), "first");
+        (directory, head)
+    }
+
+    const FOREIGN_COMMIT: &str = "1111111111111111111111111111111111111111";
+
+    #[test]
+    fn a_build_commit_this_repository_does_not_hold_says_nothing_at_session_start() {
+        let (repo, _) = repository_with_one_commit();
+        assert_eq!(
+            build_note_for(repo.path(), Some(FOREIGN_COMMIT), false),
+            "",
+            "a commit that is not an object here cannot be acted on in this project"
+        );
+    }
+
+    #[test]
+    fn a_build_older_than_the_checkout_it_belongs_to_is_still_reported() {
+        let (repo, first) = repository_with_one_commit();
+        commit_in(repo.path(), "second");
+        let note = build_note_for(repo.path(), Some(&first), false);
+        assert!(note.contains("not established as current"), "{note}");
+    }
+
+    #[test]
+    fn a_dirty_build_is_reported_even_where_its_commit_is_not_held() {
+        let (repo, _) = repository_with_one_commit();
+        let note = build_note_for(repo.path(), Some(FOREIGN_COMMIT), true);
+        assert!(note.contains("cannot be told"), "{note}");
+    }
+
+    #[test]
+    fn a_build_without_a_commit_is_reported_in_any_repository() {
+        let (repo, _) = repository_with_one_commit();
+        let note = build_note_for(repo.path(), None, false);
+        assert!(note.contains("cannot be told"), "{note}");
+    }
+
+    #[test]
+    fn a_directory_that_is_not_a_repository_is_still_reported() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let note = build_note_for(directory.path(), Some(FOREIGN_COMMIT), false);
+        assert!(note.contains("cannot be told"), "{note}");
     }
 
     #[test]

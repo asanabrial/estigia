@@ -862,8 +862,16 @@ fn reinstall_command(reinstall_from: &Path) -> String {
 /// in a private `gate_age_verdict`, and this is the git half that supplies what
 /// it needs.
 pub fn gate_version(repo_dir: &Path) -> Check {
-    let binary_commit = crate::build_info::commit();
-    let binary_dirty = crate::build_info::dirty();
+    gate_version_for(
+        repo_dir,
+        crate::build_info::commit(),
+        crate::build_info::dirty(),
+    )
+}
+
+/// [`gate_version`] for a build identity handed in rather than read from this
+/// binary, so a checkout and an embedded commit can be chosen independently.
+pub fn gate_version_for(repo_dir: &Path, binary_commit: Option<&str>, binary_dirty: bool) -> Check {
     let reinstall_from = checkout_root(repo_dir);
 
     let head = git_head(repo_dir);
@@ -882,6 +890,36 @@ pub fn gate_version(repo_dir: &Path) -> Check {
             commits_ahead,
         ),
     }
+}
+
+/// Whether `gate_version_for` would be unable to answer only because the
+/// embedded commit is not an object in `repo_dir`: a clean build with a commit,
+/// a readable head, an ancestry question git does not answer, and a repository
+/// that does not hold the commit. A dirty build, one with no commit and a
+/// directory with no head are not this, since each says something the operator
+/// can act on.
+pub fn commit_is_foreign_to(
+    repo_dir: &Path,
+    binary_commit: Option<&str>,
+    binary_dirty: bool,
+) -> bool {
+    let Some(commit) = binary_commit else {
+        return false;
+    };
+    !binary_dirty
+        && git_head(repo_dir).is_some()
+        && git_is_ancestor(repo_dir, "HEAD", commit).is_none()
+        && !git_holds_commit(repo_dir, commit)
+}
+
+fn git_holds_commit(repo_dir: &Path, commit: &str) -> bool {
+    Command::new("git")
+        .arg("-C")
+        .arg(repo_dir)
+        .args(["cat-file", "-e"])
+        .arg(format!("{commit}^{{commit}}"))
+        .output()
+        .is_ok_and(|output| output.status.success())
 }
 
 /// The current git `HEAD` of a directory, when there is one.
@@ -5035,6 +5073,35 @@ mod tests {
              rather than pass or break: {:?}",
             check.health
         );
+    }
+
+    #[test]
+    fn the_row_still_explains_a_commit_the_repository_does_not_hold() {
+        let repo = git_repo();
+        let git = |args: &[&str]| {
+            Command::new("git")
+                .arg("-C")
+                .arg(repo.path())
+                .args(args)
+                .status()
+                .is_ok_and(|status| status.success())
+        };
+        assert!(
+            git(&["config", "user.email", "gate-version@estigia.test"])
+                && git(&["config", "user.name", "estigia"])
+                && git(&["commit", "--quiet", "--allow-empty", "-m", "first"]),
+            "the fixture could not commit"
+        );
+        let foreign = "1111111111111111111111111111111111111111";
+        let check = gate_version_for(repo.path(), Some(foreign), false);
+        assert!(
+            matches!(&check.health, Health::Skipped { detail } if detail.contains("different repository")),
+            "{:?}",
+            check.health
+        );
+        assert!(commit_is_foreign_to(repo.path(), Some(foreign), false));
+        assert!(!commit_is_foreign_to(repo.path(), Some(foreign), true));
+        assert!(!commit_is_foreign_to(repo.path(), None, false));
     }
 
     #[test]

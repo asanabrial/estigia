@@ -7334,6 +7334,13 @@ pointer that leaves it names the document it points at.
   repository holds at all, e.g. two unrelated histories or a shallow clone) — and in every one of
   those four cases it says *skipped* rather than passing, because an unknown answer is not
   clearance.
+  `doctor` keeps every one of those rows. The session-start note (`build_note` in the hook) is
+  silent in exactly one of them: a clean build with a commit, a readable head, and a repository
+  that does not hold the commit (`git cat-file -e` fails), which is every project that is not
+  Estigia's own and where nothing can be done about it. A dirty build, a build with no commit and a
+  directory with no head are still named at session start, and so is a stale build in a checkout
+  that holds its commit. A shallow clone of Estigia that lacks the commit is silent too, since it
+  looks the same as a foreign repository; `doctor` still says *skipped* there.
 - **`status --json`'s copy of the identity is asserted nowhere.** `estigia --version` has
   `version_reports_the_build_identity_not_only_the_crate_version` in `tests/pipe/cli_process.rs` comparing the
   printed line to `estigia::build_info::VERSION` directly, and the same assertion was added
