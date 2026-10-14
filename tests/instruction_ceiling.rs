@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 
 const DOCUMENTS: &[(&str, usize)] = &[
-    ("skill/SKILL.md", 30_016),
+    ("skill/SKILL.md", 30_081),
     ("skill/agents/analyst.md", 1_968),
     ("skill/agents/developer.md", 2_881),
     ("skill/agents/review-blind.md", 7_984),
@@ -28,7 +28,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/assets/analyst-issue-template.md", 2_850),
     ("skill/bindings/github.md", 17_674),
     ("skill/bindings/github/delivery.md", 39_190),
-    ("skill/bindings/github/operations-guarantees.md", 34_366),
+    ("skill/bindings/github/operations-guarantees.md", 34_663),
     ("skill/bindings/github/operations.md", 49_913),
     ("skill/bindings/github/recovery.md", 6_571),
     ("skill/bindings/github/refusals.md", 52_401),

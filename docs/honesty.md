@@ -5724,7 +5724,7 @@ pointer that leaves it names the document it points at.
   extracted by `build.rs`, so the file is the only list. Headings inside a code fence in the body
   do not count, and headings beyond the required ones are allowed. `gh issue create` and its alias
   `gh issue new`, `gh api` posting to an `/issues` path, and a GraphQL `createIssue` mutation are
-  refused with `issue-creation-outside-flow` whoever holds the checkout, naming the `create` tool.
+  refused with `issue-creation-outside-flow` whoever holds the checkout, naming the `create` tool and its `repo` argument, which files in another repository.
   The matching is on substrings of the command line, with options allowed between `gh`, `issue`
   and `create`, so a line that merely mentions the command is refused too, `gh` after a wrapper
   such as `sudo` is matched, and an alias or a script that never spells `gh` on the line still

@@ -4269,6 +4269,67 @@ fn create_holds_its_declared_runtime_to_the_same_component_as_a_derived_one() {
 }
 
 #[test]
+fn create_refuses_a_repo_that_is_not_owner_name_before_anything_is_read_or_run() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = arg_context(&root);
+    let create = tools::find("create").expect("the tool exists");
+    let with_repo = |repo: Value| {
+        let mut arguments = required_arguments(create);
+        arguments.insert("repo".to_owned(), repo);
+        arguments.insert("run_id".to_owned(), json!("claude-aaaa1111"));
+        run_tool("create", &Value::Object(arguments), Ok(&context))
+    };
+
+    for repo in [
+        "",
+        "o",
+        "o/",
+        "/b",
+        "o/b/c",
+        "o b/c",
+        "https://github.com/o/b",
+        "o/b;true",
+    ] {
+        let failure = with_repo(json!(repo)).expect_err(&format!("{repo:?} was taken for a repo"));
+        let ToolFailure::Refused(refusal) = failure else {
+            panic!("{repo:?}: refused as malformed rather than by the rule");
+        };
+        assert_eq!(
+            refusal.code, "repo-ref-malformed",
+            "{repo:?} was refused for something else first: {refusal}"
+        );
+    }
+
+    let ToolFailure::Malformed(said) = with_repo(json!(7)).expect_err("a number named a repo")
+    else {
+        panic!("a numeric repo was answered by the world rather than refused");
+    };
+    assert!(
+        said.contains("`repo`") && said.contains("owner/name"),
+        "the refusal does not say a repo is owner/name: {said}"
+    );
+}
+
+#[test]
+fn only_create_takes_a_repo_and_it_is_optional() {
+    for tool in tools::TOOLS {
+        let takes = tool
+            .arguments
+            .iter()
+            .find(|argument| argument.name == "repo");
+        match (tool.name, takes) {
+            ("create", Some(argument)) => {
+                assert!(!argument.required, "`create` demands a repo");
+                assert!(tools::is_pointer_only("create", "repo"));
+            }
+            ("create", None) => panic!("`create` does not take a repo"),
+            (other, Some(_)) => panic!("`{other}` takes a repo, which only `create` may"),
+            _ => {}
+        }
+    }
+}
+
+#[test]
 fn a_publish_names_the_checkout_the_gate_will_measure_against() {
     let tool = tools::find("publish_review").expect("the tool exists");
     let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
@@ -5473,7 +5534,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 42_643;
+const TOOLS_LIST_CEILING: usize = 42_768;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {

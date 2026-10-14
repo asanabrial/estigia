@@ -483,6 +483,23 @@ fn declared_runtime(arguments: &Value) -> Result<(), ToolFailure> {
         .map_err(|_| ToolFailure::Refused(Box::new(runtime_names_no_runtime(runtime))))
 }
 
+/// The repository `create` was told to file in, held to the `owner/name` shape
+/// every configured repository is, before it can reach a `GH_REPO` pin or a
+/// store key.
+fn declared_repo(arguments: &Value) -> Result<Option<String>, ToolFailure> {
+    let Some(sent) = arguments.get("repo") else {
+        return Ok(None);
+    };
+    let Some(repo) = sent.as_str() else {
+        return Err(ToolFailure::Malformed(format!(
+            "`repo` is the repository to file in, `owner/name` as a string \u{2014} not {sent}"
+        )));
+    };
+    crate::config::RepoRef::parse(repo)
+        .map(|parsed| Some(parsed.to_string()))
+        .map_err(|refusal| ToolFailure::Refused(Box::new(refusal)))
+}
+
 /// The refusal a deliberately unexposed operation answers with.
 ///
 /// It carries both halves the agent needs: why no tool exists, and where the
@@ -1104,6 +1121,11 @@ pub fn run_tool(
         flags.push(named);
     }
 
+    let filing_repo = if tool.operation == "create" {
+        declared_repo(arguments)?
+    } else {
+        None
+    };
     let named_repo = match tool.binds() {
         tools::TransportBind::RepositoryHost => context.repository_host.named_repo(),
         tools::TransportBind::Tracker => context.tracker.named_repo(),
@@ -1111,7 +1133,7 @@ pub fn run_tool(
     let transport = crate::transport::Context::live(
         context.skill_root.clone(),
         context.repo_dir.clone(),
-        named_repo,
+        filing_repo.or(named_repo),
     );
     // Tracker and host may name different repos; a prior tool's
     // pin must not stick when this one has none. Held

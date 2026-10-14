@@ -25,6 +25,8 @@
 mod cli_process;
 #[path = "pipe/config.rs"]
 mod config;
+#[path = "pipe/filing.rs"]
+mod filing;
 #[path = "support/fixture_flags.rs"]
 mod fixture_flags;
 #[path = "pipe/gate_hook.rs"]
@@ -994,8 +996,13 @@ fn tracker_command(
 /// Names `o/r` as `repo`'s origin, so the store key and the queue read agree on
 /// the repository without a configured one.
 fn name_origin_o_r(repo: &std::path::Path) {
+    name_origin(repo, "git@github.com:o/r.git");
+}
+
+/// Names `url` as `repo`'s origin.
+fn name_origin(repo: &std::path::Path, url: &str) {
     assert!(
-        checked_git(repo, &["remote", "add", "origin", "git@github.com:o/r.git"]),
+        checked_git(repo, &["remote", "add", "origin", url]),
         "the fixture origin is configured"
     );
 }
