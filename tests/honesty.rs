@@ -5197,3 +5197,32 @@ fn no_instruction_promises_the_delta_for_a_merged_base_advance() {
         }
     }
 }
+
+#[test]
+fn the_silence_the_skill_states_is_the_one_ownership_applies() {
+    assert_eq!(
+        estigia::transport::ownership::SILENCE,
+        4 * 60 * 60,
+        "the skill says four hours in two places; change them with the constant"
+    );
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for path in [
+        "skill/references/runtime-notes.md",
+        "skill/bindings/github.md",
+    ] {
+        let text = std::fs::read_to_string(root.join(path)).expect("the skill ships");
+        let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(
+            flat.contains("four hours"),
+            "{path} does not state the silence window"
+        );
+    }
+    let notes = std::fs::read_to_string(root.join("skill/references/runtime-notes.md"))
+        .expect("runtime-notes ships");
+    for kind in estigia::transport::markers::ACTIVITY_KINDS {
+        assert!(
+            notes.contains(&format!("`{kind}`")),
+            "runtime-notes.md does not name the activity kind `{kind}`"
+        );
+    }
+}

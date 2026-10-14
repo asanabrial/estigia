@@ -229,6 +229,12 @@ retry spends the budget being waited for. The reset time is named only when `gh`
 - Issue Flow moves tasks; it does not judge them. Analyst domain rules decide value, and a standalone
   dev inherits that recorded judgement rather than silently reinterpreting it.
 
+A claim with a horizon stays live until that horizon, or until four hours after the run's last `heartbeat`,
+`progress`, `blocked`, `branch` or `published` marker written since the claim, whichever is later. A claim
+with no horizon stays live four hours after the last such marker. Before a phase expected to run longer than four hours,
+declare a horizon that covers it, or heartbeat at least every four hours from the orchestrator: a delegated
+context renews nothing.
+
 Before a machine-heavy phase, mention it in a heartbeat and inspect other in-progress heartbeats.
 When contention kills a run, rerun the work alone before interpreting the failure. Resource coordination signals are advisory and never replace durable
 issue state.
