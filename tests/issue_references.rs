@@ -7,13 +7,6 @@ use std::path::{Path, PathBuf};
 const PUBLIC_ISSUES_THROUGH: u64 = 93;
 
 const NOT_ISSUE_REFERENCES: &[(&str, u64, &str)] = &[
-    ("CHANGELOG.md", 464, "`close #464, #469, #473 and #474`"),
-    ("CHANGELOG.md", 469, "`close #464, #469, #473 and #474`"),
-    ("CHANGELOG.md", 473, "`close #464, #469, #473 and #474`"),
-    ("CHANGELOG.md", 474, "`close #464, #469, #473 and #474`"),
-    ("CHANGELOG.md", 464, "GitHub closed #464 on"),
-    ("CHANGELOG.md", 464, "skipping #464's `done`"),
-    ("CHANGELOG.md", 318, "another repository's #318"),
     ("docs/parity.md", 4967, "removed SDD and OpenSpec in #4967"),
     ("docs/honesty.md", 464, "`close #464`"),
     ("docs/honesty.md", 464, "closed #464 on merge"),
