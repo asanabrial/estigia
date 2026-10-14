@@ -37,6 +37,7 @@ const SWITCHES: &[&str] = &[
     "identities",
     "include-heading",
     "read-only",
+    "no-link",
 ];
 
 /// The flags of one call, by name.
@@ -1155,6 +1156,7 @@ fn run_operation(
                 // The transport defaults this to `in-progress` and the tool
                 // marks it optional.
                 expect_state: f.get("expect-state").unwrap_or("in-progress"),
+                link: !f.on("no-link"),
                 now,
             },
             // The operator's own `Worktree location`, which the flag overrides
@@ -1186,6 +1188,7 @@ fn run_operation(
                 worktree_root: f.get("worktree-root"),
                 repo_name: &super::closing::repo_identity(context)?.1,
                 expect_state: "in-progress",
+                link: false,
                 now,
             },
             // The operator's own `Worktree location`, which the flag overrides

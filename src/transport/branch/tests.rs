@@ -1378,6 +1378,7 @@ fn start_what<'a>(branch: &'a str, worktree_root: Option<&'a str>) -> Start<'a> 
         worktree_root,
         repo_name: "acme/app",
         expect_state: "in-progress",
+        link: true,
         now: "2026-06-01T00:00Z",
     }
 }

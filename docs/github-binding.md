@@ -43,6 +43,20 @@ permanently un-shippable, and a gate that fires on every correct delivery is a g
 ignored — at which point it also stops catching the keyword, which is the avoidable case that
 actually matters.
 
+**A slice that is not the last of its chain opts out of the link.** The accepted close is wrong for the
+first slices of a chain delivered as several pull requests: the first merge would close an issue that
+still has slices left. `start_branch` takes `no_link: true` (`--no-link` on the command line), which
+skips the develop call and so the Development-sidebar link. The branch is still reserved locally and
+the answer says so honestly: `natively_linked: false` and `link_outcome: skipped`, with no `link_queued`
+even while the schedule is closed, because nothing is deferred. The branch reaches the remote with the
+first push, as a hand-created one does. With no link and no closing keyword GitHub reports no closing
+reference, so `check_closing_keywords` answers `will_autoclose: false` and the merge leaves the issue
+open; the last slice starts linked as before and closes it as described above. Nothing downstream
+assumed the link: `verify_claim`'s own-delivery close and the post-merge continuation are reached only
+when GitHub closed the issue. The opt-out does not remove a link that already exists, which is why a
+branch started earlier without it still takes the reopen path in `skill/bindings/github/delivery.md`
+*Closing*. Which slice is last is the operator's to know: nothing in the transport records a chain.
+
 ## Why `done` verifies the merge
 
 `done` means merged and verified, and the verification used to be the operator remembering to read the merge

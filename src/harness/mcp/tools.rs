@@ -252,6 +252,13 @@ const WITH_REVIEW: Argument = Argument::optional(
      `review_reads_unavailable` rather than refusing a push that already landed.",
 );
 
+const NO_LINK: Argument = Argument::optional(
+    "no_link",
+    "boolean",
+    "Skip the native issue link, for a slice that is not the last of its chain: a linked \
+     branch closes the issue when its PR merges. Answers `link_outcome: skipped`.",
+);
+
 /// Every operation Estigia exposes.
 pub const TOOLS: &[Tool] = &[
     Tool {
@@ -1109,6 +1116,7 @@ pub const TOOLS: &[Tool] = &[
                 "The state this run believes the issue is in. Defaults to in-progress.",
             )
             .of(crate::config::STATES),
+            NO_LINK,
             Argument::optional(
                 "worktree_root",
                 "string",
