@@ -1179,17 +1179,13 @@ pointer that leaves it names the document it points at.
   avoids. `outside_diff` is absent when either half is unknown — the log names no source path, or
   the diff cannot be read — so the refusal never invents a location from half the evidence.
 
-- **On Windows the crate is compiled and linted in CI, and its tests are not run.** Issue #11 owns
-  it. The `windows-latest` lane runs formatting, clippy, documentation and the release build, and
-  its `tests` step is skipped; `release.yml` skips its `Test` step on the Windows targets for the
-  same reason, so a Windows archive is published having compiled and nothing more. The suite first
-  reached a Windows runner at run 38317428664 and **55 tests failed**. After the reviewer's
-  environment fix and the portable fixtures, run 38602449958 ran it again: every integration target
-  passed, `tests/pipe.rs` included, and **13 lib tests failed** — three heredoc tests in
-  `harness::issue_requirement`, six `git -C` / `cd … && git merge` / tag tests in `harness::tests`
-  that answer `review-checkout-unreadable` or `out-of-phase` on a Windows path, the reviewer's
-  allow-list test, and three Pi node-driver tests. Until those are settled a regression that only
-  Windows can see passes this lane.
+- **On Windows two Pi assertions about a signalled process are not made.** Issue #11. The suite runs on
+  the `windows-latest` lane and on the Windows release targets. It first reached a Windows runner at run
+  38317428664 with 55 failures, and run 38602449958 left 13; those were settled by two gate fixes (a
+  drive-lettered heredoc target, and a drive-lettered `cd` / `git -C` directory) and by portable
+  fixtures. A process that kills itself on Windows exits 1 and Node reports no signal, so the Pi
+  session-context test expects `exit 1` there, and the Pi loop test's `no_exit_code` case is not run on
+  Windows: a Pi loop that retried a signalled `estigia goal` on Windows would pass.
 
 - **On Windows a POSIX absolute path in a shell line is not read as absolute, so the issue gate asks
   where it would not on Unix.** Issue #11. `Path::new("/tmp/y").is_absolute()` is false there, and
@@ -8993,7 +8989,7 @@ pointer that leaves it names the document it points at.
   - **Shapes that count as an integration:** exactly `git merge [--no-edit|--no-ff|--ff|--quiet|--continue|--abort] [<ref>]`,
     spelled alone, behind one leading `cd <dir> &&`, or as `git -C <dir> merge ...`. `<dir>` is a
     plain path (letters, digits and `/._-~+@`, optionally in one pair of quotes, not starting with
-    `-` or `~`); a relative one is taken from the session directory. Everything else about the line
+    `-` or `~`, or a drive-lettered `X:/` path, which a Windows checkout is named by); a relative one is taken from the session directory. Everything else about the line
     must be literal, by the same reader `exact_integration_merge` applies to the in-progress case.
   - **When it is allowed:** the directory it names is inside `run.worktree`, the environment does not
     redirect Git, and `HEAD` there is on a branch (`is_integration_in_the_runs_own_checkout`, the

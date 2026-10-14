@@ -894,9 +894,18 @@ fn the_child_sees_only_the_allow_listed_environment() {
                 .unwrap();
             let seen = std::fs::read_to_string(&names).unwrap();
             let seen: Vec<&str> = seen.lines().collect();
-            assert!(!seen.contains(&"GH_TOKEN"), "{seen:?}");
-            assert!(seen.contains(&"OPENAI_API_KEY"), "{seen:?}");
-            assert!(seen.contains(&"PATH"), "{seen:?}");
+            let holds = |name: &str| {
+                seen.iter().any(|kept| {
+                    if cfg!(windows) {
+                        kept.eq_ignore_ascii_case(name)
+                    } else {
+                        *kept == name
+                    }
+                })
+            };
+            assert!(!holds("GH_TOKEN"), "{seen:?}");
+            assert!(holds("OPENAI_API_KEY"), "{seen:?}");
+            assert!(holds("PATH"), "{seen:?}");
         },
     );
 }

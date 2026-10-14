@@ -5617,16 +5617,16 @@ fn a_tag_of_the_runs_own_merge_commit_is_not_a_stale_verdict() {
     for command in [
         format!(
             "git -C {} tag -a v1.0 -F notes.txt {}",
-            rig.reviewed_worktree.display(),
+            crate::test_env::shell_path(&rig.reviewed_worktree),
             rig.merge
         ),
         format!(
             "git -C {} tag -a v1.0 -F notes.txt",
-            rig.reviewed_worktree.display()
+            crate::test_env::shell_path(&rig.reviewed_worktree)
         ),
         format!(
             "cd {} && git tag -a v1.0 {}",
-            rig.reviewed_worktree.display(),
+            crate::test_env::shell_path(&rig.reviewed_worktree),
             rig.merge
         ),
     ] {
@@ -5652,7 +5652,11 @@ fn a_tag_of_any_other_commit_is_still_a_stale_verdict() {
         (rig.run.clone(), "git tag v1.0 HEAD~1".to_owned()),
         (
             rig.run.clone(),
-            format!("git -C {} tag v1.0 {}", rig.primary.display(), rig.stranger),
+            format!(
+                "git -C {} tag v1.0 {}",
+                crate::test_env::shell_path(&rig.primary),
+                rig.stranger
+            ),
         ),
         (moved_base, format!("git tag v1.0 {}", rig.merge)),
     ];
@@ -5737,14 +5741,17 @@ fn a_git_command_with_a_named_directory_is_judged_against_that_directory() {
     let refusal = delivered_verdict(
         &rig,
         &rig.reviewed_worktree,
-        &format!("git -C {} tag v1.0", rig.stale_worktree.display()),
+        &format!(
+            "git -C {} tag v1.0",
+            crate::test_env::shell_path(&rig.stale_worktree)
+        ),
     )
     .expect("the session's checkout at the reviewed head spent a verdict for another directory");
     assert_eq!(refusal.code, "verdict-bound-to-other-bytes");
     assert!(
         refusal
             .message
-            .contains(&rig.stale_worktree.display().to_string()),
+            .contains(&crate::test_env::shell_path(&rig.stale_worktree)),
         "{}",
         refusal.message
     );
@@ -8504,5 +8511,33 @@ fn the_real_command_behind_a_prefix_is_read_whole() {
         "! test -f x",
     ] {
         assert_eq!(writes_a_file(line), None, "{line:?}");
+    }
+}
+
+#[test]
+fn a_drive_lettered_directory_is_a_plain_directory_and_a_drive_relative_one_is_not() {
+    let directory = "C:/Users/runneradmin/AppData/Local/Temp/.tmpX/topic~claude-abcd1234";
+    for command in [
+        format!("cd {directory} && git merge origin/main"),
+        format!("cd '{directory}' && git merge origin/main"),
+        format!("git -C {directory} merge origin/main"),
+    ] {
+        let (runs_in, exact, _) = super::directed_integration_merge(&command, true);
+        assert_eq!(runs_in, RunsIn::Named(directory.to_owned()), "{command}");
+        assert!(exact, "{command}");
+    }
+    for refused in [
+        r"C:\Users\runner\x",
+        "C:x",
+        "C:",
+        "1:/x",
+        "host:/x",
+        "/a:/b",
+        "C:/a:b",
+    ] {
+        let command = format!("cd {refused} && git merge origin/main");
+        let (runs_in, exact, _) = super::directed_integration_merge(&command, true);
+        assert_eq!(runs_in, RunsIn::Unestablished, "{command}");
+        assert!(!exact, "{command}");
     }
 }

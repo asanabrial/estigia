@@ -626,13 +626,27 @@ fn discarded_target(bytes: &[u8], from: usize) -> Option<usize> {
     is_discarded(word).then_some(end)
 }
 
+/// How many bytes of `path` are a drive letter and its colon, as in `C:/…`: two
+/// when a slash follows them, and none for `C:`, `C:name` or anything else.
+pub(crate) fn drive_prefix_len(path: &str) -> usize {
+    match path.as_bytes() {
+        [letter, b':', b'/', ..] if letter.is_ascii_alphabetic() => 2,
+        _ => 0,
+    }
+}
+
+fn is_absolute_literal(target: &str) -> bool {
+    target.starts_with('/') || drive_prefix_len(target) > 0
+}
+
 /// The target of a `cat` that writes one quoted heredoc to one literal absolute path, and nothing
 /// else.
 ///
 /// The first line is exactly `cat > TARGET <<'DELIM'` (or `>>`, or the redirect after the heredoc
 /// word), the delimiter quoted with `'` or `"`, and the first line equal to `DELIM` is the last line.
 /// The body is never read. Anything else, including a target outside `[A-Za-z0-9_./+@%:,-]`, a
-/// relative one or one holding `..`, is `None`.
+/// relative one or one holding `..`, is `None`. An absolute target is `/…` or a drive-lettered `X:/…`;
+/// `X:` alone and `X:name` are drive-relative and are `None`.
 pub fn quoted_heredoc_target(command: &str) -> Option<String> {
     let (head, rest) = command.split_once('\n')?;
     if head.starts_with([' ', '\t']) || head.ends_with([' ', '\t']) {
@@ -663,7 +677,7 @@ pub fn quoted_heredoc_target(command: &str) -> Option<String> {
     {
         return None;
     }
-    if !target.starts_with('/')
+    if !is_absolute_literal(target)
         || target.contains("..")
         || !target
             .bytes()

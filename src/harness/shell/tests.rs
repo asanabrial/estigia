@@ -1952,3 +1952,20 @@ mod differential {
         );
     }
 }
+
+#[test]
+fn a_heredoc_target_may_be_drive_lettered_but_not_drive_relative() {
+    let heredoc = |target: &str| format!("cat > {target} <<'EOF'\nx\nEOF");
+    for target in [
+        "C:/Users/runneradmin/AppData/Local/Temp/.tmpapCxiK/out.md",
+        "c:/a",
+    ] {
+        assert_eq!(
+            quoted_heredoc_target(&heredoc(target)).as_deref(),
+            Some(target)
+        );
+    }
+    for target in ["C:", "C:out.md", "1:/a", "CC:/a", "C:/../a"] {
+        assert_eq!(quoted_heredoc_target(&heredoc(target)), None, "{target}");
+    }
+}
