@@ -365,6 +365,27 @@ fn checked_git_stdout(at: &std::path::Path, arguments: &[&str]) -> String {
     }
 }
 
+/// Whether `git worktree list` registers `checkout`, whatever spelling the
+/// platform gives the path: git prints the long name with `/` where the fixture
+/// holds the 8.3 name with `\` on Windows, and a removed checkout can no longer
+/// be resolved, so its parent directory and its own name are compared.
+fn worktree_registered(repo: &std::path::Path, checkout: &std::path::Path) -> bool {
+    let listing = checked_git_stdout(repo, &["worktree", "list", "--porcelain"]);
+    listing
+        .lines()
+        .filter_map(|line| line.strip_prefix("worktree "))
+        .map(std::path::Path::new)
+        .any(|listed| {
+            listed.file_name() == checkout.file_name()
+                && match (listed.parent(), checkout.parent()) {
+                    (Some(listed), Some(checkout)) => {
+                        estigia::paths::same_directory(listed, checkout)
+                    }
+                    _ => false,
+                }
+        })
+}
+
 /// Commits one documentation-only change on top of the checkout's tip and
 /// answers `(base, head)`: the smallest change the review tier reads as `low`,
 /// so a computed verdict over it licenses no lens.

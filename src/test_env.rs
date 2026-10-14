@@ -844,6 +844,43 @@ pub(crate) fn repository_with_commit() -> tempfile::TempDir {
     directory
 }
 
+/// A path for a shell command or a TOML string: forward slashes, so neither
+/// reads a `\` as an escape, and on Windows the long name with no `\\?\`
+/// prefix, since `~` is not a character the gate's reader accepts in a literal
+/// target. A path that does not exist yet resolves through its parent.
+pub(crate) fn shell_path(path: &Path) -> String {
+    if cfg!(windows) {
+        let resolved = path
+            .canonicalize()
+            .ok()
+            .or_else(|| {
+                let parent = path.parent()?.canonicalize().ok()?;
+                Some(parent.join(path.file_name()?))
+            })
+            .unwrap_or_else(|| path.to_path_buf());
+        crate::paths::remove_windows_verbatim_prefix(resolved)
+            .display()
+            .to_string()
+            .replace('\\', "/")
+    } else {
+        path.display().to_string()
+    }
+}
+
+/// A command line whose POSIX absolute literals (`/tmp/…`, `/private/tmp/…`)
+/// name somewhere outside any fixture checkout, rewritten on Windows to an
+/// absolute path that platform reads as absolute. Unchanged elsewhere.
+pub(crate) fn outside_the_checkout(command: &str) -> String {
+    if cfg!(windows) {
+        let root = shell_path(&std::env::temp_dir());
+        command
+            .replace("/private/tmp/", "/tmp/")
+            .replace("/tmp/", &format!("{root}/tmp/"))
+    } else {
+        command.to_owned()
+    }
+}
+
 /// The fixture's own claim: the environment [`with_home_env`] built really does
 /// put both inherited roots outside `home`.
 ///
@@ -899,6 +936,16 @@ pub(crate) fn honesty_contract() -> String {
         text.len()
     );
     text
+}
+
+/// An absolute directory this platform reads as absolute: `/work/trees` is
+/// drive-relative on Windows, which a `Worktree location` refuses.
+pub(crate) fn work_trees() -> &'static str {
+    if cfg!(windows) {
+        "C:/work/trees"
+    } else {
+        "/work/trees"
+    }
 }
 
 /// Every call in a `with_logging_gh` log that would change something on

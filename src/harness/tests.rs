@@ -1227,7 +1227,7 @@ fn a_near_miss_integration_names_the_shape_instead_of_a_delivery_reason() {
         "in-progress",
     )]);
 
-    let worktree = repo.path().display();
+    let worktree = crate::test_env::shell_path(repo.path());
     let piped = format!("git -C {worktree} merge --no-edit origin/main 2>&1 | tail -3");
     let bare = format!("git -C {worktree} merge --no-edit origin/main");
 
@@ -5320,14 +5320,12 @@ fn verdict_for(rig: &IntegrationRig, command: &str) -> Option<crate::outcome::Re
 #[test]
 fn an_integrating_merge_in_the_runs_own_checkout_spends_no_verdict() {
     let rig = integration_rig();
+    let topic = crate::test_env::shell_path(&rig.topic);
     for command in [
-        format!("cd {} && git merge origin/main", rig.topic.display()),
-        format!(
-            "cd {} && git merge --no-edit origin/main",
-            rig.topic.display()
-        ),
-        format!("cd '{}' && git merge origin/main", rig.topic.display()),
-        format!("git -C {} merge --no-edit origin/main", rig.topic.display()),
+        format!("cd {topic} && git merge origin/main"),
+        format!("cd {topic} && git merge --no-edit origin/main"),
+        format!("cd '{topic}' && git merge origin/main"),
+        format!("git -C {topic} merge --no-edit origin/main"),
     ] {
         assert!(
             verdict_for(&rig, &command).is_none(),
@@ -5339,10 +5337,11 @@ fn an_integrating_merge_in_the_runs_own_checkout_spends_no_verdict() {
 #[test]
 fn a_merge_outside_the_runs_own_checkout_is_still_a_delivery() {
     let rig = integration_rig();
+    let primary = crate::test_env::shell_path(&rig.primary);
     for command in [
         "git merge origin/main".to_owned(),
-        format!("cd {} && git merge origin/main", rig.primary.display()),
-        format!("git -C {} merge origin/main", rig.primary.display()),
+        format!("cd {primary} && git merge origin/main"),
+        format!("git -C {primary} merge origin/main"),
     ] {
         let refusal = verdict_for(&rig, &command)
             .unwrap_or_else(|| panic!("`{command}` delivered on a verdict bound to other bytes"));
@@ -7033,8 +7032,9 @@ fn a_path_that_merely_carries_the_relocated_root_is_not_a_boundary() {
         .join(
             relocated
                 .path()
-                .strip_prefix("/")
-                .expect("an absolute root"),
+                .components()
+                .filter(|part| matches!(part, std::path::Component::Normal(_)))
+                .collect::<std::path::PathBuf>(),
         )
         .join("settings.json");
     let spelled = target.display().to_string();

@@ -46,7 +46,6 @@ pub(super) fn launch_failed(message: impl Into<String>) -> Refusal {
 }
 
 const INHERITED: &[&str] = &[
-    "PATH",
     "HOME",
     "USER",
     "LOGNAME",
@@ -56,10 +55,6 @@ const INHERITED: &[&str] = &[
     "XDG_CONFIG_HOME",
     "XDG_DATA_HOME",
     "XDG_CACHE_HOME",
-    "TMPDIR",
-    "TEMP",
-    "TMP",
-    "SYSTEMROOT",
     "LANG",
     "LC_ALL",
     "TERM",
@@ -73,10 +68,21 @@ const INHERITED: &[&str] = &[
 ];
 
 pub(super) fn child_environment() -> Vec<(OsString, OsString)> {
-    std::env::vars_os()
+    inherited_from(std::env::vars_os())
+}
+
+pub(super) fn inherited_from(
+    ambient: impl IntoIterator<Item = (OsString, OsString)>,
+) -> Vec<(OsString, OsString)> {
+    ambient
+        .into_iter()
         .filter(|(name, _)| {
             let name = name.to_string_lossy();
-            INHERITED.contains(&name.as_ref()) || (cfg!(test) && name.starts_with("ESTIGIA_FAKE_"))
+            crate::transport::is_essential_env(&name)
+                || INHERITED
+                    .iter()
+                    .any(|inherited| name.eq_ignore_ascii_case(inherited))
+                || (cfg!(test) && name.starts_with("ESTIGIA_FAKE_"))
         })
         .collect()
 }

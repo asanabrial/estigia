@@ -17,6 +17,12 @@ fn sandbox() -> (tempfile::TempDir, SetupOptions) {
     (home, options)
 }
 
+fn node_safe_dir(dir: &Path) -> PathBuf {
+    crate::paths::remove_windows_verbatim_prefix(
+        dir.canonicalize().expect("the directory resolves"),
+    )
+}
+
 fn agent(slug: &str) -> &'static AgentAdapter {
     find_agent(slug).expect("a declared agent")
 }
@@ -12447,7 +12453,7 @@ fn the_loop_plugin_defaults_its_objective_to_flow_dev() {
 #[test]
 fn the_opencode_plugin_hands_an_oversized_input_to_the_gate_on_standard_input() {
     let root = tempfile::tempdir().expect("a temporary directory");
-    let base = root.path().canonicalize().expect("the directory resolves");
+    let base = node_safe_dir(root.path());
     std::fs::write(
         base.join("estigia-workflow-authority.mjs"),
         crate::setup::plugin::source(std::path::Path::new("/opt/estigia")),
@@ -13838,6 +13844,10 @@ fn codex_files(options: &SetupOptions) -> (PathBuf, PathBuf) {
     )
 }
 
+fn toml_key(key: &str) -> String {
+    toml_edit::Key::new(key).display_repr().into_owned()
+}
+
 fn trust_of(options: &SetupOptions) -> Vec<(String, Option<String>)> {
     let (hooks, config) = codex_files(options);
     let text = fs::read_to_string(&config).unwrap_or_default();
@@ -13969,9 +13979,10 @@ fn codex_loop_entries_and_trust_beside_foreign_ones_leave_the_foreign_ones_alone
     });
     fs::write(&hooks, theirs_hooks.to_string()).expect("write their hooks");
     let theirs_trust = format!(
-        "[hooks.state.\"{0}:stop:0:0\"]\ntrusted_hash = \"sha256:theirs-stop\"\n\n\
-         [hooks.state.\"{0}:session_start:0:0\"]\ntrusted_hash = \"sha256:theirs-start\"\n",
-        hooks.display()
+        "[hooks.state.{}]\ntrusted_hash = \"sha256:theirs-stop\"\n\n\
+         [hooks.state.{}]\ntrusted_hash = \"sha256:theirs-start\"\n",
+        toml_key(&format!("{}:stop:0:0", hooks.display())),
+        toml_key(&format!("{}:session_start:0:0", hooks.display())),
     );
     fs::write(&config, &theirs_trust).expect("write their trust");
 
@@ -14413,7 +14424,7 @@ fn a_trust_table_written_in_another_spelling_is_not_duplicated() {
         let (key, held) = trust_of(&options).pop().expect("one entry");
         assert!(held.is_some(), "{key} carries no trust");
 
-        let quoted = serde_json::to_string(&key).expect("json");
+        let quoted = toml_key(&key);
         let first = fs::read_to_string(&config).expect("read");
         let seeded = first.replace(&format!("[hooks.state.{quoted}]"), &spelling(&quoted));
         assert_ne!(
@@ -16228,7 +16239,7 @@ fn the_pi_extension_blocks_on_one_and_two_and_lets_a_gate_that_did_not_answer_th
 {
     let node = node_executable();
     let root = tempfile::tempdir().expect("a temporary directory");
-    let base = root.path().canonicalize().expect("the directory resolves");
+    let base = node_safe_dir(root.path());
     let project = base.join("project");
     fs::create_dir_all(&project).expect("the project directory");
     fs::write(
@@ -16410,7 +16421,7 @@ fn the_pi_extension_puts_a_question_to_a_person_only_in_the_tui_and_blocks_on_an
  {
     let node = node_executable();
     let root = tempfile::tempdir().expect("a temporary directory");
-    let base = root.path().canonicalize().expect("the directory resolves");
+    let base = node_safe_dir(root.path());
     let project = base.join("project");
     fs::create_dir_all(&project).expect("the project directory");
     fs::write(
@@ -16581,7 +16592,7 @@ console.log(JSON.stringify([
 fn the_pi_extension_hands_the_binary_the_root_session_only_from_a_process_that_inherited_one() {
     let node = node_executable();
     let root = tempfile::tempdir().expect("a temporary directory");
-    let base = root.path().canonicalize().expect("the directory resolves");
+    let base = node_safe_dir(root.path());
     fs::write(
         base.join("gate.mjs"),
         plugin::pi_source(std::path::Path::new(&node)),
@@ -16894,7 +16905,7 @@ fn drive_pi_session(
 ) -> serde_json::Value {
     let node = node_executable();
     let root = tempfile::tempdir().expect("a temporary directory");
-    let base = root.path().canonicalize().expect("the directory resolves");
+    let base = node_safe_dir(root.path());
     fs::write(
         base.join("gate.mjs"),
         plugin::pi_source(std::path::Path::new(&node)),
@@ -17283,7 +17294,7 @@ console.log(JSON.stringify({ registered, out }));
 fn run_pi_review_relay_driver() -> serde_json::Value {
     let node = node_executable();
     let root = tempfile::tempdir().expect("a temporary directory");
-    let base = root.path().canonicalize().expect("the directory resolves");
+    let base = node_safe_dir(root.path());
     let project = base.join("project");
     fs::create_dir_all(&project).expect("the project directory");
     fs::write(
@@ -17797,7 +17808,7 @@ fn only_the_adapters_that_run_a_loop_are_offered_the_loop_row() {
 fn pi_loop_files() -> (tempfile::TempDir, std::path::PathBuf, String) {
     let node = node_executable();
     let root = tempfile::tempdir().expect("a temporary directory");
-    let base = root.path().canonicalize().expect("the directory resolves");
+    let base = node_safe_dir(root.path());
     fs::create_dir_all(base.join("project")).expect("the project directory");
     fs::write(
         base.join("pi-loop.mjs"),
@@ -19848,7 +19859,7 @@ console.log(JSON.stringify({
 fn run_pi_claim_driver(timeout_ms: u32) -> serde_json::Value {
     let node = node_executable();
     let root = tempfile::tempdir().expect("a temporary directory");
-    let base = root.path().canonicalize().expect("the directory resolves");
+    let base = node_safe_dir(root.path());
     let project = base.join("project");
     fs::create_dir_all(&project).expect("the project directory");
     let source = plugin::pi_source(std::path::Path::new(&node));
@@ -19993,7 +20004,7 @@ console.log(JSON.stringify(await groups[process.env.GROUP]()));
 fn run_pi_shape_driver(extension: &str, source: &str, group: &str) -> Vec<serde_json::Value> {
     let node = node_executable();
     let root = tempfile::tempdir().expect("a temporary directory");
-    let base = root.path().canonicalize().expect("the directory resolves");
+    let base = node_safe_dir(root.path());
     let project = base.join("project");
     fs::create_dir_all(&project).expect("the project directory");
     fs::write(base.join(extension), source).expect("the extension writes");

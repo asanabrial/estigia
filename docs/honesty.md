@@ -781,9 +781,11 @@ pointer that leaves it names the document it points at.
   `shell_environment_policy.inherit=none`. **A tool-granting feature a later Codex adds is not denied
   until it is added to that list**, and a read-only sandbox alone still lets a shell read files and
   print them as the answer. Nothing measures the list against the installed Codex. Both children get
-  a cleared environment plus a fixed allow-list (`PATH`, `HOME`, the platform's profile and temp
-  names, locale, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`,
-  `ANTHROPIC_AUTH_TOKEN`, `CODEX_HOME`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`), so `GH_TOKEN` does not
+  a cleared environment plus a fixed allow-list, matched without regard to case because Windows spells
+  `Path` and `SystemRoot` that way. The list is the tracker transport's own — `PATH`, `PATHEXT`, `COMSPEC`,
+  `SYSTEMDRIVE`, `SYSTEMROOT`, `WINDIR`, `TEMP`, `TMP` and `TMPDIR` — plus the reviewer's: `HOME`, the
+  platform's profile names, locale, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`,
+  `ANTHROPIC_AUTH_TOKEN`, `CODEX_HOME`, `OPENAI_API_KEY` and `OPENAI_BASE_URL`. So `GH_TOKEN` does not
   reach them. `AWS_*`, `GOOGLE_*` and the Bedrock and Vertex switches are not on it: a reviewer routed
   through either refuses as unavailable until that is decided. Claude runs with
   `--output-format json`, not `text`, because `claude -p` is reported to exit 0
@@ -1180,10 +1182,23 @@ pointer that leaves it names the document it points at.
 - **On Windows the crate is compiled and linted in CI, and its tests are not run.** Issue #11 owns
   it. The `windows-latest` lane runs formatting, clippy, documentation and the release build, and
   its `tests` step is skipped; `release.yml` skips its `Test` step on the Windows targets for the
-  same reason, so a Windows archive is published having compiled and nothing more. The suite first reached a Windows runner at run 38317428664, once
-  the crate compiled there, and **55 tests failed** on that first execution. Until #11 is done a
-  regression that only Windows can see passes this lane, and the platform-shaped assumptions behind
-  those 55 are unmeasured here.
+  same reason, so a Windows archive is published having compiled and nothing more. The suite first
+  reached a Windows runner at run 38317428664 and **55 tests failed**. After the reviewer's
+  environment fix and the portable fixtures, run 38602449958 ran it again: every integration target
+  passed, `tests/pipe.rs` included, and **13 lib tests failed** — three heredoc tests in
+  `harness::issue_requirement`, six `git -C` / `cd … && git merge` / tag tests in `harness::tests`
+  that answer `review-checkout-unreadable` or `out-of-phase` on a Windows path, the reviewer's
+  allow-list test, and three Pi node-driver tests. Until those are settled a regression that only
+  Windows can see passes this lane.
+
+- **On Windows a POSIX absolute path in a shell line is not read as absolute, so the issue gate asks
+  where it would not on Unix.** Issue #11. `Path::new("/tmp/y").is_absolute()` is false there, and
+  under Git Bash `/tmp` and `/c/…` are msys mounts the gate cannot place without the mount table, so a
+  redirect or heredoc target spelled that way is read as inside the checkout and held under `ask`. That
+  is the safe direction, never a widening, and its cost is extra prompts. The tests that name an
+  outside target build it with `test_env::outside_the_checkout`, a drive-lettered path, so they measure
+  the rule rather than the spelling. The same reading refuses a POSIX `Worktree location`, which is
+  right for a drive-relative path.
 
 ## The OpenCode plugin, and what it knows about a call
 

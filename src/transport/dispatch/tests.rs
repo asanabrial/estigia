@@ -583,8 +583,9 @@ fn a_live_call_carries_the_operators_table() {
     std::fs::write(
         root.path().join(crate::skill::CONTRACT),
         format!(
-            "# Contract\n\n{}\n| Setting | Value |\n|---|---|\n| Worktree location | /work/trees |\n{}\n",
+            "# Contract\n\n{}\n| Setting | Value |\n|---|---|\n| Worktree location | {} |\n{}\n",
             crate::config::BLOCK_BEGIN,
+            crate::test_env::work_trees(),
             crate::config::BLOCK_END
         ),
     )
@@ -594,7 +595,7 @@ fn a_live_call_carries_the_operators_table() {
         crate::transport::Context::live(root.path().to_path_buf(), root.path().to_path_buf(), None);
     assert_eq!(
         live.get("worktree location"),
-        Some("/work/trees"),
+        Some(crate::test_env::work_trees()),
         "a live context did not read the operator's table: {:?}",
         live.config
     );

@@ -361,7 +361,10 @@ fn one_command_regenerating_two_declared_files_is_compared_on_each() {
 }
 
 fn marking_command(marker: &Path) -> String {
-    format!("printf ran > {}; {REGENERATE}", marker.display())
+    format!(
+        "printf ran > {}; {REGENERATE}",
+        crate::test_env::shell_path(marker)
+    )
 }
 
 #[test]

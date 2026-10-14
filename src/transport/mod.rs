@@ -438,12 +438,16 @@ const ISOLATED_ENV_ESSENTIAL: &[&str] = &[
 fn essential_env(ambient: impl IntoIterator<Item = (String, String)>) -> Vec<(String, String)> {
     ambient
         .into_iter()
-        .filter(|(name, _)| {
-            ISOLATED_ENV_ESSENTIAL
-                .iter()
-                .any(|essential| name.eq_ignore_ascii_case(essential))
-        })
+        .filter(|(name, _)| is_essential_env(name))
         .collect()
+}
+
+/// Whether `name` is one of [`ISOLATED_ENV_ESSENTIAL`], matched the way Windows
+/// spells environment names: without regard to ASCII case.
+pub(crate) fn is_essential_env(name: &str) -> bool {
+    ISOLATED_ENV_ESSENTIAL
+        .iter()
+        .any(|essential| name.eq_ignore_ascii_case(essential))
 }
 
 fn run_with_env_and_mode(

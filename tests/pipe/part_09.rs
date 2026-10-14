@@ -1845,8 +1845,7 @@ fn releasing_a_delivered_issue_puts_its_checkout_and_branch_down() {
         ],
     );
     assert!(
-        checked_git_stdout(repo, &["worktree", "list", "--porcelain"])
-            .contains(&checkout.display().to_string()),
+        worktree_registered(repo, &checkout),
         "the fixture checkout is not registered before the release"
     );
 
@@ -2016,10 +2015,10 @@ fn releasing_a_delivered_issue_puts_its_checkout_and_branch_down() {
         !checkout.exists(),
         "the delivered checkout survived its release: {release_said}"
     );
-    let listing = checked_git_stdout(repo, &["worktree", "list", "--porcelain"]);
     assert!(
-        !listing.contains(&checkout.display().to_string()),
-        "the checkout stayed registered: {listing}"
+        !worktree_registered(repo, &checkout),
+        "the checkout stayed registered: {}",
+        checked_git_stdout(repo, &["worktree", "list", "--porcelain"])
     );
     let branches = checked_git_stdout(repo, &["branch", "--list", branch]);
     assert!(
@@ -2406,8 +2405,7 @@ fn a_retried_release_puts_its_checkout_down_too() {
         ],
     );
     assert!(
-        checked_git_stdout(repo, &["worktree", "list", "--porcelain"])
-            .contains(&checkout.display().to_string()),
+        worktree_registered(repo, &checkout),
         "the fixture checkout is not registered before the release"
     );
 

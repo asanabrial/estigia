@@ -564,7 +564,7 @@ fn a_redirect_to_an_absolute_path_outside_the_checkout_is_not_held() {
     for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
         let (_repo, _root, context) = rig(requirement);
         for command in ["echo x > /tmp/y", "echo x >> /tmp/y"] {
-            let decision = shell_write(&context, command);
+            let decision = shell_write(&context, &crate::test_env::outside_the_checkout(command));
             assert!(
                 matches!(decision, Decision::Outside(_)),
                 "{requirement:?} {command}: {decision:?}"
@@ -596,7 +596,7 @@ fn a_plain_rg_search_keeps_todays_behaviour() {
     for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
         let (_repo, _root, context) = rig(requirement);
         for command in ["rg pattern src", "rg pattern src > /tmp/out"] {
-            let decision = shell_write(&context, command);
+            let decision = shell_write(&context, &crate::test_env::outside_the_checkout(command));
             assert!(
                 matches!(decision, Decision::Outside(_)),
                 "{requirement:?} {command}: {decision:?}"
@@ -621,7 +621,7 @@ fn a_quoted_heredoc_written_outside_the_checkout_is_not_held() {
             "cat > /tmp/a <<'EOF'\n\nEOF",
             "cat > /tmp/a <<'EOF'\nEOF",
         ] {
-            let decision = shell_write(&context, command);
+            let decision = shell_write(&context, &crate::test_env::outside_the_checkout(command));
             assert!(
                 matches!(decision, Decision::Outside(_)),
                 "{requirement:?} {command}: {decision:?}"
@@ -634,7 +634,10 @@ fn a_quoted_heredoc_written_outside_the_checkout_is_not_held() {
 fn a_heredoc_that_is_not_the_one_exact_shape_is_held() {
     for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
         let (repo, _root, context) = rig(requirement);
-        let inside = format!("cat > {}/out.md <<'EOF'\nx\nEOF", repo.path().display());
+        let inside = format!(
+            "cat > {}/out.md <<'EOF'\nx\nEOF",
+            crate::test_env::shell_path(repo.path())
+        );
         for command in [
             inside.as_str(),
             "cat > /tmp/a <<EOF\nx\nEOF",
@@ -692,7 +695,10 @@ fn a_heredoc_that_is_not_the_one_exact_shape_is_held() {
 #[test]
 fn a_heredoc_body_naming_a_repository_command_is_data_not_a_command() {
     let (_repo, _root, context) = rig(IssueRequirement::Ask);
-    let decision = shell_write(&context, "cat > /tmp/a <<'EOF'\nrun git commit here\nEOF");
+    let decision = shell_write(
+        &context,
+        &crate::test_env::outside_the_checkout("cat > /tmp/a <<'EOF'\nrun git commit here\nEOF"),
+    );
     assert!(
         matches!(&decision, Decision::Outside(_)),
         "a here-document body `cat` writes is data, and the target is outside the checkout: \
@@ -715,7 +721,10 @@ fn quoting_the_exemption_refuses_does_not_make_a_plain_read_a_write() {
 fn any_other_shell_write_is_still_held() {
     for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
         let (repo, _root, context) = rig(requirement);
-        let inside = format!("echo x > {}/out.txt", repo.path().display());
+        let inside = format!(
+            "echo x > {}/out.txt",
+            crate::test_env::shell_path(repo.path())
+        );
         for command in [
             "echo x > out.txt",
             "echo x > ./a",

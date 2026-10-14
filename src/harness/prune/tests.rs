@@ -79,13 +79,14 @@ fn unpublished_commits_keep_a_checkout_even_when_a_claim_holds_it() {
 
 #[test]
 fn a_template_prefix_is_the_part_before_its_first_scope() {
+    let trees = crate::test_env::outside_the_checkout("/tmp/trees");
     assert_eq!(
-        root_prefix(Some("/trees/<repo>/<branch>")),
-        Some(std::path::PathBuf::from("/trees/"))
+        root_prefix(Some(&format!("{trees}/<repo>/<branch>"))),
+        Some(std::path::PathBuf::from(format!("{trees}/")))
     );
     assert_eq!(
-        root_prefix(Some("/trees")),
-        Some(std::path::PathBuf::from("/trees"))
+        root_prefix(Some(&trees)),
+        Some(std::path::PathBuf::from(&trees))
     );
     assert_eq!(root_prefix(Some("unset")), None);
     assert_eq!(root_prefix(Some("relative/<branch>")), None);
