@@ -587,7 +587,8 @@ that repository's git directory rather than into any agent's contract, so it is 
 and not the team's, and it overrides the contract's row wherever that repository is worked on —
 including in a linked worktree, which shares the file with the checkout it was added from. The file is
 found from **any directory inside the checkout or its worktrees**, not only its top level: the binary walks up
-from the working directory to the nearest `.git` (a directory, or the `gitdir:` file of a worktree or submodule)
+from the working directory to the nearest `.git` (a directory, or a readable `gitdir:` file of a worktree or
+submodule; a dangling symlink, an empty file or any other file is not a checkout and the walk goes on above it)
 without spawning git, so a session in `apps/engine` reads the rows of the repository it is inside. A directory
 inside no checkout has no repository layer, and a submodule answers for itself. Working from a subdirectory used
 to read nothing at all, so a repository's own `Git operation window` and every other repository row silently
