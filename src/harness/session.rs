@@ -1601,6 +1601,33 @@ mod tests {
     }
 
     #[test]
+    fn record_stores_a_decision_under_the_decision_kind_and_a_role_under_the_role_kind() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let state = root.path().join("runs");
+        std::fs::create_dir_all(&state).expect("the state directory");
+
+        record(&state, &serde_json::json!({ "at": 1, "verdict": "kept" }));
+        assert_eq!(
+            decision_records(&state),
+            vec![serde_json::json!({ "at": 1, "verdict": "kept" })]
+        );
+        assert!(
+            role_records(&state).is_empty(),
+            "a decision was filed as a role"
+        );
+
+        record_role(
+            &state,
+            &serde_json::json!({ "at": 2, "agent_type": "seen" }),
+        );
+        assert_eq!(decision_records(&state).len(), 1);
+        assert_eq!(
+            role_records(&state),
+            vec![serde_json::json!({ "at": 2, "agent_type": "seen" })]
+        );
+    }
+
+    #[test]
     fn the_age_prune_keeps_recent_records_and_runs_at_most_once_a_day() {
         let root = tempfile::tempdir().expect("a temporary root");
         let state = root.path().join("runs");

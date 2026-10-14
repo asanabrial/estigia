@@ -3864,6 +3864,55 @@ mod tests {
     }
 
     #[test]
+    fn the_text_served_to_pi_names_no_count_while_the_window_is_open_either() {
+        let run = session::Run::new("pi-abcd1234".to_owned());
+        at_minutes(12 * 60, || {
+            queue_writes(1);
+            let one = session_start_text(&closed_context(), &run, None);
+            assert_eq!(flush_requests(), 1);
+            queue_writes(4);
+            let five = session_start_text(&closed_context(), &run, None);
+            assert_eq!(flush_requests(), 2);
+            assert_eq!(one, five);
+            assert!(
+                one.contains(
+                    "GitHub writes are queued from a closed git operation window; `estigia flush` \
+                     was started"
+                ),
+                "{one}"
+            );
+            assert!(!one.contains("1 GitHub"), "{one}");
+        });
+    }
+
+    fn counted_note_is_singular_then_plural(minutes: u16, tail: &'static str) {
+        at_minutes(minutes, || {
+            queue_writes(1);
+            let one = queue_note(&closed_context(), true).expect("one write waits");
+            assert!(
+                one.starts_with(&format!("1 GitHub write is {tail}")),
+                "{one}"
+            );
+            queue_writes(2);
+            let three = queue_note(&closed_context(), true).expect("three writes wait");
+            assert!(
+                three.starts_with(&format!("3 GitHub writes are {tail}")),
+                "{three}"
+            );
+        });
+    }
+
+    #[test]
+    fn a_counted_queue_note_is_singular_for_one_write_while_the_window_is_closed() {
+        counted_note_is_singular_then_plural(20 * 60, "queued; nothing reaches GitHub");
+    }
+
+    #[test]
+    fn a_counted_queue_note_is_singular_for_one_write_while_the_window_is_open() {
+        counted_note_is_singular_then_plural(12 * 60, "queued from a closed git operation window");
+    }
+
+    #[test]
     fn the_stop_hook_names_the_queue_and_never_blocks_for_it() {
         queue_writes(1);
         let input = Input {

@@ -1998,14 +1998,31 @@ fn unassembled_fragments(repo_dir: &std::path::Path) -> Result<Vec<String>, Fail
             )));
         }
     };
+    fragments_among(entries.map(|entry| {
+        entry.map(|entry| {
+            (
+                entry.file_name().to_string_lossy().into_owned(),
+                entry.path(),
+            )
+        })
+    }))
+}
+
+fn fragments_among(
+    entries: impl Iterator<Item = std::io::Result<(String, std::path::PathBuf)>>,
+) -> Result<Vec<String>, Failure> {
     let mut names = Vec::new();
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if !entry.path().is_file() || !super::changelog::is_fragment_name(&name) {
+    for entry in entries {
+        let (name, path) = entry.map_err(|error| {
+            Failure::Read(format!(
+                "an entry of changes/ could not be read, so unassembled fragments cannot be ruled out: {error}"
+            ))
+        })?;
+        if !path.is_file() || !super::changelog::is_fragment_name(&name) {
             continue;
         }
         let mut first = Vec::new();
-        std::fs::File::open(entry.path())
+        std::fs::File::open(&path)
             .and_then(|file| {
                 std::io::BufRead::read_until(&mut std::io::BufReader::new(file), b'\n', &mut first)
             })
