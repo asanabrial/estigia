@@ -9,7 +9,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use serde_json::{Map, Value, json};
 
-use super::{AgentAdapter, InstructionFile};
+use super::{AgentAdapter, InstructionFile, PiExposure};
 use crate::harness::hook::{Dialect, Event};
 
 /// How one agent registers a hook that can deny a tool call. Several agents
@@ -299,6 +299,8 @@ impl AgentAdapter {
     }
 }
 
+const PI_SERVER_DESCRIPTION: &str = "Estigia workflow authority: claim an issue, record tasks and reviews, transition state, release";
+
 /// The name the server is registered under, in every dialect.
 pub const SERVER_NAME: &str = crate::NAME;
 
@@ -307,8 +309,8 @@ pub const SERVER_NAME: &str = crate::NAME;
 pub(super) enum McpFormat {
     /// `mcpServers: { estigia: { command, args } }`
     McpServers,
-    /// `McpServers` plus `exposure: "direct"`: Pi's default, `codemode`, registers
-    /// the tools without declaring them to the model.
+    /// `McpServers` plus an `exposure`: Pi's default, `codemode`, registers the
+    /// tools without declaring them to the model.
     PiMcpServers,
     /// `mcp: { estigia: { type: "local", command: [...] } }`
     Local,
@@ -390,6 +392,7 @@ pub(super) fn render_mcp(
     existing: Option<&str>,
     executable: &Path,
     format: McpFormat,
+    pi_exposure: PiExposure,
 ) -> Result<String> {
     let command = executable.to_str().with_context(|| {
         format!(
@@ -460,9 +463,17 @@ pub(super) fn render_mcp(
                 "args": ["mcp"],
             }),
             McpFormat::McpServers => json!({ "command": command, "args": ["mcp"] }),
-            McpFormat::PiMcpServers => {
-                json!({ "command": command, "args": ["mcp"], "exposure": "direct" })
-            }
+            McpFormat::PiMcpServers => match pi_exposure {
+                PiExposure::Direct => {
+                    json!({ "command": command, "args": ["mcp"], "exposure": "direct" })
+                }
+                PiExposure::Deferred => json!({
+                    "command": command,
+                    "args": ["mcp"],
+                    "exposure": "deferred",
+                    "description": PI_SERVER_DESCRIPTION,
+                }),
+            },
             McpFormat::CodexToml => unreachable!("CodexToml returns before this match"),
         },
     );

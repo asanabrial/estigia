@@ -1427,7 +1427,11 @@ pub fn full(
         .filter(|adapter| configured.contains(adapter))
         .and_then(|adapter| crate::setup::resolve_paths(adapter, options).ok())
         .and_then(|paths| paths.instructions.parent().map(Path::to_path_buf));
-    checks.push(pi_config(pi_agent_dir.as_deref(), repo_dir));
+    checks.push(pi_config(
+        pi_agent_dir.as_deref(),
+        repo_dir,
+        crate::setup::installed_pi_version(),
+    ));
     checks.push(pi_subagents(pi_agent_dir.as_deref(), repo_dir));
     checks.extend(lockfiles(repo_dir));
 
@@ -2295,7 +2299,11 @@ pub fn tool_servers(
 /// project `settings.json` and the project `mcp.json` override of the `estigia`
 /// server; a file that is missing or does not parse is not a finding, because
 /// Pi would not read it either.
-pub fn pi_config(agent_dir: Option<&Path>, repo_dir: &Path) -> Check {
+pub fn pi_config(
+    agent_dir: Option<&Path>,
+    repo_dir: &Path,
+    pi_version: Option<crate::setup::PiVersion>,
+) -> Check {
     let about = "whether Pi's settings leave Estigia's gate, tool server and directive in force";
     let Some(agent_dir) = agent_dir else {
         return Check {
@@ -2336,7 +2344,7 @@ pub fn pi_config(agent_dir: Option<&Path>, repo_dir: &Path) -> Check {
                 crate::NAME
             ));
         }
-        if exposure.is_some_and(|exposure| exposure != "direct") {
+        if exposure.is_some_and(|exposure| !matches!(exposure, "direct" | "deferred")) {
             findings.push(format!(
                 "{} sets `exposure: {}` on the `{}` server",
                 mcp.display(),
@@ -2349,10 +2357,11 @@ pub fn pi_config(agent_dir: Option<&Path>, repo_dir: &Path) -> Check {
     let hidden = override_file.is_file();
     let health = if findings.is_empty() && !hidden {
         Health::Fine {
-            detail:
+            detail: format!(
                 "no Pi setting excludes Estigia's extensions or overrides its tool server, and \
-                     no override file hides its directive"
-                    .to_owned(),
+                 no override file hides its directive; {}",
+                pi_exposure_reading(agent_dir, pi_version)
+            ),
         }
     } else {
         let mut parts: Vec<String> = Vec::new();
@@ -2604,6 +2613,32 @@ pub fn pi_subagents(agent_dir: Option<&Path>, repo_dir: &Path) -> Check {
     }
 }
 
+fn pi_exposure_reading(agent_dir: &Path, version: Option<crate::setup::PiVersion>) -> String {
+    let seen = version.map_or_else(
+        || "an unreadable version".to_owned(),
+        |version| format!("Pi {version}"),
+    );
+    let exposure = pi_json(&agent_dir.join("mcp.json")).and_then(|value| {
+        value
+            .pointer(&format!("/mcpServers/{}/exposure", crate::NAME))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    });
+    let Some(exposure) = exposure else {
+        return format!("the tool server's exposure is not set in the user mcp.json ({seen})");
+    };
+    let mut reading = format!("the tool server's exposure is `{exposure}` ({seen})");
+    if exposure == "direct" && version.is_some_and(|version| version >= crate::setup::DEFERRED_FROM)
+    {
+        reading.push_str(&format!(
+            "; warning: this Pi lists deferred servers and loads their tools on demand, while \
+             `direct` declares every tool on every request. `estigia setup pi` writes `{}`",
+            crate::setup::PiExposure::Deferred.word()
+        ));
+    }
+    reading
+}
+
 fn pi_json(path: &Path) -> Option<serde_json::Value> {
     serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
 }
@@ -2814,7 +2849,7 @@ mod tests {
     }
 
     fn pi_verdict(agent: &tempfile::TempDir, repo: &tempfile::TempDir) -> Health {
-        pi_config(Some(agent.path()), repo.path()).health
+        pi_config(Some(agent.path()), repo.path(), None).health
     }
 
     #[test]
@@ -3016,6 +3051,56 @@ mod tests {
         }
     }
 
+    fn pi_exposure_detail(body: Option<&str>, version: Option<crate::setup::PiVersion>) -> String {
+        let (agent, repo) = pi_dirs();
+        if let Some(body) = body {
+            std::fs::write(agent.path().join("mcp.json"), body).expect("an mcp file");
+        }
+        let Health::Fine { detail } = pi_config(Some(agent.path()), repo.path(), version).health
+        else {
+            panic!("an exposure alone broke the row");
+        };
+        detail
+    }
+
+    #[test]
+    fn the_row_names_the_exposure_and_the_pi_version_and_warns_on_direct_under_1_2_0() {
+        let at = |minor| crate::setup::PiVersion::parse(&format!("1.{minor}.0"));
+        let direct = r#"{"mcpServers":{"estigia":{"exposure":"direct"}}}"#;
+        let deferred = r#"{"mcpServers":{"estigia":{"exposure":"deferred"}}}"#;
+
+        let warned = pi_exposure_detail(Some(direct), at(2));
+        assert!(
+            warned.contains("`direct`") && warned.contains("Pi 1.2.0"),
+            "{warned}"
+        );
+        assert!(warned.contains("warning"), "{warned}");
+
+        for (body, version, exposure) in [
+            (Some(direct), at(1), "`direct`"),
+            (Some(deferred), at(2), "`deferred`"),
+            (Some(direct), None, "`direct`"),
+            (None, at(2), "not set"),
+        ] {
+            let detail = pi_exposure_detail(body, version);
+            assert!(detail.contains(exposure), "{detail}");
+            assert!(!detail.contains("warning"), "{detail}");
+        }
+        let unread = pi_exposure_detail(Some(direct), None);
+        assert!(unread.contains("unreadable version"), "{unread}");
+    }
+
+    #[test]
+    fn a_project_mcp_override_that_defers_the_server_is_not_a_finding() {
+        let (agent, repo) = pi_dirs();
+        std::fs::write(
+            repo.path().join(".pi").join("mcp.json"),
+            r#"{"mcpServers":{"estigia":{"exposure":"deferred"}}}"#,
+        )
+        .expect("an mcp file");
+        assert!(matches!(pi_verdict(&agent, &repo), Health::Fine { .. }));
+    }
+
     #[test]
     fn pi_settings_that_leave_estigia_loaded_are_fine_and_nothing_is_rewritten() {
         let (agent, repo) = pi_dirs();
@@ -3034,7 +3119,7 @@ mod tests {
         std::fs::write(agent.path().join("settings.json"), "{ not json").expect("settings");
         assert!(matches!(pi_verdict(&agent, &repo), Health::Fine { .. }));
         assert!(matches!(
-            pi_config(None, repo.path()).health,
+            pi_config(None, repo.path(), None).health,
             Health::Skipped { .. }
         ));
     }

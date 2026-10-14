@@ -626,7 +626,7 @@ the relay does not prove is in [`honesty.md`](honesty.md).
 Every `~/.pi/agent` below is Pi's agent directory: `$PI_CODING_AGENT_DIR` when that is set to an absolute path
 (or one starting with `~`), `~/.pi/agent` otherwise. `estigia setup pi` writes six things: the fenced directive into `~/.pi/agent/AGENTS.md`, the skill
 into the shared `~/.agents/skills` tree, Estigia's server into `~/.pi/agent/mcp.json` under
-`mcpServers` (`command`, `args: ["mcp"]` and `exposure: "direct"`, see below), and two
+`mcpServers` (`command`, `args: ["mcp"]`, an `exposure` and, on a Pi that defers, a `description`; see below), and two
 extensions: `~/.pi/agent/extensions/estigia-workflow-authority.ts`, marked `estigia:workflow-authority`
 like OpenCode's plugin, and the review relay described in the next section; and two prompt templates,
 described after the extension. Where `Model routing` names
@@ -761,12 +761,24 @@ and the extension passes `event.input` through unchanged. The run id the gate de
 session id, then eight hex digits of its FNV-1a hash.
 
 Pi's default MCP `exposure` is `codemode`, which registers a server's tools for codemode scripts but
-neither declares them to the model nor lists them, so the entry carries `exposure: "direct"`: the tools
-are declared like built-ins. It carries no `description`: Pi uses that field to list a `codemode` or
-`deferred` server in the system prompt, to rank `tool_search` results and for `describeNamespace()`,
-and none of those applies to a `direct` server. Estigia owns the entry and rewrites it whole on every
-setup, so an entry from an older setup (no `exposure`) is migrated on the next run, an `exposure` an
-operator edited into it is put back to `direct`, and a second run changes nothing. Every other
+does not declare them to the model, so the entry carries an explicit `exposure`, chosen by the Pi
+version `pi --version` reports on `PATH` when `setup` or `sync` runs (or the guided screen):
+
+| Pi | `exposure` | Why |
+|---|---|---|
+| 1.2.0 or later | `deferred`, with a `description` | Pi lists the server in the system prompt and loads its tools on demand through `tool_search`, instead of declaring all of them on every request |
+| before 1.2.0 | `direct`, no `description` | The tools are declared like built-ins; `deferred` and the server listing do not exist |
+| not found, or a version that does not parse | `direct` | The conservative value every Pi can use |
+
+The `description` is `Estigia workflow authority: claim an issue, record tasks and reviews, transition
+state, release`. Pi uses it to list the server and to rank `tool_search` results, and none of that
+applies to a `direct` server, so that entry carries none. `estigia setup pi --dry-run` prints a `note:`
+naming the exposure it would write and the version reading behind it. Estigia owns the entry and
+rewrites it whole on every setup, so an entry from an older setup is migrated on the next run, an
+`exposure` an operator edited into it is put back, a Pi upgraded to 1.2.0 gets `deferred` on the next
+setup, and a second run with the same Pi changes nothing. `estigia doctor`'s `pi-config` row names the
+exposure it finds in the user `mcp.json` and the Pi version, and says so when a Pi at 1.2.0 or later
+still carries `direct`; that is a warning inside an otherwise fine row, not a break. Every other
 adapter's entry is unchanged.
 
 The same extension registers one command, `/estigia-doctor`, with `pi.registerCommand`. It runs

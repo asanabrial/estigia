@@ -5836,6 +5836,19 @@ pointer that leaves it names the document it points at.
   `exposure: "direct"` is read from Pi's `docs/mcp.md` ("Control tool exposure"), not observed: no live
   Pi has connected to the server and declared its tools to a model. An older Pi that does not know the
   field is not known to ignore it rather than reject the entry.
+- **`deferred` exposure was measured with one model and one run per prompt, and setup reads the Pi version from
+  `pi --version`.** On Pi 1.2.0 with `opencode-go/deepseek-v4.1-flash`, a first request cost 3,255 input tokens with
+  `deferred` against 13,868 with `direct` and 2,986 with the server off, and the model reached
+  `mcp__estigia__*` tools through `tool_search` for an explicit prompt (8,720 input tokens in all) and an
+  implicit one (67,063). Those are single runs, turn counts varied between 2 and 15, and no other model was
+  tried. What is not measured: a real flow (claim, task, transition, release) under `deferred`, where each
+  `tool_search` result stays declared on the branch and the cost after several loads is the open number. The
+  version gate is a comparison against 1.2.0 of the first `x.y.z` in `pi --version`'s output; a pre-release
+  suffix is dropped, so `1.2.0-beta.1` reads as 1.2.0. A `pi` that is not on the `PATH` of the process
+  running `setup`, or prints no version, gets `direct`, and the Pi that actually runs may be another one. The
+  entry is written when `setup` runs, so a Pi upgraded afterwards keeps `direct` until the next setup, which
+  is what the `pi-config` warning names. Pi 1.2.0 itself was not installed on the machine this was built on
+  (1.1.0 was); the 1.2.0 behaviour is read from the issue's measurements, not re-observed here.
 - **No live Pi turn has run the review relay, and no model completion has been requested through it.**
   The relay is measured under `node` against a stand-in binary and a stubbed `ctx.modelRegistry`: the
   arguments it hands `estigia review prompt`, `model` and `admit`, the prompt it submits verbatim as the
@@ -6026,7 +6039,7 @@ pointer that leaves it names the document it points at.
   `pi-config` row of `doctor` reads the user and project `settings.json` for an `extensions` entry that
   excludes `estigia-workflow-authority.ts` or `estigia-review-relay.ts`, by exact name or by a glob that
   matches either, or `-builtin:mcp`, and the project `mcp.json` for `enabled: false` or an `exposure`
-  other than `direct` on the `estigia` server; it is broken, never rewrites a file, and names no
+  other than `direct` or `deferred` on the `estigia` server; it is broken, never rewrites a file, and names no
   command, because `estigia setup pi` does not touch Pi's settings. What is not measured: whether a
   project `-path` excludes a *user-level loose* extension at load time (the write path was read, not
   the loader); Pi's glob dialect (the row's own matcher lets `*` cross `/` and knows `?`, nothing
