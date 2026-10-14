@@ -1008,6 +1008,27 @@ mod fake_cli_default_tests {
     }
 
     #[test]
+    fn a_scripted_gh_answers_while_another_test_holds_the_reviewer_launch_variables() {
+        with_fake_clis(
+            &[],
+            &[("ESTIGIA_FAKE_EXIT_WITHOUT_READING", OsStr::new("1"))],
+            |_| {
+                let bin = super::scripted_gh();
+                let answered = super::with_scripted_gh(bin.path(), "[]", || {
+                    crate::transport::gh_json(
+                        &["api", "repos/{owner}/{repo}/issues/1/comments"],
+                        None,
+                    )
+                });
+                assert_eq!(
+                    answered.expect("the scripted gh ran"),
+                    Some(serde_json::json!([]))
+                );
+            },
+        );
+    }
+
+    #[test]
     fn the_default_is_put_back_when_the_body_returns() {
         with_fake_clis(&[], &[], |_| ());
         assert_eq!(super::with_environment_read_locked(stdin_log), None);
