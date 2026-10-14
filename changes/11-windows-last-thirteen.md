@@ -1,3 +1,0 @@
-section: The harness
-
-- **A drive-lettered path is a plain path to the gate's shell readers.** Issue #11, second slice. A `cat > C:/… <<'EOF'` heredoc target and the directory of `cd C:/… && git merge` or `git -C C:/… merge` were refused as unreadable, so on Windows a heredoc outside the checkout was held and a merge in the run's own worktree was judged a delivery. Both now accept `X:/…`; `X:`, `X:name` and backslash spellings are still refused. The other lib tests that failed there were fixtures and are portable now, and `ci.yml` and `release.yml` run the suite on Windows again (`docs/honesty.md`).

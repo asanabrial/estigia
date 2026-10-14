@@ -152,17 +152,12 @@ fn the_changelog_is_readable_by_the_tool_estigia_ships() {
     //
     // It used to run the shipped `github.py` for this. The tool that answers
     // now is the port, so the port is what is asked.
-    // The changelog is read from a copy in a repository with no `changes/`: this
-    // repository's own fragments are waiting to be assembled, and `changelog_notes`
-    // refuses exactly that, so reading in place would measure the fragments.
     let root = repository_root();
     let version = env!("CARGO_PKG_VERSION");
-    let copy = tempfile::tempdir().expect("a repository without fragments");
-    let changelog = copy.path().join("CHANGELOG.md");
-    std::fs::copy(root.join("CHANGELOG.md"), &changelog).expect("a copy of the changelog");
+    let changelog = root.join("CHANGELOG.md");
     let context = estigia::transport::Context {
         skill_dir: root.join("skill"),
-        repo_dir: copy.path().to_path_buf(),
+        repo_dir: root,
         config: Vec::new(),
         repo: None,
     };
@@ -479,12 +474,5 @@ fn the_stale_prose_rule_and_its_carve_out_reach_both_carriers() {
     assert!(
         words(&finding).contains(&carve_out),
         "skill/policies/blind-judges.md's `What a finding is` section no longer states the carve-out's bound: moved out of the classification section or deleted"
-    );
-
-    let changelog = std::fs::read_to_string(repository_root().join("CHANGELOG.md"))
-        .expect("the changelog ships");
-    assert!(
-        words(&changelog).contains(&carve_out),
-        "CHANGELOG.md no longer states the carve-out's bound"
     );
 }

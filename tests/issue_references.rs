@@ -47,12 +47,8 @@ fn shipped_text(root: &Path) -> Vec<(String, String)> {
         root.join("README.md"),
         root.join("CHANGELOG.md"),
     ];
-    for dir in ["docs", "skill", "changes", "src"] {
-        let path = root.join(dir);
-        if dir == "changes" && !path.exists() {
-            continue;
-        }
-        files_under(&path, &mut paths);
+    for dir in ["docs", "skill", "src"] {
+        files_under(&root.join(dir), &mut paths);
     }
     let mut texts = Vec::new();
     for path in paths {
