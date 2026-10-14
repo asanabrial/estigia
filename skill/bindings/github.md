@@ -113,7 +113,7 @@ phase") instructs you to do nothing, and reading it as a stand-down would have y
 asked you to drop.
 
 Only `viewerDidAuthor=true` comments are control input. Reclaims must match the stale prior holder
-unless marked `forced=true`; horizonless acquisitions expire four hours after trusted activity.
+unless marked `forced=true`; an acquisition expires at its horizon or four hours after trusted activity, whichever is later.
 
 `heartbeat` runs the renewal **before** it records, and refuses to record when the renewal says stop,
 so a loser's next heartbeat exits `1` instead of writing. The renewal does not prevent losing the race;

@@ -22,7 +22,7 @@ pub type Stamp = i64;
 pub const UNKNOWN: Stamp = Stamp::MIN;
 
 /// How long a run may stay silent before its claim is stale.
-const SILENCE: i64 = 4 * 60 * 60;
+pub const SILENCE: i64 = 4 * 60 * 60;
 
 /// Parses an ISO-8601 UTC stamp, or `None` when it is not one.
 ///
