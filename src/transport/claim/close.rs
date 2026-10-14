@@ -39,7 +39,7 @@ fn match_merge(
     second_parent: &str,
     base_is_ancestor_of_first_parent: bool,
 ) -> Option<OwnClose> {
-    if delivering_sha.len() != 40
+    if !is_full_sha(delivering_sha)
         || !receipt.delivered_by_merge(second_parent, base_is_ancestor_of_first_parent)
     {
         return None;
@@ -116,13 +116,17 @@ pub(crate) fn verified_delivery(
     Ok(Some(merge))
 }
 
+fn is_full_sha(sha: &str) -> bool {
+    sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 fn merge_cause(
     receipt: &ReviewTransaction,
     delivering_sha: &str,
     second_parent: &str,
     base_is_ancestor_of_first_parent: bool,
 ) -> &'static str {
-    if delivering_sha.len() != 40 {
+    if !is_full_sha(delivering_sha) {
         "merge-commit-unreadable"
     } else if second_parent != receipt.head {
         "second-parent-is-not-the-reviewed-head"
@@ -1008,5 +1012,36 @@ mod tests {
         let receipt = receipt();
         let verdict = merge_cause(&receipt, &"e".repeat(39), &receipt.head, true);
         assert_eq!(verdict, "merge-commit-unreadable");
+    }
+
+    #[test]
+    fn a_merge_sha_of_the_right_length_that_is_not_hex_is_named_as_unreadable() {
+        let receipt = receipt();
+        let not_hex = "g".repeat(40);
+        let other_parent = "c".repeat(40);
+        assert_ne!(other_parent, receipt.head);
+        assert_eq!(
+            merge_cause(&receipt, &not_hex, &other_parent, true),
+            "merge-commit-unreadable"
+        );
+        assert!(match_merge(&receipt, &not_hex, &receipt.head, true).is_none());
+    }
+
+    #[test]
+    fn a_well_formed_merge_with_nothing_to_blame_falls_to_unreadable() {
+        let receipt = receipt();
+        let sha = "e".repeat(40);
+        assert_eq!(
+            merge_cause(&receipt, &sha, &receipt.head, true),
+            "merge-commit-unreadable"
+        );
+        assert_eq!(
+            merge_cause(&receipt, &sha, &"c".repeat(40), true),
+            "second-parent-is-not-the-reviewed-head"
+        );
+        assert_eq!(
+            merge_cause(&receipt, &sha, &receipt.head, false),
+            "reviewed-base-is-not-behind-the-first-parent"
+        );
     }
 }

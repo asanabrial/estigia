@@ -47,9 +47,10 @@ fn transport_sources() -> Vec<String> {
 /// The body of `pub fn <name>` inside one file's text, up to the next public
 /// function of that same file or its end.
 fn function_body_in(source: &str, name: &str) -> Option<String> {
+    let padded = format!("\n{source}");
     let opens = format!("\npub fn {name}(");
-    let start = source.find(&opens)?;
-    let rest = &source[start + 1..];
+    let start = padded.find(&opens)?;
+    let rest = &padded[start + 1..];
     Some(
         rest.find("\npub fn ")
             .map_or(rest, |at| &rest[..at])
@@ -1860,6 +1861,18 @@ fn a_function_body_ends_with_its_own_file_whatever_file_follows_it() {
     let body = function_body_in(reader, "read").expect("the function is in its own file");
     assert!(!body.contains("fs::write"), "{body}");
     assert!(function_body_in(writer, "read").is_none());
+}
+
+#[test]
+fn a_function_at_the_very_start_of_a_file_is_found() {
+    let source = "pub fn read() {
+    let _ = 1;
+}
+pub fn other() {}
+";
+    let body = function_body_in(source, "read").expect("the first line of a file is searched");
+    assert!(body.starts_with("pub fn read("), "{body}");
+    assert!(!body.contains("other"), "{body}");
 }
 
 #[test]
