@@ -1148,7 +1148,7 @@ pub fn lockfiles(repo_dir: &Path) -> Option<Check> {
 }
 
 /// Everything `doctor` looks at, by the name it reports under. Three of the
-/// nineteen (`contract`, `gate`, `tools`) produce one row per configured agent.
+/// twenty (`contract`, `gate`, `tools`, `permission`) produce one row per configured agent.
 pub const CHECKS: &[&str] = &[
     "skill",
     "skill-assets",
@@ -1169,6 +1169,7 @@ pub const CHECKS: &[&str] = &[
     "pi-config",
     "pi-subagents",
     "lockfiles",
+    "permission",
 ];
 
 /// One row two roots answer differently: the setting, what the agent reads, and
@@ -1433,6 +1434,22 @@ pub fn full(
         crate::setup::installed_pi_version(),
     ));
     checks.push(pi_subagents(pi_agent_dir.as_deref(), repo_dir));
+    let modes: Vec<(&'static str, ModeReading)> = configured
+        .iter()
+        .filter(|adapter| matches!(adapter.slug, "claude-code" | "codex" | "opencode" | "pi"))
+        .map(|adapter| {
+            let paths = crate::setup::resolve_paths(adapter, options).ok();
+            let user_file = paths.and_then(|paths| match adapter.slug {
+                "claude-code" => paths.hooks,
+                _ => paths.mcp_config,
+            });
+            (
+                adapter.slug,
+                read_permission_mode(adapter.slug, user_file.as_deref(), repo_dir),
+            )
+        })
+        .collect();
+    checks.extend(permission_modes(&modes));
     checks.extend(lockfiles(repo_dir));
 
     // Carried rather than defaulted: on an empty path the store's own path is
@@ -2694,6 +2711,163 @@ fn pi_glob(pattern: &str, text: &str) -> bool {
         &pattern.chars().collect::<Vec<_>>(),
         &text.chars().collect::<Vec<_>>(),
     )
+}
+
+/// What a host's own settings say about its automatic permission mode.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModeReading {
+    /// A setting that names the mode, and the file it came from.
+    Set {
+        /// The setting as the file spells it.
+        value: String,
+        /// Where it was read.
+        file: PathBuf,
+    },
+    /// Every file that could hold the setting was read and none sets it.
+    Unset,
+    /// A file that could hold the setting exists and could not be parsed.
+    Unreadable {
+        /// The file.
+        file: PathBuf,
+        /// What the parser said.
+        why: String,
+    },
+    /// The host has no permission prompts for a mode to approve.
+    NoPrompts,
+}
+
+/// Reads one host's configured permission mode, most specific file first.
+///
+/// Only settings files are read. A mode chosen on the host's command line,
+/// such as `opencode run --auto` or `claude --permission-mode`, is invisible
+/// from here, and `Unset` says exactly that rather than claiming the default.
+pub fn read_permission_mode(slug: &str, user_file: Option<&Path>, repo_dir: &Path) -> ModeReading {
+    if slug == "pi" {
+        return ModeReading::NoPrompts;
+    }
+    let files: Vec<PathBuf> = match slug {
+        "claude-code" => [
+            Some(repo_dir.join(".claude").join("settings.local.json")),
+            Some(repo_dir.join(".claude").join("settings.json")),
+            user_file.map(Path::to_path_buf),
+        ]
+        .into_iter()
+        .flatten()
+        .collect(),
+        "opencode" => [
+            Some(repo_dir.join("opencode.json")),
+            user_file.map(Path::to_path_buf),
+        ]
+        .into_iter()
+        .flatten()
+        .collect(),
+        _ => user_file.map(Path::to_path_buf).into_iter().collect(),
+    };
+    for file in files {
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let found = if slug == "codex" {
+            codex_policy(&text)
+        } else {
+            json_mode(slug, &text)
+        };
+        match found {
+            Ok(Some(value)) => return ModeReading::Set { value, file },
+            Ok(None) => {}
+            Err(why) => return ModeReading::Unreadable { file, why },
+        }
+    }
+    ModeReading::Unset
+}
+
+fn json_mode(slug: &str, text: &str) -> Result<Option<String>, String> {
+    let root: serde_json::Value = serde_json::from_str(text).map_err(|error| error.to_string())?;
+    let pointer = if slug == "claude-code" {
+        "/permissions/defaultMode"
+    } else {
+        "/permission"
+    };
+    Ok(root.pointer(pointer).map(|value| match value.as_str() {
+        Some(text) => text.to_owned(),
+        None => value.to_string(),
+    }))
+}
+
+fn codex_policy(text: &str) -> Result<Option<String>, String> {
+    let document: toml_edit::DocumentMut =
+        text.parse().map_err(|error: toml_edit::TomlError| {
+            error
+                .to_string()
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .to_owned()
+        })?;
+    let parts: Vec<String> = ["approval_policy", "sandbox_mode"]
+        .iter()
+        .filter_map(|key| {
+            let value = document.get(key)?.as_str()?;
+            Some(format!("{key} = {value}"))
+        })
+        .collect();
+    Ok((!parts.is_empty()).then(|| parts.join(", ")))
+}
+
+/// One row per host whose permission mode `doctor` reads, saying what the
+/// mode is and that Estigia's decisions are not among the prompts it approves.
+///
+/// Never broken: the mode is the operator's to choose, and the row exists so
+/// that it is visible, not so that it can block a run.
+pub fn permission_modes(readings: &[(&'static str, ModeReading)]) -> Vec<Check> {
+    let about = "each host's configured permission mode, and that Estigia's decisions are not approved by it";
+    readings
+        .iter()
+        .map(|(slug, reading)| {
+            let holds = format!(
+                "{slug}: an automatic mode approves the host's own prompts, and Estigia's refusals \
+                 and questions are not approved by it"
+            );
+            let health = match reading {
+                ModeReading::Set { value, file } => {
+                    let flag = if *slug == "opencode" {
+                        "; `--auto` is a command-line flag and is not readable here"
+                    } else if *slug == "codex" {
+                        "; not measured live"
+                    } else {
+                        ""
+                    };
+                    Health::Fine {
+                        detail: format!("{value} ({}); {holds}{flag}", file.display()),
+                    }
+                }
+                ModeReading::Unset => Health::Fine {
+                    detail: format!(
+                        "no permission mode is set in the settings files read; a mode chosen on \
+                         the command line is not readable here; {holds}"
+                    ),
+                },
+                ModeReading::Unreadable { file, why } => Health::Skipped {
+                    detail: format!(
+                        "{slug}: the mode could not be read ({}: {why}); Estigia's gate decides \
+                         whatever it is",
+                        file.display()
+                    ),
+                },
+                ModeReading::NoPrompts => Health::Fine {
+                    detail: format!(
+                        "{slug} has no permission prompts to approve; tools always run and the \
+                         gate decides every call"
+                    ),
+                },
+            };
+            Check {
+                name: "permission",
+                about,
+                health,
+            }
+        })
+        .collect()
 }
 
 /// Whether the gate has been letting calls through without deciding on them.

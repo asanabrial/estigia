@@ -828,3 +828,79 @@ fn a_write_the_gate_cannot_place_is_reported_at_session_start_rather_than_asked(
         .expect("context is injected");
     assert!(!text.contains("notes.txt"), "{text}");
 }
+
+fn hook_answer_in_mode(
+    context: &GateContext,
+    dialect: Dialect,
+    agent: &str,
+    mode: &serde_json::Value,
+) -> serde_json::Value {
+    let target = context.repo_dir.join("src.rs");
+    let mut payload = serde_json::json!({
+        "session_id": "abcd1234",
+        "cwd": context.repo_dir.display().to_string(),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Edit",
+        "tool_input": { "file_path": target.display().to_string() },
+    });
+    for (key, value) in mode.as_object().expect("mode fields") {
+        payload[key] = value.clone();
+    }
+    let input = hook::read_input(payload.to_string().as_bytes());
+    assert!(!input.unreadable && !input.absent, "{payload}");
+    hook::run_as(
+        dialect,
+        Some(agent),
+        Event::PreToolUse,
+        &input,
+        Some(context),
+    )
+}
+
+fn decision_word(answer: &serde_json::Value) -> String {
+    answer["hookSpecificOutput"]["permissionDecision"]
+        .as_str()
+        .unwrap_or("none")
+        .to_owned()
+}
+
+#[test]
+fn a_host_automatic_mode_leaves_the_hook_answer_a_refusal_or_a_question() {
+    let modes = [
+        serde_json::json!({}),
+        serde_json::json!({ "permission_mode": "bypassPermissions" }),
+        serde_json::json!({ "permission_mode": "auto" }),
+        serde_json::json!({ "permission_mode": "dontAsk" }),
+        serde_json::json!({ "permission_mode": "acceptEdits" }),
+        serde_json::json!({ "approval_policy": "never", "sandbox_mode": "danger-full-access" }),
+        serde_json::json!({ "permission_mode": "bypassPermissions", "approval_policy": "never" }),
+    ];
+
+    let (_repo, _root, required) = rig(IssueRequirement::Required);
+    for (agent, mode) in [("claude-code", &modes[1..5]), ("codex", &modes[1..])]
+        .into_iter()
+        .flat_map(|(agent, set)| set.iter().map(move |mode| (agent, mode)))
+    {
+        let answer = hook_answer_in_mode(&required, Dialect::ClaudeCode, agent, mode);
+        assert_eq!(decision_word(&answer), "deny", "{agent} {mode}: {answer}");
+        assert!(
+            answer.to_string().contains(CODE),
+            "{agent} {mode}: {answer}"
+        );
+        let plain = hook_answer_in_mode(&required, Dialect::ClaudeCode, agent, &modes[0]);
+        assert_eq!(answer, plain, "{agent} {mode}: the mode changed the answer");
+    }
+
+    let (_repo, _root, asking) = rig(IssueRequirement::Ask);
+    for mode in &modes[1..5] {
+        let answer = hook_answer_in_mode(&asking, Dialect::ClaudeCode, "claude-code", mode);
+        assert_eq!(decision_word(&answer), "ask", "{mode}: {answer}");
+        let plain = hook_answer_in_mode(&asking, Dialect::ClaudeCode, "claude-code", &modes[0]);
+        assert_eq!(answer, plain, "{mode}: the mode changed the answer");
+    }
+    for mode in &modes[1..] {
+        let answer = hook_answer_in_mode(&asking, Dialect::ClaudeCode, "codex", mode);
+        assert_eq!(decision_word(&answer), "deny", "codex {mode}: {answer}");
+        assert!(answer.to_string().contains(CODE), "codex {mode}: {answer}");
+    }
+}
