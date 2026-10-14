@@ -123,7 +123,8 @@ or broke a rule it can be told. That includes:
 - **`*-missing`, `*-not-found`, `*-unknown*`, `finding-citation-unresolvable`,
   `*-without-transaction`**: the caller cited a finding, receipt or entry the ledger does not hold. The
   ledger was read and it does not hold it, so the receipt did not move — it was never there;
-- the gate's delivery codes, `delivery-pr-unidentified`, `delivery-pr-mismatch`,
+- the gate's delivery codes, `delivery-pr-unidentified`, `delivery-pr-repository-option` (the line names a
+  repository the gate does not read), `delivery-pr-mismatch`,
   `complete-review-transaction-missing`, `complete-review-transaction-not-selected`: the command or the
   checkout is not one a receipt can be selected for;
 - `inspect-parent-missing`: the publication named for an inspection was published with no recorded

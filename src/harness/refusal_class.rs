@@ -199,6 +199,7 @@ const REFUSED: &[&str] = &[
     "delegated-definition-unowned",
     "delivery-not-verified",
     "delivery-pr-mismatch",
+    "delivery-pr-repository-option",
     "delivery-pr-unidentified",
     "delivery-route-retired",
     "delivery-topology-mismatch",
@@ -478,8 +479,9 @@ mod tests {
     use super::*;
     use crate::harness::tracker::TRANSPORT_VOCABULARY;
 
-    const GATE_CODES: [&str; 8] = [
+    const GATE_CODES: [&str; 9] = [
         "delivery-pr-unidentified",
+        "delivery-pr-repository-option",
         "complete-review-transaction-missing",
         "delivery-pr-mismatch",
         "complete-review-transaction-not-selected",

@@ -64,6 +64,16 @@ pub use session::Run;
 /// How long a routine write may ride on the previous answer.
 pub const RENEWAL_WINDOW: Duration = Duration::from_secs(120);
 
+/// Why a merge command's pull request stayed unidentified although the line
+/// may well carry a number.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PrUnidentified {
+    /// The byte filter disqualified the line.
+    Byte(String),
+    /// The line passed the filter and carries an option naming a repository.
+    RepositoryOption,
+}
+
 /// What the agent is about to do, as far as the gate is concerned.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
@@ -78,9 +88,9 @@ pub enum Action {
         command: String,
         /// The exact pull request named by a narrowly recognised merge command.
         pr: Option<u64>,
-        /// Why a merge command's PR stayed unidentified, when the byte filter
-        /// was what disqualified it.
-        pr_unidentified_reason: Option<String>,
+        /// Why a merge command's PR stayed unidentified, when the line named
+        /// a number or could have.
+        pr_unidentified_reason: Option<PrUnidentified>,
         /// The target of an exact local `git merge --ff-only`, when the shell
         /// payload was narrow enough to prove rather than interpret.
         local_fast_forward_target: Option<String>,
@@ -1043,6 +1053,21 @@ pub(crate) fn delivery_pr_unidentified(reason: Option<String>) -> Refusal {
     )
 }
 
+pub(crate) fn delivery_pr_repository_option() -> Refusal {
+    Refusal::not_started(
+        "delivery-pr-repository-option",
+        "the merge command names a repository with `--repo` or `-R`, and the gate reads only the \
+         spelling that targets the checkout's own repository, so no review transaction can be \
+         selected"
+            .to_owned(),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "run the same `gh pr merge <number> ...` command from the checkout, without `--repo` \
+             or `-R`",
+        ),
+    )
+}
+
 pub(crate) fn complete_review_transaction_missing(pr: u64) -> Refusal {
     Refusal::not_started(
         "complete-review-transaction-missing",
@@ -1105,6 +1130,25 @@ fn pr_merge_disqualifying_byte(command: &str) -> Option<char> {
         .map(char::from)
 }
 
+fn names_a_repository(word: &str) -> bool {
+    word == "--repo"
+        || word.starts_with("--repo=")
+        || word
+            .strip_prefix('-')
+            .is_some_and(|short| !short.starts_with('-') && short.contains('R'))
+}
+
+/// Whether a merge command the byte filter admits names a repository, which
+/// is why `pr_merge_target` refuses a line that does carry a number.
+fn pr_merge_names_a_repository(command: &str) -> bool {
+    if !command.bytes().all(allowed_pr_merge_byte) {
+        return false;
+    }
+    let words: Vec<&str> = command.split_ascii_whitespace().collect();
+    words.get(..3) == Some(&["gh", "pr", "merge"][..])
+        && words.iter().any(|word| names_a_repository(word))
+}
+
 /// The one PR target that can be retained without becoming a shell parser: the
 /// number is the fourth word — before every flag — spelled as digits with no
 /// leading zero. A retained number selects which review transaction may
@@ -1116,13 +1160,7 @@ fn pr_merge_target(command: &str) -> Option<u64> {
     }
     let words: Vec<&str> = command.split_ascii_whitespace().collect();
     if words.get(..3) != Some(&["gh", "pr", "merge"][..])
-        || words.iter().any(|word| {
-            *word == "--repo"
-                || word.starts_with("--repo=")
-                || word
-                    .strip_prefix('-')
-                    .is_some_and(|short| !short.starts_with('-') && short.contains('R'))
-        })
+        || words.iter().any(|word| names_a_repository(word))
     {
         return None;
     }
@@ -1181,7 +1219,13 @@ pub(crate) fn stale_verdict(
         let command_pr = match pr {
             Some(pr) => *pr,
             None => {
-                return Some(delivery_pr_unidentified(pr_unidentified_reason.clone()));
+                return Some(match pr_unidentified_reason {
+                    Some(PrUnidentified::RepositoryOption) => delivery_pr_repository_option(),
+                    Some(PrUnidentified::Byte(byte)) => {
+                        delivery_pr_unidentified(Some(byte.clone()))
+                    }
+                    None => delivery_pr_unidentified(None),
+                });
             }
         };
         let Some(receipt) = run
@@ -2003,16 +2047,22 @@ pub fn classify_observing(
                 None
             };
             let pr_unidentified_reason = if matched == "gh pr merge" && pr.is_none() {
-                command
-                    .literal
-                    .as_deref()
-                    .ok()
+                let literal = command.literal.as_deref().ok();
+                literal
                     .and_then(pr_merge_disqualifying_byte)
-                    .map(|byte| byte.to_string())
+                    .map(|byte| PrUnidentified::Byte(byte.to_string()))
+                    .or_else(|| {
+                        literal
+                            .is_some_and(pr_merge_names_a_repository)
+                            .then_some(PrUnidentified::RepositoryOption)
+                    })
             } else {
                 None
             };
-            let disqualifying_byte = pr_unidentified_reason.clone();
+            let disqualifying_byte = match &pr_unidentified_reason {
+                Some(PrUnidentified::Byte(byte)) => Some(byte.clone()),
+                _ => None,
+            };
             let directed = if DELIVERS.contains(&matched) && matched.starts_with("git ") {
                 let literal_text = command.literal.as_deref().ok();
                 directed_integration_merge(

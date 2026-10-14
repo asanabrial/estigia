@@ -187,9 +187,10 @@ fn an_unidentified_pr_merge_refusal_names_the_byte_that_disqualified_it() {
     // a sentence that is false of a command naming PR 136 — and the reader
     // goes looking for the number, which is the two-hour detour that was
     // measured.
-    let reason = pr_unidentified_reason
-        .as_deref()
-        .expect("a redirected merge was unidentified without the byte that did it");
+    let Some(PrUnidentified::Byte(reason)) = pr_unidentified_reason else {
+        panic!("a redirected merge was unidentified without the byte that did it");
+    };
+    let reason = reason.as_str();
     assert!(
         reason.contains('>'),
         "the disqualifying byte is not named: {reason}"
@@ -206,6 +207,72 @@ fn an_unidentified_pr_merge_refusal_names_the_byte_that_disqualified_it() {
     assert!(
         detail.contains(reason),
         "the byte that disqualified the command is not in the way out: {refusal}"
+    );
+}
+
+#[test]
+fn a_merge_naming_a_repository_carries_that_reason_and_a_plain_merge_carries_none() {
+    for command in [
+        "gh pr merge 54 --repo foreign/repo",
+        "gh pr merge 54 --repo=foreign/repo",
+        "gh pr merge 54 -R foreign/repo",
+        "gh pr merge 54 -Rforeign/repo",
+        "gh pr merge 54 -dRforeign/repo",
+    ] {
+        let (action, _) = classify("Bash", &json!({"command": command}));
+        assert!(
+            matches!(
+                action,
+                Action::Boundary {
+                    pr: None,
+                    pr_unidentified_reason: Some(PrUnidentified::RepositoryOption),
+                    ..
+                }
+            ),
+            "{command} -> {action:?}"
+        );
+    }
+    let (plain, _) = classify("Bash", &json!({"command": "gh pr merge 54 --merge"}));
+    assert!(
+        matches!(
+            plain,
+            Action::Boundary {
+                pr: Some(54),
+                pr_unidentified_reason: None,
+                ..
+            }
+        ),
+        "{plain:?}"
+    );
+    let (quoted, _) = classify("Bash", &json!({"command": "gh pr merge 54 --repo 'o/r'"}));
+    assert!(
+        matches!(
+            quoted,
+            Action::Boundary {
+                pr_unidentified_reason: Some(PrUnidentified::Byte(_)),
+                ..
+            }
+        ),
+        "a disqualifying byte must still be named first: {quoted:?}"
+    );
+}
+
+#[test]
+fn the_repository_option_refusal_names_the_option_and_the_way_out() {
+    let refusal = delivery_pr_repository_option();
+    assert_eq!(refusal.code, "delivery-pr-repository-option");
+    assert!(refusal.message.contains("--repo"), "{refusal}");
+    assert!(
+        !refusal.message.contains("does not name"),
+        "the number is there; the refusal must not say it is missing: {refusal}"
+    );
+    let Resolution::NoCommand { detail, .. } = &refusal.resolution else {
+        panic!("the way out is the operator's, not a command: {refusal}");
+    };
+    assert!(detail.contains("without `--repo`"), "{refusal}");
+    assert_eq!(
+        super::refusal_class::class_of(refusal.code),
+        Some(crate::outcome::RefusalClass::Refused)
     );
 }
 

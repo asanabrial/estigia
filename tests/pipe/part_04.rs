@@ -281,6 +281,70 @@ fn a_merge_and_a_mismatched_pr_merge_on_one_line_is_refused_from_review() {
     );
 }
 
+/// A merge that names a repository option is refused for that option. The
+/// number is there, so the refusal must not say it is missing.
+#[test]
+fn a_merge_naming_a_repository_is_refused_for_the_option_and_not_for_a_missing_number() {
+    for command in [
+        "gh pr merge 54 --repo foreign/repo --merge",
+        "gh pr merge 54 --repo=foreign/repo --merge",
+        "gh pr merge 54 -R foreign/repo --merge",
+        "gh pr merge 54 -dRforeign/repo",
+    ] {
+        let rig = tracker_rig();
+        let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+        let pointer = serde_json::json!({
+            "run_id": "claude-abcd1234",
+            "issue": 12,
+            "revision": 1,
+            "state": "review",
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+            "review_receipt": {
+                "epoch": "a".repeat(32),
+                "pr": 54,
+                "head": rig.head,
+                "base": "b".repeat(40),
+                "digest": "c".repeat(64),
+            },
+            "reviewed_head": serde_json::Value::Null,
+        });
+        std::fs::write(
+            home.join(".estigia")
+                .join("runs")
+                .join("claude-abcd1234.json"),
+            serde_json::to_string(&pointer).expect("the pointer serialises"),
+        )
+        .expect("the pointer is written");
+        let input = serde_json::json!({ "command": command }).to_string();
+        let (out, err, _) = run_with_tracker(
+            home,
+            repo,
+            bin,
+            &issue_answer("review"),
+            &[
+                "gate",
+                "Bash",
+                "--json",
+                "--run-id",
+                "claude-abcd1234",
+                "--input",
+                &input,
+            ],
+            "",
+        );
+        let answered = format!("{out}{err}");
+        assert!(
+            answered.contains("delivery-pr-repository-option"),
+            "`{command}` was not refused for its repository option: {answered}"
+        );
+        assert!(
+            !answered.contains("does not name one positive numeric pull request"),
+            "`{command}` was refused for a missing number that is there: {answered}"
+        );
+    }
+}
+
 /// The floor a compound line's classification is measured against: a line
 /// carrying exactly one irreversible fragment answers exactly as it does today,
 /// in every tier. The multiplicity refusal must never fire on one fragment, so
