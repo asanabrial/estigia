@@ -218,7 +218,7 @@ fn a_review_payload_is_the_unified_diff_of_the_receipt_ends() {
 }
 
 /// An untracked `.git/info/attributes` reaches an unisolated `git diff` the
-/// same way a committed `.gitattributes` does — issue #353's own measurement,
+/// same way a committed `.gitattributes` does. Measured:
 /// 41,334 bytes collapsing to 606 under one `* -diff` line. Reddens against
 /// `review_payload_bounded` before it runs isolated: the payload it answers
 /// is `Binary files a/keep.txt and b/keep.txt differ` instead of the real
@@ -286,7 +286,7 @@ fn an_isolated_payload_is_byte_identical_to_an_ambient_one_absent_any_attribute_
 /// through the default global attributes file, which is resolved from `HOME`
 /// and `XDG_CONFIG_HOME` rather than from any config value the fence could
 /// redirect. Without the fence that equality is decided by the machine rather
-/// than by the code, and this test is what says so. Issue #359.
+/// than by the code, and this test is what says so.
 #[test]
 fn the_ambient_fence_ignores_every_attribute_source_outside_the_repository() {
     let (root, base, head) = two_commit_repo("changed\nsecond line\n");
@@ -470,7 +470,7 @@ fn publish_review_materialises_the_payload_from_the_receipt_ends_before_any_writ
     );
 }
 
-/// Issue #306: the base-ancestry refusal precedes the payload materialisation,
+/// The base-ancestry refusal precedes the payload materialisation,
 /// and this binds that order. The binding is source-text rather than
 /// behavioural because the property is the call order itself: the behavioural
 /// alternative — a base advance larger than `REVIEW_PAYLOAD_CEILING` whose
@@ -479,7 +479,7 @@ fn publish_review_materialises_the_payload_from_the_receipt_ends_before_any_writ
 /// fixture and still cannot name the order when it fails. Reading through
 /// `source_text::code_of` means the comment above the call cannot move the
 /// boundary, so the assertion holds the code and not the prose. Run as a
-/// mutation for #306: moving the `is_ancestor` block below `review_payload`
+/// mutation: moving the `is_ancestor` block below `review_payload`
 /// reddens this test with the message below.
 #[test]
 fn the_base_ancestry_refusal_precedes_the_payload_materialisation() {
