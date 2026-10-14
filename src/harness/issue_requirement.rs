@@ -63,8 +63,14 @@ pub fn decision(
 
 fn held(context: &GateContext, requirement: IssueRequirement) -> Option<Decision> {
     match requirement {
-        IssueRequirement::Required => Some(Decision::Deny(Box::new(refusal(context, requirement)))),
-        IssueRequirement::Ask => Some(Decision::Ask(Box::new(refusal(context, requirement)))),
+        IssueRequirement::Required => Some(Decision::Deny(Box::new(refusal(
+            context.workflow == Some(crate::config::Workflow::Assisted),
+            requirement,
+        )))),
+        IssueRequirement::Ask => Some(Decision::Ask(Box::new(refusal(
+            context.workflow == Some(crate::config::Workflow::Assisted),
+            requirement,
+        )))),
         IssueRequirement::Off => None,
     }
 }
@@ -160,8 +166,9 @@ fn lands_in_the_checkout(repo_dir: &Path, target: &str) -> bool {
     crate::paths::covers(&root, &landing)
 }
 
-fn refusal(context: &GateContext, requirement: IssueRequirement) -> Refusal {
-    let way_in = if context.workflow == Some(crate::config::Workflow::Assisted) {
+/// The refusal for an unclaimed write under the requirement in force.
+pub fn refusal(assisted: bool, requirement: IssueRequirement) -> Refusal {
+    let way_in = if assisted {
         "a local claim taken with `assist` in a worktree, which gives the isolated checkout to \
          write in"
     } else {
