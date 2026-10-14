@@ -13,12 +13,14 @@ fn transport_source() -> String {
     )
 }
 
-/// Every `.rs` file of the transport, so a body can be found wherever it is.
-fn transport_bodies() -> String {
+/// Every `.rs` file of the transport, one entry each and in path order, so a
+/// body can be found wherever it is without one file's text running into the
+/// next.
+fn transport_sources() -> Vec<String> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("src")
         .join("transport");
-    let mut all = String::new();
+    let mut paths = Vec::new();
     let mut stack = vec![root];
     while let Some(at) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&at) else {
@@ -31,13 +33,28 @@ fn transport_bodies() -> String {
             } else if path.extension().is_some_and(|kind| kind == "rs")
                 && path.file_name().is_some_and(|name| name != "tests.rs")
             {
-                let source = std::fs::read_to_string(&path).unwrap_or_default();
-                all.push_str(&crate::source_text::code_of(&source));
-                all.push('\n');
+                paths.push(path);
             }
         }
     }
-    all
+    paths.sort();
+    paths
+        .iter()
+        .map(|path| crate::source_text::code_of(&std::fs::read_to_string(path).unwrap_or_default()))
+        .collect()
+}
+
+/// The body of `pub fn <name>` inside one file's text, up to the next public
+/// function of that same file or its end.
+fn function_body_in(source: &str, name: &str) -> Option<String> {
+    let opens = format!("\npub fn {name}(");
+    let start = source.find(&opens)?;
+    let rest = &source[start + 1..];
+    Some(
+        rest.find("\npub fn ")
+            .map_or(rest, |at| &rest[..at])
+            .to_owned(),
+    )
 }
 
 /// The body of the function one operation runs, wherever the dispatcher sends it.
@@ -59,15 +76,10 @@ fn transport_body(operation: &str) -> String {
     let Some(name) = called.rsplit("::").next() else {
         return String::new();
     };
-    let bodies = transport_bodies();
-    let opens = format!("\npub fn {name}(");
-    let Some(start) = bodies.find(&opens) else {
-        return String::new();
-    };
-    let rest = &bodies[start + 1..];
-    rest.find("\npub fn ")
-        .map_or(rest, |at| &rest[..at])
-        .to_owned()
+    transport_sources()
+        .iter()
+        .find_map(|source| function_body_in(source, name))
+        .unwrap_or_default()
 }
 
 /// One operation's arm of the dispatcher, from its name to the next one.
@@ -1839,6 +1851,15 @@ fn transport_touches_the_disk(operation: &str) -> bool {
     ]
     .iter()
     .any(|call| body.contains(call))
+}
+
+#[test]
+fn a_function_body_ends_with_its_own_file_whatever_file_follows_it() {
+    let reader = "\npub fn read() {\n    let _ = 1;\n}\n";
+    let writer = "fn helper() {\n    std::fs::write(\"x\", \"\");\n}\n";
+    let body = function_body_in(reader, "read").expect("the function is in its own file");
+    assert!(!body.contains("fs::write"), "{body}");
+    assert!(function_body_in(writer, "read").is_none());
 }
 
 #[test]
