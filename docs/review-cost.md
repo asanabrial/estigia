@@ -554,6 +554,7 @@ the exact bytes a client receives for the table.
 | Issue #5, `TOOLS` at 33 — shared argument text, no refusal-code lists, no `lens` argument; context unreadable | 33 | 42,643 |
 | Issue #69, `review_tier` gains `raise`, `raise_reason` and `focus_reason` (ceiling set to the measured size) | 33 | 43,055 |
 | Issue #69, `publish_review` and `republish_review` take the same four arguments (ceiling set to the measured size) | 33 | 44,277 |
+| `send_message` and `list_sessions` join, answered from the local store (ceiling set to the measured size) | 35 | 45,266 |
 
 Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
 retired aggregate verdict and the three `NOT_EXPOSED` names were removed outright; `reclaim`,

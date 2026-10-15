@@ -47,7 +47,7 @@ macro_rules! say {
     }};
 }
 
-mod sessions;
+pub(crate) mod sessions;
 
 /// The same line, into a string rather than onto the terminal.
 macro_rules! line {
@@ -4583,8 +4583,8 @@ fn role_issue_matches(
 /// refusal that names what to run.
 fn mcp() -> Result<(), Refusal> {
     let context = gate_context("");
-    let stdin = std::io::stdin();
-    harness::mcp::serve(stdin.lock(), std::io::stdout(), context).map_err(|error| {
+    let stdin = std::io::BufReader::new(std::io::stdin());
+    harness::mcp::serve(stdin, std::io::stdout(), context).map_err(|error| {
         Refusal::not_started(
             "mcp-stream-failed",
             format!("the MCP stream ended badly: {error}"),

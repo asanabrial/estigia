@@ -1098,7 +1098,10 @@ fn every_tool_maps_to_a_transport_operation_the_binding_documents() {
         .iter()
         .find(|file| file.path == "bindings/github.md")
         .expect("the GitHub binding ships");
-    for tool in TOOLS {
+    for tool in TOOLS
+        .iter()
+        .filter(|tool| !tools::is_local_store(tool.name))
+    {
         assert!(
             binding.contents.contains(tool.operation),
             "{} runs `{}`, which bindings/github.md never names",
@@ -1156,7 +1159,10 @@ fn every_tool_names_a_row_the_binding_actually_has() {
         .iter()
         .find(|file| file.path == "bindings/github.md")
         .expect("the GitHub binding ships");
-    for tool in TOOLS {
+    for tool in TOOLS
+        .iter()
+        .filter(|tool| !tools::is_local_store(tool.name))
+    {
         let row = format!("| {}", tool.contract_name);
         let backticked = format!("| `{}`", tool.contract_name);
         assert!(
@@ -2472,7 +2478,10 @@ fn the_flags_read_out_of_the_transport_are_the_ones_it_declares() {
 
 #[test]
 fn every_tool_sends_flags_the_transport_accepts() {
-    for tool in TOOLS {
+    for tool in TOOLS
+        .iter()
+        .filter(|tool| !tools::is_local_store(tool.name))
+    {
         let Some((accepted, required)) = transport_flags(tool.operation) else {
             panic!(
                 "{} runs `{}`, which the transport does not declare",
@@ -4920,6 +4929,7 @@ fn start_branch_through_the_server_is_not_stopped_by_the_schedule_outside_the_pe
 }
 
 const READ_TOOLS: &[&str] = &[
+    "list_sessions",
     "tasks",
     "verify_claim",
     "review_status",
@@ -4930,7 +4940,7 @@ const READ_TOOLS: &[&str] = &[
     "target",
 ];
 
-const LOCAL_WRITER_TOOLS: &[&str] = &["judge_workspaces", "blocked_until", "task"];
+const LOCAL_WRITER_TOOLS: &[&str] = &["judge_workspaces", "blocked_until", "task", "send_message"];
 
 #[test]
 fn every_tool_is_a_tracker_writer_an_assisted_only_a_local_writer_or_a_read_and_never_two() {
@@ -5568,7 +5578,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 44_277;
+const TOOLS_LIST_CEILING: usize = 45_266;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -5749,4 +5759,462 @@ fn done_and_release_name_a_dirty_claim_checkout_and_other_calls_do_not() {
         None
     );
     assert_eq!(super::checkout_notice("unassign", &done, None), None);
+}
+
+mod send_message {
+    use super::*;
+    use crate::transport::store::{self, Repo, SessionSeen, Store};
+
+    const SENDER: &str = "claude-send0a1b2c3d";
+    const RECIPIENT: &str = "codex-recv0a1b2c3d";
+    const HOLDER_NOW: &str = "2026-01-01T00:10Z";
+
+    struct Rig {
+        root: tempfile::TempDir,
+    }
+
+    fn repo() -> Repo {
+        Repo {
+            host: "github.com".to_owned(),
+            owner: "asanabrial".to_owned(),
+            name: "estigia".to_owned(),
+        }
+    }
+
+    impl Rig {
+        fn new() -> Self {
+            let rig = Self {
+                root: tempfile::tempdir().expect("a temporary root"),
+            };
+            let store = rig.store();
+            for (run_id, runtime) in [(SENDER, "claude"), (RECIPIENT, "codex")] {
+                store
+                    .session_seen(
+                        &SessionSeen {
+                            run_id,
+                            runtime,
+                            session_id: "host-session",
+                            repo_dir: None,
+                        },
+                        1_000,
+                    )
+                    .expect("a session registers");
+            }
+            rig
+        }
+
+        fn context(&self) -> GateContext {
+            let mut context = bare_context(&self.root, &self.root.path().join("repo"));
+            context.tracker = crate::config::Tracker::Github {
+                repo: Some(crate::config::RepoRef::parse("asanabrial/estigia").expect("a repo")),
+            };
+            context
+        }
+
+        fn store(&self) -> Store {
+            Store::open(&store::beside(&self.context().state_root)).expect("the store opens")
+        }
+
+        fn hold(&self, issue: u64, run_id: &str) {
+            let github = json!({
+                "body": "Body.",
+                "labels": [{ "name": "status:in-progress" }],
+                "comments": [{
+                    "id": "IC_1",
+                    "createdAt": "2026-01-01T00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!(
+                        "Claimed.\n\n<!-- issue-flow: claim run-id={run_id} runtime=codex \
+                         horizon=2099-01-01T00:00Z op-id={} -->\n",
+                        "0123456789abcdef0123456789abcdef"
+                    ),
+                }],
+            });
+            self.store()
+                .import(&repo(), issue, &github, HOLDER_NOW)
+                .expect("a claim imports");
+        }
+
+        fn rows_to(&self, run_id: &str) -> u64 {
+            self.store()
+                .messages_waiting_for()
+                .expect("the mailbox reads")
+                .get(run_id)
+                .copied()
+                .unwrap_or_default()
+        }
+
+        fn rows_from(&self, run_id: &str) -> u64 {
+            self.store()
+                .messages_undelivered_from()
+                .expect("the mailbox reads")
+                .get(run_id)
+                .copied()
+                .unwrap_or_default()
+        }
+
+        fn serve(&self, lines: &[Value]) -> Vec<Value> {
+            let input = lines
+                .iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n");
+            let mut output = Vec::new();
+            serve(std::io::Cursor::new(input), &mut output, Ok(self.context()))
+                .expect("the stream is served");
+            String::from_utf8(output)
+                .expect("utf-8")
+                .lines()
+                .map(|line| serde_json::from_str(line).expect("one JSON message per line"))
+                .collect()
+        }
+    }
+
+    fn initialize(capabilities: Value) -> Value {
+        json!({
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": { "protocolVersion": "2025-11-25", "capabilities": capabilities },
+        })
+    }
+
+    fn asks() -> Value {
+        json!({ "elicitation": { "form": {}, "url": {} } })
+    }
+
+    fn send(id: u64, to: &str, text: &str) -> Value {
+        json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": { "name": "send_message",
+                "arguments": { "run_id": SENDER, "to": to, "text": text } },
+        })
+    }
+
+    fn answer(number: u64, result: Value) -> Value {
+        json!({ "jsonrpc": "2.0", "id": format!("estigia-elicit-{number}"), "result": result })
+    }
+
+    fn choose(number: u64, choice: &str) -> Value {
+        answer(
+            number,
+            json!({ "action": "accept", "content": { "choice": choice } }),
+        )
+    }
+
+    fn questions(output: &[Value]) -> Vec<&Value> {
+        output
+            .iter()
+            .filter(|message| message["method"] == "elicitation/create")
+            .collect()
+    }
+
+    fn reply(output: &[Value], id: u64) -> &Value {
+        output
+            .iter()
+            .find(|message| message["id"] == id && message.get("method").is_none())
+            .unwrap_or_else(|| panic!("no answer to {id} in {output:?}"))
+    }
+
+    fn text_of(reply: &Value) -> String {
+        reply["result"]["content"][0]["text"]
+            .as_str()
+            .expect("a text result")
+            .to_owned()
+    }
+
+    #[test]
+    fn a_client_that_declared_no_elicitation_is_refused_and_nothing_is_recorded() {
+        let rig = Rig::new();
+        for capabilities in [
+            json!({}),
+            json!({ "roots": {} }),
+            json!({ "elicitation": true }),
+        ] {
+            let output = rig.serve(&[initialize(capabilities), send(2, RECIPIENT, "hello")]);
+            let text = text_of(reply(&output, 2));
+            assert!(text.contains("message-needs-a-person"), "{text}");
+            assert_eq!(reply(&output, 2)["result"]["isError"], true);
+            assert!(questions(&output).is_empty());
+        }
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn a_send_the_mailbox_would_refuse_is_refused_before_the_person_is_asked() {
+        let rig = Rig::new();
+        for (to, text, code) in [
+            ("codex-gone0a1b2c3d", "hello", "message-recipient-unknown"),
+            (RECIPIENT, "   ", "message-empty"),
+        ] {
+            let output = rig.serve(&[initialize(asks()), send(2, to, text)]);
+            let answer = text_of(reply(&output, 2));
+            assert!(answer.contains(code), "{answer}");
+            assert!(questions(&output).is_empty(), "{output:?}");
+        }
+        assert_eq!(rig.rows_from(SENDER), 0);
+    }
+
+    #[test]
+    fn a_call_with_no_initialize_is_never_asked_about() {
+        let rig = Rig::new();
+        let output = rig.serve(&[send(2, RECIPIENT, "hello")]);
+        assert!(text_of(reply(&output, 2)).contains("message-needs-a-person"));
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn every_answer_but_an_allow_is_refused_and_nothing_is_recorded() {
+        let rig = Rig::new();
+        let refusals = [
+            choose(1, "deny"),
+            answer(1, json!({ "action": "decline" })),
+            answer(1, json!({ "action": "cancel" })),
+            answer(
+                1,
+                json!({ "action": "decline", "content": { "choice": "allow_once" } }),
+            ),
+            answer(
+                1,
+                json!({ "action": "cancel", "content": { "choice": "allow_session" } }),
+            ),
+            answer(
+                1,
+                json!({ "action": "accept", "content": { "choice": "yes please" } }),
+            ),
+            answer(1, json!({ "action": "accept" })),
+            json!({ "jsonrpc": "2.0", "id": "estigia-elicit-1",
+                    "error": { "code": -32601, "message": "no" } }),
+        ];
+        for refusal in refusals {
+            let output = rig.serve(&[initialize(asks()), send(2, RECIPIENT, "hello"), refusal]);
+            assert_eq!(questions(&output).len(), 1);
+            let text = text_of(reply(&output, 2));
+            assert!(text.contains("message-not-allowed"), "{text}");
+            assert_eq!(rig.rows_to(RECIPIENT), 0);
+        }
+    }
+
+    #[test]
+    fn the_question_names_the_recipient_the_issue_it_holds_and_the_text() {
+        let rig = Rig::new();
+        rig.hold(12, RECIPIENT);
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, "#12", "please rebase"),
+            choose(1, "deny"),
+        ]);
+        let question = questions(&output)[0];
+        let message = question["params"]["message"].as_str().expect("a message");
+        for part in [RECIPIENT, "#12", "please rebase", SENDER] {
+            assert!(message.contains(part), "{part} missing from {message}");
+        }
+        let choice = &question["params"]["requestedSchema"]["properties"]["choice"];
+        assert_eq!(choice["enum"].as_array().map(Vec::len), Some(3));
+        assert_eq!(choice["enumNames"].as_array().map(Vec::len), Some(3));
+        assert_eq!(
+            question["params"]["requestedSchema"]["required"],
+            json!(["choice"])
+        );
+    }
+
+    #[test]
+    fn allow_once_records_one_row_from_the_sender_and_the_next_send_asks_again() {
+        let rig = Rig::new();
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "first"),
+            choose(1, "allow_once"),
+            send(3, RECIPIENT, "second"),
+            choose(2, "deny"),
+        ]);
+        assert_eq!(questions(&output).len(), 2);
+        assert_eq!(reply(&output, 2)["result"]["isError"], false);
+        assert_eq!(reply(&output, 3)["result"]["isError"], true);
+        assert_eq!(rig.rows_to(RECIPIENT), 1);
+        assert_eq!(rig.rows_from(SENDER), 1);
+    }
+
+    #[test]
+    fn allow_for_this_session_records_the_send_and_spares_the_next_question() {
+        let rig = Rig::new();
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "first"),
+            choose(1, "allow_session"),
+            send(3, RECIPIENT, "second"),
+        ]);
+        assert_eq!(questions(&output).len(), 1);
+        assert_eq!(reply(&output, 3)["result"]["isError"], false);
+        assert_eq!(rig.rows_to(RECIPIENT), 2);
+        assert_eq!(rig.rows_from(SENDER), 2);
+    }
+
+    #[test]
+    fn a_session_grant_belongs_to_the_run_that_was_given_it() {
+        let rig = Rig::new();
+        let mut other = send(3, RECIPIENT, "second");
+        other["params"]["arguments"]["run_id"] = json!("claude-othr0a1b2c3d");
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "first"),
+            choose(1, "allow_session"),
+            other,
+        ]);
+        assert_eq!(questions(&output).len(), 2);
+        assert_eq!(rig.rows_to(RECIPIENT), 1);
+    }
+
+    #[test]
+    fn a_session_grant_belongs_to_the_process_that_was_given_it() {
+        let rig = Rig::new();
+        rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "first"),
+            choose(1, "allow_session"),
+        ]);
+        let output = rig.serve(&[initialize(asks()), send(2, RECIPIENT, "again")]);
+        assert_eq!(questions(&output).len(), 1);
+        assert_eq!(rig.rows_to(RECIPIENT), 1);
+    }
+
+    #[test]
+    fn an_issue_number_reaches_the_run_the_store_shows_holding_it() {
+        let rig = Rig::new();
+        rig.hold(12, RECIPIENT);
+        for (id, to) in [(2, "12"), (3, "#12")] {
+            let output = rig.serve(&[
+                initialize(asks()),
+                send(id, to, "hello"),
+                choose(1, "allow_once"),
+            ]);
+            assert_eq!(reply(&output, id)["result"]["isError"], false);
+        }
+        assert_eq!(rig.rows_to(RECIPIENT), 2);
+    }
+
+    #[test]
+    fn an_issue_nobody_holds_is_refused_without_asking_and_nothing_is_recorded() {
+        let rig = Rig::new();
+        let output = rig.serve(&[initialize(asks()), send(2, "#99", "hello")]);
+        assert!(text_of(reply(&output, 2)).contains("message-issue-has-no-holder"));
+        assert!(questions(&output).is_empty());
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn a_pointer_naming_an_issue_does_not_make_its_run_the_holder() {
+        let rig = Rig::new();
+        let mut pointer = session::Run::new(RECIPIENT.to_owned());
+        pointer.issue = Some(crate::identity::Identity::Number(12));
+        session::store(&rig.context().state_root, &pointer).expect("the pointer writes");
+        let output = rig.serve(&[initialize(asks()), send(2, "12", "hello")]);
+        assert!(text_of(reply(&output, 2)).contains("message-issue-has-no-holder"));
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn a_line_that_arrives_while_the_person_is_asked_is_served_afterwards() {
+        let rig = Rig::new();
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "hello"),
+            json!({"jsonrpc": "2.0", "id": 7, "method": "ping"}),
+            choose(1, "allow_once"),
+            json!({"jsonrpc": "2.0", "id": 8, "method": "ping"}),
+        ]);
+        let order: Vec<String> = output
+            .iter()
+            .map(|message| {
+                message["method"]
+                    .as_str()
+                    .map_or_else(|| message["id"].to_string(), str::to_owned)
+            })
+            .collect();
+        assert_eq!(order, ["1", "elicitation/create", "2", "7", "8"]);
+        assert_eq!(rig.rows_to(RECIPIENT), 1);
+    }
+
+    #[test]
+    fn an_input_that_closes_while_the_person_is_asked_refuses_and_records_nothing() {
+        let rig = Rig::new();
+        let output = rig.serve(&[initialize(asks()), send(2, RECIPIENT, "hello")]);
+        assert_eq!(questions(&output).len(), 1);
+        let text = text_of(reply(&output, 2));
+        assert!(text.contains("message-question-failed"), "{text}");
+        assert!(!text.contains("message-not-allowed"), "{text}");
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn a_question_nobody_answers_in_time_refuses_and_records_nothing() {
+        let rig = Rig::new();
+        let (sender, lines) = std::sync::mpsc::channel();
+        for line in [initialize(asks()), send(2, RECIPIENT, "hello")] {
+            sender.send(Ok(line.to_string())).expect("queued");
+        }
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let _ = sender.send(Ok(choose(1, "allow_once").to_string()));
+        });
+        let mut output = Vec::new();
+        super::super::serve_lines(
+            &lines,
+            &mut output,
+            Ok(rig.context()),
+            std::time::Duration::from_millis(100),
+        )
+        .expect("served");
+        let output: Vec<Value> = String::from_utf8(output)
+            .expect("utf-8")
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("json"))
+            .collect();
+        assert!(text_of(reply(&output, 2)).contains("message-not-allowed"));
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn the_tool_takes_no_argument_that_skips_the_question() {
+        let rig = Rig::new();
+        let context = rig.context();
+        for extra in ["requested_by", "confirmed", "consent"] {
+            let mut arguments = json!({ "run_id": SENDER, "to": RECIPIENT, "text": "hello" });
+            arguments[extra] = json!(true);
+            let failure = run_tool("send_message", &arguments, Ok(&context))
+                .expect_err("an argument that is not in the schema");
+            assert!(matches!(failure, ToolFailure::Malformed(_)), "{failure}");
+        }
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn list_sessions_answers_the_entries_the_command_prints() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let result = run_tool("list_sessions", &json!({}), Ok(&context)).expect("a list");
+        let mut listed: Value =
+            serde_json::from_str(result["content"][0]["text"].as_str().expect("text"))
+                .expect("json");
+        let mut printed = serde_json::to_value(
+            crate::cli::sessions::entries(&context.state_root).expect("entries"),
+        )
+        .expect("serialises");
+        for entries in [listed["sessions"].as_array_mut(), printed.as_array_mut()]
+            .into_iter()
+            .flatten()
+        {
+            for entry in entries {
+                entry
+                    .as_object_mut()
+                    .expect("an object")
+                    .remove("silent_for");
+            }
+        }
+        assert_eq!(listed["sessions"], printed);
+        assert_eq!(listed["sessions"].as_array().map(Vec::len), Some(2));
+        assert_eq!(
+            listed["stale_after"],
+            crate::cli::sessions::STALE_AFTER_SECONDS
+        );
+    }
 }

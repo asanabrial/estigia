@@ -6,13 +6,17 @@
 //! and the answer is the tracker's, translated. What this protocol subset
 //! does not implement is in [`UNIMPLEMENTED`].
 
+use std::collections::{BTreeSet, VecDeque};
 use std::io::{BufRead, Write};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
 use super::{GateContext, session, tracker};
 use crate::outcome::{Refusal, Resolution};
 
+pub(crate) mod messaging;
 pub mod tools;
 
 pub use tools::{NOT_EXPOSED, NOT_RUN, PointerEffect, TOOLS, Tool};
@@ -29,6 +33,11 @@ pub const UNIMPLEMENTED: &[(&str, &str)] = &[
     (
         "prompts",
         "the contract lives in the skill, which the agent reads directly",
+    ),
+    (
+        "elicitation beyond one form question",
+        "`send_message` puts one enum question to the person and reads the answer; no other tool \
+         asks, and a client that declared no `capabilities.elicitation` is never asked",
     ),
     (
         "sampling",
@@ -74,29 +83,165 @@ mod code {
     pub const INVALID_PARAMS: i64 = -32602;
 }
 
+/// How long a question to the person waits for the client's answer.
+pub const ELICITATION_WAIT: Duration = Duration::from_secs(15 * 60);
+
+type Lines = mpsc::Receiver<std::io::Result<String>>;
+
+/// What one server process remembers: whether the client can be asked, and who the person
+/// allowed for the rest of the process.
+#[derive(Default)]
+struct Server {
+    elicitation: bool,
+    grants: BTreeSet<String>,
+}
+
+impl Server {
+    fn initialize(&mut self, params: &Value) -> Value {
+        self.elicitation = params
+            .pointer("/capabilities/elicitation")
+            .is_some_and(Value::is_object);
+        initialize(params)
+    }
+
+    fn consent<'a>(&'a mut self, client: &'a mut dyn messaging::Elicit) -> messaging::Consent<'a> {
+        messaging::Consent {
+            declared: self.elicitation,
+            grants: &mut self.grants,
+            client,
+        }
+    }
+}
+
+/// Puts a request to the client on the same pipe and reads its answer, holding every other
+/// line that arrives meanwhile.
+struct Wire<'a, W: Write> {
+    lines: &'a Lines,
+    output: &'a mut W,
+    pending: &'a mut VecDeque<String>,
+    wait: Duration,
+    asked: &'a mut u64,
+}
+
+impl<W: Write> messaging::Elicit for Wire<'_, W> {
+    fn elicit(&mut self, message: &str, schema: Value) -> Result<Value, messaging::Unasked> {
+        *self.asked += 1;
+        let id = format!("estigia-elicit-{}", self.asked);
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "elicitation/create",
+            "params": { "message": message, "requestedSchema": schema },
+        });
+        let unreachable =
+            |error: &dyn std::fmt::Display| messaging::Unasked::Unreachable(error.to_string());
+        writeln!(self.output, "{request}").map_err(|error| unreachable(&error))?;
+        self.output.flush().map_err(|error| unreachable(&error))?;
+        let deadline = Instant::now() + self.wait;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            let line = match self.lines.recv_timeout(left) {
+                Ok(Ok(line)) => line,
+                Ok(Err(error)) => return Err(unreachable(&error)),
+                Err(mpsc::RecvTimeoutError::Timeout) => return Err(messaging::Unasked::Unanswered),
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err(unreachable(&"the client closed its input"));
+                }
+            };
+            let parsed: Option<Value> = serde_json::from_str(&line).ok();
+            let answers_us = parsed.as_ref().is_some_and(|value| {
+                value.get("id").and_then(Value::as_str) == Some(id.as_str())
+                    && value.get("method").is_none()
+            });
+            if answers_us {
+                return Ok(parsed
+                    .and_then(|value| value.get("result").cloned())
+                    .unwrap_or(Value::Null));
+            }
+            self.pending.push_back(line);
+        }
+    }
+}
+
+struct Silent;
+
+impl messaging::Elicit for Silent {
+    fn elicit(&mut self, _message: &str, _schema: Value) -> Result<Value, messaging::Unasked> {
+        Err(messaging::Unasked::Unreachable(
+            "this entry point has no client to ask".to_owned(),
+        ))
+    }
+}
+
 /// Serves stdio until the client closes it.
 pub fn serve(
-    input: impl BufRead,
-    mut output: impl Write,
+    input: impl BufRead + Send + 'static,
+    output: impl Write,
     context: Result<GateContext, Refusal>,
 ) -> std::io::Result<()> {
-    for line in input.lines() {
-        let line = line?;
+    let (sender, lines) = mpsc::channel();
+    std::thread::spawn(move || {
+        for line in input.lines() {
+            let failed = line.is_err();
+            if sender.send(line).is_err() || failed {
+                break;
+            }
+        }
+    });
+    serve_lines(&lines, output, context, ELICITATION_WAIT)
+}
+
+fn serve_lines(
+    lines: &Lines,
+    mut output: impl Write,
+    context: Result<GateContext, Refusal>,
+    wait: Duration,
+) -> std::io::Result<()> {
+    let mut server = Server::default();
+    let mut pending: VecDeque<String> = VecDeque::new();
+    let mut asked = 0;
+    loop {
+        let line = match pending.pop_front() {
+            Some(line) => line,
+            None => match lines.recv() {
+                Ok(line) => line?,
+                Err(_) => return Ok(()),
+            },
+        };
         if line.trim().is_empty() {
             continue;
         }
-        let Some(response) = handle_line(&line, context.as_ref()) else {
+        let response = {
+            let mut wire = Wire {
+                lines,
+                output: &mut output,
+                pending: &mut pending,
+                wait,
+                asked: &mut asked,
+            };
+            handle(&line, context.as_ref(), &mut server, &mut wire)
+        };
+        let Some(response) = response else {
             // A notification: JSON-RPC says answer nothing.
             continue;
         };
         writeln!(output, "{response}")?;
         output.flush()?;
     }
-    Ok(())
 }
 
-/// Answers one line, or nothing when it was a notification.
+/// Answers one line, or nothing when it was a notification. It has no client to put a question
+/// to, so a `send_message` through it is always refused.
 pub fn handle_line(line: &str, context: Result<&GateContext, &Refusal>) -> Option<Value> {
+    handle(line, context, &mut Server::default(), &mut Silent)
+}
+
+fn handle(
+    line: &str,
+    context: Result<&GateContext, &Refusal>,
+    server: &mut Server,
+    client: &mut dyn messaging::Elicit,
+) -> Option<Value> {
     let request: Value = match serde_json::from_str(line) {
         Ok(request) => request,
         Err(error) => {
@@ -128,9 +273,9 @@ pub fn handle_line(line: &str, context: Result<&GateContext, &Refusal>) -> Optio
     let id = id?;
 
     Some(match method {
-        "initialize" => success(id, initialize(&params)),
+        "initialize" => success(id, server.initialize(&params)),
         "tools/list" => success(id, json!({ "tools": tool_schemas(context) })),
-        "tools/call" => match call(&params, context) {
+        "tools/call" => match call(&params, context, Some(&mut server.consent(client))) {
             Ok(result) => success(id, result),
             Err(message) => error_response(id, code::INVALID_PARAMS, &message),
         },
@@ -186,13 +331,17 @@ fn tool_schemas(context: Result<&GateContext, &Refusal>) -> Vec<Value> {
         .collect()
 }
 
-fn call(params: &Value, context: Result<&GateContext, &Refusal>) -> Result<Value, String> {
+fn call(
+    params: &Value,
+    context: Result<&GateContext, &Refusal>,
+    consent: Option<&mut messaging::Consent<'_>>,
+) -> Result<Value, String> {
     let name = params
         .get("name")
         .and_then(Value::as_str)
         .ok_or_else(|| "tools/call needs a name".to_owned())?;
     let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
-    match run_tool(name, &arguments, context) {
+    match run_tool_asking(name, &arguments, context, consent) {
         Ok(result) => Ok(result),
         Err(ToolFailure::Refused(refusal)) => Ok(refusal_result(&refusal)),
         Err(ToolFailure::Malformed(message)) => Err(message),
@@ -525,6 +674,15 @@ pub fn run_tool(
     arguments: &Value,
     context: Result<&GateContext, &Refusal>,
 ) -> Result<Value, ToolFailure> {
+    run_tool_asking(name, arguments, context, None)
+}
+
+fn run_tool_asking(
+    name: &str,
+    arguments: &Value,
+    context: Result<&GateContext, &Refusal>,
+    consent: Option<&mut messaging::Consent<'_>>,
+) -> Result<Value, ToolFailure> {
     if let Some(reason) = tools::unexposed_reason(name) {
         return Err(ToolFailure::Refused(Box::new(operation_has_no_tool(
             name, reason,
@@ -659,6 +817,14 @@ pub fn run_tool(
                 ),
             ))));
         }
+    }
+
+    match name {
+        "send_message" => {
+            return messaging::send_message(arguments, context, named.as_ref(), consent);
+        }
+        "list_sessions" => return messaging::list_sessions(context),
+        _ => {}
     }
 
     if tools::is_assisted_only(name) && context.workflow != Some(crate::config::Workflow::Assisted)

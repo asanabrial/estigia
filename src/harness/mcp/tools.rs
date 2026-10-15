@@ -431,6 +431,38 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "send_message",
+        contract_name: "send_message",
+        description: "Leave a message for another session on this machine, delivered at its next \
+                      hook point. The person is asked first, every time unless they allowed this \
+                      session; with nobody to ask, nothing is recorded. Local to the store; the \
+                      tracker is not touched.",
+        operation: "send-message",
+        arguments: &[
+            RUN_ID,
+            Argument::required(
+                "to",
+                "string",
+                "The recipient run id, or an issue number (`12` or `#12`): the run the store \
+                 shows holding it.",
+            ),
+            Argument::required("text", "string", "The message."),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
+        name: "list_sessions",
+        contract_name: "list_sessions",
+        description: "The sessions registered on this machine: run id, runtime, status, the issue \
+                      each holds, last seen, mail waiting. The entries `estigia sessions --json` \
+                      prints. Read-only.",
+        operation: "list-sessions",
+        arguments: &[],
+        effect: PointerEffect::None,
+        writes: false,
+    },
+    Tool {
         name: "blocked_until",
         contract_name: "blocked_until",
         description: "Record, or clear, the clauses that discharge a blocked issue. A clause \
@@ -1518,6 +1550,18 @@ pub const TRACKER_WRITERS: &[&str] = &[
 /// The tools that exist only where `Workflow` is `assisted`, and are refused
 /// everywhere else.
 pub const ASSISTED_ONLY: &[&str] = &["assist", "draft_pr"];
+
+/// The tools answered from Estigia's own store, never by the transport.
+///
+/// `run_tool` takes them before the transport context is built, and the tests that walk
+/// [`TOOLS`] against the transport's operations and the binding's rows name this list as
+/// their exemption.
+pub const LOCAL_STORE_TOOLS: &[&str] = &["send_message", "list_sessions"];
+
+/// Whether a tool is answered from Estigia's own store.
+pub fn is_local_store(name: &str) -> bool {
+    LOCAL_STORE_TOOLS.contains(&name)
+}
 
 /// Whether a tool writes to the tracker or the repository host.
 pub fn writes_the_tracker(name: &str) -> bool {

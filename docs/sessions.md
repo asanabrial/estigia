@@ -2,7 +2,8 @@
 
 `estigia sessions [--json]` answers one question: which sessions has this machine seen, which issue does
 each hold, and is each still there. `estigia sessions send` puts a message in another session's mailbox, and the
-hook point of each runtime delivers it. The last section lists what does not exist yet.
+hook point of each runtime delivers it. The `send_message` and `list_sessions` MCP tools are the same two
+doors for an agent ([below](#the-mcp-tools)). The last section lists what does not exist yet.
 
 ## What is recorded
 
@@ -49,8 +50,7 @@ terminal sends with none, and the message is shown as from a person.
   against the sender (`undelivered_sent`) for as long as it stays so. An empty message and one over 8192 bytes are refused.
 - Sending is a write to Estigia's own state, like `estigia goal stop-after`, not a write to the repository: it needs
   no claim and the gate classifies the shell line that runs it as it classifies any other `estigia` command. The row
-  is the record of the send. No MCP tool mirrors it, because every MCP tool is a tracker operation and a mailbox row
-  is not one.
+  is the record of the send. The MCP tools in [the next section](#the-mcp-tools) reach the same row.
 - `estigia sessions` shows `waiting` (rows addressed to this session and not yet delivered) and `undelivered_sent`
   (rows this session sent that nobody has taken) beside each session.
 
@@ -75,6 +75,59 @@ What delivery refuses to do:
   and a Pi child session do not take the root session's mail.
 - It is recorded when it is handed to the host, not when the model reads it: no host reports a read, so "delivered"
   is the observable event and there is no separate "read" stamp.
+
+## The MCP tools
+
+`list_sessions` takes no arguments and answers the object `estigia sessions --json` prints (`sessions` beside
+`stale_after`), built by the same function.
+
+`send_message` takes `run_id` (the sender, this run's id, held to the shape every tool's `run_id` is), `to` and
+`text`, and calls the same `mailbox::send` as `estigia sessions send`, so the recipient, empty-text and size
+refusals above are the same ones. `to` is a run id, or an issue number written `12` or `#12`. An issue resolves to
+the run the local store's timeline shows holding it (the claim reducer over the stored timeline, as for any holder
+decision), never to a run pointer or a label. An issue with no live holder is refused with
+`message-issue-has-no-holder` and nothing is recorded. Both tools answer from the local store and bypass the
+tracker transport, so they need neither a tracker nor a repository host transport and are not binding operations.
+
+Consent follows who started the send. A person at a terminal is never asked. An agent's `send_message` is asked
+about before any row is written, through MCP elicitation (protocol `2025-06-18`):
+
+- At `initialize` the server records whether the client sent a `capabilities.elicitation` object. Its shape is not
+  inspected: `{}` and `{"form":{},"url":{}}` both count.
+- With no such capability, and no session grant, the send is refused with `message-needs-a-person` and nothing is
+  recorded.
+- Otherwise the server sends `elicitation/create` with a message naming the sender, the recipient run id, the issue
+  the recipient holds when it is known, and the text, and a schema with one required string `choice`: `allow_once`,
+  `allow_session` or `deny`.
+- `accept` with `allow_once` sends. `accept` with `allow_session` sends and remembers the grant, keyed by the
+  sender's run id, until that server process exits (one MCP server process is one agent session). Everything else
+  is refused with `message-not-allowed` and nothing is recorded: `deny`, `decline`, `cancel`, an unknown choice, an
+  error response, or no answer in 15 minutes. A question that could not be put or whose answer could not be read
+  (a failed write, a read error, a closed input) is refused `message-question-failed` instead, because the person
+  was never asked and the refusal must not read as their decision.
+- An issue number is resolved against the clock; an unreadable clock is `message-holder-unreadable`, never a holder.
+- While the server waits, any other line from the client is queued and served after the tool call answers. Requests
+  are still served one at a time.
+- The tool has no argument that skips the question, and the binary cannot tell whether a person asked the agent to
+  send. A person who wants no prompt sends from the CLI.
+
+The issue named in the question for a run-id recipient is read from that run's pointer, for display only; the
+store decides only the resolution of an issue number.
+
+What was measured, on Claude Code 2.1.300 (2026-10-15):
+
+- Against a probe MCP server: Claude Code sends a `server/discover` request before `initialize` (a method-not-found
+  answer is accepted), declares `capabilities.elicitation` as `{"form":{},"url":{}}`, and accepted this server's
+  `2025-06-18` answer to its `2025-11-25` request.
+- Against Estigia's own server under `claude -p`: `send_message` was refused `message-not-allowed`, because the
+  elicitation came back `{"action":"cancel"}`, and no row was written. A non-interactive session refuses every send.
+- Against Estigia's own server in an interactive session: the question appeared as a form showing the sender, the
+  recipient, the issue it holds and the text. The enum rendered as a single select field listing the three
+  `enumNames`. Choosing *Allow once* and accepting recorded the row, and the recipient took it at its next
+  `PreToolUse`.
+
+What was not measured: *Allow for this session* and *Deny* in the live dialog (the scripted tests cover both), and
+Codex and OpenCode.
 
 ## What does not exist yet
 

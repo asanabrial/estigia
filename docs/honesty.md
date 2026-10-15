@@ -10163,5 +10163,14 @@ mail waiting; and Node tests that drive the generated Pi extension. What it does
 - **"Read" is not recorded.** `delivered_at` is the observable event; no host reports that the model read the text.
 - **The counts in `estigia sessions` belong to listed sessions.** A message whose sender has neither a registry row
   nor a run pointer is counted in the table and shown against nobody.
+- **The MCP `send_message` door was driven live on one host only.** The unit tests play the client over an in-memory
+  stream: capability absent, each refusing answer, allow once, allow for the session, a line arriving while the
+  question is open, a closed input and a missed deadline. Live runs covered Claude Code 2.1.300 only: `claude -p`
+  refused with no row written, and the interactive dialog's *Allow once* recorded a row that was then delivered.
+  *Allow for this session* and *Deny* were not run live, and Codex and OpenCode were not run at all. A client that declares the capability and never renders the question waits out the 15 minutes and the send is
+  refused. The grant is per server process and keyed by the sender's run id, which the caller names: an agent that
+  names another run's id borrows its grant only if that run's id was granted in the same process.
+- **The question shows the issue a run-id recipient holds from its run pointer, not from the store.** The pointer is
+  not authority; only the resolution of an issue number reads the store.
 - **A message is text from another session.** Delivery says so in its first lines; nothing stops a model from acting
   on it, and nothing here measures how the hosts' models treat it.
