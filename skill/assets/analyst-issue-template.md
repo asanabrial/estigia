@@ -35,8 +35,14 @@ Everything from here down is written in the language the operator configuration'
 `Issue body language` row names — which is not necessarily the one above it.
 
 ## Problem
-What is wrong or missing, and how you know. Evidence, not assertion:
-file:line references, measured numbers, logs, reproduction steps.
+What is wrong or missing, and how you know. Evidence, not assertion: measured numbers, logs,
+reproduction steps. Cite a file with the symbol inside it, never a line number.
+
+### Today
+What happens now, and the command or test that shows it.
+
+### Expected
+What should happen instead.
 
 ## Why it matters
 Impact if left alone. If you cannot state one, say so plainly — a documented
@@ -45,19 +51,38 @@ Impact if left alone. If you cannot state one, say so plainly — a documented
 ## Proposed approach
 The design. Alternatives you considered and why you rejected them.
 Ordered work is not here: it comes later, from the run that holds the issue.
-If unsure, name the decision and its discharger, not an open question.
+If unsure, name the decision and its discharger, not an open question. Work that waits on a
+person's decision is filed `blocked`, not `ready`.
+
+### Pitfalls
+What looks right and is not: a check that passes without measuring, a fixture that must be built
+first.
+
+### Size
+Expected changed lines against `Change size`, and where the work would split.
+
+## Where to start
+Each file to read or change, with the symbol inside it and one line on why; the nearest existing
+test to copy. Locations, not ordered steps: ordered work stays the claim holder's `task` checklist.
 
 ## Acceptance criteria
 Checkable statements. "Faster" is not a criterion; "p95 under 200 ms measured
-by X" is. Include what must NOT change (invariants, byte-identical outputs).
+by X" is. The first criterion is the test that goes red against today's code. Include what must NOT
+change (invariants, byte-identical outputs).
+
+### Rules that apply
+Repository or domain rules this change must keep, named by file and section, not restated.
+
+## How to verify
+The exact commands, including any build or tool they need first.
 
 ## Out of scope
 What a dev should explicitly not do here. This prevents scope creep more
 reliably than any amount of prose in the sections above.
 
 ## Evidence
-Commands run, files read, numbers measured. Enough that a reviewer can
-re-check the analysis without repeating it.
+Commands run, files read, numbers measured, and the commit they were read at. Enough that a
+reviewer can re-check the analysis without repeating it.
 
 — Analysed by <run-id> on <date>
 ```

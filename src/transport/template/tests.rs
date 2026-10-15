@@ -96,6 +96,24 @@ fn every_required_heading_is_named_when_it_is_missing() {
 }
 
 #[test]
+fn a_body_without_where_to_start_is_refused() {
+    let body = filled().replacen("## Where to start\n", "plain text\n", 1);
+    assert_eq!(
+        problem_of(&body),
+        ("## Where to start".to_owned(), "missing".to_owned())
+    );
+}
+
+#[test]
+fn a_body_without_how_to_verify_is_refused() {
+    let body = filled().replacen("## How to verify\n", "plain text\n", 1);
+    assert_eq!(
+        problem_of(&body),
+        ("## How to verify".to_owned(), "missing".to_owned())
+    );
+}
+
+#[test]
 fn headings_out_of_template_order_are_refused_naming_the_first_displaced() {
     let body = filled()
         .replacen("## Problem\n", "## @@\n", 1)

@@ -9,7 +9,9 @@ const BODY: &str = "## Description for dumb humans\n\n> [!NOTE]\n> A probe.\n\n\
     ## Problem\nA probe.\n\n\
     ## Why it matters\nA probe.\n\n\
     ## Proposed approach\nA probe.\n\n\
+    ## Where to start\nA probe.\n\n\
     ## Acceptance criteria\nA probe.\n\n\
+    ## How to verify\nA probe.\n\n\
     ## Out of scope\nA probe.\n\n\
     ## Evidence\nA probe.\n";
 
