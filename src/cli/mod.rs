@@ -339,7 +339,8 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             event,
             dialect,
             agent,
-        } => hook(event, dialect, agent.as_deref()),
+            wait_mail,
+        } => hook(event, dialect, agent.as_deref(), *wait_mail),
 
         Command::Guard { uninstall, dry_run } => guard(*uninstall, *dry_run, cli.json),
 
@@ -4597,7 +4598,7 @@ fn mcp() -> Result<(), Refusal> {
 }
 
 /// Runs one lifecycle event. Never fails the agent's tool call.
-fn hook(event: &str, dialect: &str, agent: Option<&str>) -> Result<(), Refusal> {
+fn hook(event: &str, dialect: &str, agent: Option<&str>, wait_mail: bool) -> Result<(), Refusal> {
     let Some(event) = harness::hook::Event::from_slug(event) else {
         let known = harness::hook::EVENTS
             .iter()
@@ -4630,6 +4631,10 @@ fn hook(event: &str, dialect: &str, agent: Option<&str>) -> Result<(), Refusal> 
             dialect.slug()
         );
     }
+    if wait_mail {
+        wait_for_mail(dialect, agent, &input, context.as_ref());
+        return Ok(());
+    }
     let answer = loop_stop::answer(dialect, agent, event, &input, context.as_ref());
 
     // One dialect reads a process status rather than a document.
@@ -4647,6 +4652,34 @@ fn hook(event: &str, dialect: &str, agent: Option<&str>) -> Result<(), Refusal> 
 
     say!("{answer}");
     Ok(())
+}
+
+/// The `Stop` hook that outlives the turn: exits 2 with the mail on standard
+/// error, or returns having written nothing.
+fn wait_for_mail(
+    dialect: harness::hook::Dialect,
+    agent: Option<&str>,
+    input: &harness::hook::Input,
+    context: Option<&harness::GateContext>,
+) {
+    let (Some(context), Some(run_id)) = (
+        context,
+        harness::hook::mail_recipient(dialect, agent, input),
+    ) else {
+        return;
+    };
+    let deadline = std::time::Duration::from_secs(
+        harness::mailbox::WAIT_TIMEOUT_SECONDS - harness::mailbox::WAIT_MARGIN_SECONDS,
+    );
+    if let Some(text) = harness::mailbox::wait(
+        &context.state_root,
+        &run_id,
+        harness::mailbox::WAIT_INTERVAL,
+        deadline,
+    ) {
+        eprintln!("{text}");
+        std::process::exit(2);
+    }
 }
 
 /// Runs a git hook, whose contract is the exit code.

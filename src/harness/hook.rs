@@ -1363,12 +1363,22 @@ pub fn run_as(
                 &[],
             );
             let answer = response_in(dialect, &decision);
-            if agent_absent && !input.session_id.trim().is_empty() {
+            if mail_recipient(dialect, host, input).is_some() {
                 return with_mail(context, dialect, &recorded, answer);
             }
             answer
         }
     }
+}
+
+/// The run whose mail a hook may deliver: the main conversation of a named
+/// session, in the one dialect that carries mail. `None` for a sub-agent's
+/// call or a payload that names no session.
+pub fn mail_recipient(dialect: Dialect, agent: Option<&str>, input: &Input) -> Option<String> {
+    (dialect == Dialect::ClaudeCode
+        && input.agent_type.is_none()
+        && !input.session_id.trim().is_empty())
+    .then(|| session::run_id(session::runtime_of_agent(agent), &input.session_id))
 }
 
 fn with_mail(context: &GateContext, dialect: Dialect, run_id: &str, mut answer: Value) -> Value {

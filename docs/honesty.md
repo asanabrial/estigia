@@ -10141,8 +10141,9 @@ mail waiting; and Node tests that drive the generated Pi extension. What it does
 - **Pi's section lasts one turn.** The extension adds the text to that turn's prompt sections, which Pi rebuilds for
   the next turn, so a model that does not act on it in that turn does not see it again. Whether this Pi version keeps
   the section out of the stored conversation was not measured.
-- **No Claude Code or Codex hook other than `PreToolUse` delivers.** A session that makes no tool call is not
-  reached, on any runtime. `UserPromptSubmit` and `PostToolUse` are not registered by setup.
+- **Beyond `PreToolUse`, only `Stop` delivers.** Claude Code's waiter and Codex's loop `Stop` take mail; a session that
+  makes no tool call and ends no turn is not reached, on any runtime. `UserPromptSubmit` and `PostToolUse` are not
+  registered by setup.
 - **OpenCode was driven under `node` against stubs, not against a host.** Three Node tests drive the generated
   plugin: OpenCode 1's `tool.execute.after` appending to a string result, OpenCode 2's `execute.after` steering
   through a stub `ctx.session.prompt`, and the fallback to `ctx.session.synthetic` when that throws or is absent.
@@ -10155,11 +10156,26 @@ mail waiting; and Node tests that drive the generated Pi extension. What it does
   delivered. No small fix exists, because the take and the stamp are one statement.
 - **OpenCode costs one extra process per tool call.** The gate asks only for writes; the mailbox is read after every
   tool, and `estigia session deliver` answers from a read-only open of the store when nothing waits.
-- **No accelerator wakes an idle session, and none was run live.** OpenCode's `generate` is not used, nothing in
+- **Only Claude Code wakes an idle session, and OpenCode and Codex have no accelerator run live.** OpenCode's `generate` is not used, nothing in
   the plugin learns that a row was written, and Codex `turn/steer` (daemon threads) is not built. The Codex terminal
   UI and the Codex daemon stay undriven (above).
 - **A delivery is stamped before the host acknowledges it.** A hook process killed between the stamp and the write to
   standard output loses the message as delivered. The window is one statement wide and was not provoked.
+- **The Claude Code mail waiter was measured once, by hand, and not under load.** Claude Code 2.1.300 woke an idle
+  interactive session when an `asyncRewake` `Stop` hook exited 2 (the measurement is in
+  [`sessions.md`](sessions.md#waking-an-idle-claude-code-session)). Not measured live: two waiters overlapping on one
+  session (one per turn that ended before the earlier waiter did; the unit test covers two threads taking one row and
+  shows exactly one wins, which is the store's single statement, not a host); a session idle longer than 60 s before
+  the mail came (the measurement used a short wait; the 3600 s `timeout` is the documented field, not a long idle run);
+  and mail arriving while a turn is running (the `PreToolUse` delivery should take it first, and if the waiter takes
+  it instead, whether Claude Code delivers a rewake that arrives mid-turn was not seen). A waiter process lives for up
+  to an hour per turn that ended, so a long session holds several; nothing reaps one when its session ends before the
+  deadline. Mail the waiter took is stamped delivered before Claude Code acknowledges the exit, so a host that
+  discards it loses it, as the other points do.
+- **An already idle Codex session is not woken.** Codex's `Stop` hook is synchronous and continues the turn that is
+  ending, so mail left for an idle Codex session waits for the end or the next `PreToolUse` of its next turn. Codex has
+  a `Stop` entry only with the `Loop plugin` row `on`, so without it mail waits for `PreToolUse`. The blocking answer
+  was exercised by unit tests on this crate's output, and the mail-plus-loop `reason` was not run against a live Codex.
 - **"Read" is not recorded.** `delivered_at` is the observable event; no host reports that the model read the text.
 - **The counts in `estigia sessions` belong to listed sessions.** A message whose sender has neither a registry row
   nor a run pointer is counted in the table and shown against nobody.

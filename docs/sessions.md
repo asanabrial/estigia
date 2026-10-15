@@ -62,7 +62,9 @@ nothing and leaves the rows pending; a delivery that failed is never recorded as
 | Runtime | Delivery point | How |
 |---|---|---|
 | Claude Code | `PreToolUse` hook | The hook's answer carries the text as `hookSpecificOutput.additionalContext`, beside whatever it decided. |
+| Claude Code | `Stop` hook, `--wait-mail` | Outlives the turn (`asyncRewake`) and, when mail arrives, exits 2 with the text on standard error, which starts a new turn in an idle session. [Below](#waking-an-idle-claude-code-session). |
 | Codex | `PreToolUse` hook | The same hook and the same answer, registered with `--agent codex`. |
+| Codex | `Stop` hook, only with the `Loop plugin` row `on` | `{"decision":"block","reason":…}` with the text as the reason; when the loop also continues, one reason carries the loop's text, a blank line, then the mail. A turn in progress only: an idle Codex session is not woken. |
 | Pi | `before_agent_start` | The extension runs `estigia session deliver` and adds the text as its own `estigia-mail` prompt section. |
 | OpenCode 1 | `tool.execute.after` of the gate plugin | The text is appended to the tool's string result, after the plugin registered the session with `estigia session start`. |
 | OpenCode 2 | `execute.after` of the gate plugin | `ctx.session.prompt` with `delivery: "steer"` (the accelerator); when the service is absent or throws, `ctx.session.synthetic`. With neither function the mailbox is not read and the rows stay pending. |
@@ -126,6 +128,25 @@ What was measured, on Claude Code 2.1.300 (2026-10-15):
   `enumNames`. Choosing *Allow once* and accepting recorded the row, and the recipient took it at its next
   `PreToolUse`.
 
+### Waking an idle Claude Code session
+
+Setup adds a second `Stop` entry beside the ordinary one:
+`"<estigia>" hook stop --agent claude-code --dialect claude-code --wait-mail`, with `"asyncRewake": true` and
+`"timeout": 3600`. The process reads the `Stop` payload and resolves the run id exactly as the `PreToolUse` delivery
+does (`hook::mail_recipient`: the `claude-code` dialect, no `agent_type`, a named session); with no such run it exits 0 at
+once. Otherwise it asks the store for mail addressed to that run every second, up to 3595 seconds (the timeout less
+five), and takes it with the same single-statement delivery as every other point. Mail found: the rendered text goes
+to standard error and the exit status is 2. Nothing by the deadline: exit 0 and no row touched. A read that fails
+three times running also exits 0, leaving the rows pending for the `PreToolUse` delivery; one failure is
+tolerated because a send in progress can briefly hold the store.
+
+Measured on Claude Code 2.1.300, 2026-10-15, interactive TUI: a project `.claude/settings.json` `Stop` hook with
+`asyncRewake: true`, a `timeout` and no `async` key keeps running after the turn ends; when it exits 2 while the
+session is idle, Claude Code starts a turn by itself, the transcript shows "Stop hook feedback", and the model acts on
+the hook's standard error. `Stop` fires again at the end of that turn, so the waiter re-arms after every turn. The
+documented default command-hook timeout is 600 s, and `timeout` is enforced on `asyncRewake` hooks, which is why a long
+one is written. What this does not cover is in [`honesty.md`](honesty.md).
+
 What was not measured: *Allow for this session* and *Deny* in the live dialog (the scripted tests cover both), and
 Codex and OpenCode.
 
@@ -134,10 +155,13 @@ Codex and OpenCode.
 - Nothing refreshes `last_seen` on a gated write, so a session that holds no claim and runs longer than six hours
   reads `stale` while it is alive. Touching the registry from the gate is the next slice.
 - No pid is recorded, and no host API is asked whether a session is alive.
-- There is no Claude Code `UserPromptSubmit` or `PostToolUse` hook, since setup registers neither; a Claude Code or
-  Codex session that makes no tool call receives nothing until it makes one. The same holds for an OpenCode session
-  that makes no tool call.
-- No accelerator wakes an idle session. OpenCode's `steer` is used at the hook point, where the session is mid-turn;
+- There is no Claude Code `UserPromptSubmit` or `PostToolUse` hook, since setup registers neither. A Codex or
+  OpenCode session that makes no tool call receives nothing until it makes one, and a Codex session also at the end of
+  a turn when the loop is on. A Claude Code session is woken while idle for up to 3600 seconds after its last turn
+  ended (the waiter's `timeout`); after that, and in a session set up before the waiter existed, mail waits for the next
+  turn's `PreToolUse`.
+- Only Claude Code wakes an idle session. Codex's `Stop` hook runs synchronously and continues the turn that is
+  ending; it cannot start one. OpenCode's `steer` is used at the hook point, where the session is mid-turn;
   nothing watches the mailbox between hook points, because the plugin is told nothing when a row is written, and
   OpenCode's `generate` is not used. Codex `turn/steer` needs the daemon and is not built.
 

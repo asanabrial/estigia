@@ -2325,7 +2325,10 @@ fn stop_and_session_start_reach_claude_code_always_and_codex_only_under_the_loop
                                 entry.get("matcher").is_none(),
                                 "Stop fires once per turn, not per tool: {entry}"
                             );
-                            let stop = hook_commands(&written, "Stop");
+                            let stop: Vec<String> = hook_commands(&written, "Stop")
+                                .into_iter()
+                                .filter(|command| !command.ends_with(" --wait-mail"))
+                                .collect();
                             if codex_gets_them {
                                 assert_eq!(entry["hooks"][0]["timeout"], 180);
                                 assert!(
@@ -14025,6 +14028,59 @@ fn codex_setup_with_the_loop_off_takes_back_both_entries_and_their_trust() {
         without.1,
         "turning the loop off left trust for a hook that is gone"
     );
+}
+
+fn waiter_hooks(written: &serde_json::Value) -> Vec<serde_json::Value> {
+    written["hooks"]["Stop"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|group| group["hooks"].as_array().into_iter().flatten())
+        .filter(|hook| {
+            hook["command"]
+                .as_str()
+                .is_some_and(|command| command.ends_with(" --wait-mail"))
+        })
+        .cloned()
+        .collect()
+}
+
+#[test]
+fn claude_code_stop_gets_one_mail_waiter_that_rewakes_and_uninstall_removes_exactly_it() {
+    for config in [Config::default(), loop_on()] {
+        let (_home, options) = sandbox();
+        let adapter = agent("claude-code");
+        let paths = resolve_paths(adapter, &options).expect("paths resolve");
+        let hooks = paths.hooks.expect("a hooks file");
+        fs::create_dir_all(hooks.parent().expect("a parent")).expect("create the dir");
+        fs::write(
+            &hooks,
+            r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"theirs stop"}]}]}}"#,
+        )
+        .expect("write their hooks");
+
+        setup(adapter, &config, &options).expect("setup succeeds");
+        setup(adapter, &config, &options).expect("a second setup succeeds");
+        let written: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&hooks).expect("read")).expect("json");
+        let waiters = waiter_hooks(&written);
+        assert_eq!(waiters.len(), 1, "{written}");
+        assert_eq!(waiters[0]["type"], "command");
+        assert_eq!(waiters[0]["asyncRewake"], true);
+        assert_eq!(waiters[0]["timeout"], 3600);
+        assert!(waiters[0].get("async").is_none(), "{written}");
+        assert!(
+            waiters[0]["command"].as_str().is_some_and(|command| command
+                .ends_with(" hook stop --agent claude-code --dialect claude-code --wait-mail")),
+            "{written}"
+        );
+        assert_eq!(hook_commands(&written, "Stop")[0], "theirs stop");
+
+        uninstall(adapter, &options).expect("uninstall succeeds");
+        let written: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&hooks).expect("read")).expect("json");
+        assert_eq!(hook_commands(&written, "Stop"), ["theirs stop"]);
+    }
 }
 
 #[test]
