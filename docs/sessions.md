@@ -115,7 +115,11 @@ stops at `session.execution.started` and when the plugin is disposed.
 
 That a `queue` prompt starts a turn on an idle session is not read from OpenCode's own source: the loop plugin in
 `src/setup/plugin.rs` (`enqueue`, reacting to `session.execution.succeeded`) relies on it, against OpenCode 2.0.28.
-The wake is driven under `node` against a stand-in host and `estigia`; it was not run against a live OpenCode.
+The wake is driven under `node` against a stand-in host and `estigia`. It was also run once live, on OpenCode 2.0.28,
+2026-10-15, as an interactive session with a private server (`opencode --standalone`), whose configuration loaded only
+this plugin. The session was left idle after one turn. A message sent with `estigia sessions send` then started a turn
+with no input, and the row was stamped delivered. The prompt began with the same "not from your user" framing that
+`PreToolUse` delivery uses.
 
 What delivery refuses to do:
 

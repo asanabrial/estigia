@@ -10179,10 +10179,10 @@ mail waiting; and Node tests that drive the generated Pi extension. What it does
   delivered. No small fix exists, because the take and the stamp are one statement.
 - **OpenCode costs one extra process per tool call.** The gate asks only for writes; the mailbox is read after every
   tool, and `estigia session deliver` answers from a read-only open of the store when nothing waits.
-- **Claude Code and Pi wake an idle session; OpenCode 2 does so unmeasured against a live host.** The OpenCode 2 wake
-  ([`sessions.md`](sessions.md#waking-an-idle-opencode-session)) is driven under `node` against a stand-in host: that a
-  `delivery: "queue"` prompt starts a turn on an idle session is inferred from the loop plugin's use of it, not seen
-  here. OpenCode 1 is not woken, a session that never finished a turn is not polled, and a plugin loaded while a
+- **Claude Code, Pi and OpenCode 2 wake an idle session, each measured live once, by hand.** The OpenCode 2 wake
+  ([`sessions.md`](sessions.md#waking-an-idle-opencode-session)) is driven under `node` against a stand-in host. It was
+  also run once on OpenCode 2.0.28 with a private server (`--standalone`). Not measured live: a prompt the host refuses,
+  and a session woken while the background service rather than a private server runs the plugin. OpenCode 1 is not woken, a session that never finished a turn is not polled, and a plugin loaded while a
   session is already idle learns of it only at that session's next terminal event. OpenCode's `generate` is not used, nothing in
   the plugin learns that a row was written, and Codex `turn/steer` (daemon threads) is not built. The Codex terminal
   UI and the Codex daemon stay undriven (above).
