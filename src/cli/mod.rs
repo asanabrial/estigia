@@ -6128,7 +6128,9 @@ fn session_lifecycle(action: &SessionAction, json: bool) -> Result<(), Refusal> 
         SessionAction::Deliver {
             session_id,
             runtime,
-        } => sessions::deliver(runtime, session_id, json),
+            peek,
+            through,
+        } => sessions::deliver(runtime, session_id, *peek, *through, json),
         SessionAction::End {
             session_id,
             runtime,

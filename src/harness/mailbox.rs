@@ -109,10 +109,14 @@ const WAIT_READ_FAILURES: u32 = 3;
 pub(crate) const WAIT_INTERVAL: Duration = Duration::from_secs(1);
 
 pub(crate) fn deliver(state_root: &Path, run_id: &str) -> Option<String> {
-    taken(state_root, run_id).ok().flatten()
+    taken(state_root, run_id, i64::MAX).ok().flatten()
 }
 
-fn taken(state_root: &Path, run_id: &str) -> Result<Option<String>, ()> {
+pub(crate) fn deliver_through(state_root: &Path, run_id: &str, through: i64) -> Option<String> {
+    taken(state_root, run_id, through).ok().flatten()
+}
+
+fn taken(state_root: &Path, run_id: &str, through: i64) -> Result<Option<String>, ()> {
     let path = store::beside(state_root);
     let now = session::now_seconds().ok_or(())?;
     let Some(reader) = store::open_for_read(&path).map_err(|_| ())? else {
@@ -127,7 +131,7 @@ fn taken(state_root: &Path, run_id: &str) -> Result<Option<String>, ()> {
     }
     let taken = store::Store::open(&path)
         .map_err(|_| ())?
-        .messages_taken(run_id, now)
+        .messages_taken_through(run_id, now, through)
         .map_err(|_| ())?;
     Ok((!taken.is_empty()).then(|| render(&taken, now)))
 }
@@ -175,7 +179,7 @@ pub(crate) fn wait(
     let mut failures = 0;
     loop {
         let outcome = match still_current(state_root, run_id, &token) {
-            Ok(true) => taken(state_root, run_id),
+            Ok(true) => taken(state_root, run_id, i64::MAX),
             Ok(false) => return None,
             Err(()) => Err(()),
         };
@@ -195,6 +199,15 @@ pub(crate) fn wait(
         }
         std::thread::sleep(interval.min(deadline - elapsed));
     }
+}
+
+/// The text [`deliver`] would print and the id of the last message in it, stamping nothing.
+pub(crate) fn peek(state_root: &Path, run_id: &str) -> Option<(String, i64)> {
+    let now = session::now_seconds()?;
+    let reader = store::open_for_read(&store::beside(state_root)).ok()??;
+    let pending = reader.messages_pending(run_id).ok()?;
+    let last = pending.last()?.id;
+    Some((render(&pending, now), last))
 }
 
 fn render(messages: &[Message], now: u64) -> String {
@@ -304,7 +317,7 @@ mod tests {
         leave(&state_root, "claude-aaaa", "only one of you");
         let spawn = || {
             let state_root = state_root.clone();
-            std::thread::spawn(move || taken(&state_root, "claude-aaaa"))
+            std::thread::spawn(move || taken(&state_root, "claude-aaaa", i64::MAX))
         };
         let (first, second) = (spawn(), spawn());
         let delivered = [first, second]

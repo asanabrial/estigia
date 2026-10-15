@@ -123,7 +123,7 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Eighty-eight tests **require** `node` on the path, and all eighty-eight drive the OpenCode plugins and
+   --no-deps`. Ninety-two tests **require** `node` on the path, and all ninety-two drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
    let a gate defect stand. Nine are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
@@ -176,6 +176,11 @@ a second copy that will disagree.
    `the_pi_extension_delivers_waiting_mail_as_its_own_prompt_section_at_before_agent_start`,
    `the_pi_extension_adds_no_mail_section_when_nothing_waits_or_the_mailbox_cannot_be_read` and
    `a_pi_child_asks_about_the_root_session_and_never_ends_it`;
+   four drive the Pi gate extension's wake of an idle session through `drive_pi_wake` —
+   `an_idle_pi_session_with_waiting_mail_is_woken_with_a_follow_up_and_then_takes_it`,
+   `a_wake_that_throws_or_cannot_be_made_leaves_the_mail_pending_for_the_next_turn`,
+   `a_pi_child_never_polls_and_the_root_stops_at_a_turn_and_at_shutdown` and
+   `a_turn_started_by_a_wake_reads_the_mailbox_only_after_the_wake_has_taken_its_mail`;
    and three drive the Pi review relay extension —
    `the_pi_review_relay_materialises_the_prompt_and_admits_the_answer`,
    `the_pi_review_relay_keeps_the_reason_when_the_binary_exits_before_reading_stdin` and
@@ -218,7 +223,7 @@ a second copy that will disagree.
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that eighty-eight tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that ninety-two tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here

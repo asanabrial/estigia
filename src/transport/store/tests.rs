@@ -2703,6 +2703,31 @@ fn a_message_is_taken_once_in_the_order_it_was_sent_and_stamped_delivered() {
 }
 
 #[test]
+fn pending_messages_are_read_without_being_stamped_and_taken_only_up_to_the_id_read() {
+    let (_directory, store) = open();
+    mail(&store, None, "pi-bbbb", "first", 100);
+    mail(&store, None, "pi-bbbb", "second", 110);
+
+    let pending = store.messages_pending("pi-bbbb").expect("pending");
+    assert_eq!(pending.len(), 2);
+    assert_eq!(
+        store.messages_pending("pi-bbbb").expect("again").len(),
+        2,
+        "reading stamped a message"
+    );
+
+    mail(&store, None, "pi-bbbb", "third", 120);
+    let taken = store
+        .messages_taken_through("pi-bbbb", 200, pending[1].id)
+        .expect("taken");
+    let bodies: Vec<&str> = taken.iter().map(|m| m.body.as_str()).collect();
+    assert_eq!(bodies, ["first", "second"]);
+    let left = store.messages_pending("pi-bbbb").expect("left");
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0].body, "third");
+}
+
+#[test]
 fn the_counts_name_what_waits_for_a_recipient_and_what_a_sender_still_has_undelivered() {
     let (_directory, store) = open();
     mail(&store, Some("claude-aaaa"), "pi-bbbb", "one", 100);

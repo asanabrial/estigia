@@ -66,8 +66,35 @@ nothing and leaves the rows pending; a delivery that failed is never recorded as
 | Codex | `PreToolUse` hook | The same hook and the same answer, registered with `--agent codex`. |
 | Codex | `Stop` hook, only with the `Loop plugin` row `on` | `{"decision":"block","reason":…}` with the text as the reason; when the loop also continues, one reason carries the loop's text, a blank line, then the mail. A turn in progress only: an idle Codex session is not woken. |
 | Pi | `before_agent_start` | The extension runs `estigia session deliver` and adds the text as its own `estigia-mail` prompt section. |
+| Pi, idle | A poll every 10 seconds between turns | The extension runs `estigia session deliver --peek --json`; with mail it calls `pi.sendMessage` with `deliverAs: "followUp"` and `triggerTurn: true`, and only when that returned without throwing it runs `estigia session deliver --through <id>`. See [Waking an idle Pi session](#waking-an-idle-pi-session). |
 | OpenCode 1 | `tool.execute.after` of the gate plugin | The text is appended to the tool's string result, after the plugin registered the session with `estigia session start`. |
 | OpenCode 2 | `execute.after` of the gate plugin | `ctx.session.prompt` with `delivery: "steer"` (the accelerator); when the service is absent or throws, `ctx.session.synthetic`. With neither function the mailbox is not read and the rows stay pending. |
+
+### Waking an idle Pi session
+
+A Pi session that is between turns reaches no hook point, so the extension polls. The root session starts a 10-second
+timer (`WAKE_INTERVAL_MS`) at `session_start` and again at `agent_settled`, the event Pi fires once a run has fully
+settled with no retry, compaction or queued continuation pending; it stops the timer at `agent_start`, so nothing
+polls while a turn runs, and at `session_shutdown`. A child session never starts one. Both events are
+`AgentStartEvent` and `AgentSettledEvent` in `dist/core/extensions/types.d.ts` of `@earendil-works/pi-coding-agent`
+1.1.0.
+
+Each tick is `estigia session deliver --peek --json`, which prints `{"messages": <text or null>, "through": <id of
+the last message or null>}` and stamps nothing; `--through <id>` stamps and prints only the rows up to that id, so
+mail that arrives between the two calls is left pending. With mail, the extension calls `pi.sendMessage` with a
+custom message of type `estigia-mail`, `deliverAs: "followUp"` and `triggerTurn: true`. In `AgentSession.sendCustomMessage`
+(`dist/core/agent-session.js`) an idle session with `triggerTurn` runs a new turn on that message, and one that began
+streaming meanwhile queues it as a follow-up. `ExtensionAPI.sendMessage` returns nothing and reports an asynchronous
+failure only as a runtime error event, so "handed over" means the call did not throw. That is the order the take
+follows: a `sendMessage` that throws, or a host without one, leaves the rows pending and `before_agent_start` takes them
+as before. If the take fails after a successful hand-over the rows stay pending and are delivered a second time.
+`before_agent_start` waits for a wake in flight, so the turn a wake starts does not take the same rows into its prompt.
+
+The wake is read from Pi's type definitions and source and driven under `node` against a stand-in `pi` and `estigia`.
+It was also run once live, on Pi 1.1.0 on 2026-10-15. An interactive session loaded only this extension and was left
+idle after one turn. A message sent to it with `estigia sessions send` started a turn within 30 seconds with no
+input, and the row was stamped delivered. Not measured live: a `sendMessage` that fails, and mail arriving while a
+turn runs.
 
 What delivery refuses to do:
 
@@ -174,7 +201,7 @@ Codex and OpenCode.
   a turn when the loop is on. A Claude Code session is woken while idle for up to 3600 seconds after its last turn
   ended (the waiter's `timeout`); after that, and in a session set up before the waiter existed, mail waits for the next
   turn's `PreToolUse`.
-- Only Claude Code wakes an idle session. Codex's `Stop` hook runs synchronously and continues the turn that is
+- Only Claude Code and Pi wake an idle session. Codex's `Stop` hook runs synchronously and continues the turn that is
   ending; it cannot start one. OpenCode's `steer` is used at the hook point, where the session is mid-turn;
   nothing watches the mailbox between hook points, because the plugin is told nothing when a row is written, and
   OpenCode's `generate` is not used. Codex `turn/steer` needs the daemon and is not built.

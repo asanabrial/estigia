@@ -291,6 +291,7 @@ const STATUS_TIMEOUT_MS = 5000;
 const SESSION_TIMEOUT_MS = 5000;
 const SECTION = "estigia";
 const MAIL_SECTION = "estigia-mail";
+const WAKE_INTERVAL_MS = 10000;
 const CARD = "estigia-refusal";
 const TITLE = "Estigia";
 const ASKED = 4;
@@ -645,7 +646,58 @@ const card = (pi, ctx, tool, reason) => {
   } catch {}
 };
 
+const peeked = (text) => {
+  try {
+    const answer = JSON.parse(text);
+    return typeof answer?.messages === "string" && Number.isInteger(answer?.through)
+      ? { text: answer.messages, through: answer.through }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export default function (pi) {
+  let waker;
+  let handover = Promise.resolve();
+  let ticking = false;
+  const stopWake = () => {
+    if (waker !== undefined) clearInterval(waker);
+    waker = undefined;
+  };
+  const wake = async (own, cwd) => {
+    const mail = await askSession("deliver", own, ["--peek", "--json"], cwd);
+    if (mail.why) return console.error(`estigia: the mailbox was not read (${mail.why})`);
+    const found = peeked(mail.text);
+    if (found === undefined) return;
+    try {
+      pi.sendMessage(
+        { customType: MAIL_SECTION, content: found.text, display: true },
+        { deliverAs: "followUp", triggerTurn: true },
+      );
+    } catch (error) {
+      return console.error(`estigia: waking the session failed, so the mail stays pending (${String(error?.message ?? error).trim()})`);
+    }
+    const taken = await askSession("deliver", own, ["--through", String(found.through)], cwd);
+    if (taken.why) console.error(`estigia: mail handed to the session was not recorded as delivered (${taken.why})`);
+  };
+  const startWake = (ctx) => {
+    stopWake();
+    const own = sessionOf(ctx);
+    if (!filled(own) || rootOf(own, ctx) || typeof pi.sendMessage !== "function") return;
+    const cwd = ctx?.cwd ?? process.cwd();
+    waker = setInterval(() => {
+      if (ticking) return;
+      ticking = true;
+      handover = wake(own, cwd)
+        .catch(() => {})
+        .finally(() => {
+          ticking = false;
+        });
+      return handover;
+    }, WAKE_INTERVAL_MS);
+    waker?.unref?.();
+  };
   pi.registerEntryRenderer?.(CARD, (entry, _options, theme) => {
     const data = entry?.data ?? {};
     const reason = String(data.reason ?? "");
@@ -690,6 +742,7 @@ export default function (pi) {
     }
     void showClaim(ctx);
     void showChanges(ctx);
+    startWake(ctx);
   });
   pi.on("before_agent_start", async (event, ctx) => {
     const text = await sessionContext(sessionOf(ctx), ctx);
@@ -702,13 +755,18 @@ export default function (pi) {
     options.sections[SECTION] = text;
     const own = sessionOf(ctx);
     if (filled(own) && !rootOf(own, ctx)) {
+      await handover;
       const mail = await askSession("deliver", own, [], ctx?.cwd ?? process.cwd());
       if (mail.text) options.sections[MAIL_SECTION] = mail.text;
       else if (mail.why) console.error(`estigia: the mailbox was not read (${mail.why})`);
     }
     return undefined;
   });
+  pi.on("agent_start", async () => {
+    stopWake();
+  });
   pi.on("session_shutdown", async (event, ctx) => {
+    stopWake();
     const session = sessionOf(ctx);
     if (!filled(session) || rootOf(session, ctx)) return;
     const key = `${session}:${event?.reason ?? ""}`;
@@ -721,6 +779,7 @@ export default function (pi) {
   pi.on("agent_settled", async (_event, ctx) => {
     void showClaim(ctx);
     void showChanges(ctx);
+    startWake(ctx);
   });
   pi.on("tool_result", async (_event, ctx) => {
     void showClaim(ctx);

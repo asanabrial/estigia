@@ -17571,6 +17571,273 @@ fn a_pi_child_asks_about_the_root_session_and_never_ends_it() {
     assert_eq!(said["results"][1]["sections"]["estigia"], "ROOT CONTEXT");
 }
 
+fn drive_pi_wake(
+    steps: serde_json::Value,
+    session: &str,
+    plan: serde_json::Value,
+    inherited: Option<&str>,
+) -> serde_json::Value {
+    let node = node_executable();
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let base = node_safe_dir(root.path());
+    fs::write(
+        base.join("gate.mjs"),
+        plugin::pi_source(std::path::Path::new(&node)),
+    )
+    .expect("the extension writes");
+    fs::write(
+        base.join("stub.cjs"),
+        r#"const fs = require("node:fs");
+const path = require("node:path");
+if (path.basename(process.argv[1] ?? "") === "session") {
+  const plan = JSON.parse(process.env.STUB_PLAN);
+  const args = process.argv.slice(2);
+  fs.appendFileSync(process.env.STUB_LOG, JSON.stringify(["session", ...args]) + "\n");
+  if (args[0] === "deliver" && args.includes("--peek")) {
+    fs.writeSync(1, JSON.stringify({ messages: plan.peek ?? null, through: plan.through ?? null }));
+  } else if (args[0] === "deliver") {
+    if (args.includes("--through") && plan.slow_take) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, plan.slow_take);
+    fs.appendFileSync(process.env.STUB_LOG, JSON.stringify(["done", ...args]) + "\n");
+    fs.writeSync(1, plan.deliver ?? "");
+  } else {
+    fs.writeSync(1, plan.stdout ?? "");
+  }
+  process.exit(0);
+}
+"#,
+    )
+    .expect("the stand-in writes");
+    fs::write(
+        base.join("drive.mjs"),
+        r#"import { readFileSync } from "node:fs";
+
+process.env.NODE_OPTIONS = `--require "${process.env.STUB_PATH}"`;
+const plan = JSON.parse(process.env.STUB_PLAN);
+const timers = new Map();
+let next = 1;
+globalThis.setInterval = (fn, ms) => {
+  const id = { id: next++, unref() {} };
+  timers.set(id, { fn, ms });
+  return id;
+};
+globalThis.clearInterval = (id) => timers.delete(id);
+const handlers = {};
+const sent = [];
+const pi = { on: (name, handler) => { handlers[name] = handler; } };
+if (!plan.no_send) {
+  pi.sendMessage = (message, options) => {
+    sent.push({ message, options });
+    if (plan.send_throws) throw new Error("the host refused");
+  };
+}
+(await import("./gate.mjs")).default(pi);
+const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => process.env.OWN_SESSION } };
+const results = [];
+for (const [name, event] of JSON.parse(process.env.STEPS)) {
+  if (name === "tick_nowait") {
+    for (const timer of [...timers.values()]) timer.fn();
+    results.push({ sections: null });
+    continue;
+  }
+  if (name === "tick") {
+    const waiting = [...timers.values()];
+    await Promise.all(waiting.map((timer) => timer.fn()));
+    results.push({ intervals: waiting.map((timer) => timer.ms), sections: null });
+    continue;
+  }
+  const sentEvent = { type: name, ...event };
+  if (name === "before_agent_start") sentEvent.systemPromptOptions = { sections: {} };
+  await handlers[name](sentEvent, ctx);
+  results.push({ active: timers.size, sections: sentEvent.systemPromptOptions?.sections ?? null });
+}
+const logged = readFileSync(process.env.STUB_LOG, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+console.log(JSON.stringify({ logged, sent, results }));
+"#,
+    )
+    .expect("the driver writes");
+    let log = base.join("calls.log");
+    fs::write(&log, "").expect("the log resets");
+    let mut command = std::process::Command::new(&node);
+    command
+        .arg(base.join("drive.mjs"))
+        .current_dir(&base)
+        .env("STUB_LOG", &log)
+        .env("STUB_PLAN", plan.to_string())
+        .env("STEPS", steps.to_string())
+        .env(
+            "STUB_PATH",
+            base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
+        )
+        .env("OWN_SESSION", session)
+        .env_remove("NODE_OPTIONS")
+        .env_remove("ESTIGIA_PI_PARENT_SESSION")
+        .env_remove("ESTIGIA_PI_PARENT_PID");
+    if let Some(id) = inherited {
+        command
+            .env("ESTIGIA_PI_PARENT_SESSION", id)
+            .env("ESTIGIA_PI_PARENT_PID", "1");
+    }
+    let ran = command.output().expect("node runs");
+    assert!(
+        ran.status.success(),
+        "the driver failed: {}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    serde_json::from_slice(&ran.stdout).expect("the driver prints JSON")
+}
+
+#[test]
+fn a_turn_started_by_a_wake_reads_the_mailbox_only_after_the_wake_has_taken_its_mail() {
+    let said = drive_pi_wake(
+        serde_json::json!([
+            ["session_start", {"reason": "startup"}],
+            ["tick_nowait", {}],
+            ["before_agent_start", {}]
+        ]),
+        "sess-w4",
+        serde_json::json!({"peek": "MAIL TEXT", "through": 7, "slow_take": 400}),
+        None,
+    );
+    let calls: Vec<Vec<String>> = said["logged"]
+        .as_array()
+        .expect("a log")
+        .iter()
+        .map(|call| {
+            call.as_array()
+                .expect("a call")
+                .iter()
+                .map(|word| word.as_str().expect("a word").to_owned())
+                .collect()
+        })
+        .collect();
+    let took = calls
+        .iter()
+        .position(|call| call[0] == "done" && call.contains(&"--through".to_owned()))
+        .expect("the wake took its mail");
+    let read = calls
+        .iter()
+        .position(|call| call[0] == "done" && !call.contains(&"--through".to_owned()))
+        .expect("the turn read the mailbox");
+    assert!(took < read, "{calls:?}");
+}
+
+fn session_calls(said: &serde_json::Value) -> Vec<Vec<String>> {
+    said["logged"]
+        .as_array()
+        .expect("a log")
+        .iter()
+        .filter(|call| call[0] != "done")
+        .map(|call| {
+            call.as_array()
+                .expect("a call")
+                .iter()
+                .map(|word| word.as_str().expect("a word").to_owned())
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn an_idle_pi_session_with_waiting_mail_is_woken_with_a_follow_up_and_then_takes_it() {
+    let said = drive_pi_wake(
+        serde_json::json!([["session_start", {"reason": "startup"}], ["tick", {}]]),
+        "sess-w1",
+        serde_json::json!({"peek": "MAIL TEXT", "through": 7}),
+        None,
+    );
+    assert_eq!(said["results"][1]["intervals"], serde_json::json!([10000]));
+    let sent = said["sent"].as_array().expect("sent");
+    assert_eq!(sent.len(), 1, "{said}");
+    assert_eq!(sent[0]["message"]["content"], "MAIL TEXT");
+    assert_eq!(
+        sent[0]["options"],
+        serde_json::json!({"deliverAs": "followUp", "triggerTurn": true})
+    );
+    let calls = session_calls(&said);
+    let deliveries: Vec<&Vec<String>> = calls.iter().filter(|call| call[1] == "deliver").collect();
+    assert_eq!(deliveries.len(), 2, "{calls:?}");
+    assert!(deliveries[0].contains(&"--peek".to_owned()), "{calls:?}");
+    assert_eq!(
+        deliveries[1][deliveries[1].len() - 2..],
+        ["--through", "7"],
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn a_wake_that_throws_or_cannot_be_made_leaves_the_mail_pending_for_the_next_turn() {
+    for plan in [
+        serde_json::json!({"peek": "MAIL TEXT", "through": 7, "deliver": "MAIL TEXT", "send_throws": true}),
+        serde_json::json!({"peek": "MAIL TEXT", "through": 7, "deliver": "MAIL TEXT", "no_send": true}),
+    ] {
+        let said = drive_pi_wake(
+            serde_json::json!([
+                ["session_start", {"reason": "startup"}],
+                ["tick", {}],
+                ["before_agent_start", {}]
+            ]),
+            "sess-w2",
+            plan.clone(),
+            None,
+        );
+        let calls = session_calls(&said);
+        assert!(
+            calls
+                .iter()
+                .all(|call| !call.contains(&"--through".to_owned())),
+            "{plan}: the mail was taken before it was handed over: {calls:?}"
+        );
+        assert_eq!(
+            said["results"][2]["sections"]["estigia-mail"], "MAIL TEXT",
+            "{plan}: {said}"
+        );
+    }
+}
+
+#[test]
+fn a_pi_child_never_polls_and_the_root_stops_at_a_turn_and_at_shutdown() {
+    let said = drive_pi_wake(
+        serde_json::json!([["session_start", {"reason": "startup"}], ["tick", {}]]),
+        "child-w3",
+        serde_json::json!({"peek": "MAIL TEXT", "through": 7}),
+        Some("root-1"),
+    );
+    assert_eq!(said["results"][0]["active"], 0, "{said}");
+    assert!(said["sent"].as_array().expect("sent").is_empty(), "{said}");
+    assert!(
+        session_calls(&said)
+            .iter()
+            .all(|call| !call.contains(&"--peek".to_owned())),
+        "{said}"
+    );
+
+    let said = drive_pi_wake(
+        serde_json::json!([
+            ["session_start", {"reason": "startup"}],
+            ["agent_start", {}],
+            ["tick", {}],
+            ["agent_settled", {"aborted": false}],
+            ["session_shutdown", {"reason": "quit"}],
+            ["tick", {}]
+        ]),
+        "sess-w3",
+        serde_json::json!({"peek": "MAIL TEXT", "through": 7}),
+        None,
+    );
+    let active: Vec<_> = said["results"]
+        .as_array()
+        .expect("results")
+        .iter()
+        .map(|step| step["active"].clone())
+        .collect();
+    assert_eq!(
+        serde_json::Value::Array(active),
+        serde_json::json!([1, 0, null, 1, 0, null]),
+        "{said}"
+    );
+    assert!(said["sent"].as_array().expect("sent").is_empty(), "{said}");
+}
+
 const PI_REVIEW_STUB: &str = r#"const fs = require("node:fs");
 const path = require("node:path");
 if (path.basename(process.argv[1] ?? "") === "review") {
