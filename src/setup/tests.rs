@@ -22769,9 +22769,16 @@ const messages = [];
 });
 const ctx = { cwd: process.env.PROJECT, hasUI: false, sessionManager: { getSessionId: () => "root-1" } };
 
-const seen = () => (existsSync(process.env.FAKE_SEEN) ? readFileSync(process.env.FAKE_SEEN, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
+const parsed = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+const seen = () => (existsSync(process.env.FAKE_SEEN) ? readFileSync(process.env.FAKE_SEEN, "utf8").split("\n").map(parsed).filter(Boolean) : []);
 const resultFile = (name) => `${process.env.RESULT_DIR}/${name}.json`;
-const result = (name) => until(() => (existsSync(resultFile(name)) ? JSON.parse(readFileSync(resultFile(name), "utf8")) : null));
+const result = (name) => until(() => (existsSync(resultFile(name)) ? parsed(readFileSync(resultFile(name), "utf8")) : null));
 const start = (mode, name, background = true) => {
   process.env.FAKE_MODE = mode;
   process.env.FAKE_RESULT = resultFile(name);
@@ -22812,6 +22819,8 @@ const begin = Date.now();
 const silent = start("query", "silent");
 const timedOut = await result("silent");
 const waited = Date.now() - begin;
+const silentRequest = messages.filter((entry) => entry.message.details?.kind === "query").at(-1)?.message.details.request_id;
+const staleReply = await attempt(() => tools.estigia_subagent_reply.execute("r", { id: "a4", request_id: silentRequest, text: "too late" }));
 const silentAsked = messages.filter((entry) => entry.message.details?.kind === "query").length;
 await stopAll();
 await ended("a4");
@@ -22859,6 +22868,7 @@ console.log(JSON.stringify({
   waited,
   silentAsked,
   lateReply,
+  staleReply,
 }));
 "##;
 
@@ -23001,6 +23011,7 @@ fn an_unanswered_pi_child_query_ends_at_its_timeout_with_an_error() {
         "the query did not end at its timeout: {waited}ms"
     );
     failed_with(&said["lateReply"], "no longer running");
+    failed_with(&said["staleReply"], "stopped waiting");
 }
 
 #[cfg(unix)]

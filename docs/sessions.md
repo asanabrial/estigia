@@ -127,6 +127,9 @@ child's tool result, and the child's final answer reached the parent as a follow
 A message sent while the other side is gone is lost and the sender is told when it can be. A query pending
 when the child ends is dropped, and a reply to it is a tool error. A query pending when the parent ends
 fails in the child as soon as the channel closes; one the parent never answers fails after 120 seconds.
+The parent forgets the query at the same 120 seconds, so a reply that comes later is refused rather than
+reported as answered. A reply is forgotten only once the channel has accepted it, so a reply that fails to
+send can be sent again.
 Neither side's session is changed by what arrives: a message is text for a model, not an instruction the
 gate treats differently.
 

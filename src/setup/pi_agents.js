@@ -142,6 +142,7 @@ const finish = (run, status, resolve, text) => {
   if (run.status !== "running") return;
   run.status = status;
   run.endedAt = Date.now();
+  for (const expiry of run.queries.values()) clearTimeout(expiry);
   run.queries.clear();
   remember(run, text);
   clearTimeout(run.setupTimer);
@@ -258,7 +259,9 @@ const onChild = (run, message) => {
       run.child.send({ kind: "refusal", request_id: message.request_id, text: WAITING_REFUSAL });
     } catch {}
   } else if (message.kind === "query" && filled(message.request_id) && !run.queries.has(message.request_id)) {
-    run.queries.set(message.request_id, message.text);
+    const expiry = setTimeout(() => run.queries.delete(message.request_id), QUERY_TIMEOUT_MS);
+    expiry.unref?.();
+    run.queries.set(message.request_id, expiry);
     note(run, `child asks (${message.request_id}): ${message.text}`);
     relay(
       run,
@@ -290,16 +293,18 @@ const replyToChild = (params) => {
   if (!filled(params?.text)) failure("a reply needs text");
   const run = runningChild(params?.id);
   const requestId = String(params?.request_id ?? "");
-  if (!run.queries.has(requestId)) failure(`subagent ${run.id} has no pending query ${requestId || "(none)"}`);
-  run.queries.delete(requestId);
+  if (!run.queries.has(requestId)) {
+    failure(`subagent ${run.id} has no pending query ${requestId || "(none)"}; it was answered, or the child stopped waiting`);
+  }
   note(run, `you (reply to ${requestId}): ${params.text}`);
   return new Promise((resolve, reject) => {
     try {
-      run.child.send({ kind: "reply", request_id: requestId, text: params.text }, (error) =>
-        error
-          ? reject(new Error(`estigia: the reply could not reach ${run.id}: ${error.message}`))
-          : resolve({ content: [{ type: "text", text: `answered ${requestId}` }], details: { id: run.id } }),
-      );
+      run.child.send({ kind: "reply", request_id: requestId, text: params.text }, (error) => {
+        if (error) return reject(new Error(`estigia: the reply could not reach ${run.id}: ${error.message}`));
+        clearTimeout(run.queries.get(requestId));
+        run.queries.delete(requestId);
+        resolve({ content: [{ type: "text", text: `answered ${requestId}` }], details: { id: run.id } });
+      });
     } catch (error) {
       reject(new Error(`estigia: the reply could not reach ${run.id}: ${String(error?.message ?? error)}`));
     }
