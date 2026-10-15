@@ -150,8 +150,37 @@ pub(super) fn int(value: u64) -> i64 {
     i64::try_from(value).unwrap_or(i64::MAX)
 }
 
+thread_local! {
+    static OPENING_SINCE: std::cell::Cell<Option<std::time::Instant>> =
+        const { std::cell::Cell::new(None) };
+}
+
+struct Opening;
+
+impl Opening {
+    fn begin() -> Self {
+        OPENING_SINCE.set(Some(std::time::Instant::now()));
+        Self
+    }
+}
+
+impl Drop for Opening {
+    fn drop(&mut self) {
+        OPENING_SINCE.set(None);
+    }
+}
+
 fn unreadable(what: &str) -> impl Fn(rusqlite::Error) -> Failure + '_ {
-    move |error| Failure::Read(format!("the local store could not {what}: {error}"))
+    move |error| {
+        let code = error.sqlite_error().map(|failure| failure.extended_code);
+        let elapsed = OPENING_SINCE.get().map(|since| since.elapsed().as_millis());
+        let detail = match (code, elapsed) {
+            (Some(code), Some(ms)) => format!(" (sqlite {code}, after {ms} ms)"),
+            (Some(code), None) => format!(" (sqlite {code})"),
+            _ => String::new(),
+        };
+        Failure::Read(format!("the local store could not {what}: {error}{detail}"))
+    }
 }
 
 impl Store {
@@ -162,6 +191,7 @@ impl Store {
 
     /// Opens the store waiting at most `wait` on a lock another opener holds.
     pub(crate) fn open_waiting(path: &Path, wait: Duration) -> Result<Self, Failure> {
+        let _opening = Opening::begin();
         let store = Self::connect(path, wait)?;
         store.migrate()?;
         Ok(store)

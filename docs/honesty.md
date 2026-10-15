@@ -127,6 +127,14 @@ pointer that leaves it names the document it points at.
   same way, and the count `doctor` reports is the only trace. No bound was raised, because a longer
   wait puts the same stall on the gate's critical path.
 
+  The same message was reported on Windows (`the local store could not create its version table:
+  database is locked`) and is **unexplained**. Ruled out on macOS: a busy handler the
+  autocommit `CREATE TABLE IF NOT EXISTS meta` bypasses (SQLite 3.53.2 calls it; 4,800 raw opens and
+  300 rounds each of 32 and 8 concurrent `Store::open` gave no version-table failure, the slowest open
+  220 ms against the 5000 ms `BUSY_WAIT`). Not measurable here: Windows. Every open-path error now
+  ends `(sqlite <extended code>, after <n> ms)`, the milliseconds counted from the start of
+  `Store::open_waiting`, so the next occurrence says whether the wait expired or SQLite gave up at once.
+
 - **Two threads of one process staged the same body file, and the later rename failed.** Issue
   #30: `a_readback_that_settles_elsewhere_says_the_head_moved` failed in 1 of 13 full release
   runs on Linux arm64. Measured with a debug build running `transport::claim` at `--test-threads=64`:

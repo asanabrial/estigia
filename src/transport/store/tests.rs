@@ -2716,3 +2716,38 @@ fn the_counts_name_what_waits_for_a_recipient_and_what_a_sender_still_has_undeli
     let undelivered = store.messages_undelivered_from().expect("counts");
     assert_eq!(undelivered.get("claude-aaaa"), Some(&2));
 }
+
+#[test]
+fn a_busy_open_names_sqlites_code_and_how_long_it_waited() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("state.db");
+    let holder = rusqlite::Connection::open(&path).expect("the holder opens");
+    holder
+        .execute_batch("BEGIN EXCLUSIVE;")
+        .expect("the holder takes the lock");
+
+    let wait = std::time::Duration::from_millis(300);
+    let Failure::Read(message) = Store::open_waiting(&path, wait)
+        .err()
+        .expect("a locked file is refused")
+    else {
+        panic!("a locked file is a failed read");
+    };
+
+    assert!(
+        message.starts_with("the local store could not "),
+        "{message}"
+    );
+    assert!(message.contains("database is locked"), "{message}");
+    let tail = message
+        .rsplit_once(" (sqlite 5, after ")
+        .unwrap_or_else(|| panic!("no code and elapsed in {message:?}"))
+        .1;
+    let elapsed: u128 = tail
+        .strip_suffix(" ms)")
+        .unwrap_or_else(|| panic!("elapsed is not closed in {message:?}"))
+        .parse()
+        .expect("elapsed is whole milliseconds");
+    assert!(elapsed >= wait.as_millis(), "{elapsed} ms in {message:?}");
+    holder.execute_batch("ROLLBACK;").expect("releases");
+}
