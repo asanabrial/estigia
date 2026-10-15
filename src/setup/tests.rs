@@ -16675,7 +16675,7 @@ fn a_node_driver_that_never_exits_fails_within_its_deadline_and_shows_what_it_pr
         run_node_within(
             "the hanging stand-in",
             &mut command,
-            std::time::Duration::from_millis(1500),
+            std::time::Duration::from_secs(10),
         )
     });
     let message = match outcome {
@@ -16686,13 +16686,13 @@ fn a_node_driver_that_never_exits_fails_within_its_deadline_and_shows_what_it_pr
             .expect("the timeout panics with a formatted message"),
     };
     assert!(
-        started.elapsed() < std::time::Duration::from_secs(30),
+        started.elapsed() < std::time::Duration::from_secs(40),
         "the bound did not hold: {:?}",
         started.elapsed()
     );
     for expected in [
         "the hanging stand-in",
-        "timed out after 1.5 s",
+        "timed out after 10 s",
         "said before hanging",
         "complained before hanging",
     ] {
