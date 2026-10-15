@@ -320,6 +320,14 @@ pub enum Command {
         /// dialect and calling it an agent.
         #[arg(long)]
         agent: Option<String>,
+
+        /// Wait for mail addressed to this session instead of answering the event.
+        ///
+        /// Written by `setup` on Claude Code's `Stop` as an `asyncRewake` hook: the
+        /// process outlives the turn and, when mail arrives, exits 2 with the
+        /// message on standard error, which wakes the idle session.
+        #[arg(long)]
+        wait_mail: bool,
     },
 
     /// Swear to an issue: claim it, and bind this run's writes to that claim.

@@ -7,7 +7,7 @@ use crate::harness::hook::{
     Dialect, Event, Input, background_work_outstanding, run_as, stop_block,
 };
 use crate::harness::loop_text::{Invocation, continuation};
-use crate::harness::{GateContext, session};
+use crate::harness::{GateContext, mailbox, session};
 
 const UNCONFIRMED_ATTEMPTS: u32 = 3;
 const UNCONFIRMED_RETRY_PAUSE: Duration = Duration::from_millis(500);
@@ -75,7 +75,7 @@ pub(super) fn answer(
                 if decision.consumes_stop_request() {
                     session::clear_stop_after(&context.state_root, &run_id);
                 }
-                return decision.into_value();
+                return with_mail(&context.state_root, &run_id, decision.into_value());
             }
             if agent == "claude-code" {
                 return claude(context, input, &run_id);
@@ -83,6 +83,21 @@ pub(super) fn answer(
         }
     }
     run_as(dialect, agent, event, input, context)
+}
+
+fn with_mail(state_root: &std::path::Path, run_id: &str, mut answer: Value) -> Value {
+    let Some(mail) = mailbox::deliver(state_root, run_id) else {
+        return answer;
+    };
+    let reason = match answer.get("reason").and_then(Value::as_str) {
+        Some(held) => format!("{held}\n\n{mail}"),
+        None => mail,
+    };
+    if let Some(fields) = answer.as_object_mut() {
+        fields.insert("decision".to_owned(), json!("block"));
+        fields.insert("reason".to_owned(), json!(reason));
+    }
+    answer
 }
 
 /// Claude Code's `Stop`, when the `Loop plugin` row registered the loop entry.

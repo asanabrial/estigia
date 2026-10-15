@@ -991,6 +991,19 @@ pub(super) fn render_hooks(
             .and_then(Value::as_array_mut)
         {
             list.push(Value::Object(entry));
+            if *event == crate::harness::hook::Event::Stop {
+                list.push(json!({
+                    "hooks": [{
+                        "type": "command",
+                        "command": format!(
+                            "{command_prefix} {} --wait-mail",
+                            event_arguments(*event, agent, spec.dialect)
+                        ),
+                        "asyncRewake": true,
+                        "timeout": crate::harness::mailbox::WAIT_TIMEOUT_SECONDS,
+                    }],
+                }));
+            }
         }
     }
 

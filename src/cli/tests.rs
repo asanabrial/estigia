@@ -8924,6 +8924,83 @@ fn a_codex_stop_with_only_held_work_lets_the_turn_end_and_says_what_it_waits_on(
     );
 }
 
+fn leave_mail(context: &harness::GateContext, run_id: &str, body: &str) {
+    crate::transport::store::Store::open(&crate::transport::store::beside(&context.state_root))
+        .expect("the store opens")
+        .message_sent(
+            &crate::transport::store::MessageSent {
+                sender_run_id: None,
+                recipient_run_id: run_id,
+                body,
+            },
+            10,
+        )
+        .expect("the message is recorded");
+}
+
+fn mail_waiting(context: &harness::GateContext, run_id: &str) -> Option<u64> {
+    crate::transport::store::Store::open(&crate::transport::store::beside(&context.state_root))
+        .expect("the store opens")
+        .messages_waiting_for()
+        .expect("counts")
+        .get(run_id)
+        .copied()
+}
+
+#[test]
+fn a_codex_stop_carries_waiting_mail_and_the_loop_continuation_in_one_reason() {
+    let (_root, context, run_id) = stop_rig("codex-stop-mail-live");
+    leave_mail(&context, &run_id, "the review is done");
+    let script = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        &run_id,
+        7,
+        "in-progress",
+    )]);
+    let answer = stop_answer(
+        "codex",
+        &stop_input("codex-stop-mail-live", false),
+        &context,
+        &script,
+    );
+    let held = harness::hook::stop_block(&crate::identity::Identity::Number(7), &run_id);
+    let reason = answer["reason"].as_str().unwrap_or_default();
+    assert_eq!(answer["decision"], "block", "{answer}");
+    assert!(
+        reason.starts_with(held["reason"].as_str().expect("a reason"))
+            && reason.contains("the review is done"),
+        "{answer}"
+    );
+    assert_eq!(mail_waiting(&context, &run_id), None);
+}
+
+#[test]
+fn a_codex_stop_with_nothing_to_continue_still_blocks_on_waiting_mail_and_keeps_the_loop_note() {
+    let (_root, context, run_id) = stop_rig("codex-stop-mail-held");
+    leave_mail(&context, &run_id, "look at this");
+    seed_store(&[(
+        40,
+        "in-progress",
+        "Body.",
+        vec![held_claim("someone-e", &"e".repeat(32))],
+    )]);
+    let script = crate::test_env::answers(&queues(serde_json::json!([claimable_issue(40)])));
+    let answer = stop_answer(
+        "codex",
+        &stop_input("codex-stop-mail-held", false),
+        &context,
+        &script,
+    );
+    assert_eq!(answer["decision"], "block", "{answer}");
+    assert!(
+        answer["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("look at this")),
+        "{answer}"
+    );
+    assert!(answer["systemMessage"].is_string(), "{answer}");
+    assert_eq!(mail_waiting(&context, &run_id), None);
+}
+
 #[test]
 fn claude_code_stop_answers_as_before_and_never_claims_the_next_issue() {
     let (_root, context, _) = stop_rig("claude-stop-claimable");

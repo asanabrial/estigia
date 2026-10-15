@@ -451,6 +451,7 @@ is the only terminator, and Codex imposes no cap of its own.
 | holds none, and only `held` or `pending` work is left | allows the stop, with `systemMessage` naming what the queue waits on |
 | holds none, and only `unadmitted` issues are left | allows the stop without ending the loop (`terminal: false`), with `systemMessage` naming the count and saying to admit each with an explicit `transition` |
 | holds none and nothing can open | allows the stop, with `systemMessage` naming the `unconditioned` count when there is one |
+| has mail waiting, whichever of the rows above applies | the same answer with `decision: block` and a `reason` that is the loop's reason (when it has one), a blank line, then the mail; `systemMessage` is kept. The mail is taken by the delivery in [`sessions.md`](sessions.md#the-mailbox), so the row is stamped once. Codex has no `Stop` entry without the `Loop plugin` row `on`, so this is where Codex mail is delivered at `Stop`. |
 | has a claim answer that stays `unread` or `unreadable` past the bounded retries, or a queue count that could not be read | allows the stop, with `systemMessage` naming what could not be confirmed and, for a retried claim, saying the read was retried |
 
 The reading is `goal_reading`, the function behind `estigia goal`, not a copy of it, and an
@@ -540,6 +541,22 @@ That ordinary `Stop` also stands aside for a run waiting on a person: one whose 
 state `blocked`, or whose newest receipt on the held issue in the local store is `escalated` (a
 publication recorded after it ends the wait). It reads the store alone, never the tracker, and a store
 it cannot read exempts nothing. The loop's own `Stop` and Codex's keep their answers.
+
+## The Claude Code mail waiter
+
+Whatever the `Loop plugin` row says, `estigia setup claude-code` writes one more `Stop` group, after the ordinary
+one and in a group of its own:
+
+```json
+{"hooks": [{"type": "command",
+            "command": "\"<estigia>\" hook stop --agent claude-code --dialect claude-code --wait-mail",
+            "asyncRewake": true, "timeout": 3600}]}
+```
+
+It waits for mail addressed to the session and wakes it by exiting 2; what it does is in
+[`sessions.md`](sessions.md#waking-an-idle-claude-code-session). Setup rewrites it in place, so a second run adds no
+duplicate, and uninstall removes it with the other Estigia hooks because it has Estigia's shape (below) while another
+tool's `Stop` entries, the loop's included, stay. Only Claude Code gets it; Codex's `Stop` is the loop's.
 
 ## Which hook commands setup treats as its own
 

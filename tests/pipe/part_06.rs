@@ -3054,6 +3054,69 @@ fn hook_payload(session: &str, repo: &std::path::Path, tool: &str, extra: &str) 
 }
 
 #[test]
+fn the_claude_code_mail_waiter_exits_two_with_the_message_once_and_zero_when_it_has_no_one_to_serve()
+ {
+    let rig = tracker_rig();
+    let recipient = estigia::harness::session::run_id("claude", "recipient-1");
+    let waiter = |payload: &str| {
+        run_with_tracker(
+            rig.home.path(),
+            rig.repo.path(),
+            rig.bin.path(),
+            "[]",
+            &[
+                "hook",
+                "stop",
+                "--agent",
+                "claude-code",
+                "--dialect",
+                "claude-code",
+                "--wait-mail",
+            ],
+            payload,
+        )
+    };
+    let (_, _, ok) = run_with_tracker(
+        rig.home.path(),
+        rig.repo.path(),
+        rig.bin.path(),
+        "[]",
+        &["hook", "session-start", "--agent", "claude-code"],
+        &format!(
+            "{{\"session_id\":\"recipient-1\",\"cwd\":\"{}\"}}",
+            rig.repo.path().display().to_string().replace('\\', "\\\\")
+        ),
+    );
+    assert!(ok);
+    let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "send", &recipient, "wake up"]);
+    assert!(ok, "{said}{stderr}");
+
+    let cwd = rig.repo.path().display().to_string().replace('\\', "\\\\");
+    let (out, stderr, ok) = waiter(&format!(
+        "{{\"session_id\":\"recipient-1\",\"cwd\":\"{cwd}\",\"agent_type\":\"reader\"}}"
+    ));
+    assert!(ok && out.is_empty() && stderr.is_empty(), "{out}{stderr}");
+    let (out, stderr, ok) = waiter("{\"cwd\":\"/\"}");
+    assert!(ok && out.is_empty() && stderr.is_empty(), "{out}{stderr}");
+    assert_eq!(
+        session_named(&listed_sessions(&rig), &recipient)["waiting"],
+        1
+    );
+
+    let own = format!("{{\"session_id\":\"recipient-1\",\"cwd\":\"{cwd}\"}}");
+    let (out, stderr, ok) = waiter(&own);
+    assert!(
+        !ok && out.is_empty(),
+        "exit 2 was not the answer: {out}{stderr}"
+    );
+    assert!(stderr.contains("wake up"), "{stderr}");
+    assert_eq!(
+        session_named(&listed_sessions(&rig), &recipient)["waiting"],
+        0
+    );
+}
+
+#[test]
 fn claude_code_and_codex_hooks_hand_a_waiting_message_to_the_agent_once() {
     for agent in ["claude-code", "codex"] {
         let rig = tracker_rig();
