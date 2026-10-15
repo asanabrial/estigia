@@ -1238,24 +1238,33 @@ fn the_reviewer_child_keeps_the_user_names_the_keychain_lookup_needs() {
 
 #[test]
 fn the_allow_list_matches_names_the_way_windows_spells_them() {
-    let ambient = [
+    let kept_names = [
         "Path",
+        "PATH",
         "SystemRoot",
+        "SystemDrive",
+        "WinDir",
         "PathExt",
         "ComSpec",
+        "TMPDIR",
+        "Temp",
+        "tmp",
+        "TEMP",
+        "TMP",
         "OPENAI_API_KEY",
-        "GH_TOKEN",
-    ]
-    .map(|name| (OsString::from(name), OsString::from("v")));
+        "Home",
+        "anthropic_api_key",
+    ];
+    let dropped_names = ["GH_TOKEN", "TMPDIRS", "XTEMP", "PATHS"];
+    let ambient = kept_names
+        .iter()
+        .chain(dropped_names.iter())
+        .map(|name| (OsString::from(name), OsString::from("v")));
     let kept: Vec<String> = run::inherited_from(ambient)
         .into_iter()
         .map(|(name, _)| name.to_string_lossy().into_owned())
         .collect();
-    assert_eq!(
-        kept,
-        ["Path", "SystemRoot", "PathExt", "ComSpec", "OPENAI_API_KEY"],
-        "{kept:?}"
-    );
+    assert_eq!(kept, kept_names, "{kept:?}");
 }
 
 #[cfg(unix)]

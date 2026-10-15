@@ -18408,13 +18408,14 @@ fn a_recorded_raise_lifts_the_tier_the_gate_reads_and_an_unknown_word_lifts_noth
     );
 }
 
-#[test]
-fn a_raised_repair_is_judged_by_the_whole_high_panel_and_not_the_delta_lens() {
-    let (_root, context, parent, repair) = delta_lens_repair_world();
-    let mut comments = vec![
-        published(&parent),
-        computed_by("codex-b", &parent, "approved"),
-        recorded_finding_on(&parent, 6, "f-1", "suggestion", None, None),
+fn raised_repair_comments(
+    parent: &ReviewTransaction,
+    repair: &ReviewTransaction,
+) -> Vec<ownership::Comment> {
+    vec![
+        published(parent),
+        computed_by("codex-b", parent, "approved"),
+        recorded_finding_on(parent, 6, "f-1", "suggestion", None, None),
         wrote(
             "3",
             super::super::markers::render(
@@ -18440,7 +18441,13 @@ fn a_raised_repair_is_judged_by_the_whole_high_panel_and_not_the_delta_lens() {
             )
             .expect("a raised repair marker"),
         ),
-    ];
+    ]
+}
+
+#[test]
+fn a_raised_repair_is_judged_by_the_whole_high_panel_and_not_the_delta_lens() {
+    let (_root, context, parent, repair) = delta_lens_repair_world();
+    let mut comments = raised_repair_comments(&parent, &repair);
     comments.push(recorded_lens_report_for(&repair, 3, "review-lens", None));
     let (level, verdict) = computed::computed_for(&context, &comments, &repair, None)
         .expect("the repair's panel reads");
@@ -18457,6 +18464,25 @@ fn a_raised_repair_is_judged_by_the_whole_high_panel_and_not_the_delta_lens() {
             "a raised repair was not owed `{role}`: {verdict:?}"
         );
     }
+}
+
+#[test]
+fn a_raised_repair_whose_whole_high_panel_reported_is_approved() {
+    let (_root, context, parent, repair) = delta_lens_repair_world();
+    let mut comments = raised_repair_comments(&parent, &repair);
+    for (n, role) in [
+        (4, "review-risk"),
+        (7, "review-readback"),
+        (8, "review-readability"),
+        (9, "review-reliability"),
+    ] {
+        comments.push(recorded_lens_report_for(&repair, n, role, None));
+    }
+    let (level, verdict) = computed::computed_for(&context, &comments, &repair, None)
+        .expect("the repair's panel reads");
+    assert_eq!(level, RiskLevel::High, "{verdict:?}");
+    assert_eq!(verdict.outcome, ComputedOutcome::Approved, "{verdict:?}");
+    assert!(verdict.missing_roles.is_empty(), "{verdict:?}");
 }
 
 #[test]

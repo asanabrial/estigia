@@ -280,10 +280,21 @@ const NAMED_FILES: usize = 5;
 pub fn orphan_notice(context: &Context, holdings: &[Run]) -> Option<String> {
     let registered = branch::registered_worktrees(context).ok()?;
     let started = std::time::Instant::now();
+    orphan_notice_of(&registered, holdings, || started.elapsed() > NOTICE_BUDGET)
+}
+
+type Registered = std::collections::BTreeMap<String, branch::RegisteredWorktree>;
+
+fn orphan_notice_of(
+    registered: &Registered,
+    holdings: &[Run],
+    mut over_budget: impl FnMut() -> bool,
+) -> Option<String> {
     let mut dirty: Vec<(PathBuf, Option<String>, usize)> = Vec::new();
     let mut unread = 0usize;
     for entry in registered.values() {
         if entry.path.join(".git").is_dir()
+            || is_bare_repository(&entry.path)
             || holdings
                 .iter()
                 .filter(|pointer| !pointer.unreadable)
@@ -296,7 +307,7 @@ pub fn orphan_notice(context: &Context, holdings: &[Run]) -> Option<String> {
         {
             continue;
         }
-        if started.elapsed() > NOTICE_BUDGET {
+        if over_budget() {
             unread += 1;
             continue;
         }
@@ -355,6 +366,10 @@ pub fn orphan_notice(context: &Context, holdings: &[Run]) -> Option<String> {
         " `estigia changes` lists every checkout and what it holds; nothing here is removed.",
     );
     Some(text)
+}
+
+fn is_bare_repository(path: &Path) -> bool {
+    !path.join(".git").exists() && path.join("HEAD").is_file() && path.join("objects").is_dir()
 }
 
 fn quick_status(path: &Path) -> Option<usize> {

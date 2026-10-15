@@ -21501,7 +21501,7 @@ console.log(JSON.stringify({
 }));
 "#;
 
-fn run_opencode_mail_driver() -> serde_json::Value {
+fn run_opencode_driver(source: &str) -> std::process::Output {
     let root = tempfile::tempdir().expect("a temporary directory");
     std::fs::write(
         root.path().join("estigia-workflow-authority.mjs"),
@@ -21509,7 +21509,7 @@ fn run_opencode_mail_driver() -> serde_json::Value {
     )
     .expect("the plugin writes");
     let driver = root.path().join("drive-mail.mjs");
-    std::fs::write(&driver, OPENCODE_MAIL_DRIVER).expect("the driver writes");
+    std::fs::write(&driver, source).expect("the driver writes");
     let ran = std::process::Command::new("node")
         .arg(&driver)
         .current_dir(root.path())
@@ -21526,8 +21526,52 @@ fn run_opencode_mail_driver() -> serde_json::Value {
         "the mail driver failed: {}",
         String::from_utf8_lossy(&ran.stderr)
     );
+    ran
+}
+
+fn run_opencode_mail_driver() -> serde_json::Value {
+    let ran = run_opencode_driver(OPENCODE_MAIL_DRIVER);
     serde_json::from_slice(&ran.stdout).expect("the driver prints JSON")
 }
+
+const OPENCODE_LOST_MAIL_DRIVER: &str = r#"import plugin from "./estigia-workflow-authority.mjs";
+
+const stub = (mail) => (strings, ...values) => {
+  const taking = strings[1]?.trim() === "session" && values[1] === "deliver";
+  const chain = {
+    cwd() { return chain; },
+    quiet() { return chain; },
+    nothrow() { return Promise.resolve({ exitCode: 0, stdout: taking ? (mail.shift() ?? "") : "" }); },
+  };
+  return chain;
+};
+
+const attempts = [];
+const refuses = (kind, reason) => async (argument) => {
+  attempts.push([kind, argument.text]);
+  throw new Error(reason);
+};
+
+const deliverTo = async (sessionID, mail, session) => {
+  const registered = [];
+  globalThis.Bun = { $: stub([mail]) };
+  await plugin.setup({
+    location: { directory: "/p" },
+    tool: { hook: async (name, callback) => { registered.push([name, callback]); } },
+    session,
+  });
+  await registered.find(([name]) => name === "execute.after")[1]({ tool: "read", sessionID });
+};
+
+await deliverTo("ses_a", "LOST A\n", {
+  prompt: refuses("prompt", "steering is down"),
+  synthetic: refuses("synthetic", "synthetic is down"),
+});
+await deliverTo("ses_b", "LOST B\n", { prompt: refuses("prompt", "steering is down") });
+await deliverTo("ses_c", "LOST C\n", { synthetic: refuses("synthetic", "only synthetic, and down") });
+
+console.log(JSON.stringify(attempts));
+"#;
 
 #[test]
 fn the_opencode_plugin_appends_waiting_mail_to_a_tool_result_after_registering_the_session() {
@@ -21606,6 +21650,35 @@ fn the_opencode_plugin_falls_back_to_a_synthetic_message_when_the_prompt_fails_o
             "{case}: {handed:?}"
         );
     }
+}
+
+#[test]
+fn the_opencode_plugin_says_on_standard_error_that_mail_is_lost_when_both_hand_overs_fail() {
+    let ran = run_opencode_driver(OPENCODE_LOST_MAIL_DRIVER);
+    let said = String::from_utf8_lossy(&ran.stderr);
+    for expected in [
+        "the host would not steer a message in (steering is down)",
+        "(synthetic is down) and is lost: LOST A",
+        "(session.synthetic is not a function) and is lost: LOST B",
+        "(only synthetic, and down) and is lost: LOST C",
+    ] {
+        assert!(
+            said.contains(expected),
+            "standard error lacks `{expected}`: {said}"
+        );
+    }
+    assert_eq!(said.matches("is lost:").count(), 3, "{said}");
+    let attempts: serde_json::Value =
+        serde_json::from_slice(&ran.stdout).expect("the driver prints JSON");
+    assert_eq!(
+        attempts,
+        serde_json::json!([
+            ["prompt", "LOST A"],
+            ["synthetic", "LOST A"],
+            ["prompt", "LOST B"],
+            ["synthetic", "LOST C"]
+        ])
+    );
 }
 
 #[test]
