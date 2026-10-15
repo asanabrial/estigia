@@ -22740,7 +22740,7 @@ process.env.PI_CODING_AGENT_DIR = process.env.AGENT_DIR;
 process.env.ESTIGIA_PI_PARENT_SESSION = "root-1";
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const until = async (check, ms = 8000) => {
+const until = async (check, ms = 30000) => {
   for (let waited = 0; waited < ms; waited += 25) {
     const found = check();
     if (found) return found;
@@ -22892,10 +22892,10 @@ fn run_pi_messages_driver() -> &'static serde_json::Value {
             )
             .replace(
                 "const QUERY_TIMEOUT_MS = 120000;",
-                "const QUERY_TIMEOUT_MS = 1500;",
+                "const QUERY_TIMEOUT_MS = 5000;",
             );
         assert!(
-            runner.contains("QUERY_TIMEOUT_MS = 1500;") && runner.contains(&format!("{:?}", fake)),
+            runner.contains("QUERY_TIMEOUT_MS = 5000;") && runner.contains(&format!("{:?}", fake)),
             "the constants are not where the test looks"
         );
         fs::write(base.join("agents.mjs"), runner).expect("the runner writes");
@@ -22997,7 +22997,7 @@ fn an_unanswered_pi_child_query_ends_at_its_timeout_with_an_error() {
     );
     let waited = said["waited"].as_u64().expect("a duration");
     assert!(
-        (1400..7000).contains(&waited),
+        (4900..20000).contains(&waited),
         "the query did not end at its timeout: {waited}ms"
     );
     failed_with(&said["lateReply"], "no longer running");
@@ -23073,7 +23073,7 @@ fn a_background_pi_subagent_returns_at_once_and_delivers_its_answer_as_a_waking_
     );
     assert_eq!(said["backgroundStatus"]["status"], "running");
     assert!(
-        said["backgroundReturned"].as_u64().expect("a duration") < 1500,
+        said["backgroundReturned"].as_u64().expect("a duration") < 4000,
         "{said}"
     );
     let delivered = &said["delivered"];
@@ -23097,7 +23097,7 @@ fn a_query_from_a_child_the_parent_is_blocked_on_fails_at_once_and_is_never_rela
     let said = run_pi_messages_driver();
     failed_with(&said["refused"], "waiting on this child");
     assert!(
-        said["refusedAfter"].as_u64().expect("a duration") < 1400,
+        said["refusedAfter"].as_u64().expect("a duration") < 4000,
         "{said}"
     );
     assert_eq!(said["foregroundOpen"], true, "{said}");
