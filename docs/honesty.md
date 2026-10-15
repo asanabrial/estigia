@@ -5973,12 +5973,19 @@ pointer that leaves it names the document it points at.
   launch. A child that lists `estigia-doctor` from another extension passes it. The tool is named
   `estigia_subagent`, not `subagent`, so it cannot replace another runner's tool of that name, which means the
   issue's wording is not met literally.
-- **Pi parent and child messages: the channel was seen live once, the background fix only against a
-  stand-in.** On 2026-10-15 with Pi 1.1.0 the IPC channel and the child tool worked against a real parent
-  and child, and exposed that a foreground `estigia_subagent` call leaves the parent unable to reply. The
-  background mode and the immediate refusal were added after that and are measured only by the stand-in:
-  removing the background flag, the foreground refusal or the delivery of the final answer turns a test
-  red each, but a live run with `background: true` has not been repeated.
+- **Pi parent and child messages were run live twice, both on one host and by hand.** On 2026-10-15, with Pi
+  1.1.0 as both parent and child:
+  - The first run used a foreground `estigia_subagent`. The IPC channel and the child tool worked, and the run
+    showed that the parent could not reply while it waited on that child.
+  - The second run used `background: true`. The child's query woke the parent, the parent's
+    `estigia_subagent_reply` came back as the child's tool result, and the child's final answer reached the
+    parent as a follow-up, all within 15 seconds.
+
+  Not run live:
+  - the immediate refusal of a foreground query;
+  - steering through `estigia_subagent_message`;
+  - a query that times out after the background fix;
+  - a child launched under an agent definition that restricts `--tools`.
 - **Pi parent and child messages were first driven against a stand-in `pi` that is a Node script.** Reproduced first, by mutation: removing the running check on the steer, the
   `triggerTurn` option, the deletion of an answered request, the query timeout, the condition that registers
   the child-side tool, the answer text in the child's result and the steer send each turn exactly the

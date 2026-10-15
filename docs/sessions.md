@@ -120,7 +120,9 @@ rather than left to time out; answering a query, like steering, needs the child 
 temporary home and an agent definition `worker`: the IPC channel and the child's
 `estigia_parent_message` worked and the query reached the parent's runner, but the parent had launched the
 child in the foreground, could not call `estigia_subagent_reply`, and the query failed after the full 120
-seconds. That is what the background mode and the immediate refusal answer.
+seconds. That is what the background mode and the immediate refusal answer. A second live run the same day used
+`background: true`. The child's query woke the idle parent, `estigia_subagent_reply` returned the answer as the
+child's tool result, and the child's final answer reached the parent as a follow-up, within 15 seconds.
 
 A message sent while the other side is gone is lost and the sender is told when it can be. A query pending
 when the child ends is dropped, and a reply to it is a tool error. A query pending when the parent ends
