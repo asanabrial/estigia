@@ -123,7 +123,7 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Ninety-nine tests **require** `node` on the path, and all ninety-nine drive the OpenCode plugins and
+   --no-deps`. One hundred and four tests **require** `node` on the path, and all one hundred and four drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
    let a gate defect stand. Nine are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
@@ -176,6 +176,12 @@ a second copy that will disagree.
    `the_pi_extension_delivers_waiting_mail_as_its_own_prompt_section_at_before_agent_start`,
    `the_pi_extension_adds_no_mail_section_when_nothing_waits_or_the_mailbox_cannot_be_read` and
    `a_pi_child_asks_about_the_root_session_and_never_ends_it`;
+   five drive the OpenCode 2 gate plugin's wake of an idle session through `run_opencode_wake_driver` —
+   `an_idle_opencode_root_session_with_mail_gets_one_queued_prompt_and_then_a_take_through_the_peeked_row`,
+   `an_opencode_wake_that_the_host_refuses_or_cannot_make_leaves_the_rows_pending`,
+   `an_opencode_session_is_polled_only_while_it_is_idle_and_a_root`,
+   `disposing_the_opencode_plugin_stops_the_poll_and_the_event_stream` and
+   `two_opencode_polls_are_never_in_flight_for_one_session_and_a_session_that_started_meanwhile_is_not_prompted`;
    four drive the Pi gate extension's wake of an idle session through `drive_pi_wake` —
    `an_idle_pi_session_with_waiting_mail_is_woken_with_a_follow_up_and_then_takes_it`,
    `a_wake_that_throws_or_cannot_be_made_leaves_the_mail_pending_for_the_next_turn`,
@@ -231,7 +237,7 @@ a second copy that will disagree.
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that ninety-nine tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that one hundred and four tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here
