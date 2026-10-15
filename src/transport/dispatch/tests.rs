@@ -238,7 +238,9 @@ fn findings_without_a_receipt_are_refused_before_any_label_is_created() {
         ## Problem\nA probe.\n\n\
         ## Why it matters\nA probe.\n\n\
         ## Proposed approach\nA probe.\n\n\
+        ## Where to start\nA probe.\n\n\
         ## Acceptance criteria\nA probe.\n\n\
+        ## How to verify\nA probe.\n\n\
         ## Out of scope\nA probe.\n\n\
         ## Evidence\nA probe.\n";
     let root = tempfile::tempdir().expect("a directory");

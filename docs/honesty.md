@@ -5786,7 +5786,10 @@ pointer that leaves it names the document it points at.
   is a read in every spelling. The read exemption that remains knows only `-X GET` and
   `--method GET` and matches them anywhere on the line, so a post beside a `-X GET` read
   (`gh api -X GET a; gh api repos/o/r/issues -f t=x`) still files an issue unchecked. The check is structural: it reads headings
-  and the alert, not the prose beneath them, and it is held only by `create`, so an issue filed in
+  and the alert, not the prose beneath them. The template's `###` sub-sections (`### Today`,
+  `### Expected`, `### Pitfalls`, `### Size`, `### Rules that apply`) are prose guidance and are
+  not enforced: a body that omits them is accepted, whereas `## Where to start` and `## How to
+  verify` are `##` headings and so required. It is held only by `create`, so an issue filed in
   the web interface or by a token outside this harness is unchecked as well.
 - **A delivery is refused in a state that holds no verdict.** Holding an issue and being allowed to
   land it were one question, and only the first was ever put: a run in `in-progress` that ran
