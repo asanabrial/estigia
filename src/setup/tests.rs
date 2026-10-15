@@ -17641,8 +17641,7 @@ for (const [name, event] of JSON.parse(process.env.STEPS)) {
   }
   if (name === "tick") {
     const waiting = [...timers.values()];
-    for (const timer of waiting) timer.fn();
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await Promise.all(waiting.map((timer) => timer.fn()));
     results.push({ intervals: waiting.map((timer) => timer.ms), sections: null });
     continue;
   }

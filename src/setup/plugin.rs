@@ -694,6 +694,7 @@ export default function (pi) {
         .finally(() => {
           ticking = false;
         });
+      return handover;
     }, WAKE_INTERVAL_MS);
     waker?.unref?.();
   };
