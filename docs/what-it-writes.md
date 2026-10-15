@@ -1055,6 +1055,16 @@ message is text for the model and never a permission decision.
   child's `estigia_parent_message` result is the text. An unknown or already-answered request, or a child
   that has finished, is a tool error.
 
+**Background.** `estigia_subagent` takes `background` (boolean, default false). Foreground, the tool blocks
+the parent's turn until the child settles, so the parent model cannot call anything else meanwhile: it can
+neither steer the child nor answer it. With `background: true` the tool returns at once with the subagent
+id and label, and when the child settles its final answer, or its failure, reaches the parent as a
+`sendMessage` follow-up with `triggerTurn: true`, so an idle parent is woken. Steering and replying
+therefore need `background: true`, and the tool descriptions say so. A query from a child whose parent is
+blocked on it in the foreground fails in the child at once, with a message saying the parent is waiting
+and the question belongs in the final answer; it is not relayed. A notification from a foreground child is
+still queued for after the call returns.
+
 The parent receives a notification or a query as `pi.sendMessage` with `deliverAs: "followUp"` and
 `triggerTurn: true`, the same call the loop uses: Pi queues it for the next turn boundary of a busy session
 and starts a turn in an idle one. A query's message names the child id and the request id so the model

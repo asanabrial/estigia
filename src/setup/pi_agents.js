@@ -18,6 +18,8 @@ const COMMAND = "estigia-agents";
 const MESSAGE_TOOL = "estigia_subagent_message";
 const REPLY_TOOL = "estigia_subagent_reply";
 const PARENT_TOOL = "estigia_parent_message";
+const WAITING_REFUSAL =
+  "the parent is waiting on this child and cannot answer until it finishes; finish and put the question in the final answer";
 const MESSAGE_TYPE = "estigia-subagent-message";
 const QUERY_TIMEOUT_MS = 120000;
 const SHORTCUT = "ctrl+alt+a";
@@ -250,6 +252,11 @@ const onChild = (run, message) => {
   if (message.kind === "notification") {
     note(run, `child: ${message.text}`);
     relay(run, `${who} reports: ${message.text}`, { kind: "notification" });
+  } else if (message.kind === "query" && filled(message.request_id) && !run.background) {
+    note(run, `child asked while the parent waits: ${message.text}`);
+    try {
+      run.child.send({ kind: "refusal", request_id: message.request_id, text: WAITING_REFUSAL });
+    } catch {}
   } else if (message.kind === "query" && filled(message.request_id) && !run.queries.has(message.request_id)) {
     run.queries.set(message.request_id, message.text);
     note(run, `child asks (${message.request_id}): ${message.text}`);
@@ -321,7 +328,9 @@ const toParent = (params) => {
       action(value);
     };
     const onMessage = (message) => {
-      if (message?.kind !== "reply" || message.request_id !== requestId) return;
+      if (message?.request_id !== requestId) return;
+      if (message.kind === "refusal") return done(reject, new Error(`estigia: ${message.text}`));
+      if (message.kind !== "reply") return;
       done(resolve, { content: [{ type: "text", text: String(message.text ?? "") }], details: { kind, request_id: requestId } });
     };
     const onGone = () => done(reject, new Error("estigia: the parent went away before it answered"));
@@ -336,8 +345,9 @@ const toParent = (params) => {
 };
 
 const launch = (params, ctx, signal) =>
-  new Promise((resolve) => {
-    const refuse = (text) => resolve({ content: [{ type: "text", text }], details: { status: "refused" } });
+  new Promise((answer) => {
+    let resolve = answer;
+    const refuse = (text) => answer({ content: [{ type: "text", text }], details: { status: "refused" } });
     const agent = String(params?.agent ?? "");
     const task = String(params?.task ?? "");
     if (!filled(task)) return refuse("estigia: a subagent needs a task");
@@ -368,7 +378,15 @@ const launch = (params, ctx, signal) =>
       text: "",
       log: [],
       queries: new Map(),
+      background: params?.background === true,
     };
+    if (run.background) {
+      resolve = (result) =>
+        relay(run, `Subagent ${run.id} (${run.label}) ${result.details.status}: ${result.content[0].text}`, {
+          kind: "final",
+          status: result.details.status,
+        });
+    }
     note(run, `task: ${task}`);
     let child;
     try {
@@ -415,6 +433,12 @@ const launch = (params, ctx, signal) =>
     signal?.addEventListener?.("abort", () => stop(run), { once: true });
     send(run, { id: "commands", type: "get_commands" });
     redraw();
+    if (run.background) {
+      answer({
+        content: [{ type: "text", text: `started ${run.id} (${run.label}) in the background; its answer arrives as a follow-up` }],
+        details: { id: run.id, agent, status: "running" },
+      });
+    }
   });
 
 const items = () => {
@@ -507,13 +531,14 @@ export default function (pi) {
     name: TOOL,
     label: "Estigia subagent",
     description:
-      "Runs one delegated worker (an agent definition setup wrote, such as developer or analyst) as a separate Pi process and returns its final answer when it settles. Its writes are decided by Estigia as this session's run.",
+      "Runs one delegated worker (an agent definition setup wrote, such as developer or analyst) as a separate Pi process and returns its final answer when it settles. With background: true it returns at once with the subagent id and the answer arrives later as a follow-up; steering it (estigia_subagent_message) and answering its questions (estigia_subagent_reply) need background: true, because a foreground call blocks this turn. Its writes are decided by Estigia as this session's run.",
     parameters: {
       type: "object",
       properties: {
         agent: { type: "string", description: "The agent definition name." },
         task: { type: "string", description: "What the worker is to do." },
         label: { type: "string", description: "A short name shown on its card." },
+        background: { type: "boolean", description: "Return at once and deliver the answer later. Default false." },
       },
       required: ["agent", "task"],
       additionalProperties: false,
@@ -523,7 +548,7 @@ export default function (pi) {
   pi.registerTool({
     name: MESSAGE_TOOL,
     label: "Estigia subagent message",
-    description: "Steers a running subagent by id: the text reaches it as a follow-up. A finished or unknown subagent is an error.",
+    description: "Steers a running subagent by id; the subagent must have been started with background: true. The text reaches it as a follow-up. A finished or unknown subagent is an error.",
     parameters: {
       type: "object",
       properties: {
@@ -538,7 +563,7 @@ export default function (pi) {
   pi.registerTool({
     name: REPLY_TOOL,
     label: "Estigia subagent reply",
-    description: "Answers a question a running subagent is waiting on, by subagent id and request id; the answer is its tool result.",
+    description: "Answers a question a running background subagent is waiting on, by subagent id and request id; the answer is its tool result. Needs background: true on the subagent.",
     parameters: {
       type: "object",
       properties: {

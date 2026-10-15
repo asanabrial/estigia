@@ -22691,9 +22691,16 @@ const tools = {};
   appendEntry: () => {},
 });
 
+const settle = (text) => {
+  out({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text }] } });
+  out({ type: "agent_settled" });
+  process.exit(0);
+};
+
 const work = async () => {
   const mode = process.env.FAKE_MODE;
   const names = Object.keys(tools);
+  if (mode === "settle") return settle("all done");
   if (mode === "hang") {
     setInterval(() => {}, 1000);
     return;
@@ -22765,15 +22772,16 @@ const ctx = { cwd: process.env.PROJECT, hasUI: false, sessionManager: { getSessi
 const seen = () => (existsSync(process.env.FAKE_SEEN) ? readFileSync(process.env.FAKE_SEEN, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
 const resultFile = (name) => `${process.env.RESULT_DIR}/${name}.json`;
 const result = (name) => until(() => (existsSync(resultFile(name)) ? JSON.parse(readFileSync(resultFile(name), "utf8")) : null));
-const start = (mode, name) => {
+const start = (mode, name, background = true) => {
   process.env.FAKE_MODE = mode;
   process.env.FAKE_RESULT = resultFile(name);
-  return tools.estigia_subagent.execute("c", { agent: "developer", task: name, label: name }, undefined, undefined, ctx);
+  return tools.estigia_subagent.execute("c", { agent: "developer", task: name, label: name, background }, undefined, undefined, ctx);
 };
 const stopAll = () => command.handler("stop all", ctx);
 
 const parentTools = Object.keys(tools).sort();
 
+const ended = (id) => until(() => messages.find((entry) => entry.message.details?.kind === "final" && entry.message.details.id === id) ?? null);
 const hanging = start("hang", "steered");
 await until(() => seen().some((entry) => entry.type === "prompt"));
 const steerSent = await attempt(() => tools.estigia_subagent_message.execute("m", { id: "a1", text: "change course" }));
@@ -22781,14 +22789,14 @@ const steers = await until(() => { const found = seen().filter((entry) => entry.
 const unknownTarget = await attempt(() => tools.estigia_subagent_message.execute("m", { id: "a99", text: "x" }));
 const emptySteer = await attempt(() => tools.estigia_subagent_message.execute("m", { id: "a1", text: " " }));
 await stopAll();
-const hangingEnded = await hanging;
+const hangingEnded = await ended("a1");
 const finishedTarget = await attempt(() => tools.estigia_subagent_message.execute("m", { id: "a1", text: "too late" }));
 
 const notifying = start("notify", "told");
 const told = await result("told");
 const relayed = await until(() => messages.find((entry) => entry.message.details?.kind === "notification") ?? null);
 await stopAll();
-await notifying;
+await ended("a2");
 
 const asking = start("query", "asked");
 const asked = await until(() => messages.find((entry) => entry.message.details?.kind === "query") ?? null);
@@ -22798,7 +22806,7 @@ const answer = await attempt(() => tools.estigia_subagent_reply.execute("r", { i
 const answered = await result("asked");
 const answeredAgain = await attempt(() => tools.estigia_subagent_reply.execute("r", { id: "a3", request_id: requestId, text: "again" }));
 await stopAll();
-await asking;
+await ended("a3");
 
 const begin = Date.now();
 const silent = start("query", "silent");
@@ -22806,16 +22814,38 @@ const timedOut = await result("silent");
 const waited = Date.now() - begin;
 const silentAsked = messages.filter((entry) => entry.message.details?.kind === "query").length;
 await stopAll();
-await silent;
+await ended("a4");
 const lateReply = await attempt(() => tools.estigia_subagent_reply.execute("r", { id: "a4", request_id: "late", text: "x" }));
 
+const launched = Date.now();
+const background = await start("settle", "bg");
+const backgroundReturned = Date.now() - launched;
+const delivered = await until(() => messages.find((entry) => entry.message.details?.kind === "final" && entry.message.details.id === "a5") ?? null);
+
+const foregroundStart = Date.now();
+const foreground = start("query", "fg", false);
+const refused = await result("fg");
+const refusedAfter = Date.now() - foregroundStart;
+const foregroundOpen = await Promise.race([foreground.then(() => false), pause(200).then(() => true)]);
+const foregroundAsked = messages.filter((entry) => entry.message.details?.id === "a6" && entry.message.details.kind === "query").length;
+await stopAll();
+await foreground;
+
 console.log(JSON.stringify({
+  background: background.content[0].text,
+  backgroundStatus: background.details,
+  backgroundReturned,
+  delivered,
+  refused,
+  refusedAfter,
+  foregroundOpen,
+  foregroundAsked,
   parentTools,
   steerSent,
   steers,
   unknownTarget,
   emptySteer,
-  hangingEnded: hangingEnded.details.status,
+  hangingEnded: hangingEnded.message.details.status,
   finishedTarget,
   told,
   relayed,
@@ -23028,4 +23058,48 @@ fn setup_says_so_when_another_pi_subagent_runner_is_present_and_still_installs_i
         .expect("setup did not say another runner is present");
     assert!(note.contains("subagent-other.ts"), "{note}");
     assert!(directory.join(plugin::PI_AGENTS_FILE).is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_background_pi_subagent_returns_at_once_and_delivers_its_answer_as_a_waking_follow_up() {
+    let said = run_pi_messages_driver();
+    assert!(
+        said["background"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("a5"),
+        "{said}"
+    );
+    assert_eq!(said["backgroundStatus"]["status"], "running");
+    assert!(
+        said["backgroundReturned"].as_u64().expect("a duration") < 1500,
+        "{said}"
+    );
+    let delivered = &said["delivered"];
+    assert!(
+        delivered["message"]["content"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("all done"),
+        "{delivered}"
+    );
+    assert_eq!(delivered["message"]["details"]["status"], "done");
+    assert_eq!(
+        delivered["options"],
+        serde_json::json!({ "triggerTurn": true, "deliverAs": "followUp" })
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_query_from_a_child_the_parent_is_blocked_on_fails_at_once_and_is_never_relayed() {
+    let said = run_pi_messages_driver();
+    failed_with(&said["refused"], "waiting on this child");
+    assert!(
+        said["refusedAfter"].as_u64().expect("a duration") < 1400,
+        "{said}"
+    );
+    assert_eq!(said["foregroundOpen"], true, "{said}");
+    assert_eq!(said["foregroundAsked"], 0, "{said}");
 }
