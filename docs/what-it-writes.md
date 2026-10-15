@@ -1035,9 +1035,40 @@ The view is redrawn once a second while open and calls no model.
 **History.** When a child finishes, fails or is stopped, the runner appends one `estigia-agent` entry
 with `pi.appendEntry`: id, agent, label, status, model, tokens, cost, times, the task and the answer
 (first 4000 characters). Pi keeps such entries in the session and never sends them to the model; the
-runner calls no other method that could (`sendMessage`, `sendUserMessage`). On `session_start` the
-runner reads them back from `ctx.sessionManager.getEntries()` so a resumed session lists them in the view,
-with the task and answer as the transcript.
+runner calls no other method that could on this path (`sendUserMessage`; `sendMessage` is used only by
+the child messages below). On `session_start` the runner reads them back from
+`ctx.sessionManager.getEntries()` so a resumed session lists them in the view, with the task and answer as
+the transcript.
+
+**Parent and child messages.** Three more tools, none of which touches the gate or a claim; a delivered
+message is text for the model and never a permission decision.
+
+- `estigia_subagent_message` (`id`, `text`), on the parent: sends the text to a running child as an RPC
+  `steer`, through the same writer the view's `f` uses. A finished or unknown child is a tool error.
+- `estigia_parent_message` (`kind`: `notification` or `query`, `text`), on the child. It is registered
+  only in a process the runner spawned, which the runner opens an IPC channel to at spawn
+  (`stdio: [pipe, pipe, ignore, ipc]`, so `process.send` exists in the child; this needs the `pi` command to
+  be a Node program). A `notification` returns once it is sent. A `query` carries a request id and blocks
+  that tool call until the parent answers, for at most 120 seconds, then the tool is an error; the error
+  also arrives if the channel closes first.
+- `estigia_subagent_reply` (`id`, `request_id`, `text`), on the parent: answers a pending query, and the
+  child's `estigia_parent_message` result is the text. An unknown or already-answered request, or a child
+  that has finished, is a tool error.
+
+**Background.** `estigia_subagent` takes `background` (boolean, default false). Foreground, the tool blocks
+the parent's turn until the child settles, so the parent model cannot call anything else meanwhile: it can
+neither steer the child nor answer it. With `background: true` the tool returns at once with the subagent
+id and label, and when the child settles its final answer, or its failure, reaches the parent as a
+`sendMessage` follow-up with `triggerTurn: true`, so an idle parent is woken. Steering and replying
+therefore need `background: true`, and the tool descriptions say so. A query from a child whose parent is
+blocked on it in the foreground fails in the child at once, with a message saying the parent is waiting
+and the question belongs in the final answer; it is not relayed. A notification from a foreground child is
+still queued for after the call returns.
+
+The parent receives a notification or a query as `pi.sendMessage` with `deliverAs: "followUp"` and
+`triggerTurn: true`, the same call the loop uses: Pi queues it for the next turn boundary of a busy session
+and starts a turn in an idle one. A query's message names the child id and the request id so the model
+can call the reply tool.
 
 ## What setup writes into Codex's configuration
 

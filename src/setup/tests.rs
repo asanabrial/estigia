@@ -22171,7 +22171,7 @@ const appended = [];
 agents.on = {};
 const record = (name, impl) => (...args) => { piCalls.push(name); return impl?.(...args); };
 (await import("./agents.mjs")).default({
-  registerTool: record("registerTool", (tool) => { agents.tool = tool; }),
+  registerTool: record("registerTool", (tool) => { if (tool.name === "estigia_subagent") agents.tool = tool; }),
   registerCommand: record("registerCommand", (name, options) => { agents.command = { name, ...options }; }),
   registerShortcut: record("registerShortcut", (key, options) => { agents.shortcut = { key, ...options }; }),
   on: record("on", (name, handler) => { agents.on[name] = handler; }),
@@ -22673,6 +22673,380 @@ fn finished_pi_subagent_tasks_are_kept_as_session_entries_and_never_sent_to_the_
     assert!(!resumed.contains("decoy"), "{resumed}");
 }
 
+#[cfg(unix)]
+const PI_MESSAGES_FAKE_PI: &str = r##"#!__NODE__
+import { appendFileSync, writeFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+import { pathToFileURL } from "node:url";
+
+const out = (record) => process.stdout.write(JSON.stringify(record) + "\n");
+writeFileSync(process.env.FAKE_PID, String(process.pid));
+
+const tools = {};
+(await import(pathToFileURL(process.env.RUNNER).href)).default({
+  registerTool: (tool) => { tools[tool.name] = tool; },
+  registerCommand: () => {},
+  registerShortcut: () => {},
+  on: () => {},
+  appendEntry: () => {},
+});
+
+const settle = (text) => {
+  out({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text }] } });
+  out({ type: "agent_settled" });
+  process.exit(0);
+};
+
+const work = async () => {
+  const mode = process.env.FAKE_MODE;
+  const names = Object.keys(tools);
+  if (mode === "settle") return settle("all done");
+  if (mode === "hang") {
+    setInterval(() => {}, 1000);
+    return;
+  }
+  const tool = tools.estigia_parent_message;
+  const kind = mode === "notify" ? "notification" : "query";
+  let result;
+  try {
+    const answer = await tool.execute("t", { kind, text: mode === "notify" ? "heads up" : "which database?" });
+    result = { ok: true, text: answer.content[0].text, names };
+  } catch (error) {
+    result = { ok: false, error: String(error.message), names };
+  }
+  writeFileSync(process.env.FAKE_RESULT, JSON.stringify(result));
+  setInterval(() => {}, 1000);
+};
+
+const lines = createInterface({ input: process.stdin });
+for await (const line of lines) {
+  const command = JSON.parse(line);
+  appendFileSync(process.env.FAKE_SEEN, JSON.stringify({ type: command.type, message: command.message }) + "\n");
+  if (command.type === "get_commands") {
+    out({ id: command.id, type: "response", command: "get_commands", success: true, data: { commands: [{ name: "estigia-doctor", source: "extension" }] } });
+  } else if (command.type === "get_state") {
+    out({ id: command.id, type: "response", command: "get_state", success: true, data: { model: { id: "fake-model" } } });
+  } else if (command.type === "prompt") {
+    out({ id: command.id, type: "response", command: "prompt", success: true, data: { disposition: "started" } });
+    work();
+  }
+}
+"##;
+
+#[cfg(unix)]
+const PI_MESSAGES_DRIVER: &str = r##"import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+process.env.PI_CODING_AGENT_DIR = process.env.AGENT_DIR;
+process.env.ESTIGIA_PI_PARENT_SESSION = "root-1";
+
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const until = async (check, ms = 30000) => {
+  for (let waited = 0; waited < ms; waited += 25) {
+    const found = check();
+    if (found) return found;
+    await pause(25);
+  }
+  return null;
+};
+const attempt = async (call) => {
+  try {
+    return { ok: true, text: (await call()).content[0].text };
+  } catch (error) {
+    return { ok: false, error: String(error.message) };
+  }
+};
+
+const tools = {};
+let command;
+const messages = [];
+(await import("./agents.mjs")).default({
+  registerTool: (tool) => { tools[tool.name] = tool; },
+  registerCommand: (name, options) => { command = options; },
+  registerShortcut: () => {},
+  on: () => {},
+  appendEntry: () => {},
+  sendMessage: (message, options) => { messages.push({ message, options }); },
+});
+const ctx = { cwd: process.env.PROJECT, hasUI: false, sessionManager: { getSessionId: () => "root-1" } };
+
+const parsed = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+const seen = () => (existsSync(process.env.FAKE_SEEN) ? readFileSync(process.env.FAKE_SEEN, "utf8").split("\n").map(parsed).filter(Boolean) : []);
+const resultFile = (name) => `${process.env.RESULT_DIR}/${name}.json`;
+const result = (name) => until(() => (existsSync(resultFile(name)) ? parsed(readFileSync(resultFile(name), "utf8")) : null));
+const start = (mode, name, background = true) => {
+  process.env.FAKE_MODE = mode;
+  process.env.FAKE_RESULT = resultFile(name);
+  return tools.estigia_subagent.execute("c", { agent: "developer", task: name, label: name, background }, undefined, undefined, ctx);
+};
+const stopAll = () => command.handler("stop all", ctx);
+
+const parentTools = Object.keys(tools).sort();
+
+const ended = (id) => until(() => messages.find((entry) => entry.message.details?.kind === "final" && entry.message.details.id === id) ?? null);
+const hanging = start("hang", "steered");
+await until(() => seen().some((entry) => entry.type === "prompt"));
+const steerSent = await attempt(() => tools.estigia_subagent_message.execute("m", { id: "a1", text: "change course" }));
+const steers = await until(() => { const found = seen().filter((entry) => entry.type === "steer"); return found.length ? found : null; });
+const unknownTarget = await attempt(() => tools.estigia_subagent_message.execute("m", { id: "a99", text: "x" }));
+const emptySteer = await attempt(() => tools.estigia_subagent_message.execute("m", { id: "a1", text: " " }));
+await stopAll();
+const hangingEnded = await ended("a1");
+const finishedTarget = await attempt(() => tools.estigia_subagent_message.execute("m", { id: "a1", text: "too late" }));
+
+const notifying = start("notify", "told");
+const told = await result("told");
+const relayed = await until(() => messages.find((entry) => entry.message.details?.kind === "notification") ?? null);
+await stopAll();
+await ended("a2");
+
+const asking = start("query", "asked");
+const asked = await until(() => messages.find((entry) => entry.message.details?.kind === "query") ?? null);
+const requestId = asked?.message.details.request_id;
+const unknownRequest = await attempt(() => tools.estigia_subagent_reply.execute("r", { id: "a3", request_id: "nope", text: "x" }));
+const answer = await attempt(() => tools.estigia_subagent_reply.execute("r", { id: "a3", request_id: requestId, text: "use sqlite" }));
+const answered = await result("asked");
+const answeredAgain = await attempt(() => tools.estigia_subagent_reply.execute("r", { id: "a3", request_id: requestId, text: "again" }));
+await stopAll();
+await ended("a3");
+
+const begin = Date.now();
+const silent = start("query", "silent");
+const timedOut = await result("silent");
+const waited = Date.now() - begin;
+const silentRequest = messages.filter((entry) => entry.message.details?.kind === "query").at(-1)?.message.details.request_id;
+const withdrawn = await until(() => messages.find((entry) => entry.message.details?.kind === "withdrawn" && entry.message.details.request_id === silentRequest) ?? null);
+const staleReply = await attempt(() => tools.estigia_subagent_reply.execute("r", { id: "a4", request_id: silentRequest, text: "too late" }));
+const silentAsked = messages.filter((entry) => entry.message.details?.kind === "query").length;
+await stopAll();
+await ended("a4");
+const lateReply = await attempt(() => tools.estigia_subagent_reply.execute("r", { id: "a4", request_id: "late", text: "x" }));
+
+const launched = Date.now();
+const background = await start("settle", "bg");
+const backgroundReturned = Date.now() - launched;
+const delivered = await until(() => messages.find((entry) => entry.message.details?.kind === "final" && entry.message.details.id === "a5") ?? null);
+
+const foregroundStart = Date.now();
+const foreground = start("query", "fg", false);
+const refused = await result("fg");
+const refusedAfter = Date.now() - foregroundStart;
+const foregroundOpen = await Promise.race([foreground.then(() => false), pause(200).then(() => true)]);
+const foregroundAsked = messages.filter((entry) => entry.message.details?.id === "a6" && entry.message.details.kind === "query").length;
+await stopAll();
+await foreground;
+
+console.log(JSON.stringify({
+  background: background.content[0].text,
+  backgroundStatus: background.details,
+  backgroundReturned,
+  delivered,
+  refused,
+  refusedAfter,
+  foregroundOpen,
+  foregroundAsked,
+  parentTools,
+  steerSent,
+  steers,
+  unknownTarget,
+  emptySteer,
+  hangingEnded: hangingEnded.message.details.status,
+  finishedTarget,
+  told,
+  relayed,
+  asked: asked?.message,
+  askedOptions: asked?.options,
+  unknownRequest,
+  answer,
+  answered,
+  answeredAgain,
+  timedOut,
+  waited,
+  silentAsked,
+  lateReply,
+  staleReply,
+  withdrawn: withdrawn !== null,
+}));
+"##;
+
+#[cfg(unix)]
+fn run_pi_messages_driver() -> &'static serde_json::Value {
+    use std::os::unix::fs::PermissionsExt;
+    static SAID: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+    SAID.get_or_init(|| {
+        let node = node_executable();
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let base = root.path().canonicalize().expect("the directory resolves");
+        let project = base.join("project");
+        let agent_dir = base.join("agent");
+        let results = base.join("results");
+        fs::create_dir_all(&project).expect("the project directory");
+        fs::create_dir_all(&results).expect("the results directory");
+        fs::create_dir_all(agent_dir.join("agents")).expect("the agents directory");
+        fs::write(
+            agent_dir.join("agents").join("developer.md"),
+            "---\nname: developer\ndescription: d\n---\n\nYou are the developer.\n",
+        )
+        .expect("the definition writes");
+        let fake = base.join("pi");
+        let runner = plugin::pi_agents_source()
+            .replace(
+                "const PI_COMMAND = \"pi\";",
+                &format!(
+                    "const PI_COMMAND = {};",
+                    serde_json::to_string(&fake).unwrap()
+                ),
+            )
+            .replace(
+                "const QUERY_TIMEOUT_MS = 120000;",
+                "const QUERY_TIMEOUT_MS = 5000;",
+            );
+        assert!(
+            runner.contains("QUERY_TIMEOUT_MS = 5000;") && runner.contains(&format!("{:?}", fake)),
+            "the constants are not where the test looks"
+        );
+        fs::write(base.join("agents.mjs"), runner).expect("the runner writes");
+        fs::write(&fake, PI_MESSAGES_FAKE_PI.replace("__NODE__", &node))
+            .expect("the stand-in pi writes");
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).expect("executable");
+        fs::write(base.join("drive.mjs"), PI_MESSAGES_DRIVER).expect("the driver writes");
+        let ran = std::process::Command::new(&node)
+            .arg(base.join("drive.mjs"))
+            .current_dir(&base)
+            .env("FAKE_PID", base.join("pi.pid"))
+            .env("FAKE_SEEN", base.join("seen.log"))
+            .env("RUNNER", base.join("agents.mjs"))
+            .env("RESULT_DIR", &results)
+            .env("AGENT_DIR", &agent_dir)
+            .env("PROJECT", &project)
+            .env_remove("NODE_OPTIONS")
+            .output()
+            .expect("node runs");
+        assert!(
+            ran.status.success(),
+            "the driver failed: {}\n{}",
+            String::from_utf8_lossy(&ran.stderr),
+            String::from_utf8_lossy(&ran.stdout)
+        );
+        serde_json::from_slice(&ran.stdout).expect("the driver prints JSON")
+    })
+}
+
+#[cfg(unix)]
+fn failed_with(value: &serde_json::Value, needle: &str) {
+    assert_eq!(value["ok"], false, "{value}");
+    assert!(
+        value["error"].as_str().unwrap_or_default().contains(needle),
+        "{needle} missing: {value}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_parent_steers_a_running_pi_child_and_a_finished_or_unknown_one_is_an_error() {
+    let said = run_pi_messages_driver();
+    assert_eq!(said["steerSent"]["ok"], true, "{said}");
+    let steers = said["steers"].as_array().expect("what the child received");
+    assert_eq!(steers.len(), 1, "{steers:?}");
+    assert_eq!(steers[0]["message"], "change course");
+    failed_with(&said["unknownTarget"], "no subagent a99");
+    failed_with(&said["emptySteer"], "needs text");
+    assert_eq!(said["hangingEnded"], "stopped");
+    failed_with(&said["finishedTarget"], "no longer running");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_pi_child_notification_reaches_the_parent_as_a_follow_up_that_wakes_it() {
+    let said = run_pi_messages_driver();
+    assert_eq!(said["told"]["ok"], true, "{said}");
+    let relayed = &said["relayed"];
+    assert!(
+        relayed["message"]["content"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("heads up"),
+        "{relayed}"
+    );
+    assert_eq!(relayed["message"]["details"]["id"], "a2");
+    assert_eq!(
+        relayed["options"],
+        serde_json::json!({ "triggerTurn": true, "deliverAs": "followUp" })
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_pi_child_query_blocks_until_the_parent_answers_and_the_answer_is_its_tool_result() {
+    let said = run_pi_messages_driver();
+    let content = said["asked"]["content"].as_str().unwrap_or_default();
+    assert!(content.contains("which database?"), "{content}");
+    assert!(content.contains("estigia_subagent_reply"), "{content}");
+    assert_eq!(
+        said["askedOptions"],
+        serde_json::json!({ "triggerTurn": true, "deliverAs": "followUp" })
+    );
+    assert_eq!(said["answer"]["ok"], true, "{said}");
+    assert_eq!(said["answered"]["ok"], true, "{said}");
+    assert_eq!(said["answered"]["text"], "use sqlite");
+    failed_with(&said["unknownRequest"], "no pending query nope");
+    failed_with(&said["answeredAgain"], "no pending query");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unanswered_pi_child_query_ends_at_its_timeout_with_an_error() {
+    let said = run_pi_messages_driver();
+    failed_with(&said["timedOut"], "did not answer");
+    assert_eq!(
+        said["silentAsked"], 2,
+        "the silent query never reached the parent: {said}"
+    );
+    let waited = said["waited"].as_u64().expect("a duration");
+    assert!(
+        (4900..20000).contains(&waited),
+        "the query did not end at its timeout: {waited}ms"
+    );
+    failed_with(&said["lateReply"], "no longer running");
+    assert_eq!(
+        said["withdrawn"], true,
+        "the parent was not told the child stopped waiting: {said}"
+    );
+    failed_with(&said["staleReply"], "stopped waiting");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_child_side_message_tool_exists_only_in_a_session_the_runner_spawned() {
+    let said = run_pi_messages_driver();
+    let parent: Vec<&str> = said["parentTools"]
+        .as_array()
+        .expect("tools")
+        .iter()
+        .filter_map(|name| name.as_str())
+        .collect();
+    assert_eq!(
+        parent,
+        [
+            "estigia_subagent",
+            "estigia_subagent_message",
+            "estigia_subagent_reply"
+        ]
+    );
+    let child: Vec<&str> = said["told"]["names"]
+        .as_array()
+        .expect("what the child registered")
+        .iter()
+        .filter_map(|name| name.as_str())
+        .collect();
+    assert!(child.contains(&"estigia_parent_message"), "{child:?}");
+}
+
 #[test]
 fn setup_says_so_when_another_pi_subagent_runner_is_present_and_still_installs_its_own() {
     let (home, options) = sandbox();
@@ -22701,4 +23075,48 @@ fn setup_says_so_when_another_pi_subagent_runner_is_present_and_still_installs_i
         .expect("setup did not say another runner is present");
     assert!(note.contains("subagent-other.ts"), "{note}");
     assert!(directory.join(plugin::PI_AGENTS_FILE).is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_background_pi_subagent_returns_at_once_and_delivers_its_answer_as_a_waking_follow_up() {
+    let said = run_pi_messages_driver();
+    assert!(
+        said["background"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("a5"),
+        "{said}"
+    );
+    assert_eq!(said["backgroundStatus"]["status"], "running");
+    assert!(
+        said["backgroundReturned"].as_u64().expect("a duration") < 4000,
+        "{said}"
+    );
+    let delivered = &said["delivered"];
+    assert!(
+        delivered["message"]["content"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("all done"),
+        "{delivered}"
+    );
+    assert_eq!(delivered["message"]["details"]["status"], "done");
+    assert_eq!(
+        delivered["options"],
+        serde_json::json!({ "triggerTurn": true, "deliverAs": "followUp" })
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_query_from_a_child_the_parent_is_blocked_on_fails_at_once_and_is_never_relayed() {
+    let said = run_pi_messages_driver();
+    failed_with(&said["refused"], "waiting on this child");
+    assert!(
+        said["refusedAfter"].as_u64().expect("a duration") < 4000,
+        "{said}"
+    );
+    assert_eq!(said["foregroundOpen"], true, "{said}");
+    assert_eq!(said["foregroundAsked"], 0, "{said}");
 }

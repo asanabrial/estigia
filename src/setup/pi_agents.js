@@ -2,10 +2,12 @@
 //
 // Runs a delegated worker as a separate `pi --mode rpc` process, draws one row per
 // worker above the editor, opens a full view of them, keeps what finished as session
-// entries the model is never sent, and stops or steers one on request. It decides nothing: the child
-// inherits the environment the gate extension exported, so every write it makes
+// entries the model is never sent, and stops or steers one on request. A parent model can steer a
+// running child and answer its questions; a child can tell its parent something or ask it. It decides
+// nothing: the child inherits the environment the gate extension exported, so every write it makes
 // is decided by the binary as the parent's run. Removed by `estigia uninstall pi`.
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +15,14 @@ import { join } from "node:path";
 const PI_COMMAND = "__PI__";
 const TOOL = "__TOOL__";
 const COMMAND = "estigia-agents";
+const MESSAGE_TOOL = "estigia_subagent_message";
+const REPLY_TOOL = "estigia_subagent_reply";
+const PARENT_TOOL = "estigia_parent_message";
+const WAITING_REFUSAL =
+  "the parent is waiting on this child and cannot answer until it finishes; finish and put the question in the final answer";
+const MESSAGE_TYPE = "estigia-subagent-message";
+const QUERY_TIMEOUT_MS = 120000;
+const WITHDRAW_GRACE_MS = 5000;
 const SHORTCUT = "ctrl+alt+a";
 const HISTORY = "estigia-agent";
 const LOG_LINES = 200;
@@ -133,6 +143,8 @@ const finish = (run, status, resolve, text) => {
   if (run.status !== "running") return;
   run.status = status;
   run.endedAt = Date.now();
+  for (const expiry of run.queries.values()) clearTimeout(expiry);
+  run.queries.clear();
   remember(run, text);
   clearTimeout(run.setupTimer);
   try {
@@ -146,6 +158,11 @@ const send = (run, record) => {
   try {
     run.child.stdin.write(`${JSON.stringify(record)}\n`);
   } catch {}
+};
+
+const steerRun = (run, message) => {
+  send(run, { type: "steer", message });
+  note(run, `you (sent, not confirmed): ${message}`);
 };
 
 const stop = (run) => {
@@ -222,9 +239,133 @@ const onEvent = (run, event, resolve) => {
   redraw();
 };
 
+const relay = (run, text, details) => {
+  try {
+    host.sendMessage(
+      { customType: MESSAGE_TYPE, content: text, display: true, details: { id: run.id, ...details } },
+      { triggerTurn: true, deliverAs: "followUp" },
+    );
+  } catch {}
+};
+
+const onChild = (run, message) => {
+  if (run.status !== "running") return;
+  const who = `Subagent ${run.id} (${run.label})`;
+  if (message?.kind === "withdraw" && run.queries.has(message.request_id)) {
+    clearTimeout(run.queries.get(message.request_id));
+    run.queries.delete(message.request_id);
+    note(run, `child stopped waiting (${message.request_id})`);
+    relay(run, `${who} stopped waiting for an answer to ${message.request_id}`, { kind: "withdrawn", request_id: message.request_id });
+    return;
+  }
+  if (!filled(message?.text)) return;
+  if (message.kind === "notification") {
+    note(run, `child: ${message.text}`);
+    relay(run, `${who} reports: ${message.text}`, { kind: "notification" });
+  } else if (message.kind === "query" && filled(message.request_id) && !run.background) {
+    note(run, `child asked while the parent waits: ${message.text}`);
+    try {
+      run.child.send({ kind: "refusal", request_id: message.request_id, text: WAITING_REFUSAL });
+    } catch {}
+  } else if (message.kind === "query" && filled(message.request_id) && !run.queries.has(message.request_id)) {
+    const expiry = setTimeout(() => run.queries.delete(message.request_id), QUERY_TIMEOUT_MS + WITHDRAW_GRACE_MS);
+    expiry.unref?.();
+    run.queries.set(message.request_id, expiry);
+    note(run, `child asks (${message.request_id}): ${message.text}`);
+    relay(
+      run,
+      `${who} asks and is waiting: ${message.text}\nAnswer with ${REPLY_TOOL} {"id": "${run.id}", "request_id": "${message.request_id}", "text": "..."}`,
+      { kind: "query", request_id: message.request_id },
+    );
+  }
+};
+
+const failure = (text) => {
+  throw new Error(`estigia: ${text}`);
+};
+
+const runningChild = (id) => {
+  const run = runs.get(String(id ?? ""));
+  if (!run) failure(`no subagent ${id ?? "(none)"} is known to this session`);
+  if (run.status !== "running") failure(`subagent ${run.id} is no longer running (${run.status})`);
+  return run;
+};
+
+const messageChild = (params) => {
+  if (!filled(params?.text)) failure("a message to a subagent needs text");
+  const run = runningChild(params?.id);
+  steerRun(run, params.text);
+  return { content: [{ type: "text", text: `sent to ${run.id}; not confirmed` }], details: { id: run.id } };
+};
+
+const replyToChild = (params) => {
+  if (!filled(params?.text)) failure("a reply needs text");
+  const run = runningChild(params?.id);
+  const requestId = String(params?.request_id ?? "");
+  if (!run.queries.has(requestId)) {
+    failure(`subagent ${run.id} has no pending query ${requestId || "(none)"}; it was answered, or the child stopped waiting`);
+  }
+  note(run, `you (reply to ${requestId}): ${params.text}`);
+  return new Promise((resolve, reject) => {
+    try {
+      run.child.send({ kind: "reply", request_id: requestId, text: params.text }, (error) => {
+        if (error) return reject(new Error(`estigia: the reply could not reach ${run.id}: ${error.message}`));
+        clearTimeout(run.queries.get(requestId));
+        run.queries.delete(requestId);
+        resolve({ content: [{ type: "text", text: `answered ${requestId}` }], details: { id: run.id } });
+      });
+    } catch (error) {
+      reject(new Error(`estigia: the reply could not reach ${run.id}: ${String(error?.message ?? error)}`));
+    }
+  });
+};
+
+const toParent = (params) => {
+  const kind = params?.kind;
+  if (kind !== "notification" && kind !== "query") failure("kind must be notification or query");
+  if (!filled(params?.text)) failure("a message to the parent needs text");
+  if (typeof process.send !== "function" || !process.connected) failure("this session has no channel to a parent");
+  const post = (message) =>
+    new Promise((resolve, reject) =>
+      process.send(message, (error) => (error ? reject(new Error(`estigia: the parent could not be reached: ${error.message}`)) : resolve())),
+    );
+  if (kind === "notification") {
+    return post({ kind, text: params.text }).then(() => ({ content: [{ type: "text", text: "sent to the parent" }], details: { kind } }));
+  }
+  const requestId = randomUUID();
+  return new Promise((resolve, reject) => {
+    let timer;
+    const done = (action, value) => {
+      clearTimeout(timer);
+      process.off("message", onMessage);
+      process.off("disconnect", onGone);
+      action(value);
+    };
+    const onMessage = (message) => {
+      if (message?.request_id !== requestId) return;
+      if (message.kind === "refusal") return done(reject, new Error(`estigia: ${message.text}`));
+      if (message.kind !== "reply") return;
+      done(resolve, { content: [{ type: "text", text: String(message.text ?? "") }], details: { kind, request_id: requestId } });
+    };
+    const onGone = () => done(reject, new Error("estigia: the parent went away before it answered"));
+    timer = setTimeout(() => {
+      const late = new Error(`estigia: the parent did not answer within ${Math.round(QUERY_TIMEOUT_MS / 1000)}s`);
+      try {
+        process.send({ kind: "withdraw", request_id: requestId }, () => done(reject, late));
+      } catch {
+        done(reject, late);
+      }
+    }, QUERY_TIMEOUT_MS);
+    process.on("message", onMessage);
+    process.on("disconnect", onGone);
+    post({ kind, request_id: requestId, text: params.text }).catch((error) => done(reject, error));
+  });
+};
+
 const launch = (params, ctx, signal) =>
-  new Promise((resolve) => {
-    const refuse = (text) => resolve({ content: [{ type: "text", text }], details: { status: "refused" } });
+  new Promise((answer) => {
+    let resolve = answer;
+    const refuse = (text) => answer({ content: [{ type: "text", text }], details: { status: "refused" } });
     const agent = String(params?.agent ?? "");
     const task = String(params?.task ?? "");
     if (!filled(task)) return refuse("estigia: a subagent needs a task");
@@ -254,14 +395,23 @@ const launch = (params, ctx, signal) =>
       settledCost: 0,
       text: "",
       log: [],
+      queries: new Map(),
+      background: params?.background === true,
     };
+    if (run.background) {
+      resolve = (result) =>
+        relay(run, `Subagent ${run.id} (${run.label}) ${result.details.status}: ${result.content[0].text}`, {
+          kind: "final",
+          status: result.details.status,
+        });
+    }
     note(run, `task: ${task}`);
     let child;
     try {
       child = spawn(PI_COMMAND, args, {
         cwd: ctx?.cwd ?? process.cwd(),
         detached: process.platform !== "win32",
-        stdio: ["pipe", "pipe", "ignore"],
+        stdio: ["pipe", "pipe", "ignore", "ipc"],
         windowsHide: true,
       });
     } catch (error) {
@@ -287,6 +437,7 @@ const launch = (params, ctx, signal) =>
       }
     });
     child.stdin.on("error", () => {});
+    child.on("message", (message) => onChild(run, message));
     child.on("error", (error) => finish(run, "failed", resolve, `estigia: could not run ${PI_COMMAND}: ${String(error?.message ?? error)}`));
     child.on("close", (code, name) => {
       const how = run.stopped ? "stopped" : "failed";
@@ -300,6 +451,12 @@ const launch = (params, ctx, signal) =>
     signal?.addEventListener?.("abort", () => stop(run), { once: true });
     send(run, { id: "commands", type: "get_commands" });
     redraw();
+    if (run.background) {
+      answer({
+        content: [{ type: "text", text: `started ${run.id} (${run.label}) in the background; its answer arrives as a follow-up` }],
+        details: { id: run.id, agent, status: "running" },
+      });
+    }
   });
 
 const items = () => {
@@ -335,8 +492,7 @@ const steer = async (run, ctx) => {
   if (run?.status !== "running" || typeof ctx?.ui?.input !== "function") return;
   const message = await ctx.ui.input(`Follow-up for ${run.label}`, "");
   if (!filled(message)) return;
-  send(run, { type: "steer", message });
-  note(run, `you (sent, not confirmed): ${message}`);
+  steerRun(run, message);
 };
 
 const openView = (ctx) =>
@@ -393,19 +549,69 @@ export default function (pi) {
     name: TOOL,
     label: "Estigia subagent",
     description:
-      "Runs one delegated worker (an agent definition setup wrote, such as developer or analyst) as a separate Pi process and returns its final answer when it settles. Its writes are decided by Estigia as this session's run.",
+      "Runs one delegated worker (an agent definition setup wrote, such as developer or analyst) as a separate Pi process and returns its final answer when it settles. With background: true it returns at once with the subagent id and the answer arrives later as a follow-up; steering it (estigia_subagent_message) and answering its questions (estigia_subagent_reply) need background: true, because a foreground call blocks this turn. Its writes are decided by Estigia as this session's run.",
     parameters: {
       type: "object",
       properties: {
         agent: { type: "string", description: "The agent definition name." },
         task: { type: "string", description: "What the worker is to do." },
         label: { type: "string", description: "A short name shown on its card." },
+        background: { type: "boolean", description: "Return at once and deliver the answer later. Default false." },
       },
       required: ["agent", "task"],
       additionalProperties: false,
     },
     execute: (_id, params, signal, _update, ctx) => launch(params, ctx, signal),
   });
+  pi.registerTool({
+    name: MESSAGE_TOOL,
+    label: "Estigia subagent message",
+    description: "Steers a running subagent by id; the subagent must have been started with background: true. The text reaches it as a follow-up. A finished or unknown subagent is an error.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The subagent id, such as a1." },
+        text: { type: "string", description: "What to tell it." },
+      },
+      required: ["id", "text"],
+      additionalProperties: false,
+    },
+    execute: (_id, params) => messageChild(params),
+  });
+  pi.registerTool({
+    name: REPLY_TOOL,
+    label: "Estigia subagent reply",
+    description: "Answers a question a running background subagent is waiting on, by subagent id and request id; the answer is its tool result. Needs background: true on the subagent.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The subagent id, such as a1." },
+        request_id: { type: "string", description: "The request id the question carried." },
+        text: { type: "string", description: "The answer." },
+      },
+      required: ["id", "request_id", "text"],
+      additionalProperties: false,
+    },
+    execute: (_id, params) => replyToChild(params),
+  });
+  if (typeof process.send === "function") {
+    pi.registerTool({
+      name: PARENT_TOOL,
+      label: "Estigia parent message",
+      description:
+        "Tells the parent session something (notification) or asks it a question (query). A query waits for the answer and is an error if none comes in time.",
+      parameters: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["notification", "query"] },
+          text: { type: "string", description: "What to tell or ask." },
+        },
+        required: ["kind", "text"],
+        additionalProperties: false,
+      },
+      execute: (_id, params) => toParent(params),
+    });
+  }
   pi.registerCommand(COMMAND, {
     description: "Open the subagent view, or `stop <id|all>`",
     handler: handle,

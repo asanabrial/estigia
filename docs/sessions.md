@@ -105,6 +105,35 @@ What delivery refuses to do:
 - It is recorded when it is handed to the host, not when the model reads it: no host reports a read, so "delivered"
   is the observable event and there is no separate "read" stamp.
 
+## The Pi parent-child channel
+
+A Pi subagent runner child and its parent also talk directly, and this is not the mailbox: nothing is
+written to the registry, nothing is persisted, and delivery is at-most-once. The runner opens a Node IPC
+channel to each child it spawns; the child's `estigia_parent_message` tool sends a notification or a query
+over it, and the parent's `estigia_subagent_reply` answers a query over it. The parent steers a child with
+`estigia_subagent_message`, an RPC `steer` on the child's standard input. The tools are described in
+[`what-it-writes.md`](what-it-writes.md).
+
+A foreground `estigia_subagent` call blocks the parent's turn, so a query from that child is refused at once
+rather than left to time out; answering a query, like steering, needs the child to have been started with
+`background: true`. Measured live on 2026-10-15 with Pi 1.1.0, a real `pi` parent and child under a
+temporary home and an agent definition `worker`: the IPC channel and the child's
+`estigia_parent_message` worked and the query reached the parent's runner, but the parent had launched the
+child in the foreground, could not call `estigia_subagent_reply`, and the query failed after the full 120
+seconds. That is what the background mode and the immediate refusal answer. A second live run the same day used
+`background: true`. The child's query woke the idle parent, `estigia_subagent_reply` returned the answer as the
+child's tool result, and the child's final answer reached the parent as a follow-up, within 15 seconds.
+
+A message sent while the other side is gone is lost and the sender is told when it can be. A query pending
+when the child ends is dropped, and a reply to it is a tool error. A query pending when the parent ends
+fails in the child as soon as the channel closes; one the parent never answers fails after 120 seconds.
+When the child gives up, it tells the parent first. The parent then forgets the query and tells its model that
+the child stopped waiting, so a later reply is refused rather than reported as answered. If that notice never
+arrives, the parent forgets the query five seconds after its own 120 seconds. A reply is forgotten only once the channel has accepted it, so a reply that fails to
+send can be sent again.
+Neither side's session is changed by what arrives: a message is text for a model, not an instruction the
+gate treats differently.
+
 ## The MCP tools
 
 `list_sessions` takes no arguments and answers the object `estigia sessions --json` prints (`sessions` beside

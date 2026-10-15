@@ -5973,6 +5973,29 @@ pointer that leaves it names the document it points at.
   launch. A child that lists `estigia-doctor` from another extension passes it. The tool is named
   `estigia_subagent`, not `subagent`, so it cannot replace another runner's tool of that name, which means the
   issue's wording is not met literally.
+- **Pi parent and child messages were run live twice, both on one host and by hand.** On 2026-10-15, with Pi
+  1.1.0 as both parent and child:
+  - The first run used a foreground `estigia_subagent`. The IPC channel and the child tool worked, and the run
+    showed that the parent could not reply while it waited on that child.
+  - The second run used `background: true`. The child's query woke the parent, the parent's
+    `estigia_subagent_reply` came back as the child's tool result, and the child's final answer reached the
+    parent as a follow-up, all within 15 seconds.
+
+  Not run live:
+  - the immediate refusal of a foreground query;
+  - steering through `estigia_subagent_message`;
+  - a query that times out after the background fix;
+  - a child launched under an agent definition that restricts `--tools`.
+- **Pi parent and child messages were first driven against a stand-in `pi` that is a Node script.** Reproduced first, by mutation: removing the running check on the steer, the
+  `triggerTurn` option, the deletion of an answered request, the query timeout, the condition that registers
+  the child-side tool, the answer text in the child's result and the steer send each turn exactly the
+  test that names them red. Not measured: that a real `pi` is a Node program and so inherits the IPC
+  channel, that it passes an extension tool's thrown error back to the model as a tool error, that
+  `--tools` in an agent definition leaves an extension tool available, that `sendMessage` with
+  `deliverAs: "followUp"` really queues at a turn boundary and wakes an idle session (the stand-in records
+  the call and its options only), and any ordering between two children. At-most-once: a notification sent
+  while the parent is gone is lost without the child being told after the send call returns. The query
+  timeout, 120 seconds, is a constant, not a setting.
 - **The Pi subagent view, steering and history have been driven against recorded stand-ins for Pi's UI and
   session API, never a live Pi.** Reproduced first: each of the four view tests and the three `doctor`
   and setup tests fails when its piece is removed. Dropping the transcript, the `steer` send, the stop
