@@ -7,10 +7,10 @@ use crate::identity::Identity;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use crate::transport::store::{self, SessionRow};
 
-pub(super) const STALE_AFTER_SECONDS: u64 = 6 * 60 * 60;
+pub(crate) const STALE_AFTER_SECONDS: u64 = 6 * 60 * 60;
 
 #[derive(Serialize)]
-struct Listed {
+pub(crate) struct Listed {
     run_id: String,
     runtime: String,
     session_id: Option<String>,
@@ -112,10 +112,9 @@ pub(super) fn unreadable(detail: &str) -> Refusal {
     )
 }
 
-pub(super) fn sessions(json: bool) -> Result<(), Refusal> {
-    let root = session::state_root(None)?;
+pub(crate) fn entries(root: &Path) -> Result<Vec<Listed>, Refusal> {
     let (rows, waiting, undelivered) =
-        match store::open_for_read(&store::beside(&root)).map_err(|f| unreadable(&f.detail()))? {
+        match store::open_for_read(&store::beside(root)).map_err(|f| unreadable(&f.detail()))? {
             Some(opened) => (
                 opened.sessions().map_err(|f| unreadable(&f.detail()))?,
                 opened
@@ -127,11 +126,17 @@ pub(super) fn sessions(json: bool) -> Result<(), Refusal> {
             ),
             None => Default::default(),
         };
-    let mut entries = listed(rows, session::holdings(&root), session::now_seconds());
+    let mut entries = listed(rows, session::holdings(root), session::now_seconds());
     for entry in &mut entries {
         entry.waiting = waiting.get(&entry.run_id).copied().unwrap_or_default();
         entry.undelivered_sent = undelivered.get(&entry.run_id).copied().unwrap_or_default();
     }
+    Ok(entries)
+}
+
+pub(super) fn sessions(json: bool) -> Result<(), Refusal> {
+    let root = session::state_root(None)?;
+    let entries = entries(&root)?;
     if json {
         super::print_json(&serde_json::json!({
             "sessions": entries,

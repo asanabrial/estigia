@@ -49,19 +49,17 @@ pub(crate) fn recipient_unknown(recipient: &str) -> Refusal {
     )
 }
 
-pub(crate) fn send(
+fn admitted(
     state_root: &Path,
-    sender: Option<&str>,
     recipient: &str,
     body: &str,
-) -> Result<Receipt, Refusal> {
+) -> Result<(store::Store, store::SessionRow), Refusal> {
     if body.trim().is_empty() {
         return Err(empty());
     }
     if body.len() > MAX_BODY_BYTES {
         return Err(too_long(body.len()));
     }
-    let now = session::now_seconds().ok_or_else(|| unavailable("the clock could not be read"))?;
     let opened = store::Store::open(&store::beside(state_root))
         .map_err(|failure| unavailable(&failure.detail()))?;
     let registered = opened
@@ -72,6 +70,22 @@ pub(crate) fn send(
     let Some(registered) = registered else {
         return Err(recipient_unknown(recipient));
     };
+    Ok((opened, registered))
+}
+
+/// Refuses what [`send`] would refuse, writing nothing.
+pub(crate) fn admissible(state_root: &Path, recipient: &str, body: &str) -> Result<(), Refusal> {
+    admitted(state_root, recipient, body).map(|_| ())
+}
+
+pub(crate) fn send(
+    state_root: &Path,
+    sender: Option<&str>,
+    recipient: &str,
+    body: &str,
+) -> Result<Receipt, Refusal> {
+    let (opened, registered) = admitted(state_root, recipient, body)?;
+    let now = session::now_seconds().ok_or_else(|| unavailable("the clock could not be read"))?;
     let id = opened
         .message_sent(
             &MessageSent {

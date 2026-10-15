@@ -298,7 +298,10 @@ fn findings_without_a_receipt_are_refused_before_any_label_is_created() {
 fn every_operation_the_tools_name_is_dispatched() {
     let root = tempfile::tempdir().expect("a directory");
     let context = context(root.path());
-    for tool in crate::harness::mcp::tools::TOOLS {
+    for tool in crate::harness::mcp::tools::TOOLS
+        .iter()
+        .filter(|tool| !crate::harness::mcp::tools::is_local_store(tool.name))
+    {
         let refusal = super::dispatch(&context, tool.operation, &[], "2026-01-01T00:00:00Z")
             .err()
             .map(|failure| failure.envelope());
@@ -335,7 +338,10 @@ fn every_operation_the_tools_name_is_dispatched() {
 /// does not expose. What cannot be true is the reverse.
 #[test]
 fn every_operation_a_tool_offers_is_claimed_or_declared_unscripted() {
-    for tool in crate::harness::mcp::tools::TOOLS {
+    for tool in crate::harness::mcp::tools::TOOLS
+        .iter()
+        .filter(|tool| !crate::harness::mcp::tools::is_local_store(tool.name))
+    {
         let claimed = super::super::commands::SCRIPTED.contains(&tool.operation);
         // `NOT_SCRIPTED` spells its keys the way the contract does, with
         // underscores, and pairs two of them on one row.
@@ -456,7 +462,10 @@ fn every_flag_a_tool_sends_is_one_the_dispatcher_reads() {
     let mut checked = 0;
     let mut missing: Vec<String> = Vec::new();
     let mut demanded: Vec<String> = Vec::new();
-    for tool in crate::harness::mcp::tools::TOOLS {
+    for tool in crate::harness::mcp::tools::TOOLS
+        .iter()
+        .filter(|tool| !crate::harness::mcp::tools::is_local_store(tool.name))
+    {
         let Some(body) = arm(tool.operation) else {
             // An operation with no arm is a tool that cannot run at all, which
             // `every_operation_the_tools_name_is_dispatched` owns.

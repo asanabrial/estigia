@@ -117,6 +117,10 @@ fn inventory() -> Vec<Refusal> {
         crate::harness::mailbox::too_long(9000),
         crate::harness::mailbox::recipient_unknown("pi-ghost"),
         crate::harness::mailbox::unavailable("the local store could not be opened"),
+        crate::harness::mcp::messaging::needs_a_person("claude-abcd1234"),
+        crate::harness::mcp::messaging::not_allowed("claude-abcd1234", "pi-ghost"),
+        crate::harness::mcp::messaging::issue_has_no_holder(12),
+        crate::harness::mcp::messaging::holder_unreadable("the store could not be opened"),
         Refusal::not_started(
             "read-failed",
             "the reviewer's answer could not be read from standard input",
