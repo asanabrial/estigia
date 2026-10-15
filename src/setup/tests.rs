@@ -6254,11 +6254,12 @@ console.log(JSON.stringify([
     )
     .expect("the driver writes");
 
-    let ran = match std::process::Command::new("node")
-        .arg(root.path().join("drive.mjs"))
-        .current_dir(root.path())
-        .output()
-    {
+    let ran = match run_node(
+        "the_plugin_says_so_when_the_gate_returns_no_exit_code",
+        std::process::Command::new("node")
+            .arg(root.path().join("drive.mjs"))
+            .current_dir(root.path()),
+    ) {
         Ok(ran) => ran,
         Err(error) => panic!(
             "this test drives the generated plugin, which is JavaScript, and \
@@ -6378,11 +6379,12 @@ console.log(JSON.stringify(results));
     )
     .expect("the driver writes");
 
-    let ran = match std::process::Command::new("node")
-        .arg(root.path().join("drive.mjs"))
-        .current_dir(root.path())
-        .output()
-    {
+    let ran = match run_node(
+        "the_plugin_refuses_under_the_hosts_automatic_mode_and_registers_no_permission_hook",
+        std::process::Command::new("node")
+            .arg(root.path().join("drive.mjs"))
+            .current_dir(root.path()),
+    ) {
         Ok(ran) => ran,
         Err(error) => panic!(
             "this test drives the generated plugin, which is JavaScript, and \
@@ -6472,14 +6474,13 @@ fn the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer() {
     //
     // So the first spelling passed on a plugin holding `const roto = ((;`. A
     // check that cannot fail reads exactly like one that ran.
-    let mut node = match std::process::Command::new("node")
-        .args(["--input-type=module", "--check"])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-    {
-        Ok(node) => node,
+    let checked = match run_node_fed(
+        "the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer",
+        std::process::Command::new("node").args(["--input-type=module", "--check"]),
+        NODE_DRIVER_DEADLINE,
+        Some(source.into_bytes()),
+    ) {
+        Ok(checked) => checked,
         // Node is not a dependency of this crate and the plugin runs on Bun.
         // Said out loud rather than passing quietly, for the same reason.
         Err(error) => {
@@ -6487,13 +6488,6 @@ fn the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer() {
             return;
         }
     };
-    use std::io::Write;
-    node.stdin
-        .as_mut()
-        .expect("a pipe to node")
-        .write_all(source.as_bytes())
-        .expect("the plugin is handed over");
-    let checked = node.wait_with_output().expect("node answers");
     assert!(
         checked.status.success(),
         "the plugin this crate writes is not valid JavaScript:\n{}",
@@ -10193,10 +10187,12 @@ console.log(JSON.stringify({{ v1: seenV1, v2: seenV2 }}));
     )
     .expect("the driver writes");
 
-    let ran = std::process::Command::new("node")
-        .arg(&driver)
-        .current_dir(root.path())
-        .output();
+    let ran = run_node(
+        "the_plugin_hands_the_gate_the_directory_the_call_runs_in",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .current_dir(root.path()),
+    );
     let ran = match ran {
         Ok(ran) => ran,
         Err(error) => panic!(
@@ -10743,10 +10739,12 @@ fn run_loop_driver() -> serde_json::Value {
     let driver = root.path().join("drive-loop.mjs");
     std::fs::write(&driver, LOOP_DRIVER).expect("the driver writes");
 
-    let ran = std::process::Command::new("node")
-        .arg(&driver)
-        .current_dir(root.path())
-        .output();
+    let ran = run_node(
+        "run_loop_driver",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .current_dir(root.path()),
+    );
     let ran = match ran {
         Ok(ran) => ran,
         Err(error) => panic!(
@@ -11697,16 +11695,18 @@ fn the_loop_plugin_waits_on_held_or_pending_work_and_asks_again() {
     let driver = root.path().join("drive-loop.mjs");
     std::fs::write(&driver, format!("{harness}{LOOP_WAIT_SCENARIOS}")).expect("the driver writes");
 
-    let ran = std::process::Command::new("node")
-        .arg(&driver)
-        .current_dir(root.path())
-        .output()
-        .unwrap_or_else(|error| {
-            panic!(
-                "this test drives the generated loop plugin, which is JavaScript, and `node` could \
+    let ran = run_node(
+        "the_loop_plugin_waits_on_held_or_pending_work_and_asks_again",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .current_dir(root.path()),
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "this test drives the generated loop plugin, which is JavaScript, and `node` could \
                  not be run ({error}). Install Node and re-run; it is not skipped."
-            )
-        });
+        )
+    });
     assert!(
         ran.status.success(),
         "the driver failed: {}\n{}",
@@ -12225,16 +12225,18 @@ fn the_loop_plugin_waits_while_a_child_session_runs_and_resumes_when_it_ends() {
     let driver = root.path().join("drive-loop.mjs");
     std::fs::write(&driver, format!("{harness}{LOOP_CHILD_SCENARIOS}")).expect("the driver writes");
 
-    let ran = std::process::Command::new("node")
-        .arg(&driver)
-        .current_dir(root.path())
-        .output()
-        .unwrap_or_else(|error| {
-            panic!(
-                "this test drives the generated loop plugin, which is JavaScript, and `node` could \
+    let ran = run_node(
+        "the_loop_plugin_waits_while_a_child_session_runs_and_resumes_when_it_ends",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .current_dir(root.path()),
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "this test drives the generated loop plugin, which is JavaScript, and `node` could \
                  not be run ({error}). Install Node and re-run; it is not skipped."
-            )
-        });
+        )
+    });
     assert!(
         ran.status.success(),
         "the driver failed: {}\n{}",
@@ -12432,16 +12434,18 @@ fn the_loop_plugin_defaults_its_objective_to_flow_dev() {
     )
     .expect("the driver writes");
 
-    let ran = std::process::Command::new("node")
-        .arg(&driver)
-        .current_dir(root.path())
-        .output()
-        .unwrap_or_else(|error| {
-            panic!(
-                "this test drives the generated loop plugin, which is JavaScript, and `node` could \
+    let ran = run_node(
+        "the_loop_plugin_defaults_its_objective_to_flow_dev",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .current_dir(root.path()),
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "this test drives the generated loop plugin, which is JavaScript, and `node` could \
                  not be run ({error}). Install Node and re-run; it is not skipped."
-            )
-        });
+        )
+    });
     assert!(
         ran.status.success(),
         "the driver failed: {}\n{}",
@@ -12581,13 +12585,15 @@ console.log(JSON.stringify([v1, v2]));
     )
     .expect("the driver writes");
 
-    let ran = std::process::Command::new(node_executable())
-        .arg("drive.mjs")
-        .current_dir(&base)
-        .env("STUB_LOG", base.join("calls.json"))
-        .env_remove("NODE_OPTIONS")
-        .output()
-        .expect("node runs");
+    let ran = run_node(
+        "the_opencode_plugin_hands_an_oversized_input_to_the_gate_on_standard_input",
+        std::process::Command::new(node_executable())
+            .arg("drive.mjs")
+            .current_dir(&base)
+            .env("STUB_LOG", base.join("calls.json"))
+            .env_remove("NODE_OPTIONS"),
+    )
+    .expect("node runs");
     assert!(
         ran.status.success(),
         "the plugin would not load: {}",
@@ -12624,16 +12630,18 @@ fn the_loop_plugin_records_what_it_saw_and_listens_again() {
     std::fs::write(&driver, format!("{harness}{LOOP_SILENCE_SCENARIOS}"))
         .expect("the driver writes");
 
-    let ran = std::process::Command::new("node")
-        .arg(&driver)
-        .current_dir(root.path())
-        .output()
-        .unwrap_or_else(|error| {
-            panic!(
-                "this test drives the generated loop plugin, which is JavaScript, and `node` could \
+    let ran = run_node(
+        "the_loop_plugin_records_what_it_saw_and_listens_again",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .current_dir(root.path()),
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "this test drives the generated loop plugin, which is JavaScript, and `node` could \
                  not be run ({error}). Install Node and re-run; it is not skipped."
-            )
-        });
+        )
+    });
     assert!(
         ran.status.success(),
         "the driver failed: {}\n{}",
@@ -12864,10 +12872,12 @@ console.log(JSON.stringify({{ v1: seenV1, v2: seenV2 }}));
     )
     .expect("the driver writes");
 
-    let ran = std::process::Command::new("node")
-        .arg(&driver)
-        .current_dir(root.path())
-        .output();
+    let ran = run_node(
+        "the_plugin_hands_the_gate_the_directory_every_write_lands_in",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .current_dir(root.path()),
+    );
     let ran = match ran {
         Ok(ran) => ran,
         Err(error) => panic!(
@@ -13389,10 +13399,12 @@ fn run_goal_loop_driver() -> serde_json::Value {
     .expect("the goal loop plugin writes");
     let driver = root.path().join("drive-goal-loop.mjs");
     std::fs::write(&driver, GOAL_LOOP_DRIVER).expect("the driver writes");
-    let ran = std::process::Command::new("node")
-        .arg(&driver)
-        .current_dir(root.path())
-        .output();
+    let ran = run_node(
+        "run_goal_loop_driver",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .current_dir(root.path()),
+    );
     let ran = match ran {
         Ok(ran) => ran,
         Err(error) => panic!(
@@ -15603,11 +15615,13 @@ fn run_review_relay_driver() -> serde_json::Value {
     let driver = root.path().join("drive-review-relay.mjs");
     std::fs::write(&driver, REVIEW_RELAY_DRIVER).expect("the driver writes");
     let launch = crate::transport::claim::opencode_relay_launch("review-reliability");
-    let ran = std::process::Command::new("node")
-        .arg(&driver)
-        .arg(launch.to_string())
-        .current_dir(root.path())
-        .output();
+    let ran = run_node(
+        "run_review_relay_driver",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .arg(launch.to_string())
+            .current_dir(root.path()),
+    );
     let ran = match ran {
         Ok(ran) => ran,
         Err(error) => panic!(
@@ -16567,11 +16581,133 @@ fn the_pi_extension_gates_the_tools_the_classifier_judges_by_the_arguments_pi_se
     assert_eq!(how, Sensitivity::Routine);
 }
 
+const NODE_DRIVER_DEADLINE: std::time::Duration = std::time::Duration::from_secs(120);
+
+fn run_node(
+    label: &str,
+    command: &mut std::process::Command,
+) -> std::io::Result<std::process::Output> {
+    run_node_within(label, command, NODE_DRIVER_DEADLINE)
+}
+
+fn run_node_within(
+    label: &str,
+    command: &mut std::process::Command,
+    deadline: std::time::Duration,
+) -> std::io::Result<std::process::Output> {
+    run_node_fed(label, command, deadline, None)
+}
+
+fn run_node_fed(
+    label: &str,
+    command: &mut std::process::Command,
+    deadline: std::time::Duration,
+    input: Option<Vec<u8>>,
+) -> std::io::Result<std::process::Output> {
+    fn drain<R: std::io::Read + Send + 'static>(
+        pipe: Option<R>,
+    ) -> std::sync::mpsc::Receiver<Vec<u8>> {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut bytes);
+            }
+            let _ = sender.send(bytes);
+        });
+        receiver
+    }
+
+    let started = std::time::Instant::now();
+    let mut child = command
+        .stdin(if input.is_some() {
+            std::process::Stdio::piped()
+        } else {
+            std::process::Stdio::null()
+        })
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    if let (Some(input), Some(mut pipe)) = (input, child.stdin.take()) {
+        std::thread::spawn(move || {
+            use std::io::Write;
+            let _ = pipe.write_all(&input);
+        });
+    }
+    let stdout = drain(child.stdout.take());
+    let stderr = drain(child.stderr.take());
+    let grace = std::time::Duration::from_secs(2);
+    let collect = |receiver: &std::sync::mpsc::Receiver<Vec<u8>>| {
+        receiver.recv_timeout(grace).unwrap_or_default()
+    };
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(std::process::Output {
+                status,
+                stdout: collect(&stdout),
+                stderr: collect(&stderr),
+            });
+        }
+        if started.elapsed() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "{label}: node timed out after {} s\nstdout:\n{}\nstderr:\n{}",
+                deadline.as_secs_f64(),
+                String::from_utf8_lossy(&collect(&stdout)),
+                String::from_utf8_lossy(&collect(&stderr)),
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_node_driver_that_never_exits_fails_within_its_deadline_and_shows_what_it_printed() {
+    let node = node_executable();
+    let started = std::time::Instant::now();
+    let outcome = std::panic::catch_unwind(|| {
+        let mut command = std::process::Command::new(&node);
+        command.args([
+            "-e",
+            "console.log('said before hanging'); console.error('complained before hanging'); setInterval(() => {}, 1000);",
+        ]);
+        run_node_within(
+            "the hanging stand-in",
+            &mut command,
+            std::time::Duration::from_secs(10),
+        )
+    });
+    let message = match outcome {
+        Ok(_) => panic!("a driver that never exits was reported as finished"),
+        Err(payload) => payload
+            .downcast_ref::<String>()
+            .cloned()
+            .expect("the timeout panics with a formatted message"),
+    };
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(40),
+        "the bound did not hold: {:?}",
+        started.elapsed()
+    );
+    for expected in [
+        "the hanging stand-in",
+        "timed out after 10 s",
+        "said before hanging",
+        "complained before hanging",
+    ] {
+        assert!(
+            message.contains(expected),
+            "`{expected}` is missing from: {message}"
+        );
+    }
+}
+
 fn node_executable() -> String {
-    match std::process::Command::new("node")
-        .args(["-p", "process.execPath"])
-        .output()
-    {
+    match run_node(
+        "node_executable",
+        std::process::Command::new("node").args(["-p", "process.execPath"]),
+    ) {
         Ok(ran) if ran.status.success() => String::from_utf8_lossy(&ran.stdout).trim().to_owned(),
         Ok(ran) => panic!(
             "`node` could not report its own path: {}",
@@ -16669,7 +16805,7 @@ console.log(JSON.stringify([
     )
     .expect("the driver writes");
 
-    let ran = std::process::Command::new(&node)
+    let ran = run_node("the_pi_extension_blocks_on_one_and_two_and_lets_a_gate_that_did_not_answer_through_with_a_word", std::process::Command::new(&node)
         .arg(base.join("drive.mjs"))
         .current_dir(&base)
         .env("STUB_LOG", base.join("calls.log"))
@@ -16679,7 +16815,7 @@ console.log(JSON.stringify([
         )
         .env("PROJECT", &project)
         .env_remove("NODE_OPTIONS")
-        .output()
+        )
         .expect("node runs");
     assert!(
         ran.status.success(),
@@ -16858,7 +16994,7 @@ console.log(JSON.stringify([
     )
     .expect("the driver writes");
 
-    let ran = std::process::Command::new(&node)
+    let ran = run_node("the_pi_extension_puts_a_question_to_a_person_only_in_the_tui_and_blocks_on_any_code_it_cannot_read", std::process::Command::new(&node)
         .arg(base.join("drive.mjs"))
         .current_dir(&base)
         .env("STUB_LOG", base.join("calls.log"))
@@ -16868,7 +17004,7 @@ console.log(JSON.stringify([
         )
         .env("PROJECT", &project)
         .env_remove("NODE_OPTIONS")
-        .output()
+        )
         .expect("node runs");
     assert!(
         ran.status.success(),
@@ -17014,7 +17150,7 @@ console.log(JSON.stringify({ logged, exported: process.env.ESTIGIA_PI_PARENT_SES
                 .env("ESTIGIA_PI_PARENT_SESSION", id)
                 .env("ESTIGIA_PI_PARENT_PID", pid);
         }
-        let ran = command.output().expect("node runs");
+        let ran = run_node("the_pi_extension_hands_the_binary_the_root_session_only_from_a_process_that_inherited_one", &mut command).expect("node runs");
         assert!(
             ran.status.success(),
             "the driver failed: {}",
@@ -17135,7 +17271,11 @@ console.log(JSON.stringify({ logged, exported: process.env.ESTIGIA_PI_PARENT_SES
                 .env("ESTIGIA_PI_PARENT_SESSION", id)
                 .env("ESTIGIA_PI_PARENT_PID", pid);
         }
-        let ran = command.output().expect("node runs");
+        let ran = run_node(
+            "the_pi_extension_links_a_child_by_its_parent_header_whatever_its_pid",
+            &mut command,
+        )
+        .expect("node runs");
         assert!(
             ran.status.success(),
             "the driver failed: {}",
@@ -17339,7 +17479,7 @@ console.log(JSON.stringify({ logged, results }));
             .env("ESTIGIA_PI_PARENT_SESSION", id)
             .env("ESTIGIA_PI_PARENT_PID", "1");
     }
-    let ran = command.output().expect("node runs");
+    let ran = run_node("drive_pi_session", &mut command).expect("node runs");
     assert!(
         ran.status.success(),
         "the driver failed: {}",
@@ -17677,7 +17817,7 @@ console.log(JSON.stringify({ logged, sent, results }));
             .env("ESTIGIA_PI_PARENT_SESSION", id)
             .env("ESTIGIA_PI_PARENT_PID", "1");
     }
-    let ran = command.output().expect("node runs");
+    let ran = run_node("drive_pi_wake", &mut command).expect("node runs");
     assert!(
         ran.status.success(),
         "the driver failed: {}",
@@ -17995,18 +18135,20 @@ fn run_pi_review_relay_driver() -> serde_json::Value {
     .expect("the short-deadline relay writes");
     fs::write(base.join("stub.cjs"), PI_REVIEW_STUB).expect("the stand-in writes");
     fs::write(base.join("drive.mjs"), PI_REVIEW_DRIVER).expect("the driver writes");
-    let ran = std::process::Command::new(&node)
-        .arg(base.join("drive.mjs"))
-        .current_dir(&base)
-        .env("STUB_LOG", base.join("calls.log"))
-        .env(
-            "STUB_PATH",
-            base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
-        )
-        .env("PROJECT", &project)
-        .env_remove("NODE_OPTIONS")
-        .output()
-        .expect("node runs");
+    let ran = run_node(
+        "run_pi_review_relay_driver",
+        std::process::Command::new(&node)
+            .arg(base.join("drive.mjs"))
+            .current_dir(&base)
+            .env("STUB_LOG", base.join("calls.log"))
+            .env(
+                "STUB_PATH",
+                base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
+            )
+            .env("PROJECT", &project)
+            .env_remove("NODE_OPTIONS"),
+    )
+    .expect("node runs");
     assert!(
         ran.status.success(),
         "the Pi review relay would not load or the driver failed: {}",
@@ -18504,18 +18646,20 @@ fn run_pi_loop_driver() -> &'static serde_json::Value {
     static CASES: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
     CASES.get_or_init(|| {
         let (_root, base, node) = pi_loop_files();
-        let ran = std::process::Command::new(&node)
-            .arg(base.join("drive.mjs"))
-            .current_dir(&base)
-            .env("STUB_LOG", base.join("calls.log"))
-            .env(
-                "STUB_PATH",
-                base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
-            )
-            .env("PROJECT", base.join("project"))
-            .env_remove("NODE_OPTIONS")
-            .output()
-            .expect("node runs");
+        let ran = run_node(
+            "run_pi_loop_driver",
+            std::process::Command::new(&node)
+                .arg(base.join("drive.mjs"))
+                .current_dir(&base)
+                .env("STUB_LOG", base.join("calls.log"))
+                .env(
+                    "STUB_PATH",
+                    base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
+                )
+                .env("PROJECT", base.join("project"))
+                .env_remove("NODE_OPTIONS"),
+        )
+        .expect("node runs");
         assert!(
             ran.status.success(),
             "the loop extension would not load or the driver failed: {}",
@@ -19870,11 +20014,13 @@ fn run_pi_goal_loop_driver() -> &'static serde_json::Value {
         .expect("the goal loop extension writes");
         let driver = root.path().join("drive-pi-goal-loop.mjs");
         std::fs::write(&driver, PI_GOAL_LOOP_DRIVER).expect("the driver writes");
-        let ran = std::process::Command::new("node")
-            .arg(&driver)
-            .current_dir(root.path())
-            .env_remove("NODE_OPTIONS")
-            .output();
+        let ran = run_node(
+            "run_pi_goal_loop_driver",
+            std::process::Command::new("node")
+                .arg(&driver)
+                .current_dir(root.path())
+                .env_remove("NODE_OPTIONS"),
+        );
         let ran = match ran {
             Ok(ran) => ran,
             Err(error) => panic!(
@@ -20612,18 +20758,20 @@ fn run_pi_claim_driver(timeout_ms: u32) -> serde_json::Value {
     fs::write(base.join("missing.mjs"), missing).expect("the extension writes");
     fs::write(base.join("stub.cjs"), PI_CLAIM_STUB).expect("the stand-in writes");
     fs::write(base.join("drive.mjs"), PI_CLAIM_DRIVER).expect("the driver writes");
-    let ran = std::process::Command::new(&node)
-        .arg(base.join("drive.mjs"))
-        .current_dir(&base)
-        .env("STUB_LOG", base.join("calls.log"))
-        .env(
-            "STUB_PATH",
-            base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
-        )
-        .env("PROJECT", &project)
-        .env_remove("NODE_OPTIONS")
-        .output()
-        .expect("node runs");
+    let ran = run_node(
+        "run_pi_claim_driver",
+        std::process::Command::new(&node)
+            .arg(base.join("drive.mjs"))
+            .current_dir(&base)
+            .env("STUB_LOG", base.join("calls.log"))
+            .env(
+                "STUB_PATH",
+                base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
+            )
+            .env("PROJECT", &project)
+            .env_remove("NODE_OPTIONS"),
+    )
+    .expect("node runs");
     assert!(
         ran.status.success(),
         "the extension would not load: {}",
@@ -20734,20 +20882,22 @@ fn run_pi_shape_driver(extension: &str, source: &str, group: &str) -> Vec<serde_
     fs::write(base.join(extension), source).expect("the extension writes");
     fs::write(base.join("stub.cjs"), PI_CLAIM_STUB).expect("the stand-in writes");
     fs::write(base.join("drive.mjs"), PI_SHAPE_DRIVER).expect("the driver writes");
-    let ran = std::process::Command::new(&node)
-        .arg(base.join("drive.mjs"))
-        .current_dir(&base)
-        .env("STUB_LOG", base.join("calls.log"))
-        .env(
-            "STUB_PATH",
-            base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
-        )
-        .env("EXTENSION", extension)
-        .env("GROUP", group)
-        .env("PROJECT", &project)
-        .env_remove("NODE_OPTIONS")
-        .output()
-        .expect("node runs");
+    let ran = run_node(
+        "run_pi_shape_driver",
+        std::process::Command::new(&node)
+            .arg(base.join("drive.mjs"))
+            .current_dir(&base)
+            .env("STUB_LOG", base.join("calls.log"))
+            .env(
+                "STUB_PATH",
+                base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
+            )
+            .env("EXTENSION", extension)
+            .env("GROUP", group)
+            .env("PROJECT", &project)
+            .env_remove("NODE_OPTIONS"),
+    )
+    .expect("node runs");
     assert!(
         ran.status.success(),
         "the extension would not load: {}",
@@ -21833,17 +21983,19 @@ fn run_opencode_driver(source: &str) -> std::process::Output {
     .expect("the plugin writes");
     let driver = root.path().join("drive-mail.mjs");
     std::fs::write(&driver, source).expect("the driver writes");
-    let ran = std::process::Command::new("node")
-        .arg(&driver)
-        .current_dir(root.path())
-        .output()
-        .unwrap_or_else(|error| {
-            panic!(
-                "this test drives the generated OpenCode plugin, which is JavaScript, and `node` \
+    let ran = run_node(
+        "run_opencode_driver",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .current_dir(root.path()),
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "this test drives the generated OpenCode plugin, which is JavaScript, and `node` \
                  could not be run ({error}). Install Node and re-run; it is not skipped, because \
                  a plugin nothing executes is a delivery nothing measures."
-            )
-        });
+        )
+    });
     assert!(
         ran.status.success(),
         "the mail driver failed: {}",
@@ -22647,7 +22799,7 @@ if (path.basename(process.argv[1] ?? "") === "gate") {
         )
         .expect("the gate stand-in writes");
         fs::write(base.join("drive.mjs"), PI_AGENTS_DRIVER).expect("the driver writes");
-        let ran = std::process::Command::new(&node)
+        let ran = run_node("run_pi_agents_driver", std::process::Command::new(&node)
             .arg(base.join("drive.mjs"))
             .current_dir(&base)
             .env("STUB_LOG", base.join("calls.log"))
@@ -22661,7 +22813,7 @@ if (path.basename(process.argv[1] ?? "") === "gate") {
             .env("AGENT_DIR", &agent_dir)
             .env("PROJECT", &project)
             .env_remove("NODE_OPTIONS")
-            .output()
+            )
             .expect("node runs");
         assert!(
             ran.status.success(),
@@ -23175,18 +23327,20 @@ fn run_pi_messages_driver() -> &'static serde_json::Value {
             .expect("the stand-in pi writes");
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).expect("executable");
         fs::write(base.join("drive.mjs"), PI_MESSAGES_DRIVER).expect("the driver writes");
-        let ran = std::process::Command::new(&node)
-            .arg(base.join("drive.mjs"))
-            .current_dir(&base)
-            .env("FAKE_PID", base.join("pi.pid"))
-            .env("FAKE_SEEN", base.join("seen.log"))
-            .env("RUNNER", base.join("agents.mjs"))
-            .env("RESULT_DIR", &results)
-            .env("AGENT_DIR", &agent_dir)
-            .env("PROJECT", &project)
-            .env_remove("NODE_OPTIONS")
-            .output()
-            .expect("node runs");
+        let ran = run_node(
+            "run_pi_messages_driver",
+            std::process::Command::new(&node)
+                .arg(base.join("drive.mjs"))
+                .current_dir(&base)
+                .env("FAKE_PID", base.join("pi.pid"))
+                .env("FAKE_SEEN", base.join("seen.log"))
+                .env("RUNNER", base.join("agents.mjs"))
+                .env("RESULT_DIR", &results)
+                .env("AGENT_DIR", &agent_dir)
+                .env("PROJECT", &project)
+                .env_remove("NODE_OPTIONS"),
+        )
+        .expect("node runs");
         assert!(
             ran.status.success(),
             "the driver failed: {}\n{}",
