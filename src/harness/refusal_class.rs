@@ -32,6 +32,7 @@ const UNAVAILABLE: &[&str] = &[
     "linear-unreachable",
     "mcp-stream-failed",
     "message-holder-unreadable",
+    "message-question-failed",
     "message-source-unreadable",
     "message-store-unavailable",
     "no-terminal-for-the-screen",

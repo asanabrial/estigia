@@ -6139,7 +6139,9 @@ mod send_message {
         let rig = Rig::new();
         let output = rig.serve(&[initialize(asks()), send(2, RECIPIENT, "hello")]);
         assert_eq!(questions(&output).len(), 1);
-        assert!(text_of(reply(&output, 2)).contains("message-not-allowed"));
+        let text = text_of(reply(&output, 2));
+        assert!(text.contains("message-question-failed"), "{text}");
+        assert!(!text.contains("message-not-allowed"), "{text}");
         assert_eq!(rig.rows_to(RECIPIENT), 0);
     }
 

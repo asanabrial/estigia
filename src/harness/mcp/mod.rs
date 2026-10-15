@@ -124,7 +124,7 @@ struct Wire<'a, W: Write> {
 }
 
 impl<W: Write> messaging::Elicit for Wire<'_, W> {
-    fn elicit(&mut self, message: &str, schema: Value) -> Option<Value> {
+    fn elicit(&mut self, message: &str, schema: Value) -> Result<Value, messaging::Unasked> {
         *self.asked += 1;
         let id = format!("estigia-elicit-{}", self.asked);
         let request = json!({
@@ -133,19 +133,30 @@ impl<W: Write> messaging::Elicit for Wire<'_, W> {
             "method": "elicitation/create",
             "params": { "message": message, "requestedSchema": schema },
         });
-        writeln!(self.output, "{request}").ok()?;
-        self.output.flush().ok()?;
+        let unreachable =
+            |error: &dyn std::fmt::Display| messaging::Unasked::Unreachable(error.to_string());
+        writeln!(self.output, "{request}").map_err(|error| unreachable(&error))?;
+        self.output.flush().map_err(|error| unreachable(&error))?;
         let deadline = Instant::now() + self.wait;
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
-            let line = self.lines.recv_timeout(left).ok()?.ok()?;
+            let line = match self.lines.recv_timeout(left) {
+                Ok(Ok(line)) => line,
+                Ok(Err(error)) => return Err(unreachable(&error)),
+                Err(mpsc::RecvTimeoutError::Timeout) => return Err(messaging::Unasked::Unanswered),
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err(unreachable(&"the client closed its input"));
+                }
+            };
             let parsed: Option<Value> = serde_json::from_str(&line).ok();
             let answers_us = parsed.as_ref().is_some_and(|value| {
                 value.get("id").and_then(Value::as_str) == Some(id.as_str())
                     && value.get("method").is_none()
             });
             if answers_us {
-                return parsed?.get("result").cloned();
+                return Ok(parsed
+                    .and_then(|value| value.get("result").cloned())
+                    .unwrap_or(Value::Null));
             }
             self.pending.push_back(line);
         }
@@ -155,8 +166,10 @@ impl<W: Write> messaging::Elicit for Wire<'_, W> {
 struct Silent;
 
 impl messaging::Elicit for Silent {
-    fn elicit(&mut self, _message: &str, _schema: Value) -> Option<Value> {
-        None
+    fn elicit(&mut self, _message: &str, _schema: Value) -> Result<Value, messaging::Unasked> {
+        Err(messaging::Unasked::Unreachable(
+            "this entry point has no client to ask".to_owned(),
+        ))
     }
 }
 
@@ -217,7 +230,8 @@ fn serve_lines(
     }
 }
 
-/// Answers one line, or nothing when it was a notification.
+/// Answers one line, or nothing when it was a notification. It has no client to put a question
+/// to, so a `send_message` through it is always refused.
 pub fn handle_line(line: &str, context: Result<&GateContext, &Refusal>) -> Option<Value> {
     handle(line, context, &mut Server::default(), &mut Silent)
 }

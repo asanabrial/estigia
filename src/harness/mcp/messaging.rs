@@ -19,11 +19,18 @@ pub(super) const ALLOW_ONCE: &str = "allow_once";
 pub(super) const ALLOW_SESSION: &str = "allow_session";
 pub(super) const DENY: &str = "deny";
 
+/// Why no answer came back from the client.
+pub(super) enum Unasked {
+    /// Nobody answered before the deadline.
+    Unanswered,
+    /// The question could not be put or its answer could not be read.
+    Unreachable(String),
+}
+
 /// Something that can put one question to the person and report the client's answer.
 pub(super) trait Elicit {
-    /// The `result` of the client's response, or `None` when it answered with an error, did
-    /// not answer in time, or the input closed.
-    fn elicit(&mut self, message: &str, schema: Value) -> Option<Value>;
+    /// The `result` of the client's response, `null` when it answered with an error.
+    fn elicit(&mut self, message: &str, schema: Value) -> Result<Value, Unasked>;
 }
 
 /// What the server knows about the person it could ask.
@@ -65,6 +72,19 @@ pub(crate) fn not_allowed(sender: &str, recipient: &str) -> Refusal {
         Resolution::no_command(
             NoCommandReason::OperatorKnowledge,
             "the person's own decision; ask them rather than asking again",
+        ),
+    )
+}
+
+pub(crate) fn question_failed(detail: &str) -> Refusal {
+    Refusal::unavailable(
+        "message-question-failed",
+        format!(
+            "the question could not be put to the person or answered: {detail}; nothing was recorded"
+        ),
+        Resolution::no_command(
+            NoCommandReason::WorldAction,
+            "a client that is still connected; the person was never asked, so this is not their answer",
         ),
     )
 }
@@ -115,7 +135,9 @@ fn holder_of(context: &GateContext, issue: u64) -> Result<String, Refusal> {
     let comments = opened
         .timeline(&repo, issue)
         .map_err(|failure| holder_unreadable(&failure.detail()))?;
-    let now = session::stamp_of(session::now_seconds().unwrap_or_default());
+    let now = session::stamp_of(
+        session::now_seconds().ok_or_else(|| holder_unreadable("the clock could not be read"))?,
+    );
     crate::transport::claim::holding(&comments, &now)
         .holder
         .ok_or_else(|| issue_has_no_holder(issue))
@@ -198,7 +220,12 @@ pub(super) fn send_message(
             &question(sender, &recipient, held, text),
             requested_schema(),
         );
-        match answer.as_ref().map_or(DENY, choice_of) {
+        let answer = match answer {
+            Ok(answer) => answer,
+            Err(Unasked::Unanswered) => Value::Null,
+            Err(Unasked::Unreachable(detail)) => return Err(refused(question_failed(&detail))),
+        };
+        match choice_of(&answer) {
             ALLOW_ONCE => {}
             ALLOW_SESSION => {
                 consent.grants.insert(sender.to_owned());

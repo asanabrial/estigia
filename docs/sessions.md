@@ -102,7 +102,10 @@ about before any row is written, through MCP elicitation (protocol `2025-06-18`)
 - `accept` with `allow_once` sends. `accept` with `allow_session` sends and remembers the grant, keyed by the
   sender's run id, until that server process exits (one MCP server process is one agent session). Everything else
   is refused with `message-not-allowed` and nothing is recorded: `deny`, `decline`, `cancel`, an unknown choice, an
-  error response, a closed input, or no answer in 15 minutes.
+  error response, or no answer in 15 minutes. A question that could not be put or whose answer could not be read
+  (a failed write, a read error, a closed input) is refused `message-question-failed` instead, because the person
+  was never asked and the refusal must not read as their decision.
+- An issue number is resolved against the clock; an unreadable clock is `message-holder-unreadable`, never a holder.
 - While the server waits, any other line from the client is queued and served after the tool call answers. Requests
   are still served one at a time.
 - The tool has no argument that skips the question, and the binary cannot tell whether a person asked the agent to
