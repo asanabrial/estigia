@@ -69,6 +69,7 @@ nothing and leaves the rows pending; a delivery that failed is never recorded as
 | Pi, idle | A poll every 10 seconds between turns | The extension runs `estigia session deliver --peek --json`; with mail it calls `pi.sendMessage` with `deliverAs: "followUp"` and `triggerTurn: true`, and only when that returned without throwing it runs `estigia session deliver --through <id>`. See [Waking an idle Pi session](#waking-an-idle-pi-session). |
 | OpenCode 1 | `tool.execute.after` of the gate plugin | The text is appended to the tool's string result, after the plugin registered the session with `estigia session start`. |
 | OpenCode 2 | `execute.after` of the gate plugin | `ctx.session.prompt` with `delivery: "steer"` (the accelerator); when the service is absent or throws, `ctx.session.synthetic`. With neither function the mailbox is not read and the rows stay pending. |
+| OpenCode 2, idle | A poll every 10 seconds between turns | The plugin runs `estigia session deliver --peek --json`; with mail it calls `ctx.session.prompt` with `delivery: "queue"`, and only when that resolved it runs `estigia session deliver --through <id>`. See [Waking an idle OpenCode session](#waking-an-idle-opencode-session). |
 
 ### Waking an idle Pi session
 
@@ -95,6 +96,30 @@ It was also run once live, on Pi 1.1.0 on 2026-10-15. An interactive session loa
 idle after one turn. A message sent to it with `estigia sessions send` started a turn within 30 seconds with no
 input, and the row was stamped delivered. Not measured live: a `sendMessage` that fails, and mail arriving while a
 turn runs.
+
+### Waking an idle OpenCode session
+
+OpenCode 2 only; OpenCode 1 (the function export) has no event stream the plugin uses and is not woken. The gate plugin
+subscribes to `ctx.event.subscribe` (resubscribing after one second when the stream ends or fails, as the loop plugin
+does) and reads four events: `session.created`, `session.execution.started`, and the terminal
+`session.execution.succeeded`, `session.execution.failed` and `session.execution.interrupted`. A root session is idle
+from a terminal event until the next `session.execution.started`; a session with a `parentID`, learned from
+`session.created` or from `ctx.session.get`, is never polled, and neither is one that has not yet finished a turn.
+
+While a session is idle the plugin ticks every 10 seconds (`WAKE_INTERVAL_MS`), never two ticks in flight for one
+session, and a tick is `estigia session deliver --peek --json` followed, with mail, by `ctx.session.prompt` with
+`delivery: "queue"` and then `estigia session deliver --through <id>`. A prompt that throws, a host with no
+`session.prompt`, or a session that began executing while the peek was in flight, takes nothing, and the rows stay
+pending for `execute.after`. If the take fails after the prompt resolved the rows are delivered a second time. Polling
+stops at `session.execution.started` and when the plugin is disposed.
+
+That a `queue` prompt starts a turn on an idle session is not read from OpenCode's own source: the loop plugin in
+`src/setup/plugin.rs` (`enqueue`, reacting to `session.execution.succeeded`) relies on it, against OpenCode 2.0.28.
+The wake is driven under `node` against a stand-in host and `estigia`. It was also run once live, on OpenCode 2.0.28,
+2026-10-15, as an interactive session with a private server (`opencode --standalone`), whose configuration loaded only
+this plugin. The session was left idle after one turn. A message sent with `estigia sessions send` then started a turn
+with no input, and the row was stamped delivered. The prompt began with the same "not from your user" framing that
+`PreToolUse` delivery uses.
 
 What delivery refuses to do:
 
@@ -230,9 +255,8 @@ Codex and OpenCode.
   a turn when the loop is on. A Claude Code session is woken while idle for up to 3600 seconds after its last turn
   ended (the waiter's `timeout`); after that, and in a session set up before the waiter existed, mail waits for the next
   turn's `PreToolUse`.
-- Only Claude Code and Pi wake an idle session. Codex's `Stop` hook runs synchronously and continues the turn that is
-  ending; it cannot start one. OpenCode's `steer` is used at the hook point, where the session is mid-turn;
-  nothing watches the mailbox between hook points, because the plugin is told nothing when a row is written, and
-  OpenCode's `generate` is not used. Codex `turn/steer` needs the daemon and is not built.
+- Only Claude Code, Pi and OpenCode 2 wake an idle session. Codex's `Stop` hook runs synchronously and continues the turn that is
+  ending; it cannot start one. OpenCode 2 is woken by a poll, not by a notice that a row was written, and
+  OpenCode 1 is not woken; OpenCode's `generate` is not used. Codex `turn/steer` needs the daemon and is not built.
 
 [`honesty.md`](honesty.md) records what this does not measure.

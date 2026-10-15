@@ -22014,6 +22014,266 @@ fn the_opencode_plugin_leaves_the_mailbox_unread_when_the_host_offers_no_way_to_
     );
 }
 
+const OPENCODE_WAKE_DRIVER: &str = r#"import plugin from "./estigia-workflow-authority.mjs";
+
+const settle = async () => {
+  for (let turn = 0; turn < 8; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+};
+
+const scenario = async ({ session, mail = "WAKE", through = 7, promptFails = false, noPrompt = false, parents = {}, hold = false }, steps) => {
+  const log = [];
+  const timers = new Map();
+  let next = 1;
+  globalThis.setInterval = (fn, ms) => {
+    const id = { id: next++, ms, unref() {} };
+    timers.set(id, { fn, ms });
+    return id;
+  };
+  globalThis.clearInterval = (id) => timers.delete(id);
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  globalThis.Bun = {
+    $: (strings, ...values) => {
+      const chain = {
+        cwd() { return chain; },
+        quiet() { return chain; },
+        async nothrow() {
+          const extra = [values[4]].flat().map(String);
+          if (values[1] === "deliver" && extra.includes("--peek")) {
+            log.push(["peek", values[2], values[3], ...extra]);
+            if (hold) await held;
+            return { exitCode: 0, stdout: JSON.stringify({ messages: mail, through }) };
+          }
+          log.push([values[1] === "deliver" ? "through" : String(values[1]), values[2], ...extra]);
+          return { exitCode: 0, stdout: "" };
+        },
+      };
+      return chain;
+    },
+  };
+  const queue = [];
+  let wakeReader;
+  let aborted = false;
+  let subscriptions = 0;
+  const ctx = {
+    location: { directory: "/p" },
+    tool: { hook: async () => {} },
+    session: {
+      get: async ({ sessionID }) => ({ data: { parentID: parents[sessionID] } }),
+    },
+    event: {
+      subscribe({ signal }) {
+        subscriptions += 1;
+        signal.addEventListener("abort", () => { aborted = true; wakeReader?.(); });
+        return (async function* () {
+          while (!signal.aborted) {
+            if (queue.length === 0) await new Promise((resolve) => { wakeReader = resolve; });
+            while (queue.length > 0) yield queue.shift();
+          }
+        })();
+      },
+    },
+  };
+  if (!noPrompt) {
+    ctx.session.prompt = async (argument) => {
+      log.push(["prompt", argument]);
+      if (promptFails) throw new Error("the host refused");
+    };
+  }
+  const dispose = await plugin.setup(ctx);
+  const emit = async (type, data) => {
+    queue.push({ type, data });
+    wakeReader?.();
+    await settle();
+  };
+  const tick = async () => {
+    await Promise.all([...timers.values()].map((timer) => timer.fn()));
+    await settle();
+  };
+  const state = { emit, tick, timers, dispose, release: () => release(), log };
+  await steps(state);
+  const out = { log, timers: [...timers.values()].map((timer) => timer.ms), aborted, subscriptions };
+  return out;
+};
+
+const results = {};
+
+results.idle = await scenario({ session: "ses_idle" }, async (w) => {
+  await w.emit("session.execution.succeeded", { sessionID: "ses_idle" });
+  await w.tick();
+});
+
+results.failed_turn = await scenario({}, async (w) => {
+  await w.emit("session.execution.failed", { sessionID: "ses_failed" });
+  await w.tick();
+});
+
+results.refused = await scenario({ promptFails: true }, async (w) => {
+  await w.emit("session.execution.succeeded", { sessionID: "ses_refused" });
+  await w.tick();
+});
+
+results.no_prompt = await scenario({ noPrompt: true }, async (w) => {
+  await w.emit("session.execution.succeeded", { sessionID: "ses_bare" });
+  await w.tick();
+});
+
+results.running = await scenario({}, async (w) => {
+  await w.emit("session.execution.succeeded", { sessionID: "ses_run" });
+  await w.emit("session.execution.started", { sessionID: "ses_run" });
+  await w.tick();
+});
+
+results.never_idle = await scenario({}, async (w) => {
+  await w.emit("session.execution.started", { sessionID: "ses_new" });
+  await w.tick();
+});
+
+results.child_created = await scenario({}, async (w) => {
+  await w.emit("session.created", { sessionID: "ses_kid", parentID: "ses_root" });
+  await w.emit("session.execution.succeeded", { sessionID: "ses_kid" });
+  await w.tick();
+});
+
+results.child_looked_up = await scenario({ parents: { ses_kid2: "ses_root" } }, async (w) => {
+  await w.emit("session.execution.succeeded", { sessionID: "ses_kid2" });
+  await w.tick();
+});
+
+results.disposed = await scenario({}, async (w) => {
+  await w.emit("session.execution.succeeded", { sessionID: "ses_gone" });
+  w.dispose();
+  await w.tick();
+});
+
+results.in_flight = await scenario({ hold: true }, async (w) => {
+  await w.emit("session.execution.succeeded", { sessionID: "ses_slow" });
+  const first = [...w.timers.values()].map((timer) => timer.fn());
+  const second = [...w.timers.values()].map((timer) => timer.fn());
+  await settle();
+  w.release();
+  await Promise.all([...first, ...second]);
+  await settle();
+});
+
+results.started_during_peek = await scenario({ hold: true }, async (w) => {
+  await w.emit("session.execution.succeeded", { sessionID: "ses_busy" });
+  const polled = [...w.timers.values()].map((timer) => timer.fn());
+  await settle();
+  await w.emit("session.execution.started", { sessionID: "ses_busy" });
+  w.release();
+  await Promise.all(polled);
+  await settle();
+});
+
+console.log(JSON.stringify(results));
+"#;
+
+fn run_opencode_wake_driver() -> &'static serde_json::Value {
+    static SAID: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+    SAID.get_or_init(|| {
+        let ran = run_opencode_driver(OPENCODE_WAKE_DRIVER);
+        serde_json::from_slice(&ran.stdout).expect("the driver prints JSON")
+    })
+}
+
+fn wake_kinds(case: &serde_json::Value) -> Vec<String> {
+    case["log"]
+        .as_array()
+        .expect("the log")
+        .iter()
+        .map(|entry| entry[0].as_str().unwrap_or_default().to_string())
+        .collect()
+}
+
+#[test]
+fn an_idle_opencode_root_session_with_mail_gets_one_queued_prompt_and_then_a_take_through_the_peeked_row()
+ {
+    let said = run_opencode_wake_driver();
+    for case in ["idle", "failed_turn"] {
+        let ran = &said[case];
+        assert_eq!(ran["timers"], serde_json::json!([10000]), "{case}: {ran}");
+        assert_eq!(
+            wake_kinds(ran),
+            ["start", "peek", "prompt", "through"],
+            "{case}: {ran}"
+        );
+        let log = ran["log"].as_array().expect("the log");
+        assert_eq!(
+            log[1],
+            serde_json::json!(["peek", log[1][1], "opencode", "--peek", "--json"]),
+            "{case}"
+        );
+        assert_eq!(log[2][1]["delivery"], "queue", "{case}");
+        assert_eq!(log[2][1]["text"], "WAKE", "{case}");
+        assert_eq!(log[2][1]["sessionID"], log[1][1], "{case}");
+        assert_eq!(log[3][2], "--through", "{case}");
+        assert_eq!(log[3][3], "7", "{case}");
+    }
+}
+
+#[test]
+fn an_opencode_wake_that_the_host_refuses_or_cannot_make_leaves_the_rows_pending() {
+    let said = run_opencode_wake_driver();
+    assert_eq!(
+        wake_kinds(&said["refused"]),
+        ["start", "peek", "prompt"],
+        "a refused prompt was followed by a take: {}",
+        said["refused"]
+    );
+    assert_eq!(
+        said["no_prompt"]["log"],
+        serde_json::json!([]),
+        "a host with no session.prompt had its mailbox read"
+    );
+    assert_eq!(said["no_prompt"]["subscriptions"], 0);
+}
+
+#[test]
+fn an_opencode_session_is_polled_only_while_it_is_idle_and_a_root() {
+    let said = run_opencode_wake_driver();
+    for case in ["running", "never_idle", "child_created", "child_looked_up"] {
+        assert_eq!(
+            said[case]["timers"],
+            serde_json::json!([]),
+            "{case}: {}",
+            said[case]
+        );
+        assert_eq!(
+            said[case]["log"],
+            serde_json::json!([]),
+            "{case}: {}",
+            said[case]
+        );
+    }
+}
+
+#[test]
+fn disposing_the_opencode_plugin_stops_the_poll_and_the_event_stream() {
+    let said = run_opencode_wake_driver();
+    let ran = &said["disposed"];
+    assert_eq!(ran["timers"], serde_json::json!([]), "{ran}");
+    assert_eq!(ran["log"], serde_json::json!([]), "{ran}");
+    assert_eq!(ran["aborted"], true, "{ran}");
+}
+
+#[test]
+fn two_opencode_polls_are_never_in_flight_for_one_session_and_a_session_that_started_meanwhile_is_not_prompted()
+ {
+    let said = run_opencode_wake_driver();
+    let peeks = wake_kinds(&said["in_flight"])
+        .iter()
+        .filter(|kind| *kind == "peek")
+        .count();
+    assert_eq!(peeks, 1, "{}", said["in_flight"]);
+    assert_eq!(
+        wake_kinds(&said["started_during_peek"]),
+        ["start", "peek"],
+        "a session that began executing during the peek was prompted: {}",
+        said["started_during_peek"]
+    );
+}
+
 #[test]
 fn pi_installs_reports_and_removes_the_subagent_runner_on_every_install() {
     let (home, options) = sandbox();

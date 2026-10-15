@@ -140,6 +140,127 @@ const before = (tool, args, cwd, shell, session) => {{
 
 const introduced = new Set();
 
+const WAKE_INTERVAL_MS = 10000;
+const RESUBSCRIBE_MS = 1000;
+const IDLED = new Set([
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.execution.interrupted",
+]);
+
+const askMailbox = async (shell, cwd, session, verb, extra) => {{
+  try {{
+    const answer = await shell`${{ESTIGIA}} session ${{verb}} --session-id ${{session}} --runtime ${{RUNTIME}} ${{extra}}`
+      .cwd(cwd)
+      .quiet()
+      .nothrow();
+    if (answer?.exitCode === 0) return String(answer.stdout ?? "").trim();
+    console.error(`estigia: session ${{verb}} did not answer (exit ${{answer?.exitCode}})`);
+  }} catch (error) {{
+    console.error(`estigia: session ${{verb}} could not be run (${{String(error?.message ?? error).trim()}})`);
+  }}
+  return undefined;
+}};
+
+const peeked = (text) => {{
+  try {{
+    const answer = JSON.parse(text);
+    return typeof answer?.messages === "string" && Number.isInteger(answer?.through)
+      ? {{ text: answer.messages, through: answer.through }}
+      : undefined;
+  }} catch {{
+    return undefined;
+  }}
+}};
+
+const wake = async (ctx, shell, cwd, sessionID, idle) => {{
+  if (!introduced.has(sessionID)) {{
+    introduced.add(sessionID);
+    await askMailbox(shell, cwd, sessionID, "start", []);
+  }}
+  const found = peeked(await askMailbox(shell, cwd, sessionID, "deliver", ["--peek", "--json"]));
+  if (found === undefined || !idle.has(sessionID)) return;
+  try {{
+    await ctx.session.prompt({{ sessionID, text: found.text, delivery: "queue" }});
+  }} catch (error) {{
+    console.error(`estigia: waking the session failed, so the mail stays pending (${{String(error?.message ?? error).trim()}})`);
+    return;
+  }}
+  await askMailbox(shell, cwd, sessionID, "deliver", ["--through", String(found.through)]);
+}};
+
+const watchIdle = (ctx, cwd) => {{
+  const controller = new AbortController();
+  const born = new Map();
+  const idle = new Map();
+  const polling = new Set();
+  const stop = (sessionID) => {{
+    const timer = idle.get(sessionID);
+    if (timer !== undefined) clearInterval(timer);
+    idle.delete(sessionID);
+  }};
+  const isChild = async (sessionID) => {{
+    if (born.has(sessionID)) return born.get(sessionID);
+    let child = false;
+    try {{
+      const parent = (await ctx.session.get({{ sessionID }}))?.data?.parentID;
+      child = typeof parent === "string" && parent !== "";
+    }} catch {{}}
+    born.set(sessionID, child);
+    return child;
+  }};
+  const start = (sessionID) => {{
+    if (idle.has(sessionID)) return;
+    const timer = setInterval(() => {{
+      if (polling.has(sessionID)) return;
+      polling.add(sessionID);
+      return wake(ctx, globalThis.Bun?.$, cwd, sessionID, idle)
+        .catch(() => {{}})
+        .finally(() => polling.delete(sessionID));
+    }}, WAKE_INTERVAL_MS);
+    timer?.unref?.();
+    idle.set(sessionID, timer);
+  }};
+  const react = async (event) => {{
+    const sessionID = event?.data?.sessionID;
+    if (typeof sessionID !== "string" || sessionID === "") return;
+    if (event.type === "session.created") {{
+      const parent = event.data.parentID;
+      born.set(sessionID, typeof parent === "string" && parent !== "");
+    }} else if (event.type === "session.execution.started") {{
+      stop(sessionID);
+    }} else if (IDLED.has(event.type) && !(await isChild(sessionID))) {{
+      start(sessionID);
+    }}
+  }};
+  (async () => {{
+    while (!controller.signal.aborted) {{
+      let why = "the event stream ended";
+      try {{
+        for await (const event of ctx.event.subscribe({{ signal: controller.signal }})) {{
+          if (controller.signal.aborted) return;
+          await react(event);
+        }}
+      }} catch (error) {{
+        why = `the event stream failed (${{String(error?.message ?? error).trim()}})`;
+      }}
+      if (controller.signal.aborted) return;
+      console.error(`estigia: ${{why}}; subscribing again`);
+      await new Promise((resolve) => {{
+        const timer = setTimeout(resolve, RESUBSCRIBE_MS);
+        controller.signal.addEventListener("abort", () => {{
+          clearTimeout(timer);
+          resolve();
+        }}, {{ once: true }});
+      }});
+    }}
+  }})();
+  return () => {{
+    controller.abort();
+    for (const sessionID of [...idle.keys()]) stop(sessionID);
+  }};
+}};
+
 const mailOf = async (shell, cwd, session) => {{
   if (typeof shell !== "function" || typeof session !== "string" || session.trim() === "") return "";
   const ask = async (verb) => {{
@@ -219,6 +340,9 @@ export default {{
       }});
     }} catch (error) {{
       console.error(`estigia: this host takes no execute.after hook, so no mail is delivered (${{String(error?.message ?? error).trim()}})`);
+    }}
+    if (typeof ctx?.session?.prompt === "function" && typeof ctx?.event?.subscribe === "function") {{
+      return watchIdle(ctx, cwd);
     }}
   }},
   // OpenCode 1 reads the default object and hands `server` the same context the
