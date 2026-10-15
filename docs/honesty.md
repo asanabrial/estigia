@@ -428,6 +428,14 @@ pointer that leaves it names the document it points at.
   against the one `review_status` offers at admission, and a result for a receipt the review has
   moved past is refused `capture-result-stale` with nothing recorded.
 
+  - **The relay is measured under `node` against stand-in shells, and `bun` only by hand.** The tests
+    drive the generated plugin with a stand-in whose command objects honour the `<` redirect and have no
+    `.stdin()`; none runs it under Bun, because that would make `bun` a second required interpreter in CI.
+    The redirect form and a 200,000-byte answer were read to EOF by a child under Bun 1.3.1 and OpenCode
+    2.0.28's event shapes were read from its binary, not from a live review: no run through a live host
+    has admitted an answer, and a host that changes `result.content` or the `(input, output)` shape
+    leaves the plugin inert or refusing, never admitting a wrong answer.
+
   - **A relayed reviewer runs as the built-in `general` sub-agent, with its tool grant.** The
     `relay: true` answer on an OpenCode run carries `launch`, naming `general` and the marker prompt
     `<!-- estigia:review name=<role> -->`, because `estigia setup opencode` installs no reviewer agent

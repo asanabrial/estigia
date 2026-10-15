@@ -637,6 +637,17 @@ then a coded `unavailable` naming the CLI to install. A run id whose runtime can
 second order and never takes the relay ahead of a CLI. The detached runner's own selection has no host
 and never relays.
 
+The slot a launch was relayed for is remembered from `execute.before` by the call's `id`, because the
+prompt `before` puts in the task input carries no marker and the sub-agent is `general`; `execute.after` reads it
+there first and forgets it. The host builds the tool's answer from `result.content` (an array of parts) and
+`result.output`, so the plugin joins the text parts of `content` for admission, else `output`, and
+replaces both with the admission note. Every command it runs has its standard input attached with the
+shell's `<` redirect, an empty one for `prompt`, because Bun's shell has no `.stdin()` and a command
+left without one inherits the host's terminal and blocks on it; where that cannot be attached the plugin
+refuses with `authority_unavailable` and runs nothing. The OpenCode 1 `server` path takes the host's
+`(input, output)` hooks, with the arguments in `output.args` before and the text in `output.output` after, and
+throws `review-admission-refused` when the binary refuses an answer.
+
 A plain `estigia setup opencode --uninstall` removes it, as it removes every plugin Estigia wrote: a
 file left behind that shells out to an uninstalled binary would be a dangling file, not an
 uninstall. A file carrying no `estigia:review-relay` marker is neither replaced nor removed. What
