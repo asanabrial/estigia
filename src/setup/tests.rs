@@ -15202,7 +15202,7 @@ fn uninstall_leaves_an_unowned_binary_launched_reviewer_alone() {
 /// what the plugin did.
 const REVIEW_RELAY_DRIVER: &str = r#"import plugin, { EstigiaReviewRelay } from "./estigia-review-relay.mjs";
 
-const state = { calls: [], answers: {}, throwAwait: false };
+const state = { calls: [], answers: {}, throwAwait: false, exitsEarly: false };
 
 const makeShell = () => (strings, ...values) => {
   const rendered = values.map(String);
@@ -15217,9 +15217,12 @@ const makeShell = () => (strings, ...values) => {
   });
   const scripted = state.answers[action] ?? { exitCode: 0, stdout: "", stderr: "" };
   const chain = {
+    ...(state.exitsEarly
+      ? { exitCode: scripted.exitCode, stdout: scripted.stdout, stderr: scripted.stderr }
+      : {}),
     then: (resolve, reject) =>
-      state.throwAwait
-        ? reject(new Error("the shell failed"))
+      state.throwAwait || state.exitsEarly
+        ? reject(new Error("EPIPE: the relay exited before reading the answer"))
         : resolve({ exitCode: scripted.exitCode, stdout: scripted.stdout, stderr: scripted.stderr }),
     cwd(directory) {
       call.cwd = String(directory);
@@ -15339,6 +15342,30 @@ await after(thrown);
 out.thrown_status = thrown.status;
 out.thrown_result = thrown.result;
 state.throwAwait = false;
+
+state.exitsEarly = true;
+state.answers = {
+  admit: {
+    exitCode: 1,
+    stdout: "",
+    stderr: JSON.stringify({
+      code: "capture-result-stale",
+      message: "the review moved after job j2 was launched",
+    }),
+  },
+};
+const early = {
+  tool: "task",
+  sessionID: "ses_relay",
+  input: { subagent_type: "review-risk" },
+  status: "completed",
+  result: "EARLY RAW",
+};
+await after(early);
+out.early_status = early.status;
+out.early_error = early.error;
+out.early_result = early.result;
+state.exitsEarly = false;
 const v4Admit = () => {
   try {
     throw new Error("EPIPE: the relay exited before reading the answer");
@@ -15470,6 +15497,29 @@ await v1Hooks["tool.execute.after"](
 );
 out.v1_output = v1Output.output;
 out.v1_delivered = (await state.calls.at(-1).stdinBlob?.text()) ?? null;
+
+state.answers = {
+  prompt: { exitCode: 0, stdout: "V1 PROMPT" },
+  admit: {
+    exitCode: 1,
+    stdout: "",
+    stderr: JSON.stringify({
+      code: "capture-result-stale",
+      message: "the review moved after job j3 was launched",
+    }),
+  },
+};
+const v1Refused = { title: "t", output: "V1 REFUSED RAW ANSWER", metadata: {} };
+out.v1_refusal_thrown = null;
+try {
+  await v1Hooks["tool.execute.after"](
+    { tool: "task", sessionID: "ses_v1", callID: "call_v1r", args: v1Args },
+    v1Refused,
+  );
+} catch (error) {
+  out.v1_refusal_thrown = error.code;
+}
+out.v1_refusal_output = v1Refused.output;
 
 const v1 = await EstigiaReviewRelay({
   $: makeShell(),
@@ -15622,6 +15672,24 @@ fn the_review_relay_keeps_the_reason_when_the_relay_exits_before_reading_stdin()
             .contains("RAW"),
         "a shell that threw left the reviewer's raw answer for the orchestrator: {cases}"
     );
+    assert_eq!(
+        cases["early_status"], "error",
+        "a relay that exited before reading the answer was not reported as a refusal: {cases}"
+    );
+    let early = cases["early_error"]
+        .as_str()
+        .expect("the refusal the orchestrator reads after an early exit");
+    assert!(
+        early.contains("the review moved after job j2 was launched"),
+        "the reason a relay gave before exiting early was lost: {early}"
+    );
+    assert!(
+        !cases["early_result"]
+            .as_str()
+            .unwrap_or("")
+            .contains("EARLY RAW"),
+        "an early exit left the reviewer's raw answer for the orchestrator: {cases}"
+    );
     let v4 = cases["v4_lost_reason"].as_str().expect("the v4 shape");
     assert!(
         !v4.contains("the review moved"),
@@ -15740,6 +15808,18 @@ fn the_review_relay_serves_the_opencode_1_hook_shape() {
     assert!(
         !output.contains("V1 RAW ANSWER") && output.contains("admitted"),
         "{output}"
+    );
+    assert_eq!(
+        cases["v1_refusal_thrown"], "review-admission-refused",
+        "a refused admission did not throw on the OpenCode 1 hook: {cases}"
+    );
+    let refused = cases["v1_refusal_output"]
+        .as_str()
+        .expect("the output the host reads after a refusal");
+    assert!(
+        refused.contains("the review moved after job j3 was launched")
+            && !refused.contains("V1 REFUSED RAW ANSWER"),
+        "the raw answer reached the calling model on a refusal: {refused}"
     );
 }
 
