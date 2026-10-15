@@ -26,11 +26,17 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 permissions:
   contents: read
 
 jobs:
+  # The job id and the matrix are the required status contexts on main
+  # (`check (ubuntu-latest)` and its two siblings): renaming either, or folding
+  # the matrix into another job, leaves a required context that never reports.
+  # `lint` and `release` run beside it rather than after it, so the slowest
+  # suite sets the wall time instead of the sum of every stage.
   check:
     strategy:
       fail-fast: false
@@ -73,13 +79,6 @@ jobs:
         with:
           cache-on-failure: true
 
-      # No `--locked`: rustfmt resolves no dependencies and takes no such flag.
-      - name: formatting
-        run: cargo fmt --all --check
-
-      - name: lints
-        run: cargo clippy --all-targets --all-features --locked
-
       # `--no-fail-fast` because `cargo test` stops at the first target that
       # fails and skips every later one. Measured with a failing lib test: the
       # bare command prints **one** `test result` line and this one prints nine.
@@ -92,8 +91,55 @@ jobs:
       - name: tests
         run: cargo test --all-features --no-fail-fast --locked
 
+  # Per platform, because `cfg(windows)` and `cfg(unix)` code is only linted and
+  # documented on the platform that compiles it.
+  lint:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      # `cache-on-failure` for the reason given on the `check` job's cache step.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # No `--locked`: rustfmt resolves no dependencies and takes no such flag.
+      - name: formatting
+        run: cargo fmt --all --check
+
+      - name: lints
+        run: cargo clippy --all-targets --all-features --locked
+
       - name: documentation
         run: cargo doc --no-deps --all-features --locked
+
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      # `cache-on-failure` for the reason given on the `check` job's cache step.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: release build
         run: cargo build --release --locked
