@@ -910,10 +910,13 @@ const reviewerEvent = (event) => {
 
 __EXIT_CLASS__
 
-// The relay is asked and nothing is decided here. The output is handed over on
-// standard input, but a failed delivery is swallowed: the relay may exit before
-// it reads the whole answer, and the reason it refused is on standard output,
-// which is read to EOF before anything is treated as the outcome.
+// The relay is asked and nothing is decided here. Standard input is always
+// attached with the shell's own `<` redirect, an empty one for `prompt`: Bun's
+// shell has no `.stdin()`, and a command left without one inherits the host's
+// terminal and blocks on it. Where the input cannot be attached nothing is run.
+// A failed delivery is swallowed because the relay may exit before it reads the
+// whole answer, and the reason it refused is on standard output, which is read
+// to EOF before anything is treated as the outcome.
 const ask = async (shell, cwd, action, name, session, stdin) => {
   const run = shellOf(shell);
   if (typeof run !== "function") {
@@ -922,28 +925,28 @@ const ask = async (shell, cwd, action, name, session, stdin) => {
       message: "estigia: the review relay could not be run (this host supplied no shell)",
     };
   }
+  if (typeof Blob !== "function") {
+    return {
+      code: "authority_unavailable",
+      message:
+        "estigia: the review relay was not run (this host cannot attach standard input to it)",
+    };
+  }
+  const input = new Blob([stdin ?? ""]);
   const identified = typeof session === "string" && session.trim() !== "";
   let command;
   try {
     command = identified
-      ? run`${ESTIGIA} review ${action} --name ${name} --session-id ${session} --runtime ${RUNTIME}`
+      ? run`${ESTIGIA} review ${action} --name ${name} --session-id ${session} --runtime ${RUNTIME} < ${input}`
           .cwd(cwd)
           .quiet()
           .nothrow()
-      : run`${ESTIGIA} review ${action} --name ${name}`.cwd(cwd).quiet().nothrow();
+      : run`${ESTIGIA} review ${action} --name ${name} < ${input}`.cwd(cwd).quiet().nothrow();
   } catch (error) {
     return {
       code: "authority_unavailable",
       message: `estigia: the review relay could not be started (${errorText(error)})`,
     };
-  }
-  if (stdin !== null && typeof command?.stdin === "function") {
-    try {
-      const piped = command.stdin(new Blob([stdin]));
-      if (piped && typeof piped.catch === "function") piped.catch(() => {});
-    } catch (error) {
-      // Read below: the reason is on standard output.
-    }
   }
   let answer;
   try {
@@ -968,25 +971,35 @@ const putPrompt = (event, prompt) => {
 
 const putResult = (event, note) => {
   if (!event || typeof event !== "object") return;
-  if (event.result && typeof event.result === "object") {
-    for (const field of ["result", "output", "text", "content"]) delete event.result[field];
-    event.result.result = note;
-  } else {
+  if (typeof event.result === "string") {
     event.result = note;
+    return;
   }
+  if (!event.result || typeof event.result !== "object") event.result = {};
+  for (const field of ["result", "text"]) delete event.result[field];
+  event.result.output = note;
+  event.result.content = [{ type: "text", text: note }];
 };
 
 const rawOutput = (event) => {
   const result = event?.result;
   if (typeof result === "string") return result;
   if (result && typeof result === "object") {
-    for (const field of ["result", "output", "text", "content"]) {
+    if (Array.isArray(result.content)) {
+      const parts = result.content
+        .map((part) => (typeof part === "string" ? part : part?.text))
+        .filter((text) => typeof text === "string");
+      if (parts.length > 0) return parts.join("\n");
+    }
+    for (const field of ["output", "content", "result", "text"]) {
       if (typeof result[field] === "string") return result[field];
     }
     return JSON.stringify(result);
   }
   return String(result ?? "");
 };
+
+const slots = new Map();
 
 const before = async (event, cwd, shell) => {
   const name = reviewerEvent(event);
@@ -1003,10 +1016,14 @@ const before = async (event, cwd, shell) => {
     throw coded("authority_unavailable", "estigia: the review relay answered no prompt");
   }
   putPrompt(event, prompt);
+  if (event?.id !== undefined && event?.id !== null) slots.set(String(event.id), name);
 };
 
 const after = async (event, cwd, shell) => {
-  const name = reviewerEvent(event);
+  const key = event?.id !== undefined && event?.id !== null ? String(event.id) : null;
+  const remembered = key === null ? undefined : slots.get(key);
+  if (key !== null) slots.delete(key);
+  const name = remembered ?? reviewerEvent(event);
   if (!name) return;
   const asked = await ask(shell, cwd, "admit", name, event?.sessionID, rawOutput(event));
   if (asked.code) {
@@ -1024,12 +1041,31 @@ const after = async (event, cwd, shell) => {
   );
 };
 
-const relay = async ({ $, directory, worktree }) => ({
-  "tool.execute.before": async (event) =>
-    before(event, worktree ?? directory ?? process.cwd(), $),
-  "tool.execute.after": async (event) =>
-    after(event, worktree ?? directory ?? process.cwd(), $),
-});
+const relay = async ({ $, directory, worktree }) => {
+  const cwd = worktree ?? directory ?? process.cwd();
+  return {
+    "tool.execute.before": async (input, output) => {
+      const event = { tool: input?.tool, sessionID: input?.sessionID, id: input?.callID };
+      event.input = output?.args;
+      await before(event, cwd, $);
+    },
+    "tool.execute.after": async (input, output) => {
+      const event = {
+        tool: input?.tool,
+        sessionID: input?.sessionID,
+        id: input?.callID,
+        input: input?.args,
+        result: output?.output,
+      };
+      await after(event, cwd, $);
+      if (event.status === "error") {
+        output.output = event.error;
+        throw coded("review-admission-refused", event.error);
+      }
+      if (typeof event.result === "string") output.output = event.result;
+    },
+  };
+};
 
 export const EstigiaReviewRelay = relay;
 

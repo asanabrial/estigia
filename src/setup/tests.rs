@@ -15202,13 +15202,19 @@ fn uninstall_leaves_an_unowned_binary_launched_reviewer_alone() {
 /// what the plugin did.
 const REVIEW_RELAY_DRIVER: &str = r#"import plugin, { EstigiaReviewRelay } from "./estigia-review-relay.mjs";
 
-const state = { calls: [], answers: {}, breakStdin: false, throwAwait: false };
+const state = { calls: [], answers: {}, throwAwait: false };
 
-const makeShell = () => (_strings, ...values) => {
+const makeShell = () => (strings, ...values) => {
   const rendered = values.map(String);
   const action = rendered.find((value) => value === "prompt" || value === "admit") ?? "";
-  const call = { action, values: rendered, cwd: null, stdinBlob: null, stdinFailed: false };
+  const call = { action, values: rendered, cwd: null, stdinBlob: null, attached: false };
   state.calls.push(call);
+  values.forEach((value, index) => {
+    if (value instanceof Blob && /<\s*$/.test(strings[index])) {
+      call.stdinBlob = value;
+      call.attached = true;
+    }
+  });
   const scripted = state.answers[action] ?? { exitCode: 0, stdout: "", stderr: "" };
   const chain = {
     then: (resolve, reject) =>
@@ -15223,14 +15229,6 @@ const makeShell = () => (_strings, ...values) => {
       return chain;
     },
     nothrow() {
-      return chain;
-    },
-    stdin(blob) {
-      if (state.breakStdin) {
-        call.stdinFailed = true;
-        throw new Error("EPIPE: the relay exited before reading the answer");
-      }
-      call.stdinBlob = blob;
       return chain;
     },
   };
@@ -15295,7 +15293,6 @@ await before(viaSubagent);
 out.subagent_injected = viaSubagent.input.prompt;
 
 state.answers = { admit: { exitCode: 0, stdout: "{\"ok\":true}" } };
-state.breakStdin = false;
 const admitted = {
   tool: "task",
   sessionID: "ses_relay",
@@ -15317,7 +15314,6 @@ state.answers = {
     }),
   },
 };
-state.breakStdin = true;
 const stale = {
   tool: "task",
   sessionID: "ses_relay",
@@ -15352,7 +15348,6 @@ const v4Admit = () => {
 };
 out.v4_lost_reason = v4Admit();
 
-state.breakStdin = false;
 state.answers = {
   prompt: {
     exitCode: 3,
@@ -15406,6 +15401,75 @@ const v4Classify = (status, stderr) => {
   return said?.code ?? "authority_unavailable";
 };
 out.v4_unavailable = v4Classify(3, JSON.stringify({ code: "authority_unavailable" }));
+
+state.answers = {
+  prompt: { exitCode: 0, stdout: "MATERIALISED PROMPT" },
+  admit: { exitCode: 0, stdout: "{\"ok\":true}" },
+};
+const v2Input = {
+  subagent_type: "general",
+  description: "review",
+  prompt: "<!-- estigia:review name=review-lens --> go",
+};
+const v2Before = { tool: "task", sessionID: "ses_v2", id: "call_v2", agent: "build", input: v2Input };
+await before(v2Before);
+out.v2_prompt = v2Input.prompt;
+const v2Result = { content: [{ type: "text", text: "V2 REVIEWER ANSWER" }], metadata: { keep: true } };
+const v2After = {
+  tool: "task",
+  sessionID: "ses_v2",
+  id: "call_v2",
+  agent: "build",
+  input: v2Input,
+  status: "completed",
+  result: v2Result,
+};
+await after(v2After);
+out.v2_status = v2After.status;
+out.v2_content = v2After.result.content;
+out.v2_output = v2After.result.output ?? null;
+out.v2_metadata = v2After.result.metadata ?? null;
+out.v2_admit_session = state.calls.at(-1).values.includes("ses_v2");
+
+const unrelated = { tool: "task", sessionID: "ses_v2", id: "call_other", input: { subagent_type: "general", prompt: "x" }, status: "completed", result: { content: [{ type: "text", text: "KEEP" }] } };
+const callsBefore = state.calls.length;
+await after(unrelated);
+out.unrelated_untouched = state.calls.length === callsBefore && unrelated.result.content[0].text === "KEEP";
+
+const v2Error = { tool: "task", sessionID: "ses_v2", id: "call_v2b", input: { subagent_type: "review-risk" }, status: "completed", result: { output: "SECOND", content: [{ type: "text", text: "A" }, { type: "text", text: "B" }] } };
+await after(v2Error);
+out.joined_delivery = (await state.calls.at(-1).stdinBlob?.text()) ?? null;
+
+out.every_call_attached = state.calls.every((call) => call.attached);
+
+const realBlob = globalThis.Blob;
+globalThis.Blob = undefined;
+const unattachable = { tool: "task", sessionID: "ses_v2", id: "call_u", input: { subagent_type: "review-risk" }, status: "completed", result: "NEVER SENT" };
+const callsAtUnattachable = state.calls.length;
+await after(unattachable);
+globalThis.Blob = realBlob;
+out.unattachable_ran = state.calls.length - callsAtUnattachable;
+out.unattachable_status = unattachable.status;
+out.unattachable_error = unattachable.error;
+
+state.answers = {
+  prompt: { exitCode: 0, stdout: "V1 PROMPT" },
+  admit: { exitCode: 0, stdout: "{\"ok\":true}" },
+};
+const v1Hooks = await EstigiaReviewRelay({ $: makeShell(), directory: "/tmp/relay-project" });
+const v1Args = { subagent_type: "review-risk", prompt: "orchestrator" };
+await v1Hooks["tool.execute.before"](
+  { tool: "task", sessionID: "ses_v1", callID: "call_v1" },
+  { args: v1Args },
+);
+out.v1_prompt = v1Args.prompt;
+const v1Output = { title: "t", output: "V1 RAW ANSWER", metadata: {} };
+await v1Hooks["tool.execute.after"](
+  { tool: "task", sessionID: "ses_v1", callID: "call_v1", args: v1Args },
+  v1Output,
+);
+out.v1_output = v1Output.output;
+out.v1_delivered = (await state.calls.at(-1).stdinBlob?.text()) ?? null;
 
 const v1 = await EstigiaReviewRelay({
   $: makeShell(),
@@ -15581,6 +15645,101 @@ fn the_review_relay_keeps_unavailable_and_stale_apart() {
     assert_eq!(
         cases["v4_unavailable"], "stale_authority",
         "the fixture does not reproduce the v4 defect it claims to: {cases}"
+    );
+}
+
+/// OpenCode 2 hands `execute.after` an input whose prompt `execute.before` already
+/// replaced, and builds the tool's answer from `result.content` and `result.output`.
+/// The slot is remembered by the call's id, and the answer is read from the parts.
+#[test]
+fn the_review_relay_admits_the_answer_of_a_v2_call_by_the_id_before_remembered() {
+    let cases = run_review_relay_driver();
+    assert_eq!(
+        cases["v2_prompt"], "MATERIALISED PROMPT",
+        "the prompt was not materialised: {cases}"
+    );
+    let delivered: Vec<&str> = cases["delivered"]
+        .as_array()
+        .expect("what the relay received")
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .collect();
+    assert!(
+        delivered.contains(&"V2 REVIEWER ANSWER"),
+        "the answer of a call whose prompt `before` replaced was never admitted: {delivered:?}"
+    );
+    assert_eq!(
+        cases["joined_delivery"], "A\nB",
+        "the text parts of the content were not joined: {cases}"
+    );
+    assert_ne!(cases["v2_status"], "error", "{cases}");
+    assert_eq!(
+        cases["v2_content"],
+        serde_json::json!([{"type": "text", "text": cases["v2_output"]}]),
+        "the host builds its answer from content and output, and they must agree: {cases}"
+    );
+    let note = cases["v2_output"]
+        .as_str()
+        .expect("an output the host reads");
+    assert!(
+        note.contains("admitted") && !note.contains("V2 REVIEWER ANSWER"),
+        "the orchestrator was left something other than the admission note: {note}"
+    );
+    assert_eq!(
+        cases["v2_metadata"],
+        serde_json::json!({"keep": true}),
+        "{cases}"
+    );
+    assert_eq!(
+        cases["unrelated_untouched"], true,
+        "a call `before` never relayed was admitted or rewritten: {cases}"
+    );
+}
+
+/// Bun's shell has no `.stdin()`; an answer is attached with the `<` redirect, and
+/// an answer that cannot be attached is refused rather than run on an inherited
+/// terminal.
+#[test]
+fn the_review_relay_attaches_the_answer_by_redirect_and_never_runs_with_an_inherited_stdin() {
+    let cases = run_review_relay_driver();
+    assert_eq!(
+        cases["every_call_attached"], true,
+        "a command ran with its standard input left to the host: {cases}"
+    );
+    assert_eq!(
+        cases["unattachable_ran"], 0,
+        "an admission ran although its answer could not be attached: {cases}"
+    );
+    assert_eq!(cases["unattachable_status"], "error", "{cases}");
+    assert!(
+        cases["unattachable_error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("standard input"),
+        "the refusal does not say why: {cases}"
+    );
+    assert!(
+        !cases["unattachable_error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("NEVER SENT"),
+        "{cases}"
+    );
+}
+
+/// OpenCode 1 hooks are `(input, output)`: arguments in `output.args` before, the
+/// tool's text in `output.output` after.
+#[test]
+fn the_review_relay_serves_the_opencode_1_hook_shape() {
+    let cases = run_review_relay_driver();
+    assert_eq!(cases["v1_prompt"], "V1 PROMPT", "{cases}");
+    assert_eq!(cases["v1_delivered"], "V1 RAW ANSWER", "{cases}");
+    let output = cases["v1_output"]
+        .as_str()
+        .expect("the output the host reads");
+    assert!(
+        !output.contains("V1 RAW ANSWER") && output.contains("admitted"),
+        "{output}"
     );
 }
 

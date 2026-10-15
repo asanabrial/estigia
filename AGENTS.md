@@ -123,7 +123,7 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Eighty-four tests **require** `node` on the path, and all eighty-four drive the OpenCode plugins and
+   --no-deps`. Eighty-seven tests **require** `node` on the path, and all eighty-seven drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
    let a gate defect stand. Eight are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
@@ -145,11 +145,14 @@ a second copy that will disagree.
    `the_loop_plugin_stops_on_a_live_answer_that_names_no_issue`); eight drive the generic goal and loop
    plugin through `run_goal_loop_driver`, among them
    `the_generic_goal_judges_every_third_turn_and_continues_the_others_unasked` and
-   `the_generic_goal_judges_the_turn_that_reaches_its_cap`; four drive the review relay plugin —
+   `the_generic_goal_judges_the_turn_that_reaches_its_cap`; seven drive the review relay plugin —
    `the_review_relay_materialises_the_prompt_and_admits_the_answer`,
    `the_review_relay_intercepts_the_launch_the_relay_answer_prescribes`,
    `the_review_relay_keeps_the_reason_when_the_relay_exits_before_reading_stdin` and
-   `the_review_relay_keeps_unavailable_and_stale_apart` — and reproduce the two v4 relay defects; nine drive
+   `the_review_relay_keeps_unavailable_and_stale_apart`,
+   `the_review_relay_admits_the_answer_of_a_v2_call_by_the_id_before_remembered`,
+   `the_review_relay_attaches_the_answer_by_redirect_and_never_runs_with_an_inherited_stdin` and
+   `the_review_relay_serves_the_opencode_1_hook_shape` — the first four reproduce the two v4 relay defects; nine drive
    the Pi gate extension, `the_pi_extension_blocks_on_one_and_two_and_lets_a_gate_that_did_not_answer_through_with_a_word`,
    `the_pi_extension_gates_a_tool_by_the_shape_of_its_input_and_not_only_by_its_name`,
    `the_pi_extension_bounds_the_gate_call_and_shows_the_person_a_write_that_went_out_unchecked`,
@@ -214,7 +217,7 @@ a second copy that will disagree.
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that eighty-four tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that eighty-seven tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here
