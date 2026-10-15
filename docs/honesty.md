@@ -5986,6 +5986,12 @@ pointer that leaves it names the document it points at.
   - steering through `estigia_subagent_message`;
   - a query that times out after the background fix;
   - a child launched under an agent definition that restricts `--tools`.
+- **A reply can still be reported as answered after its child gave up.** When a child's query times out, the
+  child sends a withdraw frame and the parent forgets the query. Two windows remain. One is a reply that crosses
+  the withdraw in flight. The other is a withdraw that never arrives, in which case the parent's own expiry
+  (`WITHDRAW_GRACE_MS`, five seconds after the timeout) is all that closes it. In either window
+  `estigia_subagent_reply` answers `answered`, although the child never receives the text. No test covers
+  either window, a failed withdraw send, or a withdraw for an unknown request.
 - **Pi parent and child messages were first driven against a stand-in `pi` that is a Node script.** Reproduced first, by mutation: removing the running check on the steer, the
   `triggerTurn` option, the deletion of an answered request, the query timeout, the condition that registers
   the child-side tool, the answer text in the child's result and the steer send each turn exactly the
