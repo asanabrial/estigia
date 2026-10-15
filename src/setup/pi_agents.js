@@ -22,6 +22,7 @@ const WAITING_REFUSAL =
   "the parent is waiting on this child and cannot answer until it finishes; finish and put the question in the final answer";
 const MESSAGE_TYPE = "estigia-subagent-message";
 const QUERY_TIMEOUT_MS = 120000;
+const WITHDRAW_GRACE_MS = 5000;
 const SHORTCUT = "ctrl+alt+a";
 const HISTORY = "estigia-agent";
 const LOG_LINES = 200;
@@ -248,8 +249,16 @@ const relay = (run, text, details) => {
 };
 
 const onChild = (run, message) => {
-  if (run.status !== "running" || !filled(message?.text)) return;
+  if (run.status !== "running") return;
   const who = `Subagent ${run.id} (${run.label})`;
+  if (message?.kind === "withdraw" && run.queries.has(message.request_id)) {
+    clearTimeout(run.queries.get(message.request_id));
+    run.queries.delete(message.request_id);
+    note(run, `child stopped waiting (${message.request_id})`);
+    relay(run, `${who} stopped waiting for an answer to ${message.request_id}`, { kind: "withdrawn", request_id: message.request_id });
+    return;
+  }
+  if (!filled(message?.text)) return;
   if (message.kind === "notification") {
     note(run, `child: ${message.text}`);
     relay(run, `${who} reports: ${message.text}`, { kind: "notification" });
@@ -259,7 +268,7 @@ const onChild = (run, message) => {
       run.child.send({ kind: "refusal", request_id: message.request_id, text: WAITING_REFUSAL });
     } catch {}
   } else if (message.kind === "query" && filled(message.request_id) && !run.queries.has(message.request_id)) {
-    const expiry = setTimeout(() => run.queries.delete(message.request_id), QUERY_TIMEOUT_MS);
+    const expiry = setTimeout(() => run.queries.delete(message.request_id), QUERY_TIMEOUT_MS + WITHDRAW_GRACE_MS);
     expiry.unref?.();
     run.queries.set(message.request_id, expiry);
     note(run, `child asks (${message.request_id}): ${message.text}`);
@@ -339,10 +348,14 @@ const toParent = (params) => {
       done(resolve, { content: [{ type: "text", text: String(message.text ?? "") }], details: { kind, request_id: requestId } });
     };
     const onGone = () => done(reject, new Error("estigia: the parent went away before it answered"));
-    timer = setTimeout(
-      () => done(reject, new Error(`estigia: the parent did not answer within ${Math.round(QUERY_TIMEOUT_MS / 1000)}s`)),
-      QUERY_TIMEOUT_MS,
-    );
+    timer = setTimeout(() => {
+      const late = new Error(`estigia: the parent did not answer within ${Math.round(QUERY_TIMEOUT_MS / 1000)}s`);
+      try {
+        process.send({ kind: "withdraw", request_id: requestId }, () => done(reject, late));
+      } catch {
+        done(reject, late);
+      }
+    }, QUERY_TIMEOUT_MS);
     process.on("message", onMessage);
     process.on("disconnect", onGone);
     post({ kind, request_id: requestId, text: params.text }).catch((error) => done(reject, error));

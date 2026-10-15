@@ -22820,6 +22820,7 @@ const silent = start("query", "silent");
 const timedOut = await result("silent");
 const waited = Date.now() - begin;
 const silentRequest = messages.filter((entry) => entry.message.details?.kind === "query").at(-1)?.message.details.request_id;
+const withdrawn = await until(() => messages.find((entry) => entry.message.details?.kind === "withdrawn" && entry.message.details.request_id === silentRequest) ?? null);
 const staleReply = await attempt(() => tools.estigia_subagent_reply.execute("r", { id: "a4", request_id: silentRequest, text: "too late" }));
 const silentAsked = messages.filter((entry) => entry.message.details?.kind === "query").length;
 await stopAll();
@@ -22869,6 +22870,7 @@ console.log(JSON.stringify({
   silentAsked,
   lateReply,
   staleReply,
+  withdrawn: withdrawn !== null,
 }));
 "##;
 
@@ -23011,6 +23013,10 @@ fn an_unanswered_pi_child_query_ends_at_its_timeout_with_an_error() {
         "the query did not end at its timeout: {waited}ms"
     );
     failed_with(&said["lateReply"], "no longer running");
+    assert_eq!(
+        said["withdrawn"], true,
+        "the parent was not told the child stopped waiting: {said}"
+    );
     failed_with(&said["staleReply"], "stopped waiting");
 }
 
