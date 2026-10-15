@@ -2984,6 +2984,49 @@ fn a_sent_message_waits_visibly_for_both_ends_until_the_recipient_takes_it_once(
 }
 
 #[test]
+fn a_peeked_message_stays_pending_until_it_is_taken_through_the_id_that_was_read() {
+    let rig = tracker_rig();
+    pi_start(&rig, "alice");
+    let bob = pi_start(&rig, "bob");
+    let (said, stderr, ok) = send_from(&rig, "alice", &bob, "wake up");
+    assert!(ok, "{said}{stderr}");
+
+    let deliver = |extra: &[&str]| {
+        let mut args = vec![
+            "--json",
+            "session",
+            "deliver",
+            "--session-id",
+            "bob",
+            "--runtime",
+            "pi",
+        ];
+        args.extend_from_slice(extra);
+        let (said, stderr, ok) = pi_session_run(&rig, &args);
+        assert!(ok, "{said}{stderr}");
+        serde_json::from_str::<serde_json::Value>(&said).expect("json")
+    };
+
+    let peeked = deliver(&["--peek"]);
+    assert!(
+        peeked["messages"]
+            .as_str()
+            .unwrap_or("")
+            .contains("wake up"),
+        "{peeked}"
+    );
+    let through = peeked["through"].as_i64().expect("an id").to_string();
+    assert_eq!(deliver(&["--peek"]), peeked, "peeking stamped the message");
+    let listed = listed_sessions(&rig);
+    assert_eq!(session_named(&listed, &bob)["waiting"], 1, "{listed:?}");
+
+    deliver(&["--through", &through]);
+    let listed = listed_sessions(&rig);
+    assert_eq!(session_named(&listed, &bob)["waiting"], 0, "{listed:?}");
+    assert_eq!(deliver(&["--peek"])["messages"], serde_json::Value::Null);
+}
+
+#[test]
 fn a_message_for_a_session_nobody_registered_is_refused_and_records_nothing() {
     let rig = tracker_rig();
     pi_start(&rig, "alice");

@@ -806,6 +806,9 @@ the reason is `new`, `resume`, `fork` or `reload`, because a session that was on
 resumed, and a reload keeps the same session id. A child process never ends the session it was started
 under.
 
+While the root session is idle the extension also polls the mailbox every 10 seconds and wakes the session with
+`pi.sendMessage`; [`sessions.md`](sessions.md#waking-an-idle-pi-session) has the order and what it refuses.
+
 Pi's own argument names need no translation. Its `write` takes `path` and `content`, its `edit` takes
 `path` and an `edits` list, and its `bash` takes `command`; `harness::path_argument` and the shell
 reader already accept `path` and `command`, so the rule for what a write targets stays in the binary

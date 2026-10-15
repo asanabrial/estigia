@@ -628,6 +628,14 @@ pub enum SessionAction {
         /// The runtime whose run ids `--session-id` derives.
         #[arg(long, value_parser = runtime)]
         runtime: String,
+
+        /// Print the pending messages and the id of the last one, and record nothing.
+        #[arg(long, conflicts_with = "through")]
+        peek: bool,
+
+        /// Take only the messages up to this id, as `--peek` reported it.
+        #[arg(long)]
+        through: Option<i64>,
     },
     /// Forget the run's pointer, and only when the session is over. The claim
     /// on the tracker is untouched.

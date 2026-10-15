@@ -231,11 +231,29 @@ pub(super) fn send(
     Ok(())
 }
 
-pub(super) fn deliver(runtime: &str, session_id: &str, json: bool) -> Result<(), Refusal> {
+pub(super) fn deliver(
+    runtime: &str,
+    session_id: &str,
+    peek: bool,
+    through: Option<i64>,
+    json: bool,
+) -> Result<(), Refusal> {
     let root = session::state_root(None)?;
-    let text = mailbox::deliver(&root, &session::run_id(runtime, session_id));
+    let run = session::run_id(runtime, session_id);
+    let (text, last) = if peek {
+        match mailbox::peek(&root, &run) {
+            Some((text, last)) => (Some(text), Some(last)),
+            None => (None, None),
+        }
+    } else {
+        let text = match through {
+            Some(through) => mailbox::deliver_through(&root, &run, through),
+            None => mailbox::deliver(&root, &run),
+        };
+        (text, None)
+    };
     if json {
-        super::print_json(&serde_json::json!({ "messages": text }));
+        super::print_json(&serde_json::json!({ "messages": text, "through": last }));
     } else if let Some(text) = text {
         say!("{text}");
     }

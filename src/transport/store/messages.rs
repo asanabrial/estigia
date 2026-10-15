@@ -21,6 +21,15 @@ fn seconds(value: i64) -> u64 {
     u64::try_from(value).unwrap_or_default()
 }
 
+fn message_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
+    Ok(Message {
+        id: row.get(0)?,
+        sender_run_id: row.get(1)?,
+        body: row.get(2)?,
+        created_at: seconds(row.get(3)?),
+    })
+}
+
 fn counted(store: &Store, sql: &str, what: &'static str) -> Result<BTreeMap<String, u64>, Failure> {
     let mut statement = store.connection().prepare(sql).map_err(unreadable(what))?;
     statement
@@ -49,33 +58,54 @@ impl Store {
         Ok(self.connection().last_insert_rowid())
     }
 
+    #[cfg(test)]
     pub(crate) fn messages_taken(
         &self,
         recipient_run_id: &str,
         now: u64,
     ) -> Result<Vec<Message>, Failure> {
+        self.messages_taken_through(recipient_run_id, now, i64::MAX)
+    }
+
+    pub(crate) fn messages_taken_through(
+        &self,
+        recipient_run_id: &str,
+        now: u64,
+        through: i64,
+    ) -> Result<Vec<Message>, Failure> {
         let mut statement = self
             .connection()
             .prepare(
                 "UPDATE messages SET delivered_at = ?2
-                 WHERE recipient_run_id = ?1 AND delivered_at IS NULL
+                 WHERE recipient_run_id = ?1 AND delivered_at IS NULL AND id <= ?3
                  RETURNING id, sender_run_id, body, created_at",
             )
             .map_err(unreadable("take the pending messages"))?;
         let mut taken = statement
-            .query_map(rusqlite::params![recipient_run_id, int(now)], |row| {
-                Ok(Message {
-                    id: row.get(0)?,
-                    sender_run_id: row.get(1)?,
-                    body: row.get(2)?,
-                    created_at: seconds(row.get(3)?),
-                })
-            })
+            .query_map(
+                rusqlite::params![recipient_run_id, int(now), through],
+                message_row,
+            )
             .map_err(unreadable("take the pending messages"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(unreadable("take the pending messages"))?;
         taken.sort_by_key(|message| message.id);
         Ok(taken)
+    }
+
+    pub(crate) fn messages_pending(&self, recipient_run_id: &str) -> Result<Vec<Message>, Failure> {
+        let mut statement = self
+            .connection()
+            .prepare(
+                "SELECT id, sender_run_id, body, created_at FROM messages
+                 WHERE recipient_run_id = ?1 AND delivered_at IS NULL ORDER BY id",
+            )
+            .map_err(unreadable("read the pending messages"))?;
+        statement
+            .query_map(rusqlite::params![recipient_run_id], message_row)
+            .map_err(unreadable("read the pending messages"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(unreadable("read the pending messages"))
     }
 
     pub(crate) fn messages_waiting_for(&self) -> Result<BTreeMap<String, u64>, Failure> {
