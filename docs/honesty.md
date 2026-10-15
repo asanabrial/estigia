@@ -5973,6 +5973,17 @@ pointer that leaves it names the document it points at.
   launch. A child that lists `estigia-doctor` from another extension passes it. The tool is named
   `estigia_subagent`, not `subagent`, so it cannot replace another runner's tool of that name, which means the
   issue's wording is not met literally.
+- **Pi parent and child messages have been driven against a stand-in `pi` that is a Node script, never a
+  live one.** Reproduced first, by mutation: removing the running check on the steer, the
+  `triggerTurn` option, the deletion of an answered request, the query timeout, the condition that registers
+  the child-side tool, the answer text in the child's result and the steer send each turn exactly the
+  test that names them red. Not measured: that a real `pi` is a Node program and so inherits the IPC
+  channel, that it passes an extension tool's thrown error back to the model as a tool error, that
+  `--tools` in an agent definition leaves an extension tool available, that `sendMessage` with
+  `deliverAs: "followUp"` really queues at a turn boundary and wakes an idle session (the stand-in records
+  the call and its options only), and any ordering between two children. At-most-once: a notification sent
+  while the parent is gone is lost without the child being told after the send call returns. The query
+  timeout, 120 seconds, is a constant, not a setting.
 - **The Pi subagent view, steering and history have been driven against recorded stand-ins for Pi's UI and
   session API, never a live Pi.** Reproduced first: each of the four view tests and the three `doctor`
   and setup tests fails when its piece is removed. Dropping the transcript, the `steer` send, the stop

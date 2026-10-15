@@ -105,6 +105,21 @@ What delivery refuses to do:
 - It is recorded when it is handed to the host, not when the model reads it: no host reports a read, so "delivered"
   is the observable event and there is no separate "read" stamp.
 
+## The Pi parent-child channel
+
+A Pi subagent runner child and its parent also talk directly, and this is not the mailbox: nothing is
+written to the registry, nothing is persisted, and delivery is at-most-once. The runner opens a Node IPC
+channel to each child it spawns; the child's `estigia_parent_message` tool sends a notification or a query
+over it, and the parent's `estigia_subagent_reply` answers a query over it. The parent steers a child with
+`estigia_subagent_message`, an RPC `steer` on the child's standard input. The tools are described in
+[`what-it-writes.md`](what-it-writes.md).
+
+A message sent while the other side is gone is lost and the sender is told when it can be. A query pending
+when the child ends is dropped, and a reply to it is a tool error. A query pending when the parent ends
+fails in the child as soon as the channel closes; one the parent never answers fails after 120 seconds.
+Neither side's session is changed by what arrives: a message is text for a model, not an instruction the
+gate treats differently.
+
 ## The MCP tools
 
 `list_sessions` takes no arguments and answers the object `estigia sessions --json` prints (`sessions` beside

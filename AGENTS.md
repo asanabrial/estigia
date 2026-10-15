@@ -123,7 +123,7 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. Ninety-two tests **require** `node` on the path, and all ninety-two drive the OpenCode plugins and
+   --no-deps`. Ninety-seven tests **require** `node` on the path, and all ninety-seven drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
    let a gate defect stand. Nine are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
@@ -218,12 +218,18 @@ a second copy that will disagree.
    `the_pi_subagent_view_lists_children_and_shows_each_transcript_with_no_model_call`,
    `a_running_pi_subagent_is_steered_from_the_view_and_a_finished_one_is_not`,
    `the_pi_subagent_view_stops_one_child_and_stops_all_only_after_a_confirm` and
-   `finished_pi_subagent_tasks_are_kept_as_session_entries_and_never_sent_to_the_model`.
+   `finished_pi_subagent_tasks_are_kept_as_session_entries_and_never_sent_to_the_model`; and five drive
+   its parent and child messages through `run_pi_messages_driver`, Unix only for the same reason —
+   `a_parent_steers_a_running_pi_child_and_a_finished_or_unknown_one_is_an_error`,
+   `a_pi_child_notification_reaches_the_parent_as_a_follow_up_that_wakes_it`,
+   `a_pi_child_query_blocks_until_the_parent_answers_and_the_answer_is_its_tool_result`,
+   `an_unanswered_pi_child_query_ends_at_its_timeout_with_an_error` and
+   `the_child_side_message_tool_exists_only_in_a_session_the_runner_spawned`.
    None skips when `node` is missing; all fail and say so, since a skip
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that ninety-two tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that ninety-seven tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here
