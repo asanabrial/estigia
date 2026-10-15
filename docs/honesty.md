@@ -10161,17 +10161,18 @@ mail waiting; and Node tests that drive the generated Pi extension. What it does
   UI and the Codex daemon stay undriven (above).
 - **A delivery is stamped before the host acknowledges it.** A hook process killed between the stamp and the write to
   standard output loses the message as delivered. The window is one statement wide and was not provoked.
-- **The Claude Code mail waiter was measured once, by hand, and not under load.** Claude Code 2.1.300 woke an idle
-  interactive session when an `asyncRewake` `Stop` hook exited 2 (the measurement is in
-  [`sessions.md`](sessions.md#waking-an-idle-claude-code-session)). Not measured live: two waiters overlapping on one
-  session (one per turn that ended before the earlier waiter did; the unit test covers two threads taking one row and
-  shows exactly one wins, which is the store's single statement, not a host); a session idle longer than 60 s before
-  the mail came (the measurement used a short wait; the 3600 s `timeout` is the documented field, not a long idle run);
-  and mail arriving while a turn is running (the `PreToolUse` delivery should take it first, and if the waiter takes
-  it instead, whether Claude Code delivers a rewake that arrives mid-turn was not seen). A waiter process lives for up
-  to an hour per turn that ended, so a long session holds several; nothing reaps one when its session ends before the
-  deadline. Mail the waiter took is stamped delivered before Claude Code acknowledges the exit, so a host that
-  discards it loses it, as the other points do.
+- **The Claude Code mail waiter was measured in one live session, not under load.** Claude Code 2.1.300 woke an idle
+  interactive session within 15 seconds when an `asyncRewake` `Stop` hook exited 2, a new waiter was running
+  afterwards, and none remained after the session was killed (see
+  [`sessions.md`](sessions.md#waking-an-idle-claude-code-session)). Not measured live: a session idle longer than
+  60 s before the mail came (the 3600 s `timeout` is the documented field, not a long idle run), and mail arriving
+  while a turn is running (the `PreToolUse` delivery should take it first; if a waiter takes it instead, whether
+  Claude Code delivers a rewake that arrives mid-turn was not seen). At most one waiter per run polls: each new waiter
+  overwrites a token in `store_meta`, and a superseded one exits 0 at its next poll, within about a second, taking
+  nothing. Two waiters starting at the same instant race on that write, and the loser retires; the unit tests drive
+  threads, not two real hook processes. A waiter whose store cannot be read exits and leaves its rows pending, and
+  mail the waiter took is stamped delivered before Claude Code acknowledges the exit, so a host that discards it loses
+  it, as the other points do.
 - **An already idle Codex session is not woken.** Codex's `Stop` hook is synchronous and continues the turn that is
   ending, so mail left for an idle Codex session waits for the end or the next `PreToolUse` of its next turn. Codex has
   a `Stop` entry only with the `Loop plugin` row `on`, so without it mail waits for `PreToolUse`. The blocking answer

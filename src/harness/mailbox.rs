@@ -132,8 +132,35 @@ fn taken(state_root: &Path, run_id: &str) -> Result<Option<String>, ()> {
     Ok((!taken.is_empty()).then(|| render(&taken, now)))
 }
 
+fn waiter_key(run_id: &str) -> String {
+    format!("mail-waiter:{run_id}")
+}
+
+fn new_token() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    format!("{}-{nanos}", std::process::id())
+}
+
+fn claim_waiter(state_root: &Path, run_id: &str, token: &str) -> Result<(), ()> {
+    store::Store::open(&store::beside(state_root))
+        .and_then(|opened| opened.set_meta(&waiter_key(run_id), token))
+        .map_err(|_| ())
+}
+
+fn still_current(state_root: &Path, run_id: &str, token: &str) -> Result<bool, ()> {
+    let Some(reader) = store::open_for_read(&store::beside(state_root)).map_err(|_| ())? else {
+        return Ok(false);
+    };
+    let current = reader.meta(&waiter_key(run_id)).map_err(|_| ())?;
+    Ok(current.as_deref() == Some(token))
+}
+
 /// Waits for mail addressed to `run_id`, asking the store every `interval`
-/// until `deadline` has passed. `None` when nothing came or the store could
+/// until `deadline` has passed. The waiter records a fresh token for the run
+/// when it starts and returns `None` at its next poll once a newer waiter has
+/// replaced it, taking nothing. `None` when nothing came or the store could
 /// not be read; rows stay pending in both cases. A read that fails
 /// three times running ends the wait; one failure may be a send in progress.
 pub(crate) fn wait(
@@ -142,10 +169,17 @@ pub(crate) fn wait(
     interval: Duration,
     deadline: Duration,
 ) -> Option<String> {
+    let token = new_token();
+    claim_waiter(state_root, run_id, &token).ok()?;
     let started = Instant::now();
     let mut failures = 0;
     loop {
-        match taken(state_root, run_id) {
+        let outcome = match still_current(state_root, run_id, &token) {
+            Ok(true) => taken(state_root, run_id),
+            Ok(false) => return None,
+            Err(()) => Err(()),
+        };
+        match outcome {
             Ok(Some(text)) => return Some(text),
             Ok(None) => failures = 0,
             Err(()) => {
@@ -265,19 +299,17 @@ mod tests {
     }
 
     #[test]
-    fn two_waiters_on_one_row_deliver_it_exactly_once() {
+    fn two_takers_of_one_row_deliver_it_exactly_once() {
         let (_directory, state_root) = rig();
         leave(&state_root, "claude-aaaa", "only one of you");
         let spawn = || {
             let state_root = state_root.clone();
-            std::thread::spawn(move || {
-                wait(&state_root, "claude-aaaa", TICK, Duration::from_millis(300))
-            })
+            std::thread::spawn(move || taken(&state_root, "claude-aaaa"))
         };
         let (first, second) = (spawn(), spawn());
         let delivered = [first, second]
             .into_iter()
-            .filter_map(|waiter| waiter.join().expect("the waiter finishes"))
+            .filter_map(|racer| racer.join().expect("the racer finishes").ok().flatten())
             .count();
         assert_eq!(delivered, 1);
     }
@@ -312,5 +344,45 @@ mod tests {
         let text = wait(&state_root, "claude-aaaa", TICK, Duration::from_secs(10));
         sender.join().expect("the sender finishes");
         assert!(text.is_some_and(|text| text.contains("first mail ever")));
+    }
+
+    #[test]
+    fn a_newer_waiter_retires_the_older_one_which_takes_nothing() {
+        let (_directory, state_root) = rig();
+        let start = |state_root: std::path::PathBuf| {
+            std::thread::spawn(move || {
+                wait(&state_root, "claude-aaaa", TICK, Duration::from_secs(20))
+            })
+        };
+        let older = start(state_root.clone());
+        std::thread::sleep(Duration::from_millis(200));
+        let newer = start(state_root.clone());
+        let retired = Instant::now();
+        assert_eq!(older.join().expect("the older waiter finishes"), None);
+        assert!(retired.elapsed() < Duration::from_secs(5));
+
+        leave(&state_root, "claude-aaaa", "for the newer");
+        let text = newer
+            .join()
+            .expect("the newer waiter finishes")
+            .expect("the newer waiter took the mail");
+        assert!(text.contains("for the newer"), "{text}");
+        assert_eq!(waiting(&state_root, "claude-aaaa"), None);
+    }
+
+    #[test]
+    fn waiters_of_different_runs_do_not_retire_each_other() {
+        let (_directory, state_root) = rig();
+        let start = |run: &'static str| {
+            let state_root = state_root.clone();
+            std::thread::spawn(move || wait(&state_root, run, TICK, Duration::from_secs(10)))
+        };
+        let first = start("claude-aaaa");
+        let second = start("claude-bbbb");
+        std::thread::sleep(Duration::from_millis(200));
+        leave(&state_root, "claude-aaaa", "one");
+        leave(&state_root, "claude-bbbb", "two");
+        assert!(first.join().expect("finishes").is_some());
+        assert!(second.join().expect("finishes").is_some());
     }
 }

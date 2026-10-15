@@ -140,12 +140,26 @@ to standard error and the exit status is 2. Nothing by the deadline: exit 0 and 
 three times running also exits 0, leaving the rows pending for the `PreToolUse` delivery; one failure is
 tolerated because a send in progress can briefly hold the store.
 
+**One waiter per run.** Every turn's `Stop` starts a waiter, so each one first writes a fresh token for its run to
+the `store_meta` row `mail-waiter:<run id>` (one small row per run, overwritten, never deleted), and every poll
+reads that row before it takes anything. A waiter whose token is no longer the current one exits 0 at its next poll
+(within about a second) and takes nothing; the newest waiter keeps waiting. Waiters of different runs do not touch
+each other's rows.
+
 Measured on Claude Code 2.1.300, 2026-10-15, interactive TUI: a project `.claude/settings.json` `Stop` hook with
 `asyncRewake: true`, a `timeout` and no `async` key keeps running after the turn ends; when it exits 2 while the
 session is idle, Claude Code starts a turn by itself, the transcript shows "Stop hook feedback", and the model acts on
 the hook's standard error. `Stop` fires again at the end of that turn, so the waiter re-arms after every turn. The
 documented default command-hook timeout is 600 s, and `timeout` is enforced on `asyncRewake` hooks, which is why a long
-one is written. What this does not cover is in [`honesty.md`](honesty.md).
+one is written.
+
+Measured live on Claude Code 2.1.300, 2026-10-15, with a session installed from this branch's
+`estigia setup claude-code`: the session was left idle after one turn, and `estigia sessions send <its run id>
+"<text>"` from another process woke it within 15 seconds ("Stop hook feedback"; the model answered the message as
+another session's request). The row was stamped delivered, a new waiter was running afterwards, and when the session
+was killed no waiter process from it remained.
+
+What this does not cover is in [`honesty.md`](honesty.md).
 
 What was not measured: *Allow for this session* and *Deny* in the live dialog (the scripted tests cover both), and
 Codex and OpenCode.
