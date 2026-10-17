@@ -38,7 +38,7 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
           - target: x86_64-apple-darwin
-            os: macos-15-intel
+            os: macos-latest
           - target: aarch64-apple-darwin
             os: macos-latest
           - target: x86_64-pc-windows-msvc
@@ -85,22 +85,10 @@ jobs:
       - name: Install the toolchain
         run: rustup target add ${{ matrix.target }}
 
-      # One test executes the generated OpenCode plugin, which is JavaScript.
-      # This step matters more here than in `ci.yml`: the suite below runs on a
-      # **tag**, and a missing interpreter there publishes no release at all.
-      # That is not a hypothetical — it is the exact failure this file already
-      # suffered once, with `python3`, and the reason the guard on interpreters
-      # was kept rather than deleted.
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-
-      # The suite runs on every target that can run it. A cross-built archive
-      # is published having compiled and nothing more, and saying which is
-      # which is the honest part.
-      - name: Test
-        run: cargo test --release --target ${{ matrix.target }}
-
+      # No suite here: `ci.yml` runs it on every runner below before a merge can
+      # land, and a test that flakes after the tag is immutable fails a release
+      # instead of a pull request. `x86_64-apple-darwin` is cross-compiled on the
+      # arm64 image, so it is built and never executed.
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
 

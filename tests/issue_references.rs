@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-const PUBLIC_ISSUES_THROUGH: u64 = 104;
+const PUBLIC_ISSUES_THROUGH: u64 = 135;
 
 const NOT_ISSUE_REFERENCES: &[(&str, u64, &str)] = &[
     ("docs/parity.md", 4967, "removed SDD and OpenSpec in #4967"),

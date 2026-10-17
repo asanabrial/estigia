@@ -602,7 +602,7 @@ struct TrackerRig {
 fn tracker_rig() -> TrackerRig {
     // Found from the test binary rather than from the manifest, because the
     // profile and the target triple are not knowable from here. `release.yml`
-    // runs `cargo test --release --target <triple>`, which puts the example under
+    // used to run `cargo test --release --target <triple>`, which puts the example under
     // `target/<triple>/release/examples/` — a hardcoded `target/debug/examples`
     // was absent there, so the first version of this assertion turned a silent
     // skip on all six release targets into a hard failure on all six, and no tag

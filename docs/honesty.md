@@ -866,7 +866,7 @@ pointer that leaves it names the document it points at.
   | `actions/checkout@v7` | `ci.yml`, `release.yml` | `node24` — raised earlier | unchanged |
   | `dtolnay/rust-toolchain@stable` | `ci.yml` | `composite`, shell steps only | unchanged |
   | `Swatinem/rust-cache@v2` | `ci.yml` | `node24` | unchanged; floor `v2` |
-  | `actions/setup-node` | `ci.yml`, `release.yml` | **`node20`** at `v4` | `v5`, `node24` |
+  | `actions/setup-node` | `ci.yml` (`release.yml` until #135) | **`node20`** at `v4` | `v5`, `node24` |
   | `actions/upload-artifact` | `release.yml` | **`node20`** at `v4` | `v6`, `node24` |
   | `actions/download-artifact` | `release.yml` | **`node20`** at `v4` | `v7`, `node24` |
   | `softprops/action-gh-release` | `release.yml` | **`node20`** at `v2` | `v3`, `node24` |
@@ -1399,7 +1399,7 @@ pointer that leaves it names the document it points at.
   no switch is honoured there. What is *not* measured is a full end-to-end publish that waits the
   real ninety seconds under load — only that the schedule constants and the sleep call itself
   remain, and that no override can reach a `--release` binary.
-  `cargo test --release` (what `release.yml` runs) compiles: `set_fsync_skip_for_tests`,
+  `cargo test --release` (what `release.yml` ran until #135) compiles: `set_fsync_skip_for_tests`,
   `with_preview` and `with_real_fsync` are `cfg(test)` helpers whose bodies degrade to a no-op or a
   plain call of `body` when `debug_assertions` is off, so the release suite runs with real fsyncs and
   the real preview — the overrides stay absent, and the fsync-skip assertion in
@@ -10244,3 +10244,19 @@ pinned `mcp-publisher` to the files they describe. What it does not measure:
   checked-out manifests name.
 - **The installed-version check reads `--version` text.** A binary at the install path that answers the
   package's version is run without its bytes being checked against the release.
+
+## The release builds; CI tests
+
+Since #135 `release.yml` runs no `cargo test`: the suite runs in `ci.yml`, whose `check` matrix covers every runner
+a release archive is built on (`every_runner_a_release_builds_on_is_one_ci_tests_on`), so a flake fails a pull
+request instead of a tag. Measured before the change, on the `v0.1.0` and `v0.1.1` tags: about 50 minutes per
+release, the x86_64 Windows job alone, and one release (`v0.1.1`, run 39043362083) failed on a bash timeout in a test
+that passed on the same target the run before. What the change gives up:
+
+- **The release profile is tested nowhere.** `ci.yml` runs the debug profile; `lto = "thin"`, `codegen-units = 1`
+  and `strip` are compiled by the release build and executed by nobody before an archive ships.
+- **`x86_64-apple-darwin` is built and never run.** It is cross-compiled on the arm64 `macos-latest` image; no
+  runner executes an Intel macOS binary, and Rosetta on the arm64 image was not tried.
+- **The tagged tree is assumed to be the tested tree.** A tag is cut on the merge of a pull request CI passed;
+  nothing checks that the base did not advance between the green run and the merge beyond the delivery rules a
+  merge already follows.
