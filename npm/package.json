@@ -1,6 +1,6 @@
 {
   "name": "@asanabrial/estigia",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "mcpName": "io.github.asanabrial/estigia",
   "description": "Guardrails for AI coding agents (Claude Code, Codex, OpenCode, Pi): an MCP server and hooks that verify issue claims, bind reviews to exact commits and gate merges",
   "bin": {
