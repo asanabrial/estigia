@@ -1538,7 +1538,7 @@ fn packaged_files() -> Vec<String> {
     );
     String::from_utf8_lossy(&output.stdout)
         .lines()
-        .map(str::to_owned)
+        .map(|file| file.replace('\\', "/"))
         .collect()
 }
 
@@ -1629,6 +1629,11 @@ fn the_registries_publish_only_a_tag_they_were_handed() {
     assert!(
         !code_of(&workflow).contains("secrets."),
         "a registry token is stored where trusted publishing needs none"
+    );
+    let (_, registry) = &jobs[2];
+    assert!(
+        registry.contains("sha256sum -c") && !registry.contains("releases/latest"),
+        "mcp-publisher runs with the job's publishing identity, so it is pinned and checked first"
     );
 }
 

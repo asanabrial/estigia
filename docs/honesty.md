@@ -10231,13 +10231,16 @@ mail waiting; and Node tests that drive the generated Pi extension. What it does
 publishes crates.io, npm and the MCP registry from a tag. What this measures: four Node tests in `tests/npm.rs`
 that drive the installer against archives served from `127.0.0.1` — a verified install that records, places and
 runs, and a second run that fetches nothing; a mismatched sum, a missing sum and a refused record that place
-nothing — and static tests that hold its target table, the three version fields and the workflow's tag guard to
-the files they describe. What it does not measure:
+nothing — and static tests that hold its target table, the three version fields, the workflow's `v*` input guard and the
+pinned `mcp-publisher` to the files they describe. What it does not measure:
 
 - **The Node tests run on Unix only.** The stand-in binary is a shell script, so the Windows branches — the
   `System32` `tar.exe` that reads the zip, the `%LOCALAPPDATA%` directory, replacing an `.exe` another
   process holds open — have never run.
 - **No registry was published to.** Trusted publishing, the idempotence probes and `mcp-publisher` run only
   on a tag, and no tag has been cut; `server.json` was not validated by the registry.
+- **The tag-against-version steps in the `crates-io` and `npm` jobs are asserted by nothing.** Removing them
+  leaves every test green; `cargo publish` and `npm publish` would then publish whatever version the
+  checked-out manifests name.
 - **The installed-version check reads `--version` text.** A binary at the install path that answers the
   package's version is run without its bytes being checked against the release.

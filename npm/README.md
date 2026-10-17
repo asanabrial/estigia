@@ -8,7 +8,7 @@ npx -y @asanabrial/estigia setup --all
 ```
 
 This package is an installer, not a copy of the program. On first run, and whenever the installed
-version differs from this package's, it does what the release installers do: it downloads the release
+version differs from this package's (or from `ESTIGIA_VERSION`), it does what the release installers do: it downloads the release
 archive for your platform, verifies it against the `.sha256` published beside it, records the
 candidate with `estigia __record-install`, and places the binary in `~/.local/bin` (on Windows
 `%LOCALAPPDATA%\estigia\bin`; `ESTIGIA_INSTALL_DIR` moves it). Then it runs that binary with the

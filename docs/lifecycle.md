@@ -17,7 +17,7 @@ the third, and it runs the installed binary afterwards with the arguments it was
 the directory the scripts use rather than into npm's cache because `setup` writes the canonicalised
 path of the running binary into every agent's hooks (`setup::executable_path`): a path that changed
 with each version would leave those hooks naming a file the next upgrade removed. It reinstalls when
-`estigia --version` at that path does not answer the package's version. `cargo install estigia` is a
+`estigia --version` at that path does not answer the package's version, or the one `ESTIGIA_VERSION` names. `cargo install estigia` is a
 source build, exactly as `cargo install --git` is.
 
 `estigia update` is read-only. Text and global `--json` output report the pathname returned by

@@ -137,7 +137,10 @@ async function install(tag, target, binary) {
     const recorded = spawnSync(candidate, ["__record-install"], {
       stdio: ["ignore", process.stderr, process.stderr],
     });
-    if (recorded.error || recorded.status !== 0) {
+    if (recorded.error) {
+      fail(`could not run the downloaded candidate: ${recorded.error.message}`);
+    }
+    if (recorded.status !== 0) {
       fail("candidate lifecycle admission failed; refusing to replace the installed executable");
     }
 
