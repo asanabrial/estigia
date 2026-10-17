@@ -5,7 +5,7 @@ not edit this file: the agent cutting a version writes its entry in the release 
 the pull requests merged since the previous tag. `changelog-notes` reads that entry for the tag and
 the Release, and refuses a missing or empty one.
 
-## 0.1.0 — unreleased
+## 0.1.0 — 2026-10-17
 
 The first version. Estigia is a harness: it does not ask an agent to follow the workflow, it holds
 the tools.
@@ -23,3 +23,4 @@ the tools.
 - Pi subagents with a live card, a full view and history.
 - `estigia setup` and `uninstall` for each supported agent, and `doctor`, `changes` and `prune` to inspect and clean up.
 - Linux, macOS and Windows builds.
+- Installed by `install.sh` / `install.ps1`, by `npx @asanabrial/estigia`, or built with `cargo install estigia`; listed in the MCP registry as `io.github.asanabrial/estigia`.
