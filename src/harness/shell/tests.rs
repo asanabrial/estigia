@@ -1830,13 +1830,15 @@ mod differential {
         TimedOut,
     }
 
+    const A_CASE_THAT_HANGS: Duration = Duration::from_secs(30);
+
     fn executed_by_bash(text: &str, markers: usize, dir: &Path) -> Outcome {
         let cwd = fresh_directory(dir);
         let mut child =
             bash(dir, &cwd, &["--noprofile", "--norc", "-c", text]).unwrap_or_else(|error| {
                 panic!("the differential test requires `bash` on the path: {error}")
             });
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + A_CASE_THAT_HANGS;
         loop {
             if child.try_wait().expect("bash was waited on").is_some() {
                 break;
@@ -1872,6 +1874,15 @@ mod differential {
                 (executed.len(), failure)
             }
         }
+    }
+
+    #[test]
+    fn a_case_slower_than_the_old_two_second_bound_is_judged_by_what_it_ran() {
+        let dir = sandbox();
+        let markers = vec!["touch ran_0_".to_owned()];
+        let (executed, failure) = judge("sleep 3; touch ran_0_", &markers, dir.path());
+        assert_eq!(failure, None);
+        assert_eq!(executed, 1);
     }
 
     const MEASURED_BY_EARLIER_ROUNDS: &[(&str, (u32, u32))] = &[
