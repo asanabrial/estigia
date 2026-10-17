@@ -121,41 +121,43 @@ fn the_workflow_builds_every_target_an_installer_can_ask_for() {
     }
 }
 
-/// The instant `the_intel_macos_runner_label_is_dated` goes red: 2027-07-01, a
-/// month before the August 2027 window GitHub names for `macos-15-intel`, the
-/// last hosted x86_64 macOS image (actions/runner-images#13045; changelog
-/// 2025-09-19). Seconds since the Unix epoch.
-const INTEL_MACOS_LABEL_GOES_RED_AT: u64 = 1_814_400_000;
+fn ci_check_runners() -> Vec<String> {
+    let workflow = code_of(&read(".github/workflows/ci.yml"));
+    let check = workflow
+        .split_once("\n  check:\n")
+        .map(|(_, rest)| rest)
+        .unwrap_or_else(|| panic!("ci.yml has no `check` job"));
+    let line = check
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("os: ["))
+        .and_then(|rest| rest.strip_suffix(']'))
+        .unwrap_or_else(|| panic!("the `check` job names no `os: [...]` matrix"));
+    line.split(',')
+        .map(|label| label.trim().to_owned())
+        .collect()
+}
 
 #[test]
-fn the_intel_macos_runner_label_is_dated() {
-    // `x86_64-apple-darwin` builds on `macos-15-intel`, and nothing else dates
-    // that image: `workflow_targets` reads the triples and never the labels.
-    // When GitHub retires the last hosted x86_64 macOS image the leg queues
-    // until the 24-hour timeout and every publication lane goes red — the
-    // failure that was recorded, with nothing in-crate noticing first. So the label
-    // is dated: past the day below, an unchanged label is a red test rather than
-    // a stuck lane.
-    let workflow = read(".github/workflows/release.yml");
-    let label = matrix_os_for(&workflow, "x86_64-apple-darwin");
-    assert_eq!(
-        label.as_deref(),
-        Some("macos-15-intel"),
-        "the x86_64-apple-darwin matrix entry no longer reads `os: macos-15-intel`. Moving that \
-         leg off the image is this check's discharge: replace or delete it in the same change \
-         rather than leaving a date beside a label it no longer describes"
-    );
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_else(|why| panic!("the clock reads after 1970: {why}"))
-        .as_secs();
-    assert!(
-        now < INTEL_MACOS_LABEL_GOES_RED_AT,
-        "the release workflow still builds x86_64-apple-darwin on macos-15-intel, which GitHub \
-         retires in August 2027. A retired label queues until the 24-hour timeout and reddens \
-         every publication lane. Move the target to a supported image or drop it, \
-         then update this check"
-    );
+fn every_runner_a_release_builds_on_is_one_ci_tests_on() {
+    let release = read(".github/workflows/release.yml");
+    let tested = ci_check_runners();
+    for target in TARGETS {
+        let label = matrix_os_for(&release, target)
+            .unwrap_or_else(|| panic!("{target} has no `os:` in the release matrix"));
+        if *target == "x86_64-apple-darwin" {
+            assert_eq!(
+                label, "macos-latest",
+                "Intel macOS is cross-compiled on the arm64 image CI already tests, so the release \
+                 never waits on the small x86_64 macOS pool"
+            );
+            continue;
+        }
+        assert!(
+            tested.contains(&label),
+            "{target} is built on {label}, which ci.yml never tests on; the release no longer runs \
+             the suite, so that platform would ship untested"
+        );
+    }
 }
 
 #[test]
@@ -683,18 +685,22 @@ fn no_workflow_needs_only_interpreters_it_sets_up() {
         "the test that requires an interpreter is gone, so the steps below are \
          asking both workflows to install a tool nothing needs"
     );
-    for name in ["ci.yml", "release.yml"] {
-        let workflow = read(&format!(".github/workflows/{name}"));
-        assert!(
-            workflow.contains("cargo test"),
-            "{name} has no test step, so nothing above was checked against a real workflow"
-        );
-        assert!(
-            workflow.contains("actions/setup-node"),
-            "{name} runs a suite that executes JavaScript and never installs a \
-             runtime for it, so it passes only while the runner image happens to"
-        );
-    }
+    let ci = read(".github/workflows/ci.yml");
+    assert!(
+        ci.contains("cargo test"),
+        "ci.yml has no test step, so nothing above was checked against a real workflow"
+    );
+    assert!(
+        ci.contains("actions/setup-node"),
+        "ci.yml runs a suite that executes JavaScript and never installs a \
+         runtime for it, so it passes only while the runner image happens to"
+    );
+    let release = code_of(&read(".github/workflows/release.yml"));
+    assert!(
+        !release.contains("cargo test") && !release.contains("actions/setup-node"),
+        "release.yml runs the suite again after the tag is immutable, where a flake fails a release \
+         instead of a pull request; the suite belongs to ci.yml"
+    );
 
     // The floor: the guard is looking at real files with real steps in them.
     for name in ["ci.yml", "release.yml"] {

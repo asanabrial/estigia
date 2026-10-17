@@ -33,7 +33,7 @@ permissions:
 
 jobs:
   # The job id and the matrix are the required status contexts on main
-  # (`check (ubuntu-latest)` and its two siblings): renaming either, or folding
+  # (`check (ubuntu-latest)` and its siblings): renaming either, or folding
   # the matrix into another job, leaves a required context that never reports.
   # `lint` and `release` run beside it rather than after it, so the slowest
   # suite sets the wall time instead of the sum of every stage.
@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, windows-11-arm]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
 
