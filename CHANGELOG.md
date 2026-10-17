@@ -5,6 +5,10 @@ not edit this file: the agent cutting a version writes its entry in the release 
 the pull requests merged since the previous tag. `changelog-notes` reads that entry for the tag and
 the Release, and refuses a missing or empty one.
 
+## 0.1.1 — 2026-10-17
+
+- The README carries `mcp-name: io.github.asanabrial/estigia`, which the MCP registry reads in the published crate before it accepts the `cargo` package; 0.1.0 was refused for its absence.
+
 ## 0.1.0 — 2026-10-17
 
 The first version. Estigia is a harness: it does not ask an agent to follow the workflow, it holds

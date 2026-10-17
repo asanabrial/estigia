@@ -93,8 +93,10 @@ npx -y @asanabrial/estigia setup --all
 The package carries no binary. It fetches the same archive, checks the same `.sha256`, records the
 candidate the same way, places it in the same directory, and runs it; see
 [`docs/lifecycle.md`](docs/lifecycle.md) for why it never runs Estigia out of npm's cache. The same
-package is what the [MCP registry](https://registry.modelcontextprotocol.io) entry
-`io.github.asanabrial/estigia` starts, as `npx -y @asanabrial/estigia mcp`.
+package is what the [MCP registry](https://registry.modelcontextprotocol.io) entry starts, as
+`npx -y @asanabrial/estigia mcp`. Its name there is `mcp-name: io.github.asanabrial/estigia`, written out
+rather than in a comment because the registry reads that line in the crate's README to accept the
+`cargo` package, and crates.io strips HTML comments.
 
 To build it yourself instead, which is the one route that needs Rust:
 

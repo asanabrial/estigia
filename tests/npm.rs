@@ -106,6 +106,19 @@ fn the_mcp_registry_entry_names_the_packages_this_repository_publishes() {
     assert!(published.contains(&("cargo".to_owned(), "estigia".to_owned())));
 }
 
+#[test]
+fn the_crate_readme_names_the_registry_entry_that_claims_it() {
+    let name = json("server.json")["name"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let line = format!("mcp-name: {name}");
+    assert!(
+        read("README.md").contains(&line),
+        "the MCP registry refuses the cargo package unless the published README carries `{line}`"
+    );
+}
+
 #[cfg(unix)]
 mod installer {
     use super::root;
