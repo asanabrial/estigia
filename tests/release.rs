@@ -1523,3 +1523,65 @@ fn uncommented(line: &str) -> &str {
     }
     line
 }
+
+fn packaged_files() -> Vec<String> {
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["package", "--list", "--allow-dirty", "--offline"])
+        .current_dir(root())
+        .output()
+        .unwrap_or_else(|why| panic!("cargo package --list could not start: {why}"));
+    assert!(
+        output.status.success(),
+        "cargo package --list failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn the_published_crate_carries_what_builds_the_binary_and_nothing_else() {
+    let files = packaged_files();
+    let stray: Vec<&String> = files
+        .iter()
+        .filter(|file| {
+            [
+                "assets/", "docs/", "tests/", "scripts/", ".github/", "changes/", "npm/",
+            ]
+            .iter()
+            .any(|dir| file.starts_with(dir))
+        })
+        .collect();
+    assert!(stray.is_empty(), "the crate would publish {stray:?}");
+    for needed in [
+        "build.rs",
+        "refusal-baseline.txt",
+        "README.md",
+        "LICENSE",
+        "src/main.rs",
+    ] {
+        assert!(
+            files.iter().any(|file| file == needed),
+            "the crate would not publish {needed}"
+        );
+    }
+    assert!(
+        files.iter().any(|file| file.starts_with("skill/")),
+        "the crate would not publish skill/, which build.rs and the binary embed"
+    );
+}
+
+#[test]
+fn the_published_crate_is_findable_on_crates_io() {
+    let manifest = read("Cargo.toml");
+    for key in ["keywords", "categories", "homepage", "readme"] {
+        assert!(
+            manifest
+                .lines()
+                .any(|line| line.starts_with(&format!("{key} = "))),
+            "Cargo.toml names no {key}, which crates.io searches and shows"
+        );
+    }
+}
