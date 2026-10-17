@@ -9,6 +9,17 @@ It is one document in [the reference set](README.md); [`what-it-writes.md`](what
 covers the files setup writes into an agent, and [`configuration.md`](configuration.md) the settings
 a run reads.
 
+Three routes install a released binary, and all three are one sequence: download the archive for the
+platform, check it against the `.sha256` published beside it, run `__record-install` on the extracted
+candidate, and only then replace the installed executable. `scripts/install.sh` and
+`scripts/install.ps1` are two of them; the npm package `@asanabrial/estigia` (`npm/bin/estigia.js`) is
+the third, and it runs the installed binary afterwards with the arguments it was given. It installs into
+the directory the scripts use rather than into npm's cache because `setup` writes the canonicalised
+path of the running binary into every agent's hooks (`setup::executable_path`): a path that changed
+with each version would leave those hooks naming a file the next upgrade removed. It reinstalls when
+`estigia --version` at that path does not answer the package's version. `cargo install estigia` is a
+source build, exactly as `cargo install --git` is.
+
 `estigia update` is read-only. Text and global `--json` output report the pathname returned by
 `current_exe`, a SHA-256 inventory of bytes reopened through that pathname, whether a local installer
 record uses that lookup key, the package version and embedded skill/agent-definition digest compiled into

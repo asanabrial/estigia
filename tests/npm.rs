@@ -1,3 +1,4 @@
+//! The npm installer and the MCP registry entry, held to the release they publish.
 use std::path::{Path, PathBuf};
 
 fn root() -> PathBuf {

@@ -10224,3 +10224,20 @@ mail waiting; and Node tests that drive the generated Pi extension. What it does
   not authority; only the resolution of an issue number reads the store.
 - **A message is text from another session.** Delivery says so in its first lines; nothing stops a model from acting
   on it, and nothing here measures how the hosts' models treat it.
+
+## The npm installer and the registries
+
+`npm/bin/estigia.js` installs a release archive the way the scripts do, and `publish-registries.yml`
+publishes crates.io, npm and the MCP registry from a tag. What this measures: four Node tests in `tests/npm.rs`
+that drive the installer against archives served from `127.0.0.1` — a verified install that records, places and
+runs, and a second run that fetches nothing; a mismatched sum, a missing sum and a refused record that place
+nothing — and static tests that hold its target table, the three version fields and the workflow's tag guard to
+the files they describe. What it does not measure:
+
+- **The Node tests run on Unix only.** The stand-in binary is a shell script, so the Windows branches — the
+  `System32` `tar.exe` that reads the zip, the `%LOCALAPPDATA%` directory, replacing an `.exe` another
+  process holds open — have never run.
+- **No registry was published to.** Trusted publishing, the idempotence probes and `mcp-publisher` run only
+  on a tag, and no tag has been cut; `server.json` was not validated by the registry.
+- **The installed-version check reads `--version` text.** A binary at the install path that answers the
+  package's version is run without its bytes being checked against the release.

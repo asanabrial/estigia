@@ -123,7 +123,7 @@ a second copy that will disagree.
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. One hundred and five tests **require** `node` on the path, and one hundred and four of them drive the OpenCode plugins and
+   --no-deps`. One hundred and nine tests **require** `node` on the path, and one hundred and four of them drive the OpenCode plugins and
    the Pi extensions this crate generates — because those are JavaScript and asserting on their source text is what
    let a gate defect stand. Nine are on the gate plugin,
    `the_plugin_hands_the_gate_the_directory_the_call_runs_in`,
@@ -233,7 +233,12 @@ a second copy that will disagree.
    `the_child_side_message_tool_exists_only_in_a_session_the_runner_spawned`,
    `a_background_pi_subagent_returns_at_once_and_delivers_its_answer_as_a_waking_follow_up` and
    `a_query_from_a_child_the_parent_is_blocked_on_fails_at_once_and_is_never_relayed`.
-   The hundred and fifth, `a_node_driver_that_never_exits_fails_within_its_deadline_and_shows_what_it_printed`,
+   Four in `tests/npm.rs` drive the npm installer, `npm/bin/estigia.js`, on Unix only and with `tar` as well:
+   `the_npm_installer_records_and_places_a_verified_binary_and_runs_it`,
+   `the_npm_installer_refuses_an_archive_that_does_not_match_its_sum`,
+   `the_npm_installer_refuses_an_archive_with_no_published_sum` and
+   `the_npm_installer_places_nothing_the_lifecycle_record_refused`.
+   The last, `a_node_driver_that_never_exits_fails_within_its_deadline_and_shows_what_it_printed`,
    drives no generated code: it holds the deadline every one of the others runs under. Every `node` launch in
    `src/setup/tests.rs` goes through `run_node`, which drains both pipes on threads and, past 120 s (the
    slowest driver measured 12 s under the full parallel run), kills and reaps `node` and fails naming the test
@@ -242,7 +247,7 @@ a second copy that will disagree.
    spelled as a pass is a defect this repository has filed against itself. Others *ask* for an
    interpreter and tolerate its absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
-   that one hundred and five tests require `node` and one requires `bash`, and nothing else does. `doctor` asks for
+   that one hundred and nine tests require `node`, four of them `tar` too, and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here

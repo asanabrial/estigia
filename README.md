@@ -84,10 +84,23 @@ prebuilt binaries, and each script checks its download against the checksum publ
 refuses to install anything that does not match. The binary lands in `~/.local/bin`, or on your PATH
 on Windows; `ESTIGIA_INSTALL_DIR` moves that and `ESTIGIA_VERSION` takes a tag other than the latest.
 
+With Node already on the machine, npm is the same installer:
+
+```sh
+npx -y @asanabrial/estigia setup --all
+```
+
+The package carries no binary. It fetches the same archive, checks the same `.sha256`, records the
+candidate the same way, places it in the same directory, and runs it; see
+[`docs/lifecycle.md`](docs/lifecycle.md) for why it never runs Estigia out of npm's cache. The same
+package is what the [MCP registry](https://registry.modelcontextprotocol.io) entry
+`io.github.asanabrial/estigia` starts, as `npx -y @asanabrial/estigia mcp`.
+
 To build it yourself instead, which is the one route that needs Rust:
 
 ```sh
-cargo install --git https://github.com/asanabrial/estigia
+cargo install estigia                                     # the published crate
+cargo install --git https://github.com/asanabrial/estigia  # main as it stands
 ```
 
 A source build is treated as a source build from then on: it has no installer record, so the commands
