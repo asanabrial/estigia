@@ -3,19 +3,26 @@ name = "estigia"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "Workflow authority for coding agents over an issue tracker: timeline-adjudicated claims, states, exact review binding, and delivery evidence"
+description = "Guardrails for AI coding agents (Claude Code, Codex, OpenCode, Pi): an MCP server and hooks that verify issue claims, bind reviews to exact commits and gate merges"
 repository = "https://github.com/asanabrial/estigia"
+homepage = "https://github.com/asanabrial/estigia"
+readme = "README.md"
+keywords = ["mcp", "ai-agents", "claude-code", "guardrails", "code-review"]
+categories = ["command-line-utilities", "development-tools"]
 rust-version = "1.97"
-# What `cargo publish` must not carry. Stated here rather than left to
-# `.gitignore`, because the two are not the same gate: cargo only consults git's
-# ignore rules inside a git checkout, so a publish from a plain directory ships
-# everything those rules were supposed to hold back. Measured before this line
-# existed: `cargo package --list` reported 331 files, 210 of them mutation-test
-# output and one of them the operator's own working log.
-exclude = [
-    "/mutants.out",
-    "/mutants.out.old",
-    "/HANDOFF.md",
+# An allowlist rather than `exclude`: cargo consults `.gitignore` only inside a git
+# checkout, and a published crate has no use for the docs, tests, scripts and
+# workflows beside the code.
+include = [
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/build.rs",
+    "/src/**",
+    "/skill/**",
+    "/refusal-baseline.txt",
+    "/README.md",
+    "/LICENSE",
+    "/THIRD_PARTY_NOTICES.md",
 ]
 
 [dependencies]

@@ -1,0 +1,46 @@
+{
+  "name": "@asanabrial/estigia",
+  "version": "0.1.0",
+  "mcpName": "io.github.asanabrial/estigia",
+  "description": "Guardrails for AI coding agents (Claude Code, Codex, OpenCode, Pi): an MCP server and hooks that verify issue claims, bind reviews to exact commits and gate merges",
+  "bin": {
+    "estigia": "bin/estigia.js"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "codex",
+    "opencode",
+    "ai-agents",
+    "guardrails",
+    "code-review"
+  ],
+  "homepage": "https://github.com/asanabrial/estigia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asanabrial/estigia.git",
+    "directory": "npm"
+  },
+  "bugs": {
+    "url": "https://github.com/asanabrial/estigia/issues"
+  },
+  "author": "Alexis Sanabria Lopez",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "linux",
+    "darwin",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

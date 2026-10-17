@@ -4656,7 +4656,7 @@ mod tests {
     /// A `git log` walk for removed `SkillFile` paths was considered instead
     /// of this frozen list, and would have been more accurate — it needs no
     /// upkeep of its own. It was not chosen: this crate is published
-    /// (`Cargo.toml`'s `exclude` list exists because of it), and `cargo test`
+    /// (`Cargo.toml`'s `include` list exists because of it), and `cargo test`
     /// against a package extracted from a tarball has no `.git` at all, so
     /// that guard would hard-fail outside a checkout rather than measure
     /// anything. `a_linked_worktree_keeps_its_answers_with_the_repository`,

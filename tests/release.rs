@@ -876,6 +876,7 @@ const RUNTIME_FLOORS: &[(&str, u32)] = &[
     // reader cannot reach them. It is floored anyway, so a revert to `@v2` — the
     // major whose pins are the node20 pair — reddens rather than passing green.
     ("actions/attest-build-provenance", 3),
+    ("rust-lang/crates-io-auth-action", 1),
 ];
 
 /// The floor table's own completeness, held against the workflows.
@@ -1522,4 +1523,130 @@ fn uncommented(line: &str) -> &str {
         previous = character;
     }
     line
+}
+
+fn packaged_files() -> Vec<String> {
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["package", "--list", "--allow-dirty", "--offline"])
+        .current_dir(root())
+        .output()
+        .unwrap_or_else(|why| panic!("cargo package --list could not start: {why}"));
+    assert!(
+        output.status.success(),
+        "cargo package --list failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|file| file.replace('\\', "/"))
+        .collect()
+}
+
+#[test]
+fn the_published_crate_carries_what_builds_the_binary_and_nothing_else() {
+    let files = packaged_files();
+    let stray: Vec<&String> = files
+        .iter()
+        .filter(|file| {
+            [
+                "assets/", "docs/", "tests/", "scripts/", ".github/", "changes/", "npm/",
+            ]
+            .iter()
+            .any(|dir| file.starts_with(dir))
+        })
+        .collect();
+    assert!(stray.is_empty(), "the crate would publish {stray:?}");
+    for needed in [
+        "build.rs",
+        "refusal-baseline.txt",
+        "README.md",
+        "LICENSE",
+        "src/main.rs",
+    ] {
+        assert!(
+            files.iter().any(|file| file == needed),
+            "the crate would not publish {needed}"
+        );
+    }
+    assert!(
+        files.iter().any(|file| file.starts_with("skill/")),
+        "the crate would not publish skill/, which build.rs and the binary embed"
+    );
+}
+
+#[test]
+fn the_published_crate_is_findable_on_crates_io() {
+    let manifest = read("Cargo.toml");
+    for key in ["keywords", "categories", "homepage", "readme"] {
+        assert!(
+            manifest
+                .lines()
+                .any(|line| line.starts_with(&format!("{key} = "))),
+            "Cargo.toml names no {key}, which crates.io searches and shows"
+        );
+    }
+}
+
+fn jobs_of(workflow: &str) -> Vec<(String, String)> {
+    let code = code_of(workflow);
+    let body = code
+        .split_once("\njobs:\n")
+        .map(|(_, jobs)| jobs)
+        .unwrap_or_else(|| panic!("the workflow has no jobs"));
+    let mut jobs: Vec<(String, String)> = Vec::new();
+    for line in body.lines() {
+        let name = line
+            .strip_prefix("  ")
+            .filter(|rest| !rest.starts_with(' ') && rest.ends_with(':'));
+        match (name, jobs.last_mut()) {
+            (Some(name), _) => jobs.push((name.trim_end_matches(':').to_owned(), String::new())),
+            (None, Some((_, block))) => {
+                block.push_str(line);
+                block.push('\n');
+            }
+            (None, None) => {}
+        }
+    }
+    jobs
+}
+
+#[test]
+fn the_registries_publish_only_a_tag_they_were_handed() {
+    let workflow = read(".github/workflows/publish-registries.yml");
+    let jobs = jobs_of(&workflow);
+    let names: Vec<&str> = jobs.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(names, ["crates-io", "npm", "mcp-registry"]);
+    for (name, block) in &jobs {
+        assert!(
+            block.contains("    if: startsWith(inputs.ref, 'v')"),
+            "{name} would run on a dispatch that names no tag, which every review publication sends"
+        );
+        assert!(
+            block.contains("id-token: write"),
+            "{name} publishes without trusted publishing"
+        );
+    }
+    assert!(
+        !code_of(&workflow).contains("secrets."),
+        "a registry token is stored where trusted publishing needs none"
+    );
+    let (_, registry) = &jobs[2];
+    assert!(
+        registry.contains("sha256sum -c") && !registry.contains("releases/latest"),
+        "mcp-publisher runs with the job's publishing identity, so it is pinned and checked first"
+    );
+}
+
+#[test]
+fn a_published_release_hands_its_tag_to_the_registries() {
+    let workflow = read(".github/workflows/release.yml");
+    let jobs = jobs_of(&workflow);
+    let (_, registries) = jobs
+        .iter()
+        .find(|(name, _)| name == "registries")
+        .unwrap_or_else(|| panic!("release.yml has no registries job"));
+    assert!(registries.contains("needs: publish"));
+    assert!(registries.contains("gh workflow run publish-registries.yml"));
+    assert!(registries.contains("-f ref=\"$REF\""));
+    assert!(registries.contains("REF: ${{ github.ref_name }}"));
 }
