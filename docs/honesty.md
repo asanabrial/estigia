@@ -436,13 +436,18 @@ pointer that leaves it names the document it points at.
   against the one `review_status` offers at admission, and a result for a receipt the review has
   moved past is refused `capture-result-stale` with nothing recorded.
 
-  - **The relay is measured under `node` against stand-in shells, and `bun` only by hand.** The tests
+  - **Automated relay coverage uses `node` stand-in shells; live foreground transport was also measured.** The tests
     drive the generated plugin with a stand-in whose command objects honour the `<` redirect and have no
     `.stdin()`; none runs it under Bun, because that would make `bun` a second required interpreter in CI.
     The redirect form and a 200,000-byte answer were read to EOF by a child under Bun 1.3.1 and OpenCode
-    2.0.28's event shapes were read from its binary, not from a live review: no run through a live host
-    has admitted an answer, and a host that changes `result.content` or the `(input, output)` shape
-    leaves the plugin inert or refusing, never admitting a wrong answer.
+    2.0.28's event shapes were read from its binary. Separately, the publishing run directly launched four
+    native OpenCode foreground reviewer contexts through the candidate relay in a temporary workspace
+    profile while delivering the claim-authority correction. All four answers were admitted privately
+    with zero findings against that correction's exact receipt, without Claude or Codex fallback.
+    This measures native foreground transport, not approval of the relay candidate, acknowledgment
+    handling or background support. The global binary and configuration were untouched. A host that
+    changes `result.content` or the `(input, output)` shape leaves the plugin inert or refusing, never
+    admitting a wrong answer.
 
   - **A relayed reviewer runs as the built-in `general` sub-agent, with its tool grant.** The
     `relay: true` answer on an OpenCode run carries `launch`, naming `general` and the marker prompt
@@ -451,6 +456,26 @@ pointer that leaves it names the document it points at.
     tools (edit, write, bash), where the CLI's reviewer runs with none, so the relayed reviewer is
     sealed by the prompt the plugin puts in, not by a tool grant: a weaker seal than the CLI's
     tool-less reviewer. Nothing here removes the grant or reads what the sub-agent did with it.
+    The native completion shape was read from the installed OpenCode 2.0.32 executable's
+    `SubagentTool.Plugin` and `Tool.execute` code (external source). Its structured `output.output`
+    carries final text; `content` wraps it for display. The generated-plugin fixture now measures
+    that distinction with synthetic text, plus running-child, tool-error and contradictory-metadata
+    refusals. Earlier fixtures used only text parts and missed the wrapper/admission mismatch.
+    Foreground review is supported; background launches are explicitly refused rather than admitting
+    their launch notifications. No correlated private background completion channel is implemented.
+    `a_relayed_answer_is_admitted_against_the_job_receipt` now passes a synthetic native completion
+    through the generated plugin under Node and then real ledger admission, rather than relying on a
+    successful admission stub alone. A separate capture regression abandons a runner-less relay job
+    through collect and relaunches it on the unchanged receipt. Neither test measures a live model.
+    The native completion driver checks actual recursively collected string values for leaked answer
+    text, not a serialized envelope whose escaping can hide it. Leaving the native raw answer and
+    display wrapper intact passed the former check but fails the strengthened check with
+    `review output leaked`. The refusal fixture checks the ordered collect, status and same-receipt
+    foreground relaunch diagnostic for a foreground child that remains running, mismatched identity
+    or status, missing output and tool error, as well as zero admission and suppressed raw output.
+    Removing that recovery diagnostic passed the former assertions but fails the strengthened ones
+    on the missing `collect_review_input` step. Both mutations were restored; runtime behavior is
+    unchanged by these assertion repairs.
   - **ZCode, Cursor and DeepSeek Harness cannot relay.** The canonical per-runtime table
     (`src/setup/capabilities.rs`) records no agent-definitions surface for any of the three
     (`agent_definitions: false`), so none can be routed to a reserved reviewer at all; and only
