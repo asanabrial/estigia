@@ -1458,7 +1458,8 @@ fn reclaim_is_valid(
     // The prefix, and only the reclaims already accepted within it.
     let upto = &comments[..event.position.min(comments.len())];
     let legacy = legacy_release_positions(upto, prior, valid_so_far);
-    let before = reduce_ownership(prior, &legacy, &Default::default(), upto, &event.created_at);
+    let epochs = epoch_release_positions(upto, prior, valid_so_far);
+    let before = reduce_ownership(prior, &legacy, &epochs, upto, &event.created_at);
 
     let epoch_of = |candidate: &Event| {
         ownership_epoch(
