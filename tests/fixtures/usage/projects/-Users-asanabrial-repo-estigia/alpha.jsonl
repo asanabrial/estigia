@@ -1,0 +1,5 @@
+{"type":"user","message":{"role":"user","content":"start"}}
+{"type":"assistant","uuid":"u1","message":{"id":"m1","usage":{"input_tokens":3,"cache_read_input_tokens":100,"cache_creation_input_tokens":7,"output_tokens":5},"content":[{"type":"tool_use","name":"mcp__estigia__task","input":{"issue":148}}]}}
+{"type":"assistant","uuid":"u2","message":{"id":"m2","usage":{"input_tokens":4,"cache_read_input_tokens":200,"cache_creation_input_tokens":0,"output_tokens":6},"content":[{"type":"tool_use","name":"mcp__estigia__tasks","input":{"issue":148}}]}}
+{"type":"assistant","uuid":"u3","message":{"id":"m2","usage":{"input_tokens":900,"cache_read_input_tokens":900,"cache_creation_input_tokens":900,"output_tokens":900},"content":[{"type":"tool_use","name":"mcp__estigia__tasks","input":{"issue":152}}]}}
+{"type":"assistant","uuid":"u4","message":{"content":[{"type":"text","text":"no usage here"}]}}

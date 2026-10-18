@@ -698,6 +698,18 @@ context — the same detection the baseline scripts in `~/estigia-baseline/` use
 than reimplemented from first principles), per-issue input tokens where a transcript names an
 issue, and each repository's most recent session time.
 
+It also reports the four usage classes — `input`, `cache_read`, `cache_creation` and `output` —
+separately, per context, from each record's own counters. The mapping is `CLAUDE_USAGE_KEYS` in the
+script and is this CLI's; a provider whose cached counters already sit inside its input total needs
+its own. A class no measured record carried is `null` and never `0`, and a record missing any of the
+four is counted in `usage.records_missing_a_counter`, so the classes read as a floor rather than as
+complete. They change nothing outside themselves: against the base script, on the same corpus, the
+two agree byte for byte on `session_count`, `context_input_tokens`, the forced-`Stop` figures and
+`per_issue_input_tokens` (measured 2026-10-18: 179 sessions, 90,563 usage records, none of them
+missing a counter). `tests/usage_accounting.rs` pins the classes against a hand-written fixture,
+including the unknown and the missing-counter cases the live corpus does not exercise, and pins the
+readable table that names them.
+
 **Run on this machine, against this checkout, after the change landed and delivery sessions closed
 against it.** The condition the baseline's acceptance item 6 waited on is now met: the corpus under
 `~/.claude-personal/projects` holds delivery sessions whose own transcripts name a build carrying
@@ -710,13 +722,15 @@ those slices. The recent estigia transcripts carry build commits
 each. The corpus is no longer only older than the change, so the re-read below is the post-change one
 the acceptance item asked for.
 
-The script itself is exercised now — its own readable-table output, on the corpus as it stands on
-this machine, is below (`--projects ~/.claude-personal/projects`, the default; full JSON is
-reproducible with the same command, no `--json` needed to see it — it prints after the table). The
-session counts name the repositories the original 15-transcript baseline already drew from and
-several the corpus has since grown; this is the same live corpus, re-read by the adapted script
-rather than a fresh one. The blocks for repositories outside this project are omitted, and so
-is the `overall` block, which summed them.
+The script itself is exercised now — its own readable-table output as it stood on 2026-10-04, on
+the corpus as it stood then, is below (`--projects ~/.claude-personal/projects`, the default; full
+JSON is reproducible with the same command, no `--json` needed to see it — it prints after the
+table). That capture predates the class lines above: a run now prints a `usage classes` block after
+the per-context lines, and a `records missing a counter` line under it when any record lacked one.
+Every other line is unchanged. The session counts name the repositories the original 15-transcript
+baseline already drew from and several the corpus has since grown; this is the same live corpus,
+re-read by the adapted script rather than a fresh one. The blocks for repositories outside this
+project are omitted, and so is the `overall` block, which summed them.
 
 ```
 == estigia ==

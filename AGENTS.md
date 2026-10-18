@@ -254,6 +254,12 @@ a second copy that will disagree.
    spawns `node` to check the plugin parses, and several fixtures spawn `sh` — so the honest line is
    that one hundred and eleven tests require `node`, four of them `tar` too, and one requires `bash`, and nothing else does. `doctor` asks for
    none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not skips, without it.
+   One more interpreter joined that list with the transcript accounting: the five tests in
+   `tests/usage_accounting.rs` run the measurement script under `python3`, the interpreter that
+   script is written in, and they are `#[cfg(unix)]` because `python3` is not the name Windows
+   ships. They fail, never skip, without it, so the honest line is that one test requires `bash`,
+   five require `python3` on Unix, and nothing else does; all of those read a missing interpreter as
+   a broken build rather than an unbuilt fixture.
    `cargo doc` is on this list because it was not, and
    had been failing outright — four public pages linking to private items, and neither the list here
    nor CI ever asked. A crate whose public documentation does not build is one nobody
