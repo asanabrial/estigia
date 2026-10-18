@@ -4201,6 +4201,7 @@ fn prune(confirm: bool, base: &str, json: bool) -> Result<(), Refusal> {
         ownership: harness::session::state_root(None)
             .map_err(|failure| failure.message)
             .and_then(|root| harness::prune::ownership(&root)),
+        ownership_root: harness::session::state_root(None).ok(),
     };
     let swept = harness::prune::sweep(&view).map_err(|failure| {
         Refusal::not_started(

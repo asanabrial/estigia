@@ -1976,6 +1976,7 @@ pub fn sweep(
         ownership: super::session::state_root(None)
             .map_err(|failure| failure.message)
             .and_then(|root| super::prune::ownership(&root)),
+        ownership_root: super::session::state_root(None).ok(),
     };
     match crate::harness::prune::sweep(&view) {
         Ok(swept) => {

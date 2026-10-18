@@ -1,6 +1,259 @@
 use super::*;
 
 #[test]
+fn correction_configured_upstream_presence_keeps_the_checkout() {
+    for alternative_remote in [false, true] {
+        let (root, clone, trees) = sweep_fixture();
+        let upstream = if alternative_remote {
+            let other = root.path().join("other.git");
+            git(
+                root.path(),
+                &[
+                    "clone",
+                    "--quiet",
+                    "--bare",
+                    root.path().join("remote.git").to_str().unwrap(),
+                    other.to_str().unwrap(),
+                ],
+            );
+            git(&clone, &["remote", "add", "other", other.to_str().unwrap()]);
+            git(&clone, &["fetch", "--quiet", "other"]);
+            "other/issue-2-open"
+        } else {
+            git(&clone, &["push", "origin", "issue-2-open:renamed"]);
+            "origin/renamed"
+        };
+        git(
+            &clone,
+            &["branch", "--set-upstream-to", upstream, "issue-2-open"],
+        );
+        git(
+            &root.path().join("work"),
+            &["push", "origin", "--delete", "issue-2-open"],
+        );
+        let context = Context::live(root.path().join("skill"), clone, None);
+        let view = View {
+            context: &context,
+            base: "main",
+            holdings: &[],
+            root: Some(&trees),
+            ownership: Ok(Vec::new()),
+            ownership_root: Some(root.path().join("runs")),
+        };
+        let decision = orphan_decision(&view);
+        assert!(!decision.delete, "{upstream}: {decision:?}");
+        assert!(
+            decision.reason.contains("remote branch still exists"),
+            "{decision:?}"
+        );
+        assert!(confirm(&view, &[decision]).is_empty());
+        assert!(trees.join("issue-2-open").exists());
+        git(
+            &context.repo_dir,
+            &["push", "origin", "issue-2-open:archive"],
+        );
+        git(
+            &context.repo_dir,
+            &[
+                "push",
+                if alternative_remote {
+                    "other"
+                } else {
+                    "origin"
+                },
+                "--delete",
+                if alternative_remote {
+                    "issue-2-open"
+                } else {
+                    "renamed"
+                },
+            ],
+        );
+        let gone = orphan_decision(&view);
+        assert!(gone.delete, "{upstream}: {gone:?}");
+        let removed = confirm(&view, &[gone]);
+        assert_eq!(removed[0]["outcome"], "removed", "{removed:?}");
+    }
+}
+
+#[test]
+fn correction_confirmation_rereads_new_holders_and_failed_ownership() {
+    for case in [
+        "session",
+        "pointer",
+        "unreadable",
+        "registry",
+        "boundary-session",
+        "boundary-pointer",
+        "boundary-unreadable",
+    ] {
+        let (root, clone, trees) = sweep_fixture();
+        git(&clone, &["push", "origin", "issue-2-open:archive"]);
+        git(&clone, &["push", "origin", "--delete", "issue-2-open"]);
+        let context = Context::live(root.path().join("skill"), clone, None);
+        let pointers = root.path().join("runs");
+        let view = View {
+            context: &context,
+            base: "main",
+            holdings: &[],
+            root: Some(&trees),
+            ownership: Ok(Vec::new()),
+            ownership_root: Some(pointers.clone()),
+        };
+        let decision = orphan_decision(&view);
+        assert!(decision.delete, "{decision:?}");
+        let change_ownership = || {
+            std::fs::create_dir_all(&pointers).unwrap();
+            match case {
+                "session" | "boundary-session" => {
+                    let store = crate::transport::store::Store::open(
+                        &crate::transport::store::beside(&pointers),
+                    )
+                    .unwrap();
+                    store
+                        .session_seen(
+                            &crate::transport::store::SessionSeen {
+                                run_id: "opencode-late",
+                                runtime: "opencode",
+                                session_id: "late",
+                                repo_dir: trees.join("issue-2-open").to_str(),
+                            },
+                            1,
+                        )
+                        .unwrap();
+                }
+                "pointer" | "boundary-pointer" => {
+                    let mut pointer = Run::new("opencode-late".to_owned());
+                    pointer.issue = Some(crate::identity::Identity::Number(3));
+                    pointer.worktree = Some(trees.join("issue-2-open"));
+                    std::fs::write(
+                        pointers.join("opencode-late.json"),
+                        serde_json::to_vec(&pointer).unwrap(),
+                    )
+                    .unwrap();
+                }
+                "registry" => std::fs::write(
+                    crate::transport::store::beside(&pointers),
+                    "unreadable registry",
+                )
+                .unwrap(),
+                _ => std::fs::write(pointers.join("opencode-late.json"), "unreadable pointer")
+                    .unwrap(),
+            }
+        };
+        let answers = if case.starts_with("boundary-") {
+            vec![confirm_worktree_after(&view, &decision, change_ownership)]
+        } else {
+            change_ownership();
+            confirm(&view, &[decision])
+        };
+        assert_eq!(answers[0]["outcome"], "kept", "{case}: {answers:?}");
+        let reason = answers[0]["detail"].as_str().unwrap();
+        assert!(
+            reason.contains(if case.ends_with("session") {
+                "session"
+            } else {
+                "ownership"
+            }),
+            "{case}: {answers:?}"
+        );
+        assert!(trees.join("issue-2-open").exists());
+    }
+}
+
+#[test]
+fn correction_missing_local_and_ambiguous_upstreams_are_kept() {
+    for case in ["untracked", "local", "unknown", "missing-merge", "multiple"] {
+        let (root, clone, trees) = sweep_fixture();
+        git(&clone, &["push", "origin", "issue-2-open:archive"]);
+        git(&clone, &["push", "origin", "--delete", "issue-2-open"]);
+        match case {
+            "untracked" => git(&clone, &["branch", "--unset-upstream", "issue-2-open"]),
+            "local" => git(&clone, &["config", "branch.issue-2-open.remote", "."]),
+            "unknown" => git(&clone, &["config", "branch.issue-2-open.remote", "unknown"]),
+            "missing-merge" => git(&clone, &["config", "--unset", "branch.issue-2-open.merge"]),
+            _ => git(
+                &clone,
+                &[
+                    "config",
+                    "--add",
+                    "branch.issue-2-open.merge",
+                    "refs/heads/archive",
+                ],
+            ),
+        }
+        let context = Context::live(root.path().join("skill"), clone, None);
+        let view = View {
+            context: &context,
+            base: "main",
+            holdings: &[],
+            root: Some(&trees),
+            ownership: Ok(Vec::new()),
+            ownership_root: Some(root.path().join("runs")),
+        };
+        let decision = orphan_decision(&view);
+        assert!(!decision.delete, "{case}: {decision:?}");
+        assert!(
+            decision.reason.contains(if case == "untracked" {
+                "no configured upstream"
+            } else {
+                "tracking identity"
+            }),
+            "{case}: {decision:?}"
+        );
+        assert!(confirm(&view, &[decision]).is_empty());
+        assert!(trees.join("issue-2-open").exists());
+    }
+}
+
+#[test]
+fn correction_revision_and_branch_movement_after_proof_are_kept() {
+    for move_branch in [false, true] {
+        let (root, clone, trees) = sweep_fixture();
+        git(&clone, &["push", "origin", "issue-2-open:archive"]);
+        git(&clone, &["push", "origin", "--delete", "issue-2-open"]);
+        let context = Context::live(root.path().join("skill"), clone, None);
+        let view = View {
+            context: &context,
+            base: "main",
+            holdings: &[],
+            root: Some(&trees),
+            ownership: Ok(Vec::new()),
+            ownership_root: Some(root.path().join("runs")),
+        };
+        let decision = orphan_decision(&view);
+        assert!(decision.delete);
+        let target = trees.join("issue-2-open");
+        let answer = confirm_worktree_after(&view, &decision, || {
+            if move_branch {
+                git(&target, &["switch", "--quiet", "-c", "moved"]);
+            } else {
+                git(
+                    &target,
+                    &[
+                        "commit",
+                        "--quiet",
+                        "--allow-empty",
+                        "-m",
+                        "late unique commit",
+                    ],
+                );
+            }
+        });
+        assert_eq!(answer["outcome"], "kept", "{answer:?}");
+        assert!(
+            answer["detail"].as_str().unwrap().contains(if move_branch {
+                "branch changed"
+            } else {
+                "not at the delivered head"
+            }),
+            "{answer:?}"
+        );
+        assert!(target.exists());
+    }
+}
+
+#[test]
 fn a_remote_gone_checkout_reachable_from_another_remote_is_removed_only_on_confirmation() {
     let (root, clone, trees) = sweep_fixture();
     git(&clone, &["push", "origin", "issue-2-open:archive"]);
@@ -17,6 +270,7 @@ fn a_remote_gone_checkout_reachable_from_another_remote_is_removed_only_on_confi
         holdings: &[],
         root: Some(&trees),
         ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
     };
     let bin = crate::test_env::scripted_gh();
     let script = crate::test_env::answers(&[
@@ -143,6 +397,7 @@ fn remote_gone_eligibility_keeps_dirty_unique_held_present_and_unreadable_checko
             holdings: &holdings,
             root: Some(&trees),
             ownership,
+            ownership_root: Some(root.path().join("runs")),
         };
         let decision = orphan_decision(&view);
         assert!(!decision.delete, "{case}: {decision:?}");
@@ -171,6 +426,7 @@ fn confirmation_rechecks_remote_gone_work_before_removing_it() {
         holdings: &[],
         root: Some(&trees),
         ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
     };
     let decision = orphan_decision(&view);
     assert!(decision.delete);
@@ -469,6 +725,7 @@ fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
         holdings: &holdings,
         root: Some(trees.as_path()),
         ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
     };
     let script = crate::test_env::answers(&[
         crate::test_env::open_but_unmatched_issue(1),
@@ -541,6 +798,7 @@ fn a_kept_checkout_names_the_uncommitted_files_it_carries() {
         holdings: &[],
         root: Some(trees.as_path()),
         ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
     };
     let script = crate::test_env::answers(&[
         crate::test_env::open_but_unmatched_issue(1),
@@ -632,6 +890,7 @@ fn confirm_removes_only_what_the_sweep_marked_for_deletion() {
         holdings: &holdings,
         root: Some(trees.as_path()),
         ownership: Ok(Vec::new()),
+        ownership_root: Some(root.path().join("runs")),
     };
     let script = crate::test_env::answers(&[
         crate::test_env::open_but_unmatched_issue(1),

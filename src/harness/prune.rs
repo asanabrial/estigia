@@ -153,12 +153,14 @@ pub struct View<'a> {
     /// checkout under it is the ordinary case; one outside it is the shape a
     /// judge's directory takes.
     pub root: Option<&'a Path>,
-    /// Directories named by sessions not known ended, or an ownership read failure.
+    /// Initial ownership observations, retained conservatively alongside fresh reads.
     pub ownership: Result<Vec<std::path::PathBuf>, String>,
+    /// The pointer directory used to refresh ownership before orphan retirement.
+    pub ownership_root: Option<std::path::PathBuf>,
 }
 
-/// Reads session directories conservatively: silence is not proof of an ended
-/// session, and a corrupt pointer is not proof that no claim holds a checkout.
+/// Reads pointer and session directories conservatively, refusing corrupt or
+/// unlocated ownership. Silence is not proof that a session ended.
 pub fn ownership(root: &Path) -> Result<Vec<std::path::PathBuf>, String> {
     let unreadable = super::session::unreadable_holdings(root);
     if !unreadable.is_empty() {
@@ -167,12 +169,23 @@ pub fn ownership(root: &Path) -> Result<Vec<std::path::PathBuf>, String> {
             unreadable.join(", ")
         ));
     }
+    let mut paths = Vec::new();
+    for pointer in super::session::holdings(root) {
+        if pointer.worktree.is_none() && pointer.repo_dir.is_none() {
+            return Err(format!(
+                "ownership has no readable checkout ({})",
+                pointer.run_id
+            ));
+        }
+        paths.extend(pointer.worktree);
+        paths.extend(pointer.repo_dir);
+    }
     let opened = crate::transport::store::open_for_read(&crate::transport::store::beside(root))
         .map_err(|failure| failure.detail())?;
     let Some(opened) = opened else {
-        return Ok(Vec::new());
+        return Ok(paths);
     };
-    opened
+    let sessions = opened
         .sessions()
         .map_err(|failure| failure.detail())?
         .into_iter()
@@ -183,7 +196,9 @@ pub fn ownership(root: &Path) -> Result<Vec<std::path::PathBuf>, String> {
                 .filter(|path| path.is_absolute())
                 .ok_or_else(|| format!("session {} has no readable checkout", row.run_id))
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    paths.extend(sessions);
+    Ok(paths)
 }
 
 /// Reads the machine and decides what the sweep would do.
@@ -238,7 +253,7 @@ fn observe_worktrees(
                     }
                     _ => outside_the_root(view, &entry.path).or_else(|| {
                         match remote_gone(view, &entry.path, branch, &mut refreshed) {
-                            Ok(()) => {
+                            Ok(_) => {
                                 unpublished = false;
                                 Some(REMOTE_GONE.to_owned())
                             }
@@ -338,12 +353,7 @@ fn observe_heads(
 
 const REMOTE_GONE: &str = "its remote branch is gone and every commit is on a remote";
 
-fn remote_gone(
-    view: &View<'_>,
-    path: &Path,
-    branch: &str,
-    refreshed: &mut Option<Result<(), String>>,
-) -> Result<(), String> {
+fn check_ownership(view: &View<'_>, path: &Path) -> Result<(), String> {
     if let Some(pointer) = view.holdings.iter().find(|pointer| {
         pointer.unreadable
             || (pointer.worktree.is_none() && pointer.repo_dir.is_none())
@@ -365,6 +375,21 @@ fn remote_gone(
     {
         return Err("a session not known ended holds this checkout".to_owned());
     }
+    let root = view
+        .ownership_root
+        .as_deref()
+        .ok_or_else(|| "ownership root could not be read".to_owned())?;
+    let latest = ownership(root).map_err(|why| format!("ownership could not be read: {why}"))?;
+    if latest
+        .iter()
+        .any(|named| crate::paths::same_directory(named, path))
+    {
+        return Err("ownership is held by a session or run pointer not known released".to_owned());
+    }
+    Ok(())
+}
+
+fn check_branch(path: &Path, branch: &str) -> Result<(), String> {
     let current = run(
         &["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
         Some(path),
@@ -374,6 +399,58 @@ fn remote_gone(
     if current.stdout.trim() != branch {
         return Err("the checkout's branch changed".to_owned());
     }
+    Ok(())
+}
+
+fn tracking_identity(path: &Path, branch: &str) -> Result<(String, String), String> {
+    let remote = config_one(path, &format!("branch.{branch}.remote"))?;
+    let reference = config_one(path, &format!("branch.{branch}.merge"))?;
+    let (remote, reference) = match (remote, reference) {
+        (Some(remote), Some(reference)) => (remote, reference),
+        (None, None) => return Err("no configured upstream; untracked checkout is kept".to_owned()),
+        _ => return Err("tracking identity could not be read completely".to_owned()),
+    };
+    if remote == "."
+        || remote.starts_with('-')
+        || config_one(path, &format!("remote.{remote}.url"))?.is_none()
+        || !reference.starts_with("refs/heads/")
+    {
+        return Err("tracking identity is local-only, invalid or unknown".to_owned());
+    }
+    run(
+        &["git", "check-ref-format", &reference],
+        Some(path),
+        How::read(),
+    )
+    .map_err(|failure| format!("tracking identity is invalid: {}", failure.detail()))?;
+    Ok((remote, reference))
+}
+
+fn config_one(path: &Path, key: &str) -> Result<Option<String>, String> {
+    let output = run(
+        &["git", "config", "--get-all", key],
+        Some(path),
+        How::tolerated(),
+    )
+    .map_err(|failure| format!("tracking identity could not be read: {}", failure.detail()))?;
+    let values: Vec<&str> = output.stdout.lines().collect();
+    match (output.status, values.as_slice()) {
+        (0, [value]) if !value.trim().is_empty() => Ok(Some((*value).to_owned())),
+        (1, []) => Ok(None),
+        _ => Err(format!(
+            "tracking identity could not be read unambiguously ({key})"
+        )),
+    }
+}
+
+fn remote_gone(
+    view: &View<'_>,
+    path: &Path,
+    branch: &str,
+    refreshed: &mut Option<Result<(), String>>,
+) -> Result<String, String> {
+    check_ownership(view, path)?;
+    check_branch(path, branch)?;
     let files = super::changes::uncommitted(path)
         .map_err(|why| format!("checkout state could not be read: {why}"))?;
     if !files.is_empty() {
@@ -384,6 +461,7 @@ fn remote_gone(
                 .collect::<Vec<_>>(),
         ));
     }
+    let (tracking_remote, reference) = tracking_identity(path, branch)?;
     refreshed
         .get_or_insert_with(|| {
             run(
@@ -396,14 +474,13 @@ fn remote_gone(
         })
         .as_ref()
         .map_err(Clone::clone)?;
-    let reference = format!("refs/heads/{branch}");
     let remote = run(
         &[
             "git",
             "ls-remote",
             "--exit-code",
             "--heads",
-            "origin",
+            &tracking_remote,
             &reference,
         ],
         Some(path),
@@ -415,14 +492,23 @@ fn remote_gone(
         2 if remote.stdout.trim().is_empty() => {}
         _ => return Err(format!("remote state could not be read: {}", remote.stderr.trim())),
     }
+    let head = run(
+        &["git", "rev-parse", "--verify", "HEAD^{commit}"],
+        Some(path),
+        How::read(),
+    )
+    .map_err(|failure| format!("checkout head could not be read: {}", failure.detail()))?
+    .stdout
+    .trim()
+    .to_ascii_lowercase();
     let commits = run(
-        &["git", "rev-list", "--count", "HEAD", "--not", "--remotes"],
+        &["git", "rev-list", "--count", &head, "--not", "--remotes"],
         Some(path),
         How::read(),
     )
     .map_err(|failure| format!("checkout commits could not be read: {}", failure.detail()))?;
     match commits.stdout.trim().parse::<u64>() {
-        Ok(0) => Ok(()),
+        Ok(0) => Ok(head),
         Ok(_) => Err(carries(&[])),
         Err(_) => Err("checkout commits could not be read".to_owned()),
     }
@@ -642,31 +728,54 @@ fn confirm_head(view: &View<'_>, branch: &str) -> serde_json::Value {
 }
 
 fn confirm_worktree(view: &View<'_>, entry: &Swept) -> serde_json::Value {
+    confirm_worktree_after(view, entry, || {})
+}
+
+fn confirm_worktree_after(
+    view: &View<'_>,
+    entry: &Swept,
+    after_proof: impl FnOnce(),
+) -> serde_json::Value {
     let path = std::path::PathBuf::from(&entry.name);
-    if entry.reason == REMOTE_GONE {
+    let kept = |why| {
+        let mut value = branch::Retired {
+            worktree: path.clone(),
+            worktree_removed: false,
+            branch: entry.branch.clone(),
+            branch_deleted: false,
+            reason: Some(why),
+        }
+        .to_json();
+        value["kind"] = serde_json::json!("worktree");
+        value
+    };
+    let proven = if entry.reason == REMOTE_GONE {
         let checked = entry
             .branch
             .as_deref()
             .ok_or_else(|| "checkout branch could not be read".to_owned())
             .and_then(|branch| remote_gone(view, &path, branch, &mut None));
-        if let Err(why) = checked {
-            let mut value = branch::Retired {
-                worktree: path,
-                worktree_removed: false,
-                branch: entry.branch.clone(),
-                branch_deleted: false,
-                reason: Some(why),
-            }
-            .to_json();
-            value["kind"] = serde_json::json!("worktree");
-            return value;
+        match checked {
+            Ok(head) => Some(head),
+            Err(why) => return kept(why),
         }
-    }
+    } else {
+        None
+    };
     if entry.branch.is_none() {
         return remove_detached_worktree(view, &path);
     }
+    after_proof();
+    if proven.is_some() {
+        let checked = check_ownership(view, &path)
+            .and_then(|()| check_branch(&path, entry.branch.as_deref().unwrap_or_default()));
+        if let Err(why) = checked {
+            return kept(why);
+        }
+    }
     let branch = entry.branch.clone();
-    let removed = branch::retire_checkout(view.context, &path, &worktree_head(&path));
+    let expected = proven.unwrap_or_else(|| worktree_head(&path));
+    let removed = branch::retire_checkout(view.context, &path, &expected);
     let mut value = removed.to_json();
     value["kind"] = serde_json::json!("worktree");
     if branch.is_some() && value.get("branch").is_none() {
@@ -711,10 +820,6 @@ fn remove_detached_worktree(view: &View<'_>, path: &Path) -> serde_json::Value {
     value
 }
 
-/// The checkout's own head, which `retire_checkout` compares against the
-/// delivery it was proved against. The sweep hands a branch checkout back to
-/// itself: the check that matters here is `git status --porcelain`, which
-/// `retire_checkout` already makes, and the sweep has no delivery to compare to.
 fn worktree_head(path: &Path) -> String {
     run(&["git", "rev-parse", "HEAD"], Some(path), How::tolerated())
         .ok()

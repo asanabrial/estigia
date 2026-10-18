@@ -4508,7 +4508,7 @@ pointer that leaves it names the document it points at.
     branch is neither merged nor closed. The behavioral regression
     `a_remote_gone_checkout_reachable_from_another_remote_is_removed_only_on_confirmation` in
     `src/harness/prune/tests.rs` failed on the delivered base and failed again when only the new
-    eligibility result was disabled; the restored prune module passed 14 tests. Its fixture deletes
+    eligibility result was disabled; the corrected prune module passed 18 tests. Its fixture deletes
     the branch from a second checkout, leaving a stale tracking ref to be pruned, and retains the
     commits on an archive branch rather than on main. The retained-state fixture covers dirty,
     unique, pointer-held, session-held, remote-present and unreadable cases. See
@@ -4522,10 +4522,22 @@ pointer that leaves it names the document it points at.
     and stops protecting a readable pointer when its issue reads closed. This extension does not
     alter that independent legacy route. The new route instead keeps every matching pointer and
     every checkout named by a registry session not explicitly ended, refusing unreadable ownership.
+    The three correction regressions first failed together: a renamed upstream still present was
+    selected, a session registered after discovery was removed, and a clean unique commit injected
+    after proof was substituted as the expected revision and removed. The corrected route resolves
+    the configured remote and full upstream ref even after its tracking ref disappears. Tests cover
+    both non-origin and differently named upstreams while present and after deletion, and retain
+    missing, local-only, unknown and ambiguous tracking identities. Confirmation now rereads both
+    run pointers and sessions, including immediately after the proof hook used by the behavioral
+    fixtures, and uses the exact commit id inspected for reachability as retirement's expected HEAD.
+    A newly registered holder, corrupted ownership read, changed branch or changed revision is kept.
+
     These are observations, not a lock: a claim with no pointer and no session directory cannot be
-    attributed, and another process can change ownership after discovery. Confirmation repeats the
-    Git checks but uses the invocation's ownership snapshot; neither route proves absence of every
-    live process.
+    attributed. Another process can still acquire ownership after the last ownership read, recreate
+    the upstream after the last remote query, or change Git state after retirement's branch/HEAD/status
+    checks and before `git worktree remove`. The
+    correction removes snapshot reuse and revision substitution from the new route; it does not
+    make that multi-command operation atomic, and neither route proves absence of every live process.
   - **The sweep's remote deletion bypasses the push guard, and that is a bypass.** `estigia prune
     --confirm` runs `git push --no-verify --delete` for each head, because the guard refuses a push
     no live claim authorises and the sweep runs from a checkout that holds none — a guarded
