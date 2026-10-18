@@ -248,7 +248,8 @@ them on the durable work item so the next run resumes rather than reconstructs.
 
 Clean up only after delivery is verified or abandonment is explicitly recorded. `release` puts down
 the isolated checkout this run created, and the local branch checked out there, once the tracker
-recognises the issue's close as this run's own delivery — the run's `published` marker, the closing
+recognises the issue's close as the registered delivery — the newest confirmed publication's
+`published` marker, the closing
 pull request, and a merge whose second parent is the reviewed head and whose first parent descends from the reviewed base — and the checkout carries no
 unpublished work: its head is the delivered head and `git status --porcelain` is empty. Anything that
 does not clear that bar is kept, and the release answer names the check it failed. A retried release
@@ -263,7 +264,7 @@ a merged head branch loses no audit evidence: the pull request, its review histo
 and any tag or Release are separate objects the host keeps. Preserve those.
 
 **A delivery that skips `release` is reported, not refused.** `doctor`'s `stale-run-pointer` row
-names a pointer whose issue closed behind this run's own delivery, and its `prune` row names a branch
+names a pointer whose issue closed behind a close Estigia recognises as the registered delivery, and its `prune` row names a branch
 or checkout no live claim owns. `estigia prune` lists what either row named and removes it only on
 `--confirm`; it never deletes what a live claim holds or what carries commits the remote does not
 have. The two rows are red and block nothing: the skip is a leftover, not a reason a fresh run cannot

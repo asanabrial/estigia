@@ -38,7 +38,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/policies/judgment-day.md", 15_969),
     ("skill/protocols/rdd.md", 7_863),
     ("skill/references/domain-composition.md", 9_798),
-    ("skill/references/repository-delivery.md", 21_259),
+    ("skill/references/repository-delivery.md", 21_314),
     ("skill/references/runtime-notes.md", 19_444),
     ("skill/references/safety-incidents.md", 16_216),
 ];

@@ -355,7 +355,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "allow_closed_by_pr",
                 "integer",
-                "Optional pin of the PR that closed this issue after this run published it.",
+                "Optional pin of the pull request that closed this issue.",
             )
             .counting_from(1),
         ],
