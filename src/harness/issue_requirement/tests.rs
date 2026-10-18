@@ -994,6 +994,37 @@ fn a_write_from_a_non_git_directory_into_a_repository_is_still_held() {
 }
 
 #[test]
+fn a_patch_that_deletes_or_moves_a_path_in_a_repository_is_still_held() {
+    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
+    let repo = crate::test_env::repository_with_commit();
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path(), launch.path(), IssueRequirement::Ask);
+    let inside = repo.path().join("src.rs").display().to_string();
+    let outside = launch.path().join("notes.md").display().to_string();
+    for entries in [
+        [
+            ("*** Add File", outside.as_str()),
+            ("*** Delete File", inside.as_str()),
+        ],
+        [
+            ("*** Add File", outside.as_str()),
+            ("*** Move to", inside.as_str()),
+        ],
+        [
+            ("*** Delete File", inside.as_str()),
+            ("*** Delete File", outside.as_str()),
+        ],
+        [
+            ("*** Move to", inside.as_str()),
+            ("*** Move to", outside.as_str()),
+        ],
+    ] {
+        let patch = patch_write(&context, &patch_body(&entries));
+        assert!(held_for_an_issue(&patch), "{entries:?}: {patch:?}");
+    }
+}
+
+#[test]
 fn a_content_string_is_not_a_target_list_for_a_tool_that_is_not_a_patch() {
     let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
     let repo = crate::test_env::repository_with_commit();
@@ -1034,10 +1065,25 @@ fn an_ancestor_this_process_cannot_open_is_held_rather_than_exempted() {
         "a process that can open {} cannot measure the unreadable-ancestor arm",
         locked.display()
     );
+    let target = locked.join("notes.md");
+    // Asserted so the coverage is conclusive rather than incidental: the arm is
+    // reached only where `placed` answers for the path and the `.git` lookup
+    // then fails. Were `placed` to answer `None` here, the hold would come from
+    // `Unplaceable` and a mutation of the error arm would leave the suite green.
+    assert!(
+        crate::paths::placed(&target).is_some(),
+        "{} is unplaceable, so this test never reaches the unreadable-ancestor arm",
+        target.display()
+    );
+    assert!(
+        super::holds_a_git_entry(&target).is_none(),
+        "{} did not report an unreadable ancestor",
+        target.display()
+    );
     let decision = unclaimed_edit(
         &context,
         "Write",
-        serde_json::json!({ "file_path": locked.join("notes.md").display().to_string() }),
+        serde_json::json!({ "file_path": target.display().to_string() }),
     );
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
         .expect("the mode is restored so the fixture can be cleaned up");
