@@ -21,6 +21,20 @@
   section carries the figures and the limits it records beside them; this entry records only that
   the comparison is drawn, and that its aggregation is what it costs.
 
+- **The usage classes are one CLI's counters, and the fixture behind them is synthetic.**
+  `scripts/measure-transcripts.py` reports `input`, `cache_read`, `cache_creation` and `output`
+  separately, and the mapping it uses is `CLAUDE_USAGE_KEYS` — Claude Code's own keys. No other
+  provider's transcripts are read by this script at all, so the classes say nothing about Codex, Pi,
+  OpenCode, native reviewers or auxiliary requests, and a provider whose cached counters already sit
+  inside its input total would need a mapping that does not exist yet. A class no measured record
+  carried is `null` and never `0`, and `usage.records_missing_a_counter` counts the records lacking
+  any of the four; on the corpus read on 2026-10-18 no record was missing a counter, so both
+  branches — the unknown class and the floor — are exercised only by the hand-written fixture in
+  `tests/usage_accounting.rs`, not by live data. That fixture is not host evidence: it is
+  Claude-shaped JSONL written so that a total is checkable by hand. The parity the same corpus shows
+  against the base script covers the fields the classes do not reach, and says nothing about whether
+  the classes are the ones a cost comparison needs.
+
 - **A `never-ran` verdict is recorded evidence, not verified evidence.** Read through `record_computed_verdict`: it approves under a publication lane whose failing
   runs report `steps: []` on every job only when the caller supplies `--never-ran-evidence-file`,
   and it stores that file's content in the marker verbatim — on the same footing as a finding's
