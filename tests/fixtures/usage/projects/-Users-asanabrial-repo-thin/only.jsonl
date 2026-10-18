@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"one record that carries no cached or output counter"}}
+{"type":"assistant","uuid":"t1","message":{"id":"tm1","usage":{"input_tokens":5},"content":[{"type":"text","text":"nothing else measured"}]}}
