@@ -141,7 +141,7 @@ pub fn control_after(
 }
 
 /// The prefix `verify_claim` writes into `checked[0]` when the issue closed
-/// behind this run's own delivery, and the one
+/// behind the review's registered delivery, and the one
 /// [`Answer::is_own_delivery_close`](crate::harness::tracker::Answer::is_own_delivery_close)
 /// reads back. The delimiter is part of it: the sha and epoch that follow are
 /// not, so a reader that matched the bare token would accept a value this never
@@ -176,13 +176,15 @@ pub const OWN_DELIVERY_CLOSE_SPELLING_POPULATION: Population = Population {
 /// current live holder, and nothing since the claim has told it to stop.
 ///
 /// `allow_closed_by_pr` exists for exactly one moment: the renewal immediately
-/// before `close`, after this run's own merge. Under `gh issue develop` the
-/// merge auto-closes the issue, so a closed issue *there* is the expected
-/// outcome of the delivery rather than evidence somebody else took it. Without
-/// it the renewal would hard-stop and the run would skip the `transition --to
-/// done` that the auto-close makes mandatory — the rule blocking itself. It is
+/// before `close`, after the delivery merge. Under `gh issue develop` the merge
+/// auto-closes the issue, so a closed issue *there* is the expected outcome of
+/// the delivery rather than evidence somebody else took it. Without it the
+/// renewal would hard-stop and the run would skip the `transition --to done`
+/// that the auto-close makes mandatory — the rule blocking itself. It is
 /// deliberately narrow: the issue must have been closed **by the PR that was
-/// merged**, and any other closer is still a stop.
+/// merged**, and any other closer is still a stop. Whose run published that PR
+/// is not part of it: the live claim is the authority, so a successor that
+/// inherited the review renews against the delivery it holds.
 pub fn verify_claim(
     context: &Context,
     issue: u64,
@@ -219,23 +221,23 @@ pub(crate) fn verify_held(
     let mut own_close = None;
     if !ledger.is_open() {
         let state = "CLOSED";
-        own_close =
-            close::own_delivery_close(context, issue, run_id, &comments, allow_closed_by_pr)?;
+        own_close = close::delivery_close(context, issue, &comments, None, allow_closed_by_pr)?;
         if own_close.is_none() {
             // A branch-link auto-close can land on a merge the receipt does not
-            // match; when the closer is still this run's, name the continuation.
-            if close::closed_by_own_publication(context, issue, run_id, &comments)?.is_some()
+            // match; when the closer is still the review's registered pull
+            // request, name the continuation.
+            if close::closing_publication(context, issue, &comments)?.is_some()
                 && holding(&comments, now).holder.as_deref() == Some(run_id)
             {
                 let action = format!(
-                    "the branch link closed it when your pull request merged, and the work is \
-                     still yours: `gh issue reopen {issue}`, then `transition` back into the \
-                     state the work is in and renew before writing"
+                    "the branch link closed it when the reviewed pull request merged, and the \
+                     work is still yours: `gh issue reopen {issue}`, then `transition` back into \
+                     the state the work is in and renew before writing"
                 );
                 return Err(stop(
                     "issue-not-open",
                     format!(
-                        "issue #{issue} is {state} — closed by this run's own merged publication"
+                        "issue #{issue} is {state} — closed by the review's registered pull request"
                     ),
                     &action,
                 ));
@@ -4395,7 +4397,8 @@ const COMPLETED_CANDIDATES: u64 = 100;
 /// store.
 ///
 /// Candidates are the store's `done` issues, and each is adjudicated by
-/// `own_delivery_close`, the same proof `verify-claim` uses, over the store's own
+/// `delivery_close` narrowed to this run's own publication, the same proof
+/// `verify-claim` uses, over the store's own
 /// timeline; only the merge proof reads GitHub, which is GitHub's own object.
 /// `None` when a read did not land: a count a fault emptied is not zero, and the
 /// loop it answers stops on the fault rather than reading it as none done. A
@@ -4424,7 +4427,7 @@ pub fn completed_count(context: &Context, run_id: &str) -> Result<Option<u64>, F
             Ok(comments) => comments,
             Err(_) => return Ok(None),
         };
-        match close::own_delivery_close(context, row.number, run_id, &comments, None) {
+        match close::delivery_close(context, row.number, &comments, Some(run_id), None) {
             Ok(Some(_)) => completed += 1,
             Ok(None) => {}
             Err(Failure::Stop(_)) => {}
@@ -11743,7 +11746,7 @@ fn put_down_checkout(
     run_id: &str,
     comments: &[ownership::Comment],
 ) -> serde_json::Value {
-    match close::own_delivery_close(context, issue, run_id, comments, None) {
+    match close::delivery_close(context, issue, comments, None, None) {
         Ok(Some(own)) => {
             // The remote heads first: the deletion pushes from this checkout,
             // and `retire_checkout` removes it. A release run from inside its
@@ -11766,7 +11769,7 @@ fn put_down_checkout(
             "removed": false,
             "outcome": "kept",
             "worktree": worktree.display().to_string(),
-            "detail": "the issue's close is not this run's own delivery, so the checkout is \
+            "detail": "the issue's close is not the registered delivery's merge, so the checkout is \
                        preserved",
         }),
         Err(failure) => serde_json::json!({

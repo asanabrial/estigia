@@ -62,7 +62,7 @@ branch started earlier without it still takes the reopen path in `skill/bindings
 `done` means merged and verified, and the verification used to be the operator remembering to read the merge
 commit's parents. `transition --to done` now reads them: with a confirmed review receipt on the issue it takes the
 receipt's pull request and requires a merge commit whose second parent is the reviewed head and whose first parent
-descends from the reviewed base — the proof `verify_claim` already uses for a closed issue (`own_delivery_close`),
+descends from the reviewed base — the proof `verify_claim` already uses for a closed issue (`delivery_close`),
 without its condition that GitHub counts the pull request as a closer. That condition is left out on purpose: a pull
 request that only says `Refs #<n>` is delivered all the same, and refusing it would make the recommended wording
 un-shippable.
