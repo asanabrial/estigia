@@ -895,6 +895,99 @@ fn task_is_refused_for_a_run_that_does_not_hold_the_issue() {
     assert_eq!(read["count"], 0, "{read}");
 }
 
+/// The legacy acknowledgment carries the changed row beside the whole checklist,
+/// so twenty inserts emit 230 row copies where twenty rows changed — the figure
+/// a compact response is measured against. `tasks` is the recovery path and stays
+/// complete and ordered.
+///
+/// Mutation: drop the changed row from the answer, or lose or reorder a row in
+/// the read-back, and this reddens.
+#[test]
+fn the_legacy_task_acknowledgment_repeats_the_whole_checklist() {
+    fn record(context: &crate::transport::Context, id: &str) -> Result<serde_json::Value, Failure> {
+        super::task(
+            context,
+            &super::TaskCall {
+                issue: 5,
+                run_id: "claude-abcd1234",
+                expect_state: "in-progress",
+                id,
+                text: Some("a task"),
+                route: Some("inline"),
+                status: None,
+                commit: None,
+                now: "2026-01-02T00:00Z",
+            },
+        )
+    }
+
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let store_path = root.path().join("state.db");
+    let mut context = local_context(root.path());
+    context.repo = Some("fixture/repo".to_owned());
+    let bin = crate::test_env::scripted_gh();
+    let held = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        "claude-abcd1234",
+        5,
+        "in-progress",
+    )]);
+    let log = root.path().join("calls.log");
+
+    let (copies, last, read) = crate::transport::store::with_store_at(&store_path, || {
+        crate::test_env::with_logging_gh(bin.path(), &held, &log, || {
+            let mut copies = 0usize;
+            let mut last = None;
+            for n in 1..=20 {
+                let answer = record(&context, &format!("T{n}")).expect("the task records");
+                copies += 1 + rows(&answer["tasks"]);
+                last = Some(answer);
+            }
+            let read = super::tasks(&context, 5).expect("the checklist reads");
+            (copies, last.expect("twenty answers"), read)
+        })
+    });
+
+    assert_eq!(
+        copies, 230,
+        "twenty inserts emitted {copies} row copies, where only twenty rows changed"
+    );
+    assert_eq!(last["task"]["id"], "T20", "{last}");
+    assert_eq!(
+        rows(&last["tasks"]),
+        20,
+        "the changed row travels beside the whole checklist: {last}"
+    );
+    assert_eq!(read["count"], 20, "{read}");
+    assert_eq!(
+        ids(&read["tasks"]),
+        (1..=20).map(|n| format!("T{n}")).collect::<Vec<_>>(),
+        "the read-back is complete and in the order the rows were first recorded"
+    );
+    assert!(
+        gh_writes(&log).is_empty(),
+        "task reached GitHub for a write: {:?}",
+        gh_writes(&log)
+    );
+}
+
+fn rows(value: &serde_json::Value) -> usize {
+    value.as_array().expect("the checklist is an array").len()
+}
+
+fn ids(value: &serde_json::Value) -> Vec<String> {
+    value
+        .as_array()
+        .expect("the checklist is an array")
+        .iter()
+        .map(|row| {
+            row["id"]
+                .as_str()
+                .expect("every row carries an id")
+                .to_owned()
+        })
+        .collect()
+}
+
 /// The title search sends the whole title as one quoted phrase, so search syntax
 /// inside a title cannot drop the issue the retry is looking for.
 ///
