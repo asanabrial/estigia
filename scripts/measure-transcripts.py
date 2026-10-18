@@ -10,13 +10,13 @@ forced-`Stop` turns and per-issue input tokens — per repository and overall.
 Repository attribution and detail are in `docs/review-cost.md`; this file is
 the mechanism, not the discussion of what it found.
 
-Beside `context_input_tokens` it reports the four usage classes separately,
-from the record's own counters. `CLAUDE_USAGE_KEYS` is this CLI's mapping, and
-a class no measured record carried is `null` rather than `0`, so an unobserved
-counter is never read as a zero; a record missing any of the four is counted in
-`usage.records_missing_a_counter`, which makes the class totals a floor rather
-than a silent one. A provider whose cached counters are already inside its
-input total needs its own mapping, not this one.
+Beside `context_input_tokens` it reports the usage classes separately, from the
+record's own counters. The classes are the keys of `CLAUDE_USAGE_KEYS`, this
+CLI's mapping, and a class no measured record carried is `null` rather than
+`0`, so an unobserved counter is never read as a zero; a record missing any of
+them is counted in `usage.records_missing_a_counter`, which makes the class
+totals a floor rather than a silent one. A provider whose cached counters are
+already inside its input total needs its own mapping, not this one.
 """
 
 import argparse
@@ -26,8 +26,6 @@ import json
 import os
 import statistics
 import sys
-
-USAGE_CLASSES = ("input", "cache_read", "cache_creation", "output")
 
 CLAUDE_USAGE_KEYS = {
     "input": "input_tokens",
@@ -47,7 +45,7 @@ def context_tokens(usage):
 
 def new_usage_total():
     return {
-        "tokens": dict.fromkeys(USAGE_CLASSES),
+        "tokens": dict.fromkeys(CLAUDE_USAGE_KEYS),
         "records": 0,
         "records_missing_a_counter": 0,
     }
@@ -64,6 +62,7 @@ def add_usage(total, usage):
         total["tokens"][name] = value + (total["tokens"][name] or 0)
     if missing:
         total["records_missing_a_counter"] += 1
+    return total
 
 
 def merge_usage(target, source):

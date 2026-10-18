@@ -33,6 +33,23 @@ fn measured() -> Value {
     serde_json::from_slice(&output.stdout).expect("the measurement answers one JSON object")
 }
 
+fn rendered_table() -> String {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let output = Command::new("python3")
+        .arg(root.join("scripts/measure-transcripts.py"))
+        .arg("--projects")
+        .arg(root.join("tests/fixtures/usage/projects"))
+        .output()
+        .expect("python3 runs the measurement script");
+    assert!(
+        output.status.success(),
+        "{:?}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
 fn number(report: &Value, pointer: &str) -> i64 {
     report
         .pointer(pointer)
@@ -137,4 +154,22 @@ fn the_overall_figures_are_the_two_projects_folded_together() {
     );
     assert_eq!(number(overall, "/usage/records"), 4);
     assert_eq!(number(overall, "/usage/records_missing_a_counter"), 1);
+}
+
+#[test]
+fn the_readable_table_names_the_unknown_class_and_the_floor() {
+    let table = rendered_table();
+    assert!(table.contains("usage classes"), "{table}");
+    assert!(
+        table.contains("cache_read unknown"),
+        "a class no record carried is shown as unknown, not as a zero:\n{table}"
+    );
+    assert!(
+        table.contains("records missing a counter: 1"),
+        "the table states the floor it is reporting under:\n{table}"
+    );
+    assert!(
+        table.contains("sessions naming several issues: 1"),
+        "the attribution limit is stated where the figures are:\n{table}"
+    );
 }

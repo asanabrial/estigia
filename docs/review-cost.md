@@ -707,7 +707,8 @@ complete. They change nothing outside themselves: against the base script, on th
 two agree byte for byte on `session_count`, `context_input_tokens`, the forced-`Stop` figures and
 `per_issue_input_tokens` (measured 2026-10-18: 179 sessions, 90,563 usage records, none of them
 missing a counter). `tests/usage_accounting.rs` pins the classes against a hand-written fixture,
-including the unknown and the missing-counter cases the live corpus does not exercise.
+including the unknown and the missing-counter cases the live corpus does not exercise, and pins the
+readable table that names them.
 
 **Run on this machine, against this checkout, after the change landed and delivery sessions closed
 against it.** The condition the baseline's acceptance item 6 waited on is now met: the corpus under
