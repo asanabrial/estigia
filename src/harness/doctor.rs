@@ -1973,6 +1973,9 @@ pub fn sweep(
         base: "main",
         holdings,
         root: root.as_deref(),
+        ownership: super::session::state_root(None)
+            .map_err(|failure| failure.message)
+            .and_then(|root| super::prune::ownership(&root)),
     };
     match crate::harness::prune::sweep(&view) {
         Ok(swept) => {
@@ -1984,8 +1987,8 @@ pub fn sweep(
                     about,
                     health: Health::Fine {
                         detail: format!(
-                            "no merged or closed branch or checkout is unowned; {} listed and kept \
-                             (live claim, unpublished work, or not yet merged or closed)",
+                            "no eligible branch or checkout is unowned; {} listed and kept \
+                             (held, unpublished work, or no readable cleanup eligibility)",
                             swept.len()
                         ),
                     },

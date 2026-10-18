@@ -1,5 +1,232 @@
 use super::*;
 
+#[test]
+fn a_remote_gone_checkout_reachable_from_another_remote_is_removed_only_on_confirmation() {
+    let (root, clone, trees) = sweep_fixture();
+    git(&clone, &["push", "origin", "issue-2-open:archive"]);
+    git(
+        &root.path().join("work"),
+        &["push", "origin", "--delete", "issue-2-open"],
+    );
+    let skill = root.path().join("skill");
+    std::fs::create_dir_all(&skill).unwrap();
+    let context = Context::live(skill, clone.clone(), None);
+    let view = View {
+        context: &context,
+        base: "main",
+        holdings: &[],
+        root: Some(&trees),
+        ownership: Ok(Vec::new()),
+    };
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        crate::test_env::open_but_unmatched_issue(1),
+        crate::test_env::open_but_unmatched_issue(2),
+        crate::test_env::closed_issue(3),
+        crate::test_env::open_but_unmatched_issue(4),
+        serde_json::json!({ "matches": "pr list", "stdout": "[]", "status": 0 }),
+    ]);
+    crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        let swept = sweep(&view).unwrap();
+        let orphan = swept
+            .iter()
+            .find(|entry| {
+                entry.kind == Kind::Worktree && entry.branch.as_deref() == Some("issue-2-open")
+            })
+            .unwrap();
+        assert!(orphan.delete, "remote-gone checkout was kept: {orphan:?}");
+        assert!(
+            trees.join("issue-2-open").exists(),
+            "discovery removed a checkout"
+        );
+        let answer = confirm(&view, std::slice::from_ref(orphan));
+        assert_eq!(answer[0]["worktree_removed"], true, "{answer:?}");
+        assert_eq!(answer[0]["branch_deleted"], true, "{answer:?}");
+        assert!(!trees.join("issue-2-open").exists());
+        let local = run(
+            &["git", "show-ref", "--verify", "refs/heads/issue-2-open"],
+            Some(&clone),
+            How::tolerated(),
+        )
+        .unwrap();
+        assert_ne!(local.status, 0);
+        let remote = run(
+            &["git", "ls-remote", "--heads", "origin", "archive"],
+            Some(&clone),
+            How::read(),
+        )
+        .unwrap();
+        assert!(remote.stdout.contains("refs/heads/archive"));
+    });
+}
+
+fn orphan_decision(view: &View<'_>) -> Swept {
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        crate::test_env::open_but_unmatched_issue(1),
+        crate::test_env::open_but_unmatched_issue(2),
+        crate::test_env::closed_issue(3),
+        crate::test_env::open_but_unmatched_issue(4),
+    ]);
+    crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        observe_worktrees(view, &mut BTreeMap::new())
+            .unwrap()
+            .into_iter()
+            .find(|entry| entry.branch.as_deref() == Some("issue-2-open"))
+            .and_then(decide)
+            .unwrap()
+    })
+}
+
+#[test]
+fn remote_gone_eligibility_keeps_dirty_unique_held_present_and_unreadable_checkouts() {
+    for (case, reason) in [
+        ("dirty", "scratch.txt"),
+        ("unique", "commits not on the remote"),
+        ("pointer", "ownership is held or unknown"),
+        ("primary-pointer", "ownership is held or unknown"),
+        ("unlocated-pointer", "ownership is held or unknown"),
+        ("session", "session not known ended"),
+        ("unreadable-pointer", "ownership is held or unknown"),
+        ("unreadable-ownership", "ownership could not be read"),
+        ("present", "remote branch still exists"),
+        ("unreadable-remote", "remote state could not be read"),
+        ("unreadable-local", "checkout state could not be read"),
+    ] {
+        let (root, clone, trees) = sweep_fixture();
+        let target = trees.join("issue-2-open");
+        git(&clone, &["push", "origin", "issue-2-open:archive"]);
+        if case != "present" {
+            git(
+                &root.path().join("work"),
+                &["push", "origin", "--delete", "issue-2-open"],
+            );
+        }
+        let mut holdings = Vec::new();
+        let mut ownership = Ok(Vec::new());
+        match case {
+            "dirty" => std::fs::write(target.join("scratch.txt"), "keep\n").unwrap(),
+            "unique" => {
+                std::fs::write(target.join("local.txt"), "unique\n").unwrap();
+                git(&target, &["add", "."]);
+                git(&target, &["commit", "--quiet", "-m", "unique"]);
+            }
+            "pointer" | "primary-pointer" | "unlocated-pointer" | "unreadable-pointer" => {
+                let mut pointer = Run::new("opencode-held".to_owned());
+                pointer.issue = Some(crate::identity::Identity::Number(3));
+                if case == "primary-pointer" {
+                    pointer.repo_dir = Some(target.clone());
+                } else if case != "unlocated-pointer" {
+                    pointer.worktree = Some(target.clone());
+                }
+                pointer.unreadable = case == "unreadable-pointer";
+                holdings.push(pointer);
+            }
+            "session" => ownership = Ok(vec![target.clone()]),
+            "unreadable-ownership" => ownership = Err("fixture registry read failed".to_owned()),
+            "unreadable-remote" => git(
+                &clone,
+                &[
+                    "remote",
+                    "set-url",
+                    "origin",
+                    root.path().join("missing.git").to_str().unwrap(),
+                ],
+            ),
+            "unreadable-local" => std::fs::write(target.join(".git"), "gitdir: missing\n").unwrap(),
+            _ => {}
+        }
+        let context = Context::live(root.path().join("skill"), clone.clone(), None);
+        let view = View {
+            context: &context,
+            base: "main",
+            holdings: &holdings,
+            root: Some(&trees),
+            ownership,
+        };
+        let decision = orphan_decision(&view);
+        assert!(!decision.delete, "{case}: {decision:?}");
+        assert!(decision.reason.contains(reason), "{case}: {decision:?}");
+        assert!(confirm(&view, &[decision]).is_empty());
+        assert!(target.exists());
+        let local = run(
+            &["git", "show-ref", "--verify", "refs/heads/issue-2-open"],
+            Some(&clone),
+            How::read(),
+        )
+        .unwrap();
+        assert_eq!(local.status, 0);
+    }
+}
+
+#[test]
+fn confirmation_rechecks_remote_gone_work_before_removing_it() {
+    let (root, clone, trees) = sweep_fixture();
+    git(&clone, &["push", "origin", "issue-2-open:archive"]);
+    git(&clone, &["push", "origin", "--delete", "issue-2-open"]);
+    let context = Context::live(root.path().join("skill"), clone.clone(), None);
+    let view = View {
+        context: &context,
+        base: "main",
+        holdings: &[],
+        root: Some(&trees),
+        ownership: Ok(Vec::new()),
+    };
+    let decision = orphan_decision(&view);
+    assert!(decision.delete);
+    git(&clone, &["push", "origin", "issue-2-open"]);
+    let answers = confirm(&view, std::slice::from_ref(&decision));
+    assert_eq!(answers[0]["outcome"], "kept");
+    assert!(
+        answers[0]["detail"]
+            .as_str()
+            .unwrap()
+            .contains("still exists")
+    );
+    assert!(trees.join("issue-2-open").exists());
+    git(&clone, &["push", "origin", "--delete", "issue-2-open"]);
+    std::fs::write(trees.join("issue-2-open").join("late.txt"), "late\n").unwrap();
+    let answers = confirm(&view, &[decision]);
+    assert_eq!(answers[0]["outcome"], "kept");
+    assert!(answers[0]["detail"].as_str().unwrap().contains("late.txt"));
+    assert!(trees.join("issue-2-open").exists());
+}
+
+#[test]
+fn ownership_reads_nonended_sessions_and_refuses_corrupt_pointers_and_store() {
+    let root = tempfile::tempdir().unwrap();
+    let pointers = root.path().join("runs");
+    std::fs::create_dir(&pointers).unwrap();
+    let path = crate::transport::store::beside(&pointers);
+    let store = crate::transport::store::Store::open(&path).unwrap();
+    let checkout = root.path().join("checkout");
+    store
+        .session_seen(
+            &crate::transport::store::SessionSeen {
+                run_id: "opencode-held",
+                runtime: "opencode",
+                session_id: "held",
+                repo_dir: checkout.to_str(),
+            },
+            1,
+        )
+        .unwrap();
+    assert_eq!(ownership(&pointers).unwrap(), vec![checkout]);
+    store.session_ended("opencode-held", None, 2).unwrap();
+    assert!(ownership(&pointers).unwrap().is_empty());
+    std::fs::write(pointers.join("opencode-corrupt.json"), "not json").unwrap();
+    assert!(
+        ownership(&pointers)
+            .unwrap_err()
+            .contains("ownership could not be read")
+    );
+    let bad = tempfile::tempdir().unwrap();
+    let bad_pointers = bad.path().join("runs");
+    std::fs::create_dir(&bad_pointers).unwrap();
+    std::fs::write(crate::transport::store::beside(&bad_pointers), "not sqlite").unwrap();
+    assert!(ownership(&bad_pointers).is_err());
+}
+
 fn observed(kind: Kind, name: &str, sweepable: Option<&str>) -> Observed {
     Observed {
         kind,
@@ -10,6 +237,7 @@ fn observed(kind: Kind, name: &str, sweepable: Option<&str>) -> Observed {
         unpublished: false,
         uncommitted: Vec::new(),
         held: None,
+        kept: None,
     }
 }
 
@@ -240,6 +468,7 @@ fn the_sweep_lists_merged_and_closed_and_keeps_held_and_unpublished() {
         base: "main",
         holdings: &holdings,
         root: Some(trees.as_path()),
+        ownership: Ok(Vec::new()),
     };
     let script = crate::test_env::answers(&[
         crate::test_env::open_but_unmatched_issue(1),
@@ -311,6 +540,7 @@ fn a_kept_checkout_names_the_uncommitted_files_it_carries() {
         base: "main",
         holdings: &[],
         root: Some(trees.as_path()),
+        ownership: Ok(Vec::new()),
     };
     let script = crate::test_env::answers(&[
         crate::test_env::open_but_unmatched_issue(1),
@@ -401,6 +631,7 @@ fn confirm_removes_only_what_the_sweep_marked_for_deletion() {
         base: "main",
         holdings: &holdings,
         root: Some(trees.as_path()),
+        ownership: Ok(Vec::new()),
     };
     let script = crate::test_env::answers(&[
         crate::test_env::open_but_unmatched_issue(1),
