@@ -499,7 +499,8 @@ pub const TOOLS: &[Tool] = &[
         description: "Record or revise one row of the claimed issue's ODD task checklist in the \
                       local store: a stable id, its acceptance, the route used and, once done, \
                       the commit identity. Needs the live claim; nothing is written to the \
-                      tracker. The answer carries the whole checklist.",
+                      tracker. The answer carries the whole checklist, or with `compact` the \
+                      changed row alone.",
         operation: "task",
         arguments: &[
             ISSUE,
@@ -537,6 +538,11 @@ pub const TOOLS: &[Tool] = &[
                 "The state this run believes the issue is in. Defaults to in-progress.",
             )
             .of(crate::config::STATES),
+            Argument::optional(
+                "compact",
+                "boolean",
+                "Answer with the changed row alone instead of the whole checklist.",
+            ),
         ],
         effect: PointerEffect::None,
         writes: true,

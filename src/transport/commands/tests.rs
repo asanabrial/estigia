@@ -803,6 +803,7 @@ fn task_records_the_checklist_under_the_claim_and_tasks_reads_it_back() {
                 route,
                 status,
                 commit,
+                compact: false,
                 now: "2026-01-02T00:00Z",
             },
         )
@@ -882,6 +883,7 @@ fn task_is_refused_for_a_run_that_does_not_hold_the_issue() {
                     route: Some("inline"),
                     status: None,
                     commit: None,
+                    compact: false,
                     now: "2026-01-02T00:00Z",
                 },
             );
@@ -916,6 +918,7 @@ fn the_legacy_task_acknowledgment_repeats_the_whole_checklist() {
                 route: Some("inline"),
                 status: None,
                 commit: None,
+                compact: false,
                 now: "2026-01-02T00:00Z",
             },
         )
@@ -963,6 +966,201 @@ fn the_legacy_task_acknowledgment_repeats_the_whole_checklist() {
         (1..=20).map(|n| format!("T{n}")).collect::<Vec<_>>(),
         "the read-back is complete and in the order the rows were first recorded"
     );
+    assert!(
+        gh_writes(&log).is_empty(),
+        "task reached GitHub for a write: {:?}",
+        gh_writes(&log)
+    );
+}
+
+/// The compact acknowledgment carries the changed row alone, so twenty inserts
+/// emit twenty row copies where the legacy answer emits 230. `tasks` is the
+/// recovery path and still holds every row, in order.
+///
+/// Mutation: make the compact path read the checklist back, or answer without
+/// the changed row, and this reddens.
+#[test]
+fn the_compact_task_acknowledgment_carries_only_the_changed_row() {
+    fn record(context: &crate::transport::Context, id: &str) -> serde_json::Value {
+        super::task(
+            context,
+            &super::TaskCall {
+                issue: 5,
+                run_id: "claude-abcd1234",
+                expect_state: "in-progress",
+                id,
+                text: Some("a task"),
+                route: Some("inline"),
+                status: None,
+                commit: None,
+                compact: true,
+                now: "2026-01-02T00:00Z",
+            },
+        )
+        .expect("the task records")
+    }
+
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let store_path = root.path().join("state.db");
+    let mut context = local_context(root.path());
+    context.repo = Some("fixture/repo".to_owned());
+    let bin = crate::test_env::scripted_gh();
+    let held = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        "claude-abcd1234",
+        5,
+        "in-progress",
+    )]);
+    let log = root.path().join("calls.log");
+
+    let (copies, last, read) = crate::transport::store::with_store_at(&store_path, || {
+        crate::test_env::with_logging_gh(bin.path(), &held, &log, || {
+            let mut copies = 0usize;
+            let mut last = None;
+            for n in 1..=20 {
+                let answer = record(&context, &format!("T{n}"));
+                assert!(
+                    answer.get("tasks").is_none(),
+                    "the compact answer carried the checklist: {answer}"
+                );
+                assert_eq!(answer["task"]["id"], format!("T{n}"), "{answer}");
+                copies += 1 + answer["tasks"].as_array().map_or(0, Vec::len);
+                last = Some(answer);
+            }
+            let read = super::tasks(&context, 5).expect("the checklist reads");
+            (copies, last.expect("twenty answers"), read)
+        })
+    });
+
+    assert_eq!(
+        copies, 20,
+        "twenty compact inserts emitted {copies} row copies, where only twenty rows changed"
+    );
+    let last = &last;
+    assert_eq!(last["task"]["id"], "T20", "{last}");
+    assert_eq!(last["task"]["text"], "a task", "{last}");
+    assert_eq!(last["task"]["route"], "inline", "{last}");
+    assert_eq!(last["task"]["done"], false, "{last}");
+    assert_eq!(read["count"], 20, "{read}");
+    assert_eq!(
+        ids(&read["tasks"]),
+        (1..=20).map(|n| format!("T{n}")).collect::<Vec<_>>(),
+        "the read-back is complete and in the order the rows were first recorded"
+    );
+    assert!(
+        gh_writes(&log).is_empty(),
+        "task reached GitHub for a write: {:?}",
+        gh_writes(&log)
+    );
+}
+
+/// A compact revision answers with the revised row alone and leaves the legacy
+/// answer and the checklist as they were: the same id, a new status and commit.
+///
+/// Mutation: answer the row as it was stored rather than the one just written,
+/// and this reddens.
+#[test]
+fn a_compact_revision_answers_the_revised_row_and_leaves_the_checklist_alone() {
+    fn record(
+        context: &crate::transport::Context,
+        id: &str,
+        text: Option<&str>,
+        route: Option<&str>,
+        status: Option<&str>,
+        commit: Option<&str>,
+        compact: bool,
+    ) -> serde_json::Value {
+        super::task(
+            context,
+            &super::TaskCall {
+                issue: 5,
+                run_id: "claude-abcd1234",
+                expect_state: "in-progress",
+                id,
+                text,
+                route,
+                status,
+                commit,
+                compact,
+                now: "2026-01-02T00:00Z",
+            },
+        )
+        .expect("the task records")
+    }
+
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let store_path = root.path().join("state.db");
+    let mut context = local_context(root.path());
+    context.repo = Some("fixture/repo".to_owned());
+    let bin = crate::test_env::scripted_gh();
+    let held = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        "claude-abcd1234",
+        5,
+        "in-progress",
+    )]);
+    let log = root.path().join("calls.log");
+
+    let (revised, legacy, read) = crate::transport::store::with_store_at(&store_path, || {
+        crate::test_env::with_logging_gh(bin.path(), &held, &log, || {
+            record(
+                &context,
+                "T1",
+                Some("first"),
+                Some("inline"),
+                None,
+                None,
+                true,
+            );
+            record(
+                &context,
+                "T2",
+                Some("second"),
+                Some("delegated"),
+                None,
+                None,
+                true,
+            );
+            let revised = record(
+                &context,
+                "T1",
+                None,
+                None,
+                Some("done"),
+                Some("abcdef0"),
+                true,
+            );
+            let legacy = record(&context, "T1", None, None, None, None, false);
+            let read = super::tasks(&context, 5).expect("the checklist reads");
+            (revised, legacy, read)
+        })
+    });
+
+    assert_eq!(
+        revised,
+        serde_json::json!({
+            "ok": true,
+            "issue": 5,
+            "task": {
+                "id": "T1",
+                "text": "first",
+                "route": "inline",
+                "done": true,
+                "commit": "abcdef0",
+            },
+        }),
+        "{revised}"
+    );
+    assert!(
+        revised.get("tasks").is_none(),
+        "the compact answer carried the checklist: {revised}"
+    );
+
+    assert_eq!(legacy["task"]["done"], true, "{legacy}");
+    assert_eq!(legacy["task"]["commit"], "abcdef0", "{legacy}");
+    assert_eq!(rows(&legacy["tasks"]), 2, "{legacy}");
+    assert_eq!(read["count"], 2, "{read}");
+    assert_eq!(ids(&read["tasks"]), vec!["T1", "T2"], "{read}");
+    assert_eq!(read["tasks"][0]["done"], true, "{read}");
+    assert_eq!(read["tasks"][0]["commit"], "abcdef0", "{read}");
     assert!(
         gh_writes(&log).is_empty(),
         "task reached GitHub for a write: {:?}",

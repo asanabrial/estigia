@@ -1093,6 +1093,8 @@ pub struct TaskCall<'a> {
     pub status: Option<&'a str>,
     /// The work-unit commit identity.
     pub commit: Option<&'a str>,
+    /// Answer with the changed row alone, without the whole checklist.
+    pub compact: bool,
     /// The caller's clock.
     pub now: &'a str,
 }
@@ -1112,6 +1114,8 @@ fn task_json(row: &super::store::TaskRow) -> serde_json::Value {
 /// The checklist lives in the local store, never on the tracker: a write is
 /// refused unless the run holds the issue, and a revision is the same id with new
 /// fields. A new row needs its text and route; `done` needs a commit identity.
+/// The answer carries the changed row beside the whole checklist unless
+/// [`TaskCall::compact`] asks for the row alone.
 pub fn task(context: &Context, call: &TaskCall<'_>) -> Result<serde_json::Value, Failure> {
     let well_formed_id = !call.id.is_empty()
         && call.id.len() <= 40
@@ -1173,6 +1177,13 @@ pub fn task(context: &Context, call: &TaskCall<'_>) -> Result<serde_json::Value,
         commit: call.commit,
     };
     let row = store.change_task(&repo, call.issue, &change, call.now)?;
+    if call.compact {
+        return Ok(serde_json::json!({
+            "ok": true,
+            "issue": call.issue,
+            "task": task_json(&row),
+        }));
+    }
     let tasks: Vec<_> = store
         .tasks(&repo, call.issue)?
         .iter()

@@ -1212,3 +1212,75 @@ fn an_operation_naming_a_rekeyed_provisional_number_runs_against_the_real_one() 
 
     assert_eq!(answered["issue"], 55, "{answered}");
 }
+
+/// The `--compact` switch reaches the `task` arm, and the answer it produces is
+/// the changed row alone; without it the arm answers the whole checklist.
+///
+/// Mutation: read the switch with `f.get` instead of `f.on`, or drop it from
+/// `SWITCHES`, and the compact call is answered as the legacy one.
+#[test]
+fn the_task_arm_reads_the_compact_switch_and_answers_the_changed_row_alone() {
+    let root = tempfile::tempdir().expect("a scratch directory");
+    let store_path = root.path().join("state.db");
+    let mut context = context(root.path());
+    context.repo = Some("fixture/repo".to_owned());
+    let bin = crate::test_env::scripted_gh();
+    let held = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        "claude-abcd1234",
+        5,
+        "in-progress",
+    )]);
+    let log = root.path().join("calls.log");
+
+    let (compact, legacy) = crate::transport::store::with_store_at(&store_path, || {
+        crate::test_env::with_logging_gh(bin.path(), &held, &log, || {
+            let call = |extra: &[&str]| {
+                let mut flags: Vec<String> = [
+                    "--issue",
+                    "5",
+                    "--run-id",
+                    "claude-abcd1234",
+                    "--id",
+                    "T1",
+                    "--text",
+                    "first",
+                    "--route",
+                    "inline",
+                ]
+                .iter()
+                .map(|part| (*part).to_owned())
+                .collect();
+                flags.extend(extra.iter().map(|part| (*part).to_owned()));
+                super::dispatch(&context, "task", &flags, "2026-01-02T00:00Z")
+                    .expect("the task records")
+            };
+            (call(&["--compact"]), call(&[]))
+        })
+    });
+
+    assert_eq!(
+        compact,
+        serde_json::json!({
+            "ok": true,
+            "issue": 5,
+            "task": {
+                "id": "T1",
+                "text": "first",
+                "route": "inline",
+                "done": false,
+                "commit": null,
+            },
+        }),
+        "{compact}"
+    );
+    assert!(
+        compact.get("tasks").is_none(),
+        "the compact switch did not stop the checklist: {compact}"
+    );
+    assert_eq!(legacy["task"]["id"], "T1", "{legacy}");
+    assert_eq!(
+        legacy["tasks"].as_array().map(Vec::len),
+        Some(1),
+        "the legacy answer lost the whole checklist: {legacy}"
+    );
+}
