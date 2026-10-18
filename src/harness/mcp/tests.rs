@@ -4928,6 +4928,166 @@ fn start_branch_through_the_server_is_not_stopped_by_the_schedule_outside_the_pe
     }
 }
 
+/// `verify_claim`'s `allow_closed_by_pr` reaches the transport rather than
+/// stopping at the schema: the successor's renewal passes with the pin the
+/// closing pull request carries and refuses with another, where a server that
+/// dropped the argument would answer both the same way.
+#[test]
+fn verify_claim_carries_the_closing_pin_from_the_arguments_to_the_transport() {
+    use crate::transport::store::{Repo, Store};
+
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo_dir = root.path().join("repo");
+    std::fs::create_dir_all(&repo_dir).expect("a checkout");
+    let git = |args: &[&str]| -> String {
+        let output = std::process::Command::new("git")
+            .current_dir(&repo_dir)
+            .args(args)
+            .output()
+            .expect("git runs");
+        assert!(output.status.success(), "git {args:?}: {output:?}");
+        String::from_utf8(output.stdout).expect("utf-8")
+    };
+    git(&["init", "--quiet", "-b", "main"]);
+    git(&["config", "user.email", "estigia@example.invalid"]);
+    git(&["config", "user.name", "Estigia test"]);
+    std::fs::write(repo_dir.join("one.txt"), "one\n").expect("content");
+    git(&["add", "one.txt"]);
+    git(&["commit", "--quiet", "-m", "base"]);
+    let base = git(&["rev-parse", "HEAD"]).trim().to_owned();
+    let head = "b".repeat(40);
+    let merge_sha = "e".repeat(40);
+    let epoch = "a".repeat(32);
+    let digest = "d".repeat(64);
+    let op_id = "c".repeat(32);
+
+    let comment = |id: &str, at: &str, body: String| {
+        json!({
+            "id": id,
+            "createdAt": at,
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": body,
+        })
+    };
+    let claim = comment(
+        "IC_claim",
+        "2026-07-28T01:00:00Z",
+        format!(
+            "Claimed by claude-abcd1234.\n\n{}\n",
+            crate::transport::markers::render(
+                "claim",
+                &[
+                    ("run-id", "claude-abcd1234"),
+                    ("runtime", "claude"),
+                    ("horizon", "2099-01-01T00:00Z"),
+                    ("op-id", &op_id),
+                ],
+            )
+            .expect("a claim marker"),
+        ),
+    );
+    let publication = comment(
+        "IC_publication",
+        "2026-07-28T01:30:00Z",
+        format!(
+            "published.\n\n{}\n",
+            crate::transport::markers::render(
+                "published",
+                &[
+                    ("run-id", "claude-b"),
+                    ("epoch", &epoch),
+                    ("pr", "7"),
+                    ("head", &head),
+                    ("base", &base),
+                    ("digest", &digest),
+                ],
+            )
+            .expect("a published marker"),
+        ),
+    );
+
+    let repo = Repo {
+        host: "github.com".to_owned(),
+        owner: "fixture".to_owned(),
+        name: "repo".to_owned(),
+    };
+    let store_path = root.path().join("state.db");
+    let mut store = Store::open(&store_path).expect("the scratch store opens");
+    store
+        .import(
+            &repo,
+            7,
+            &json!({
+                "body": "Delivered.",
+                "labels": [{ "name": "status:review" }],
+                "comments": [claim, publication],
+            }),
+            "2026-07-28T01:30Z",
+        )
+        .expect("issue 7 imports");
+    drop(store);
+
+    let closing = json!({
+        "data": { "repository": { "issue": { "closedByPullRequestsReferences": {
+            "nodes": [{ "number": 7, "state": "MERGED", "headRefName": "h", "baseRefName": "b" }],
+            "pageInfo": { "hasNextPage": false, "endCursor": null },
+        } } } },
+    });
+    let bin = crate::test_env::scripted_gh();
+    let answers = crate::test_env::answers(&[
+        json!({
+            "matches": "repo view",
+            "stdout": json!({ "owner": { "login": "fixture" }, "name": "repo" }).to_string(),
+        }),
+        json!({ "matches": "api graphql", "stdout": closing.to_string() }),
+        json!({
+            "matches": "pr view 7 --json mergeCommit",
+            "stdout": json!({ "mergeCommit": { "oid": merge_sha } }).to_string(),
+        }),
+        crate::test_env::issue_view_answer(
+            7,
+            json!({ "state": "CLOSED", "labels": [], "comments": [] }),
+        ),
+        json!({
+            "matches": "/commits/",
+            "stdout": json!({ "parents": [{ "sha": base }, { "sha": head }] }).to_string(),
+        }),
+    ]);
+    let context = bare_context(&root, &repo_dir);
+    let call = |pin: u64| {
+        super::run_tool(
+            "verify_claim",
+            &json!({
+                "issue": 7,
+                "run_id": "claude-abcd1234",
+                "expect_state": "review",
+                "allow_closed_by_pr": pin,
+            }),
+            Ok(&context),
+        )
+    };
+    let (granted, refused) = crate::test_env::with_scripted_gh(bin.path(), &answers, || {
+        crate::transport::store::with_store_at(&store_path, || (call(7), call(99)))
+    });
+
+    let granted = granted.expect("the successor's renewal passed through the server");
+    let text = granted["content"][0]["text"]
+        .as_str()
+        .expect("a tool result carries text");
+    assert!(
+        text.contains(crate::transport::claim::OWN_DELIVERY_CLOSE_PREFIX),
+        "the renewal did not report the auto-close it was renewing past: {text}"
+    );
+
+    let super::ToolFailure::Refused(refusal) =
+        refused.expect_err("a pin naming another pull request refuses")
+    else {
+        panic!("the wrong-pin call was refused as something other than a refusal");
+    };
+    assert_eq!(refusal.code, "issue-not-open", "{refusal:?}");
+}
+
 const READ_TOOLS: &[&str] = &[
     "list_sessions",
     "tasks",

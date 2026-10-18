@@ -1812,7 +1812,7 @@ fn a_delivery_that_follows_the_sequence_puts_its_own_claim_down() {
 /// `release` is the one step the delivery path runs after the close,
 /// and it is where the run that delivered puts its checkout down. This drives a
 /// real `release` against an issue whose close the tracker recognises as this
-/// run's own delivery — the same `own_delivery_close` proof `verify_claim`
+/// run's own delivery — the same `delivery_close` proof `verify_claim`
 /// uses — and asserts the worktree and the local branch are gone, with the
 /// removal named in the answer. The sibling test above is the other half: a
 /// close the tracker does not recognise leaves the checkout alone.

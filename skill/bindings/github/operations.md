@@ -549,7 +549,7 @@ tier's own `lenses`; so does the whole-change fallback, whichever reason it name
 
 `unassign` puts the issue down without changing its state. Discovery is read-only and answers the
 exact epoch to name; repeating with `--target-operation` authorises only that epoch. It also
-converges the `dev:` label projection and, once the tracker confirms the close is this run's own
+converges the `dev:` label projection and, once the tracker confirms the close is the registered
 delivery and the checkout carries nothing unpublished, puts the isolated checkout down.
 
 `--evidence-file <f>` posts the close-evidence comment as a note in the same call, and `--spend

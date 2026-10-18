@@ -1546,8 +1546,9 @@ pointer that leaves it names the document it points at.
   *undischargeable* — a loop can stop with a discharged condition nobody counted, and nothing here
   proves which of the two happened. The completion count `--max` compares against is no
   stronger in the other direction: it is enumerated from the tracker — the closed, `status:done`
-  issues that mention the run — and each candidate is proved by `own_delivery_close`, the same
-  merge-parent proof `verify-claim` uses, so a squash or rebase delivery, whose topology that proof
+  issues that mention the run — and each candidate is proved by `delivery_close`, the same
+  merge-parent proof `verify-claim` uses, narrowed here to the publication this run made, so a
+  squash or rebase delivery, whose topology that proof
   refuses, is a **floor**: an issue delivered that way is not counted, and the cap can run past it.
   `docs/what-it-writes.md` states the install half.
 
@@ -1828,7 +1829,7 @@ pointer that leaves it names the document it points at.
 
   None of it proves an independent context existed or establishes lens count, concurrency,
   independence, blindness, same-finding identity or composition — nothing checks that the run
-  launched the lenses the tier licenses. A closed-issue `verify_claim` accepts the follow-up only when this run's review transaction, the closing PR, and the merge commit's parents (reviewed base, then head) all agree; any other close is still `issue-not-open`, and an unreadable closer listing is a failed read. The refusal tells the two apart by its message: when the closer is still this run's own publication and the run still holds the issue, it names the reopen-and-transition continuation instead of calling the close somebody else's. It cannot prove the lenses
+  launched the lenses the tier licenses. A closed-issue `verify_claim` accepts the follow-up only when the review's registered publication, the closing PR, and the merge commit's parents (reviewed base, then head) all agree; any other close is still `issue-not-open`, and an unreadable closer listing is a failed read. The refusal tells the two apart by its message: when the closer is still the review's registered publication and the run still holds the issue, it names the reopen-and-transition continuation instead of calling the close somebody else's. It cannot prove the lenses
   read those bytes or that their findings were honest. An OpenCode run launching Task lenses is that
   same instruction, not a proof those Tasks ran or were blind. A marker can still be forged by a collaborator
   acting outside Estigia. The composition is the tier's lens count rather than operator-selected — the
@@ -7811,13 +7812,13 @@ pointer that leaves it names the document it points at.
   fixture change ended it.
 
   What reconciliation deliberately does not close: a **single** holder whose issue is closed by a
-  close this harness cannot recognise as that run's own delivery still refuses every write in the
+  close this harness cannot recognise as the review's registered delivery still refuses every write in the
   checkout it
   names, with the same `issue-not-open` reason it always has. Reconciliation is guarded to two or
   more holders on purpose — not because `GateContext` cannot tell an own-delivery close from a
   stranger's, but because folding a single holder into this loop would not repeat that refusal, it
-  would **erase** it. A close this harness *does* recognise as that run's own delivery — the closing
-  PR the receipt names, and a merge whose second parent is the reviewed head and whose first parent
+  would **erase** it. A close this harness *does* recognise as the review's registered delivery — the closing
+  PR the newest confirmed publication names, and a merge whose second parent is the reviewed head and whose first parent
   descends from the reviewed base
   (`src/transport/claim/close.rs`) — makes `verify_claim` answer `closed-by-own-delivery`
   rather than `issue-not-open`, so `holder_standing` counts that pointer `Live` and there is nothing
@@ -7852,7 +7853,7 @@ pointer that leaves it names the document it points at.
   by a test; the end-to-end arm is not.** The test `own_delivery_close_reads_the_transports_own_prefix_and_nothing_else` calls the predicate
   with a fabricated `Answer` — including bodies whose `checked[0]` is absent, non-array or
   non-string — so the reader itself is measured. Driving the whole `stranded` arm still needs a
-  fixture that actually produces `own_delivery_close` — a closing PR the receipt names and a merge
+  fixture that actually produces `delivery_close` — a closing PR the receipt names and a merge
   whose second parent is the reviewed head and whose first parent descends from the reviewed base —
   and, as the next entry's own disclosure says, no such fixture exists
   anywhere in this crate's suite, so the `stranded` arm is classified code with no test behind it,
@@ -7872,7 +7873,7 @@ pointer that leaves it names the document it points at.
 
   **The narrowed sentence still denied two states.** Its first clause, "names an
   issue the tracker reports closed", is false of an aged stranded pointer, which reaches `Fine` with
-  its issue closed. Its second, "still holds one closed behind this run's own delivery", is false of
+  its issue closed. Its second, "still holds one closed behind the registered delivery", is false of
   a label-mismatched own-delivery close: that one stops at `unexpected-state` before holdership is
   examined, so it reaches `Fine` with a live holder while `checked[0]` still carries the prefix. The
   sentence now names exactly the row's three buckets — answered with `issue-not-open`, answered with
@@ -8040,11 +8041,12 @@ pointer that leaves it names the document it points at.
   afterwards, not less.
   **It also reads as live to everything that would otherwise clear it, and that is the half worth
   knowing.** A delivery that followed the rest of step 6 leaves behind a close this harness recognises
-  as its own — `own_delivery_close` matches on that run's `published` marker, the closing PR the
-  receipt names, and a merge whose second parent is exactly the receipt's head and whose first parent
-  descends from the receipt's base
-  (`src/transport/claim/close.rs`) — so `verify_claim` answers `closed-by-own-delivery` rather
-  than `issue-not-open` (`src/transport/claim.rs`). `Answer::stopped_reason()` is
+  as the registered delivery — `delivery_close` matches the newest confirmed publication's pull
+  request against the closing PR, and a merge whose second parent is exactly the receipt's head and
+  whose first parent descends from the receipt's base
+  (`src/transport/claim/close.rs`); the run that published the receipt is not part of the match, so a
+  successor holding the live claim renews against a predecessor's delivery, and `verify_claim` answers
+  `closed-by-own-delivery` rather than `issue-not-open` (`src/transport/claim.rs`). `Answer::stopped_reason()` is
   `None` for anything but a code-1 answer (`src/harness/tracker.rs`), so `holder_standing`
   classifies that pointer `Live` (`src/harness/mod.rs`). That read was rewritten to go
   through `Answer::standing()`, and the classification it produces is unchanged: a pass reaches the
@@ -8054,7 +8056,7 @@ pointer that leaves it names the document it points at.
   does: it reports this population in its own `stranded` bucket, named separately from `stale` and
   from `unread`, rather than folding it into the unknown arm the way it used to.
   **The close proof itself has tests from 2026-09-27; the population it names does not.** `release`
-  now removes the delivering run's checkout on exactly `own_delivery_close`'s proof, and
+  now removes the delivering run's checkout on exactly `delivery_close`'s proof, and
   `tests/pipe/part_09.rs` drives both directions end to end:
   `releasing_a_delivered_issue_puts_its_checkout_and_branch_down` asserts a recognised close removes
   the worktree and the local branch, and
@@ -8066,8 +8068,9 @@ pointer that leaves it names the document it points at.
   and the local branch back after the call — so the sentence is about production, not the suite.
   What remains unexercised is the guard's own population: `src/harness/guard/tests.rs`'s
   `a_single_stale_holder_still_refuses_through_its_own_issue_not_open` covers only the stranger
-  population, so a single holder whose issue closed behind that same run's own delivery — the
-  population `verify_claim` answers `closed-by-own-delivery` for instead of `issue-not-open` — is not
+  population, so a single holder whose issue closed behind a delivery this harness recognises as the
+  review's registered delivery — the population `verify_claim` answers `closed-by-own-delivery` for
+  instead of `issue-not-open` — is not
   exercised by any guard test. That guard module discloses the gap; this entry, whose job that is,
   did not until now.
   What it does instead is hold the checkout. The next run to claim there makes two holders, neither of
@@ -8427,8 +8430,9 @@ pointer that leaves it names the document it points at.
   After that the open-or-closed question is one REST read, `gh api repos/{owner}/{repo}/issues/<n>`,
   which also says whose issue it is, beside the comments sync below: measured by the call counter, a renewal on an open, held issue
   was one GraphQL call before and is two REST calls and no GraphQL call now (the first touch adds
-  the one `issue view` import). On a **closed** issue `verify-claim` proves the close was this run's own delivery from the
-  `published` receipt in the store, and asks GitHub only for the pull request that closed the issue
+  the one `issue view` import). On a **closed** issue `verify-claim` proves the close was the review's registered
+  delivery, whichever run published it, from the `published` receipt in the store, and asks GitHub only
+  for the pull request that closed the issue
   and its merge commit. It read the issue's comments over GraphQL for that receipt until
   nothing posted the receipt there any more, so every delivery's own close was refused as
   `issue-not-open` once the review family stopped posting, which
@@ -8599,7 +8603,7 @@ pointer that leaves it names the document it points at.
   reads — the recorders the admission then calls still open their own, one per read they make. A
   store or REST failure is a failed read; anything after a GitHub write is
   `write-failed`. Still over GraphQL, on purpose or not yet moved: the closing-reference read that
-  proves an own delivery close (`verify-claim`, `completed_count`), the projection convergence
+  proves a registered delivery close (`verify-claim`, `completed_count`), the projection convergence
   reads of `claim`, `reclaim` and `unassign`, the pre-write `assignees,labels` read `claim` takes
   for the `foreign-projection` check, and the `labels` read `handoff_review` takes for
   its release plan and its final check. Because a marker posted by this run is recorded in the
@@ -9185,7 +9189,7 @@ pointer that leaves it names the document it points at.
     refused them. The commit the line acts on — a tag's named commit, else the checkout's `HEAD`;
     the fast-forward's named target, in addition to `HEAD` — is now also admitted when it is a
     two-parent merge whose second parent is the receipt's head and whose first parent descends from
-    the receipt's base. That is the topology `match_own_close` applies to the merge readback, held
+    the receipt's base. That is the topology `match_merge` applies to the merge readback, held
     in one place (`ReviewTransaction::delivered_by_merge`) that both read. A tag line is read only
     when it is plain words (`tag_target`); a quoted space, shell punctuation, a flag outside the few
     that create a tag or a third positional leaves the commit unread and the comparison with the
@@ -9902,9 +9906,9 @@ pointer that leaves it names the document it points at.
   `skill/bindings/github.md`'s `verify_claim` exception now require the delivered SHA's second parent
   to be exactly the reviewed head and the reviewed base to be an **ancestor** of its first parent;
   `skill/bindings/github/delivery.md` and `skill/references/repository-delivery.md` state the same
-  predicate for the run's own post-merge readback and for `release`. `match_own_close`
+  predicate for the run's own post-merge readback and for `release`. `match_merge`
   (`src/transport/claim/close.rs`) is fed that ancestry rather than comparing the first parent
-  directly, and `own_delivery_close` computes it with
+  directly, and `delivery_close` computes it with
   `git merge-base --is-ancestor <receipt.base> <first parent>` in `context.repo_dir`, reusing
   `transport::target::is_ancestor` — exit 0 is an ancestor, exit 1 is not, and any other exit is a
   `Read` failure rather than "not my delivery", because an unknown answer is not clearance.

@@ -4,33 +4,17 @@ use super::{ReviewTransaction, ownership};
 use crate::transport::{Context, Failure};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct OwnClose {
+pub(crate) struct DeliveryClose {
     pub pr: u64,
     pub epoch: String,
     /// The receipt head the merge's second parent proved delivered.
     pub head: String,
     pub delivering_sha: String,
 }
-pub(crate) fn match_own_close(
-    receipt: &ReviewTransaction,
-    closing_prs: &[u64],
-    delivering_sha: &str,
-    second_parent: &str,
-    base_is_ancestor_of_first_parent: bool,
-    pin: Option<u64>,
-) -> Option<OwnClose> {
-    if pin.is_some_and(|pr| pr != receipt.pr) {
-        return None;
-    }
-    if !closing_prs.contains(&receipt.pr) {
-        return None;
-    }
-    match_merge(
-        receipt,
-        delivering_sha,
-        second_parent,
-        base_is_ancestor_of_first_parent,
-    )
+/// Whether `receipt`'s pull request is one the issue's close is attributed to,
+/// narrowed to `pin` when one is given.
+fn is_registered_close(receipt: &ReviewTransaction, closing_prs: &[u64], pin: Option<u64>) -> bool {
+    pin.is_none_or(|pr| pr == receipt.pr) && closing_prs.contains(&receipt.pr)
 }
 
 fn match_merge(
@@ -38,13 +22,13 @@ fn match_merge(
     delivering_sha: &str,
     second_parent: &str,
     base_is_ancestor_of_first_parent: bool,
-) -> Option<OwnClose> {
+) -> Option<DeliveryClose> {
     if !is_full_sha(delivering_sha)
         || !receipt.delivered_by_merge(second_parent, base_is_ancestor_of_first_parent)
     {
         return None;
     }
-    Some(OwnClose {
+    Some(DeliveryClose {
         pr: receipt.pr,
         epoch: receipt.epoch.clone(),
         head: receipt.head.clone(),
@@ -54,7 +38,7 @@ fn match_merge(
 
 /// What `transition --to done` reads before it moves anything: the merge of
 /// the latest confirmed publication's pull request, held to the same proof as
-/// [`own_delivery_close`] without its closing-reference condition — a pull
+/// [`delivery_close`] without its closing-reference condition — a pull
 /// request that only references the issue is delivered all the same.
 ///
 /// `None` when the issue has no confirmed publication, so a `done` with no
@@ -136,20 +120,26 @@ fn merge_cause(
         "merge-commit-unreadable"
     }
 }
-pub(crate) fn own_delivery_close(
+/// The registered publication whose merge closed `issue`, proved against the
+/// merge's own topology.
+///
+/// `publisher` narrows to one run's publication; `None` accepts any run's,
+/// because a renewal and a release answer to the live claim and not to whoever
+/// published — a successor renewing past a predecessor's delivery still has to
+/// prove the close. `pin` narrows further, to that pull request.
+pub(crate) fn delivery_close(
     context: &Context,
     issue: u64,
-    run_id: &str,
     comments: &[ownership::Comment],
+    publisher: Option<&str>,
     pin: Option<u64>,
-) -> Result<Option<OwnClose>, Failure> {
+) -> Result<Option<DeliveryClose>, Failure> {
     let Some((receipt, closing_prs)) =
-        own_publication_and_closers(context, issue, run_id, comments)?
+        publication_and_closers(context, issue, comments, publisher)?
     else {
         return Ok(None);
     };
-    let receipt = &receipt;
-    if pin.is_some_and(|pr| pr != receipt.pr) || !closing_prs.contains(&receipt.pr) {
+    if !is_registered_close(&receipt, &closing_prs, pin) {
         return Ok(None);
     }
     let Some((sha, first, second)) = closing_merge(context, receipt.pr)? else {
@@ -157,61 +147,49 @@ pub(crate) fn own_delivery_close(
     };
     let base_is_ancestor_of_first_parent =
         super::super::target::is_ancestor(&context.repo_dir, &receipt.base, &first)?;
-    Ok(match_own_close(
-        receipt,
-        &closing_prs,
+    Ok(match_merge(
+        &receipt,
         &sha,
         &second,
         base_is_ancestor_of_first_parent,
-        pin,
     ))
 }
 
-/// The run's own confirmed publication and the issue's closing pull requests,
-/// when it has published at all — the shared head of [`own_delivery_close`] and
-/// [`closed_by_own_publication`].
-fn own_publication_and_closers(
+/// The newest confirmed publication — narrowed to `publisher`'s when one is
+/// named — and the issue's closing pull requests, when there is a publication at
+/// all: the shared head of [`delivery_close`] and [`closing_publication`].
+fn publication_and_closers(
     context: &Context,
     issue: u64,
-    run_id: &str,
     comments: &[ownership::Comment],
+    publisher: Option<&str>,
 ) -> Result<Option<(ReviewTransaction, Vec<u64>)>, Failure> {
-    let has_own = comments.iter().any(|c| {
-        c.viewer_did_author
-            && !c.includes_created_edit
-            && super::super::markers::parse(&c.body).iter().any(|m| {
-                m.get("kind").map(String::as_str) == Some("published")
-                    && m.get("run-id").map(String::as_str) == Some(run_id)
-            })
-    });
-    if !has_own {
+    let Some(publication) = super::all_publications(comments)?
+        .into_iter()
+        .rfind(|p| p.confirmed && publisher.is_none_or(|run| p.publisher == run))
+    else {
         return Ok(None);
-    }
+    };
     let closing = super::super::closing::closing_refs(context, issue)?;
     let closing_prs: Vec<u64> = closing
         .iter()
         .filter_map(|r| r.get("number").and_then(serde_json::Value::as_u64))
         .collect();
-    let Some(publication) = super::all_publications(comments)?
-        .into_iter()
-        .rfind(|p| p.publisher == run_id && p.confirmed)
-    else {
-        return Ok(None);
-    };
     Ok(Some((publication.receipt, closing_prs)))
 }
 
-/// The run's own confirmed publication, when it is one of the pull requests
-/// that closed the issue — the weaker fact the `issue-not-open` refusal needs
-/// where [`own_delivery_close`]'s merge proof does not match.
-pub(crate) fn closed_by_own_publication(
+/// The confirmed publication, when it is one of the pull requests that closed
+/// the issue — the weaker fact the `issue-not-open` refusal needs where
+/// [`delivery_close`]'s merge proof does not match.
+///
+/// Publisher-agnostic: the close reads the same whoever published it, so the
+/// run holding the live claim is named the continuation either way.
+pub(crate) fn closing_publication(
     context: &Context,
     issue: u64,
-    run_id: &str,
     comments: &[ownership::Comment],
 ) -> Result<Option<u64>, Failure> {
-    let Some((receipt, closing_prs)) =
-        own_publication_and_closers(context, issue, run_id, comments)?
+    let Some((receipt, closing_prs)) = publication_and_closers(context, issue, comments, None)?
     else {
         return Ok(None);
     };
@@ -287,10 +265,10 @@ mod tests {
     }
 
     #[test]
-    fn a_matching_own_merge_permits_the_follow_up() {
+    fn a_registered_close_whose_merge_joins_the_receipt_is_a_delivery() {
         let r = receipt();
-        let found = match_own_close(&r, &[42], &sha(), &r.head, true, None)
-            .expect("own delivery should permit");
+        assert!(is_registered_close(&r, &[42], None));
+        let found = match_merge(&r, &sha(), &r.head, true).expect("the merge joins the receipt");
         assert_eq!(found.pr, 42);
         assert_eq!(found.epoch, r.epoch);
         assert_eq!(found.head, r.head);
@@ -298,31 +276,32 @@ mod tests {
     }
 
     #[test]
-    fn a_different_run_pin_or_missing_closer_is_not_ours() {
+    fn a_pin_for_another_pr_or_a_missing_closer_is_not_registered() {
         let r = receipt();
-        assert!(match_own_close(&r, &[42], &sha(), &r.head, true, Some(7)).is_none());
-        assert!(match_own_close(&r, &[7], &sha(), &r.head, true, None).is_none());
+        assert!(!is_registered_close(&r, &[42], Some(7)));
+        assert!(!is_registered_close(&r, &[7], None));
+        assert!(is_registered_close(&r, &[42], Some(42)));
     }
 
     #[test]
-    fn a_merge_whose_second_parent_is_not_the_receipt_head_is_not_ours() {
+    fn a_merge_whose_second_parent_is_not_the_receipt_head_is_not_a_delivery() {
         let r = receipt();
-        assert!(match_own_close(&r, &[42], &sha(), &r.base, true, None).is_none());
-        assert!(match_own_close(&r, &[42], "short", &r.head, true, None).is_none());
+        assert!(match_merge(&r, &sha(), &r.base, true).is_none());
+        assert!(match_merge(&r, "short", &r.head, true).is_none());
     }
 
     #[test]
     fn a_delivery_whose_first_parent_descends_from_the_reviewed_base_is_recognised() {
         let r = receipt();
-        let found = match_own_close(&r, &[42], &sha(), &r.head, true, None)
-            .expect("a forward-integrated delivery is still this run's own");
+        let found = match_merge(&r, &sha(), &r.head, true)
+            .expect("a forward-integrated delivery is still a delivery");
         assert_eq!(found.delivering_sha, sha());
     }
 
     #[test]
     fn a_delivery_whose_first_parent_is_unrelated_to_the_reviewed_base_is_refused() {
         let r = receipt();
-        assert!(match_own_close(&r, &[42], &sha(), &r.head, false, None).is_none());
+        assert!(match_merge(&r, &sha(), &r.head, false).is_none());
     }
 
     /// A repository with `base`, a commit that descends from it, and a root
@@ -371,11 +350,11 @@ mod tests {
         (root, base, descendant, unrelated)
     }
 
-    fn own_close_for_first_parent(
+    fn delivery_close_for_first_parent(
         repo: &std::path::Path,
         base: &str,
         first_parent: &str,
-    ) -> Option<OwnClose> {
+    ) -> Option<DeliveryClose> {
         let run_id = "claude-abcd1234";
         let head = "b".repeat(40);
         let merge_sha = "e".repeat(40);
@@ -434,25 +413,24 @@ mod tests {
             repo: None,
         };
         crate::test_env::with_scripted_gh(bin.path(), &script, || {
-            own_delivery_close(&context, 7, run_id, &comments, None)
-                .expect("a readable tracker answers")
+            delivery_close(&context, 7, &comments, None, None).expect("a readable tracker answers")
         })
     }
 
     #[test]
-    fn a_forward_integrated_delivery_is_recognised_as_this_runs_own_close() {
+    fn a_forward_integrated_delivery_is_recognised_as_the_registered_close() {
         let (root, base, descendant, _unrelated) = repo_with_a_descendant_and_an_unrelated_commit();
-        let found = own_close_for_first_parent(root.path(), &base, &descendant)
-            .expect("a first parent that descends from the reviewed base is this run's delivery");
+        let found = delivery_close_for_first_parent(root.path(), &base, &descendant)
+            .expect("a first parent that descends from the reviewed base is the delivery");
         assert_eq!(found.pr, 42);
         assert_eq!(found.head, "b".repeat(40));
     }
 
     #[test]
-    fn a_delivery_whose_first_parent_is_unrelated_is_not_this_runs_own_close() {
+    fn a_delivery_whose_first_parent_is_unrelated_is_not_a_registered_close() {
         let (root, base, _descendant, unrelated) = repo_with_a_descendant_and_an_unrelated_commit();
         assert!(
-            own_close_for_first_parent(root.path(), &base, &unrelated).is_none(),
+            delivery_close_for_first_parent(root.path(), &base, &unrelated).is_none(),
             "a first parent sharing no history with the reviewed base was accepted as delivery"
         );
     }
@@ -587,13 +565,14 @@ mod tests {
     }
 
     #[test]
-    fn an_issue_closed_by_this_runs_own_publication_names_the_continuation() {
+    fn an_issue_closed_by_the_registered_publication_names_the_continuation() {
         let (root, base, _descendant, unrelated) = repo_with_a_descendant_and_an_unrelated_commit();
         // The merge's first parent shares no history with the reviewed base, so
-        // `own_delivery_close` cannot prove the delivery — the shape that
-        // stranded the run — while the closer is still this run's publication.
+        // `delivery_close` cannot prove the delivery — the shape that stranded
+        // the run — while the closer is still the review's registered
+        // publication.
         let refused = verify_claim_on_an_issue(root.path(), "CLOSED", &base, &unrelated, Some(42))
-            .expect_err("a close this run's own publication caused must still refuse the renewal");
+            .expect_err("a close the registered publication caused must still refuse the renewal");
         let Failure::Stop(body) = refused else {
             panic!("the own-delivery refusal was not a stop: {refused:?}");
         };

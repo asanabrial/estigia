@@ -12563,7 +12563,7 @@ fn review_transaction_refuses_an_epoch_the_timeline_never_published() {
 /// `done` issue the run merely mentioned is not one of them. Issue 7 carries a
 /// publication by the run whose merge parents are the receipt's own base and
 /// head, so it counts; issue 8 carries nothing by the run, so it does not.
-/// Turning the per-issue `own_delivery_close` proof into a bare `status:done`
+/// Turning the per-issue `delivery_close` proof into a bare `status:done`
 /// count must redden this.
 #[test]
 fn the_completion_count_is_proved_per_issue_rather_than_searched() {
@@ -12742,22 +12742,34 @@ fn an_own_delivery_close_is_proved_from_the_store_when_github_carries_no_marker(
     );
 }
 
+/// A successor that inherited the review renews past the auto-close: it holds
+/// the live claim, and the publication that registered the delivery was the
+/// predecessor's, so a renewal keyed to this run's own publication would stand
+/// the successor down before it could finish the delivery (the annotated tag,
+/// the Release, the `done` transition and the release). The claim, not the run
+/// that published, is the authority.
 #[test]
-fn a_closed_issue_is_not_this_runs_delivery_without_a_receipt_in_the_store() {
+fn a_successor_renews_past_a_close_its_predecessors_publication_caused() {
+    let answer = verify_a_closed_issue_from_the_store(Some("claude-b"), None)
+        .expect("the close is the registered delivery, proved from the store");
+    assert!(
+        answer.to_string().contains(OWN_DELIVERY_CLOSE_PREFIX),
+        "{answer}"
+    );
+}
+
+/// A store with no publication carrying a complete receipt proves nothing,
+/// whoever holds the claim: the renewal refuses as `issue-not-open` and names no
+/// delivering SHA.
+#[test]
+fn a_closed_issue_is_not_a_delivery_without_a_receipt_in_the_store() {
     let refused = verify_a_closed_issue_from_the_store(None, None)
         .expect_err("no receipt in the store proves nothing");
     assert_refused_as_not_open(refused);
 }
 
 #[test]
-fn a_closed_issue_is_not_this_runs_delivery_on_another_runs_receipt() {
-    let refused = verify_a_closed_issue_from_the_store(Some("claude-b"), None)
-        .expect_err("another run's receipt is not this run's delivery");
-    assert_refused_as_not_open(refused);
-}
-
-#[test]
-fn a_closed_issue_is_not_this_runs_delivery_when_the_merge_does_not_match_the_receipt() {
+fn a_closed_issue_is_not_a_delivery_when_the_merge_does_not_match_the_receipt() {
     let refused = verify_a_closed_issue_from_the_store(Some("claude-a"), Some(&"9".repeat(40)))
         .expect_err("a merge whose second parent is not the receipt head is not this delivery");
     assert_refused_as_not_open(refused);
