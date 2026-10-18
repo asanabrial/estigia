@@ -8209,16 +8209,21 @@ pointer that leaves it names the document it points at.
     or a bare or mirror layout is read as a repository only where a `.git` entry sits in an
     ancestor; the reading is one `git` subprocess per unclaimed routine write this row reaches, and
     nothing caches across writes.
-  - **A write tool whose paths live in a patch body is placed by the body's own paths.**
-    `classify_observing` reads every string the payload carries — the reading the control-surface
-    rule already makes, for the same reason — and takes `*** Add File:`, `*** Update File:`,
+  - **A write tool whose paths live in a patch body is placed by the body's own paths.** For
+    `patch` and `apply_patch` — the two write tools whose body *is* their target list, and only
+    where no field named a path — `classify_observing` reads every string the payload carries, the
+    reading the control-surface rule already makes, and takes `*** Add File:`, `*** Update File:`,
     `*** Delete File:` and `*** Move to:` as naming a target, one per line. `patch` with `patchText`
-    is the payload the reproduction failed on, and `apply_patch` and `patch` under any field spelling
-    share the read. Each named path is placed, and a write to **any** repository among them is held,
-    so a mixed-target patch is refused whole. A body shape this reader does not know names nothing,
-    and a `target` that is not a path places against the launch directory instead — the fail-closed
-    direction — so a patch into a repository is never exempted for being under-read. A path that
-    cannot be placed is read as inside.
+    is the payload the reproduction failed on. Each named path is placed, and a write to **any**
+    repository among them is held, so a mixed-target patch is refused whole. A body shape this
+    reader does not know names nothing, and a `target` that is not a path places against the launch
+    directory instead — the fail-closed direction — so a patch into a repository is never exempted
+    for being under-read. **No other write tool's body is read as paths**: one that named no path in
+    a field is a write whose destination was not read, and a marker in a content string must not
+    displace the tool's own name and exempt it. That shape — a `pre_write_code` call whose `file`
+    field goes unread while a `*** Add File:` line in its `content` supplies the target — is what a
+    draft that read every write tool's body exempted, and the regression it drove is what holds the
+    reader to the two tools. A path that cannot be placed is read as inside.
   - **A shell write is placed inside only by its literal redirect targets or by naming a repository
     operation.** Redirects to literal absolute paths the gate places outside every repository are not
     held: each `>`, `>>`

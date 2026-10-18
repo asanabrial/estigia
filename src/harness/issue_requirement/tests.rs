@@ -994,6 +994,57 @@ fn a_write_from_a_non_git_directory_into_a_repository_is_still_held() {
 }
 
 #[test]
+fn a_content_string_is_not_a_target_list_for_a_tool_that_is_not_a_patch() {
+    let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
+    let repo = crate::test_env::repository_with_commit();
+    // `pre_write_code` names its path in `file`, which `path_argument` does not
+    // read, so this is a write whose destination the gate never read. A marker
+    // in its `content` is body text, not a target list.
+    for payload in [
+        serde_json::json!({
+            "file": repo.path().join("src.rs").display().to_string(),
+            "content": "*** Begin Patch\n*** Add File: /tmp/elsewhere.md\n+x\n*** End Patch",
+        }),
+        serde_json::json!({
+            "file": repo.path().join("src.rs").display().to_string(),
+            "content": "*** Update File: /tmp/elsewhere.md\n@@\n-old\n+new\n",
+        }),
+    ] {
+        let decision = unclaimed_edit(&context, "pre_write_code", payload.clone());
+        assert!(held_for_an_issue(&decision), "{payload}: {decision:?}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn an_ancestor_this_process_cannot_open_is_held_rather_than_exempted() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
+    let locked = launch.path().join("locked");
+    std::fs::create_dir(&locked).expect("a directory");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+        .expect("a mode the process cannot read");
+    // The premise, asserted rather than assumed: the arm under test is reached
+    // only by a process that cannot open the ancestor. A root run reads straight
+    // through the mode, and must fail here rather than report a write as held
+    // that nothing held.
+    assert!(
+        std::fs::read_dir(&locked).is_err(),
+        "a process that can open {} cannot measure the unreadable-ancestor arm",
+        locked.display()
+    );
+    let decision = unclaimed_edit(
+        &context,
+        "Write",
+        serde_json::json!({ "file_path": locked.join("notes.md").display().to_string() }),
+    );
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+        .expect("the mode is restored so the fixture can be cleaned up");
+    assert!(held_for_an_issue(&decision), "{decision:?}");
+}
+
+#[test]
 fn a_write_tool_whose_body_named_no_readable_path_is_still_held() {
     let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
     let repo = crate::test_env::repository_with_commit();

@@ -2319,11 +2319,13 @@ pub fn classify_observing(
         let named = path_argument(input);
         let target = named.clone().unwrap_or_else(|| tool.to_owned());
         let payload_text = input.to_string();
-        // Read only where no field names a path, for the reason the control
-        // surface is: a write tool whose paths live in its body is the one
-        // shape with no argument to read. Reading a body beside a field would
-        // put a path a *content* string mentions into the place's answer.
-        let write_targets = named.is_none().then(|| patch_targets(input));
+        // Read only for the tools whose body *is* their target list, and only
+        // where no field names a path. Any other write tool that named no path
+        // is one whose destination the gate did not read, and a marker in a
+        // content string would displace the tool's own name and exempt the
+        // write.
+        let write_targets =
+            (named.is_none() && names_a_patch_body(&name)).then(|| patch_targets(input));
         if person_only::is_the_record(&target)
             || (named.is_none() && person_only::names_the_record(&payload_text))
         {
@@ -2416,6 +2418,16 @@ fn argument_name(key: &str) -> String {
 /// copy of the rule. This is the one owner.
 pub(crate) fn path_argument(input: &serde_json::Value) -> Option<String> {
     argument_named(input, &["filepath", "path", "notebookpath"])
+}
+
+/// Whether a write tool's paths live in a patch body rather than in a field.
+///
+/// Two of them do — Codex's `apply_patch` and OpenCode's `patch`, the same two
+/// whose whole payload the control surface is read from. Every other write tool
+/// that named no path is one whose destination was not read, and its body is
+/// content rather than a target list.
+fn names_a_patch_body(tool: &str) -> bool {
+    matches!(tool, "apply_patch" | "patch")
 }
 
 /// The markers a patch body puts in front of the file an entry touches.
