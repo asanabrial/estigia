@@ -460,6 +460,10 @@ pointer that leaves it names the document it points at.
     The stand-in reviewer follows the supplied prompt; no model's compliance with conflicting
     inherited instructions is measured. Separate capture tests reject ambiguous channels and old
     attempt IDs and admit a fresh attempt on the unchanged receipt after malformed output.
+    Removing the appended channel instruction makes the generated-plugin regression fail with
+    `reviewer-result-malformed`, because its stand-in then emits the required acknowledgment plus
+    bare JSON. Framed-answer tests also hold receipt movement stale and repeated admission to one
+    report; the channel does not substitute a job ID for the publication's identity checks.
   - **ZCode, Cursor and DeepSeek Harness cannot relay.** The canonical per-runtime table
     (`src/setup/capabilities.rs`) records no agent-definitions surface for any of the three
     (`agent_definitions: false`), so none can be routed to a reserved reviewer at all; and only

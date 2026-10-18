@@ -1113,6 +1113,47 @@ fn malformed_or_ambiguous_opencode_channels_record_nothing() {
     }
 }
 
+#[test]
+fn a_framed_opencode_answer_still_owes_the_exact_publication_receipt() {
+    let run = "opencode-ses12345deadbeef";
+    let world = capturable_as(run);
+    let launched = relay_launch_as(&world, RELIABILITY_LENS, run).expect("launch");
+    let receipt = ReviewTransaction {
+        epoch: op(77),
+        ..world.receipt.clone()
+    };
+    let payload = crate::transport::target::review_payload(
+        &world.context.repo_dir,
+        &receipt.base,
+        &receipt.head,
+    )
+    .expect("payload");
+    open_ledger_result(&world)
+        .and_then(|ledger| {
+            ledger.append(&published_with_payload(&receipt, &payload.digest).body, NOW)
+        })
+        .expect("newer publication");
+    let answer = framed_answer(&launched, "Acknowledged.", r#"{"findings": []}"#);
+    let rejected = relay_admit_for(&world, RELIABILITY_LENS, &answer, run);
+    assert_eq!(refused_as(&rejected), "capture-result-stale");
+    assert_eq!(job_state(&world, &launched), "stale");
+    nothing_was_written(&world);
+}
+
+#[test]
+fn admitting_a_framed_opencode_answer_twice_records_one_report() {
+    let run = "opencode-ses12345deadbeef";
+    let world = capturable_as(run);
+    let launched = relay_launch_as(&world, RELIABILITY_LENS, run).expect("launch");
+    let answer = framed_answer(&launched, "Acknowledged.", r#"{"findings": []}"#);
+    for _ in 0..2 {
+        let admitted =
+            relay_admit_for(&world, RELIABILITY_LENS, &answer, run).expect("admitted or read back");
+        assert_eq!(admitted["ok"], true);
+    }
+    assert_eq!(on_the_timeline(&world).1, [RELIABILITY_LENS]);
+}
+
 /// An OpenCode relay answer carries the launch the host makes: a built-in
 /// sub-agent and the marker prompt the relay plugin intercepts, never the
 /// reserved reviewer as an agent. Another host's answer carries none.
