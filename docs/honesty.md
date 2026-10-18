@@ -8429,7 +8429,7 @@ pointer that leaves it names the document it points at.
     `lost-claim-race` with the world unchanged and **rolls its marker back**, so the store keeps
     only the winner's row and the loser makes no `dev:` label. `reclaim` adjudicates after its
     transaction has committed, so a `lost-reclaim-race` loser's row still stays.
-  - **Reclaim validation used to resurrect scoped releases (#143).** Discovery and preflight
+  - **Reclaim validation used to resurrect scoped releases.** Discovery and preflight
     honored operation-scoped unassigns, but `ownership::reclaim_is_valid` reduced its prefix with
     an empty epoch-release map. With the released acquisitions' horizons still live, a forced
     takeover of the exact discovered holder committed and then answered `reclaim-discarded`,
