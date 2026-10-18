@@ -2073,6 +2073,148 @@ fn claim_a() -> ownership::Comment {
     )
 }
 
+fn assert_reclaim_after_scoped_releases(releases: usize) {
+    let acquisitions = [
+        ("claude-a", HOLDER_OPERATION),
+        ("claude-b", "cccccccccccccccccccccccccccccccc"),
+        ("claude-c", "dddddddddddddddddddddddddddddddd"),
+    ];
+    let mut comments = vec![claim_a()];
+    for index in 0..releases {
+        let (run, operation) = acquisitions[index];
+        let release = super::super::markers::render(
+            "unassign",
+            &[
+                ("run-id", run),
+                ("runtime", "claude"),
+                (
+                    "op-id",
+                    [
+                        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                        "ffffffffffffffffffffffffffffffff",
+                    ][index],
+                ),
+                ("target-op", operation),
+            ],
+        )
+        .expect("the scoped release renders");
+        comments.push(dated(
+            &format!("release-{index}"),
+            &format!("2026-07-28T0{}:00:00Z", index * 2 + 2),
+            release,
+        ));
+        let (next_run, next_operation) = acquisitions[index + 1];
+        comments.push(dated(
+            &format!("claim-{index}"),
+            &format!("2026-07-28T0{}:00:00Z", index * 2 + 3),
+            claim_body(next_run, next_operation),
+        ));
+    }
+    let (holder, operation) = acquisitions[releases];
+    let before = holding(&comments, RECLAIM_NOW);
+    assert_eq!(before.holder.as_deref(), Some(holder));
+    assert_eq!(before.live.len(), 1, "released acquisitions remain live");
+
+    let directory = tempfile::tempdir().expect("a directory for the store");
+    let context = context_at(directory.path());
+    let evidence = directory.path().join("evidence.md");
+    std::fs::write(&evidence, TAKEOVER_EVIDENCE).expect("the evidence");
+    let bin = crate::test_env::scripted_gh();
+    let script = claim_script(12, &comments);
+    let request = Reclaim {
+        issue: 12,
+        run_id: "claude-a",
+        runtime: "claude",
+        horizon: RECLAIM_HORIZON,
+        operation_id: RECLAIM_OPERATION,
+        target_operation: None,
+        force: true,
+        reason_file: Some(&evidence),
+        now: RECLAIM_NOW,
+    };
+    crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        let discovery = reclaim(&context, &request).expect("discovery succeeds");
+        assert_eq!(discovery["target_operation"], operation);
+        assert_eq!(discovery["write_performed"], false);
+        assert_eq!(
+            holding(&store_timeline(&context, 12), RECLAIM_NOW)
+                .holder
+                .as_deref(),
+            Some(holder)
+        );
+        let answer = reclaim(
+            &context,
+            &Reclaim {
+                target_operation: Some(operation),
+                ..request
+            },
+        )
+        .expect("the forced exact-target reclaim must survive read-back after scoped releases");
+        assert_eq!(answer["reclaimed_from"], holder);
+        let timeline = store_timeline(&context, 12);
+        let after = holding(&timeline, RECLAIM_NOW);
+        assert_eq!(after.holder.as_deref(), Some("claude-a"));
+        assert!(
+            won_the_reclaim(after.event, "claude-a", &timeline, RECLAIM_OPERATION)
+                .expect("the exact reclaim reads back as forced")
+        );
+    });
+}
+
+#[test]
+fn a_forced_reclaim_after_one_scoped_release_reads_back() {
+    assert_reclaim_after_scoped_releases(1);
+}
+
+#[test]
+fn a_forced_reclaim_after_two_scoped_releases_reads_back() {
+    assert_reclaim_after_scoped_releases(2);
+}
+
+#[test]
+fn a_discarded_reclaim_releases_nothing_in_a_later_reclaims_prefix() {
+    let contender = "cccccccccccccccccccccccccccccccc";
+    let later = "dddddddddddddddddddddddddddddddd";
+    let mut attributes = takeover_attributes("claude-c", contender);
+    attributes[0].1 = "claude-d";
+    attributes[3].1 = later;
+    let comments = vec![
+        claim_a(),
+        dated(
+            "2",
+            "2026-07-28T02:00:00Z",
+            unforced_takeover(&takeover_attributes("claude-a", HOLDER_OPERATION)),
+        ),
+        dated(
+            "3",
+            "2026-07-28T03:00:00Z",
+            claim_body("claude-c", contender),
+        ),
+        dated(
+            "4",
+            "2026-07-28T04:00:00Z",
+            forced_takeover(&attributes, TAKEOVER_EVIDENCE),
+        ),
+    ];
+    assert_eq!(
+        ownership::discarded_reclaim(&comments, RECLAIM_OPERATION),
+        Some(ownership::ReclaimDiscard::LiveTargetUnforced)
+    );
+    assert_eq!(
+        ownership::discarded_reclaim(&comments, later),
+        Some(ownership::ReclaimDiscard::TargetNotHolder)
+    );
+    assert_eq!(
+        holding(&comments, RECLAIM_NOW).holder.as_deref(),
+        Some("claude-a")
+    );
+    assert!(
+        ownership::authoritative_events(&comments)
+            .iter()
+            .all(|event| event.kind == "claim")
+    );
+}
+
 /// The floor each discard test breaks from: one claim, and one forced takeover
 /// of it whose evidence binds. Every input below is a rendered marker, so what
 /// a test breaks is what the reader has to refuse.

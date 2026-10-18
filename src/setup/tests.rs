@@ -15576,7 +15576,7 @@ for (const kind of ["running", "identity", "status", "missing", "tool-error"]) {
   if (kind === "missing") delete event.result.output.output;
   const callsAtResult = state.calls.length;
   await after(event);
-  out.native_refusals.push({ kind, calls: state.calls.length - callsAtResult, status: event.status, result: event.result });
+  out.native_refusals.push({ kind, calls: state.calls.length - callsAtResult, status: event.status, error: event.error, result: event.result });
 }
 
 out.every_call_attached = state.calls.every((call) => call.attached);
@@ -15722,7 +15722,9 @@ event.result = {
 };
 await hooks['execute.after'](event);
 if (event.status === 'error') throw new Error(event.error);
-if (JSON.stringify(event.result).includes(answer)) throw new Error('review output leaked');
+const stringValues = value => typeof value === 'string' ? [value]
+  : value && typeof value === 'object' ? Object.values(value).flatMap(stringValues) : [];
+if (stringValues(event.result).some(value => value.includes(answer))) throw new Error('review output leaked');
 process.stdout.write(captured);
 "#,
     )
@@ -15908,12 +15910,38 @@ fn the_review_relay_admits_the_answer_of_a_v2_call_by_the_id_before_remembered()
         "review-background-unsupported"
     );
     assert_eq!(cases["background_request_calls"], 0);
-    for refusal in cases["native_refusals"]
+    let refusals = cases["native_refusals"]
         .as_array()
-        .expect("native lifecycle cases")
-    {
+        .expect("native lifecycle cases");
+    assert_eq!(
+        refusals
+            .iter()
+            .map(|refusal| refusal["kind"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["running", "identity", "status", "missing", "tool-error"]
+    );
+    for refusal in refusals {
         assert_eq!(refusal["calls"], 0, "{refusal}");
         assert_eq!(refusal["status"], "error", "{refusal}");
+        let diagnostic = refusal["error"].as_str().expect("refusal diagnostic");
+        let mut recovery = diagnostic;
+        for step in [
+            "collect_review_input",
+            "abandon this runner-less attempt",
+            "review_status",
+            "relaunch foreground on the same receipt",
+        ] {
+            recovery = recovery
+                .split_once(step)
+                .unwrap_or_else(|| panic!("missing ordered recovery step {step:?}: {refusal}"))
+                .1;
+        }
+        assert_eq!(refusal["result"]["output"], diagnostic, "{refusal}");
+        assert_eq!(
+            refusal["result"]["content"],
+            serde_json::json!([{"type": "text", "text": diagnostic}]),
+            "{refusal}"
+        );
         assert!(
             !refusal["result"]
                 .to_string()
