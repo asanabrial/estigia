@@ -193,10 +193,13 @@ pub enum Command {
 
     /// Sweep branches and checkouts no delivery owns.
     ///
-    /// Read-only until `--confirm`. It lists every remote head that is merged or
+    /// No removal until `--confirm`; discovery can refresh remote-tracking refs.
+    /// It lists every remote head that is merged or
     /// closed and every registered checkout, keeps any a live claim holds or that
     /// carries uncommitted work or commits the remote does not have, and removes
-    /// the rest only when the operator confirms.
+    /// eligible entries only when the operator confirms. Clean remote-gone orphan
+    /// checkouts also qualify when every commit remains on a remote and no known
+    /// session or pointer holds them; unreadable eligibility keeps them.
     Prune {
         /// Remove what the sweep lists, rather than only listing it.
         #[arg(long)]

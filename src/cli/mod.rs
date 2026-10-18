@@ -4198,6 +4198,10 @@ fn prune(confirm: bool, base: &str, json: bool) -> Result<(), Refusal> {
         base,
         holdings: &holdings,
         root: root.as_deref(),
+        ownership: harness::session::state_root(None)
+            .map_err(|failure| failure.message)
+            .and_then(|root| harness::prune::ownership(&root)),
+        ownership_root: harness::session::state_root(None).ok(),
     };
     let swept = harness::prune::sweep(&view).map_err(|failure| {
         Refusal::not_started(
@@ -4226,7 +4230,7 @@ fn prune(confirm: bool, base: &str, json: bool) -> Result<(), Refusal> {
         return Ok(());
     }
     if swept.is_empty() {
-        say!("nothing to sweep: no merged or closed branch or checkout is unowned");
+        say!("nothing to sweep: no eligible branch or checkout is unowned");
         return Ok(());
     }
     for entry in &swept {

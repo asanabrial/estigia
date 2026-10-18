@@ -924,11 +924,12 @@ pub(super) fn launch_relay(
 }
 
 /// The sub-agent launch an OpenCode host makes for one reviewer name: a built-in
-/// agent and the marker prompt the review relay plugin intercepts.
+/// foreground agent and the marker prompt the review relay plugin intercepts.
 pub fn opencode_relay_launch(name: &str) -> serde_json::Value {
     serde_json::json!({
         "agent": "general",
         "prompt": format!("<!-- estigia:review name={name} -->"),
+        "background": false,
     })
 }
 

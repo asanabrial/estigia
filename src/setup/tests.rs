@@ -15535,6 +15535,50 @@ const v2Error = { tool: "task", sessionID: "ses_v2", id: "call_v2b", input: { su
 await after(v2Error);
 out.joined_delivery = (await state.calls.at(-1).stdinBlob?.text()) ?? null;
 
+const nativeAnswer = '{"findings":[]}';
+const native = {
+  tool: "subagent", sessionID: "ses_native", id: "native-completed",
+  input: { agent: prescribed.agent, prompt: prescribed.prompt },
+};
+await before(native);
+native.status = "completed";
+native.result = {
+  output: { sessionID: "native-child", status: "completed", output: nativeAnswer },
+  content: `<subagent sessionID="native-child" state="completed">\n${nativeAnswer}\n</subagent>`,
+  metadata: { sessionID: "native-child", status: "completed" },
+};
+await after(native);
+out.native_delivery = await state.calls.at(-1).stdinBlob.text();
+out.native_result = native.result;
+
+const backgroundRequest = {
+  tool: "subagent", sessionID: "ses_native", id: "native-background-request",
+  input: { agent: prescribed.agent, prompt: prescribed.prompt, background: true },
+};
+const callsAtBackground = state.calls.length;
+out.background_request_code = null;
+try { await before(backgroundRequest); } catch (error) { out.background_request_code = error.code; }
+out.background_request_calls = state.calls.length - callsAtBackground;
+
+out.native_refusals = [];
+for (const kind of ["running", "identity", "status", "missing", "tool-error"]) {
+  const event = {
+    tool: "subagent", sessionID: "ses_native", id: `native-${kind}`,
+    input: { agent: prescribed.agent, prompt: prescribed.prompt },
+  };
+  await before(event);
+  event.status = kind === "tool-error" ? "error" : "completed";
+  event.result = {
+    output: { sessionID: "native-child", status: kind === "running" ? "running" : "completed", output: "DO NOT ADMIT OR SHOW" },
+    content: "DO NOT ADMIT OR SHOW",
+    metadata: { sessionID: kind === "identity" ? "other-child" : "native-child", status: kind === "running" || kind === "status" ? "running" : "completed" },
+  };
+  if (kind === "missing") delete event.result.output.output;
+  const callsAtResult = state.calls.length;
+  await after(event);
+  out.native_refusals.push({ kind, calls: state.calls.length - callsAtResult, status: event.status, error: event.error, result: event.result });
+}
+
 out.every_call_attached = state.calls.every((call) => call.attached);
 
 const realBlob = globalThis.Blob;
@@ -15637,6 +15681,73 @@ fn run_review_relay_driver() -> serde_json::Value {
     serde_json::from_slice(&ran.stdout).expect("the driver prints JSON")
 }
 
+pub(crate) fn native_relay_completion(prompt: &[u8], answer: &[u8]) -> Vec<u8> {
+    let root = tempfile::tempdir().expect("native relay fixture");
+    crate::paths::replace_atomically(
+        &root.path().join("estigia-review-relay.mjs"),
+        &crate::setup::plugin::review_relay_source(std::path::Path::new("/opt/estigia")),
+    )
+    .expect("generated relay writes");
+    let driver = root.path().join("native-completion.mjs");
+    crate::paths::replace_atomically(
+        &driver,
+        r#"import plugin from './estigia-review-relay.mjs';
+const [launchText, prompt, answer] = process.argv.slice(2);
+const launch = JSON.parse(launchText);
+const hooks = {};
+let captured;
+globalThis.Bun = { $: (strings, ...values) => {
+  const action = values.find(value => value === 'prompt' || value === 'admit');
+  const input = values.find(value => value instanceof Blob);
+  if (!input) throw new Error('stdin was not attached');
+  const chain = {
+    cwd() { return chain; }, quiet() { return chain; }, nothrow() { return chain; },
+    async then(resolve) {
+      if (action === 'admit') captured = await input.text();
+      resolve({ exitCode: 0, stdout: action === 'prompt' ? prompt : '{"ok":true}' });
+    },
+  };
+  return chain;
+} };
+await plugin.setup({ location: { directory: process.cwd() }, tool: { hook: async (name, fn) => hooks[name] = fn } });
+const event = { tool: 'subagent', id: 'native-completion', sessionID: 'parent',
+  input: { agent: launch.agent, prompt: launch.prompt, background: launch.background } };
+await hooks['execute.before'](event);
+if (event.input.prompt !== prompt.trim()) throw new Error('returned launch not intercepted');
+event.status = 'completed';
+event.result = {
+  output: { sessionID: 'child', status: 'completed', output: answer },
+  content: `<subagent sessionID="child" state="completed">\n${answer}\n</subagent>`,
+  metadata: { sessionID: 'child', status: 'completed' },
+};
+await hooks['execute.after'](event);
+if (event.status === 'error') throw new Error(event.error);
+const stringValues = value => typeof value === 'string' ? [value]
+  : value && typeof value === 'object' ? Object.values(value).flatMap(stringValues) : [];
+if (stringValues(event.result).some(value => value.includes(answer))) throw new Error('review output leaked');
+process.stdout.write(captured);
+"#,
+    )
+    .expect("native driver writes");
+    let launch = crate::transport::claim::opencode_relay_launch("review-reliability");
+    let ran = run_node(
+        "native_relay_completion",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .arg(launch.to_string())
+            .arg(std::str::from_utf8(prompt).expect("UTF-8 prompt"))
+            .arg(std::str::from_utf8(answer).expect("UTF-8 reviewer answer"))
+            .current_dir(root.path()),
+    )
+    .expect("this test requires node; it is not skipped");
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    ran.stdout
+}
+
 pub(crate) fn acknowledged_relay_answer(
     directory: &std::path::Path,
     launch: &serde_json::Value,
@@ -15681,11 +15792,15 @@ const channel = event.input.prompt.match(/<estigia-review-result job="[a-f0-9]{3
 const answer = channel
   ? channel[0] + '\n{"findings": []}\n</estigia-review-result>\n'
   : '{"findings": []}';
-event.result = { content: [
-  { type: 'text', text: 'Get ready for the next battle!\n' },
-  { type: 'text', text: answer },
-] };
+const finalText = 'Get ready for the next battle!\n' + answer;
+event.status = 'completed';
+event.result = {
+  output: { sessionID: 'acknowledgment-child', status: 'completed', output: finalText },
+  content: `<subagent sessionID="acknowledgment-child" state="completed">\n${finalText}\n</subagent>`,
+  metadata: { sessionID: 'acknowledgment-child', status: 'completed' },
+};
 await hooks['execute.after'](event);
+if (event.status === 'error') throw new Error(event.error);
 if (JSON.stringify(event.result).includes('Get ready for the next battle!')) throw new Error('raw output leaked');
 process.stdout.write(captured);
 "#,
@@ -15858,12 +15973,58 @@ fn the_review_relay_keeps_unavailable_and_stale_apart() {
     );
 }
 
-/// OpenCode 2 hands `execute.after` an input whose prompt `execute.before` already
-/// replaced, and builds the tool's answer from `result.content` and `result.output`.
-/// The slot is remembered by the call's id, and the answer is read from the parts.
 #[test]
 fn the_review_relay_admits_the_answer_of_a_v2_call_by_the_id_before_remembered() {
     let cases = run_review_relay_driver();
+    assert_eq!(
+        cases["native_delivery"], r#"{"findings":[]}"#,
+        "native wrapper was admitted instead of the designated result"
+    );
+    assert!(!cases["native_result"].to_string().contains("findings"));
+    assert_eq!(
+        cases["background_request_code"],
+        "review-background-unsupported"
+    );
+    assert_eq!(cases["background_request_calls"], 0);
+    let refusals = cases["native_refusals"]
+        .as_array()
+        .expect("native lifecycle cases");
+    assert_eq!(
+        refusals
+            .iter()
+            .map(|refusal| refusal["kind"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["running", "identity", "status", "missing", "tool-error"]
+    );
+    for refusal in refusals {
+        assert_eq!(refusal["calls"], 0, "{refusal}");
+        assert_eq!(refusal["status"], "error", "{refusal}");
+        let diagnostic = refusal["error"].as_str().expect("refusal diagnostic");
+        let mut recovery = diagnostic;
+        for step in [
+            "collect_review_input",
+            "abandon this runner-less attempt",
+            "review_status",
+            "relaunch foreground on the same receipt",
+        ] {
+            recovery = recovery
+                .split_once(step)
+                .unwrap_or_else(|| panic!("missing ordered recovery step {step:?}: {refusal}"))
+                .1;
+        }
+        assert_eq!(refusal["result"]["output"], diagnostic, "{refusal}");
+        assert_eq!(
+            refusal["result"]["content"],
+            serde_json::json!([{"type": "text", "text": diagnostic}]),
+            "{refusal}"
+        );
+        assert!(
+            !refusal["result"]
+                .to_string()
+                .contains("DO NOT ADMIT OR SHOW"),
+            "{refusal}"
+        );
+    }
     assert_eq!(
         cases["v2_prompt"], "MATERIALISED PROMPT",
         "the prompt was not materialised: {cases}"

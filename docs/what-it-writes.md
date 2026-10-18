@@ -20,9 +20,40 @@ before. Windows ACLs and ownership are not carried over. The staging lives in `p
 a `branch` marker in the local store, and `release` — the last step of a delivery — deletes every
 remote head those markers name, reading each one back, then puts down the isolated checkout and its local
 branch. `estigia prune` is the operator-invoked sweep for what no delivery owned: merged or closed
-heads and checkouts, kept when a live claim holds them or they carry commits the remote does not
+heads and checkouts, plus [remote-gone orphan checkouts](#explicit-orphan-pruning), kept when a live claim holds them or they carry commits the remote does not
 have, removed only on `--confirm`. The rules, and what each still cannot see, are in the contract's
 delivery reference and [`honesty.md`](honesty.md); this document does not restate them.
+
+## Explicit orphan pruning
+
+`estigia prune` retains its existing merged/closed cleanup. An additional eligibility route handles
+a branch checkout that would otherwise be kept: its configured upstream must be absent after
+`git fetch --prune --all`, its working tree must be clean, and `git rev-list --count <proven-head>
+--not --remotes` must be zero. The upstream identity comes from `branch.<name>.remote` and
+`branch.<name>.merge`, not the local branch name or a presumed `origin`; the configuration remains
+readable when fetching removes a stale tracking ref. Reachability from any refreshed remote-tracking
+branch suffices, not only the default branch. A configured upstream still present on its actual remote
+is never eligible through this route. The safe fallback for genuinely untracked branches is to keep
+them: absent, incomplete, multiple, invalid, local-only (`remote = .`) or unknown tracking identities
+are not inferred to mean a deleted remote branch.
+
+The additional route keeps any checkout named by a run pointer, even when its issue is closed. It
+also keeps a checkout named by a session registry entry not explicitly ended; a stale heartbeat is
+not an ended session. Unreadable pointers, registry reads, remote reads and local Git reads keep the
+candidate and name the reason. This deliberately retains some abandoned checkouts rather than
+guessing that their holders died. The remaining observation limits are in
+[`honesty.md`](honesty.md), under “What the prune sweep cannot see”.
+
+Without `--confirm`, the command only lists candidates and refreshes remote-tracking refs; it removes
+no checkout or branch. Confirmation rereads pointers and the session registry for the new route,
+repeats its Git checks, then rereads ownership and checks branch identity at the retirement boundary.
+The reachability query uses a captured commit id, and that exact id is passed to the existing
+retirement operation's HEAD comparison; a newer HEAD is never substituted for the proven revision.
+Confirmation then uses the existing
+checkout retirement operation: `git worktree remove` without force, followed by local branch
+retirement. It introduces no remote-branch deletion and no session-start deletion. `release` and
+the ordinary `estigia changes` listing are unchanged. These observations are not a repository or
+ownership lock; the remaining race after the final checks is described in `honesty.md`.
 
 **What Estigia writes to GitHub.** Issues and their prose, a person's `comment` prose, labels,
 open or closed, pull requests and branches — and no `issue-flow` marker anywhere. The markers of the
@@ -641,7 +672,7 @@ admission and replaces the result, so the orchestrator never receives the review
 accepts a task of any sub-agent whose input carries `estigia:review name=<role>`, for a host that has
 no reviewer agent of its own. `estigia setup opencode` installs no reviewer agent, so the form a
 host launches is the second: the `relay: true` answer on an OpenCode run carries
-`launch: {agent, prompt}`, the built-in `general` sub-agent and the prompt
+`launch: {agent, prompt, background: false}`, the built-in `general` sub-agent and the prompt
 `<!-- estigia:review name=<role> -->`, and the plugin replaces that prompt with the binary's. A task
 naming a reserved reviewer is relayed too, for a host that has defined one itself.
 
@@ -669,10 +700,24 @@ then a coded `unavailable` naming the CLI to install. A run id whose runtime can
 second order and never takes the relay ahead of a CLI. The detached runner's own selection has no host
 and never relays.
 
+The OpenCode relay supports foreground review only. A request with `background: true` is refused
+before the host spawns a child. A foreground tool that returns a running child, including a host-side
+transition to background, is refused without submitting its launch notice for admission. Tool errors,
+incomplete native results and contradictory child identity/status metadata are also refused without
+admission; their raw output is replaced with a diagnostic. Asynchronous completion would require a
+correlated private notification channel, which this plugin does not register.
+
+After such a refusal, the relay job has no completed result. Call `collect_review_input` once to
+abandon its runner-less slot (`capture-runner-lost`), then ask `review_status` and relaunch foreground
+on the unchanged publication. Do not republish or count a later visible background notification as
+review evidence. If foreground completion is unavailable, retain the exact receipt and hand off.
+
 The slot a launch was relayed for is remembered from `execute.before` by the call's `id`, because the
 prompt `before` puts in the task input carries no marker and the sub-agent is `general`; `execute.after` reads it
-there first and forgets it. The host builds the tool's answer from `result.content` (an array of parts) and
-`result.output`, so the plugin joins the text parts of `content` for admission, else `output`, and
+there first and forgets it. A native structured subagent completion designates its answer in
+`result.output.output`; `result.content` is a rendered `<subagent>` wrapper, never the review payload.
+The plugin validates the native child identity/status against metadata and admits only that designated
+completed string. Legacy unstructured results still join text parts of `content`, else `output`, and
 replaces both with the admission note. Every command it runs has its standard input attached with the
 shell's `<` redirect, an empty one for `prompt`, because Bun's shell has no `.stdin()` and a command
 left without one inherits the host's terminal and blocks on it; where that cannot be attached the plugin

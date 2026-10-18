@@ -1164,6 +1164,7 @@ fn an_opencode_relay_answer_carries_the_launch_the_plugin_intercepts() {
         .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
     assert_eq!(launched["relay"], true, "{launched}");
     assert_eq!(launched["launch"]["agent"], "general", "{launched}");
+    assert_eq!(launched["launch"]["background"], false, "{launched}");
     assert_eq!(
         launched["launch"]["prompt"],
         format!("<!-- estigia:review name={RELIABILITY_LENS} -->"),
@@ -1190,18 +1191,35 @@ fn a_relayed_answer_is_admitted_against_the_job_receipt() {
         "the relay job did not hold the binary's prompt"
     );
 
-    let outcome = relay_admit_as(
-        &world,
-        RELIABILITY_LENS,
-        &answer_of(&[answered_finding("a-valid-one", "src/foo.rs:1")]).expect("an answer"),
-    );
+    let answer = answer_of(&[answered_finding("a-valid-one", "src/foo.rs:1")]).expect("an answer");
+    let native = crate::setup::tests::native_relay_completion(&prompt, &answer);
+    let outcome = relay_admit_as(&world, RELIABILITY_LENS, &native);
 
     let answer = outcome.unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+    assert!(!String::from_utf8_lossy(&native).contains("<subagent"));
     assert_eq!(answer["ok"], true, "{answer}");
     assert_eq!(answer["findings_recorded"], 1, "{answer}");
     let (findings, reports) = on_the_timeline(&world);
     assert_eq!(findings.len(), 1);
     assert_eq!(reports, [RELIABILITY_LENS]);
+}
+
+#[test]
+fn an_unsupported_relay_lifecycle_can_be_collected_and_relaunched_on_the_same_receipt() {
+    let world = capturable();
+    let first = relay_launch(&world, RELIABILITY_LENS).expect("relay launch");
+    nothing_was_written(&world);
+    let collected = collect(&world, RELIABILITY_LENS);
+    assert_eq!(refused_as(&collected), "capture-runner-lost");
+    assert_eq!(job_state(&world, &first), "abandoned");
+    nothing_was_written(&world);
+    let retry = relay_launch(&world, RELIABILITY_LENS).expect("same-receipt retry");
+    assert_eq!(first["epoch"], retry["epoch"]);
+    assert_ne!(first["job"], retry["job"]);
+    let admitted = relay_admit_as(&world, RELIABILITY_LENS, &answer_of(&[]).expect("answer"))
+        .expect("completed retry");
+    assert_eq!(admitted["ok"], true);
+    assert_eq!(on_the_timeline(&world).1, [RELIABILITY_LENS]);
 }
 
 /// A relayed answer for a receipt the review has moved past is refused with the

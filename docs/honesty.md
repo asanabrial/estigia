@@ -436,13 +436,18 @@ pointer that leaves it names the document it points at.
   against the one `review_status` offers at admission, and a result for a receipt the review has
   moved past is refused `capture-result-stale` with nothing recorded.
 
-  - **The relay is measured under `node` against stand-in shells, and `bun` only by hand.** The tests
+  - **Automated relay coverage uses `node` stand-in shells; live foreground transport was also measured.** The tests
     drive the generated plugin with a stand-in whose command objects honour the `<` redirect and have no
     `.stdin()`; none runs it under Bun, because that would make `bun` a second required interpreter in CI.
     The redirect form and a 200,000-byte answer were read to EOF by a child under Bun 1.3.1 and OpenCode
-    2.0.28's event shapes were read from its binary, not from a live review: no run through a live host
-    has admitted an answer, and a host that changes `result.content` or the `(input, output)` shape
-    leaves the plugin inert or refusing, never admitting a wrong answer.
+    2.0.28's event shapes were read from its binary. Separately, the publishing run directly launched four
+    native OpenCode foreground reviewer contexts through the candidate relay in a temporary workspace
+    profile while delivering the claim-authority correction. All four answers were admitted privately
+    with zero findings against that correction's exact receipt, without Claude or Codex fallback.
+    This measures native foreground transport, not approval of the relay candidate, acknowledgment
+    handling or background support. The global binary and configuration were untouched. A host that
+    changes `result.content` or the `(input, output)` shape leaves the plugin inert or refusing, never
+    admitting a wrong answer.
 
   - **A relayed reviewer runs as the built-in `general` sub-agent, with its tool grant.** The
     `relay: true` answer on an OpenCode run carries `launch`, naming `general` and the marker prompt
@@ -464,6 +469,26 @@ pointer that leaves it names the document it points at.
     `reviewer-result-malformed`, because its stand-in then emits the required acknowledgment plus
     bare JSON. Framed-answer tests also hold receipt movement stale and repeated admission to one
     report; the channel does not substitute a job ID for the publication's identity checks.
+    The native completion shape was read from the installed OpenCode 2.0.32 executable's
+    `SubagentTool.Plugin` and `Tool.execute` code (external source). Its structured `output.output`
+    carries final text; `content` wraps it for display. The generated-plugin fixture now measures
+    that distinction with synthetic text, plus running-child, tool-error and contradictory-metadata
+    refusals. Earlier fixtures used only text parts and missed the wrapper/admission mismatch.
+    Foreground review is supported; background launches are explicitly refused rather than admitting
+    their launch notifications. No correlated private background completion channel is implemented.
+    `a_relayed_answer_is_admitted_against_the_job_receipt` now passes a synthetic native completion
+    through the generated plugin under Node and then real ledger admission, rather than relying on a
+    successful admission stub alone. A separate capture regression abandons a runner-less relay job
+    through collect and relaunches it on the unchanged receipt. Neither test measures a live model.
+    The native completion driver checks actual recursively collected string values for leaked answer
+    text, not a serialized envelope whose escaping can hide it. Leaving the native raw answer and
+    display wrapper intact passed the former check but fails the strengthened check with
+    `review output leaked`. The refusal fixture checks the ordered collect, status and same-receipt
+    foreground relaunch diagnostic for a foreground child that remains running, mismatched identity
+    or status, missing output and tool error, as well as zero admission and suppressed raw output.
+    Removing that recovery diagnostic passed the former assertions but fails the strengthened ones
+    on the missing `collect_review_input` step. Both mutations were restored; runtime behavior is
+    unchanged by these assertion repairs.
   - **ZCode, Cursor and DeepSeek Harness cannot relay.** The canonical per-runtime table
     (`src/setup/capabilities.rs`) records no agent-definitions surface for any of the three
     (`agent_definitions: false`), so none can be routed to a reserved reviewer at all; and only
@@ -4491,11 +4516,41 @@ pointer that leaves it names the document it points at.
   - **What the prune sweep cannot see.** It attributes a head or checkout to an issue by the
     `issue-<n>-…` convention in a branch name or by a run pointer, so a head that names no issue
     and carries no pointer is listed only when it is merged into the base, while a checkout is always
-    listed, kept when nothing says it is finished. Its "a live claim
+    listed, kept when nothing says it is finished. The additional remote-gone orphan route now
+    recognises a clean checkout whose commits remain on any refreshed remote ref, even when the
+    branch is neither merged nor closed. The behavioral regression
+    `a_remote_gone_checkout_reachable_from_another_remote_is_removed_only_on_confirmation` in
+    `src/harness/prune/tests.rs` failed on the delivered base and failed again when only the new
+    eligibility result was disabled; the corrected prune module passed 18 tests. Its fixture deletes
+    the branch from a second checkout, leaving a stale tracking ref to be pruned, and retains the
+    commits on an archive branch rather than on main. The retained-state fixture covers dirty,
+    unique, pointer-held, session-held, remote-present and unreadable cases. See
+    [the route's rules](what-it-writes.md#explicit-orphan-pruning).
+
+    The legacy route's "a live claim
     holds it" answer is a readable run pointer whose issue the tracker still reports open, not a
     re-read of the claim itself: a pointer a run left behind reads as live, and a claim the pointer
-    never recorded reads as unheld. Both directions are fail-safe — a false "held" keeps a branch, and
-    the operator confirms every deletion — but neither is proof.
+    never recorded reads as unheld. A false "held" keeps a branch; a false "unheld" is not safe just
+    because the operator confirms deletion. In particular, `held_worktree` skips unreadable pointers
+    and stops protecting a readable pointer when its issue reads closed. This extension does not
+    alter that independent legacy route. The new route instead keeps every matching pointer and
+    every checkout named by a registry session not explicitly ended, refusing unreadable ownership.
+    The three correction regressions first failed together: a renamed upstream still present was
+    selected, a session registered after discovery was removed, and a clean unique commit injected
+    after proof was substituted as the expected revision and removed. The corrected route resolves
+    the configured remote and full upstream ref even after its tracking ref disappears. Tests cover
+    both non-origin and differently named upstreams while present and after deletion, and retain
+    missing, local-only, unknown and ambiguous tracking identities. Confirmation now rereads both
+    run pointers and sessions, including immediately after the proof hook used by the behavioral
+    fixtures, and uses the exact commit id inspected for reachability as retirement's expected HEAD.
+    A newly registered holder, corrupted ownership read, changed branch or changed revision is kept.
+
+    These are observations, not a lock: a claim with no pointer and no session directory cannot be
+    attributed. Another process can still acquire ownership after the last ownership read, recreate
+    the upstream after the last remote query, or change Git state after retirement's branch/HEAD/status
+    checks and before `git worktree remove`. The
+    correction removes snapshot reuse and revision substitution from the new route; it does not
+    make that multi-command operation atomic, and neither route proves absence of every live process.
   - **The sweep's remote deletion bypasses the push guard, and that is a bypass.** `estigia prune
     --confirm` runs `git push --no-verify --delete` for each head, because the guard refuses a push
     no live claim authorises and the sweep runs from a checkout that holds none — a guarded
@@ -8442,6 +8497,20 @@ pointer that leaves it names the document it points at.
     `lost-claim-race` with the world unchanged and **rolls its marker back**, so the store keeps
     only the winner's row and the loser makes no `dev:` label. `reclaim` adjudicates after its
     transaction has committed, so a `lost-reclaim-race` loser's row still stays.
+  - **Reclaim validation used to resurrect scoped releases.** Discovery and preflight
+    honored operation-scoped unassigns, but `ownership::reclaim_is_valid` reduced its prefix with
+    an empty epoch-release map. With the released acquisitions' horizons still live, a forced
+    takeover of the exact discovered holder committed and then answered `reclaim-discarded`,
+    `target-not-holder`, naming that same holder as `winner`. Closed by deriving the prefix's
+    scoped releases with `epoch_release_positions`, using only already accepted reclaims.
+    `a_forced_reclaim_after_one_scoped_release_reads_back` and
+    `a_forced_reclaim_after_two_scoped_releases_reads_back` in `src/transport/claim/tests.rs`
+    drive discovery, the forced exact-target write and store read-back. Both failed with that
+    diagnostic before the correction; replacing the corrected map with an empty one makes both
+    fail again. `a_discarded_reclaim_releases_nothing_in_a_later_reclaims_prefix` checks that a
+    refused takeover neither releases its target for a later validation nor becomes an
+    authoritative activity/ownership event. These are deterministic scripted-tracker tests,
+    not a recovery of any live issue.
   - **The claim's label follows the commit.** A `dev:` label that cannot be made after the store
     accepted the claim is `write-failed`, and the claim is held; the retry with the same operation
     id finds the stored claim, writes no second one, and runs the projection again.
