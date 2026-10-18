@@ -451,6 +451,13 @@ pointer that leaves it names the document it points at.
     tools (edit, write, bash), where the CLI's reviewer runs with none, so the relayed reviewer is
     sealed by the prompt the plugin puts in, not by a tool grant: a weaker seal than the CLI's
     tool-less reviewer. Nothing here removes the grant or reads what the sub-agent did with it.
+    The native completion shape was read from the installed OpenCode 2.0.32 executable's
+    `SubagentTool.Plugin` and `Tool.execute` code (external source). Its structured `output.output`
+    carries final text; `content` wraps it for display. The generated-plugin fixture now measures
+    that distinction with synthetic text, plus running-child, tool-error and contradictory-metadata
+    refusals. Earlier fixtures used only text parts and missed the wrapper/admission mismatch.
+    Foreground review is supported; background launches are explicitly refused rather than admitting
+    their launch notifications. No correlated private background completion channel is implemented.
   - **ZCode, Cursor and DeepSeek Harness cannot relay.** The canonical per-runtime table
     (`src/setup/capabilities.rs`) records no agent-definitions surface for any of the three
     (`agent_definitions: false`), so none can be routed to a reserved reviewer at all; and only

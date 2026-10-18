@@ -1165,9 +1165,25 @@ const putResult = (event, note) => {
 };
 
 const rawOutput = (event) => {
+  const unsupported = () => coded(
+    "review-result-unsupported",
+    "estigia: review requires a completed foreground result with matching child identity and status; " +
+      "call collect_review_input to abandon this runner-less attempt, then ask review_status and relaunch foreground on the same receipt",
+  );
+  if (event?.status && event.status !== "completed") throw unsupported();
   const result = event?.result;
   if (typeof result === "string") return result;
   if (result && typeof result === "object") {
+    if ((result.output && typeof result.output === "object") || result.metadata?.status !== undefined) {
+      const child = result.output;
+      const metadata = result.metadata;
+      if (!child || typeof child !== "object" || typeof child.sessionID !== "string" || child.sessionID.trim() === "" ||
+          child.status !== "completed" || typeof child.output !== "string" ||
+          metadata?.sessionID !== child.sessionID || metadata?.status !== child.status) {
+        throw unsupported();
+      }
+      return child.output;
+    }
     if (Array.isArray(result.content)) {
       const parts = result.content
         .map((part) => (typeof part === "string" ? part : part?.text))
@@ -1187,6 +1203,13 @@ const slots = new Map();
 const before = async (event, cwd, shell) => {
   const name = reviewerEvent(event);
   if (!name) return;
+  if (event?.input?.background === true) {
+    throw coded(
+      "review-background-unsupported",
+      "estigia: review must run foreground; no child was launched. " +
+        "Call collect_review_input to abandon this runner-less attempt, then ask review_status and relaunch with background false",
+    );
+  }
   const asked = await ask(shell, cwd, "prompt", name, event?.sessionID, null);
   if (asked.code) {
     throw coded(
@@ -1208,7 +1231,16 @@ const after = async (event, cwd, shell) => {
   if (key !== null) slots.delete(key);
   const name = remembered ?? reviewerEvent(event);
   if (!name) return;
-  const asked = await ask(shell, cwd, "admit", name, event?.sessionID, rawOutput(event));
+  let raw;
+  try {
+    raw = rawOutput(event);
+  } catch (error) {
+    event.status = "error";
+    event.error = errorText(error);
+    putResult(event, event.error);
+    return;
+  }
+  const asked = await ask(shell, cwd, "admit", name, event?.sessionID, raw);
   if (asked.code) {
     const refusal = asked.message || `estigia refused the reviewer's answer (${asked.code})`;
     if (event && typeof event === "object") {

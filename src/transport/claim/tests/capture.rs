@@ -1018,6 +1018,7 @@ fn an_opencode_relay_answer_carries_the_launch_the_plugin_intercepts() {
         .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
     assert_eq!(launched["relay"], true, "{launched}");
     assert_eq!(launched["launch"]["agent"], "general", "{launched}");
+    assert_eq!(launched["launch"]["background"], false, "{launched}");
     assert_eq!(
         launched["launch"]["prompt"],
         format!("<!-- estigia:review name={RELIABILITY_LENS} -->"),

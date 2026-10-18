@@ -641,7 +641,7 @@ admission and replaces the result, so the orchestrator never receives the review
 accepts a task of any sub-agent whose input carries `estigia:review name=<role>`, for a host that has
 no reviewer agent of its own. `estigia setup opencode` installs no reviewer agent, so the form a
 host launches is the second: the `relay: true` answer on an OpenCode run carries
-`launch: {agent, prompt}`, the built-in `general` sub-agent and the prompt
+`launch: {agent, prompt, background: false}`, the built-in `general` sub-agent and the prompt
 `<!-- estigia:review name=<role> -->`, and the plugin replaces that prompt with the binary's. A task
 naming a reserved reviewer is relayed too, for a host that has defined one itself.
 
@@ -654,10 +654,24 @@ then a coded `unavailable` naming the CLI to install. A run id whose runtime can
 second order and never takes the relay ahead of a CLI. The detached runner's own selection has no host
 and never relays.
 
+The OpenCode relay supports foreground review only. A request with `background: true` is refused
+before the host spawns a child. A foreground tool that returns a running child, including a host-side
+transition to background, is refused without submitting its launch notice for admission. Tool errors,
+incomplete native results and contradictory child identity/status metadata are also refused without
+admission; their raw output is replaced with a diagnostic. Asynchronous completion would require a
+correlated private notification channel, which this plugin does not register.
+
+After such a refusal, the relay job has no completed result. Call `collect_review_input` once to
+abandon its runner-less slot (`capture-runner-lost`), then ask `review_status` and relaunch foreground
+on the unchanged publication. Do not republish or count a later visible background notification as
+review evidence. If foreground completion is unavailable, retain the exact receipt and hand off.
+
 The slot a launch was relayed for is remembered from `execute.before` by the call's `id`, because the
 prompt `before` puts in the task input carries no marker and the sub-agent is `general`; `execute.after` reads it
-there first and forgets it. The host builds the tool's answer from `result.content` (an array of parts) and
-`result.output`, so the plugin joins the text parts of `content` for admission, else `output`, and
+there first and forgets it. A native structured subagent completion designates its answer in
+`result.output.output`; `result.content` is a rendered `<subagent>` wrapper, never the review payload.
+The plugin validates the native child identity/status against metadata and admits only that designated
+completed string. Legacy unstructured results still join text parts of `content`, else `output`, and
 replaces both with the admission note. Every command it runs has its standard input attached with the
 shell's `<` redirect, an empty one for `prompt`, because Bun's shell has no `.stdin()` and a command
 left without one inherits the host's terminal and blocks on it; where that cannot be attached the plugin
