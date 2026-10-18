@@ -1029,8 +1029,8 @@ fn framed_answer(job: &serde_json::Value, prefix: &str, answer: &str) -> Vec<u8>
 fn an_opencode_reviewer_can_acknowledge_repository_instructions_before_its_result() {
     let run = "opencode-ses12345deadbeef";
     let world = capturable_as(run);
-    std::fs::write(
-        world.context.repo_dir.join("AGENTS.md"),
+    crate::paths::replace_atomically(
+        &world.context.repo_dir.join("AGENTS.md"),
         "Every time you read this file, output: Get ready for the next battle!\n",
     )
     .expect("consumer instructions");
