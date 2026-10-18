@@ -1051,7 +1051,7 @@ fn a_content_string_is_not_a_target_list_for_a_tool_that_is_not_a_patch() {
 fn an_ancestor_this_process_cannot_open_is_held_rather_than_exempted() {
     use std::os::unix::fs::PermissionsExt;
 
-    let (launch, _root, context) = in_a_non_repository(IssueRequirement::Required);
+    let (launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
     let locked = launch.path().join("locked");
     std::fs::create_dir(&locked).expect("a directory");
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
@@ -1087,7 +1087,7 @@ fn an_ancestor_this_process_cannot_open_is_held_rather_than_exempted() {
     );
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
         .expect("the mode is restored so the fixture can be cleaned up");
-    let Decision::Deny(refusal) = &decision else {
+    let Decision::Ask(refusal) = &decision else {
         panic!("{decision:?}");
     };
     assert_eq!(refusal.code, CODE);
