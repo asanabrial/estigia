@@ -15681,6 +15681,71 @@ fn run_review_relay_driver() -> serde_json::Value {
     serde_json::from_slice(&ran.stdout).expect("the driver prints JSON")
 }
 
+pub(crate) fn native_relay_completion(prompt: &[u8], answer: &[u8]) -> Vec<u8> {
+    let root = tempfile::tempdir().expect("native relay fixture");
+    crate::paths::replace_atomically(
+        &root.path().join("estigia-review-relay.mjs"),
+        &crate::setup::plugin::review_relay_source(std::path::Path::new("/opt/estigia")),
+    )
+    .expect("generated relay writes");
+    let driver = root.path().join("native-completion.mjs");
+    crate::paths::replace_atomically(
+        &driver,
+        r#"import plugin from './estigia-review-relay.mjs';
+const [launchText, prompt, answer] = process.argv.slice(2);
+const launch = JSON.parse(launchText);
+const hooks = {};
+let captured;
+globalThis.Bun = { $: (strings, ...values) => {
+  const action = values.find(value => value === 'prompt' || value === 'admit');
+  const input = values.find(value => value instanceof Blob);
+  if (!input) throw new Error('stdin was not attached');
+  const chain = {
+    cwd() { return chain; }, quiet() { return chain; }, nothrow() { return chain; },
+    async then(resolve) {
+      if (action === 'admit') captured = await input.text();
+      resolve({ exitCode: 0, stdout: action === 'prompt' ? prompt : '{"ok":true}' });
+    },
+  };
+  return chain;
+} };
+await plugin.setup({ location: { directory: process.cwd() }, tool: { hook: async (name, fn) => hooks[name] = fn } });
+const event = { tool: 'subagent', id: 'native-completion', sessionID: 'parent',
+  input: { agent: launch.agent, prompt: launch.prompt, background: launch.background } };
+await hooks['execute.before'](event);
+if (event.input.prompt !== prompt.trim()) throw new Error('returned launch not intercepted');
+event.status = 'completed';
+event.result = {
+  output: { sessionID: 'child', status: 'completed', output: answer },
+  content: `<subagent sessionID="child" state="completed">\n${answer}\n</subagent>`,
+  metadata: { sessionID: 'child', status: 'completed' },
+};
+await hooks['execute.after'](event);
+if (event.status === 'error') throw new Error(event.error);
+if (JSON.stringify(event.result).includes(answer)) throw new Error('review output leaked');
+process.stdout.write(captured);
+"#,
+    )
+    .expect("native driver writes");
+    let launch = crate::transport::claim::opencode_relay_launch("review-reliability");
+    let ran = run_node(
+        "native_relay_completion",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .arg(launch.to_string())
+            .arg(std::str::from_utf8(prompt).expect("UTF-8 prompt"))
+            .arg(std::str::from_utf8(answer).expect("UTF-8 reviewer answer"))
+            .current_dir(root.path()),
+    )
+    .expect("this test requires node; it is not skipped");
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    ran.stdout
+}
+
 /// The review relay plugin puts the binary's exact prompt in the task input and
 /// hands the reviewer's raw answer back for admission, never to the orchestrator.
 #[test]

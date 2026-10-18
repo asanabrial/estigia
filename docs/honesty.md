@@ -458,6 +458,10 @@ pointer that leaves it names the document it points at.
     refusals. Earlier fixtures used only text parts and missed the wrapper/admission mismatch.
     Foreground review is supported; background launches are explicitly refused rather than admitting
     their launch notifications. No correlated private background completion channel is implemented.
+    `a_relayed_answer_is_admitted_against_the_job_receipt` now passes a synthetic native completion
+    through the generated plugin under Node and then real ledger admission, rather than relying on a
+    successful admission stub alone. A separate capture regression abandons a runner-less relay job
+    through collect and relaunches it on the unchanged receipt. Neither test measures a live model.
   - **ZCode, Cursor and DeepSeek Harness cannot relay.** The canonical per-runtime table
     (`src/setup/capabilities.rs`) records no agent-definitions surface for any of the three
     (`agent_definitions: false`), so none can be routed to a reserved reviewer at all; and only
