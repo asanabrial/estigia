@@ -17,6 +17,7 @@
   <a href="https://www.rust-lang.org"><img alt="Rust 1.97+" src="https://img.shields.io/badge/rust-1.97%2B-orange.svg" /></a>
   <a href="#the-tools"><img alt="MCP: 35 tools" src="https://img.shields.io/badge/MCP-35%20tools-purple.svg" /></a>
   <a href="#install"><img alt="Linux, macOS, Windows" src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg" /></a>
+  <a href="https://glama.ai/mcp/servers/asanabrial/estigia"><img alt="Glama MCP server" src="https://glama.ai/mcp/servers/asanabrial/estigia/badges/score.svg" /></a>
 </p>
 
 ---
@@ -115,6 +116,11 @@ If you develop Estigia itself, `scripts/build-install.sh` (macOS and Linux) or
 compiles the locked release build, reinstalls through Cargo, runs setup for every agent, and
 finishes with `status` and `doctor`. Close the agents using Estigia first — Windows will not
 replace a running binary, and any platform can refuse one an agent holds locked.
+
+No container image is published. The [`Dockerfile`](Dockerfile) at the root builds one from the
+pinned toolchain, and it carries the server alone: `estigia mcp` over stdio, with no `git` and no
+`gh`, so a tool that reaches the tracker refuses inside it. It is there for a directory that
+inspects a server by running one in a container.
 
 ## Set it up in your agents
 
