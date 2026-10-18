@@ -278,12 +278,9 @@ fn holds_a_git_entry(directory: &Path) -> Option<bool> {
 
 /// The refusal for an unclaimed write under the requirement in force.
 ///
-/// The clause bound to `scope` is what keeps the refusal honest, and it is not
-/// asked to say more than the scope established: only `Repository` may name a
-/// directory, `Outside` may claim a landing only for a write it placed, and
-/// `Unknown` states that neither the directory nor the landing was established.
-/// A hold the gate reached by *failing* to place a target is under `Outside`,
-/// so the clause names the requirement's reach rather than this write's landing.
+/// The clause bound to `scope` keeps it honest: only a scope Git named may name
+/// a directory, and a hold reached by *failing* to place the write says so
+/// rather than implying the write landed in a repository.
 pub(crate) fn refusal(assisted: bool, requirement: IssueRequirement, scope: &Scope) -> Refusal {
     let way_in = if assisted {
         "a local claim taken with `assist` in a worktree, which gives the isolated checkout to \
@@ -295,7 +292,9 @@ pub(crate) fn refusal(assisted: bool, requirement: IssueRequirement, scope: &Sco
     };
     let here = match scope {
         Scope::Repository(_) => " in this repository",
-        Scope::Outside => " for a write that lands in a repository",
+        Scope::Outside => {
+            ", and this write could not be placed outside every repository, so it is held"
+        }
         Scope::Unknown => {
             ", and whether this directory or this write's landing is a repository could not \
              be established"
