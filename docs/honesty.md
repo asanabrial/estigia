@@ -451,6 +451,15 @@ pointer that leaves it names the document it points at.
     tools (edit, write, bash), where the CLI's reviewer runs with none, so the relayed reviewer is
     sealed by the prompt the plugin puts in, not by a tool grant: a weaker seal than the CLI's
     tool-less reviewer. Nothing here removes the grant or reads what the sub-agent did with it.
+    Its inherited repository instructions can require acknowledgments that conflict with JSON-only
+    output. The binary now supplies an explicit job-bound result channel, described in
+    [what it writes](what-it-writes.md#the-opencode-review-relay-plugin), instead of interpreting
+    arbitrary JSON in prose. `an_opencode_reviewer_can_acknowledge_repository_instructions_before_its_result`
+    drives the generated plugin under Node in a synthetic consumer repository requiring
+    `Get ready for the next battle!`, then passes its captured stdin through real ledger admission.
+    The stand-in reviewer follows the supplied prompt; no model's compliance with conflicting
+    inherited instructions is measured. Separate capture tests reject ambiguous channels and old
+    attempt IDs and admit a fresh attempt on the unchanged receipt after malformed output.
   - **ZCode, Cursor and DeepSeek Harness cannot relay.** The canonical per-runtime table
     (`src/setup/capabilities.rs`) records no agent-definitions surface for any of the three
     (`agent_definitions: false`), so none can be routed to a reserved reviewer at all; and only

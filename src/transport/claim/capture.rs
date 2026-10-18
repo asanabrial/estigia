@@ -940,12 +940,18 @@ fn relay_store() -> Result<Store, Failure> {
 
 /// The exact prompt of the relay job one run launched for one reviewer name.
 ///
-/// Read from the job directory `launch_review_input` wrote, so the host is handed
-/// the bytes the binary built and not a second rendering. A job that is no longer
+/// Read from the job directory `launch_review_input` wrote, with an OpenCode-only
+/// job-bound output channel appended by the binary. A job that is no longer
 /// live is `capture-job-missing`: the review has moved past it, or it was already
 /// admitted.
 pub fn relay_prompt(_context: &Context, run_id: &str, name: &str) -> Result<Vec<u8>, Failure> {
-    prompt_of(Path::new(&live_relay_job(run_id, name)?.dir))
+    let job = live_relay_job(run_id, name)?;
+    let prompt = prompt_of(Path::new(&job.dir))?;
+    Ok(if crate::reviewer::runs_on_opencode(run_id) {
+        crate::reviewer::relay::framed_prompt(prompt, &job.id)
+    } else {
+        prompt
+    })
 }
 
 /// The model the `reviewer` routing row named when the relay job was launched, or
@@ -1003,6 +1009,30 @@ pub fn relay_admit(
     };
     let status = review_status(context, issue)?;
     let ledger = Ledger::open(context, issue, now)?;
+    let bytes = if crate::reviewer::runs_on_opencode(run_id) {
+        let (answered_job, answer) = match crate::reviewer::relay::framed_result(bytes) {
+            Ok(answer) => answer,
+            Err(refusal) => {
+                if matches!(job.state.as_str(), "running" | "admitting") {
+                    leave(&ledger, &job, &job.state, "abandoned")?;
+                }
+                return Err(reviewer_failure(refusal));
+            }
+        };
+        if answered_job != job.id {
+            return Err(stop(
+                "capture-result-stale",
+                format!(
+                    "the answer names job {answered_job}, not the current attempt {}",
+                    job.id
+                ),
+                "discard this answer and launch the agent/prompt returned for the current attempt",
+            ));
+        }
+        answer
+    } else {
+        bytes
+    };
     match job.state.as_str() {
         "admitted" => return admitted_again(context, &input, &job),
         "running" | "admitting" => {}

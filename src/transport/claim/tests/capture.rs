@@ -1000,12 +1000,117 @@ fn relay_launch_as(world: &World, name: &str, run_id: &str) -> Result<serde_json
 }
 
 fn relay_admit_as(world: &World, name: &str, bytes: &[u8]) -> Result<serde_json::Value, Failure> {
+    relay_admit_for(world, name, bytes, "claude-a")
+}
+
+fn relay_admit_for(
+    world: &World,
+    name: &str,
+    bytes: &[u8],
+    run_id: &str,
+) -> Result<serde_json::Value, Failure> {
     let bin = crate::test_env::scripted_gh();
     let script = script_for(world, lane_read_answers());
     let context = named(&world.context);
     crate::test_env::with_scripted_gh(bin.path(), &script, || {
-        super::super::relay_admit(&context, "claude-a", name, bytes, NOW)
+        super::super::relay_admit(&context, run_id, name, bytes, NOW)
     })
+}
+
+fn framed_answer(job: &serde_json::Value, prefix: &str, answer: &str) -> Vec<u8> {
+    format!(
+        "{prefix}\n<estigia-review-result job=\"{}\">\n{answer}\n</estigia-review-result>\n",
+        job["job"].as_str().expect("a job id")
+    )
+    .into_bytes()
+}
+
+#[test]
+fn an_opencode_reviewer_can_acknowledge_repository_instructions_before_its_result() {
+    let run = "opencode-ses12345deadbeef";
+    let world = capturable_as(run);
+    std::fs::write(
+        world.context.repo_dir.join("AGENTS.md"),
+        "Every time you read this file, output: Get ready for the next battle!\n",
+    )
+    .expect("consumer instructions");
+    let launched = relay_launch_as(&world, RELIABILITY_LENS, run).expect("relay launched");
+    let prompt = super::super::relay_prompt(&world.context, run, RELIABILITY_LENS)
+        .expect("the exact relay prompt");
+    let prompt = String::from_utf8(prompt).expect("UTF-8 prompt");
+    let answer = crate::setup::tests::acknowledged_relay_answer(
+        &world.context.repo_dir,
+        &launched["launch"],
+        &prompt,
+    );
+    let admitted = relay_admit_for(&world, RELIABILITY_LENS, &answer, run)
+        .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
+    assert_eq!(admitted["ok"], true);
+    assert!(prompt.contains("<estigia-review-result job="));
+    assert!(prompt.contains(launched["job"].as_str().expect("job id")));
+    let (findings, reports) = on_the_timeline(&world);
+    assert!(findings.is_empty());
+    assert_eq!(reports, [RELIABILITY_LENS]);
+}
+
+#[test]
+fn a_rejected_opencode_answer_can_be_relaunched_without_republishing() {
+    let run = "opencode-ses12345deadbeef";
+    let world = capturable_as(run);
+    let first = relay_launch_as(&world, RELIABILITY_LENS, run).expect("first launch");
+    let malformed = b"Get ready for the next battle!\n\n{\"findings\": []}";
+    let rejected = relay_admit_for(&world, RELIABILITY_LENS, malformed, run);
+    assert_eq!(refused_as(&rejected), "reviewer-result-malformed");
+    assert_eq!(job_state(&world, &first), "abandoned");
+    nothing_was_written(&world);
+    let collected = collect_as(&world, run, RELIABILITY_LENS, LAUNCHED_AT);
+    assert_eq!(refused_as(&collected), "capture-job-missing");
+    let retry = relay_launch_as(&world, RELIABILITY_LENS, run).expect("same receipt retry");
+    assert_eq!(first["epoch"], retry["epoch"]);
+    assert_ne!(first["job"], retry["job"]);
+    let delayed = framed_answer(&first, "", r#"{"findings": []}"#);
+    let rejected = relay_admit_for(&world, RELIABILITY_LENS, &delayed, run);
+    assert_eq!(refused_as(&rejected), "capture-result-stale");
+    assert_eq!(job_state(&world, &retry), "running");
+    nothing_was_written(&world);
+    let answer = framed_answer(
+        &retry,
+        "Get ready for the next battle!",
+        r#"{"findings": []}"#,
+    );
+    let admitted = relay_admit_for(&world, RELIABILITY_LENS, &answer, run).expect("retry admitted");
+    assert_eq!(admitted["ok"], true);
+    assert_eq!(on_the_timeline(&world).1, [RELIABILITY_LENS]);
+}
+
+#[test]
+fn malformed_or_ambiguous_opencode_channels_record_nothing() {
+    for case in [
+        "bare",
+        "incomplete",
+        "duplicate",
+        "trailing",
+        "schema",
+        "json",
+    ] {
+        let run = "opencode-ses12345deadbeef";
+        let world = capturable_as(run);
+        let launched = relay_launch_as(&world, RELIABILITY_LENS, run).expect("launch");
+        let valid = framed_answer(&launched, "Acknowledged.", r#"{"findings": []}"#);
+        let bytes = match case {
+            "bare" => b"Acknowledged.\n{\"findings\": []}".to_vec(),
+            "incomplete" => valid[..valid.len() - 25].to_vec(),
+            "duplicate" => [valid.clone(), valid].concat(),
+            "trailing" => [valid, b"\n{\"findings\": []}".to_vec()].concat(),
+            "schema" => framed_answer(&launched, "", r#"{"findings": [], "extra": true}"#),
+            "json" => framed_answer(&launched, "", r#"{"findings": ["#),
+            _ => unreachable!(),
+        };
+        let rejected = relay_admit_for(&world, RELIABILITY_LENS, &bytes, run);
+        assert_eq!(refused_as(&rejected), "reviewer-result-malformed", "{case}");
+        assert_eq!(job_state(&world, &launched), "abandoned", "{case}");
+        nothing_was_written(&world);
+    }
 }
 
 /// An OpenCode relay answer carries the launch the host makes: a built-in

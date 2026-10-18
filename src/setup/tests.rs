@@ -15637,6 +15637,78 @@ fn run_review_relay_driver() -> serde_json::Value {
     serde_json::from_slice(&ran.stdout).expect("the driver prints JSON")
 }
 
+pub(crate) fn acknowledged_relay_answer(
+    directory: &std::path::Path,
+    launch: &serde_json::Value,
+    prompt: &str,
+) -> Vec<u8> {
+    let root = tempfile::tempdir().expect("relay driver directory");
+    std::fs::write(
+        root.path().join("estigia-review-relay.mjs"),
+        crate::setup::plugin::review_relay_source(std::path::Path::new("/opt/estigia")),
+    )
+    .expect("generated relay");
+    let driver = root.path().join("acknowledged.mjs");
+    std::fs::write(
+        &driver,
+        r#"import plugin from './estigia-review-relay.mjs';
+import { readFileSync } from 'node:fs';
+const [directory, launchText, prompt] = process.argv.slice(2);
+const launch = JSON.parse(launchText);
+let captured;
+globalThis.Bun = { $: (strings, ...values) => {
+  const action = values.find(value => value === 'prompt' || value === 'admit');
+  const input = values.find(value => value instanceof Blob);
+  if (!input) throw new Error('relay did not attach stdin');
+  const chain = {
+    cwd() { return chain; }, quiet() { return chain; }, nothrow() { return chain; },
+    async then(resolve) {
+      if (action === 'admit') captured = await input.text();
+      resolve({ exitCode: 0, stdout: action === 'prompt' ? prompt : '{"ok":true}' });
+    },
+  };
+  return chain;
+} };
+const hooks = {};
+await plugin.setup({ location: { directory }, tool: { hook: async (name, fn) => hooks[name] = fn } });
+const event = { tool: 'subagent', id: 'acknowledgment-call', sessionID: 'ses_consumer',
+  input: { agent: launch.agent, prompt: launch.prompt } };
+await hooks['execute.before'](event);
+if (event.input.prompt !== prompt.trim()) throw new Error('returned launch was not intercepted');
+const instructions = readFileSync(directory + '/AGENTS.md', 'utf8');
+if (!instructions.includes('Get ready for the next battle!')) throw new Error('missing consumer rule');
+const channel = event.input.prompt.match(/<estigia-review-result job="[a-f0-9]{32}">/);
+const answer = channel
+  ? channel[0] + '\n{"findings": []}\n</estigia-review-result>\n'
+  : '{"findings": []}';
+event.result = { content: [
+  { type: 'text', text: 'Get ready for the next battle!\n' },
+  { type: 'text', text: answer },
+] };
+await hooks['execute.after'](event);
+if (JSON.stringify(event.result).includes('Get ready for the next battle!')) throw new Error('raw output leaked');
+process.stdout.write(captured);
+"#,
+    )
+    .expect("acknowledgment driver");
+    let ran = run_node(
+        "acknowledged_relay_answer",
+        std::process::Command::new("node")
+            .arg(&driver)
+            .arg(directory)
+            .arg(launch.to_string())
+            .arg(prompt)
+            .current_dir(root.path()),
+    )
+    .expect("this test requires node; it is not skipped");
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    ran.stdout
+}
+
 /// The review relay plugin puts the binary's exact prompt in the task input and
 /// hands the reviewer's raw answer back for admission, never to the orchestrator.
 #[test]

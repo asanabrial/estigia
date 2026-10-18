@@ -635,7 +635,7 @@ row that decides nothing.
 The plugin hooks OpenCode 2's `execute.before` and `execute.after` for the sub-agent tool, whether the host names it `task`, `agent` or `subagent`. When the
 host launches a task naming one of the seven reserved reviewers — `review-lens`, `review-risk`,
 `review-readability`, `review-reliability`, `review-readback`, `review-refuter`, `review-validator`
-— the plugin asks the binary for the exact prompt `launch_review_input` recorded and puts it in the
+— the plugin asks the binary for the prompt `launch_review_input` recorded, with its job-bound output channel, and puts it in the
 task input; when the task finishes it hands the reviewer's raw output back to the binary for
 admission and replaces the result, so the orchestrator never receives the reviewer's answer. It also
 accepts a task of any sub-agent whose input carries `estigia:review name=<role>`, for a host that has
@@ -644,6 +644,21 @@ host launches is the second: the `relay: true` answer on an OpenCode run carries
 `launch: {agent, prompt}`, the built-in `general` sub-agent and the prompt
 `<!-- estigia:review name=<role> -->`, and the plugin replaces that prompt with the binary's. A task
 naming a reserved reviewer is relayed too, for a host that has defined one itself.
+
+The binary appends an OpenCode-only output contract to the stored role prompt. Repository-required
+acknowledgments may precede the result, followed by exactly one `<estigia-review-result job="ID">`
+line, the complete role JSON, and a `</estigia-review-result>` line. Nothing but whitespace may follow.
+Only that explicitly designated channel is parsed as a role answer; the binary never searches prose
+for arbitrary JSON. Missing, repeated or incomplete delimiters and invalid role JSON are refused.
+The job ID must equal the current attempt, so a delayed answer cannot satisfy a replacement attempt.
+The whole response, including acknowledgments, is limited to 4 MiB. Other hosts keep their existing
+JSON-only contract.
+
+A rejected answer abandons its job and records no report. A subsequent collect can therefore answer
+`capture-job-missing`: ask `review_status`, then call `launch_review_input` again for the still-offered
+name and launch its returned agent/prompt. This creates a new job against the same immutable receipt;
+do not republish merely to retry formatting. If the host cannot produce the required channel, preserve
+the receipt and hand off review rather than treating visible JSON as approval.
 
 `launch_review_input` selects the reviewer by the host that launched the run, read from the runtime
 its run id names. On an `opencode` run with this plugin installed it answers `relay: true` before it

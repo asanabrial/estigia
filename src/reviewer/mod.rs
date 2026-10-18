@@ -21,7 +21,7 @@ pub mod job;
 mod launch;
 pub(crate) mod process_tree;
 pub mod prompt;
-mod relay;
+pub(crate) mod relay;
 pub mod result;
 mod role;
 mod run;
