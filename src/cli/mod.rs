@@ -7239,14 +7239,23 @@ fn show_gate(
                 .as_ref()
                 .map(|command| command.same_tier_fragments.as_slice())
                 .unwrap_or_default();
+            let write_targets = observed
+                .command
+                .as_ref()
+                .map(|command| command.write_targets.as_slice())
+                .unwrap_or_default();
+            let readings = harness::guard::Readings {
+                literal,
+                same_tier_fragments,
+                write_targets,
+            };
             let adjudication = harness::guard::adjudicate_command(
                 &context,
                 &context.repo_dir,
                 &action,
                 how,
                 &[],
-                literal,
-                same_tier_fragments,
+                readings,
             );
             (
                 adjudication.decision,

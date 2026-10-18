@@ -57,8 +57,11 @@ fn shell(context: &GateContext, repo: &Path, command: &str) -> Decision {
         &action,
         how,
         &[],
-        literal,
-        &observed.same_tier_fragments,
+        guard::Readings {
+            literal,
+            same_tier_fragments: &observed.same_tier_fragments,
+            write_targets: &observed.write_targets,
+        },
     )
     .decision
 }

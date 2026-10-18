@@ -57,6 +57,9 @@ fn inventory() -> Vec<Refusal> {
         crate::harness::issue_requirement::refusal(
             false,
             crate::config::IssueRequirement::Required,
+            &crate::harness::issue_requirement::Scope::Repository(std::path::PathBuf::from(
+                "/a/checkout",
+            )),
         ),
         crate::harness::unclaimed::not_claimed(false),
         crate::harness::issue_creation::refusal(Some("gh issue create"))

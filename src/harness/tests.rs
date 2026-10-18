@@ -1892,6 +1892,7 @@ fn a_denial_through_the_ordinary_claim_road_carries_what_it_was_given() {
             boundary_source: Some("irreversible"),
             disqualifying_byte: None,
             same_tier_fragments: Vec::new(),
+            write_targets: Vec::new(),
         }),
         checkout: Some(crate::outcome::CheckoutObserved {
             adjudicated: context.repo_dir.to_string_lossy().into_owned(),

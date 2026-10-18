@@ -296,6 +296,17 @@ pub(crate) const WRITE_TOOLS: &[&str] = &[
     "pre_write_code",
 ];
 
+/// Whether a write's `target` is a tool's own name rather than a path it named —
+/// the classifier's fallback where no field named one.
+///
+/// One owner, because [`assisted`] and [`issue_requirement`] must agree on
+/// whether the gate read a destination at all.
+pub(crate) fn names_no_write_path(target: &str) -> bool {
+    WRITE_TOOLS
+        .iter()
+        .any(|tool| tool.eq_ignore_ascii_case(target))
+}
+
 /// The population and boundary `SHELL_TOOLS` enforces.
 pub const SHELL_TOOLS_POPULATION: Population = Population {
     family: "shell-tools",
@@ -1951,6 +1962,7 @@ pub fn classify_observing(
                     boundary_source: None,
                     disqualifying_byte: None,
                     same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
                 },
             );
         }
@@ -1968,6 +1980,7 @@ pub fn classify_observing(
                     boundary_source: None,
                     disqualifying_byte: None,
                     same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
                 },
             );
         }
@@ -1998,6 +2011,7 @@ pub fn classify_observing(
                     boundary_source: None,
                     disqualifying_byte: None,
                     same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
                 },
             );
         }
@@ -2020,6 +2034,7 @@ pub fn classify_observing(
                     boundary_source: None,
                     disqualifying_byte: None,
                     same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
                 },
             );
         }
@@ -2117,6 +2132,7 @@ pub fn classify_observing(
                     boundary_source: Some(boundary_source),
                     disqualifying_byte,
                     same_tier_fragments,
+                    write_targets: Vec::new(),
                 },
             );
         }
@@ -2133,6 +2149,7 @@ pub fn classify_observing(
                     boundary_source: None,
                     disqualifying_byte: None,
                     same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
                 },
             );
         }
@@ -2163,6 +2180,7 @@ pub fn classify_observing(
                     boundary_source: None,
                     disqualifying_byte: None,
                     same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
                 },
             );
         }
@@ -2188,6 +2206,7 @@ pub fn classify_observing(
                     boundary_source: None,
                     disqualifying_byte: None,
                     same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
                 },
             );
         }
@@ -2207,6 +2226,7 @@ pub fn classify_observing(
                     boundary_source: None,
                     disqualifying_byte: None,
                     same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
                 },
             );
         }
@@ -2229,6 +2249,7 @@ pub fn classify_observing(
                 boundary_source: None,
                 disqualifying_byte: None,
                 same_tier_fragments: Vec::new(),
+                write_targets: Vec::new(),
             };
             return (
                 Action::Write { target: spelling },
@@ -2253,6 +2274,7 @@ pub fn classify_observing(
                     boundary_source: None,
                     disqualifying_byte: None,
                     same_tier_fragments: Vec::new(),
+                    write_targets: Vec::new(),
                 },
             );
         }
@@ -2269,6 +2291,7 @@ pub fn classify_observing(
                 boundary_source: None,
                 disqualifying_byte: None,
                 same_tier_fragments: Vec::new(),
+                write_targets: Vec::new(),
             },
         );
     }
@@ -2276,7 +2299,7 @@ pub fn classify_observing(
     // Neither a shell call nor evidence of one: a write tool's payload names a
     // file, not a command line, so there is nothing here for the fragment
     // lists to read.
-    let not_a_shell_command = || CommandObserved {
+    let not_a_shell_command = |write_targets: Vec<String>| CommandObserved {
         matched: Established::Unestablished {
             unestablished: "this tool call is not a shell command",
         },
@@ -2289,12 +2312,20 @@ pub fn classify_observing(
         boundary_source: None,
         disqualifying_byte: None,
         same_tier_fragments: Vec::new(),
+        write_targets,
     };
 
     if WRITE_TOOLS.contains(&name.as_str()) {
         let named = path_argument(input);
         let target = named.clone().unwrap_or_else(|| tool.to_owned());
         let payload_text = input.to_string();
+        // Read only for the tools whose body *is* their target list, and only
+        // where no field names a path. Any other write tool that named no path
+        // is one whose destination the gate did not read, and a marker in a
+        // content string would displace the tool's own name and exempt the
+        // write.
+        let write_targets =
+            (named.is_none() && names_a_patch_body(&name)).then(|| patch_targets(input));
         if person_only::is_the_record(&target)
             || (named.is_none() && person_only::names_the_record(&payload_text))
         {
@@ -2303,7 +2334,7 @@ pub fn classify_observing(
                     target: person_only::RECORD.target.to_owned(),
                 },
                 Sensitivity::Routine,
-                not_a_shell_command(),
+                not_a_shell_command(Vec::new()),
             );
         }
         // The control surface, first and unconditionally — before the
@@ -2320,7 +2351,7 @@ pub fn classify_observing(
             return (
                 Action::Write { target },
                 Sensitivity::Boundary,
-                not_a_shell_command(),
+                not_a_shell_command(Vec::new()),
             );
         }
         // A write to the repository's own Estigia configuration, checked
@@ -2335,20 +2366,20 @@ pub fn classify_observing(
             return (
                 Action::Write { target },
                 Sensitivity::Boundary,
-                not_a_shell_command(),
+                not_a_shell_command(Vec::new()),
             );
         }
         return (
             Action::Write { target },
             Sensitivity::Routine,
-            not_a_shell_command(),
+            not_a_shell_command(write_targets.unwrap_or_default()),
         );
     }
 
     (
         Action::Untouched,
         Sensitivity::Routine,
-        not_a_shell_command(),
+        not_a_shell_command(Vec::new()),
     )
 }
 
@@ -2387,6 +2418,70 @@ fn argument_name(key: &str) -> String {
 /// copy of the rule. This is the one owner.
 pub(crate) fn path_argument(input: &serde_json::Value) -> Option<String> {
     argument_named(input, &["filepath", "path", "notebookpath"])
+}
+
+/// Whether a write tool's paths live in a patch body rather than in a field.
+///
+/// Two of them do — Codex's `apply_patch` and OpenCode's `patch`, the same two
+/// whose whole payload the control surface is read from. Every other write tool
+/// that named no path is one whose destination was not read, and its body is
+/// content rather than a target list.
+fn names_a_patch_body(tool: &str) -> bool {
+    matches!(tool, "apply_patch" | "patch")
+}
+
+/// The markers a patch body puts in front of the file an entry touches.
+const PATCH_PATH_MARKERS: &[&str] = &[
+    "*** Add File:",
+    "*** Update File:",
+    "*** Delete File:",
+    "*** Move to:",
+];
+
+/// The paths a write tool names in a patch body, for the tools that carry them
+/// there rather than in a field — Codex's `apply_patch` and OpenCode's `patch`.
+///
+/// Read from every string the payload holds rather than from a field name, the
+/// same reading [`text_names_a_control_surface`] makes and for the same reason.
+/// A path this misses is a write placed nowhere, and a false positive only
+/// moves a path *into* a checkout — the direction that holds a write rather
+/// than exempts one.
+fn patch_targets(input: &serde_json::Value) -> Vec<String> {
+    let mut texts = Vec::new();
+    string_values(input, &mut texts);
+    let mut targets = Vec::new();
+    for text in texts {
+        for line in text.lines() {
+            let line = line.trim();
+            for &marker in PATCH_PATH_MARKERS {
+                if let Some(path) = line.strip_prefix(marker) {
+                    let path = path.trim();
+                    if !path.is_empty() {
+                        targets.push(path.to_owned());
+                    }
+                }
+            }
+        }
+    }
+    targets
+}
+
+/// Every string a JSON document carries, at any depth.
+fn string_values(value: &serde_json::Value, out: &mut Vec<String>) {
+    match value {
+        serde_json::Value::String(text) => out.push(text.clone()),
+        serde_json::Value::Array(items) => {
+            for item in items {
+                string_values(item, out);
+            }
+        }
+        serde_json::Value::Object(fields) => {
+            for item in fields.values() {
+                string_values(item, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// One reading shared by boundary classification and proof metadata: more than
@@ -3096,7 +3191,12 @@ fn decide_observing(
         if let Some(refusal) = unclaimed::refusal(context, &context.repo_dir, action, literal) {
             return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
         }
-        return match issue_requirement::decision(context, action, how, literal) {
+        let write_targets = observed
+            .command
+            .as_ref()
+            .map(|command| command.write_targets.as_slice())
+            .unwrap_or_default();
+        return match issue_requirement::decision(context, action, how, literal, write_targets) {
             Some(Decision::Deny(refusal)) => {
                 Decision::Deny(Box::new(prefixed(*refusal, &subject, observed)))
             }

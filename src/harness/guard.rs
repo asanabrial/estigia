@@ -503,8 +503,7 @@ pub fn decide_pushing(
         },
         Sensitivity::Boundary,
         (refs, remotes),
-        None,
-        &[],
+        Readings::default(),
     )
 }
 
@@ -576,6 +575,22 @@ fn linked_siblings(state_root: &Path, repo_dir: &Path) -> Vec<session::Run> {
         .collect()
 }
 
+/// What `classify_observing` read off a call, for the doors that decide it with
+/// no run pointer to gate through: a session-less call, and the push hook.
+///
+/// Bundled rather than passed field by field. Every field comes from that one
+/// reading, and every door that carries one carries all of them — a fourth
+/// reading would otherwise widen two signatures and every call site with it.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Readings<'a> {
+    /// The single command string, when the call was a shell call.
+    pub literal: Option<&'a str>,
+    /// The irreversible fragments sharing a tier, when one tier holds two.
+    pub same_tier_fragments: &'a [String],
+    /// The paths a write tool named in a patch body.
+    pub write_targets: &'a [String],
+}
+
 /// One decision and the holder selected while making it.
 #[derive(Debug)]
 pub struct Adjudication {
@@ -609,24 +624,23 @@ pub fn adjudicate_action(
     how: Sensitivity,
     refs: &[String],
 ) -> Adjudication {
-    adjudicate_command(context, repo_dir, action, how, refs, None, &[])
+    adjudicate_command(context, repo_dir, action, how, refs, Readings::default())
 }
 
-/// [`adjudicate_action`], given the shell command line the action was
-/// classified from, when there is one. A run that holds nothing is refused a
-/// commit or a push in a checkout where the push guard is installed, and that
-/// is read from the command line rather than from the single fragment the
-/// classifier reported. `same_tier_fragments` is the tie `classify_observing`
-/// read off the line, carried here so the no-session doors refuse a
-/// same-tier compound line exactly as the run-id door does.
+/// [`adjudicate_action`], given the readings [`super::classify_observing`] took
+/// off the call. A run that holds nothing is refused a commit or a push in a
+/// checkout where the push guard is installed, and that is read from the command
+/// line rather than from the single fragment the classifier reported — the same
+/// reason the fragments sharing a tier and the paths a patch body names are
+/// carried here: what the classifier read, decided without a run pointer to gate
+/// through.
 pub fn adjudicate_command(
     context: &GateContext,
     repo_dir: &Path,
     action: &Action,
     how: Sensitivity,
     refs: &[String],
-    literal: Option<&str>,
-    same_tier_fragments: &[String],
+    readings: Readings<'_>,
 ) -> Adjudication {
     if let Some(denied) = super::person_only::deny(action) {
         return Adjudication {
@@ -634,15 +648,7 @@ pub fn adjudicate_command(
             holder: None,
         };
     }
-    adjudicate_pushing(
-        context,
-        repo_dir,
-        action,
-        how,
-        (refs, &[]),
-        literal,
-        same_tier_fragments,
-    )
+    adjudicate_pushing(context, repo_dir, action, how, (refs, &[]), readings)
 }
 
 fn adjudicate_pushing(
@@ -651,9 +657,13 @@ fn adjudicate_pushing(
     action: &Action,
     how: Sensitivity,
     (refs, remotes): (&[String], &[String]),
-    literal: Option<&str>,
-    same_tier_fragments: &[String],
+    readings: Readings<'_>,
 ) -> Adjudication {
+    let Readings {
+        literal,
+        same_tier_fragments,
+        write_targets,
+    } = readings;
     // Before asking who holds the checkout, because the answer cannot matter:
     // an action the harness does not watch is outside whoever swore what. The
     // branch below **denies** when a run pointer will not parse, which is
@@ -780,8 +790,10 @@ fn adjudicate_pushing(
             }
             [] => match super::unclaimed::refusal(context, repo_dir, action, literal) {
                 Some(refusal) => Decision::Deny(Box::new(refusal)),
-                None => super::issue_requirement::decision(context, action, how, literal)
-                    .unwrap_or(Decision::Outside(super::Aside::NothingSworn)),
+                None => {
+                    super::issue_requirement::decision(context, action, how, literal, write_targets)
+                        .unwrap_or(Decision::Outside(super::Aside::NothingSworn))
+                }
             },
             unreadable => Decision::Deny(Box::new(Refusal::not_started(
                 "run-pointers-unreadable",

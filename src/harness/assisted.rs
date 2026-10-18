@@ -11,7 +11,7 @@ use crate::config::Workflow;
 use crate::outcome::{NoCommandReason, Observed, Refusal, Resolution};
 
 use super::session::Run;
-use super::{Action, Aside, Decision, GateContext, Sensitivity};
+use super::{Action, Aside, Decision, GateContext, Sensitivity, names_no_write_path};
 
 enum Landing {
     Inside,
@@ -25,14 +25,8 @@ fn way_out(text: impl Into<String>) -> Resolution {
     Resolution::no_command(NoCommandReason::OperatorKnowledge, text)
 }
 
-fn names_no_path(target: &str) -> bool {
-    super::WRITE_TOOLS
-        .iter()
-        .any(|tool| tool.eq_ignore_ascii_case(target))
-}
-
 fn landing(worktree: &Path, from: &Path, target: &str) -> Landing {
-    if names_no_path(target) {
+    if names_no_write_path(target) {
         return Landing::Unplaced;
     }
     let Some(placed) = crate::paths::placed(&from.join(target)) else {
