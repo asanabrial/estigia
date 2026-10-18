@@ -94,8 +94,7 @@ The OpenCode relay prompt separates required repository acknowledgments from its
 result; follow the binary's channel contract rather than stripping prose or reconstructing a result.
 After a malformed answer, `capture-job-missing` on collect means that attempt was abandoned, not that
 the publication must change. Ask `review_status` and relaunch the offered input against the unchanged
-receipt. The channel and retry rules are documented in
-[the OpenCode review relay](../../docs/what-it-writes.md#the-opencode-review-relay-plugin).
+receipt. The binary's supplied prompt is the output contract, not a host-authored replacement.
 
 Acquiring a reviewer is not gated on a row: a run acquires one when its runtime can provide one, and
 does so without asking. It does not make Estigia spawn a model for the work, open a session, or prove a
