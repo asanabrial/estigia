@@ -8429,6 +8429,20 @@ pointer that leaves it names the document it points at.
     `lost-claim-race` with the world unchanged and **rolls its marker back**, so the store keeps
     only the winner's row and the loser makes no `dev:` label. `reclaim` adjudicates after its
     transaction has committed, so a `lost-reclaim-race` loser's row still stays.
+  - **Reclaim validation used to resurrect scoped releases.** Discovery and preflight
+    honored operation-scoped unassigns, but `ownership::reclaim_is_valid` reduced its prefix with
+    an empty epoch-release map. With the released acquisitions' horizons still live, a forced
+    takeover of the exact discovered holder committed and then answered `reclaim-discarded`,
+    `target-not-holder`, naming that same holder as `winner`. Closed by deriving the prefix's
+    scoped releases with `epoch_release_positions`, using only already accepted reclaims.
+    `a_forced_reclaim_after_one_scoped_release_reads_back` and
+    `a_forced_reclaim_after_two_scoped_releases_reads_back` in `src/transport/claim/tests.rs`
+    drive discovery, the forced exact-target write and store read-back. Both failed with that
+    diagnostic before the correction; replacing the corrected map with an empty one makes both
+    fail again. `a_discarded_reclaim_releases_nothing_in_a_later_reclaims_prefix` checks that a
+    refused takeover neither releases its target for a later validation nor becomes an
+    authoritative activity/ownership event. These are deterministic scripted-tracker tests,
+    not a recovery of any live issue.
   - **The claim's label follows the commit.** A `dev:` label that cannot be made after the store
     accepted the claim is `write-failed`, and the claim is held; the retry with the same operation
     id finds the stored claim, writes no second one, and runs the projection again.
