@@ -20,9 +20,40 @@ before. Windows ACLs and ownership are not carried over. The staging lives in `p
 a `branch` marker in the local store, and `release` — the last step of a delivery — deletes every
 remote head those markers name, reading each one back, then puts down the isolated checkout and its local
 branch. `estigia prune` is the operator-invoked sweep for what no delivery owned: merged or closed
-heads and checkouts, kept when a live claim holds them or they carry commits the remote does not
+heads and checkouts, plus [remote-gone orphan checkouts](#explicit-orphan-pruning), kept when a live claim holds them or they carry commits the remote does not
 have, removed only on `--confirm`. The rules, and what each still cannot see, are in the contract's
 delivery reference and [`honesty.md`](honesty.md); this document does not restate them.
+
+## Explicit orphan pruning
+
+`estigia prune` retains its existing merged/closed cleanup. An additional eligibility route handles
+a branch checkout that would otherwise be kept: its configured upstream must be absent after
+`git fetch --prune --all`, its working tree must be clean, and `git rev-list --count <proven-head>
+--not --remotes` must be zero. The upstream identity comes from `branch.<name>.remote` and
+`branch.<name>.merge`, not the local branch name or a presumed `origin`; the configuration remains
+readable when fetching removes a stale tracking ref. Reachability from any refreshed remote-tracking
+branch suffices, not only the default branch. A configured upstream still present on its actual remote
+is never eligible through this route. The safe fallback for genuinely untracked branches is to keep
+them: absent, incomplete, multiple, invalid, local-only (`remote = .`) or unknown tracking identities
+are not inferred to mean a deleted remote branch.
+
+The additional route keeps any checkout named by a run pointer, even when its issue is closed. It
+also keeps a checkout named by a session registry entry not explicitly ended; a stale heartbeat is
+not an ended session. Unreadable pointers, registry reads, remote reads and local Git reads keep the
+candidate and name the reason. This deliberately retains some abandoned checkouts rather than
+guessing that their holders died. The remaining observation limits are in
+[`honesty.md`](honesty.md), under “What the prune sweep cannot see”.
+
+Without `--confirm`, the command only lists candidates and refreshes remote-tracking refs; it removes
+no checkout or branch. Confirmation rereads pointers and the session registry for the new route,
+repeats its Git checks, then rereads ownership and checks branch identity at the retirement boundary.
+The reachability query uses a captured commit id, and that exact id is passed to the existing
+retirement operation's HEAD comparison; a newer HEAD is never substituted for the proven revision.
+Confirmation then uses the existing
+checkout retirement operation: `git worktree remove` without force, followed by local branch
+retirement. It introduces no remote-branch deletion and no session-start deletion. `release` and
+the ordinary `estigia changes` listing are unchanged. These observations are not a repository or
+ownership lock; the remaining race after the final checks is described in `honesty.md`.
 
 **What Estigia writes to GitHub.** Issues and their prose, a person's `comment` prose, labels,
 open or closed, pull requests and branches — and no `issue-flow` marker anywhere. The markers of the

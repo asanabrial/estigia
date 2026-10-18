@@ -4503,11 +4503,41 @@ pointer that leaves it names the document it points at.
   - **What the prune sweep cannot see.** It attributes a head or checkout to an issue by the
     `issue-<n>-…` convention in a branch name or by a run pointer, so a head that names no issue
     and carries no pointer is listed only when it is merged into the base, while a checkout is always
-    listed, kept when nothing says it is finished. Its "a live claim
+    listed, kept when nothing says it is finished. The additional remote-gone orphan route now
+    recognises a clean checkout whose commits remain on any refreshed remote ref, even when the
+    branch is neither merged nor closed. The behavioral regression
+    `a_remote_gone_checkout_reachable_from_another_remote_is_removed_only_on_confirmation` in
+    `src/harness/prune/tests.rs` failed on the delivered base and failed again when only the new
+    eligibility result was disabled; the corrected prune module passed 18 tests. Its fixture deletes
+    the branch from a second checkout, leaving a stale tracking ref to be pruned, and retains the
+    commits on an archive branch rather than on main. The retained-state fixture covers dirty,
+    unique, pointer-held, session-held, remote-present and unreadable cases. See
+    [the route's rules](what-it-writes.md#explicit-orphan-pruning).
+
+    The legacy route's "a live claim
     holds it" answer is a readable run pointer whose issue the tracker still reports open, not a
     re-read of the claim itself: a pointer a run left behind reads as live, and a claim the pointer
-    never recorded reads as unheld. Both directions are fail-safe — a false "held" keeps a branch, and
-    the operator confirms every deletion — but neither is proof.
+    never recorded reads as unheld. A false "held" keeps a branch; a false "unheld" is not safe just
+    because the operator confirms deletion. In particular, `held_worktree` skips unreadable pointers
+    and stops protecting a readable pointer when its issue reads closed. This extension does not
+    alter that independent legacy route. The new route instead keeps every matching pointer and
+    every checkout named by a registry session not explicitly ended, refusing unreadable ownership.
+    The three correction regressions first failed together: a renamed upstream still present was
+    selected, a session registered after discovery was removed, and a clean unique commit injected
+    after proof was substituted as the expected revision and removed. The corrected route resolves
+    the configured remote and full upstream ref even after its tracking ref disappears. Tests cover
+    both non-origin and differently named upstreams while present and after deletion, and retain
+    missing, local-only, unknown and ambiguous tracking identities. Confirmation now rereads both
+    run pointers and sessions, including immediately after the proof hook used by the behavioral
+    fixtures, and uses the exact commit id inspected for reachability as retirement's expected HEAD.
+    A newly registered holder, corrupted ownership read, changed branch or changed revision is kept.
+
+    These are observations, not a lock: a claim with no pointer and no session directory cannot be
+    attributed. Another process can still acquire ownership after the last ownership read, recreate
+    the upstream after the last remote query, or change Git state after retirement's branch/HEAD/status
+    checks and before `git worktree remove`. The
+    correction removes snapshot reuse and revision substitution from the new route; it does not
+    make that multi-command operation atomic, and neither route proves absence of every live process.
   - **The sweep's remote deletion bypasses the push guard, and that is a bypass.** `estigia prune
     --confirm` runs `git push --no-verify --delete` for each head, because the guard refuses a push
     no live claim authorises and the sweep runs from a checkout that holds none — a guarded
