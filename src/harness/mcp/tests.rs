@@ -1834,6 +1834,98 @@ fn a_boolean_goes_out_as_a_bare_flag_or_not_at_all() {
     );
 }
 
+/// The `task` tool's `compact` argument reaches the transport as the bare
+/// `--compact` flag, and declining it sends nothing, so an optimized client
+/// selects the compact answer through the schema rather than a private call.
+#[test]
+fn the_task_tool_carries_compact_to_the_transport_flag() {
+    let tool = tools::find("task").expect("a declared tool");
+    let asked = super::flags_for(
+        tool,
+        &json!({"issue": 5, "run_id": "claude-abcd1234", "id": "T1", "compact": true}),
+    )
+    .expect("well formed");
+    assert!(
+        asked.contains(&"--compact".to_owned()),
+        "the compact argument never reached the transport: {asked:?}"
+    );
+    let declined = super::flags_for(
+        tool,
+        &json!({"issue": 5, "run_id": "claude-abcd1234", "id": "T1", "compact": false}),
+    )
+    .expect("well formed");
+    assert!(
+        !declined.contains(&"--compact".to_owned()),
+        "declining compact still sent it: {declined:?}"
+    );
+}
+
+/// The `compact` argument reaches the transport through the real server, not
+/// only through `flags_for`: a client that asks for the compact answer gets the
+/// changed row alone, and one that does not still gets the whole checklist.
+#[test]
+fn the_task_tool_answers_compact_through_the_server() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo_dir = root.path().join("repo");
+    std::fs::create_dir_all(&repo_dir).expect("a checkout");
+    let store_path = root.path().join("state.db");
+    let mut context = bare_context(&root, &repo_dir);
+    context.tracker = crate::config::Tracker::Github {
+        repo: Some(crate::config::RepoRef {
+            owner: "fixture".to_owned(),
+            name: "repo".to_owned(),
+        }),
+    };
+    let bin = crate::test_env::scripted_gh();
+    let held = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        "claude-abcd1234",
+        5,
+        "in-progress",
+    )]);
+
+    let (compact, legacy) = crate::test_env::with_scripted_gh(bin.path(), &held, || {
+        crate::transport::store::with_store_at(&store_path, || {
+            let call = |compact: bool| {
+                super::run_tool(
+                    "task",
+                    &json!({
+                        "issue": 5,
+                        "run_id": "claude-abcd1234",
+                        "id": "T1",
+                        "text": "first",
+                        "route": "inline",
+                        "compact": compact,
+                    }),
+                    Ok(&context),
+                )
+                .expect("the task records")
+            };
+            (call(true), call(false))
+        })
+    });
+
+    let parse = |answered: &Value| -> Value {
+        serde_json::from_str(
+            answered["content"][0]["text"]
+                .as_str()
+                .expect("a tool result carries text"),
+        )
+        .expect("the answer is JSON")
+    };
+    let compact = parse(&compact);
+    assert!(
+        compact.get("tasks").is_none(),
+        "the compact argument never reached the transport: {compact}"
+    );
+    assert_eq!(compact["task"]["id"], "T1", "{compact}");
+    let legacy = parse(&legacy);
+    assert_eq!(
+        legacy["tasks"].as_array().map(Vec::len),
+        Some(1),
+        "the legacy answer lost the whole checklist: {legacy}"
+    );
+}
+
 /// Whether one transport subcommand changes the filesystem, read out of its
 /// own body.
 ///
@@ -5738,7 +5830,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 45_266;
+const TOOLS_LIST_CEILING: usize = 45_400;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
