@@ -337,6 +337,34 @@ fn a_usage_write_that_fails_leaves_the_answer_as_the_outcome() {
         JobResult::Answer(b"the answer".to_vec()),
         "a failed usage write turned the review's answer into a refusal"
     );
+    assert!(
+        read_usage(&dir).is_err(),
+        "a usage artifact was readable after a write that failed: {:?}",
+        read_usage(&dir)
+    );
+    assert!(
+        dir.join(USAGE).is_dir(),
+        "the obstruction is gone, so the usage write did not fail"
+    );
+}
+
+#[test]
+fn the_writer_never_emits_the_empty_counter_map_the_reader_refuses() {
+    let (_root, dir) = prepared();
+    let empty = Usage {
+        provider: "claude".to_owned(),
+        counters: std::collections::BTreeMap::new(),
+    };
+    let select =
+        move || -> Result<Box<dyn Adapter>, Refusal> { Ok(Box::new(Reports(Some(empty.clone())))) };
+    OnThread(select).start(&dir).expect("the runner starts");
+
+    assert_eq!(finished(&dir), JobResult::Answer(b"the answer".to_vec()));
+    assert!(
+        !dir.join(USAGE).exists(),
+        "the writer emitted an empty counter map"
+    );
+    assert_eq!(read_usage(&dir).expect("readable"), None);
 }
 
 fn usage_artifact(dir: &std::path::Path, content: &str) {

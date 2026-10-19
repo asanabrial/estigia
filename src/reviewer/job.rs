@@ -238,8 +238,11 @@ fn usage_json(usage: &Usage) -> serde_json::Value {
     })
 }
 
+/// Writes the provider's own usage, or nothing when there is none to preserve.
+/// An empty counter set writes nothing too, so an artifact this writer leaves is
+/// always one [`read_usage`] accepts.
 fn write_usage(dir: &Path, usage: Option<&Usage>) -> std::io::Result<()> {
-    let Some(usage) = usage else {
+    let Some(usage) = usage.filter(|usage| !usage.counters.is_empty()) else {
         return Ok(());
     };
     replace_atomically(&dir.join(USAGE), &usage_json(usage).to_string())
@@ -273,12 +276,13 @@ fn take_lock(dir: &Path) -> Result<File, Refusal> {
 /// leaves `result.json` with the provider's own usage in `usage.json` beside it
 /// when the reviewer's CLI reported any. The answer is the outcome whatever
 /// happens to the usage: a usage write that fails is reported on the runner's
-/// standard error and leaves the counters unknown rather than turning a review
-/// that succeeded into a refusal. The usage is written before the result and
-/// never inside it, so a finished result never arrives without its usage and the
-/// admitted answer's bytes do not move with it. It writes nothing else outside
-/// `dir`, and never the ledger. A manifest it cannot read, or an adapter it
-/// cannot select, is recorded as a refusal rather than left as a silent absence.
+/// standard error rather than turning a review that succeeded into a refusal,
+/// and the result is then written without the artifact. The usage is written
+/// before the result and never inside it, so the admitted answer's bytes do not
+/// move with it, and a reader of a result with no usage beside it must read the
+/// counters as unknown, never as zero. It writes nothing else outside `dir`, and
+/// never the ledger. A manifest it cannot read, or an adapter it cannot select,
+/// is recorded as a refusal rather than left as a silent absence.
 pub fn run(
     dir: &Path,
     select: &dyn Fn() -> Result<Box<dyn Adapter>, Refusal>,
