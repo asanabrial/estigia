@@ -823,7 +823,7 @@ fn run_tool_asking(
         "send_message" => {
             return messaging::send_message(arguments, context, named.as_ref(), consent);
         }
-        "list_sessions" => return messaging::list_sessions(context),
+        "list_sessions" => return messaging::list_sessions(arguments, context),
         _ => {}
     }
 

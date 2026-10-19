@@ -247,7 +247,15 @@ pub(super) fn send_message(
     ))
 }
 
-pub(super) fn list_sessions(context: &GateContext) -> Result<Value, ToolFailure> {
+pub(super) fn list_sessions(
+    arguments: &Value,
+    context: &GateContext,
+) -> Result<Value, ToolFailure> {
+    if arguments.as_object().is_some_and(|sent| !sent.is_empty()) {
+        return crate::cli::sessions::page(arguments, &context.state_root, session::now_seconds())
+            .map(|page| text_result(page.to_string()))
+            .map_err(refused);
+    }
     let entries = crate::cli::sessions::entries(&context.state_root).map_err(refused)?;
     Ok(text_result(
         json!({

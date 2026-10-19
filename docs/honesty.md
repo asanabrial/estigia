@@ -10267,6 +10267,34 @@ does not measure:
   with an uppercase letter is filed under a digested name, so its pointer is not found and its issue is not shown.
   Minted ids from the hosts measured here are lowercase; the case was found while writing the test and is not fixed.
 - **No pid, no host query.** Nothing asks a runtime whether a session is alive.
+- **A bounded `list_sessions` snapshot is a filtered re-read, not one consistent read of the machine.** Each
+  page re-reads the store and keeps the rows whose `started_at <= taken_at`; the ordering key is immutable, so a
+  full traversal has neither omissions nor duplicates under the tested mutations, but a row's `status` and
+  `last_seen` are re-derived per page and can differ between pages. The cursor's digest detects corruption and an
+  edit that does not recompute it; it is **not a MAC**, and possession of a cursor is not authorization.
+- **A snapshot's membership is frozen only to the second.** `started_at` has second granularity, so
+  `started_at <= taken_at` admits a session that registers in the same wall-clock second as `taken_at` but after
+  the page was taken, and a later page can show a row the first page never had. The ordering key is what is
+  frozen outright; the behaviour is pinned as a baseline by
+  `a_session_registered_in_the_same_second_as_taken_at_can_join_the_walk`.
+- **An unreadable store answers the shared `unknown` identity.** Where the store's identity cannot be read — the
+  Windows arm when its handle read fails, and any platform that is neither Unix nor Windows — `store_identity`
+  answers `unknown`, which every such store shares, so the cursor's store check cannot tell two of them apart; a
+  page taken against either refuses before it lists anything.
+- **A `status`-filtered traversal is not a complete set, and no test makes it one.** The value a selector compares
+  is read afresh from each page's own read, so a row that ends or heartbeats between pages can leave a
+  `status`-filtered walk, and `matched` is that page's count rather than one held across the walk. The behaviour is
+  pinned as a baseline by `a_status_filtered_traversal_reads_the_status_afresh_and_can_omit_a_changed_row`, which
+  asserts the omission rather than a guarantee: a design that made the walk complete would redden it. Nothing in
+  this design promises a complete set, and a caller that needs one reads the whole list and filters it.
+- **A bounded page's snapshot is the registry rows only.** A pointer-only run has no immutable start, so it is not
+  in the snapshot and a bounded traversal can neither omit nor duplicate it; `status=unregistered` is refused with
+  `sessions-unregistered-not-bounded`, and the full list (`estigia sessions`, or `list_sessions` with no options)
+  still shows those runs. The no-omissions property is therefore a property of the registry.
+- **A bounded answer has no fixed byte ceiling.** What bounds it is the page size (`limit`, default 50 and at most
+  500) and the row shape. The baseline measurement — a real `list_sessions` call on 2026-10-18 returning 433
+  sessions whose compact JSON was 141,698 UTF-8 bytes — is a response-size measurement, not a billed-token
+  estimate.
 
 ## The session mailbox
 
