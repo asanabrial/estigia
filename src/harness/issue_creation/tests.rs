@@ -167,8 +167,11 @@ fn a_run_with_no_claim_is_refused_too() {
         &action,
         how,
         &[],
-        literal,
-        &observed.same_tier_fragments,
+        crate::harness::guard::Readings {
+            literal,
+            same_tier_fragments: &observed.same_tier_fragments,
+            write_targets: &observed.write_targets,
+        },
     )
     .decision;
     assert!(

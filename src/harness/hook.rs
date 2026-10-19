@@ -711,18 +711,35 @@ fn session_start_body(context: &GateContext, run: &session::Run, with_count: boo
                     "Claim an issue first, filing one with `create` when none covers the \
                      change, then work through `start_branch`."
                 };
-                format!(
-                    "This run holds no issue, and `Issue requirement` is `{}` in this repository: \
-                     {}. {way_in} Reads are not gated.",
-                    requirement.as_value(),
-                    match requirement {
-                        crate::config::IssueRequirement::Required =>
-                            "Estigia refuses every repository write until one is claimed",
-                        _ =>
-                            "each repository write is put to the person until one is claimed, \
-                              and refused on a host that cannot ask",
+                let held = match requirement {
+                    crate::config::IssueRequirement::Required => {
+                        "Estigia refuses every repository write until one is claimed"
                     }
-                )
+                    _ => {
+                        "each repository write is put to the person until one is claimed, \
+                          and refused on a host that cannot ask"
+                    }
+                };
+                match super::issue_requirement::scope_of(&context.repo_dir) {
+                    super::issue_requirement::Scope::Repository(_) => format!(
+                        "This run holds no issue, and `Issue requirement` is `{}` in this \
+                         repository: {held}. {way_in} Reads are not gated.",
+                        requirement.as_value()
+                    ),
+                    super::issue_requirement::Scope::Outside => format!(
+                        "This run holds no issue. This directory is not inside a repository Estigia \
+                         can place, so no issue requirement applies to a write that lands here: \
+                         `Issue requirement` is `{}` for a write that lands in a repository Estigia \
+                         can place, and there {held}. Reads are not gated.",
+                        requirement.as_value()
+                    ),
+                    super::issue_requirement::Scope::Unknown => format!(
+                        "This run holds no issue. `Issue requirement` is `{}` here, but whether \
+                         this directory is inside a repository could not be established, so every \
+                         write from it is held rather than exempted: {held}. Reads are not gated.",
+                        requirement.as_value()
+                    ),
+                }
             }
             None if super::unclaimed::applies(context, &context.repo_dir) => {
                 let way_in = if context.workflow == Some(crate::config::Workflow::Assisted) {
@@ -1309,14 +1326,23 @@ pub fn run_as(
                     .as_ref()
                     .map(|command| command.same_tier_fragments.as_slice())
                     .unwrap_or_default();
+                let write_targets = observed
+                    .command
+                    .as_ref()
+                    .map(|command| command.write_targets.as_slice())
+                    .unwrap_or_default();
+                let readings = super::guard::Readings {
+                    literal,
+                    same_tier_fragments,
+                    write_targets,
+                };
                 let adjudication = super::guard::adjudicate_command(
                     context,
                     &context.repo_dir,
                     &action,
                     how,
                     &[],
-                    literal,
-                    same_tier_fragments,
+                    readings,
                 );
                 (
                     adjudication.decision,

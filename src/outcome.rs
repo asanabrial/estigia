@@ -188,6 +188,11 @@ pub struct CommandObserved {
     /// always did.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub same_tier_fragments: Vec<String>,
+    /// The paths a write tool names in a patch body, read only when no argument
+    /// field names a path — the one place a write tool's target is not a value
+    /// of its own. Empty for every shell call.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub write_targets: Vec<String>,
 }
 
 /// Which stated candidate a resolved checkout actually came from.
@@ -990,6 +995,7 @@ mod display_tests {
                 boundary_source: Some("irreversible"),
                 disqualifying_byte: None,
                 same_tier_fragments: Vec::new(),
+                write_targets: Vec::new(),
             }),
             checkout: Some(CheckoutObserved {
                 adjudicated: "/a/checkout".to_owned(),
