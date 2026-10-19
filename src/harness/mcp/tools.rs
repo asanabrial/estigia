@@ -455,10 +455,46 @@ pub const TOOLS: &[Tool] = &[
         name: "list_sessions",
         contract_name: "list_sessions",
         description: "The sessions registered on this machine: run id, runtime, status, the issue \
-                      each holds, last seen, mail waiting. The entries `estigia sessions --json` \
-                      prints. Read-only.",
+                      each holds, last seen, mail waiting. With no options it answers exactly the \
+                      entries `estigia sessions --json` prints. With `status`, `runtime`, `run`, \
+                      `session_id` or `repo_dir` it answers a bounded, versioned page of the rows \
+                      those selectors match, ordered by start time and run id, with `limit` rows \
+                      and a `next_cursor` to continue the same snapshot. A cursor is bound to its \
+                      selectors, snapshot and store: a malformed, edited, mismatched, expired or \
+                      replaced-store cursor is refused, never silently restarted. Read-only.",
         operation: "list-sessions",
-        arguments: &[],
+        arguments: &[
+            Argument::optional(
+                "status",
+                "string",
+                "Answer only sessions in this state: live, stale, ended, unregistered or unknown.",
+            )
+            .of(crate::cli::sessions::STATUSES),
+            Argument::optional("runtime", "string", "Answer only sessions of this runtime."),
+            Argument::optional("run", "string", "Answer only the session with this run id."),
+            Argument::optional(
+                "session_id",
+                "string",
+                "Answer only the session with this host session id.",
+            ),
+            Argument::optional(
+                "repo_dir",
+                "string",
+                "Answer only sessions started in this directory.",
+            ),
+            Argument::optional(
+                "limit",
+                "integer",
+                "The most rows this page answers. Defaults to 50; a value above 500 is refused.",
+            )
+            .counting_from(1),
+            Argument::optional(
+                "cursor",
+                "string",
+                "The `next_cursor` of the page before, to continue the same snapshot. Give the \
+                 same selectors again.",
+            ),
+        ],
         effect: PointerEffect::None,
         writes: false,
     },

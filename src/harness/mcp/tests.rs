@@ -2513,7 +2513,10 @@ fn transport_integers(operation: &str) -> Vec<String> {
 fn an_integer_argument_is_one_the_transport_parses_as_a_whole_number() {
     let mut declared = 0;
     let mut found = 0;
-    for tool in crate::harness::mcp::tools::TOOLS {
+    for tool in crate::harness::mcp::tools::TOOLS
+        .iter()
+        .filter(|tool| !crate::harness::mcp::tools::is_local_store(tool.name))
+    {
         let integers = transport_integers(tool.operation);
         found += integers.len();
         for argument in tool.arguments {
@@ -5830,7 +5833,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 45_400;
+const TOOLS_LIST_CEILING: usize = 46_700;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -6104,6 +6107,43 @@ mod send_message {
                 .get(run_id)
                 .copied()
                 .unwrap_or_default()
+        }
+
+        fn seen(
+            &self,
+            run_id: &str,
+            runtime: &str,
+            session_id: &str,
+            repo_dir: Option<&str>,
+            now: u64,
+        ) {
+            self.store()
+                .session_seen(
+                    &SessionSeen {
+                        run_id,
+                        runtime,
+                        session_id,
+                        repo_dir,
+                    },
+                    now,
+                )
+                .expect("a session registers");
+        }
+
+        fn ended(&self, run_id: &str, now: u64) {
+            self.store()
+                .session_ended(run_id, None, now)
+                .expect("a session ends");
+        }
+
+        fn pointer(&self, run_id: &str, issue: u64) {
+            let mut run = crate::harness::session::Run::new(run_id.to_owned());
+            run.issue = Some(crate::identity::Identity::Number(issue));
+            crate::harness::session::store(&self.context().state_root, &run).expect("a pointer");
+        }
+
+        fn list(&self, arguments: Value) -> Result<Value, ToolFailure> {
+            run_tool("list_sessions", &arguments, Ok(&self.context()))
         }
 
         fn serve(&self, lines: &[Value]) -> Vec<Value> {
@@ -6468,5 +6508,278 @@ mod send_message {
             listed["stale_after"],
             crate::cli::sessions::STALE_AFTER_SECONDS
         );
+    }
+
+    fn answered(result: Value) -> Value {
+        serde_json::from_str(result["content"][0]["text"].as_str().expect("text")).expect("json")
+    }
+
+    fn refusal_code(failure: ToolFailure) -> String {
+        let ToolFailure::Refused(refusal) = failure else {
+            panic!("refused as something other than a refusal: {failure}");
+        };
+        refusal.code.to_owned()
+    }
+
+    fn run_ids(page: &Value) -> Vec<String> {
+        page["sessions"]
+            .as_array()
+            .expect("a page of rows")
+            .iter()
+            .map(|row| row["run_id"].as_str().expect("a run id").to_owned())
+            .collect()
+    }
+
+    const INSERTED: &str = "pi-new0a1b2c3d";
+
+    fn churn(rig: &Rig) {
+        rig.seen("pi-c0000003", "pi", "host-c", None, 9_000_000_000);
+        rig.seen("claude-d0000004", "claude", "host-d", None, 1);
+        rig.ended("codex-e0000005", 9_000_000_000);
+        rig.ended("claude-g0000007", 9_000_000_000);
+        rig.seen(
+            "claude-g0000007",
+            "claude",
+            "host-g-moved",
+            None,
+            9_000_000_000,
+        );
+        rig.seen("pi-f0000006", "pi", "host-f-moved", None, 5_003);
+        rig.seen(INSERTED, "pi", "host-new", Some("/repo/new"), 9_000_000_000);
+    }
+
+    #[test]
+    fn a_snapshot_is_walked_without_omissions_or_duplicates_while_the_store_moves() {
+        let rig = Rig::new();
+        for (run_id, runtime, started, seen) in [
+            ("claude-a0000001", "claude", 5_000u64, 5_000u64),
+            ("codex-b0000002", "codex", 5_000, 5_000),
+            ("pi-c0000003", "pi", 5_001, 5_001),
+            ("claude-d0000004", "claude", 5_002, 5_002),
+            ("codex-e0000005", "codex", 5_003, 5_003),
+            ("pi-f0000006", "pi", 5_004, 5_003),
+            ("claude-g0000007", "claude", 5_005, 5_005),
+        ] {
+            rig.seen(run_id, runtime, "host-session", None, started);
+            if seen != started {
+                rig.seen(run_id, runtime, "host-session", None, seen);
+            }
+        }
+
+        let first = answered(rig.list(json!({"limit": 2})).expect("a first page"));
+        let taken_at = first["taken_at"].as_u64().expect("a snapshot time");
+        let mut rows: Vec<(u64, String)> = rig
+            .store()
+            .sessions()
+            .expect("the rows read")
+            .into_iter()
+            .filter(|row| row.started_at <= taken_at)
+            .map(|row| (row.started_at, row.run_id))
+            .collect();
+        rows.sort();
+        let expected: Vec<String> = rows.into_iter().map(|(_, run_id)| run_id).collect();
+        assert_eq!(expected.len(), 9, "{expected:?}");
+
+        let mut walked = run_ids(&first);
+        let mut cursor = first["next_cursor"].as_str().map(str::to_owned);
+        let mut pages = 1;
+        while let Some(token) = cursor {
+            if pages == 1 {
+                churn(&rig);
+            }
+            let answer = answered(
+                rig.list(json!({"limit": 2, "cursor": token}))
+                    .expect("a continued page"),
+            );
+            assert_eq!(answer["taken_at"].as_u64(), Some(taken_at));
+            assert_eq!(answer["matched"].as_u64(), Some(expected.len() as u64));
+            let page = run_ids(&answer);
+            assert_eq!(answer["returned"].as_u64(), Some(page.len() as u64));
+            walked.extend(page);
+            cursor = answer["next_cursor"].as_str().map(str::to_owned);
+            pages += 1;
+        }
+
+        assert_eq!(walked, expected, "the traversal is not the snapshot");
+        assert!(!walked.contains(&INSERTED.to_owned()));
+        assert_eq!(pages, 5, "the page size did not hold: {walked:?}");
+    }
+
+    #[test]
+    fn selectors_answer_only_the_rows_they_name() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        rig.seen(
+            "claude-live0a1b2c3d",
+            "claude",
+            "host-live",
+            Some("/repo/one"),
+            now,
+        );
+        rig.seen(
+            "pi-stale0a1b2c3d",
+            "pi",
+            "host-stale",
+            Some("/repo/two"),
+            now - crate::cli::sessions::STALE_AFTER_SECONDS - 1,
+        );
+        rig.seen(
+            "codex-end0a1b2c3d",
+            "codex",
+            "host-end",
+            Some("/repo/one"),
+            now,
+        );
+        rig.ended("codex-end0a1b2c3d", now);
+        rig.pointer("pi-ghost0a1b2c3d", 12);
+
+        let selected = |arguments: Value| -> Vec<String> {
+            run_ids(&answered(rig.list(arguments).expect("a page")))
+        };
+
+        assert_eq!(
+            selected(json!({"status": "live"})),
+            vec!["claude-live0a1b2c3d"]
+        );
+        assert_eq!(
+            selected(json!({"status": "stale"})),
+            vec![
+                "claude-send0a1b2c3d",
+                "codex-recv0a1b2c3d",
+                "pi-stale0a1b2c3d"
+            ]
+        );
+        assert_eq!(
+            selected(json!({"status": "ended"})),
+            vec!["codex-end0a1b2c3d"]
+        );
+        assert_eq!(
+            selected(json!({"status": "unregistered"})),
+            vec!["pi-ghost0a1b2c3d"]
+        );
+        assert_eq!(
+            selected(json!({"runtime": "pi"})),
+            vec!["pi-ghost0a1b2c3d", "pi-stale0a1b2c3d"]
+        );
+        assert_eq!(
+            selected(json!({"run": "codex-end0a1b2c3d"})),
+            vec!["codex-end0a1b2c3d"]
+        );
+        assert_eq!(
+            selected(json!({"session_id": "host-stale"})),
+            vec!["pi-stale0a1b2c3d"]
+        );
+        assert_eq!(
+            selected(json!({"repo_dir": "/repo/one"})),
+            vec!["claude-live0a1b2c3d", "codex-end0a1b2c3d"]
+        );
+    }
+
+    #[test]
+    fn a_malformed_cursor_is_refused_not_restarted() {
+        let rig = Rig::new();
+        let code = refusal_code(
+            rig.list(json!({"cursor": "not-a-cursor"}))
+                .expect_err("a refusal"),
+        );
+        assert_eq!(code, "sessions-cursor-malformed");
+    }
+
+    #[test]
+    fn an_oversized_cursor_is_refused_before_it_is_read() {
+        let rig = Rig::new();
+        let oversized = "a".repeat(crate::cli::sessions::MAX_CURSOR_BYTES + 1);
+        let code = refusal_code(
+            rig.list(json!({"cursor": oversized}))
+                .expect_err("a refusal"),
+        );
+        assert_eq!(code, "sessions-cursor-too-large");
+    }
+
+    #[test]
+    fn an_edited_cursor_is_refused() {
+        let rig = Rig::new();
+        rig.seen(
+            "claude-second0a1b2c3d",
+            "claude",
+            "host-second",
+            None,
+            2_000,
+        );
+        let page = answered(rig.list(json!({"limit": 1})).expect("a page"));
+        let token = page["next_cursor"].as_str().expect("a cursor").to_owned();
+        let (payload, digest) = token.split_once('.').expect("a payload and a digest");
+        let mut flipped = payload.to_owned();
+        let first = flipped.as_bytes()[0];
+        flipped.replace_range(0..1, if first == b'a' { "b" } else { "a" });
+        let tampered = format!("{flipped}.{digest}");
+        let code = refusal_code(
+            rig.list(json!({"limit": 1, "cursor": tampered}))
+                .expect_err("a refusal"),
+        );
+        assert_eq!(code, "sessions-cursor-tampered");
+    }
+
+    #[test]
+    fn a_cursor_from_other_selectors_is_refused() {
+        let rig = Rig::new();
+        rig.seen(
+            "claude-second0a1b2c3d",
+            "claude",
+            "host-second",
+            None,
+            2_000,
+        );
+        let page = answered(
+            rig.list(json!({"runtime": "claude", "limit": 1}))
+                .expect("a page"),
+        );
+        let token = page["next_cursor"].as_str().expect("a cursor").to_owned();
+        let code = refusal_code(
+            rig.list(json!({"runtime": "codex", "limit": 1, "cursor": token}))
+                .expect_err("a refusal"),
+        );
+        assert_eq!(code, "sessions-cursor-mismatch");
+    }
+
+    #[test]
+    fn an_expired_cursor_is_refused() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let token = crate::cli::sessions::cursor_token(&crate::cli::sessions::Cursor {
+            version: crate::cli::sessions::PAGE_VERSION,
+            selectors: crate::cli::sessions::Selectors::default(),
+            taken_at: 1,
+            last_started_at: 0,
+            last_run_id: "claude-send0a1b2c3d".to_owned(),
+            store: store::store_identity(&store::beside(&context.state_root)),
+        });
+        let code = refusal_code(rig.list(json!({"cursor": token})).expect_err("a refusal"));
+        assert_eq!(code, "sessions-cursor-expired");
+    }
+
+    #[test]
+    fn a_cursor_from_a_replaced_store_is_refused() {
+        let rig = Rig::new();
+        let token = crate::cli::sessions::cursor_token(&crate::cli::sessions::Cursor {
+            version: crate::cli::sessions::PAGE_VERSION,
+            selectors: crate::cli::sessions::Selectors::default(),
+            taken_at: 1,
+            last_started_at: 0,
+            last_run_id: "claude-send0a1b2c3d".to_owned(),
+            store: "replaced".to_owned(),
+        });
+        let code = refusal_code(rig.list(json!({"cursor": token})).expect_err("a refusal"));
+        assert_eq!(code, "sessions-cursor-store-replaced");
+    }
+
+    #[test]
+    fn a_limit_above_the_maximum_is_refused_rather_than_clamped() {
+        let rig = Rig::new();
+        let code = refusal_code(
+            rig.list(json!({"limit": crate::cli::sessions::MAX_LIMIT + 1}))
+                .expect_err("a refusal"),
+        );
+        assert_eq!(code, "sessions-limit-too-large");
     }
 }

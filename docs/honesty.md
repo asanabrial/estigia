@@ -10267,6 +10267,18 @@ does not measure:
   with an uppercase letter is filed under a digested name, so its pointer is not found and its issue is not shown.
   Minted ids from the hosts measured here are lowercase; the case was found while writing the test and is not fixed.
 - **No pid, no host query.** Nothing asks a runtime whether a session is alive.
+- **A bounded `list_sessions` snapshot is a filtered re-read, not one consistent read of the machine.** Each
+  page re-reads the store and keeps the rows whose `started_at <= taken_at`; the ordering key is immutable, so a
+  full traversal has neither omissions nor duplicates under the tested mutations, but a row's `status` and
+  `last_seen` are re-derived per page and can differ between pages. The cursor's digest detects corruption and an
+  edit that does not recompute it; it is **not a MAC**, and possession of a cursor is not authorization.
+- **A pointer-only `unregistered` row carries no start time.** It is placed at the head of the order and is not
+  filtered by the snapshot time, so a pointer created mid-traversal can be seen by a later page. The
+  no-omissions property is measured over registry rows, not over pointers.
+- **A bounded answer has no fixed byte ceiling.** What bounds it is the page size (`limit`, default 50 and at most
+  500) and the row shape. The baseline measurement — a real `list_sessions` call on 2026-10-18 returning 433
+  sessions whose compact JSON was 141,698 UTF-8 bytes — is a response-size measurement, not a billed-token
+  estimate.
 
 ## The session mailbox
 

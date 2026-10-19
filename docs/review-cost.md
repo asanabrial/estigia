@@ -555,6 +555,7 @@ the exact bytes a client receives for the table.
 | Issue #69, `review_tier` gains `raise`, `raise_reason` and `focus_reason` (ceiling set to the measured size) | 33 | 43,055 |
 | Issue #69, `publish_review` and `republish_review` take the same four arguments (ceiling set to the measured size) | 33 | 44,277 |
 | `send_message` and `list_sessions` join, answered from the local store (ceiling set to the measured size) | 35 | 45,266 |
+| `list_sessions` gains bounded discovery: seven optional selectors and paging arguments (ceiling set to the measured size) | 35 | 46,642 |
 
 Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
 retired aggregate verdict and the three `NOT_EXPOSED` names were removed outright; `reclaim`,
@@ -568,8 +569,8 @@ measurement is reproducible: `estigia mcp` answering `tools/list` on the built b
 
 The trim touched the descriptions only: names, argument names, types, enums, minimums and
 `required` lists are unchanged. The table had drifted to 56,133 bytes by then because nothing bounded
-it, and `TOOLS_LIST_CEILING` in `src/harness/mcp/tests.rs` now does, so growth past 44,325 fails
-without a reviewed edit to that constant. What the trim removed was text that did not help an agent
+it, and `TOOLS_LIST_CEILING` in `src/harness/mcp/tests.rs` now does, so growth past the registered
+ceiling fails without a reviewed edit to that constant. What the trim removed was text that did not help an agent
 call a tool: where a field moved to, and a measurement of the payload threshold. That measurement
 stays here: answers carrying 73,272 and 145,756 payload bytes were refused by the MCP surface and
 one carrying 36,288 was not, so the threshold sits inside the ordinary range, which is why

@@ -90,6 +90,33 @@ pub(crate) fn beside(state_root: &Path) -> PathBuf {
     state_root.with_file_name("state.db")
 }
 
+/// A read-only identity of the store file: the same while the file is the same
+/// file, and different once it is replaced.
+pub(crate) fn store_identity(path: &Path) -> String {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return "absent".to_owned();
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        format!("{:x}:{:x}", metadata.dev(), metadata.ino())
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt as _;
+        format!(
+            "{:x}:{:x}",
+            metadata.volume_serial_number().unwrap_or_default(),
+            metadata.file_index().unwrap_or_default()
+        )
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = metadata;
+        "unknown".to_owned()
+    }
+}
+
 /// Where review job directories live: `<home>/.estigia/jobs`, beside `state.db`.
 pub fn jobs_root(home: Option<&Path>) -> Result<PathBuf, Failure> {
     Ok(default_path(home)?.with_file_name("jobs"))
