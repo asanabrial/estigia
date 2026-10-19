@@ -90,6 +90,56 @@ pub(crate) fn beside(state_root: &Path) -> PathBuf {
     state_root.with_file_name("state.db")
 }
 
+/// A read-only identity of the store file: the same while the file is the same
+/// file, and different once it is replaced.
+pub(crate) fn store_identity(path: &Path) -> String {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        let Ok(metadata) = std::fs::metadata(path) else {
+            return "absent".to_owned();
+        };
+        format!("{:x}:{:x}", metadata.dev(), metadata.ino())
+    }
+    #[cfg(windows)]
+    {
+        if std::fs::metadata(path).is_err() {
+            return "absent".to_owned();
+        }
+        handle_identity(path)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        if std::fs::metadata(path).is_err() {
+            "absent".to_owned()
+        } else {
+            "unknown".to_owned()
+        }
+    }
+}
+
+#[cfg(windows)]
+fn handle_identity(path: &Path) -> String {
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+
+    let Ok(file) = std::fs::File::open(path) else {
+        return "unknown".to_owned();
+    };
+    let mut information = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), information.as_mut_ptr()) } == 0 {
+        return "unknown".to_owned();
+    }
+    let information = unsafe { information.assume_init() };
+    format!(
+        "{:x}:{:x}",
+        information.dwVolumeSerialNumber,
+        (u64::from(information.nFileIndexHigh) << 32) | u64::from(information.nFileIndexLow)
+    )
+}
+
 /// Where review job directories live: `<home>/.estigia/jobs`, beside `state.db`.
 pub fn jobs_root(home: Option<&Path>) -> Result<PathBuf, Failure> {
     Ok(default_path(home)?.with_file_name("jobs"))
@@ -441,5 +491,36 @@ fn order_ties_by_github(rows: &mut [(i64, ownership::Comment)]) {
         for (&index, row) in indices.iter().zip(tied) {
             rows[index] = row;
         }
+    }
+}
+
+#[cfg(test)]
+mod identity {
+    use super::store_identity;
+
+    #[test]
+    fn the_store_identity_is_stable_for_one_file_distinct_for_two_and_absent_for_no_file() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let one = directory.path().join("one.db");
+        let two = directory.path().join("two.db");
+        std::fs::write(&one, "one").expect("a first file");
+        std::fs::write(&two, "two").expect("a second file");
+
+        let identity = store_identity(&one);
+        assert_eq!(
+            identity,
+            store_identity(&one),
+            "the same file answered two identities, so a cursor could be refused for a store that never moved"
+        );
+        assert_ne!(
+            identity,
+            store_identity(&two),
+            "two files answered one identity, so a replaced store would go undetected"
+        );
+        assert_eq!(
+            store_identity(&directory.path().join("none.db")),
+            "absent",
+            "a path with no file did not answer the absent sentinel"
+        );
     }
 }

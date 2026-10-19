@@ -447,7 +447,7 @@ read   review_read      (issue, view, epoch, id, with_text, candidate, request, 
 read   review_tier      (base, head, parent_head, clearing_finding)
 read   target           (base, recorded_base, worktree, native_start, manifest)
 read   tasks            (issue)   # the ODD checklist, from the local store
-read   list_sessions    ()   # the entries `estigia sessions --json` prints
+read   list_sessions    ([status, runtime, run, session_id, repo_dir, limit, cursor])   # bounded page; no options answers the entries `estigia sessions --json` prints
 WRITE  claim            (issue, run_id, horizon[, takeover, target_operation, force, reason_file])
 WRITE  heartbeat        (issue, run_id, expect_state, body_file)
 WRITE  transition       (issue, to, run_id)
