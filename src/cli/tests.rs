@@ -123,6 +123,10 @@ fn inventory() -> Vec<Refusal> {
         super::sessions::cursor_store_replaced(),
         super::sessions::cursor_expired(),
         super::sessions::limit_too_large(crate::cli::sessions::MAX_LIMIT + 1),
+        super::sessions::selector_too_large(
+            "repo_dir",
+            crate::cli::sessions::MAX_SELECTOR_BYTES + 1,
+        ),
         super::sessions::unregistered_not_bounded(),
         crate::harness::mailbox::empty(),
         crate::harness::mailbox::too_long(9000),

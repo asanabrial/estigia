@@ -15,6 +15,7 @@ pub(crate) const MAX_LIMIT: u64 = 500;
 pub(crate) const PAGE_VERSION: u64 = 1;
 pub(crate) const CURSOR_TTL_SECONDS: u64 = 15 * 60;
 pub(crate) const MAX_CURSOR_BYTES: usize = 4096;
+pub(crate) const MAX_SELECTOR_BYTES: usize = 256;
 
 #[derive(Serialize)]
 pub(crate) struct Listed {
@@ -87,6 +88,23 @@ impl Selectors {
             && word(&self.run, &entry.run_id)
             && text(&self.session_id, &entry.session_id)
             && text(&self.repo_dir, &entry.repo_dir)
+    }
+
+    fn over_the_bound(&self) -> Option<(&'static str, usize)> {
+        [
+            ("status", &self.status),
+            ("runtime", &self.runtime),
+            ("run", &self.run),
+            ("session_id", &self.session_id),
+            ("repo_dir", &self.repo_dir),
+        ]
+        .into_iter()
+        .find_map(|(name, value)| {
+            value
+                .as_ref()
+                .filter(|value| value.len() > MAX_SELECTOR_BYTES)
+                .map(|value| (name, value.len()))
+        })
     }
 }
 
@@ -248,6 +266,20 @@ pub(super) fn limit_too_large(limit: u64) -> Refusal {
     )
 }
 
+pub(super) fn selector_too_large(name: &str, bytes: usize) -> Refusal {
+    Refusal::not_started(
+        "sessions-selector-too-large",
+        format!(
+            "`{name}` is {bytes} bytes and a selector is at most {MAX_SELECTOR_BYTES}; nothing was \
+             listed"
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            format!("a `{name}` of {MAX_SELECTOR_BYTES} bytes or fewer"),
+        ),
+    )
+}
+
 pub(super) fn unregistered_not_bounded() -> Refusal {
     Refusal::not_started(
         "sessions-unregistered-not-bounded",
@@ -396,9 +428,12 @@ pub(crate) fn entries(root: &Path) -> Result<Vec<Listed>, Refusal> {
 }
 
 /// One bounded page of the session registry, or the refusal that says why not.
-pub(crate) fn page(arguments: &Value, root: &Path) -> Result<Value, Refusal> {
-    let now = session::now_seconds().ok_or_else(clock_unreadable)?;
+pub(crate) fn page(arguments: &Value, root: &Path, now: Option<u64>) -> Result<Value, Refusal> {
+    let now = now.ok_or_else(clock_unreadable)?;
     let selectors = Selectors::of(arguments);
+    if let Some((name, bytes)) = selectors.over_the_bound() {
+        return Err(selector_too_large(name, bytes));
+    }
     if selectors.status.as_deref() == Some("unregistered") {
         return Err(unregistered_not_bounded());
     }

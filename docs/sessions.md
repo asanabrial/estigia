@@ -252,12 +252,16 @@ Codex and OpenCode.
 `list_sessions` with any option answers a **page** of the registry rather than the whole list. The answer is a
 versioned object: `version`, the page's `sessions`, its own accounting (`limit`, `returned`, `matched` — the rows
 the selectors matched as this page was taken — and `more`), a `next_cursor` that is `null` once the snapshot is
-exhausted, and the snapshot's identity (`taken_at`, and `stale_after` as before). `estigia sessions` and a
-`list_sessions` call with no options are unchanged: neither is bounded, and a caller that asks for nothing still
-gets every row.
+exhausted, and the snapshot's identity (`taken_at`, and `stale_after` as before). The page reads the clock once,
+for `taken_at` and a cursor's age; a clock that will not answer is refused `clock-unreadable`, never read as no
+time. `estigia sessions` and a `list_sessions` call with no options are unchanged: neither is bounded, and a
+caller that asks for nothing still gets every row.
 
 The selectors are `status` (`live`, `stale`, `ended` or `unknown`), `runtime`, `run` (a run id),
-`session_id` and `repo_dir`. `limit` is a positive whole number, default 50 and at most 500; a value that is
+`session_id` and `repo_dir`. Each is at most 256 bytes: a longer one is refused when it is given, with
+`sessions-selector-too-large`, because a selector is carried in the cursor the page issues and five at the
+bound hex-encode to 3,029 of the 4,096 bytes a cursor may be, leaving room for the run id and the store
+identity. `limit` is a positive whole number, default 50 and at most 500; a value that is
 not one — including an explicit `null` — is refused by the server's argument boundary (`flags_for`), which
 every tool call passes through before it is dispatched, and one above 500 by the page itself, rather than
 clamped. `cursor` is the `next_cursor` of the page before. The bounded form is the tool's alone: `estigia
@@ -269,7 +273,10 @@ is written once, when the session first registers, and never changes; `run_id` i
 order with a unique tie-breaker. Ordering by `last_seen` (a heartbeat) or by `status` (derived from a heartbeat
 and from the clock) is what this avoids: a heartbeat mid-traversal would move a row past the cursor and omit it,
 or move it back and duplicate it. A session that ends, restarts or is otherwise mutated between pages keeps its
-key and its place; a session that starts after `taken_at` is not in the snapshot and never appears. A pointer-only
+key and its place. Membership is frozen only to the second, because `started_at` has second granularity: a
+session that registers in the same second as `taken_at` — after that page was taken — is admitted by
+`started_at <= taken_at` and can appear in a later page, while one that registers after `taken_at` is not in the
+snapshot and never appears. A pointer-only
 run — a run pointer with no registry row — has no immutable start, so it is not in the snapshot at all; it is not
 bounded, and the no-omissions property is a property of the registry.
 
@@ -299,6 +306,7 @@ silently restarted, when:
 | `sessions-cursor-store-replaced` | The store file the cursor was issued against is gone or is another file. |
 | `sessions-cursor-expired` | The cursor is older than `CURSOR_TTL_SECONDS` (15 minutes). |
 | `sessions-limit-too-large` | `limit` is above the maximum. |
+| `sessions-selector-too-large` | A selector value is longer than the 256 bytes one may be. |
 | `sessions-unregistered-not-bounded` | `status=unregistered`: a pointer-only run is not a registry row and is not in the bounded snapshot; the full list still shows it. |
 
 The digest detects corruption and an edit that does not recompute it. **It is not a MAC, and possession of a

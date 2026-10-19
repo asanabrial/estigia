@@ -10272,6 +10272,11 @@ does not measure:
   full traversal has neither omissions nor duplicates under the tested mutations, but a row's `status` and
   `last_seen` are re-derived per page and can differ between pages. The cursor's digest detects corruption and an
   edit that does not recompute it; it is **not a MAC**, and possession of a cursor is not authorization.
+- **A snapshot's membership is frozen only to the second.** `started_at` has second granularity, so
+  `started_at <= taken_at` admits a session that registers in the same wall-clock second as `taken_at` but after
+  the page was taken, and a later page can show a row the first page never had. The ordering key is what is
+  frozen outright; the behaviour is pinned as a baseline by
+  `a_session_registered_in_the_same_second_as_taken_at_can_join_the_walk`.
 - **An unreadable store answers the shared `unknown` identity.** Where the store's identity cannot be read — the
   Windows arm when its handle read fails, and any platform that is neither Unix nor Windows — `store_identity`
   answers `unknown`, which every such store shares, so the cursor's store check cannot tell two of them apart; a

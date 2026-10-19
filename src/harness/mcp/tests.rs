@@ -6836,7 +6836,7 @@ mod send_message {
     #[test]
     fn a_limit_the_shared_boundary_cannot_read_is_refused_before_the_page() {
         let rig = Rig::new();
-        for limit in [json!(0), json!(-1), json!(1.5), json!("5")] {
+        for limit in [json!(0), json!(-1), json!(1.5), json!("5"), json!(null)] {
             let failure = rig
                 .list(json!({"limit": limit}))
                 .expect_err("a malformed call");
@@ -6855,6 +6855,17 @@ mod send_message {
                 "{limit} did not answer the malformed-params code: {answer}"
             );
         }
+
+        let ToolFailure::Malformed(said) = rig
+            .list(json!({"limit": null}))
+            .expect_err("a malformed call")
+        else {
+            panic!("a null `limit` was not answered as a malformed call");
+        };
+        assert!(
+            said.contains("whole number"),
+            "`docs/sessions.md` says the integer check answers a null, and this is not it: {said}"
+        );
     }
 
     #[test]
@@ -6942,5 +6953,120 @@ mod send_message {
             "`matched` is the page's own count, not one held across the walk"
         );
         assert_eq!(second["next_cursor"], Value::Null);
+    }
+
+    #[test]
+    fn a_cursor_from_another_version_is_refused() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let token = crate::cli::sessions::cursor_token(&crate::cli::sessions::Cursor {
+            version: crate::cli::sessions::PAGE_VERSION + 1,
+            selectors: crate::cli::sessions::Selectors::default(),
+            taken_at: 1,
+            last_started_at: 0,
+            last_run_id: "claude-send0a1b2c3d".to_owned(),
+            store: store::store_identity(&store::beside(&context.state_root)),
+        });
+        let code = refusal_code(rig.list(json!({"cursor": token})).expect_err("a refusal"));
+        assert_eq!(code, "sessions-cursor-mismatch");
+    }
+
+    #[test]
+    fn a_clock_that_cannot_be_read_refuses_the_page() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let refusal = crate::cli::sessions::page(&json!({}), &context.state_root, None)
+            .expect_err("a refusal");
+        assert_eq!(refusal.code, "clock-unreadable");
+    }
+
+    #[test]
+    fn a_selector_past_the_bound_is_refused_with_the_bound_named() {
+        let rig = Rig::new();
+        let too_long = "d".repeat(crate::cli::sessions::MAX_SELECTOR_BYTES + 1);
+        let ToolFailure::Refused(refusal) = rig
+            .list(json!({"repo_dir": too_long}))
+            .expect_err("a refusal")
+        else {
+            panic!("refused as something other than a refusal");
+        };
+        assert_eq!(refusal.code, "sessions-selector-too-large");
+        assert!(
+            refusal
+                .message
+                .contains(&crate::cli::sessions::MAX_SELECTOR_BYTES.to_string()),
+            "the refusal does not say what the bound is: {}",
+            refusal.message
+        );
+    }
+
+    #[test]
+    fn a_selector_at_the_bound_is_issued_a_cursor_the_tool_accepts() {
+        let rig = Rig::new();
+        let bound = crate::cli::sessions::MAX_SELECTOR_BYTES;
+        let long = |byte: char| byte.to_string().repeat(bound);
+        let (runtime, session_id, repo_dir) = (long('u'), long('s'), long('d'));
+        let (first, second) = (long('a'), long('b'));
+        rig.seen(&first, &runtime, &session_id, Some(&repo_dir), 5_000);
+        rig.seen(&second, &runtime, &session_id, Some(&repo_dir), 5_001);
+
+        let mut walked: Vec<String> = Vec::new();
+        let mut cursor: Option<String> = None;
+        loop {
+            let mut arguments = json!({
+                "runtime": runtime.clone(),
+                "session_id": session_id.clone(),
+                "repo_dir": repo_dir.clone(),
+                "limit": 1,
+            });
+            if let Some(token) = &cursor {
+                arguments["cursor"] = json!(token);
+            }
+            let page = answered(rig.list(arguments).expect("a page"));
+            walked.extend(run_ids(&page));
+            let Some(token) = page["next_cursor"].as_str().map(str::to_owned) else {
+                break;
+            };
+            assert!(
+                token.len() <= crate::cli::sessions::MAX_CURSOR_BYTES,
+                "the tool issued a {}-byte cursor, past the {} it accepts",
+                token.len(),
+                crate::cli::sessions::MAX_CURSOR_BYTES
+            );
+            cursor = Some(token);
+        }
+        assert_eq!(
+            walked,
+            vec![first, second],
+            "the walk did not visit the whole snapshot with the cursors it was issued"
+        );
+    }
+
+    /// `started_at` has second granularity, so `started_at <= taken_at` admits a
+    /// session that registers in the same second as `taken_at` but after the
+    /// first page was taken. This pins that membership is frozen only to the
+    /// second, while the ordering key is what is frozen outright; a design that
+    /// stored the snapshot would move it.
+    #[test]
+    fn a_session_registered_in_the_same_second_as_taken_at_can_join_the_walk() {
+        let rig = Rig::new();
+        rig.seen("claude-a0000001", "claude", "host-a", None, 5_000);
+        rig.seen("codex-b0000002", "codex", "host-b", None, 5_001);
+
+        let first = answered(rig.list(json!({"limit": 1})).expect("a first page"));
+        let taken_at = first["taken_at"].as_u64().expect("a snapshot time");
+        let cursor = first["next_cursor"].as_str().expect("a cursor").to_owned();
+
+        rig.seen("pi-c0000003", "pi", "host-c", None, taken_at);
+
+        let second = answered(
+            rig.list(json!({"limit": 10, "cursor": cursor}))
+                .expect("a continued page"),
+        );
+        assert!(
+            run_ids(&second).contains(&"pi-c0000003".to_owned()),
+            "a row registered in the second of `taken_at` was not admitted: {:?}",
+            run_ids(&second)
+        );
     }
 }

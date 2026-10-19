@@ -252,7 +252,7 @@ pub(super) fn list_sessions(
     context: &GateContext,
 ) -> Result<Value, ToolFailure> {
     if arguments.as_object().is_some_and(|sent| !sent.is_empty()) {
-        return crate::cli::sessions::page(arguments, &context.state_root)
+        return crate::cli::sessions::page(arguments, &context.state_root, session::now_seconds())
             .map(|page| text_result(page.to_string()))
             .map_err(refused);
     }
