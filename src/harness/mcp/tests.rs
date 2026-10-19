@@ -6834,11 +6834,26 @@ mod send_message {
     }
 
     #[test]
-    fn a_limit_that_is_not_a_positive_whole_number_is_refused_with_its_own_code() {
+    fn a_limit_the_shared_boundary_cannot_read_is_refused_before_the_page() {
         let rig = Rig::new();
         for limit in [json!(0), json!(-1), json!(1.5), json!("5")] {
-            let code = refusal_code(rig.list(json!({"limit": limit})).expect_err("a refusal"));
-            assert_eq!(code, "sessions-limit-invalid", "{limit}");
+            let failure = rig
+                .list(json!({"limit": limit}))
+                .expect_err("a malformed call");
+            assert!(
+                matches!(failure, ToolFailure::Malformed(_)),
+                "{limit} was answered as something other than a malformed call: {failure}"
+            );
+            let answer = ask(json!({
+                "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+                "params": { "name": "list_sessions", "arguments": { "limit": limit } },
+            }))
+            .expect("an answer");
+            assert_eq!(
+                answer["error"]["code"],
+                super::super::code::INVALID_PARAMS,
+                "{limit} did not answer the malformed-params code: {answer}"
+            );
         }
     }
 

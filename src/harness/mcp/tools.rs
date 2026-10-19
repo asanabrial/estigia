@@ -487,7 +487,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "limit",
                 "integer",
-                "The most rows this page answers: a positive whole number, default 50, at most 500.",
+                "The most rows this page answers. Defaults to 50; a value above 500 is refused.",
             )
             .counting_from(1),
             Argument::optional(

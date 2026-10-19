@@ -257,8 +257,9 @@ exhausted, and the snapshot's identity (`taken_at`, and `stale_after` as before)
 gets every row.
 
 The selectors are `status` (`live`, `stale`, `ended` or `unknown`), `runtime`, `run` (a run id),
-`session_id` and `repo_dir`. `limit` is a positive whole number, default 50 and at most 500; a value that is not
-one, or is above 500, is refused rather than clamped. `cursor` is the `next_cursor` of the page before.
+`session_id` and `repo_dir`. `limit` is a positive whole number, default 50 and at most 500; a value that is
+not one is refused by the shared argument boundary (`flags_for`), and one above 500 by the page itself, rather
+than clamped. `cursor` is the `next_cursor` of the page before.
 
 **Ordering and the snapshot.** A bounded page's snapshot is the registry rows with an immutable start, and a page
 orders them by `(started_at, run_id)`; the snapshot is every such row whose `started_at <= taken_at`. `started_at`
@@ -293,7 +294,6 @@ identity of the store file. A later call must repeat the same selectors; the cur
 | `sessions-cursor-mismatch` | The call's selectors or the response version differ from the cursor's. |
 | `sessions-cursor-store-replaced` | The store file the cursor was issued against is gone or is another file. |
 | `sessions-cursor-expired` | The cursor is older than `CURSOR_TTL_SECONDS` (15 minutes). |
-| `sessions-limit-invalid` | `limit` is present and is not a positive whole number. |
 | `sessions-limit-too-large` | `limit` is above the maximum. |
 | `sessions-unregistered-not-bounded` | `status=unregistered`: a pointer-only run is not a registry row and is not in the bounded snapshot; the full list still shows it. |
 

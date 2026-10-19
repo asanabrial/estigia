@@ -248,22 +248,6 @@ pub(super) fn limit_too_large(limit: u64) -> Refusal {
     )
 }
 
-pub(super) fn limit_invalid(value: &Value) -> Refusal {
-    Refusal::not_started(
-        "sessions-limit-invalid",
-        format!(
-            "`limit` is {value} and a page size is a positive whole number of rows, at most \
-             {MAX_LIMIT}; nothing was listed"
-        ),
-        Resolution::no_command(
-            NoCommandReason::OperatorKnowledge,
-            format!(
-                "a `limit` between 1 and {MAX_LIMIT}, or no `limit` for the default {DEFAULT_LIMIT}"
-            ),
-        ),
-    )
-}
-
 pub(super) fn unregistered_not_bounded() -> Refusal {
     Refusal::not_started(
         "sessions-unregistered-not-bounded",
@@ -418,17 +402,10 @@ pub(crate) fn page(arguments: &Value, root: &Path) -> Result<Value, Refusal> {
     if selectors.status.as_deref() == Some("unregistered") {
         return Err(unregistered_not_bounded());
     }
-    let limit = match arguments.get("limit") {
+    let limit = match arguments.get("limit").and_then(Value::as_u64) {
+        Some(limit) if limit > MAX_LIMIT => return Err(limit_too_large(limit)),
+        Some(limit) => limit,
         None => DEFAULT_LIMIT,
-        Some(value) => {
-            let Some(limit) = value.as_u64().filter(|limit| *limit >= 1) else {
-                return Err(limit_invalid(value));
-            };
-            if limit > MAX_LIMIT {
-                return Err(limit_too_large(limit));
-            }
-            limit
-        }
     };
     let store_id = store::store_identity(&store::beside(root));
     let (taken_at, after) = match arguments.get("cursor").and_then(Value::as_str) {
