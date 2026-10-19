@@ -238,6 +238,20 @@ pub(super) fn limit_too_large(limit: u64) -> Refusal {
     )
 }
 
+pub(super) fn unregistered_not_bounded() -> Refusal {
+    Refusal::not_started(
+        "sessions-unregistered-not-bounded",
+        "a bounded page's snapshot is the registry rows, which carry the start time a snapshot \
+         freezes, and a pointer-only run is not one of them, so `status=unregistered` matches \
+         nothing here; the full list — `estigia sessions`, or `list_sessions` with no options — \
+         still shows those runs",
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "`list_sessions` with no options, or `estigia sessions`, for the pointer-only runs",
+        ),
+    )
+}
+
 fn clock_unreadable() -> Refusal {
     Refusal::unavailable(
         "clock-unreadable",
@@ -246,23 +260,25 @@ fn clock_unreadable() -> Refusal {
     )
 }
 
-fn entries_with_start(
+/// The registry rows, keyed by their immutable start, and the pointer-only runs
+/// beside them. Only the first carries the creation value a snapshot freezes.
+fn registry_and_pointers(
     rows: Vec<SessionRow>,
     holdings: Vec<session::Run>,
     now: Option<u64>,
-) -> Vec<(u64, Listed)> {
+) -> (Vec<(u64, Listed)>, Vec<Listed>) {
     let mut pointers: std::collections::BTreeMap<String, session::Run> = holdings
         .into_iter()
         .map(|run| (run.run_id.clone(), run))
         .collect();
-    let mut entries: Vec<(u64, Listed)> = Vec::new();
+    let mut registry: Vec<(u64, Listed)> = Vec::new();
     for row in rows {
         let pointer = pointers.remove(&row.run_id);
         let last_seen = pointer
             .as_ref()
             .and_then(|run| run.verified_at)
             .map_or(row.last_seen, |verified| verified.max(row.last_seen));
-        entries.push((
+        registry.push((
             row.started_at,
             Listed {
                 status: status_of(row.ended_at.is_some(), Some(last_seen), now),
@@ -285,6 +301,7 @@ fn entries_with_start(
             },
         ));
     }
+    let mut unregistered: Vec<Listed> = Vec::new();
     for (run_id, run) in pointers {
         let runtime = match session::run_id_shape(&run_id) {
             session::RunIdShape::Named { runtime } | session::RunIdShape::Nameless { runtime } => {
@@ -292,34 +309,32 @@ fn entries_with_start(
             }
             _ => "unknown".to_owned(),
         };
-        entries.push((
-            0,
-            Listed {
-                run_id,
-                runtime,
-                session_id: None,
-                status: "unregistered",
-                issue: run.issue,
-                state: run.state,
-                last_seen: run.verified_at,
-                silent_for: run
-                    .verified_at
-                    .zip(now)
-                    .map(|(seen, now)| now.saturating_sub(seen)),
-                repo_dir: run.repo_dir.map(|path| path.display().to_string()),
-                worktree: run.worktree.map(|path| path.display().to_string()),
-                ended_at: None,
-                end_reason: None,
-                waiting: 0,
-                undelivered_sent: 0,
-            },
-        ));
+        unregistered.push(Listed {
+            run_id,
+            runtime,
+            session_id: None,
+            status: "unregistered",
+            issue: run.issue,
+            state: run.state,
+            last_seen: run.verified_at,
+            silent_for: run
+                .verified_at
+                .zip(now)
+                .map(|(seen, now)| now.saturating_sub(seen)),
+            repo_dir: run.repo_dir.map(|path| path.display().to_string()),
+            worktree: run.worktree.map(|path| path.display().to_string()),
+            ended_at: None,
+            end_reason: None,
+            waiting: 0,
+            undelivered_sent: 0,
+        });
     }
-    entries
+    (registry, unregistered)
 }
 
 fn listed(rows: Vec<SessionRow>, holdings: Vec<session::Run>, now: Option<u64>) -> Vec<Listed> {
-    let mut entries = entries_with_start(rows, holdings, now);
+    let (mut entries, unregistered) = registry_and_pointers(rows, holdings, now);
+    entries.extend(unregistered.into_iter().map(|entry| (0, entry)));
     entries.sort_by(|a, b| {
         b.1.last_seen
             .cmp(&a.1.last_seen)
@@ -374,6 +389,9 @@ pub(crate) fn entries(root: &Path) -> Result<Vec<Listed>, Refusal> {
 pub(crate) fn page(arguments: &Value, root: &Path) -> Result<Value, Refusal> {
     let now = session::now_seconds().ok_or_else(clock_unreadable)?;
     let selectors = Selectors::of(arguments);
+    if selectors.status.as_deref() == Some("unregistered") {
+        return Err(unregistered_not_bounded());
+    }
     let limit = match arguments.get("limit").and_then(Value::as_u64) {
         Some(limit) if limit > MAX_LIMIT => return Err(limit_too_large(limit)),
         Some(limit) => limit,
@@ -404,7 +422,7 @@ pub(crate) fn page(arguments: &Value, root: &Path) -> Result<Value, Refusal> {
     };
 
     let (rows, waiting, undelivered) = read(root)?;
-    let mut snapshot = entries_with_start(rows, session::holdings(root), Some(taken_at));
+    let (mut snapshot, _) = registry_and_pointers(rows, session::holdings(root), Some(taken_at));
     snapshot.retain(|(started_at, _)| *started_at <= taken_at);
     snapshot.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.run_id.cmp(&b.1.run_id)));
     for (_, entry) in &mut snapshot {

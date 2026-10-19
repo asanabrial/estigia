@@ -5833,7 +5833,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 46_700;
+const TOOLS_LIST_CEILING: usize = 46_800;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -6606,6 +6606,63 @@ mod send_message {
     }
 
     #[test]
+    fn a_pointer_only_run_is_absent_from_a_bounded_traversal_and_present_in_the_full_list() {
+        let rig = Rig::new();
+        rig.seen("claude-a0000001", "claude", "host-a", None, 5_000);
+        rig.seen("codex-b0000002", "codex", "host-b", None, 5_001);
+        rig.pointer("pi-old0a1b2c3d", 11);
+        let first = answered(rig.list(json!({"limit": 1})).expect("a first page"));
+        rig.pointer("pi-new0a1b2c3d", 12);
+        let mut walked = run_ids(&first);
+        let mut cursor = first["next_cursor"].as_str().map(str::to_owned);
+        while let Some(token) = cursor {
+            let answer = answered(
+                rig.list(json!({"limit": 1, "cursor": token}))
+                    .expect("a continued page"),
+            );
+            walked.extend(run_ids(&answer));
+            cursor = answer["next_cursor"].as_str().map(str::to_owned);
+        }
+        assert_eq!(
+            walked,
+            vec![
+                "claude-send0a1b2c3d",
+                "codex-recv0a1b2c3d",
+                "claude-a0000001",
+                "codex-b0000002"
+            ],
+            "a bounded snapshot is the registry rows, and a pointer-only run is not one of them"
+        );
+
+        let full = run_ids(&answered(rig.list(json!({})).expect("the full list")));
+        assert!(full.contains(&"pi-old0a1b2c3d".to_owned()), "{full:?}");
+        assert!(full.contains(&"pi-new0a1b2c3d".to_owned()), "{full:?}");
+    }
+
+    #[test]
+    fn a_status_unregistered_selector_is_refused_through_the_tool() {
+        let rig = Rig::new();
+        rig.pointer("pi-ghost0a1b2c3d", 12);
+        let ToolFailure::Refused(refusal) = rig
+            .list(json!({"status": "unregistered"}))
+            .expect_err("a refusal")
+        else {
+            panic!("refused as something other than a refusal");
+        };
+        assert_eq!(refusal.code, "sessions-unregistered-not-bounded");
+        assert!(
+            refusal.message.contains("pointer-only"),
+            "the refusal does not name what is missing: {}",
+            refusal.message
+        );
+        assert!(
+            refusal.message.contains("estigia sessions"),
+            "the refusal does not say the full list still shows it: {}",
+            refusal.message
+        );
+    }
+
+    #[test]
     fn selectors_answer_only_the_rows_they_name() {
         let rig = Rig::new();
         let now = crate::harness::session::now_seconds().expect("a clock");
@@ -6653,14 +6710,7 @@ mod send_message {
             selected(json!({"status": "ended"})),
             vec!["codex-end0a1b2c3d"]
         );
-        assert_eq!(
-            selected(json!({"status": "unregistered"})),
-            vec!["pi-ghost0a1b2c3d"]
-        );
-        assert_eq!(
-            selected(json!({"runtime": "pi"})),
-            vec!["pi-ghost0a1b2c3d", "pi-stale0a1b2c3d"]
-        );
+        assert_eq!(selected(json!({"runtime": "pi"})), vec!["pi-stale0a1b2c3d"]);
         assert_eq!(
             selected(json!({"run": "codex-end0a1b2c3d"})),
             vec!["codex-end0a1b2c3d"]

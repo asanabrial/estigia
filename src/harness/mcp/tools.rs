@@ -467,7 +467,9 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "status",
                 "string",
-                "Answer only sessions in this state: live, stale, ended, unregistered or unknown.",
+                "Answer only sessions in this state: live, stale, ended or unknown. \
+                 `unregistered` is refused: a bounded page is the registry rows, and a \
+                 pointer-only run has no start time to freeze.",
             )
             .of(crate::cli::sessions::STATUSES),
             Argument::optional("runtime", "string", "Answer only sessions of this runtime."),

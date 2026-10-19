@@ -10272,9 +10272,10 @@ does not measure:
   full traversal has neither omissions nor duplicates under the tested mutations, but a row's `status` and
   `last_seen` are re-derived per page and can differ between pages. The cursor's digest detects corruption and an
   edit that does not recompute it; it is **not a MAC**, and possession of a cursor is not authorization.
-- **A pointer-only `unregistered` row carries no start time.** It is placed at the head of the order and is not
-  filtered by the snapshot time, so a pointer created mid-traversal can be seen by a later page. The
-  no-omissions property is measured over registry rows, not over pointers.
+- **A bounded page's snapshot is the registry rows only.** A pointer-only run has no immutable start, so it is not
+  in the snapshot and a bounded traversal can neither omit nor duplicate it; `status=unregistered` is refused with
+  `sessions-unregistered-not-bounded`, and the full list (`estigia sessions`, or `list_sessions` with no options)
+  still shows those runs. The no-omissions property is therefore a property of the registry.
 - **A bounded answer has no fixed byte ceiling.** What bounds it is the page size (`limit`, default 50 and at most
   500) and the row shape. The baseline measurement — a real `list_sessions` call on 2026-10-18 returning 433
   sessions whose compact JSON was 141,698 UTF-8 bytes — is a response-size measurement, not a billed-token

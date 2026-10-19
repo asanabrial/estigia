@@ -413,6 +413,7 @@ const REFUSED: &[&str] = &[
     "sessions-cursor-tampered",
     "sessions-cursor-too-large",
     "sessions-limit-too-large",
+    "sessions-unregistered-not-bounded",
     "skill-not-installed",
     "skill-root-unknown",
     "source-build-not-allowed",

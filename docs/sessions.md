@@ -256,19 +256,19 @@ exhausted, and the snapshot's identity (`taken_at`, and `stale_after` as before)
 `list_sessions` call with no options are unchanged: neither is bounded, and a caller that asks for nothing still
 gets every row.
 
-The selectors are `status` (`live`, `stale`, `ended`, `unregistered` or `unknown`), `runtime`, `run` (a run id),
+The selectors are `status` (`live`, `stale`, `ended` or `unknown`), `runtime`, `run` (a run id),
 `session_id` and `repo_dir`. `limit` is a positive integer, default 50 and at most 500; a value above 500 is
 refused rather than clamped. `cursor` is the `next_cursor` of the page before.
 
-**Ordering and the snapshot.** A page orders the rows by `(started_at, run_id)`, and the snapshot is every row
-whose `started_at <= taken_at`. `started_at` is written once, when the session first registers, and never changes;
-`run_id` is unique, so the pair is a total order with a unique tie-breaker. Ordering by `last_seen` (a heartbeat)
-or by `status` (derived from a heartbeat and from the clock) is what this avoids: a heartbeat mid-traversal would
-move a row past the cursor and omit it, or move it back and duplicate it. A session that ends, restarts or is
-otherwise mutated between pages keeps its key and its place; a session that starts after `taken_at` is not in the
-snapshot and never appears. A row that is only a run pointer, with no registry row, records no start time; it is
-placed at the head of the order and cannot be filtered by `taken_at`, so a pointer that appears mid-traversal can
-be seen by a later page.
+**Ordering and the snapshot.** A bounded page's snapshot is the registry rows with an immutable start, and a page
+orders them by `(started_at, run_id)`; the snapshot is every such row whose `started_at <= taken_at`. `started_at`
+is written once, when the session first registers, and never changes; `run_id` is unique, so the pair is a total
+order with a unique tie-breaker. Ordering by `last_seen` (a heartbeat) or by `status` (derived from a heartbeat
+and from the clock) is what this avoids: a heartbeat mid-traversal would move a row past the cursor and omit it,
+or move it back and duplicate it. A session that ends, restarts or is otherwise mutated between pages keeps its
+key and its place; a session that starts after `taken_at` is not in the snapshot and never appears. A pointer-only
+run — a run pointer with no registry row — has no immutable start, so it is not in the snapshot at all; it is not
+bounded, and the no-omissions property is a property of the registry.
 
 **The cursor is bound, not trusted.** A `next_cursor` carries the response `version` (which fixes the
 ordering), the selectors it was issued for, the snapshot's `taken_at`, the key of the last row returned, and an
@@ -284,6 +284,7 @@ identity of the store file. A later call must repeat the same selectors; the cur
 | `sessions-cursor-store-replaced` | The store file the cursor was issued against is gone or is another file. |
 | `sessions-cursor-expired` | The cursor is older than `CURSOR_TTL_SECONDS` (15 minutes). |
 | `sessions-limit-too-large` | `limit` is above the maximum. |
+| `sessions-unregistered-not-bounded` | `status=unregistered`: a pointer-only run is not a registry row and is not in the bounded snapshot; the full list still shows it. |
 
 The digest detects corruption and an edit that does not recompute it. **It is not a MAC, and possession of a
 cursor is not authorization**: anybody who can read a `next_cursor` can hand it back, and the answer is the same

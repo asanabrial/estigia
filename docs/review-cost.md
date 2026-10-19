@@ -555,7 +555,7 @@ the exact bytes a client receives for the table.
 | Issue #69, `review_tier` gains `raise`, `raise_reason` and `focus_reason` (ceiling set to the measured size) | 33 | 43,055 |
 | Issue #69, `publish_review` and `republish_review` take the same four arguments (ceiling set to the measured size) | 33 | 44,277 |
 | `send_message` and `list_sessions` join, answered from the local store (ceiling set to the measured size) | 35 | 45,266 |
-| `list_sessions` gains bounded discovery: seven optional selectors and paging arguments (ceiling set to the measured size) | 35 | 46,642 |
+| `list_sessions` gains bounded discovery: seven optional selectors and paging arguments (ceiling set to the measured size) | 35 | 46,744 |
 
 Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
 retired aggregate verdict and the three `NOT_EXPOSED` names were removed outright; `reclaim`,
