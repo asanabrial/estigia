@@ -9860,6 +9860,15 @@ pointer that leaves it names the document it points at.
   `usage.json` in the job directory, so a reader must check `job_status` before trusting the counters
   of a job whose result is gone.
 
+  **A missing artifact is unknown, not zero.** `read_usage` answers `None` both when the CLI reported
+  no usage and when the counters could not be stored — a failed usage write is reported on the
+  runner's standard error (`runner.err`) and never becomes the job's outcome, so a job can finish with
+  its answer and no artifact for a reason other than "the CLI reported none". The two are not
+  distinguished, and neither is a measurement. An artifact that exists but is not JSON, is another
+  format, names no provider, holds no counters or carries a counter that is not a whole number is an
+  `Err`: corrupt, and likewise never a zero. What is not measured here is whether a consumer folding
+  counters in reads `None` as unknown rather than as zero — no such consumer exists yet.
+
 ## Refusals, and the way out they name
 
 - **A refusal that names no way out is measured at build time, and the 74 the guard reports are

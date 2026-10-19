@@ -709,7 +709,17 @@ number), preserves nothing: no file is written, and the review succeeds or fails
 before.
 
 **Reading it back.** `estigia::reviewer::job::read_usage(dir)` answers the counters a finished job
-preserved, or `None` for a job whose CLI reported none or whose directory holds no artifact.
+preserved. `None` is the **unknown** state, and it has two causes that are deliberately not
+distinguished: the CLI reported no usage, or the counters could not be stored. An artifact that
+exists but is not JSON, is another format, names no provider, holds no counters or carries a counter
+that is not a whole number is an `Err` — corrupt rather than unknown. An empty counter set is
+refused the same way, because the writer never emits one.
+
+**A failed usage write is not the job's outcome.** The answer is the outcome whatever happens to the
+artifact: a usage write that fails is reported on the runner's standard error (the `runner.err` the
+detached spawner already captures) and leaves the counters unknown, rather than turning a review that
+succeeded into a refusal. Auxiliary work must never conceal or overwrite a command's answer, and a
+missing `usage.json` is therefore read as unknown, never as zero.
 
 **Why separately.** The admitted answer's bytes are byte-identical whether or not the CLI reported
 usage, and `result.json` is byte-identical with and without it. That is the point of the separation:

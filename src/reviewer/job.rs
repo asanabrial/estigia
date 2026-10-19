@@ -238,12 +238,21 @@ fn usage_json(usage: &Usage) -> serde_json::Value {
     })
 }
 
-fn write_usage(dir: &Path, usage: Option<&Usage>) -> Result<(), Refusal> {
+fn write_usage(dir: &Path, usage: Option<&Usage>) -> std::io::Result<()> {
     let Some(usage) = usage else {
         return Ok(());
     };
     replace_atomically(&dir.join(USAGE), &usage_json(usage).to_string())
-        .map_err(|e| refused(format!("the review job usage could not be written: {e}")))
+}
+
+fn report_usage_failure(dir: &Path, error: &std::io::Error) {
+    use std::io::Write as _;
+    let _ = writeln!(
+        std::io::stderr(),
+        "the review job usage artifact {} could not be written: {error}; the reviewer's answer is \
+         still the job's outcome, and its counters are unknown",
+        dir.join(USAGE).display()
+    );
 }
 
 fn take_lock(dir: &Path) -> Result<File, Refusal> {
@@ -262,12 +271,14 @@ fn take_lock(dir: &Path) -> Result<File, Refusal> {
 /// The runner: holds the job's lock for as long as it runs, asks the selected
 /// adapter for the reviewer's answer exactly as a synchronous launch would, and
 /// leaves `result.json` with the provider's own usage in `usage.json` beside it
-/// when the reviewer's CLI reported any. The usage is written before the result
-/// and never inside it, so a finished result never arrives without its usage and
-/// the admitted answer's bytes do not move with it. It writes nothing else
-/// outside `dir`, and never the ledger. A manifest it cannot read, or an adapter
-/// it cannot select, is recorded as a refusal rather than left as a silent
-/// absence.
+/// when the reviewer's CLI reported any. The answer is the outcome whatever
+/// happens to the usage: a usage write that fails is reported on the runner's
+/// standard error and leaves the counters unknown rather than turning a review
+/// that succeeded into a refusal. The usage is written before the result and
+/// never inside it, so a finished result never arrives without its usage and the
+/// admitted answer's bytes do not move with it. It writes nothing else outside
+/// `dir`, and never the ledger. A manifest it cannot read, or an adapter it
+/// cannot select, is recorded as a refusal rather than left as a silent absence.
 pub fn run(
     dir: &Path,
     select: &dyn Fn() -> Result<Box<dyn Adapter>, Refusal>,
@@ -277,7 +288,9 @@ pub fn run(
         .map_err(|e| refused(format!("the review job could not mark itself started: {e}")))?;
     let outcome = load(dir).and_then(|invocation| {
         let review = select()?.review_with_usage(&invocation)?;
-        write_usage(dir, review.usage.as_ref())?;
+        if let Err(error) = write_usage(dir, review.usage.as_ref()) {
+            report_usage_failure(dir, &error);
+        }
         Ok(review.answer)
     });
     replace_atomically(&dir.join(RESULT), &result_json(&outcome).to_string())
@@ -317,7 +330,12 @@ fn read_result(dir: &Path) -> Result<Option<JobResult>, Failure> {
 }
 
 /// Reads the provider's own usage a job preserved in `usage.json`, or `None`
-/// when its reviewer reported none or the directory holds no artifact. It is
+/// when the directory holds no artifact — which is the unknown state: either the
+/// reviewer's CLI reported no usage or the counters could not be stored, and
+/// neither is a measurement. An artifact that exists but is not JSON, is another
+/// format, names no provider, holds no counters or carries a counter that is not
+/// a whole number is an `Err`: it is corrupt rather than unknown. An empty
+/// counter set is refused the same way, because the writer never emits one. It is
 /// written beside `result.json` and never inside it, so reading it never moves
 /// the admitted answer.
 pub fn read_usage(dir: &Path) -> Result<Option<Usage>, Failure> {
@@ -346,6 +364,9 @@ pub fn read_usage(dir: &Path) -> Result<Option<Usage>, Failure> {
             .as_u64()
             .ok_or_else(|| unreadable("carries a counter that is not a whole number"))?;
         counted.insert(name.clone(), count);
+    }
+    if counted.is_empty() {
+        return Err(unreadable("carries no counters"));
     }
     Ok(Some(Usage {
         provider: provider.to_owned(),

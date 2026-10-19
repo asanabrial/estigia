@@ -322,3 +322,83 @@ fn the_usage_artifact_never_changes_the_admitted_answer_bytes() {
         "the usage moved the admitted answer's bytes"
     );
 }
+
+#[test]
+fn a_usage_write_that_fails_leaves_the_answer_as_the_outcome() {
+    let (_root, dir) = prepared();
+    std::fs::create_dir(dir.join(USAGE))
+        .expect("a directory where the usage artifact would be written");
+
+    let select = || -> Result<Box<dyn Adapter>, Refusal> { Ok(Box::new(Reports(Some(usage())))) };
+    OnThread(select).start(&dir).expect("the runner starts");
+
+    assert_eq!(
+        finished(&dir),
+        JobResult::Answer(b"the answer".to_vec()),
+        "a failed usage write turned the review's answer into a refusal"
+    );
+}
+
+fn usage_artifact(dir: &std::path::Path, content: &str) {
+    std::fs::write(dir.join(USAGE), content).expect("the usage artifact is written");
+}
+
+#[test]
+fn the_reader_refuses_a_usage_artifact_that_is_not_json() {
+    let dir = tempfile::tempdir().unwrap();
+    usage_artifact(dir.path(), "not json at all");
+    let error = read_usage(dir.path()).expect_err("a corrupt artifact is an error");
+    assert!(error.detail().contains("not JSON"), "{error:?}");
+}
+
+#[test]
+fn the_reader_refuses_a_usage_artifact_in_another_format() {
+    let dir = tempfile::tempdir().unwrap();
+    usage_artifact(
+        dir.path(),
+        r#"{"format": 99, "provider": "claude", "counters": {"input_tokens": 1}}"#,
+    );
+    let error = read_usage(dir.path()).expect_err("a foreign format is an error");
+    assert!(error.detail().contains("format"), "{error:?}");
+}
+
+#[test]
+fn the_reader_refuses_a_usage_artifact_that_names_no_provider() {
+    let dir = tempfile::tempdir().unwrap();
+    usage_artifact(
+        dir.path(),
+        r#"{"format": 1, "counters": {"input_tokens": 1}}"#,
+    );
+    let error = read_usage(dir.path()).expect_err("a providerless artifact is an error");
+    assert!(error.detail().contains("provider"), "{error:?}");
+}
+
+#[test]
+fn the_reader_refuses_a_usage_artifact_that_holds_no_counters_field() {
+    let dir = tempfile::tempdir().unwrap();
+    usage_artifact(dir.path(), r#"{"format": 1, "provider": "claude"}"#);
+    let error = read_usage(dir.path()).expect_err("a counterless artifact is an error");
+    assert!(error.detail().contains("counters"), "{error:?}");
+}
+
+#[test]
+fn the_reader_refuses_a_usage_artifact_with_a_counter_that_is_not_a_whole_number() {
+    let dir = tempfile::tempdir().unwrap();
+    usage_artifact(
+        dir.path(),
+        r#"{"format": 1, "provider": "claude", "counters": {"input_tokens": "many"}}"#,
+    );
+    let error = read_usage(dir.path()).expect_err("a non-numeric counter is an error");
+    assert!(error.detail().contains("whole number"), "{error:?}");
+}
+
+#[test]
+fn the_reader_refuses_a_usage_artifact_whose_counters_are_empty() {
+    let dir = tempfile::tempdir().unwrap();
+    usage_artifact(
+        dir.path(),
+        r#"{"format": 1, "provider": "claude", "counters": {}}"#,
+    );
+    let error = read_usage(dir.path()).expect_err("an empty counter set is corrupt");
+    assert!(error.detail().contains("no counters"), "{error:?}");
+}
