@@ -234,7 +234,8 @@ Five invariants, and the tests are named after them:
    what decides from it is in [`honesty.md`](honesty.md).
 
    `~/.estigia/jobs/<id>/` is a fifth, written at run time and never by `setup`. A review job's
-   directory holds the manifest, the prompt, the runner's lock and logs, and its `result.json`, and
+   directory holds the manifest, the prompt, the runner's lock and logs, its `result.json`, and a
+   `usage.json` carrying the reviewer CLI's own counters when it reported any, and
    nothing removes it yet: the runner is only added, and
    [`honesty.md`](honesty.md) says what is not wired.
 

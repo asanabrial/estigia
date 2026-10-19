@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use super::run::{self, Finished, Launch, MAX_OUTPUT};
 use super::scratch::Scratch;
-use super::{Adapter, Invocation, ReviewerCode};
+use super::{Adapter, Invocation, Review, ReviewerCode, Usage};
 use crate::outcome::Refusal;
 
 pub(super) const ISOLATED_SYSTEM_PROMPT: &str = "You are a read-only code reviewer with no tools. \
@@ -158,11 +158,35 @@ fn require_success(
 }
 
 enum ClaudeResult {
-    Answer(String),
+    Answer {
+        text: String,
+        usage: Option<Usage>,
+    },
     Error {
         subtype: Option<String>,
         detail: String,
     },
+}
+
+const CLAUDE_COUNTERS: &[&str] = &[
+    "input_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "output_tokens",
+];
+
+fn claude_usage(value: &serde_json::Value) -> Option<Usage> {
+    let reported = value.get("usage")?.as_object()?;
+    let mut counters = std::collections::BTreeMap::new();
+    for name in CLAUDE_COUNTERS {
+        if let Some(count) = reported.get(*name) {
+            counters.insert((*name).to_owned(), count.as_u64()?);
+        }
+    }
+    (!counters.is_empty()).then(|| Usage {
+        provider: "claude".to_owned(),
+        counters,
+    })
 }
 
 fn parse_result(stdout: &[u8]) -> Option<ClaudeResult> {
@@ -192,7 +216,10 @@ fn parse_result(stdout: &[u8]) -> Option<ClaudeResult> {
             detail: parts.join(" "),
         })
     } else {
-        Some(ClaudeResult::Answer(result?.to_owned()))
+        Some(ClaudeResult::Answer {
+            text: result?.to_owned(),
+            usage: claude_usage(&value),
+        })
     }
 }
 
@@ -280,6 +307,11 @@ impl ClaudeCode {
 
 impl Adapter for ClaudeCode {
     fn review(&self, invocation: &Invocation) -> Result<Vec<u8>, Refusal> {
+        self.review_with_usage(invocation)
+            .map(|review| review.answer)
+    }
+
+    fn review_with_usage(&self, invocation: &Invocation) -> Result<Review, Refusal> {
         let scratch = Scratch::new()
             .map_err(|error| run::launch_failed(format!("no scratch directory: {error}")))?;
         let args = claude_args(invocation.model.as_deref());
@@ -296,8 +328,9 @@ impl Adapter for ClaudeCode {
         let mut finished = finished;
         if finished.code != Some(0)
             && is_blank(&finished.stderr)
-            && let Some(ClaudeResult::Error { detail: text, .. } | ClaudeResult::Answer(text)) =
-                parse_result(&finished.stdout)
+            && let Some(
+                ClaudeResult::Error { detail: text, .. } | ClaudeResult::Answer { text, .. },
+            ) = parse_result(&finished.stdout)
         {
             finished.stderr = text.into_bytes();
         }
@@ -315,11 +348,14 @@ impl Adapter for ClaudeCode {
             );
         }
         match parse_result(&stdout) {
-            Some(ClaudeResult::Answer(text)) if is_blank(text.as_bytes()) => {
+            Some(ClaudeResult::Answer { text, .. }) if is_blank(text.as_bytes()) => {
                 Err(ReviewerCode::NoAnswer
                     .refusal(format!("{shown} exited 0 with an empty answer")))
             }
-            Some(ClaudeResult::Answer(text)) => Ok(text.into_bytes()),
+            Some(ClaudeResult::Answer { text, usage }) => Ok(Review {
+                answer: text.into_bytes(),
+                usage,
+            }),
             Some(ClaudeResult::Error { subtype, detail }) => {
                 let text = without_prompt(detail.as_bytes(), &invocation.prompt);
                 let window = tail_chars(&text, UNAVAILABLE_WINDOW);

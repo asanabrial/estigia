@@ -855,7 +855,8 @@ pointer that leaves it names the document it points at.
   records the job against its slot and re-executes this binary as `estigia __review-job <dir>`, detached
   (a session of its own on Unix); the runner takes an exclusive lock on `<dir>/lock` for its whole life,
   runs the adapter `select_adapter` returns exactly as the foreground path did (so the deadline, the
-  output caps and the tree kill are the same) and leaves `result.json` atomically. It opens no ledger.
+  output caps and the tree kill are the same) and leaves `result.json` atomically, with the provider's
+  own usage counters in `usage.json` beside it when the CLI reported any. It opens no ledger.
   `collect_review_input` decides what that result means: only the launching run collects, `review_status`
   is read again and a receipt that moved discards the job as stale, and an answer is admitted by moving
   the job `running` to `admitting` in one `BEGIN IMMEDIATE` transaction, writing through the unchanged
@@ -885,7 +886,7 @@ pointer that leaves it names the document it points at.
   file does not exist yet reads as lost and is named for collection. It does not know which run asked, so a finished job another run
   launched is named `collect_review_input`, which that run's collect refuses `capture-job-other-run`;
   a launch from the asking run would take the slot over. A job directory is never removed except its
-  `result.json`, which is deleted after admission: `~/.estigia/jobs/` grows until a later slice cleans it.
+  `result.json`, which is deleted after admission, and `usage.json` is left beside it: `~/.estigia/jobs/` grows until a later slice cleans it.
 
 ## Node, CI and the actions that run the suite
 
@@ -9843,6 +9844,21 @@ pointer that leaves it names the document it points at.
   session that reached the tool — 16 calls, 1 answered `capture-running` — and states the after as
   zero by construction rather than observed, because `launch_review_input` and `collect_review_input`
   are recent and no post-change session exists in the corpus.
+
+- **A preserved usage artifact is not a measurement, and no total folds it in yet.** The runner now
+  writes the reviewer CLI's own counters to `usage.json` in a job's directory, beside `result.json`
+  and never inside it, and `job::read_usage` reads them back; the admitted answer's bytes and
+  `result.json` are byte-identical whether or not the CLI reported usage. Three limits stand. Only
+  the Claude adapter's `--output-format json` result carries a `usage` object, so a Codex review and
+  a relayed review preserve nothing — no counter is invented for an adapter that does not report
+  one. The totals `scripts/measure-transcripts.py` prints are read from Claude Code's own `.jsonl`
+  transcripts and do not fold this in: nothing in the script reaches a job's artifact, so no reported
+  total moved with this change. And nothing in production calls `read_usage` yet — the artifact is
+  written, the reader exists and is tested, and no figure anywhere is derived from it, so what a
+  native review actually cost stays unmeasured until something reads it. The artifact also outlives
+  the result it belongs to: `discard_result` deletes `result.json` after admission and leaves
+  `usage.json` in the job directory, so a reader must check `job_status` before trusting the counters
+  of a job whose result is gone.
 
 ## Refusals, and the way out they name
 

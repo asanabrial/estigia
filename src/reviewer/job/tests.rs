@@ -2,11 +2,11 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use super::{
-    FORMAT, JobResult, JobStatus, OnThread, RESULT, Spawner, await_started, job_status, run,
-    write_job,
+    FORMAT, JobResult, JobStatus, OnThread, RESULT, Spawner, USAGE, await_started, job_status,
+    read_usage, run, write_job,
 };
 use crate::outcome::Refusal;
-use crate::reviewer::{Adapter, Invocation, Receipt, ReviewerCode};
+use crate::reviewer::{Adapter, Invocation, Receipt, Review, ReviewerCode, Usage};
 
 fn invocation() -> Invocation {
     Invocation {
@@ -39,6 +39,34 @@ struct Refuses;
 impl Adapter for Refuses {
     fn review(&self, _: &Invocation) -> Result<Vec<u8>, Refusal> {
         Err(ReviewerCode::Unavailable.refusal("out of credit"))
+    }
+}
+
+struct Reports(Option<Usage>);
+
+impl Adapter for Reports {
+    fn review(&self, _: &Invocation) -> Result<Vec<u8>, Refusal> {
+        Ok(b"the answer".to_vec())
+    }
+
+    fn review_with_usage(&self, _: &Invocation) -> Result<Review, Refusal> {
+        Ok(Review {
+            answer: b"the answer".to_vec(),
+            usage: self.0.clone(),
+        })
+    }
+}
+
+fn usage() -> Usage {
+    Usage {
+        provider: "claude".to_owned(),
+        counters: [
+            ("input_tokens".to_owned(), 100_u64),
+            ("cache_read_input_tokens".to_owned(), 250),
+            ("output_tokens".to_owned(), 20),
+        ]
+        .into_iter()
+        .collect(),
     }
 }
 
@@ -205,4 +233,92 @@ fn a_runner_that_stopped_having_written_nothing_is_stopped_before_it_started() {
     let dir = tempfile::tempdir().unwrap();
     let looked = await_started(dir.path(), || Some("finished".to_owned()));
     assert!(looked.is_err());
+}
+
+#[test]
+fn a_finished_job_preserves_the_usage_its_adapter_reported() {
+    let (_root, dir) = prepared();
+    let reported = usage();
+    let select = {
+        let reported = reported.clone();
+        move || -> Result<Box<dyn Adapter>, Refusal> {
+            Ok(Box::new(Reports(Some(reported.clone()))))
+        }
+    };
+    OnThread(select).start(&dir).expect("the runner starts");
+    assert_eq!(finished(&dir), JobResult::Answer(b"the answer".to_vec()));
+    assert!(dir.join(USAGE).is_file(), "no usage artifact was written");
+
+    let artifact: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(dir.join(USAGE)).expect("the usage artifact"))
+            .expect("the usage artifact is JSON");
+    let mut keys: Vec<&str> = artifact
+        .as_object()
+        .expect("the artifact is an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(keys, ["counters", "format", "provider"]);
+    assert_eq!(artifact["provider"], "claude");
+    assert_eq!(artifact["counters"].as_object().expect("counters").len(), 3);
+    assert_eq!(read_usage(&dir).expect("readable"), Some(reported));
+}
+
+#[test]
+fn a_job_whose_reviewer_reported_no_usage_writes_no_artifact() {
+    let (_root, dir) = prepared();
+    OnThread(echo).start(&dir).expect("the runner starts");
+    let _ = finished(&dir);
+    assert!(
+        !dir.join(USAGE).exists(),
+        "an empty usage artifact was written"
+    );
+    assert_eq!(read_usage(&dir).expect("readable"), None);
+}
+
+#[test]
+fn the_reader_answers_nothing_for_a_directory_holding_no_artifact() {
+    let dir = tempfile::tempdir().unwrap();
+    assert_eq!(read_usage(dir.path()).expect("readable"), None);
+}
+
+#[test]
+fn discarding_the_result_leaves_the_usage_artifact_readable() {
+    let (_root, dir) = prepared();
+    let reported = usage();
+    let select = {
+        let reported = reported.clone();
+        move || -> Result<Box<dyn Adapter>, Refusal> {
+            Ok(Box::new(Reports(Some(reported.clone()))))
+        }
+    };
+    OnThread(select).start(&dir).expect("the runner starts");
+    let _ = finished(&dir);
+
+    super::discard_result(&dir).expect("the result is discarded");
+    assert_eq!(job_status(&dir).expect("status"), JobStatus::Lost);
+    assert_eq!(read_usage(&dir).expect("readable"), Some(reported));
+}
+
+#[test]
+fn the_usage_artifact_never_changes_the_admitted_answer_bytes() {
+    let (_root, plain) = prepared();
+    let silent = || -> Result<Box<dyn Adapter>, Refusal> { Ok(Box::new(Reports(None))) };
+    OnThread(silent).start(&plain).expect("the runner starts");
+    let _ = finished(&plain);
+
+    let (_root, reported) = prepared();
+    let with_usage =
+        || -> Result<Box<dyn Adapter>, Refusal> { Ok(Box::new(Reports(Some(usage())))) };
+    OnThread(with_usage)
+        .start(&reported)
+        .expect("the runner starts");
+    let _ = finished(&reported);
+
+    assert_eq!(
+        std::fs::read(plain.join(RESULT)).expect("the result without usage"),
+        std::fs::read(reported.join(RESULT)).expect("the result with usage"),
+        "the usage moved the admitted answer's bytes"
+    );
 }
