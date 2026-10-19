@@ -6832,4 +6832,100 @@ mod send_message {
         );
         assert_eq!(code, "sessions-limit-too-large");
     }
+
+    #[test]
+    fn a_limit_that_is_not_a_positive_whole_number_is_refused_with_its_own_code() {
+        let rig = Rig::new();
+        for limit in [json!(0), json!(-1), json!(1.5), json!("5")] {
+            let code = refusal_code(rig.list(json!({"limit": limit})).expect_err("a refusal"));
+            assert_eq!(code, "sessions-limit-invalid", "{limit}");
+        }
+    }
+
+    #[test]
+    fn a_limit_of_one_is_the_smallest_page_and_still_answers() {
+        let rig = Rig::new();
+        let page = answered(rig.list(json!({"limit": 1})).expect("a page"));
+        assert_eq!(page["limit"].as_u64(), Some(1));
+        assert_eq!(run_ids(&page).len(), 1);
+    }
+
+    #[test]
+    fn the_sessions_limit_is_declared_an_integer_in_the_table_and_the_schema() {
+        let tool = crate::harness::mcp::tools::find("list_sessions").expect("a tool");
+        let limit = tool
+            .arguments
+            .iter()
+            .find(|argument| argument.name == "limit")
+            .expect("`list_sessions` takes a limit");
+        assert_eq!(limit.json_type, "integer");
+        assert_eq!(
+            tool.schema()["inputSchema"]["properties"]["limit"]["type"],
+            "integer",
+            "the schema does not publish the type the table declares"
+        );
+    }
+
+    #[test]
+    fn a_cursor_payload_that_is_not_hexadecimal_is_refused_whatever_its_bytes() {
+        let rig = Rig::new();
+        for token in [
+            "€a.digest",
+            "a€.digest",
+            "€€.digest",
+            "abc.digest",
+            "zz.digest",
+        ] {
+            let code = refusal_code(rig.list(json!({"cursor": token})).expect_err("a refusal"));
+            assert_eq!(code, "sessions-cursor-malformed", "{token}");
+        }
+    }
+
+    /// A `status` selector is read from each page's own read of the row, so a
+    /// traversal filtered by `status` can omit a row whose status changed between
+    /// pages, and `matched` is that page's count rather than a count held across
+    /// the walk. This pins the behaviour `docs/sessions.md` states; a design that
+    /// froze the matched set would move it.
+    ///
+    /// A change that made the walk complete — the thing this design cannot do
+    /// statelessly — would return `codex-b0000002` and redden this.
+    #[test]
+    fn a_status_filtered_traversal_reads_the_status_afresh_and_can_omit_a_changed_row() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        for (run_id, runtime, started) in [
+            ("claude-a0000001", "claude", 5_000u64),
+            ("codex-b0000002", "codex", 5_001),
+            ("pi-c0000003", "pi", 5_002),
+        ] {
+            rig.seen(run_id, runtime, "host-session", None, started);
+            rig.seen(run_id, runtime, "host-session", None, now);
+        }
+
+        let first = answered(
+            rig.list(json!({"status": "live", "limit": 1}))
+                .expect("a first page"),
+        );
+        assert_eq!(run_ids(&first), vec!["claude-a0000001"]);
+        assert_eq!(first["matched"].as_u64(), Some(3));
+        let cursor = first["next_cursor"].as_str().expect("a cursor").to_owned();
+
+        rig.ended("codex-b0000002", now);
+
+        let second = answered(
+            rig.list(json!({"status": "live", "limit": 1, "cursor": cursor}))
+                .expect("a continued page"),
+        );
+        assert_eq!(
+            run_ids(&second),
+            vec!["pi-c0000003"],
+            "the row that ended between pages is read afresh and drops out of the walk"
+        );
+        assert_eq!(
+            second["matched"].as_u64(),
+            Some(2),
+            "`matched` is the page's own count, not one held across the walk"
+        );
+        assert_eq!(second["next_cursor"], Value::Null);
+    }
 }

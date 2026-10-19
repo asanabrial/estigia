@@ -556,6 +556,7 @@ the exact bytes a client receives for the table.
 | Issue #69, `publish_review` and `republish_review` take the same four arguments (ceiling set to the measured size) | 33 | 44,277 |
 | `send_message` and `list_sessions` join, answered from the local store (ceiling set to the measured size) | 35 | 45,266 |
 | `list_sessions` gains bounded discovery: seven optional selectors and paging arguments (ceiling set to the measured size) | 35 | 46,744 |
+| `list_sessions`'s `limit` description states the whole contract: a positive whole number, at most 500 (ceiling unchanged at 46,800) | 35 | 46,748 |
 
 Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
 retired aggregate verdict and the three `NOT_EXPOSED` names were removed outright; `reclaim`,

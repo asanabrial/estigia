@@ -251,14 +251,14 @@ Codex and OpenCode.
 
 `list_sessions` with any option answers a **page** of the registry rather than the whole list. The answer is a
 versioned object: `version`, the page's `sessions`, its own accounting (`limit`, `returned`, `matched` — the rows
-the selectors matched in this snapshot — and `more`), a `next_cursor` that is `null` once the snapshot is
+the selectors matched as this page was taken — and `more`), a `next_cursor` that is `null` once the snapshot is
 exhausted, and the snapshot's identity (`taken_at`, and `stale_after` as before). `estigia sessions` and a
 `list_sessions` call with no options are unchanged: neither is bounded, and a caller that asks for nothing still
 gets every row.
 
 The selectors are `status` (`live`, `stale`, `ended` or `unknown`), `runtime`, `run` (a run id),
-`session_id` and `repo_dir`. `limit` is a positive integer, default 50 and at most 500; a value above 500 is
-refused rather than clamped. `cursor` is the `next_cursor` of the page before.
+`session_id` and `repo_dir`. `limit` is a positive whole number, default 50 and at most 500; a value that is not
+one, or is above 500, is refused rather than clamped. `cursor` is the `next_cursor` of the page before.
 
 **Ordering and the snapshot.** A bounded page's snapshot is the registry rows with an immutable start, and a page
 orders them by `(started_at, run_id)`; the snapshot is every such row whose `started_at <= taken_at`. `started_at`
@@ -269,6 +269,16 @@ or move it back and duplicate it. A session that ends, restarts or is otherwise 
 key and its place; a session that starts after `taken_at` is not in the snapshot and never appears. A pointer-only
 run — a run pointer with no registry row — has no immutable start, so it is not in the snapshot at all; it is not
 bounded, and the no-omissions property is a property of the registry.
+
+**What a selector reads is not frozen.** `taken_at` freezes the set of rows and their order, and that part is
+sound; the value a selector compares is not in the snapshot, so it cannot be. `status` and `last_seen` are derived
+from the row as each page reads it, which is the only place they exist, so a row whose status changes between
+pages can leave a `status`-filtered traversal, and `matched` is the count as that page was taken rather than a
+count held constant across the walk. A caller that needs every row matching a `status` — a complete set rather
+than a walk — should read the whole list (no options, or `estigia sessions`) and filter it itself: that is one
+read of the registry against one clock, so the statuses in one answer agree with each other. A bounded traversal
+is for walking a large registry a page at a time; a selector on it is a convenience that reads the row as each
+page is taken.
 
 **The cursor is bound, not trusted.** A `next_cursor` carries the response `version` (which fixes the
 ordering), the selectors it was issued for, the snapshot's `taken_at`, the key of the last row returned, and an
@@ -283,6 +293,7 @@ identity of the store file. A later call must repeat the same selectors; the cur
 | `sessions-cursor-mismatch` | The call's selectors or the response version differ from the cursor's. |
 | `sessions-cursor-store-replaced` | The store file the cursor was issued against is gone or is another file. |
 | `sessions-cursor-expired` | The cursor is older than `CURSOR_TTL_SECONDS` (15 minutes). |
+| `sessions-limit-invalid` | `limit` is present and is not a positive whole number. |
 | `sessions-limit-too-large` | `limit` is above the maximum. |
 | `sessions-unregistered-not-bounded` | `status=unregistered`: a pointer-only run is not a registry row and is not in the bounded snapshot; the full list still shows it. |
 

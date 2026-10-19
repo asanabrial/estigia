@@ -389,6 +389,10 @@ fn flags_for(tool: &tools::Tool, arguments: &Value) -> Result<Vec<String>, ToolF
         }
     }
     let mut flags: Vec<String> = Vec::new();
+    // A local-store tool renders no flags: the whole-number and floor checks
+    // below exist to keep argv sane, and such a tool answers with its own
+    // refusal for an argument it cannot read.
+    let transported = !tools::is_local_store(tool.name);
     for argument in tool.arguments {
         let Some(value) = arguments.get(argument.name) else {
             if argument.required {
@@ -449,13 +453,14 @@ fn flags_for(tool: &tools::Tool, arguments: &Value) -> Result<Vec<String>, ToolF
                 choices.join(", ")
             )));
         }
-        if argument.json_type == "integer" && !value.is_i64() && !value.is_u64() {
+        if transported && argument.json_type == "integer" && !value.is_i64() && !value.is_u64() {
             return Err(ToolFailure::Malformed(format!(
                 "`{}` is a whole number, not {value}",
                 argument.name
             )));
         }
-        if let Some(least) = argument.least
+        if transported
+            && let Some(least) = argument.least
             && value.as_i64().is_some_and(|number| number < least)
         {
             return Err(ToolFailure::Malformed(format!(

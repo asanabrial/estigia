@@ -10272,6 +10272,12 @@ does not measure:
   full traversal has neither omissions nor duplicates under the tested mutations, but a row's `status` and
   `last_seen` are re-derived per page and can differ between pages. The cursor's digest detects corruption and an
   edit that does not recompute it; it is **not a MAC**, and possession of a cursor is not authorization.
+- **A `status`-filtered traversal is not a complete set, and no test makes it one.** The value a selector compares
+  is read afresh from each page's own read, so a row that ends or heartbeats between pages can leave a
+  `status`-filtered walk, and `matched` is that page's count rather than one held across the walk. The behaviour is
+  pinned as a baseline by `a_status_filtered_traversal_reads_the_status_afresh_and_can_omit_a_changed_row`, which
+  asserts the omission rather than a guarantee: a design that made the walk complete would redden it. Nothing in
+  this design promises a complete set, and a caller that needs one reads the whole list and filters it.
 - **A bounded page's snapshot is the registry rows only.** A pointer-only run has no immutable start, so it is not
   in the snapshot and a bounded traversal can neither omit nor duplicate it; `status=unregistered` is refused with
   `sessions-unregistered-not-bounded`, and the full list (`estigia sessions`, or `list_sessions` with no options)

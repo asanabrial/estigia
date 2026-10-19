@@ -109,14 +109,24 @@ fn sha256_hex(bytes: &[u8]) -> String {
     crate::paths::hex_digest(hasher.finalize())
 }
 
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
 fn unhex(text: &str) -> Option<Vec<u8>> {
-    if !text.len().is_multiple_of(2) {
+    let (pairs, rest) = text.as_bytes().as_chunks::<2>();
+    if !rest.is_empty() {
         return None;
     }
-    (0..text.len())
-        .step_by(2)
-        .map(|at| u8::from_str_radix(&text[at..at + 2], 16).ok())
-        .collect::<Option<Vec<u8>>>()
+    pairs
+        .iter()
+        .map(|pair| Some(hex_nibble(pair[0])? << 4 | hex_nibble(pair[1])?))
+        .collect()
 }
 
 /// The opaque token that names a cursor: the payload in hex, then a digest of
@@ -234,6 +244,22 @@ pub(super) fn limit_too_large(limit: u64) -> Refusal {
         Resolution::no_command(
             NoCommandReason::OperatorKnowledge,
             format!("a `limit` of {MAX_LIMIT} or fewer"),
+        ),
+    )
+}
+
+pub(super) fn limit_invalid(value: &Value) -> Refusal {
+    Refusal::not_started(
+        "sessions-limit-invalid",
+        format!(
+            "`limit` is {value} and a page size is a positive whole number of rows, at most \
+             {MAX_LIMIT}; nothing was listed"
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            format!(
+                "a `limit` between 1 and {MAX_LIMIT}, or no `limit` for the default {DEFAULT_LIMIT}"
+            ),
         ),
     )
 }
@@ -392,10 +418,17 @@ pub(crate) fn page(arguments: &Value, root: &Path) -> Result<Value, Refusal> {
     if selectors.status.as_deref() == Some("unregistered") {
         return Err(unregistered_not_bounded());
     }
-    let limit = match arguments.get("limit").and_then(Value::as_u64) {
-        Some(limit) if limit > MAX_LIMIT => return Err(limit_too_large(limit)),
-        Some(limit) => limit,
+    let limit = match arguments.get("limit") {
         None => DEFAULT_LIMIT,
+        Some(value) => {
+            let Some(limit) = value.as_u64().filter(|limit| *limit >= 1) else {
+                return Err(limit_invalid(value));
+            };
+            if limit > MAX_LIMIT {
+                return Err(limit_too_large(limit));
+            }
+            limit
+        }
     };
     let store_id = store::store_identity(&store::beside(root));
     let (taken_at, after) = match arguments.get("cursor").and_then(Value::as_str) {
