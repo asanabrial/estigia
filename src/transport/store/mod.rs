@@ -103,18 +103,36 @@ pub(crate) fn store_identity(path: &Path) -> String {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::fs::MetadataExt as _;
-        format!(
-            "{:x}:{:x}",
-            metadata.volume_serial_number().unwrap_or_default(),
-            metadata.file_index().unwrap_or_default()
-        )
+        let _ = metadata;
+        handle_identity(path)
     }
     #[cfg(not(any(unix, windows)))]
     {
         let _ = metadata;
         "unknown".to_owned()
     }
+}
+
+#[cfg(windows)]
+fn handle_identity(path: &Path) -> String {
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+
+    let Ok(file) = std::fs::File::open(path) else {
+        return "unknown".to_owned();
+    };
+    let mut information = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), information.as_mut_ptr()) } == 0 {
+        return "unknown".to_owned();
+    }
+    let information = unsafe { information.assume_init() };
+    format!(
+        "{:x}:{:x}",
+        information.dwVolumeSerialNumber,
+        (u64::from(information.nFileIndexHigh) << 32) | u64::from(information.nFileIndexLow)
+    )
 }
 
 /// Where review job directories live: `<home>/.estigia/jobs`, beside `state.db`.

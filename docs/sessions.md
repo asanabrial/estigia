@@ -285,7 +285,8 @@ page is taken.
 
 **The cursor is bound, not trusted.** A `next_cursor` carries the response `version` (which fixes the
 ordering), the selectors it was issued for, the snapshot's `taken_at`, the key of the last row returned, and an
-identity of the store file. A later call must repeat the same selectors; the cursor continues one snapshot, not
+identity of the store file — its device and inode on Unix, its volume and file index on Windows. A later
+call must repeat the same selectors; the cursor continues one snapshot, not
 "the same query run again". The cursor is refused, never silently restarted, when:
 
 | Refusal | When |
