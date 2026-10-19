@@ -258,8 +258,10 @@ gets every row.
 
 The selectors are `status` (`live`, `stale`, `ended` or `unknown`), `runtime`, `run` (a run id),
 `session_id` and `repo_dir`. `limit` is a positive whole number, default 50 and at most 500; a value that is
-not one is refused by the shared argument boundary (`flags_for`), and one above 500 by the page itself, rather
-than clamped. `cursor` is the `next_cursor` of the page before.
+not one — including an explicit `null` — is refused by the server's argument boundary (`flags_for`), which
+every tool call passes through before it is dispatched, and one above 500 by the page itself, rather than
+clamped. `cursor` is the `next_cursor` of the page before. The bounded form is the tool's alone: `estigia
+sessions` takes neither a page size nor a cursor, and reaches no page.
 
 **Ordering and the snapshot.** A bounded page's snapshot is the registry rows with an immutable start, and a page
 orders them by `(started_at, run_id)`; the snapshot is every such row whose `started_at <= taken_at`. `started_at`
