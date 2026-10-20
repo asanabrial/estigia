@@ -733,12 +733,13 @@ the relay does not prove is in [`honesty.md`](honesty.md).
 ## The Pi gate extension
 
 Every `~/.pi/agent` below is Pi's agent directory: `$PI_CODING_AGENT_DIR` when that is set to an absolute path
-(or one starting with `~`), `~/.pi/agent` otherwise. `estigia setup pi` writes seven things: the fenced directive into `~/.pi/agent/AGENTS.md`, the skill
+(or one starting with `~`), `~/.pi/agent` otherwise. `estigia setup pi` writes nine things: the fenced directive into `~/.pi/agent/AGENTS.md`, the skill
 into the shared `~/.agents/skills` tree, Estigia's server into `~/.pi/agent/mcp.json` under
-`mcpServers` (`command`, `args: ["mcp"]`, an `exposure` and, on a Pi that defers, a `description`; see below), and three
+`mcpServers` (`command`, `args: ["mcp"]`, an `exposure` and, on a Pi that defers, a `description`; see below), and four
 extensions: `~/.pi/agent/extensions/estigia-workflow-authority.ts`, marked `estigia:workflow-authority`
-like OpenCode's plugin, the review relay and the subagent runner, both described in the sections after the loop extensions; and two prompt templates,
-described after the extension. Where `Model routing` names
+like OpenCode's plugin, the review relay and the subagent runner, both described in the sections after the loop extensions, and the look extension, `~/.pi/agent/extensions/estigia-look.ts`, marked `estigia:look`; the two prompt templates,
+described after the extension; and the theme `~/.pi/agent/themes/estigia.json`. The look and the theme are
+[`The Pi look and theme`](#the-pi-look-and-theme). Where `Model routing` names
 `developer` or `analyst`, setup also writes `~/.pi/agent/agents/developer.md` and `analyst.md`, under
 the ownership record every delegated definition shares (see the agent-definitions section below). Pi loads the extension through its own TypeScript loader with no build step;
 the file is plain JavaScript, which is also valid TypeScript, so the tests load the same bytes under
@@ -835,7 +836,8 @@ previous claim. A child process asks about the exported root session, the run it
 decided as. When the gate refuses, the extension still returns `{ block: true, reason }` and, with a
 UI, also appends a session entry `estigia-refusal` through `pi.appendEntry`, which a renderer
 registered with `pi.registerEntryRenderer` draws as a heading naming the tool followed by the
-reason, the binary's standard error unchanged and only wrapped to the width. It is an entry and not
+reason, the binary's standard error unchanged and only wrapped to the width: each line carries a `▎`
+bar in the error tone and is painted on `toolErrorBg`. It is an entry and not
 a `pi.sendMessage` message because Pi converts every custom message to a user message for the model
 whatever its `display` flag says, which would put the reason in front of the model a second time.
 
@@ -902,7 +904,9 @@ The same extension registers one command, `/estigia-doctor`, with `pi.registerCo
 printed, unchanged except that trailing newlines are dropped; standard error follows standard output
 when the binary wrote to both, so a refusal line is not lost. With a UI the text is appended as a
 session entry `estigia-doctor` through `pi.appendEntry` and drawn by a renderer registered with
-`pi.registerEntryRenderer`, wrapped to the width and nothing else; it is an entry and not a
+`pi.registerEntryRenderer`, wrapped to the width and framed like the refusal card: a `▎` bar in the
+border tone on `toolPendingBg` when the binary answered, and in the error tone on `toolErrorBg` when
+it did not; it is an entry and not a
 `pi.sendMessage` message for the reason the refusal card is, so the report never reaches the model. A
 Pi without `appendEntry` gets the whole text through `ctx.ui.notify` instead. Without a UI the
 report goes to standard output. A binary that is gone, a timeout, a signal, an output larger than the
@@ -937,11 +941,43 @@ Claude Code's `commands/` directory, and `prompts/` is added to the files watche
 `PI_CODING_AGENT_DIR`. `doctor` does not read them: it reads what unloads the gate, and a missing
 template unloads nothing.
 
-A plain `estigia uninstall pi` removes the directive block, Estigia's `mcpServers` entry, both
-extensions and the two prompt templates, and leaves every other server and every other line of `AGENTS.md`. An extension at that path
+A plain `estigia uninstall pi` removes the directive block, Estigia's `mcpServers` entry, the four
+extensions, the two prompt templates, the look and the theme, and leaves every other server and every other line of `AGENTS.md`. An extension at that path
 carrying no marker is neither replaced nor removed, and `status` then reports the gate off. `--scope=workspace`
 refuses Pi. What none of this proves — chiefly that Pi acts on the returned `block` — is in
 [`honesty.md`](honesty.md).
+
+## The Pi look and theme
+
+`estigia setup pi` writes two artefacts that draw and decide nothing.
+
+`~/.pi/agent/themes/estigia.json` is a Pi theme named `estigia`, appearance `dark`, in the palette of
+the project banner: a night background, an azure accent, cyan code and links, gold headings and
+borders, olive success, ember error and amber warning. It carries all 51 color tokens Pi's schema
+requires and no token outside the set Pi accepts, and every value is either a literal color or a
+variable the file defines. Pi's schema rejects an unknown top-level key and an unknown color token, so
+the file cannot hold a marker: **it is Estigia's while its bytes are the embedded theme.** Setup
+writes an absent theme or one that is byte-identical, uninstall removes only a byte-identical one, and
+a theme somebody edited is neither replaced nor removed.
+
+`~/.pi/agent/extensions/estigia-look.ts` is a display-only extension marked `estigia:look`, with the
+same ownership rule as every other extension. It registers one command, `/estigia-look on|off`, and on
+`session_start` installs a startup header through `ctx.ui.setHeader` and a footer through
+`ctx.ui.setFooter`. The header draws the wordmark, the tagline `Light. Local. Agentic.` and the
+abbreviated working directory, branch and model, and below 40 columns it is the wordmark alone. The
+footer's first line carries `estigia`, the claim read from the `estigia-claim` status, the git branch
+from `footerData.getGitBranch()`, the model and thinking level, the context percentage and the session
+cost; its second line carries the statuses other extensions published, so installing the look never
+hides one. As the terminal narrows the line gives segments up in a fixed order — cost, then model,
+then branch, then context — and the claim is never dropped. In any mode but `tui`, or on a host whose
+`ctx.ui` has no `setHeader` or `setFooter`, nothing is installed. `/estigia-look off` puts Pi's own
+header and footer back; the choice lasts the session and is written nowhere. The extension registers
+no tool, sends no message, appends no entry and runs no process.
+
+Both are written on every install, like the gate plugin and unlike the loop plugin. Neither touches
+`~/.pi/agent/settings.json`, which is control surface: the theme is selected by the person with
+`/settings` → Theme or `pi --use-theme estigia`, and the run that writes it says so in a note.
+`PI_CODING_AGENT_DIR` moves both with the rest of the agent directory.
 
 ## The Pi loop extension
 

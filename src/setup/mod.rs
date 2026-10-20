@@ -962,6 +962,10 @@ pub enum ActionKind {
     Command,
     /// One of the prompt templates written for Pi on every install.
     PromptTemplate,
+    /// The Pi look extension, drawn on every install.
+    Look,
+    /// The Pi theme, written on every install.
+    Theme,
     /// The generic goal and loop plugin, written while the `Goal loop plugin` setting is on.
     GoalLoopPlugin,
     /// A retired SDD phase definition, taken back out where this install wrote it.
@@ -3850,6 +3854,50 @@ fn setup_into_with_skill(
             }
         }
 
+        if let Some(file) = look_extension_path(adapter, &paths) {
+            let existing = step!(read_optional(&file));
+            if existing.is_none() || plugin::look_is_ours(existing.as_deref()) {
+                actions.push(write_step!(write_file(
+                    &file,
+                    existing.as_deref(),
+                    plugin::PI_LOOK,
+                    ActionKind::Look,
+                    options.dry_run,
+                )));
+                pending.insert(
+                    file,
+                    Some(as_the_file_was(existing.as_deref(), plugin::PI_LOOK)),
+                );
+            }
+        }
+
+        if let Some(file) = pi_theme_path(adapter, &paths) {
+            let existing = step!(read_optional(&file));
+            if existing.is_none() || plugin::pi_theme_is_ours(existing.as_deref()) {
+                actions.push(write_step!(write_file(
+                    &file,
+                    existing.as_deref(),
+                    plugin::PI_THEME,
+                    ActionKind::Theme,
+                    options.dry_run,
+                )));
+                pending.insert(
+                    file,
+                    Some(as_the_file_was(existing.as_deref(), plugin::PI_THEME)),
+                );
+                if actions
+                    .last()
+                    .is_some_and(|action| action.change != Change::Unchanged)
+                {
+                    notes.push(
+                        "the Pi theme `estigia` is installed; choose it in /settings, or run \
+                         `pi --use-theme estigia`"
+                            .to_owned(),
+                    );
+                }
+            }
+        }
+
         if let Some((file, source)) = goal_loop_at(adapter, paths.loop_plugin.as_deref()) {
             let existing = step!(read_optional(&file));
             if effective.goal_loop_plugin == LoopPlugin::On {
@@ -4318,6 +4366,20 @@ pub fn uninstall_from(
                 actions.push(discard(&file, ActionKind::PromptTemplate, options.dry_run)?);
             }
         }
+    }
+
+    if let Some(file) = look_extension_path(adapter, &paths)
+        && let Some(existing) = read_optional(&file)?
+        && plugin::look_is_ours(Some(&existing))
+    {
+        actions.push(discard(&file, ActionKind::Look, options.dry_run)?);
+    }
+
+    if let Some(file) = pi_theme_path(adapter, &paths)
+        && let Some(existing) = read_optional(&file)?
+        && plugin::pi_theme_is_ours(Some(&existing))
+    {
+        actions.push(discard(&file, ActionKind::Theme, options.dry_run)?);
     }
 
     if let Some((file, _)) = goal_loop_at(adapter, paths.loop_plugin.as_deref())
@@ -5735,6 +5797,36 @@ pub fn agents_extension_path(adapter: &AgentAdapter, paths: &AgentPaths) -> Opti
             .plugin
             .as_ref()
             .map(|file| file.with_file_name(plugin::PI_AGENTS_FILE)),
+        _ => None,
+    }
+}
+
+/// The Pi look extension's path, beside the gate extension it decorates. `None`
+/// for every other adapter.
+pub fn look_extension_path(adapter: &AgentAdapter, paths: &AgentPaths) -> Option<PathBuf> {
+    match adapter.instructions {
+        InstructionFile::Pi => paths
+            .plugin
+            .as_ref()
+            .map(|file| file.with_file_name(plugin::PI_LOOK_FILE)),
+        _ => None,
+    }
+}
+
+/// The Pi theme's path under the agent directory that holds the extensions.
+/// `None` for every other adapter.
+pub fn pi_theme_path(adapter: &AgentAdapter, paths: &AgentPaths) -> Option<PathBuf> {
+    match adapter.instructions {
+        InstructionFile::Pi => paths
+            .plugin
+            .as_ref()
+            .and_then(|file| file.parent())
+            .and_then(Path::parent)
+            .map(|agent| {
+                agent
+                    .join(plugin::PI_THEME_DIRECTORY)
+                    .join(plugin::PI_THEME_FILE)
+            }),
         _ => None,
     }
 }
