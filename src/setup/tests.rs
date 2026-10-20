@@ -22818,7 +22818,7 @@ fn pi_installs_reports_and_removes_the_look_and_the_theme() {
         "the dry run wrote the look or the theme"
     );
 
-    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    let written = setup(adapter, &Config::default(), &options).expect("setup succeeds");
     let look_text = fs::read_to_string(&look).expect("the look reads");
     let theme_text = fs::read_to_string(&theme).expect("the theme reads");
     assert_eq!(look_text, plugin::PI_LOOK);
@@ -22826,9 +22826,9 @@ fn pi_installs_reports_and_removes_the_look_and_the_theme() {
     assert!(plugin::look_is_ours(Some(&look_text)));
     assert!(plugin::pi_theme_is_ours(Some(&theme_text)));
     assert!(
-        reported.notes.iter().any(|note| note.contains("/settings")),
+        written.notes.iter().any(|note| note.contains("/settings")),
         "the run that wrote the theme said nothing about choosing it: {:?}",
-        reported.notes
+        written.notes
     );
 
     let again = setup(adapter, &Config::default(), &options).expect("the second setup succeeds");
@@ -22869,6 +22869,69 @@ fn a_pi_theme_estigia_did_not_write_is_neither_replaced_nor_removed() {
     assert_eq!(fs::read_to_string(&theme).expect("it survives"), theirs);
     uninstall(adapter, &options).expect("uninstall succeeds");
     assert_eq!(fs::read_to_string(&theme).expect("it survives"), theirs);
+}
+
+#[test]
+fn a_pi_look_estigia_wrote_is_brought_current_and_one_without_the_marker_is_left_alone() {
+    let (home, options) = sandbox();
+    let adapter = agent("pi");
+    let look = pi_goal_directory(home.path()).join(plugin::PI_LOOK_FILE);
+    fs::create_dir_all(look.parent().expect("a parent")).expect("create the dir");
+
+    let stale = plugin::PI_LOOK.replacen("estigIA", "estigXX", 1);
+    assert_ne!(stale, plugin::PI_LOOK, "the fixture changed nothing");
+    assert!(plugin::look_is_ours(Some(&stale)));
+    fs::write(&look, &stale).expect("write the stale look");
+
+    let refreshed = setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    assert_eq!(
+        fs::read_to_string(&look).expect("the look reads"),
+        plugin::PI_LOOK
+    );
+    assert!(
+        refreshed
+            .actions
+            .iter()
+            .any(|action| action.kind == ActionKind::Look && action.change == Change::Update),
+        "{:?}",
+        refreshed.actions
+    );
+
+    let theirs = "export default function () {}\n";
+    fs::write(&look, theirs).expect("write their file");
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    assert_eq!(fs::read_to_string(&look).expect("it survives"), theirs);
+    uninstall(adapter, &options).expect("uninstall succeeds");
+    assert_eq!(fs::read_to_string(&look).expect("it survives"), theirs);
+}
+
+#[test]
+fn the_pi_look_and_theme_follow_the_agent_directory_they_are_installed_for() {
+    let (home, options) = sandbox();
+    let agent_root = home.path().join("elsewhere").join("pi-agent");
+    let options = SetupOptions {
+        pi_agent_dir: Some(agent_root.clone()),
+        ..options
+    };
+    let adapter = agent("pi");
+    let look = agent_root.join("extensions").join(plugin::PI_LOOK_FILE);
+    let theme = agent_root
+        .join(plugin::PI_THEME_DIRECTORY)
+        .join(plugin::PI_THEME_FILE);
+
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    assert_eq!(
+        fs::read_to_string(&look).expect("the look reads"),
+        plugin::PI_LOOK
+    );
+    assert_eq!(
+        fs::read_to_string(&theme).expect("the theme reads"),
+        plugin::PI_THEME
+    );
+
+    uninstall(adapter, &options).expect("uninstall succeeds");
+    assert!(!look.exists(), "uninstall left the look behind");
+    assert!(!theme.exists(), "uninstall left the theme behind");
 }
 
 #[test]
@@ -23040,6 +23103,23 @@ const context70 = context();
 percent = 90;
 const context90 = context();
 
+const savedHome = process.env.HOME;
+process.env.HOME = "/home/bob";
+const realCwd = ctx.cwd;
+ctx.cwd = "/home/bobby/x";
+const besideHome = header.render(120).join("\n");
+ctx.cwd = realCwd;
+if (savedHome === undefined) delete process.env.HOME;
+else process.env.HOME = savedHome;
+
+const withoutStatuses = tui.calls.footers.at(-1)({}, theme, { getExtensionStatuses: () => undefined });
+let statless = null;
+try {
+  statless = withoutStatuses.render(120).join("\n");
+} catch {
+  statless = null;
+}
+
 await tui.calls.commands[0].handler("off", ctx);
 const off = { header: tui.calls.headers.at(-1) ?? null, footer: tui.calls.footers.at(-1) ?? null };
 await tui.calls.commands[0].handler("on", ctx);
@@ -23047,13 +23127,22 @@ const on = {
   header: typeof tui.calls.headers.at(-1),
   footer: typeof tui.calls.footers.at(-1),
 };
+const drawn = tui.calls.headers.length + tui.calls.footers.length;
+await tui.calls.commands[0].handler("bogus", ctx);
+const bogus = {
+  drawn: tui.calls.headers.length + tui.calls.footers.length - drawn,
+  note: tui.calls.notified.at(-1) ?? null,
+};
 
 const rpc = build();
 await rpc.handlers.session_start({}, { mode: "rpc", ui: ui(rpc.calls) });
 const bare = build();
 let bareOk = true;
 try {
-  await bare.handlers.session_start({}, { mode: "tui", ui: { setHeader: () => {} } });
+  await bare.handlers.session_start({}, {
+    mode: "tui",
+    ui: { ...ui(bare.calls), setFooter: undefined },
+  });
 } catch {
   bareOk = false;
 }
@@ -23082,10 +23171,14 @@ writeFileSync(
     context45,
     context70,
     context90,
+    besideHome,
+    statless,
+    bogus,
     off,
     on,
     rpcDrawn: rpc.calls.headers.length + rpc.calls.footers.length,
     bareOk,
+    bareDrawn: bare.calls.headers.length + bare.calls.footers.length,
   }),
 );
 "##;
@@ -23330,6 +23423,30 @@ fn the_pi_look_draws_a_header_and_a_footer_and_decides_nothing() {
     );
     assert_eq!(answer["rpcDrawn"], 0, "the look drew in rpc mode");
     assert_eq!(answer["bareOk"], true);
+    assert_eq!(
+        answer["bareDrawn"], 0,
+        "a host without setFooter got a header anyway"
+    );
+
+    let beside = answer["besideHome"].as_str().expect("the header");
+    assert!(
+        beside.contains("/home/bobby/x"),
+        "a sibling of the home was abbreviated as if it were inside: {beside}"
+    );
+
+    let statless = answer["statless"].as_str().expect("the footer renders");
+    assert!(
+        !statless.contains("#1028"),
+        "a host with no statuses produced a claim: {statless}"
+    );
+    assert!(statless.contains("no claim"), "{statless}");
+    assert!(statless.contains("$0.120"), "{statless}");
+
+    assert_eq!(
+        answer["bogus"]["drawn"], 0,
+        "an unknown argument drew a surface"
+    );
+    assert_eq!(answer["bogus"]["note"][0], "warning", "{}", answer["bogus"]);
 }
 
 #[cfg(unix)]

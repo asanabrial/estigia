@@ -32,8 +32,11 @@ const home = () => process.env.HOME || process.env.USERPROFILE;
 const abbreviated = (path) => {
   const text = String(path ?? "");
   const base = home();
-  if (!base || !text.startsWith(base)) return text;
-  return `~${text.slice(base.length)}`;
+  if (!base) return text;
+  if (text === base) return "~";
+  const prefix = base.endsWith("/") ? base : `${base}/`;
+  if (!text.startsWith(prefix)) return text;
+  return `~/${text.slice(prefix.length)}`;
 };
 
 const gitDirOf = (cwd) => {
@@ -59,14 +62,23 @@ const branchAt = (cwd) => {
   }
 };
 
+const statusesOf = (footerData) => {
+  try {
+    return footerData?.getExtensionStatuses?.() ?? undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const claimOf = (footerData) => {
-  const text = footerData?.getExtensionStatuses?.().get(CLAIM);
+  const statuses = statusesOf(footerData);
+  const text = typeof statuses?.get === "function" ? statuses.get(CLAIM) : undefined;
   if (typeof text !== "string" || text.trim() === "") return undefined;
   return text.replace(/^estigia:\s*/, "").replaceAll(" \u00b7 ", " ");
 };
 
 const others = (footerData) =>
-  [...(footerData?.getExtensionStatuses?.() ?? [])]
+  [...(statusesOf(footerData) ?? [])]
     .filter(([key, text]) => key !== CLAIM && typeof text === "string" && text.trim() !== "")
     .map(([key, text]) => `${key} ${text}`);
 
