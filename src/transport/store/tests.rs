@@ -270,7 +270,7 @@ fn the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema() {
     assert_eq!(mode, "wal");
     assert_eq!(keys, 1);
     assert_eq!(synchronous, 2, "FULL");
-    assert_eq!(store.schema_version().expect("reads"), 11);
+    assert_eq!(store.schema_version().expect("reads"), 12);
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn reopening_keeps_the_schema_and_a_newer_one_is_refused() {
             .expect("reopens")
             .schema_version()
             .expect("reads"),
-        11
+        12
     );
 
     rusqlite::Connection::open(&path)
@@ -495,7 +495,7 @@ fn doctor_reports_the_path_the_schema_and_the_last_hours_calls() {
         panic!("a readable store is fine: {:?}", check.health);
     };
     assert!(
-        detail.contains("state.db") && detail.contains("schema 11"),
+        detail.contains("state.db") && detail.contains("schema 12"),
         "{detail}"
     );
     assert!(detail.contains("3 GraphQL, 0 REST"), "{detail}");
@@ -702,7 +702,7 @@ fn a_migration_another_opener_finished_while_this_one_waited_is_not_applied_twic
     })
     .expect("the slower opener finds the schema already laid down");
 
-    assert_eq!(slow.schema_version().expect("reads"), 11);
+    assert_eq!(slow.schema_version().expect("reads"), 12);
 }
 
 #[test]
@@ -1328,7 +1328,7 @@ fn recorded(inserted: super::jobs::Inserted) -> bool {
 #[test]
 fn migration_five_creates_the_review_jobs_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 11);
+    assert_eq!(store.schema_version().expect("a version"), 12);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('review_jobs')")
@@ -1364,7 +1364,7 @@ fn migration_five_creates_the_review_jobs_table() {
 #[test]
 fn migration_six_creates_the_blocked_clauses_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 11);
+    assert_eq!(store.schema_version().expect("a version"), 12);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('blocked_clauses')")
@@ -1381,7 +1381,7 @@ fn migration_six_creates_the_blocked_clauses_table() {
 #[test]
 fn migration_seven_creates_the_record_tables() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 11);
+    assert_eq!(store.schema_version().expect("a version"), 12);
     for (table, wanted) in [
         ("decisions", ["at", "body"].as_slice()),
         ("roles", ["at", "body"].as_slice()),
@@ -1691,6 +1691,61 @@ fn a_fresh_store_carries_the_task_table_and_an_older_one_gains_it() {
 }
 
 #[test]
+fn an_older_store_gains_the_task_evidence_column_and_keeps_its_rows() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("older.db");
+    let older = rusqlite::Connection::open(&path).expect("a file to age");
+    let before = super::schema::MIGRATIONS.len() - 1;
+    older
+        .execute_batch("CREATE TABLE meta (schema_version INTEGER NOT NULL);")
+        .expect("the version table");
+    for sql in &super::schema::MIGRATIONS[..before] {
+        older.execute_batch(sql).expect("an old migration applies");
+    }
+    older
+        .execute(
+            "INSERT INTO repos (host, owner, name) VALUES ('github.com', 'asanabrial', 'estigia')",
+            [],
+        )
+        .expect("a repo");
+    older
+        .execute(
+            "INSERT INTO tasks (repo_id, issue, id, text, route, done, commit_id, at)
+             VALUES (1, 7, 'T1', 'one', 'inline', 1, 'abcdef0', '2026-01-01T00:00Z')",
+            [],
+        )
+        .expect("a task from the older schema");
+    older
+        .execute(
+            "INSERT INTO meta (schema_version) VALUES (?1)",
+            [i64::try_from(before).expect("small")],
+        )
+        .expect("the old version is recorded");
+    drop(older);
+
+    let store = Store::open(&path).expect("the older store migrates");
+    let columns: Vec<String> = store
+        .connection()
+        .prepare("SELECT name FROM pragma_table_info('tasks')")
+        .expect("prepares")
+        .query_map([], |row| row.get(0))
+        .expect("reads")
+        .collect::<Result<_, _>>()
+        .expect("rows");
+    assert!(
+        columns.iter().any(|name| name == "evidence"),
+        "the gained column is missing: {columns:?}"
+    );
+    let tasks = store.tasks(&repo(), 7).expect("the tasks read");
+    assert_eq!(tasks.len(), 1, "{tasks:?}");
+    assert_eq!(tasks[0].commit.as_deref(), Some("abcdef0"));
+    assert_eq!(
+        tasks[0].evidence, None,
+        "the gained column was filled with something nobody wrote"
+    );
+}
+
+#[test]
 fn recorded_clauses_are_kept_in_order_once_each_and_cleared_together() {
     let (_directory, mut store) = open();
     store
@@ -1755,6 +1810,7 @@ fn a_task_is_revised_in_place_and_keeps_its_place() {
         route,
         done,
         commit,
+        evidence: None,
     };
     for (id, text) in [("T1", "one"), ("T2", "two")] {
         store
@@ -1818,7 +1874,8 @@ fn migration_eight_creates_the_tasks_table() {
             "route",
             "done",
             "commit_id",
-            "at"
+            "at",
+            "evidence"
         ]
     );
 }
@@ -2153,6 +2210,7 @@ mod rekey {
                     route: Some("inline"),
                     done: None,
                     commit: None,
+                    evidence: None,
                 },
                 NOW,
             )

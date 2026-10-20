@@ -192,4 +192,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX messages_undelivered ON messages (recipient_run_id) WHERE delivered_at IS NULL;
     ",
+    "
+    ALTER TABLE tasks ADD COLUMN evidence TEXT;
+    ",
 ];
