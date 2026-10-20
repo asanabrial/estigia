@@ -23139,6 +23139,17 @@ fn the_pi_look_draws_a_header_and_a_footer_and_decides_nothing() {
         "the look subscribed to something that can answer a call"
     );
     assert_eq!(answer["spawned"], 0, "the look started a process");
+    let imported: Vec<&str> = plugin::PI_LOOK
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("import "))
+        .filter_map(|rest| rest.rsplit_once(" from ").map(|(_, path)| path))
+        .map(|path| path.trim().trim_end_matches(';').trim_matches('"'))
+        .collect();
+    assert_eq!(
+        imported,
+        vec!["node:fs"],
+        "the look imported something it may not touch"
+    );
 
     let wide = answer["wide"].as_array().expect("the header lines");
     let wide: Vec<&str> = wide
