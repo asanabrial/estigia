@@ -6879,8 +6879,17 @@ fn every_registered_hook_names_the_agent_it_was_registered_in() {
 /// Matched on a path **component**, not as a substring: the name is short now,
 /// and `workflow/` or `dataflow.md` contains `flow` while being nobody's skill.
 fn is_payload(path: &Path) -> bool {
-    path.components()
-        .any(|part| part.as_os_str() == crate::skill::DIRECTORY)
+    let theme = path
+        .file_name()
+        .is_some_and(|name| name == plugin::PI_THEME_FILE)
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == plugin::PI_THEME_DIRECTORY);
+    theme
+        || path
+            .components()
+            .any(|part| part.as_os_str() == crate::skill::DIRECTORY)
 }
 
 /// Taking Estigia out of a machine with every agent on it leaves their things
@@ -20873,6 +20882,8 @@ const refused = [
 ];
 const card = refused[0].appended[0];
 const lines = (width) => renderers[card.type](card, { expanded: false }, undefined).render(width);
+const tones = { fg: (token, text) => `{${token}}${text}`, bg: (token, text) => `[${token}]${text}` };
+const toned = (width) => renderers[card.type](card, { expanded: false }, tones).render(width);
 
 const load = async (file) => {
   const seen = { commands: {}, renderers: {}, appended: [], sent: [] };
@@ -20936,6 +20947,7 @@ const changes = [
 ];
 const doctorCard = doctors[0].appended[0];
 const doctorLines = (width) => present.renderers[doctorCard.type](doctorCard, { expanded: false }, undefined).render(width);
+const doctorToned = (seen) => (card) => seen.renderers[card.type](card, { expanded: false }, tones).render(200);
 
 console.log(JSON.stringify({
   doctors,
@@ -20945,12 +20957,15 @@ console.log(JSON.stringify({
   doctorTypes: Object.keys(present.renderers),
   doctorWide: doctorCard ? doctorLines(200) : null,
   doctorNarrow: doctorCard ? doctorLines(10) : null,
+  doctorAnsweredToned: doctors[0].appended[0] ? doctorToned(present)(doctors[0].appended[0]) : null,
+  doctorSilentToned: doctors[2].appended[0] ? doctorToned(present)(doctors[2].appended[0]) : null,
   report,
   out,
   refused,
   rendererTypes: Object.keys(renderers),
   wide: card ? lines(200) : null,
   narrow: card ? lines(12) : null,
+  tonedWide: card ? toned(200) : null,
   reason,
 }));
 "##;
@@ -21441,6 +21456,10 @@ fn the_pi_extension_shows_the_claim_the_binary_reports_and_clears_it_when_there_
     );
 }
 
+fn without_bar(line: &str) -> &str {
+    line.strip_prefix("\u{258e} ").unwrap_or(line)
+}
+
 #[test]
 fn the_pi_extension_draws_a_refusal_card_with_the_binarys_words_and_asks_the_model_for_nothing() {
     let said = run_pi_claim_driver(400);
@@ -21475,12 +21494,29 @@ fn the_pi_extension_draws_a_refusal_card_with_the_binarys_words_and_asks_the_mod
         .iter()
         .map(|line| line.as_str().unwrap_or_default())
         .collect();
+    let shown: Vec<&str> = wide.iter().map(|line| without_bar(line)).collect();
     assert_eq!(
-        wide[1..],
+        shown[1..],
         reason.split('\n').collect::<Vec<_>>(),
         "{wide:?}"
     );
-    assert!(wide[0].contains("bash"), "{wide:?}");
+    assert!(shown[0].contains("bash"), "{wide:?}");
+    assert!(
+        wide.iter().all(|line| line.starts_with("\u{258e} ")),
+        "{wide:?}"
+    );
+    let toned: Vec<&str> = said["tonedWide"]
+        .as_array()
+        .expect("the card renders with a theme")
+        .iter()
+        .map(|line| line.as_str().unwrap_or_default())
+        .collect();
+    assert!(
+        toned
+            .iter()
+            .all(|line| line.starts_with("[toolErrorBg]{error}\u{258e} ")),
+        "the refusal card lost its tone or its background: {toned:?}"
+    );
     for line in said["narrow"].as_array().expect("the card renders narrow") {
         assert!(
             line.as_str().unwrap_or_default().chars().count() <= 12,
@@ -21547,7 +21583,13 @@ fn the_pi_extension_shows_estigia_doctor_unchanged_to_the_person_and_asks_the_mo
         .iter()
         .map(|line| line.as_str().unwrap_or_default())
         .collect();
-    assert_eq!(wide, report.split('\n').collect::<Vec<_>>(), "{wide:?}");
+    assert_eq!(
+        wide.iter()
+            .map(|line| without_bar(line))
+            .collect::<Vec<_>>(),
+        report.split('\n').collect::<Vec<_>>(),
+        "{wide:?}"
+    );
     for line in said["doctorNarrow"]
         .as_array()
         .expect("the report renders narrow")
@@ -21569,6 +21611,29 @@ fn the_pi_extension_shows_estigia_doctor_unchanged_to_the_person_and_asks_the_mo
     let silent = case("silent");
     assert!(shown(&silent).contains("exit 3"), "{silent}");
     assert_eq!(silent["appended"][0]["data"]["answered"], false, "{silent}");
+
+    let toned = |key: &str| {
+        said[key]
+            .as_array()
+            .expect("the report renders with a theme")
+            .iter()
+            .map(|line| line.as_str().unwrap_or_default())
+            .collect::<Vec<&str>>()
+    };
+    assert!(
+        toned("doctorAnsweredToned")
+            .iter()
+            .all(|line| line.starts_with("[toolPendingBg]{borderAccent}\u{258e} ")),
+        "an answered report lost its accent or its background: {:?}",
+        toned("doctorAnsweredToned")
+    );
+    assert!(
+        toned("doctorSilentToned")
+            .iter()
+            .all(|line| line.starts_with("[toolErrorBg]{error}\u{258e} ")),
+        "a report that did not answer is not drawn as one: {:?}",
+        toned("doctorSilentToned")
+    );
 
     for label in ["signal", "slow", "missing"] {
         let case = case(label);
@@ -22713,6 +22778,675 @@ fn a_pi_subagent_runner_estigia_did_not_write_is_neither_replaced_nor_removed() 
     assert_eq!(fs::read_to_string(&file).expect("it survives"), theirs);
     uninstall(adapter, &options).expect("uninstall succeeds");
     assert_eq!(fs::read_to_string(&file).expect("it survives"), theirs);
+}
+
+#[test]
+fn pi_installs_reports_and_removes_the_look_and_the_theme() {
+    let (home, options) = sandbox();
+    let adapter = agent("pi");
+    let look = pi_goal_directory(home.path()).join(plugin::PI_LOOK_FILE);
+    let theme = home
+        .path()
+        .join(".pi")
+        .join("agent")
+        .join(plugin::PI_THEME_DIRECTORY)
+        .join(plugin::PI_THEME_FILE);
+
+    let dry = SetupOptions {
+        dry_run: true,
+        ..options.clone()
+    };
+    let reported = setup(adapter, &Config::default(), &dry).expect("the dry run succeeds");
+    assert!(
+        reported
+            .actions
+            .iter()
+            .any(|action| action.kind == ActionKind::Look && action.path == look),
+        "{:?}",
+        reported.actions
+    );
+    assert!(
+        reported
+            .actions
+            .iter()
+            .any(|action| action.kind == ActionKind::Theme && action.path == theme),
+        "{:?}",
+        reported.actions
+    );
+    assert!(
+        !look.exists() && !theme.exists(),
+        "the dry run wrote the look or the theme"
+    );
+
+    let written = setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    let look_text = fs::read_to_string(&look).expect("the look reads");
+    let theme_text = fs::read_to_string(&theme).expect("the theme reads");
+    assert_eq!(look_text, plugin::PI_LOOK);
+    assert_eq!(theme_text, plugin::PI_THEME);
+    assert!(plugin::look_is_ours(Some(&look_text)));
+    assert!(plugin::pi_theme_is_ours(Some(&theme_text)));
+    assert!(
+        written.notes.iter().any(|note| note.contains("/settings")),
+        "the run that wrote the theme said nothing about choosing it: {:?}",
+        written.notes
+    );
+
+    let again = setup(adapter, &Config::default(), &options).expect("the second setup succeeds");
+    assert!(
+        again
+            .actions
+            .iter()
+            .all(|action| action.change == Change::Unchanged),
+        "{:?}",
+        again.actions
+    );
+
+    uninstall(adapter, &options).expect("uninstall succeeds");
+    assert!(!look.exists(), "uninstall left the look behind");
+    assert!(!theme.exists(), "uninstall left the theme behind");
+    assert!(
+        !theme.parent().expect("a parent").exists(),
+        "uninstall left the themes directory behind"
+    );
+}
+
+#[test]
+fn a_pi_theme_estigia_did_not_write_is_neither_replaced_nor_removed() {
+    let (home, options) = sandbox();
+    let adapter = agent("pi");
+    let theme = home
+        .path()
+        .join(".pi")
+        .join("agent")
+        .join(plugin::PI_THEME_DIRECTORY)
+        .join(plugin::PI_THEME_FILE);
+    fs::create_dir_all(theme.parent().expect("a parent")).expect("create the dir");
+    let theirs = plugin::PI_THEME.replacen("#06080e", "#06080f", 1);
+    assert_ne!(theirs, plugin::PI_THEME, "the fixture changed nothing");
+    fs::write(&theme, &theirs).expect("write their theme");
+
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    assert_eq!(fs::read_to_string(&theme).expect("it survives"), theirs);
+    uninstall(adapter, &options).expect("uninstall succeeds");
+    assert_eq!(fs::read_to_string(&theme).expect("it survives"), theirs);
+}
+
+#[test]
+fn a_pi_look_estigia_wrote_is_brought_current_and_one_without_the_marker_is_left_alone() {
+    let (home, options) = sandbox();
+    let adapter = agent("pi");
+    let look = pi_goal_directory(home.path()).join(plugin::PI_LOOK_FILE);
+    fs::create_dir_all(look.parent().expect("a parent")).expect("create the dir");
+
+    let stale = plugin::PI_LOOK.replacen("estigIA", "estigXX", 1);
+    assert_ne!(stale, plugin::PI_LOOK, "the fixture changed nothing");
+    assert!(plugin::look_is_ours(Some(&stale)));
+    fs::write(&look, &stale).expect("write the stale look");
+
+    let refreshed = setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    assert_eq!(
+        fs::read_to_string(&look).expect("the look reads"),
+        plugin::PI_LOOK
+    );
+    assert!(
+        refreshed
+            .actions
+            .iter()
+            .any(|action| action.kind == ActionKind::Look && action.change == Change::Update),
+        "{:?}",
+        refreshed.actions
+    );
+
+    let theirs = "export default function () {}\n";
+    fs::write(&look, theirs).expect("write their file");
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    assert_eq!(fs::read_to_string(&look).expect("it survives"), theirs);
+    uninstall(adapter, &options).expect("uninstall succeeds");
+    assert_eq!(fs::read_to_string(&look).expect("it survives"), theirs);
+}
+
+#[test]
+fn the_pi_look_and_theme_follow_the_agent_directory_they_are_installed_for() {
+    let (home, options) = sandbox();
+    let agent_root = home.path().join("elsewhere").join("pi-agent");
+    let options = SetupOptions {
+        pi_agent_dir: Some(agent_root.clone()),
+        ..options
+    };
+    let adapter = agent("pi");
+    let look = agent_root.join("extensions").join(plugin::PI_LOOK_FILE);
+    let theme = agent_root
+        .join(plugin::PI_THEME_DIRECTORY)
+        .join(plugin::PI_THEME_FILE);
+
+    setup(adapter, &Config::default(), &options).expect("setup succeeds");
+    assert_eq!(
+        fs::read_to_string(&look).expect("the look reads"),
+        plugin::PI_LOOK
+    );
+    assert_eq!(
+        fs::read_to_string(&theme).expect("the theme reads"),
+        plugin::PI_THEME
+    );
+
+    uninstall(adapter, &options).expect("uninstall succeeds");
+    assert!(!look.exists(), "uninstall left the look behind");
+    assert!(!theme.exists(), "uninstall left the theme behind");
+}
+
+#[test]
+fn the_pi_theme_carries_exactly_the_tokens_pi_accepts() {
+    let theme: serde_json::Value =
+        serde_json::from_str(plugin::PI_THEME).expect("the theme parses");
+    assert_eq!(theme["name"], "estigia");
+    assert_eq!(theme["appearance"], "dark");
+
+    let required = [
+        "accent",
+        "border",
+        "borderAccent",
+        "borderMuted",
+        "success",
+        "error",
+        "warning",
+        "muted",
+        "dim",
+        "text",
+        "thinkingText",
+        "selectedBg",
+        "userMessageBg",
+        "userMessageText",
+        "customMessageBg",
+        "customMessageText",
+        "customMessageLabel",
+        "toolPendingBg",
+        "toolSuccessBg",
+        "toolErrorBg",
+        "toolTitle",
+        "toolOutput",
+        "mdHeading",
+        "mdLink",
+        "mdLinkUrl",
+        "mdCode",
+        "mdCodeBlock",
+        "mdCodeBlockBorder",
+        "mdQuote",
+        "mdQuoteBorder",
+        "mdHr",
+        "mdListBullet",
+        "toolDiffAdded",
+        "toolDiffRemoved",
+        "toolDiffContext",
+        "syntaxComment",
+        "syntaxKeyword",
+        "syntaxFunction",
+        "syntaxVariable",
+        "syntaxString",
+        "syntaxNumber",
+        "syntaxType",
+        "syntaxOperator",
+        "syntaxPunctuation",
+        "thinkingOff",
+        "thinkingMinimal",
+        "thinkingLow",
+        "thinkingMedium",
+        "thinkingHigh",
+        "thinkingXhigh",
+        "bashMode",
+    ];
+    let optional = [
+        "scrollbarTrack",
+        "scrollbarThumb",
+        "searchMatchBg",
+        "searchMatchText",
+        "thinkingMax",
+    ];
+    let colors = theme["colors"].as_object().expect("colors is an object");
+    for token in required {
+        assert!(colors.contains_key(token), "the theme omits `{token}`");
+    }
+    for token in colors.keys() {
+        assert!(
+            required.contains(&token.as_str()) || optional.contains(&token.as_str()),
+            "Pi rejects the unknown token `{token}`"
+        );
+    }
+
+    let vars = theme["vars"].as_object().expect("vars is an object");
+    for (name, value) in vars {
+        let text = value.as_str().expect("a variable is a string");
+        assert!(
+            text.starts_with('#'),
+            "the variable `{name}` is not a literal color: {text}"
+        );
+    }
+    for (token, value) in colors {
+        let text = value.as_str().expect("a token is a string");
+        let literal = text.starts_with('#') || text.is_empty() || text.parse::<u16>().is_ok();
+        assert!(
+            literal || vars.contains_key(text),
+            "the token `{token}` names no variable: {text}"
+        );
+    }
+    for key in theme["export"].as_object().expect("export").keys() {
+        assert!(
+            ["pageBg", "cardBg", "infoBg"].contains(&key.as_str()),
+            "Pi rejects the unknown export key `{key}`"
+        );
+    }
+}
+
+#[cfg(unix)]
+const PI_LOOK_DRIVER: &str = r##"import { writeFileSync } from "node:fs";
+import childProcess from "node:child_process";
+import look from "./look.mjs";
+
+const theme = { fg: (_token, text) => text, bold: (text) => `**${text}**` };
+const tone = { fg: (token, text) => `{${token}}${text}`, bg: (token, text) => `[${token}]${text}` };
+let spawned = 0;
+for (const name of ["spawn", "exec", "execFile", "fork"]) {
+  const real = childProcess[name];
+  childProcess[name] = (...args) => {
+    spawned += 1;
+    return real.apply(childProcess, args);
+  };
+}
+const usage = (cost) => ({ type: "message", message: { role: "assistant", usage: { cost: { total: cost } } } });
+const ui = (calls) => ({
+  setHeader: (factory) => calls.headers.push(factory),
+  setFooter: (factory) => calls.footers.push(factory),
+  notify: (text, kind) => calls.notified.push([kind, text]),
+});
+const build = () => {
+  const calls = { tools: 0, messages: 0, userMessages: 0, entries: 0, headers: [], footers: [], commands: [], notified: [] };
+  const handlers = {};
+  look({
+    registerTool: () => { calls.tools += 1; },
+    sendMessage: () => { calls.messages += 1; },
+    sendUserMessage: () => { calls.userMessages += 1; },
+    appendEntry: () => { calls.entries += 1; },
+    registerCommand: (name, spec) => calls.commands.push({ name, handler: spec.handler }),
+    on: (name, handler) => { handlers[name] = handler; },
+  });
+  return { calls, handlers };
+};
+
+const tui = build();
+let percent = 45;
+const ctx = {
+  mode: "tui",
+  cwd: process.cwd(),
+  model: { id: "gpt-5.5" },
+  thinkingLevel: "high",
+  getContextUsage: () => ({ percent }),
+  sessionManager: { getEntryCount: () => 2, getEntries: () => [usage(0.1), usage(0.02)] },
+  ui: ui(tui.calls),
+};
+await tui.handlers.session_start({}, ctx);
+const statuses = new Map([
+  ["estigia-claim", "estigia: #1028 \u00b7 in-progress"],
+  ["ci", "green"],
+]);
+const footerData = { getGitBranch: () => "main", getExtensionStatuses: () => statuses };
+const header = tui.calls.headers.at(-1)({}, theme);
+const footer = tui.calls.footers.at(-1)({}, theme, footerData);
+const toned = tui.calls.footers.at(-1)({}, tone, footerData);
+const wide = header.render(80);
+const narrow = header.render(20);
+const at = (width) => header.render(width);
+const full = footer.render(120);
+const tight = footer.render(30);
+const context = () => toned.render(200);
+const context45 = context();
+percent = 70;
+const context70 = context();
+percent = 90;
+const context90 = context();
+
+const savedHome = process.env.HOME;
+process.env.HOME = "/home/bob";
+const realCwd = ctx.cwd;
+ctx.cwd = "/home/bobby/x";
+const besideHome = header.render(120).join("\n");
+ctx.cwd = realCwd;
+if (savedHome === undefined) delete process.env.HOME;
+else process.env.HOME = savedHome;
+
+const withoutStatuses = tui.calls.footers.at(-1)({}, theme, { getExtensionStatuses: () => undefined });
+let statless = null;
+try {
+  statless = withoutStatuses.render(120).join("\n");
+} catch {
+  statless = null;
+}
+
+await tui.calls.commands[0].handler("off", ctx);
+const off = { header: tui.calls.headers.at(-1) ?? null, footer: tui.calls.footers.at(-1) ?? null };
+await tui.calls.commands[0].handler("on", ctx);
+const on = {
+  header: typeof tui.calls.headers.at(-1),
+  footer: typeof tui.calls.footers.at(-1),
+};
+const drawn = tui.calls.headers.length + tui.calls.footers.length;
+await tui.calls.commands[0].handler("bogus", ctx);
+const bogus = {
+  drawn: tui.calls.headers.length + tui.calls.footers.length - drawn,
+  note: tui.calls.notified.at(-1) ?? null,
+};
+
+const rpc = build();
+await rpc.handlers.session_start({}, { mode: "rpc", ui: ui(rpc.calls) });
+const bare = build();
+let bareOk = true;
+try {
+  await bare.handlers.session_start({}, {
+    mode: "tui",
+    ui: { ...ui(bare.calls), setFooter: undefined },
+  });
+} catch {
+  bareOk = false;
+}
+
+writeFileSync(
+  process.env.LOOK_OUT,
+  JSON.stringify({
+    registered: {
+      tools: tui.calls.tools,
+      messages: tui.calls.messages + tui.calls.userMessages,
+      entries: tui.calls.entries,
+      commands: tui.calls.commands.map((command) => command.name),
+    },
+    subscribed: Object.keys(tui.handlers),
+    spawned,
+    wide,
+    narrow,
+    h23: at(23),
+    h24: at(24),
+    h39: at(39),
+    h40: at(40),
+    h59: at(59),
+    h60: at(60),
+    full,
+    tight,
+    context45,
+    context70,
+    context90,
+    besideHome,
+    statless,
+    bogus,
+    off,
+    on,
+    rpcDrawn: rpc.calls.headers.length + rpc.calls.footers.length,
+    bareOk,
+    bareDrawn: bare.calls.headers.length + bare.calls.footers.length,
+  }),
+);
+"##;
+
+#[cfg(unix)]
+fn drive_pi_look() -> serde_json::Value {
+    let node = node_executable();
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let base = node_safe_dir(root.path());
+    let project = base.join("project");
+    fs::create_dir_all(project.join(".git")).expect("the project directory");
+    fs::write(project.join(".git").join("HEAD"), "ref: refs/heads/main\n").expect("the head");
+    fs::write(base.join("look.mjs"), plugin::PI_LOOK).expect("the look writes");
+    fs::write(base.join("drive.mjs"), PI_LOOK_DRIVER).expect("the driver writes");
+    let answer = base.join("answer.json");
+    let mut command = std::process::Command::new(&node);
+    command
+        .arg(base.join("drive.mjs"))
+        .current_dir(&project)
+        .env("LOOK_OUT", &answer);
+    let output = run_node("the Pi look", &mut command).expect("node runs");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_str(&fs::read_to_string(&answer).expect("the answer reads"))
+        .expect("the answer parses")
+}
+
+#[cfg(unix)]
+fn imported_modules(source: &str) -> Vec<String> {
+    let characters: Vec<char> = source.chars().collect();
+    let word_before = |at: usize| {
+        let mut end = at;
+        while end > 0 && characters[end - 1].is_whitespace() {
+            end -= 1;
+        }
+        let mut start = end;
+        while start > 0 && (characters[start - 1].is_alphanumeric() || characters[start - 1] == '_')
+        {
+            start -= 1;
+        }
+        characters[start..end].iter().collect::<String>()
+    };
+    let mut paths = Vec::new();
+    let mut at = 0;
+    while at < characters.len() {
+        if characters[at] != '"' {
+            at += 1;
+            continue;
+        }
+        let mut end = at + 1;
+        while end < characters.len() && characters[end] != '"' {
+            end += 1;
+        }
+        let literal: String = characters[at + 1..end.min(characters.len())]
+            .iter()
+            .collect();
+        let word = word_before(at);
+        if (word == "from" || word == "import") && !literal.is_empty() && !literal.contains(' ') {
+            paths.push(literal);
+        }
+        at = end + 1;
+    }
+    paths
+}
+
+#[cfg(unix)]
+#[test]
+fn the_pi_look_draws_a_header_and_a_footer_and_decides_nothing() {
+    let answer = drive_pi_look();
+    assert_eq!(
+        answer["registered"]["tools"], 0,
+        "the look registered a tool"
+    );
+    assert_eq!(
+        answer["registered"]["messages"], 0,
+        "the look sent a message"
+    );
+    assert_eq!(
+        answer["registered"]["entries"], 0,
+        "the look appended an entry"
+    );
+    assert_eq!(answer["registered"]["commands"][0], "estigia-look");
+    assert_eq!(
+        answer["subscribed"],
+        serde_json::json!(["session_start"]),
+        "the look subscribed to something that can answer a call"
+    );
+    assert_eq!(answer["spawned"], 0, "the look started a process");
+    let imported = imported_modules(plugin::PI_LOOK);
+    assert!(
+        !imported.is_empty(),
+        "the look's imports could not be read at all: {imported:?}"
+    );
+    assert!(
+        imported.iter().all(|path| path == "node:fs"),
+        "the look may import only node:fs: {imported:?}"
+    );
+
+    let wide = answer["wide"].as_array().expect("the header lines");
+    let wide: Vec<&str> = wide
+        .iter()
+        .map(|line| line.as_str().expect("a line"))
+        .collect();
+    assert!(
+        wide.iter().any(|line| line.contains("**estigIA**")),
+        "the wordmark is not bold: {wide:?}"
+    );
+    assert!(
+        wide.iter().any(|line| line.contains("AI harness")),
+        "{wide:?}"
+    );
+    assert!(wide.iter().any(|line| line.contains("Light.")), "{wide:?}");
+    assert!(wide.iter().any(|line| line.contains("Local.")), "{wide:?}");
+    assert!(
+        wide.iter().any(|line| line.contains("Agentic.")),
+        "{wide:?}"
+    );
+    assert!(wide.iter().any(|line| line.contains("main")), "{wide:?}");
+    assert!(
+        wide.iter().any(|line| line.contains("gpt-5.5")),
+        "the header at 80 columns dropped the model: {wide:?}"
+    );
+
+    let narrow = answer["narrow"].as_array().expect("the narrow header");
+    assert_eq!(narrow.len(), 1, "{narrow:?}");
+    assert_eq!(narrow[0], "**estigIA**");
+
+    let header_at = |width: &str| {
+        answer[width]
+            .as_array()
+            .expect("the header lines")
+            .iter()
+            .map(|line| line.as_str().expect("a line"))
+            .collect::<Vec<&str>>()
+            .join("\n")
+    };
+    assert!(
+        !header_at("h23").contains("AI harness"),
+        "the subtitle survived 23 columns: {}",
+        header_at("h23")
+    );
+    assert!(
+        header_at("h24").contains("AI harness"),
+        "the subtitle left at 24 columns: {}",
+        header_at("h24")
+    );
+    assert!(
+        !header_at("h39").contains("Light."),
+        "the tagline survived 39 columns: {}",
+        header_at("h39")
+    );
+    assert!(
+        header_at("h40").contains("Light."),
+        "the tagline left at 40 columns: {}",
+        header_at("h40")
+    );
+    assert!(
+        !header_at("h59").contains("gpt-5.5"),
+        "the model survived 59 columns: {}",
+        header_at("h59")
+    );
+    assert!(
+        header_at("h60").contains("gpt-5.5"),
+        "the model left at 60 columns: {}",
+        header_at("h60")
+    );
+
+    let full = answer["full"].as_array().expect("the footer lines");
+    let full: Vec<&str> = full
+        .iter()
+        .map(|line| line.as_str().expect("a line"))
+        .collect();
+    let one = full.join("\n");
+    assert!(one.contains("estigia"), "{one}");
+    assert!(one.contains("#1028 in-progress"), "{one}");
+    assert!(one.contains("main"), "{one}");
+    assert!(one.contains("gpt-5.5 high"), "{one}");
+    assert!(one.contains("ctx 45%"), "{one}");
+    assert!(one.contains("$0.120"), "{one}");
+    assert!(
+        one.contains("ci green"),
+        "another extension's status was hidden: {one}"
+    );
+    assert!(
+        one.contains("**estigia**"),
+        "the footer title is not bold: {one}"
+    );
+
+    let context_at = |key: &str| {
+        answer[key]
+            .as_array()
+            .expect("the footer lines")
+            .iter()
+            .map(|line| line.as_str().expect("a line"))
+            .collect::<Vec<&str>>()
+            .join("\n")
+    };
+    assert!(
+        context_at("context45").contains("{dim}ctx 45%"),
+        "45% is not drawn as ordinary: {}",
+        context_at("context45")
+    );
+    assert!(
+        context_at("context70").contains("{warning}ctx 70%"),
+        "70% is not drawn as a warning: {}",
+        context_at("context70")
+    );
+    assert!(
+        context_at("context90").contains("{error}ctx 90%"),
+        "90% is not drawn as an error: {}",
+        context_at("context90")
+    );
+
+    let tight = answer["tight"].as_array().expect("the tight footer");
+    let tight: Vec<&str> = tight
+        .iter()
+        .map(|line| line.as_str().expect("a line"))
+        .collect();
+    let tight = tight.join("\n");
+    assert!(tight.contains("#1028 in-progress"), "{tight}");
+    assert!(
+        !tight.contains("$0.120"),
+        "the cost survived 30 columns: {tight}"
+    );
+    assert!(
+        !tight.contains("gpt-5.5"),
+        "the model survived 30 columns: {tight}"
+    );
+
+    assert!(answer["off"]["header"].is_null(), "off kept the header");
+    assert!(answer["off"]["footer"].is_null(), "off kept the footer");
+    assert_eq!(
+        answer["on"]["header"], "function",
+        "on did not redraw the header"
+    );
+    assert_eq!(
+        answer["on"]["footer"], "function",
+        "on did not redraw the footer"
+    );
+    assert_eq!(answer["rpcDrawn"], 0, "the look drew in rpc mode");
+    assert_eq!(answer["bareOk"], true);
+    assert_eq!(
+        answer["bareDrawn"], 0,
+        "a host without setFooter got a header anyway"
+    );
+
+    let beside = answer["besideHome"].as_str().expect("the header");
+    assert!(
+        beside.contains("/home/bobby/x"),
+        "a sibling of the home was abbreviated as if it were inside: {beside}"
+    );
+
+    let statless = answer["statless"].as_str().expect("the footer renders");
+    assert!(
+        !statless.contains("#1028"),
+        "a host with no statuses produced a claim: {statless}"
+    );
+    assert!(statless.contains("no claim"), "{statless}");
+    assert!(statless.contains("$0.120"), "{statless}");
+
+    assert_eq!(
+        answer["bogus"]["drawn"], 0,
+        "an unknown argument drew a surface"
+    );
+    assert_eq!(answer["bogus"]["note"][0], "warning", "{}", answer["bogus"]);
 }
 
 #[cfg(unix)]

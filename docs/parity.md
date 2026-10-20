@@ -78,7 +78,6 @@ piece has somewhere else to live:
 | The teaching persona | not this crate |
 | The permissions overlay | the host's own configuration, which Estigia does not overwrite |
 | GGA, the pre-commit AI review | not this crate; Estigia's `pre-push` guard is a different mechanism at a different boundary |
-| The theme | not this crate |
 | Runtime telemetry and its dashboard | not this crate |
 | The `gentle-pi` package harness | not this crate |
 
