@@ -952,7 +952,7 @@ refuses Pi. What none of this proves — chiefly that Pi acts on the returned `b
 `estigia setup pi` writes two artefacts that draw and decide nothing.
 
 `~/.pi/agent/themes/estigia.json` is a Pi theme named `estigia`, appearance `dark`, in the palette of
-the project banner: a night background, an azure accent, cyan code and links, gold headings and
+the project banner: a night background, an azure accent, cyan code and azure links, gold headings and
 borders, olive success, ember error and amber warning. It carries all 51 color tokens Pi's schema
 requires and no token outside the set Pi accepts, and every value is either a literal color or a
 variable the file defines. Pi's schema rejects an unknown top-level key and an unknown color token, so
@@ -964,7 +964,9 @@ a theme somebody edited is neither replaced nor removed.
 same ownership rule as every other extension. It registers one command, `/estigia-look on|off`, and on
 `session_start` installs a startup header through `ctx.ui.setHeader` and a footer through
 `ctx.ui.setFooter`. The header draws the wordmark, the tagline `Light. Local. Agentic.` and the
-abbreviated working directory, branch and model, and below 40 columns it is the wordmark alone. The
+abbreviated working directory, branch and model: the wordmark alone below 24 columns, the wordmark and
+the subtitle `AI harness` from 24, the tagline, the directory and the branch from 40, the model from
+60, and the rule from 40. The
 footer's first line carries `estigia`, the claim read from the `estigia-claim` status, the git branch
 from `footerData.getGitBranch()`, the model and thinking level, the context percentage and the session
 cost; its second line carries the statuses other extensions published, so installing the look never

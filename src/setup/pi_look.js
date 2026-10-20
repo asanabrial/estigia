@@ -23,6 +23,8 @@ const drawn = new WeakSet();
 const paint = (theme, token, text) =>
   typeof theme?.fg === "function" ? theme.fg(token, text) : text;
 
+const strong = (theme, text) => (typeof theme?.bold === "function" ? theme.bold(text) : text);
+
 const widthOf = (text) => String(text).replace(/\u001b\[[0-9;]*m/g, "").length;
 
 const home = () => process.env.HOME || process.env.USERPROFILE;
@@ -83,7 +85,7 @@ const headerComponent = (theme, ctx, branch) => ({
   render: (width) => {
     const lines = [];
     const subtitle = width >= 24 ? paint(theme, "muted", ` ${SUBTITLE}`) : "";
-    lines.push(paint(theme, "accent", MARK) + subtitle);
+    lines.push(strong(theme, paint(theme, "accent", MARK)) + subtitle);
     if (width >= 40) {
       lines.push(TAGLINE.map(([text, token]) => paint(theme, token, text)).join(" "));
       const where = [];
@@ -140,7 +142,7 @@ const footerComponent = (theme, ctx, footerData) => {
       const thinking = ctx?.thinkingLevel;
       const percent = contextOf(ctx);
       const segments = [
-        { text: paint(theme, "accent", TITLE), drop: 0 },
+        { text: strong(theme, paint(theme, "accent", TITLE)), drop: 0 },
         {
           text: claim === undefined ? paint(theme, "dim", NO_CLAIM) : paint(theme, "mdHeading", claim),
           drop: 0,

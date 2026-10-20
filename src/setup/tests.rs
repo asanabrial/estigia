@@ -20882,6 +20882,8 @@ const refused = [
 ];
 const card = refused[0].appended[0];
 const lines = (width) => renderers[card.type](card, { expanded: false }, undefined).render(width);
+const tones = { fg: (token, text) => `{${token}}${text}`, bg: (token, text) => `[${token}]${text}` };
+const toned = (width) => renderers[card.type](card, { expanded: false }, tones).render(width);
 
 const load = async (file) => {
   const seen = { commands: {}, renderers: {}, appended: [], sent: [] };
@@ -20945,6 +20947,7 @@ const changes = [
 ];
 const doctorCard = doctors[0].appended[0];
 const doctorLines = (width) => present.renderers[doctorCard.type](doctorCard, { expanded: false }, undefined).render(width);
+const doctorToned = (seen) => (card) => seen.renderers[card.type](card, { expanded: false }, tones).render(200);
 
 console.log(JSON.stringify({
   doctors,
@@ -20954,12 +20957,15 @@ console.log(JSON.stringify({
   doctorTypes: Object.keys(present.renderers),
   doctorWide: doctorCard ? doctorLines(200) : null,
   doctorNarrow: doctorCard ? doctorLines(10) : null,
+  doctorAnsweredToned: doctors[0].appended[0] ? doctorToned(present)(doctors[0].appended[0]) : null,
+  doctorSilentToned: doctors[2].appended[0] ? doctorToned(present)(doctors[2].appended[0]) : null,
   report,
   out,
   refused,
   rendererTypes: Object.keys(renderers),
   wide: card ? lines(200) : null,
   narrow: card ? lines(12) : null,
+  tonedWide: card ? toned(200) : null,
   reason,
 }));
 "##;
@@ -21499,6 +21505,18 @@ fn the_pi_extension_draws_a_refusal_card_with_the_binarys_words_and_asks_the_mod
         wide.iter().all(|line| line.starts_with("\u{258e} ")),
         "{wide:?}"
     );
+    let toned: Vec<&str> = said["tonedWide"]
+        .as_array()
+        .expect("the card renders with a theme")
+        .iter()
+        .map(|line| line.as_str().unwrap_or_default())
+        .collect();
+    assert!(
+        toned
+            .iter()
+            .all(|line| line.starts_with("[toolErrorBg]{error}\u{258e} ")),
+        "the refusal card lost its tone or its background: {toned:?}"
+    );
     for line in said["narrow"].as_array().expect("the card renders narrow") {
         assert!(
             line.as_str().unwrap_or_default().chars().count() <= 12,
@@ -21593,6 +21611,29 @@ fn the_pi_extension_shows_estigia_doctor_unchanged_to_the_person_and_asks_the_mo
     let silent = case("silent");
     assert!(shown(&silent).contains("exit 3"), "{silent}");
     assert_eq!(silent["appended"][0]["data"]["answered"], false, "{silent}");
+
+    let toned = |key: &str| {
+        said[key]
+            .as_array()
+            .expect("the report renders with a theme")
+            .iter()
+            .map(|line| line.as_str().unwrap_or_default())
+            .collect::<Vec<&str>>()
+    };
+    assert!(
+        toned("doctorAnsweredToned")
+            .iter()
+            .all(|line| line.starts_with("[toolPendingBg]{borderAccent}\u{258e} ")),
+        "an answered report lost its accent or its background: {:?}",
+        toned("doctorAnsweredToned")
+    );
+    assert!(
+        toned("doctorSilentToned")
+            .iter()
+            .all(|line| line.starts_with("[toolErrorBg]{error}\u{258e} ")),
+        "a report that did not answer is not drawn as one: {:?}",
+        toned("doctorSilentToned")
+    );
 
     for label in ["signal", "slow", "missing"] {
         let case = case(label);
@@ -22934,9 +22975,19 @@ fn the_pi_theme_carries_exactly_the_tokens_pi_accepts() {
 
 #[cfg(unix)]
 const PI_LOOK_DRIVER: &str = r##"import { writeFileSync } from "node:fs";
+import childProcess from "node:child_process";
 import look from "./look.mjs";
 
-const theme = { fg: (_token, text) => text, bold: (text) => text };
+const theme = { fg: (_token, text) => text, bold: (text) => `**${text}**` };
+const tone = { fg: (token, text) => `{${token}}${text}`, bg: (token, text) => `[${token}]${text}` };
+let spawned = 0;
+for (const name of ["spawn", "exec", "execFile", "fork"]) {
+  const real = childProcess[name];
+  childProcess[name] = (...args) => {
+    spawned += 1;
+    return real.apply(childProcess, args);
+  };
+}
 const usage = (cost) => ({ type: "message", message: { role: "assistant", usage: { cost: { total: cost } } } });
 const ui = (calls) => ({
   setHeader: (factory) => calls.headers.push(factory),
@@ -22944,12 +22995,12 @@ const ui = (calls) => ({
   notify: (text, kind) => calls.notified.push([kind, text]),
 });
 const build = () => {
-  const calls = { tools: 0, messages: 0, entries: 0, headers: [], footers: [], commands: [], notified: [] };
+  const calls = { tools: 0, messages: 0, userMessages: 0, entries: 0, headers: [], footers: [], commands: [], notified: [] };
   const handlers = {};
   look({
     registerTool: () => { calls.tools += 1; },
     sendMessage: () => { calls.messages += 1; },
-    sendUserMessage: () => { calls.messages += 1; },
+    sendUserMessage: () => { calls.userMessages += 1; },
     appendEntry: () => { calls.entries += 1; },
     registerCommand: (name, spec) => calls.commands.push({ name, handler: spec.handler }),
     on: (name, handler) => { handlers[name] = handler; },
@@ -22958,12 +23009,13 @@ const build = () => {
 };
 
 const tui = build();
+let percent = 45;
 const ctx = {
   mode: "tui",
   cwd: process.cwd(),
   model: { id: "gpt-5.5" },
   thinkingLevel: "high",
-  getContextUsage: () => ({ percent: 45 }),
+  getContextUsage: () => ({ percent }),
   sessionManager: { getEntryCount: () => 2, getEntries: () => [usage(0.1), usage(0.02)] },
   ui: ui(tui.calls),
 };
@@ -22975,10 +23027,18 @@ const statuses = new Map([
 const footerData = { getGitBranch: () => "main", getExtensionStatuses: () => statuses };
 const header = tui.calls.headers.at(-1)({}, theme);
 const footer = tui.calls.footers.at(-1)({}, theme, footerData);
+const toned = tui.calls.footers.at(-1)({}, tone, footerData);
 const wide = header.render(80);
 const narrow = header.render(20);
+const at = (width) => header.render(width);
 const full = footer.render(120);
 const tight = footer.render(30);
+const context = () => toned.render(200);
+const context45 = context();
+percent = 70;
+const context70 = context();
+percent = 90;
+const context90 = context();
 
 await tui.calls.commands[0].handler("off", ctx);
 const off = { header: tui.calls.headers.at(-1) ?? null, footer: tui.calls.footers.at(-1) ?? null };
@@ -23003,14 +23063,25 @@ writeFileSync(
   JSON.stringify({
     registered: {
       tools: tui.calls.tools,
-      messages: tui.calls.messages,
+      messages: tui.calls.messages + tui.calls.userMessages,
       entries: tui.calls.entries,
       commands: tui.calls.commands.map((command) => command.name),
     },
+    subscribed: Object.keys(tui.handlers),
+    spawned,
     wide,
     narrow,
+    h23: at(23),
+    h24: at(24),
+    h39: at(39),
+    h40: at(40),
+    h59: at(59),
+    h60: at(60),
     full,
     tight,
+    context45,
+    context70,
+    context90,
     off,
     on,
     rpcDrawn: rpc.calls.headers.length + rpc.calls.footers.length,
@@ -23062,13 +23133,22 @@ fn the_pi_look_draws_a_header_and_a_footer_and_decides_nothing() {
         "the look appended an entry"
     );
     assert_eq!(answer["registered"]["commands"][0], "estigia-look");
+    assert_eq!(
+        answer["subscribed"],
+        serde_json::json!(["session_start"]),
+        "the look subscribed to something that can answer a call"
+    );
+    assert_eq!(answer["spawned"], 0, "the look started a process");
 
     let wide = answer["wide"].as_array().expect("the header lines");
     let wide: Vec<&str> = wide
         .iter()
         .map(|line| line.as_str().expect("a line"))
         .collect();
-    assert!(wide.iter().any(|line| line.contains("estigIA")), "{wide:?}");
+    assert!(
+        wide.iter().any(|line| line.contains("**estigIA**")),
+        "the wordmark is not bold: {wide:?}"
+    );
     assert!(
         wide.iter().any(|line| line.contains("AI harness")),
         "{wide:?}"
@@ -23087,7 +23167,47 @@ fn the_pi_look_draws_a_header_and_a_footer_and_decides_nothing() {
 
     let narrow = answer["narrow"].as_array().expect("the narrow header");
     assert_eq!(narrow.len(), 1, "{narrow:?}");
-    assert_eq!(narrow[0], "estigIA");
+    assert_eq!(narrow[0], "**estigIA**");
+
+    let header_at = |width: &str| {
+        answer[width]
+            .as_array()
+            .expect("the header lines")
+            .iter()
+            .map(|line| line.as_str().expect("a line"))
+            .collect::<Vec<&str>>()
+            .join("\n")
+    };
+    assert!(
+        !header_at("h23").contains("AI harness"),
+        "the subtitle survived 23 columns: {}",
+        header_at("h23")
+    );
+    assert!(
+        header_at("h24").contains("AI harness"),
+        "the subtitle left at 24 columns: {}",
+        header_at("h24")
+    );
+    assert!(
+        !header_at("h39").contains("Light."),
+        "the tagline survived 39 columns: {}",
+        header_at("h39")
+    );
+    assert!(
+        header_at("h40").contains("Light."),
+        "the tagline left at 40 columns: {}",
+        header_at("h40")
+    );
+    assert!(
+        !header_at("h59").contains("gpt-5.5"),
+        "the model survived 59 columns: {}",
+        header_at("h59")
+    );
+    assert!(
+        header_at("h60").contains("gpt-5.5"),
+        "the model left at 60 columns: {}",
+        header_at("h60")
+    );
 
     let full = answer["full"].as_array().expect("the footer lines");
     let full: Vec<&str> = full
@@ -23104,6 +23224,35 @@ fn the_pi_look_draws_a_header_and_a_footer_and_decides_nothing() {
     assert!(
         one.contains("ci green"),
         "another extension's status was hidden: {one}"
+    );
+    assert!(
+        one.contains("**estigia**"),
+        "the footer title is not bold: {one}"
+    );
+
+    let context_at = |key: &str| {
+        answer[key]
+            .as_array()
+            .expect("the footer lines")
+            .iter()
+            .map(|line| line.as_str().expect("a line"))
+            .collect::<Vec<&str>>()
+            .join("\n")
+    };
+    assert!(
+        context_at("context45").contains("{dim}ctx 45%"),
+        "45% is not drawn as ordinary: {}",
+        context_at("context45")
+    );
+    assert!(
+        context_at("context70").contains("{warning}ctx 70%"),
+        "70% is not drawn as a warning: {}",
+        context_at("context70")
+    );
+    assert!(
+        context_at("context90").contains("{error}ctx 90%"),
+        "90% is not drawn as an error: {}",
+        context_at("context90")
     );
 
     let tight = answer["tight"].as_array().expect("the tight footer");
