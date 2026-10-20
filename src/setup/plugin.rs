@@ -760,6 +760,12 @@ const wrap = (line, width) => {
   return pieces;
 };
 
+const framed = (theme, tone, background, line) => {
+  const bar = theme?.fg?.(tone, "\u258e") ?? "\u258e";
+  const painted = `${bar} ${line}`;
+  return theme?.bg?.(background, painted) ?? painted;
+};
+
 // An entry, not a message: a custom message is converted to a user message for
 // the model whatever its display flag says, and the model already holds the
 // reason as the tool result.
@@ -827,21 +833,32 @@ export default function (pi) {
     const reason = String(data.reason ?? "");
     const head = `estigia refused this ${data.tool ?? "call"}`;
     return {
-      render: (width) => [
-        ...wrap(head, width).map((line) => theme?.fg?.("error", line) ?? line),
-        ...reason.split("\n").flatMap((line) => wrap(line, width)),
-      ],
+      render: (width) => {
+        const room = Math.max(1, width - 2);
+        return [
+          ...wrap(head, room).map((line) => framed(theme, "error", "toolErrorBg", theme?.fg?.("error", line) ?? line)),
+          ...reason
+            .split("\n")
+            .flatMap((line) => wrap(line, room).map((text) => framed(theme, "error", "toolErrorBg", text))),
+        ];
+      },
       invalidate: () => {},
     };
   });
   pi.registerEntryRenderer?.(DOCTOR_CARD, (entry, _options, theme) => {
     const data = entry?.data ?? {};
     return {
-      render: (width) =>
-        String(data.text ?? "")
+      render: (width) => {
+        const room = Math.max(1, width - 2);
+        return String(data.text ?? "")
           .split("\n")
-          .flatMap((line) => wrap(line, width))
-          .map((line) => (data.answered === false ? (theme?.fg?.("error", line) ?? line) : line)),
+          .flatMap((line) => wrap(line, room))
+          .map((line) =>
+            data.answered === false
+              ? framed(theme, "error", "toolErrorBg", theme?.fg?.("error", line) ?? line)
+              : framed(theme, "borderAccent", "toolPendingBg", line),
+          );
+      },
       invalidate: () => {},
     };
   });
@@ -1579,6 +1596,35 @@ pub const PI_PROMPTS: &[(&str, &str)] = &[
         include_str!("pi_prompts/review-status.md"),
     ),
 ];
+
+/// The directory under Pi's agent directory that Pi reads custom themes from.
+pub const PI_THEME_DIRECTORY: &str = "themes";
+
+/// The theme Estigia writes for Pi.
+pub const PI_THEME_FILE: &str = "estigia.json";
+
+/// The theme's source. Pi rejects unknown keys and unknown color tokens, so the
+/// file cannot carry a marker: it is Estigia's while its bytes are these.
+pub const PI_THEME: &str = include_str!("pi_theme.json");
+
+/// Whether the theme at that path is Estigia's, somebody else's, or absent.
+pub fn pi_theme_is_ours(existing: Option<&str>) -> bool {
+    existing == Some(PI_THEME)
+}
+
+/// The look extension Estigia writes for Pi on every install.
+pub const PI_LOOK_FILE: &str = "estigia-look.ts";
+
+/// The marker that says the look extension is Estigia's.
+pub const LOOK_MARKER: &str = "estigia:look";
+
+/// The look extension's source, written unchanged.
+pub const PI_LOOK: &str = include_str!("pi_look.js");
+
+/// Whether the look extension is Estigia's, somebody else's, or absent.
+pub fn look_is_ours(existing: Option<&str>) -> bool {
+    existing.is_some_and(|text| text.contains(LOOK_MARKER))
+}
 
 /// The loop's Claude Code slash commands: `(file name, source)`.
 ///
