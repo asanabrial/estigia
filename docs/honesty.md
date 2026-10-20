@@ -7157,6 +7157,22 @@ pointer that leaves it names the document it points at.
   `git-operation-window-denied` while the window is closed, like a publication, because marking a
   pull request ready is a write the queue does not hold; measured by
   `release_ci_denies_outside_the_period_before_reading_anything_else`.
+- **The window's scope is the repository a write is aimed at, and the gate's reading of an agent's
+  own shell line still belongs to the checkout it runs in.** The transport resolves the pin
+  `Context::repo` — `create`'s `repo` argument, or the tracker's or host's named repository — to a
+  checkout whose `origin` names it: the caller's own first, otherwise one recorded among
+  `known_repositories`, and reads that checkout's rows; a repository with no such checkout is closed
+  rather than inheriting the caller's schedule. Measured by
+  `a_create_aimed_at_another_repository_is_judged_by_that_repositorys_window`,
+  `a_flush_readback_reports_the_window_of_the_repository_it_is_aimed_at`,
+  `a_closed_caller_filing_into_an_open_repository_is_not_deferred` and
+  `a_repository_with_no_readable_rows_closes_rather_than_inheriting_the_caller`. What stays open:
+  the gate classifies a hand-written `gh` line through `harness::operation_window::check_protected`,
+  which reads `GateContext.operation_window` — built by `cli` from the **caller's** checkout — so a
+  shell `gh issue create -R <destination>` is still denied or allowed by the caller's schedule, and
+  only the transport's own `create` and the flush moved. The destination lookup also reads each
+  recorded checkout's remote through git, so a destination whose checkout is not registered, or
+  whose `origin` is not a GitHub remote, reads as no rows and closes.
 - **The store holds a write queue and one permitted rewrite of an entry.**
   Schema 9 adds `outbox` and `provisional_issues`, and the `entries_no_update` trigger now lets
   exactly one update through: moving an entry's `issue` from a provisional number to the real

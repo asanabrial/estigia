@@ -694,6 +694,10 @@ pub enum GitOperationWindow {
     /// A row was written and it does not parse. Denies every protected
     /// operation: an unknown schedule is not clearance.
     Invalid,
+    /// The repository a write is aimed at has no checkout on this machine whose
+    /// rows can be read. Denies every protected operation: a schedule nobody
+    /// can read is not clearance either.
+    Unreadable,
 }
 
 const DAY_NAMES: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -825,6 +829,7 @@ impl GitOperationWindow {
                 }
             }
             Self::Invalid => "invalid".to_owned(),
+            Self::Unreadable => "unreadable".to_owned(),
         }
     }
 
@@ -847,6 +852,7 @@ impl GitOperationWindow {
         match self {
             Self::Disabled => true,
             Self::Invalid => false,
+            Self::Unreadable => false,
             Self::Enabled {
                 start,
                 end,

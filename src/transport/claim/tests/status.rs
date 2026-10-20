@@ -362,10 +362,6 @@ fn a_refutation_batch_already_recorded_is_never_collected_again() {
 #[test]
 fn a_configured_repository_that_does_not_parse_is_unavailable_not_replaced_by_origin() {
     let (_root, context, _receipt) = low_change();
-    git(
-        &context.repo_dir,
-        &["remote", "add", "origin", "git@github.com:fixture/repo.git"],
-    );
     let bad = Context {
         repo: Some("not a repo".to_owned()),
         ..context
@@ -931,10 +927,6 @@ fn a_pull_request_whose_base_moved_off_the_receipt_is_a_coded_stop() {
 #[test]
 fn the_repository_is_read_from_the_origin_remote_when_none_is_named() {
     let (_root, context, _receipt) = low_change();
-    git(
-        &context.repo_dir,
-        &["remote", "add", "origin", "git@github.com:fixture/repo.git"],
-    );
     let unnamed = Context {
         repo: None,
         ..context
@@ -949,6 +941,7 @@ fn the_repository_is_read_from_the_origin_remote_when_none_is_named() {
 #[test]
 fn a_repository_that_cannot_be_named_without_github_is_unavailable() {
     let (_root, context, _receipt) = low_change();
+    git(&context.repo_dir, &["remote", "remove", "origin"]);
     let unnamed = Context {
         repo: None,
         ..context

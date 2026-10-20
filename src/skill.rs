@@ -1500,6 +1500,32 @@ pub fn known_repositories(home: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+/// The GitHub repository a checkout's `origin` remote names — or its first
+/// remote when there is no `origin` — when that is on GitHub.
+///
+/// Read from the checkout's own configured remote, not from a resolved URL: a
+/// local `insteadOf` rewrite of the origin would otherwise hide the repository
+/// the clone was made from, which is the one this names.
+pub(crate) fn github_repository_of(checkout: &Path) -> Option<crate::config::RepoRef> {
+    let git = |args: &[&str]| -> Option<String> {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(checkout)
+            .args(args)
+            .output()
+            .ok()
+            .filter(|output| output.status.success())?;
+        Some(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    };
+    let remotes = git(&["remote"])?;
+    let name = remotes
+        .lines()
+        .find(|name| *name == "origin")
+        .or_else(|| remotes.lines().next())?;
+    let url = git(&["config", "--get", &format!("remote.{name}.url")])?;
+    crate::config::RepoRef::from_github_remote(&url)
+}
+
 /// Every checkout the list names, reachable or not.
 ///
 /// The pruning above is what the *offer* is made from, and it is not what the

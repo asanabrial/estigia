@@ -16479,6 +16479,10 @@ fn change_of(
     git(&repo, &["init", "--quiet", "-b", "main"]);
     git(&repo, &["config", "user.email", "estigia@example.invalid"]);
     git(&repo, &["config", "user.name", "Estigia test"]);
+    git(
+        &repo,
+        &["remote", "add", "origin", "git@github.com:fixture/repo.git"],
+    );
     std::fs::write(repo.join(file), before).expect("content");
     git(&repo, &["add", file]);
     git(&repo, &["commit", "--quiet", "-m", "base"]);
@@ -16492,7 +16496,7 @@ fn change_of(
         ..ledger_receipt()
     };
     let context = Context {
-        repo: Some("o/r".to_owned()),
+        repo: Some("fixture/repo".to_owned()),
         ..context_at(&repo)
     };
     (root, context, receipt)

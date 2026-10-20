@@ -166,61 +166,65 @@ fn a_created_issue_takes_its_number_before_the_next_write_on_it() {
 fn a_create_for_another_repository_while_closed_is_queued_there_and_filed_by_a_flush_from_it() {
     let mut rig = rig();
     rig.context.repo = Some("other/target".to_owned());
-    let provisional = created(&rig);
-    let target = Repo {
-        host: "github.com".to_owned(),
-        owner: "other".to_owned(),
-        name: "target".to_owned(),
-    };
-    let held = |repo: &Repo| -> Vec<(OutboxKind, u64)> {
-        Store::open(&store_path().expect("a path"))
-            .expect("opens")
-            .outbox(repo)
-            .expect("reads")
-            .iter()
-            .map(|row| (row.kind, row.issue))
-            .collect()
-    };
+    let home = tempfile::tempdir().expect("a home");
+    let _destination = destination(home.path(), "other/target", "enabled 09:00-17:00");
+    with_home(home.path(), || {
+        let provisional = created(&rig);
+        let target = Repo {
+            host: "github.com".to_owned(),
+            owner: "other".to_owned(),
+            name: "target".to_owned(),
+        };
+        let held = |repo: &Repo| -> Vec<(OutboxKind, u64)> {
+            Store::open(&store_path().expect("a path"))
+                .expect("opens")
+                .outbox(repo)
+                .expect("reads")
+                .iter()
+                .map(|row| (row.kind, row.issue))
+                .collect()
+        };
 
-    assert_eq!(
-        held(&target),
-        vec![
-            (OutboxKind::Create, provisional),
-            (OutboxKind::Reconverge, provisional)
-        ]
-    );
-    assert_eq!(held(&repo()), Vec::new());
+        assert_eq!(
+            held(&target),
+            vec![
+                (OutboxKind::Create, provisional),
+                (OutboxKind::Reconverge, provisional)
+            ]
+        );
+        assert_eq!(held(&repo()), Vec::new());
 
-    rig.context.repo = Some("fixture/repo".to_owned());
-    let elsewhere = rig.flushed(&[]).expect("a flush from the other checkout");
-    assert_eq!(elsewhere["sent"], 0, "{elsewhere}");
-    assert_eq!(rig.writes(), Vec::<String>::new());
-    assert_eq!(held(&target).len(), 2);
+        rig.context.repo = Some("fixture/repo".to_owned());
+        let elsewhere = rig.flushed(&[]).expect("a flush from the other checkout");
+        assert_eq!(elsewhere["sent"], 0, "{elsewhere}");
+        assert_eq!(rig.writes(), Vec::<String>::new());
+        assert_eq!(held(&target).len(), 2);
 
-    rig.context.repo = Some("other/target".to_owned());
-    let report = rig
-        .flushed(&[
-            serde_json::json!({
-                "matches": "issue create",
-                "stdout": "https://github.com/other/target/issues/41",
-                "status": 0,
-            }),
-            view(41, "ready"),
-        ])
-        .expect("a flush from the target checkout");
-    assert_eq!(report["remaining"], 0, "{report}");
-    assert!(
-        rig.writes()
-            .iter()
-            .any(|line| line.starts_with("issue create")),
-        "the flush from the target checkout filed nothing: {:?}",
-        rig.writes()
-    );
-    assert!(
-        held(&target).iter().all(|(_, issue)| *issue == 41),
-        "{:?}",
-        held(&target)
-    );
+        rig.context.repo = Some("other/target".to_owned());
+        let report = rig
+            .flushed(&[
+                serde_json::json!({
+                    "matches": "issue create",
+                    "stdout": "https://github.com/other/target/issues/41",
+                    "status": 0,
+                }),
+                view(41, "ready"),
+            ])
+            .expect("a flush from the target checkout");
+        assert_eq!(report["remaining"], 0, "{report}");
+        assert!(
+            rig.writes()
+                .iter()
+                .any(|line| line.starts_with("issue create")),
+            "the flush from the target checkout filed nothing: {:?}",
+            rig.writes()
+        );
+        assert!(
+            held(&target).iter().all(|(_, issue)| *issue == 41),
+            "{:?}",
+            held(&target)
+        );
+    });
 }
 
 #[test]
