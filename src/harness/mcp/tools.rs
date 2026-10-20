@@ -536,8 +536,9 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "task",
         description: "Record or revise one row of the claimed issue's ODD task checklist in the \
                       local store: a stable id, its acceptance, the route used and, once done, \
-                      the commit identity. Needs the live claim; nothing is written to the \
-                      tracker. The answer carries the whole checklist, or with `compact` the \
+                      the commit identity or, when the work is not a commit, an `evidence` note \
+                      naming where it is recorded. Needs the live claim; nothing is written to \
+                      the tracker. The answer carries the whole checklist, or with `compact` the \
                       changed row alone.",
         operation: "task",
         arguments: &[
@@ -562,13 +563,19 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "status",
                 "string",
-                "`done` once the work-unit commit exists, `open` to reopen. Done needs `commit`.",
+                "`done` once the work-unit commit exists or its `evidence` is recorded, `open` \
+                 to reopen. Done needs `commit` or `evidence`.",
             )
             .of(&["open", "done"]),
             Argument::optional(
                 "commit",
                 "string",
                 "The work-unit commit identity, lowercase hex.",
+            ),
+            Argument::optional(
+                "evidence",
+                "string",
+                "Where the work is recorded when it is not a commit. Done needs this or `commit`.",
             ),
             Argument::optional(
                 "expect_state",

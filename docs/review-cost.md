@@ -597,6 +597,11 @@ refusal names itself; and `record_review_finding` no longer advertises `lens`, w
 refused. A caller that still sends `lens` through the tool is told it does not take it; the transport
 still refuses it `recorded-by-capture-only`.
 
+The `task` tool's `evidence` argument — the shape a task whose work is not a commit is closed by —
+moved the unreadable-context list from **46,744** to **46,996** bytes, and `TOOLS_LIST_CEILING` was
+raised by exactly that difference, from 46,800 to 46,996. The argument and its description are what
+a caller needs to close such a task, so the ceiling moved rather than the meaning being trimmed.
+
 `target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
 paid only by a call that passes `manifest`.
 

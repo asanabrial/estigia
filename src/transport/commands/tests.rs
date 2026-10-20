@@ -803,6 +803,7 @@ fn task_records_the_checklist_under_the_claim_and_tasks_reads_it_back() {
                 route,
                 status,
                 commit,
+                evidence: None,
                 compact: false,
                 now: "2026-01-02T00:00Z",
             },
@@ -849,8 +850,8 @@ fn task_records_the_checklist_under_the_claim_and_tasks_reads_it_back() {
             "issue": 5,
             "count": 2,
             "tasks": [
-                { "id": "T1", "text": "first", "route": "inline", "done": true, "commit": "abcdef0" },
-                { "id": "T2", "text": "second", "route": "delegated", "done": false, "commit": null },
+                { "id": "T1", "text": "first", "route": "inline", "done": true, "commit": "abcdef0", "evidence": null },
+                { "id": "T2", "text": "second", "route": "delegated", "done": false, "commit": null, "evidence": null },
             ],
         })
     );
@@ -858,6 +859,132 @@ fn task_records_the_checklist_under_the_claim_and_tasks_reads_it_back() {
         gh_writes(&log).is_empty(),
         "task reached GitHub for a write: {:?}",
         gh_writes(&log)
+    );
+}
+
+/// A task whose work is not a commit reaches `done` by naming where it is
+/// recorded, and the read-back carries that note beside a null commit.
+///
+/// Mutation: refuse a `done` row that has only `evidence`, or drop `evidence`
+/// from the read-back, and this reddens.
+#[test]
+fn a_done_task_may_record_evidence_instead_of_a_commit() {
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let store_path = root.path().join("state.db");
+    let mut context = local_context(root.path());
+    context.repo = Some("fixture/repo".to_owned());
+    let bin = crate::test_env::scripted_gh();
+    let held = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        "claude-abcd1234",
+        5,
+        "in-progress",
+    )]);
+    let log = root.path().join("calls.log");
+
+    let (done, read) = crate::transport::store::with_store_at(&store_path, || {
+        crate::test_env::with_logging_gh(bin.path(), &held, &log, || {
+            let call = |status: Option<&str>, commit: Option<&str>, evidence: Option<&str>| {
+                super::task(
+                    &context,
+                    &super::TaskCall {
+                        issue: 5,
+                        run_id: "claude-abcd1234",
+                        expect_state: "in-progress",
+                        id: "T1",
+                        text: Some("a bookkeeping task"),
+                        route: Some("inline"),
+                        status,
+                        commit,
+                        evidence,
+                        compact: false,
+                        now: "2026-01-02T00:00Z",
+                    },
+                )
+            };
+            call(None, None, None).expect("T1 records");
+            let done = call(
+                Some("done"),
+                None,
+                Some("recorded in the issue close evidence; no change was required"),
+            )
+            .expect("a task done by evidence alone");
+            let read = super::tasks(&context, 5).expect("the checklist reads");
+            (done, read)
+        })
+    });
+
+    assert_eq!(done["task"]["done"], true, "{done}");
+    assert_eq!(done["task"]["commit"], serde_json::Value::Null, "{done}");
+    assert_eq!(
+        done["task"]["evidence"], "recorded in the issue close evidence; no change was required",
+        "{done}"
+    );
+    assert_eq!(
+        read["tasks"][0]["evidence"],
+        "recorded in the issue close evidence; no change was required",
+        "{read}"
+    );
+    assert_eq!(
+        read["tasks"][0]["commit"],
+        serde_json::Value::Null,
+        "{read}"
+    );
+    assert!(
+        gh_writes(&log).is_empty(),
+        "task reached GitHub for a write: {:?}",
+        gh_writes(&log)
+    );
+}
+
+/// An `evidence` note that is blank or past the byte cap is refused the same
+/// way `text` is, before anything is written.
+#[test]
+fn blank_or_oversized_evidence_is_refused() {
+    let root = tempfile::tempdir().expect("a directory for the fixture repository");
+    let store_path = root.path().join("state.db");
+    let mut context = local_context(root.path());
+    context.repo = Some("fixture/repo".to_owned());
+    let bin = crate::test_env::scripted_gh();
+    let held = crate::test_env::answers(&[crate::test_env::live_holder_issue(
+        "claude-abcd1234",
+        5,
+        "in-progress",
+    )]);
+    let log = root.path().join("calls.log");
+
+    let refusals = crate::transport::store::with_store_at(&store_path, || {
+        crate::test_env::with_logging_gh(bin.path(), &held, &log, || {
+            let call = |evidence: &str| {
+                super::task(
+                    &context,
+                    &super::TaskCall {
+                        issue: 5,
+                        run_id: "claude-abcd1234",
+                        expect_state: "in-progress",
+                        id: "T1",
+                        text: Some("a task"),
+                        route: Some("inline"),
+                        status: Some("done"),
+                        commit: None,
+                        evidence: Some(evidence),
+                        compact: false,
+                        now: "2026-01-02T00:00Z",
+                    },
+                )
+                .expect_err("the call was refused")
+                .envelope()["reason"]
+                    .clone()
+            };
+            vec![call("   "), call(&"x".repeat(4001))]
+        })
+    });
+
+    assert_eq!(
+        refusals,
+        [
+            serde_json::json!("invalid-task"),
+            serde_json::json!("invalid-task")
+        ]
     );
 }
 
@@ -883,6 +1010,7 @@ fn task_is_refused_for_a_run_that_does_not_hold_the_issue() {
                     route: Some("inline"),
                     status: None,
                     commit: None,
+                    evidence: None,
                     compact: false,
                     now: "2026-01-02T00:00Z",
                 },
@@ -918,6 +1046,7 @@ fn the_legacy_task_acknowledgment_repeats_the_whole_checklist() {
                 route: Some("inline"),
                 status: None,
                 commit: None,
+                evidence: None,
                 compact: false,
                 now: "2026-01-02T00:00Z",
             },
@@ -993,6 +1122,7 @@ fn the_compact_task_acknowledgment_carries_only_the_changed_row() {
                 route: Some("inline"),
                 status: None,
                 commit: None,
+                evidence: None,
                 compact: true,
                 now: "2026-01-02T00:00Z",
             },
@@ -1080,6 +1210,7 @@ fn a_compact_revision_answers_the_revised_row_and_leaves_the_checklist_alone() {
                 route,
                 status,
                 commit,
+                evidence: None,
                 compact,
                 now: "2026-01-02T00:00Z",
             },
@@ -1145,6 +1276,7 @@ fn a_compact_revision_answers_the_revised_row_and_leaves_the_checklist_alone() {
                 "route": "inline",
                 "done": true,
                 "commit": "abcdef0",
+                "evidence": null,
             },
         }),
         "{revised}"

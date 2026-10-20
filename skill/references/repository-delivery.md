@@ -238,6 +238,18 @@ remote tag object and its peeled commit. Never move or force an existing version
 release artifact only when repository history or configuration requires one, and build it from the
 already-verified tag.
 
+## Close with no publication
+
+An issue that requires no change — a bookkeeping or publication task whose answer is a record
+rather than a diff — reaches `done` without a publication, and this class is exceptional: it is the
+one `done` with no receipt. `transition --to done` verifies the merge of the latest confirmed
+publication when there is one and answers nothing to verify when there is none, so this close is
+not refused for having no publication. The run records the close evidence exactly as any other
+close does — the reason no change was required, and the name of the person or rule that decided it
+— so a later reader sees the decision rather than inferring it from an empty diff. Its ODD
+checklist rows are done by an `evidence` note naming where the work is recorded rather than by a
+`commit`, since there is no work-unit commit to name.
+
 ## Handoff and cleanup
 
 Choose the destination the Decision Gates table in `SKILL.md` names. This file does not

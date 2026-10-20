@@ -537,6 +537,7 @@ fn run_operation(
                 route: f.get("route"),
                 status: f.get("status"),
                 commit: f.get("commit"),
+                evidence: f.get("evidence"),
                 compact: f.on("compact"),
                 now,
             },

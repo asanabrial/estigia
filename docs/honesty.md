@@ -7254,8 +7254,9 @@ pointer that leaves it names the document it points at.
   finding is not filed twice. Another machine, a person, and the board see none of it until the flush:
   the labels, the board column, the assignee and the comments on GitHub disagree with the store for
   as long as their writes are queued, and a second machine can file the same issue and take the same
-  provisional number. A task cannot be marked done while closed, because the commit that records
-  it is denied by the window. `start_branch` makes the local branch and worktree while closed,
+  provisional number. A task whose work is a commit cannot be marked done while closed, because
+  the commit that records it is denied by the window; a task closed by an `evidence` note instead
+  is not. `start_branch` makes the local branch and worktree while closed,
   which it refused before, so a branch can exist locally that GitHub has not been told of. Measured by
   `an_issue_created_while_closed_is_listed_as_provisional_in_the_state_the_store_gives_it`,
   `a_listing_with_no_provisional_issue_carries_no_trace_of_one` and
@@ -8681,8 +8682,13 @@ pointer that leaves it names the document it points at.
   and is read through the import until the store holds it. `blocked_until` requires no claim, so any
   run that names itself may add or clear a clause on a blocked issue; the claim-gated `task` is the
   only one of the three that proves who wrote. A `task` is recorded, not verified: nothing checks
-  that its commit exists or that its text is the acceptance the issue states, and a `done` row is
-  the run's word that the work-unit commit exists.
+  that its commit exists, that its `evidence` note names anything real, or that its text is the
+  acceptance the issue states, and a `done` row is the run's word that the work-unit commit exists
+  — or, when it carries `evidence` instead, that no commit was required. The no-publication close
+  is declared rather than measured: `transition --to done` refuses a `done` whose latest confirmed
+  publication is unmerged, but answers nothing to verify when the issue has no confirmed
+  publication at all, so a `done` with no publication is accepted whether the issue genuinely
+  required no change or a run took the exception where a change did.
 - **The store is one copy, and its protection is local and partial.** A lost `~/.estigia/state.db` is imported
   again on the next touch and loses only what GitHub never carried — which since slice c6 includes
   every identity, `blocked-until` clause and task a run recorded, since slice d1a every `claim`,

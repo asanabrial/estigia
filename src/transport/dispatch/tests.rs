@@ -1269,6 +1269,7 @@ fn the_task_arm_reads_the_compact_switch_and_answers_the_changed_row_alone() {
                 "route": "inline",
                 "done": false,
                 "commit": null,
+                "evidence": null,
             },
         }),
         "{compact}"

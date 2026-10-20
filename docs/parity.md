@@ -150,7 +150,8 @@ decision recorded where a reader looks for it:
   (`internal/components/agentguidance/routing.go:33-48`), the evidence budget
   (`internal/agents/capabilitymanifest/manifest.go:214-236`) and test-first as the default. Two
   divergences are declared. Tracking is recorded with the `task` operation under the claimed issue in the local store,
-  not in a checkout file (`routing.go:116`); and review binds the publication, so a chained delivery reviews per pull
+  not in a checkout file (`routing.go:116`), and a `done` row whose work is not a commit is closed by an `evidence`
+  note naming where it is recorded rather than by a commit; and review binds the publication, so a chained delivery reviews per pull
   request rather than per commit (`routing.go:119`).
 - **The managed block per runtime.** Settled as a declared divergence. gentle-ai v4 renders a full
   orchestrator block per runtime and strips the receipt-driven-development content from runtimes that

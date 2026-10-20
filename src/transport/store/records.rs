@@ -20,6 +20,7 @@ pub(crate) struct TaskRow {
     pub(crate) route: String,
     pub(crate) done: bool,
     pub(crate) commit: Option<String>,
+    pub(crate) evidence: Option<String>,
 }
 
 /// What one `task` call asks to change; an absent field leaves the row as it was.
@@ -29,6 +30,7 @@ pub(crate) struct TaskChange<'a> {
     pub(crate) route: Option<&'a str>,
     pub(crate) done: Option<bool>,
     pub(crate) commit: Option<&'a str>,
+    pub(crate) evidence: Option<&'a str>,
 }
 
 impl Store {
@@ -121,8 +123,8 @@ impl Store {
     /// Applies one change to a checklist row, creating it when it is new.
     ///
     /// A new row needs its text and its route; a row cannot be done without a
-    /// commit identity, whether recorded now or before. Refused with nothing
-    /// written otherwise.
+    /// commit identity or an `evidence` note, whether recorded now or before.
+    /// Refused with nothing written otherwise.
     pub(crate) fn change_task(
         &mut self,
         repo: &Repo,
@@ -153,6 +155,7 @@ impl Store {
                 route: change.route.map_or(row.route, ToOwned::to_owned),
                 done: change.done.unwrap_or(row.done),
                 commit: change.commit.map(ToOwned::to_owned).or(row.commit),
+                evidence: change.evidence.map(ToOwned::to_owned).or(row.evidence),
             },
             None => {
                 let (Some(text), Some(route)) = (change.text, change.route) else {
@@ -169,24 +172,27 @@ impl Store {
                     route: route.to_owned(),
                     done: change.done.unwrap_or(false),
                     commit: change.commit.map(ToOwned::to_owned),
+                    evidence: change.evidence.map(ToOwned::to_owned),
                 }
             }
         };
-        if row.done && row.commit.is_none() {
+        if row.done && row.commit.is_none() && row.evidence.is_none() {
             return Err(Failure::Stop(serde_json::json!({
                 "ok": false,
                 "reason": "task-done-without-commit",
-                "detail": "a task is done once its work-unit commit exists; name it with `commit`",
-                "action": "call `task` again with `status` done and `commit` naming the work-unit commit",
+                "detail": "a task is done once its work-unit commit exists, or its `evidence` \
+                           names where the work is recorded when no commit was required",
+                "action": "call `task` again with `status` done and either `commit` naming the \
+                           work-unit commit or `evidence` naming where the work is recorded",
             })));
         }
         transaction
             .execute(
-                "INSERT INTO tasks (repo_id, issue, id, text, route, done, commit_id, at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                "INSERT INTO tasks (repo_id, issue, id, text, route, done, commit_id, evidence, at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                  ON CONFLICT (repo_id, issue, id) DO UPDATE SET
                     text = excluded.text, route = excluded.route, done = excluded.done,
-                    commit_id = excluded.commit_id, at = excluded.at",
+                    commit_id = excluded.commit_id, evidence = excluded.evidence, at = excluded.at",
                 rusqlite::params![
                     repo_id,
                     int(issue),
@@ -195,6 +201,7 @@ impl Store {
                     row.route,
                     row.done,
                     row.commit,
+                    row.evidence,
                     now
                 ],
             )
@@ -212,7 +219,7 @@ fn read_tasks(
     issue: u64,
 ) -> rusqlite::Result<Vec<TaskRow>> {
     let mut statement = connection.prepare(
-        "SELECT id, text, route, done, commit_id FROM tasks
+        "SELECT id, text, route, done, commit_id, evidence FROM tasks
          WHERE repo_id = ?1 AND issue = ?2 ORDER BY rowid",
     )?;
     statement
@@ -223,6 +230,7 @@ fn read_tasks(
                 route: row.get(2)?,
                 done: row.get(3)?,
                 commit: row.get(4)?,
+                evidence: row.get(5)?,
             })
         })?
         .collect()

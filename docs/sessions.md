@@ -40,7 +40,7 @@ A store that is present and cannot be read is refused, not listed as empty.
 ## The mailbox
 
 `estigia sessions send <run-id> "<text>"` (or `--file <path>`) writes one row to the `messages` table of
-`state.db` (schema 11): the sender's run id when one is known, the recipient's run id, the text, and when it was
+`state.db` (schema 12): the sender's run id when one is known, the recipient's run id, the text, and when it was
 sent. The sender is `--run-id`, or `--session-id` with `--runtime`, or the ambient `ESTIGIA_RUN_ID`; a person at a
 terminal sends with none, and the message is shown as from a person.
 
