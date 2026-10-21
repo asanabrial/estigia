@@ -1259,11 +1259,13 @@ pointer that leaves it names the document it points at.
   named test still exists and that both workflows install a runtime, not how many tests spawn one.
   A driver added or deleted changes the truth of both pages and reddens neither; review is what
   holds them. **The names, though, are crossed**: `every_test_the_catalogue_names_is_still_a_function`
-  reads every backticked identifier of twelve characters or more back out of the source with its
-  comments stripped, and fails when the suite no longer holds it — measured by renaming one entry to
-  a test nobody wrote, which reddens it. What stays unheld is the *classification*: a test that
-  changes which interpreter it needs keeps its name, and the sentence that says how many need `node`
-  goes wrong with nothing to notice.
+  reads the catalogue's backticked identifiers of twelve characters or more that are lowercase
+  letters, digits and `_` only — so `node`, `tar`, `python3` and every file path are left out — walks
+  `src/` and `tests/` with comments stripped, and fails when no function of that name remains.
+  Measured by renaming one entry to a test nobody wrote, which reddens it. It crosses the *name* and
+  not the role: an entry whose test lost its `#[test]` attribute while a same-named helper stayed
+  behind is still green, as is a test that kept its name and changed which interpreter it needs, so
+  the sentence saying how many need `node` can still go wrong with nothing to notice.
 
 ## The OpenCode plugin, and what it knows about a call
 
