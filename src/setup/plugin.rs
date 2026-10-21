@@ -176,7 +176,7 @@ const peeked = (text) => {{
 const wake = async (ctx, shell, cwd, sessionID, idle) => {{
   if (!introduced.has(sessionID)) {{
     introduced.add(sessionID);
-    await askMailbox(shell, cwd, sessionID, "start", []);
+    await askMailbox(shell, cwd, sessionID, "start", ["--wake", "poll"]);
   }}
   const found = peeked(await askMailbox(shell, cwd, sessionID, "deliver", ["--peek", "--json"]));
   if (found === undefined || !idle.has(sessionID)) return;
@@ -648,7 +648,7 @@ const ended = new Set();
 const sessionContext = async (session, ctx) => {
   if (!filled(session)) return "Estigia: session context unknown (Pi gave this session no id)";
   const begun = started.get(session) ?? {};
-  const extra = [];
+  const extra = ["--wake", "poll"];
   if (filled(begun.reason)) extra.push("--reason", begun.reason);
   if (filled(begun.previous)) extra.push("--previous-session-id", begun.previous);
   const answer = await askSession(

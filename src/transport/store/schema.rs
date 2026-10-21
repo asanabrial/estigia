@@ -195,4 +195,12 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "
     ALTER TABLE tasks ADD COLUMN evidence TEXT;
     ",
+    "
+    ALTER TABLE sessions ADD COLUMN name TEXT;
+    ALTER TABLE sessions ADD COLUMN ord INTEGER;
+    ALTER TABLE sessions ADD COLUMN build TEXT;
+    ALTER TABLE sessions ADD COLUMN wake TEXT;
+    CREATE UNIQUE INDEX sessions_name ON sessions (repo_dir, name)
+        WHERE name IS NOT NULL;
+    ",
 ];

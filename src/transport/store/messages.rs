@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use rusqlite::OptionalExtension as _;
+
 use super::{Store, int, unreadable};
 use crate::transport::Failure;
 
@@ -91,6 +93,17 @@ impl Store {
             .map_err(unreadable("take the pending messages"))?;
         taken.sort_by_key(|message| message.id);
         Ok(taken)
+    }
+
+    pub(crate) fn message(&self, id: i64) -> Result<Option<Message>, Failure> {
+        self.connection()
+            .query_row(
+                "SELECT id, sender_run_id, body, created_at FROM messages WHERE id = ?1",
+                rusqlite::params![id],
+                message_row,
+            )
+            .optional()
+            .map_err(unreadable("read one message"))
     }
 
     pub(crate) fn messages_pending(&self, recipient_run_id: &str) -> Result<Vec<Message>, Failure> {

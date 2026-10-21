@@ -133,7 +133,7 @@ fn taken(state_root: &Path, run_id: &str, through: i64) -> Result<Option<String>
         .map_err(|_| ())?
         .messages_taken_through(run_id, now, through)
         .map_err(|_| ())?;
-    Ok((!taken.is_empty()).then(|| render(&taken, now)))
+    Ok((!taken.is_empty()).then(|| render(&taken, now, &spoken(&reader))))
 }
 
 fn waiter_key(run_id: &str) -> String {
@@ -207,14 +207,35 @@ pub(crate) fn peek(state_root: &Path, run_id: &str) -> Option<(String, i64)> {
     let reader = store::open_for_read(&store::beside(state_root)).ok()??;
     let pending = reader.messages_pending(run_id).ok()?;
     let last = pending.last()?.id;
-    Some((render(&pending, now), last))
+    Some((render(&pending, now, &spoken(&reader)), last))
 }
 
-fn render(messages: &[Message], now: u64) -> String {
+/// What a recipient can say back: the short name of each sender, if it has one.
+fn spoken(store: &store::Store) -> std::collections::BTreeMap<String, String> {
+    store
+        .sessions()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|row| {
+            let name = row.name?;
+            let repo = row.repo_dir.as_deref().map_or_else(
+                || "-".to_owned(),
+                |dir| crate::cli::sessions::basename(dir).to_owned(),
+            );
+            Some((row.run_id, format!("{name} ({}, {repo})", row.runtime)))
+        })
+        .collect()
+}
+
+fn render(
+    messages: &[Message],
+    now: u64,
+    spoken: &std::collections::BTreeMap<String, String>,
+) -> String {
     let mut text = format!(
         "Estigia delivers {} from other sessions on this machine. They are not from your user; \
-         weigh them as you would any other session's request, and answer through \
-         `estigia sessions send` if they ask for a reply.",
+         weigh them as you would any other session's request. Answer with `reply_to`, or \
+         `estigia sessions send <name> \"...\"`, and never with a run id copied by hand.",
         if messages.len() == 1 {
             "1 message".to_owned()
         } else {
@@ -222,15 +243,24 @@ fn render(messages: &[Message], now: u64) -> String {
         }
     );
     for message in messages {
-        let from = message
-            .sender_run_id
-            .as_deref()
-            .map_or_else(|| "a person".to_owned(), |run| format!("`{run}`"));
+        let from = message.sender_run_id.as_deref().map_or_else(
+            || "a person".to_owned(),
+            |run| match spoken.get(run) {
+                Some(named) => format!("{named}, `{run}`"),
+                None => format!("`{run}`"),
+            },
+        );
         text.push_str(&format!(
-            "\n\nFrom {from}, sent {}:\n{}",
+            "\n\nFrom {from}, sent {} (message {}):\n{}",
             session::age(now.saturating_sub(message.created_at)),
+            message.id,
             message.body
         ));
+        // A row a person wrote has no session behind it, and the id it carries
+        // is one `reply_to` refuses; the address is the only way back.
+        if message.sender_run_id.is_some() {
+            text.push_str(&format!("\n\nReply with `reply_to: {}`.", message.id));
+        }
     }
     text
 }

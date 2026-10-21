@@ -1092,6 +1092,7 @@ pub fn run_as(
                     session::runtime_of_agent(host),
                     &input.session_id,
                     &context.repo_dir,
+                    None,
                 );
             }
             let run = session::load(&context.state_root, &run_id);

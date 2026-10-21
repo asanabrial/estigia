@@ -6050,6 +6050,7 @@ mod send_message {
                             runtime,
                             session_id: "host-session",
                             repo_dir: None,
+                            wake: None,
                         },
                         1_000,
                     )
@@ -6089,6 +6090,22 @@ mod send_message {
             self.store()
                 .import(&repo(), issue, &github, HOLDER_NOW)
                 .expect("a claim imports");
+            self.pointer(run_id, issue);
+            let runtime = self
+                .store()
+                .sessions()
+                .expect("the registry reads")
+                .into_iter()
+                .find(|row| row.run_id == run_id)
+                .map(|row| row.runtime)
+                .unwrap_or_else(|| "claude".to_owned());
+            self.seen(
+                run_id,
+                &runtime,
+                "host-session",
+                None,
+                crate::harness::session::now_seconds().expect("a clock"),
+            );
         }
 
         fn rows_to(&self, run_id: &str) -> u64 {
@@ -6124,6 +6141,7 @@ mod send_message {
                         runtime,
                         session_id,
                         repo_dir,
+                        wake: None,
                     },
                     now,
                 )
@@ -6182,6 +6200,22 @@ mod send_message {
         })
     }
 
+    fn answer_to(id: u64, from: &str, to: i64, text: &str) -> Value {
+        json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": { "name": "send_message",
+                "arguments": { "run_id": from, "reply_to": to, "text": text } },
+        })
+    }
+
+    fn send_from(from: &str, id: u64, to: &str, text: &str) -> Value {
+        json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": { "name": "send_message",
+                "arguments": { "run_id": from, "to": to, "text": text } },
+        })
+    }
+
     fn answer(number: u64, result: Value) -> Value {
         json!({ "jsonrpc": "2.0", "id": format!("estigia-elicit-{number}"), "result": result })
     }
@@ -6235,7 +6269,7 @@ mod send_message {
     fn a_send_the_mailbox_would_refuse_is_refused_before_the_person_is_asked() {
         let rig = Rig::new();
         for (to, text, code) in [
-            ("codex-gone0a1b2c3d", "hello", "message-recipient-unknown"),
+            ("codex-gone0a1b2c3d", "hello", "message-no-live-session"),
             (RECIPIENT, "   ", "message-empty"),
         ] {
             let output = rig.serve(&[initialize(asks()), send(2, to, text)]);
@@ -6388,19 +6422,19 @@ mod send_message {
     fn an_issue_nobody_holds_is_refused_without_asking_and_nothing_is_recorded() {
         let rig = Rig::new();
         let output = rig.serve(&[initialize(asks()), send(2, "#99", "hello")]);
-        assert!(text_of(reply(&output, 2)).contains("message-issue-has-no-holder"));
+        assert!(text_of(reply(&output, 2)).contains("message-no-live-session"));
         assert!(questions(&output).is_empty());
         assert_eq!(rig.rows_to(RECIPIENT), 0);
     }
 
     #[test]
-    fn a_pointer_naming_an_issue_does_not_make_its_run_the_holder() {
+    fn a_stale_pointer_does_not_answer_an_issue_address() {
         let rig = Rig::new();
         let mut pointer = session::Run::new(RECIPIENT.to_owned());
         pointer.issue = Some(crate::identity::Identity::Number(12));
         session::store(&rig.context().state_root, &pointer).expect("the pointer writes");
         let output = rig.serve(&[initialize(asks()), send(2, "12", "hello")]);
-        assert!(text_of(reply(&output, 2)).contains("message-issue-has-no-holder"));
+        assert!(text_of(reply(&output, 2)).contains("message-no-live-session"));
         assert_eq!(rig.rows_to(RECIPIENT), 0);
     }
 
@@ -6480,34 +6514,263 @@ mod send_message {
     }
 
     #[test]
-    fn list_sessions_answers_the_entries_the_command_prints() {
+    fn the_default_answer_is_the_live_sessions_and_the_registry_is_the_opt_in() {
         let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        rig.seen(
+            "claude-live0a1b2c3d",
+            "claude",
+            "host-live",
+            Some("/repo/one"),
+            now,
+        );
         let context = rig.context();
-        let result = run_tool("list_sessions", &json!({}), Ok(&context)).expect("a list");
-        let mut listed: Value =
-            serde_json::from_str(result["content"][0]["text"].as_str().expect("text"))
-                .expect("json");
-        let mut printed = serde_json::to_value(
-            crate::cli::sessions::entries(&context.state_root).expect("entries"),
-        )
-        .expect("serialises");
-        for entries in [listed["sessions"].as_array_mut(), printed.as_array_mut()]
-            .into_iter()
-            .flatten()
-        {
-            for entry in entries {
-                entry
-                    .as_object_mut()
-                    .expect("an object")
-                    .remove("silent_for");
-            }
-        }
-        assert_eq!(listed["sessions"], printed);
-        assert_eq!(listed["sessions"].as_array().map(Vec::len), Some(2));
+
+        let around = answered(run_tool("list_sessions", &json!({}), Ok(&context)).expect("a list"));
+        assert_eq!(around["live_count"].as_u64(), Some(1), "{around}");
+        assert_eq!(around["of"].as_u64(), Some(3), "{around}");
+        assert_eq!(around["live"][0]["run_id"], "claude-live0a1b2c3d");
+        assert_eq!(around["live"][0]["name"], "one-1", "{around}");
+        assert_eq!(around["live"][0]["repo"], "one", "{around}");
+        assert!(around.get("sessions").is_none(), "{around}");
+
+        let page = answered(
+            run_tool("list_sessions", &json!({"limit": 10}), Ok(&context)).expect("a page"),
+        );
+        assert_eq!(page["matched"].as_u64(), Some(3), "{page}");
         assert_eq!(
-            listed["stale_after"],
+            page["stale_after"],
             crate::cli::sessions::STALE_AFTER_SECONDS
         );
+    }
+
+    #[test]
+    fn a_short_name_and_the_runtime_vocabulary_address_the_same_live_rows() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        rig.seen(
+            "opencode-live0a1b2c3d",
+            "opencode",
+            "host",
+            Some("/repo/estigia"),
+            now,
+        );
+        let context = rig.context();
+        for said in [
+            "opencode",
+            "opencode@estigia",
+            "estigia-1",
+            "opencode-live0a1b2c3d",
+        ] {
+            let answer = answered(
+                run_tool("list_sessions", &json!({"address": said}), Ok(&context))
+                    .expect("an addressed list"),
+            );
+            assert_eq!(answer["matched"].as_u64(), Some(1), "{said}: {answer}");
+            assert_eq!(
+                answer["live"][0]["run_id"], "opencode-live0a1b2c3d",
+                "{said}: {answer}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_address_nobody_live_matches_answers_the_closest_and_sends_nothing() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        rig.seen(
+            "opencode-live0a1b2c3d",
+            "opencode",
+            "host",
+            Some("/repo/estigia"),
+            now,
+        );
+        let context = rig.context();
+        let answer = answered(
+            run_tool(
+                "list_sessions",
+                &json!({"address": "codex@estigia"}),
+                Ok(&context),
+            )
+            .expect("an addressed list"),
+        );
+        assert_eq!(answer["matched"].as_u64(), Some(0), "{answer}");
+        assert_eq!(answer["live"].as_array().map(Vec::len), Some(0), "{answer}");
+        assert_eq!(answer["closest"][0]["runtime"], "opencode", "{answer}");
+    }
+
+    #[test]
+    fn an_ambiguous_address_answers_every_candidate_and_sends_nothing() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        for run in ["opencode-one0a1b2c3d", "opencode-two0a1b2c3d"] {
+            rig.seen(run, "opencode", "host", Some("/repo/estigia"), now);
+        }
+        let output = rig.serve(&[initialize(asks()), send(2, "opencode@estigia", "hello")]);
+        let text = text_of(reply(&output, 2));
+        assert!(text.contains("message-recipient-ambiguous"), "{text}");
+        for run in ["opencode-one0a1b2c3d", "opencode-two0a1b2c3d"] {
+            assert!(text.contains(run), "{run} missing from {text}");
+        }
+        assert!(questions(&output).is_empty(), "{output:?}");
+        assert_eq!(rig.rows_to("opencode-one0a1b2c3d"), 0);
+        assert_eq!(rig.rows_to("opencode-two0a1b2c3d"), 0);
+    }
+
+    #[test]
+    fn one_call_hands_an_issue_to_the_opencode_session_of_a_repository_from_every_runtime() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        let investora = "opencode-invest0a1b2c3";
+        let estigia = "opencode-estig0a1b2c3d";
+        rig.seen(
+            investora,
+            "opencode",
+            "ses_inv",
+            Some("/work/investora"),
+            now,
+        );
+        rig.seen(estigia, "opencode", "ses_est", Some("/work/estigia"), now);
+
+        for (number, from) in [
+            (10, SENDER),
+            (20, "opencode-sndr0a1b2c3d"),
+            (30, "codex-sndr0a1b2c3d"),
+            (40, "pi-sndr0a1b2c3d"),
+        ] {
+            rig.seen(
+                from,
+                &from[..from.rfind('-').unwrap_or(0)],
+                "host",
+                None,
+                now,
+            );
+
+            let first = rig.serve(&[
+                initialize(asks()),
+                send_from(from, number, "opencode@investora", "flow dev 723 investora"),
+                choose(1, "allow_once"),
+            ]);
+            assert_eq!(
+                reply(&first, number)["result"]["isError"],
+                false,
+                "{from}: {first:?}"
+            );
+            let said = text_of(reply(&first, number));
+            assert!(said.contains(investora), "{from}: {said}");
+            assert!(said.contains("queued"), "{from}: {said}");
+
+            let second = rig.serve(&[
+                initialize(asks()),
+                send_from(from, number + 1, "opencode@estigia", "flow dev 170 estigia"),
+                choose(1, "allow_once"),
+            ]);
+            assert_eq!(
+                reply(&second, number + 1)["result"]["isError"],
+                false,
+                "{from}: {second:?}"
+            );
+        }
+
+        assert_eq!(rig.rows_to(investora), 4);
+        assert_eq!(rig.rows_to(estigia), 4);
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn a_short_name_two_repositories_share_is_ambiguous_and_sends_nothing() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        for (run, dir) in [
+            ("opencode-one0a1b2c3d", "/work/estigia"),
+            ("opencode-two0a1b2c3d", "/elsewhere/estigia"),
+        ] {
+            rig.seen(run, "opencode", "host", Some(dir), now);
+        }
+        let output = rig.serve(&[initialize(asks()), send(2, "estigia-1", "hello")]);
+        let text = text_of(reply(&output, 2));
+        assert!(text.contains("message-recipient-ambiguous"), "{text}");
+        for run in ["opencode-one0a1b2c3d", "opencode-two0a1b2c3d"] {
+            assert!(text.contains(run), "{run} missing from {text}");
+        }
+        assert_eq!(rig.rows_to("opencode-one0a1b2c3d"), 0);
+        assert_eq!(rig.rows_to("opencode-two0a1b2c3d"), 0);
+    }
+
+    #[test]
+    fn a_delivered_message_carries_the_id_to_answer_and_a_persons_note_does_not() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "from a session"),
+            choose(1, "allow_once"),
+        ]);
+        assert_eq!(reply(&output, 2)["result"]["isError"], false);
+        let delivered =
+            crate::harness::mailbox::deliver(&context.state_root, RECIPIENT).expect("delivered");
+        assert!(
+            delivered.contains("Reply with `reply_to: 1`."),
+            "{delivered}"
+        );
+
+        let person =
+            crate::harness::mailbox::send(&context.state_root, None, RECIPIENT, "from a person")
+                .expect("a person sends");
+        let note =
+            crate::harness::mailbox::deliver(&context.state_root, RECIPIENT).expect("delivered");
+        assert!(
+            !note.contains("Reply with `reply_to:"),
+            "a person's note was answered by id: {note}"
+        );
+        assert!(note.contains(&format!("message {}", person.id)), "{note}");
+    }
+
+    #[test]
+    fn a_non_string_address_is_malformed_rather_than_a_listing() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let refused = run_tool("list_sessions", &json!({"address": 7}), Ok(&context));
+        match refused {
+            Err(ToolFailure::Malformed(detail)) => {
+                assert!(detail.contains("`address` is the string"), "{detail}")
+            }
+            other => panic!("a number was answered as an address: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_reply_answers_the_sender_without_a_run_id() {
+        let rig = Rig::new();
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "first"),
+            choose(1, "allow_once"),
+            answer_to(3, RECIPIENT, 1, "answer"),
+            choose(2, "allow_once"),
+        ]);
+        assert_eq!(reply(&output, 3)["result"]["isError"], false);
+        assert_eq!(rig.rows_to(RECIPIENT), 1);
+        assert_eq!(rig.rows_from(SENDER), 1);
+        assert_eq!(rig.rows_to(SENDER), 1);
+    }
+
+    #[test]
+    fn a_reply_to_a_message_a_person_sent_names_the_reason() {
+        let rig = Rig::new();
+        let receipt = crate::harness::mailbox::send(
+            &rig.context().state_root,
+            None,
+            RECIPIENT,
+            "from a person",
+        )
+        .expect("a person sends");
+        let output = rig.serve(&[
+            initialize(asks()),
+            answer_to(2, RECIPIENT, receipt.id, "answer"),
+        ]);
+        assert!(text_of(reply(&output, 2)).contains("message-reply-has-no-sender"));
+        assert_eq!(rig.rows_to(RECIPIENT), 1);
     }
 
     fn answered(result: Value) -> Value {
@@ -6634,7 +6897,11 @@ mod send_message {
             "a bounded snapshot is the registry rows, and a pointer-only run is not one of them"
         );
 
-        let full = run_ids(&answered(rig.list(json!({})).expect("the full list")));
+        let full: Vec<String> = crate::cli::sessions::entries(&rig.context().state_root)
+            .expect("the registry reads")
+            .into_iter()
+            .map(|entry| entry.run_id)
+            .collect();
         assert!(full.contains(&"pi-old0a1b2c3d".to_owned()), "{full:?}");
         assert!(full.contains(&"pi-new0a1b2c3d".to_owned()), "{full:?}");
     }

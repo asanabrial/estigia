@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use super::{GateContext, session, tracker};
 use crate::outcome::{Refusal, Resolution};
 
+pub(crate) mod address;
 pub(crate) mod messaging;
 pub mod tools;
 
