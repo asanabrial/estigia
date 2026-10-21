@@ -132,11 +132,26 @@ pub use crate::config::STATES;
 /// Its reason for existing is ordering: `gh` refuses to attach a label that does
 /// not exist, and the refusal arrives at `gh issue create` — the analyst's last
 /// step, after all the analysis is done.
+///
+/// While the git operation window is closed it writes nothing and answers
+/// `deferred`, because the `Reconverge` a queued `create`, `claim` or `transition`
+/// already schedules creates the labels at the flush.
 pub fn ensure_states(context: &Context) -> Result<serde_json::Value, Failure> {
     let ensured: Vec<String> = STATES
         .iter()
         .map(|state| format!("status:{state}"))
         .collect();
+    if matches!(
+        super::window::state(context),
+        super::window::Mode::Closed(_)
+    ) {
+        return Ok(serde_json::json!({
+            "ok": true,
+            "deferred": true,
+            "ensured": ensured,
+            "window": "closed",
+        }));
+    }
     for name in &ensured {
         super::run(
             &[

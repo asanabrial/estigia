@@ -6331,6 +6331,10 @@ pointer that leaves it names the document it points at.
   existed. Closing it means reading
   what `gh` printed rather than only its exit code, and this crate has never been shown those exact
   words — the same reason `icacls` is named beside `neutralising-shell` and not added to it.
+  A closed git operation window is the one case where the answer says so: it carries
+  `deferred: true` and `window: closed` beside the same `ensured` list, and
+  nothing was created — so a reader has to tell that answer from a `gh` that could not run, and the
+  `deferred` field is the only thing that does it.
 - **Both of those numbers used to drift unread.** The check accepted the phrase "every agent Estigia
   knows" and then stopped, so the sentence went on to say "six of them, in three dialects" while ten
   were gated in five. The counts in that sentence are now crossed against the adapter table and the
