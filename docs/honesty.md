@@ -1258,8 +1258,12 @@ pointer that leaves it names the document it points at.
   guard — `no_workflow_needs_only_interpreters_it_sets_up` in `tests/release.rs` — asks that one
   named test still exists and that both workflows install a runtime, not how many tests spawn one.
   A driver added or deleted changes the truth of both pages and reddens neither; review is what
-  holds them. The catalogue's own test names are the suite's, so a renamed test leaves this file
-  naming a test that is gone, and only a person following the link notices.
+  holds them. **The names, though, are crossed**: `every_test_the_catalogue_names_is_still_a_function`
+  reads every backticked identifier of twelve characters or more back out of the source with its
+  comments stripped, and fails when the suite no longer holds it — measured by renaming one entry to
+  a test nobody wrote, which reddens it. What stays unheld is the *classification*: a test that
+  changes which interpreter it needs keeps its name, and the sentence that says how many need `node`
+  goes wrong with nothing to notice.
 
 ## The OpenCode plugin, and what it knows about a call
 
