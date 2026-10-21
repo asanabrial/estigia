@@ -86,9 +86,11 @@ impl Store {
                 Err(error) => return Err(unreadable("record a session")(error)),
             }
         }
-        Err(Failure::Read(
-            "record a session: its short name could not be minted after five attempts".to_owned(),
-        ))
+        Err(Failure::Read(format!(
+            "record a session: `{}` could not be given a short name after five attempts, \
+             because another registration kept taking the ordinal this one computed",
+            seen.run_id
+        )))
     }
 
     pub(crate) fn session_wake(&self, run_id: &str, wake: &str) -> Result<(), Failure> {

@@ -30,6 +30,16 @@ impl Narrowed {
     }
 }
 
+/// The one row an address names, or the refusal that says why it names none
+/// or several. Both doors go through here, so they cannot disagree.
+pub(crate) fn one(narrowed: Narrowed, said: &str) -> Result<Listed, Refusal> {
+    match narrowed.matched.as_slice() {
+        [only] => Ok(only.clone()),
+        [] => Err(no_live_session(said, &narrowed)),
+        _ => Err(recipient_ambiguous(said, &narrowed)),
+    }
+}
+
 pub(crate) fn no_live_session(address: &str, narrowed: &Narrowed) -> Refusal {
     let closest = if narrowed.closest.is_empty() {
         "no session of any runtime is live on this machine".to_owned()
@@ -70,6 +80,16 @@ pub(crate) fn recipient_ambiguous(address: &str, narrowed: &Narrowed) -> Refusal
     )
 }
 
+/// A bare number has always meant an issue number, so it keeps meaning one —
+/// at both doors, which is why the CLI reaches it here rather than by itself.
+pub(crate) fn spoken(said: &str) -> String {
+    let digits = said.strip_prefix('#').unwrap_or(said);
+    if !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return format!("#{digits}");
+    }
+    said.to_owned()
+}
+
 fn matches_repo(entry: &Listed, wanted: &str) -> bool {
     entry.repo_dir.as_deref().is_some_and(|dir| {
         basename(dir) == wanted
@@ -104,16 +124,29 @@ pub(crate) fn resolve(root: &Path, address: &str) -> Result<Narrowed, Refusal> {
     let word = address.strip_prefix("runtime:").unwrap_or(address);
 
     let bare = !word.contains('#') && !word.contains('@');
-    if bare
-        && let Some(named) = every
+    if bare {
+        // A run id is unique by construction; a short name is unique only
+        // within one repository, so every row carrying it is a candidate and
+        // the caller refuses several rather than picking the first.
+        if let Some(named) = every.iter().find(|entry| entry.run_id == word) {
+            return Ok(Narrowed {
+                matched: vec![named.clone()],
+                closest: Vec::new(),
+                live: live.len(),
+            });
+        }
+        let named: Vec<Listed> = every
             .iter()
-            .find(|entry| entry.run_id == word || entry.name.as_deref() == Some(word))
-    {
-        return Ok(Narrowed {
-            matched: vec![named.clone()],
-            closest: Vec::new(),
-            live: live.len(),
-        });
+            .filter(|entry| entry.name.as_deref() == Some(word))
+            .cloned()
+            .collect();
+        if !named.is_empty() {
+            return Ok(Narrowed {
+                matched: named,
+                closest: Vec::new(),
+                live: live.len(),
+            });
+        }
     }
 
     let mut wanted_runtime: Option<String> = None;

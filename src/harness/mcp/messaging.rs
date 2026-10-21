@@ -136,28 +136,9 @@ fn malformed(detail: String) -> ToolFailure {
     ToolFailure::Malformed(detail)
 }
 
-fn issue_number(to: &str) -> Option<u64> {
-    let digits = to.strip_prefix('#').unwrap_or(to);
-    (!digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
-        .then(|| digits.parse().ok())
-        .flatten()
-}
-
-/// A bare number has always meant an issue number, so it keeps meaning one.
-fn address_of(to: &str) -> String {
-    match issue_number(to) {
-        Some(number) => format!("#{number}"),
-        None => to.to_owned(),
-    }
-}
-
 fn resolved(context: &GateContext, said: &str) -> Result<Listed, Refusal> {
     let narrowed = address::resolve(&context.state_root, said)?;
-    match narrowed.matched.as_slice() {
-        [only] => Ok(only.clone()),
-        [] => Err(address::no_live_session(said, &narrowed)),
-        _ => Err(address::recipient_ambiguous(said, &narrowed)),
-    }
+    address::one(narrowed, said)
 }
 
 fn mailbox_unreadable(detail: &str) -> Refusal {
@@ -269,7 +250,7 @@ pub(super) fn send_message(
             let to = to
                 .as_str()
                 .ok_or_else(|| malformed("`to` is an address string".to_owned()))?;
-            let said = address_of(to.trim());
+            let said = address::spoken(to);
             resolved(context, &said).map_err(refused)?
         }
         (Some(_), Some(_)) => {
@@ -341,7 +322,18 @@ pub(super) fn list_sessions(
     ]
     .iter()
     .any(|name| arguments.get(*name).is_some());
-    if let Some(asked) = arguments.get("address").and_then(Value::as_str) {
+    let asked = match arguments.get("address") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(asked)) => Some(asked.as_str()),
+        Some(_) => {
+            return Err(malformed(
+                "`address` is the string a person would say, such as `opencode@estigia`, `#96` \
+                 or `estigia-2`"
+                    .to_owned(),
+            ));
+        }
+    };
+    if let Some(asked) = asked {
         if paged {
             return Err(malformed(
                 "`address` answers the live registry by what a person calls a session; the page \

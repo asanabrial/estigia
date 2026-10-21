@@ -218,15 +218,11 @@ fn spoken(store: &store::Store) -> std::collections::BTreeMap<String, String> {
         .into_iter()
         .filter_map(|row| {
             let name = row.name?;
-            let repo = row.repo_dir.as_deref().and_then(|dir| {
-                std::path::Path::new(dir)
-                    .file_name()
-                    .and_then(|name| name.to_str())
-            });
-            Some((
-                row.run_id,
-                format!("{name} ({}, {})", row.runtime, repo.unwrap_or("-")),
-            ))
+            let repo = row.repo_dir.as_deref().map_or_else(
+                || "-".to_owned(),
+                |dir| crate::cli::sessions::basename(dir).to_owned(),
+            );
+            Some((row.run_id, format!("{name} ({}, {repo})", row.runtime)))
         })
         .collect()
 }
@@ -255,12 +251,16 @@ fn render(
             },
         );
         text.push_str(&format!(
-            "\n\nFrom {from}, sent {} (message {}):\n{}\n\nReply with `reply_to: {}`.",
+            "\n\nFrom {from}, sent {} (message {}):\n{}",
             session::age(now.saturating_sub(message.created_at)),
             message.id,
-            message.body,
-            message.id
+            message.body
         ));
+        // A row a person wrote has no session behind it, and the id it carries
+        // is one `reply_to` refuses; the address is the only way back.
+        if message.sender_run_id.is_some() {
+            text.push_str(&format!("\n\nReply with `reply_to: {}`.", message.id));
+        }
     }
     text
 }

@@ -702,20 +702,9 @@ pub(super) fn send(
         (None, None) => String::new(),
     };
     let root = session::state_root(None)?;
-    let narrowed = crate::harness::mcp::address::resolve(&root, recipient)?;
-    let row = match narrowed.matched.as_slice() {
-        [only] => only.clone(),
-        [] => {
-            return Err(crate::harness::mcp::address::no_live_session(
-                recipient, &narrowed,
-            ));
-        }
-        _ => {
-            return Err(crate::harness::mcp::address::recipient_ambiguous(
-                recipient, &narrowed,
-            ));
-        }
-    };
+    let said = crate::harness::mcp::address::spoken(recipient);
+    let narrowed = crate::harness::mcp::address::resolve(&root, &said)?;
+    let row = crate::harness::mcp::address::one(narrowed, &said)?;
     let receipt = mailbox::send(&root, sender, &row.run_id, body.trim_end())?;
     if json {
         super::print_json(&serde_json::json!({

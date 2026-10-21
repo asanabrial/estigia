@@ -6678,6 +6678,68 @@ mod send_message {
     }
 
     #[test]
+    fn a_short_name_two_repositories_share_is_ambiguous_and_sends_nothing() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        for (run, dir) in [
+            ("opencode-one0a1b2c3d", "/work/estigia"),
+            ("opencode-two0a1b2c3d", "/elsewhere/estigia"),
+        ] {
+            rig.seen(run, "opencode", "host", Some(dir), now);
+        }
+        let output = rig.serve(&[initialize(asks()), send(2, "estigia-1", "hello")]);
+        let text = text_of(reply(&output, 2));
+        assert!(text.contains("message-recipient-ambiguous"), "{text}");
+        for run in ["opencode-one0a1b2c3d", "opencode-two0a1b2c3d"] {
+            assert!(text.contains(run), "{run} missing from {text}");
+        }
+        assert_eq!(rig.rows_to("opencode-one0a1b2c3d"), 0);
+        assert_eq!(rig.rows_to("opencode-two0a1b2c3d"), 0);
+    }
+
+    #[test]
+    fn a_delivered_message_carries_the_id_to_answer_and_a_persons_note_does_not() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "from a session"),
+            choose(1, "allow_once"),
+        ]);
+        assert_eq!(reply(&output, 2)["result"]["isError"], false);
+        let delivered =
+            crate::harness::mailbox::deliver(&context.state_root, RECIPIENT).expect("delivered");
+        assert!(
+            delivered.contains("Reply with `reply_to: 1`."),
+            "{delivered}"
+        );
+
+        let person =
+            crate::harness::mailbox::send(&context.state_root, None, RECIPIENT, "from a person")
+                .expect("a person sends");
+        let note =
+            crate::harness::mailbox::deliver(&context.state_root, RECIPIENT).expect("delivered");
+        assert!(
+            !note.contains("Reply with `reply_to:"),
+            "a person's note was answered by id: {note}"
+        );
+        assert!(note.contains(&format!("message {}", person.id)), "{note}");
+    }
+
+    #[test]
+    fn a_non_string_address_is_malformed_rather_than_a_listing() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let refused = run_tool("list_sessions", &json!({"address": 7}), Ok(&context));
+        match refused {
+            Err(ToolFailure::Malformed(detail)) => {
+                assert!(detail.contains("`address` is the string"), "{detail}")
+            }
+            other => panic!("a number was answered as an address: {other:?}"),
+        }
+    }
+
+    #[test]
     fn a_reply_answers_the_sender_without_a_run_id() {
         let rig = Rig::new();
         let output = rig.serve(&[
