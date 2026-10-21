@@ -45,6 +45,14 @@ const DOCUMENTS: &[(&str, usize)] = &[
 
 const LINE_CEILING: usize = 2_000;
 
+/// The repository's own instructions, and the bytes each may carry.
+///
+/// The same mechanism as `DOCUMENTS`, for the other audience: `skill/*.md` is shipped to somebody
+/// else's agent, and `AGENTS.md` is read by every session that works here, so its size is paid per
+/// session rather than per install. Inventory belongs in a document that answers its own question;
+/// this is what fails when it comes back here.
+const OWN_INSTRUCTIONS: &[(&str, usize)] = &[("AGENTS.md", 13_223)];
+
 const LINE_EXCEPTIONS: &[LineException] = &[];
 
 struct LineException {
@@ -253,4 +261,25 @@ fn no_shipped_skill_file_names_a_docs_path_the_installed_skill_cannot_open() {
         "the skill is installed without docs/; state the fact in a shipped companion instead:\n{}",
         hits.join("\n")
     );
+}
+
+#[test]
+fn this_repositorys_own_instructions_stay_under_their_registered_ceilings() {
+    assert!(
+        !OWN_INSTRUCTIONS.is_empty(),
+        "nothing is registered, so this guard would agree with everything"
+    );
+    for (rel, ceiling) in OWN_INSTRUCTIONS {
+        let measured = lf_bytes(&root().join(rel)).len();
+        assert!(
+            !over_bytes(measured, *ceiling),
+            "{}",
+            byte_refusal(rel, measured, *ceiling)
+        );
+        assert!(
+            measured * 2 > *ceiling,
+            "{rel} is {measured} bytes against a ceiling of {ceiling}, so the entry measures \
+             something other than the file it names"
+        );
+    }
 }

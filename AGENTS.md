@@ -34,6 +34,11 @@ Four properties, and they are checkable by reading:
   prose, since in prose it may be illustrative, historical or external — and on a crate item one of
   the two forms it recognises binds to a file that does not hold it.
 
+This file carries a byte ceiling of its own in `tests/instruction_ceiling.rs`, beside the shipped
+skill's: growth past it fails the suite, and moving the number is the review-visible edit a budget
+exists to force. Inventory belongs in a document that answers its own question — which is why the test
+catalogue is in [`docs/testing.md`](docs/testing.md) rather than here.
+
 Everything here is written in **English**, including comments, commit prose and specifications. The
 audience is whoever reads this repository next, and they may not share your language.
 
