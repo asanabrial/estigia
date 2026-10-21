@@ -1354,3 +1354,81 @@ fn the_title_search_quotes_the_title_as_one_phrase() {
         "the title was not searched as one quoted phrase: {calls}"
     );
 }
+
+fn closed_window() -> crate::transport::window::Mode {
+    crate::transport::window::Mode::Closed(
+        crate::config::GitOperationWindow::parse("enabled 09:00-17:00").expect("a schedule"),
+    )
+}
+
+fn the_six_labels(answer: &serde_json::Value) -> Vec<String> {
+    answer["ensured"]
+        .as_array()
+        .expect("the six labels")
+        .iter()
+        .map(|label| label.as_str().expect("a label").to_owned())
+        .collect()
+}
+
+#[test]
+fn ensure_states_defers_while_the_git_operation_window_is_closed() {
+    let root = tempfile::tempdir().expect("a directory");
+    let log = root.path().join("calls.log");
+    let bin = crate::test_env::scripted_gh();
+    let context = local_context(root.path());
+
+    let answer = crate::test_env::with_logging_gh(bin.path(), "", &log, || {
+        crate::transport::window::with_mode(closed_window(), || super::ensure_states(&context))
+    })
+    .expect("a closed window is answered, not refused");
+
+    assert_eq!(answer["ok"], true, "{answer}");
+    assert_eq!(answer["deferred"], true, "{answer}");
+    assert_eq!(answer["window"], "closed", "{answer}");
+    assert_eq!(
+        the_six_labels(&answer),
+        crate::config::STATES
+            .iter()
+            .map(|state| format!("status:{state}"))
+            .collect::<Vec<_>>(),
+        "{answer}"
+    );
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        calls.is_empty(),
+        "the deferred answer still started gh: {calls}"
+    );
+}
+
+#[test]
+fn ensure_states_creates_the_labels_while_the_window_is_open() {
+    let root = tempfile::tempdir().expect("a directory");
+    let log = root.path().join("calls.log");
+    let bin = crate::test_env::scripted_gh();
+    let context = local_context(root.path());
+
+    let answer = crate::test_env::with_logging_gh(bin.path(), "", &log, || {
+        crate::transport::window::with_mode(crate::transport::window::Mode::Open, || {
+            super::ensure_states(&context)
+        })
+    })
+    .expect("an open window creates the labels");
+
+    assert_eq!(answer["ok"], true, "{answer}");
+    assert_eq!(answer["deferred"], serde_json::Value::Null, "{answer}");
+    assert_eq!(
+        the_six_labels(&answer).len(),
+        crate::config::STATES.len(),
+        "{answer}"
+    );
+    let calls = std::fs::read_to_string(&log).expect("the calls were logged");
+    let created = calls
+        .lines()
+        .filter(|line| line.contains("label create"))
+        .count();
+    assert_eq!(
+        created,
+        crate::config::STATES.len(),
+        "an open window did not create each label once: {calls}"
+    );
+}
