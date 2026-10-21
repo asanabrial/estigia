@@ -213,7 +213,8 @@ fn run(mut app: App, mut install: Option<&mut Installer<'_>>) -> Result<Option<D
             app.repository = repo_dir().display().to_string();
         }
         if remote_read_for != app.repository {
-            app.remote = github_remote_of(std::path::Path::new(&app.repository));
+            app.remote = crate::skill::github_repository_of(std::path::Path::new(&app.repository))
+                .map(|repo| format!("github {repo}"));
             remote_read_for.clone_from(&app.repository);
             refresh_guard(&mut app);
         }
@@ -889,28 +890,6 @@ pub(crate) fn io_refusal(what: &str, error: &std::io::Error) -> Refusal {
              needs none",
         ),
     )
-}
-
-/// `github <owner>/<name>` for the checkout's `origin` — or its first remote — when that is on GitHub.
-fn github_remote_of(checkout: &std::path::Path) -> Option<String> {
-    let git = |args: &[&str]| -> Option<String> {
-        let output = std::process::Command::new("git")
-            .arg("-C")
-            .arg(checkout)
-            .args(args)
-            .output()
-            .ok()
-            .filter(|output| output.status.success())?;
-        Some(String::from_utf8_lossy(&output.stdout).trim().to_owned())
-    };
-    let remotes = git(&["remote"])?;
-    let name = remotes
-        .lines()
-        .find(|name| *name == "origin")
-        .or_else(|| remotes.lines().next())?;
-    let url = git(&["remote", "get-url", name])?;
-    let repo = crate::config::RepoRef::from_github_remote(&url)?;
-    Some(format!("github {}/{}", repo.owner, repo.name))
 }
 
 /// The machine itself, as the page reads it.

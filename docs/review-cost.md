@@ -602,6 +602,11 @@ moved the unreadable-context list from **46,744** to **46,996** bytes, and `TOOL
 raised by exactly that difference, from 46,800 to 46,996. The argument and its description are what
 a caller needs to close such a task, so the ceiling moved rather than the meaning being trimmed.
 
+The `create` tool's `repo` argument and the `flush` description now say that the destination's git
+operation window decides, not the caller's — the behaviour a cross-repository filing changed to. That
+moved the list from **46,996** to **47,044** bytes, and `TOOLS_LIST_CEILING` was raised by exactly
+that difference: a caller filing elsewhere needs to know whose schedule it is held to.
+
 `target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
 paid only by a call that passes `manifest`.
 

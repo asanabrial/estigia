@@ -85,6 +85,15 @@ guard whether or not the checkout is claimed. The schedule never grants: inside 
 claim, state, review, and irreversible-boundary check still applies. Worktree creation on an existing
 branch, file edits, tests, and builds are unaffected. An enabled value that does not parse, or a
 clock that cannot be read, denies the protected operations rather than falling back to unrestricted.
+**Which repository's rows decide is the repository the write is aimed at, not the checkout the call
+runs in.** `create`'s `repo` argument, and the tracker's or host's named repository, name the
+destination, and the window is read from that repository's own checkout: the caller's own when its
+`origin` names the destination, otherwise one recorded among the checkouts that answer for themselves
+(`estigia config repos`), matched by the destination's `origin`. A repository this machine has no such
+checkout for is closed rather than judged by the caller's schedule — an unknown schedule is not
+clearance — and `flush` aimed at it reports `window: "closed"` and lists that repository's queue.
+This is the transport's own reading; the gate's classification of an agent's shell line still belongs
+to the checkout the line runs in, which [`docs/honesty.md`](honesty.md) records.
 The window is the base period "the day is in the set and the minute is in the range", read in the
 process's local time zone; a range that crosses midnight belongs to the day it starts on, so
 `fri 22:00-06:00` covers Friday 22:00 to Saturday 06:00 and not Saturday 22:00. `inverted` is the exact

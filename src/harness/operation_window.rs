@@ -4,8 +4,9 @@
 //! time. Enabled, it denies the protected operations outside the permitted
 //! period and never grants anything inside it: every claim, state, review,
 //! and irreversible-boundary check still runs. An enabled value that does not
-//! parse, and a clock that will not say, deny the protected operations rather
-//! than falling back to unrestricted — and nothing else.
+//! parse, a clock that will not say, and a repository whose rows this machine
+//! cannot read deny the protected operations rather than falling back to
+//! unrestricted — and nothing else.
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -182,6 +183,12 @@ pub fn denial(window: &GitOperationWindow, now: Option<u16>) -> Refusal {
                 .to_owned(),
             "a usable value, or `disabled`",
         ),
+        (GitOperationWindow::Unreadable, _) => (
+            "the repository this write is aimed at has no checkout on this machine whose git \
+             operation window can be read, so no minute can be shown inside it"
+                .to_owned(),
+            "a checkout of that repository carrying its own rows, or `disabled` written in them",
+        ),
         (_, None) => (
             "this machine could not say what time it is, so no minute can be shown inside the \
              repository's git operation window"
@@ -230,6 +237,7 @@ pub fn permits_now(window: &GitOperationWindow, now: Option<u16>) -> bool {
         (GitOperationWindow::Disabled, _) => true,
         (_, None) => false,
         (GitOperationWindow::Invalid, _) => false,
+        (GitOperationWindow::Unreadable, _) => false,
         (window, Some(minutes)) => window.permits(minutes),
     }
 }

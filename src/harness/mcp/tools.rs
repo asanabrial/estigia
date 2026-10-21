@@ -186,7 +186,8 @@ const ISSUE: Argument = Argument::required("issue", "integer", "Issue number.").
 const FILING_REPO: Argument = Argument::optional(
     "repo",
     "string",
-    "Repository to file in, `owner/name`; defaults to this checkout's. Starts unclaimed.",
+    "Repository to file in, `owner/name`; defaults to this checkout's. Starts unclaimed. The \
+     destination's window decides.",
 );
 const RECEIPT_EPOCH: Argument = Argument::required("epoch", "string", "Publication epoch.");
 const RECEIPT_PR: Argument =
@@ -1039,7 +1040,8 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "flush",
         description: "Send the GitHub writes queued while the git operation window was closed, \
                       oldest first, stopping at the first one it cannot read back. Refuses while \
-                      the window is closed. With `read_only`, lists the queue and sends nothing.",
+                      the destination's window is closed. With `read_only`, lists the queue and \
+                      sends nothing.",
         operation: "flush",
         arguments: &[Argument::optional(
             "read_only",

@@ -48,22 +48,81 @@ pub(crate) fn with_mode<T>(mode: Mode, body: impl FnOnce() -> T) -> T {
 }
 
 /// The window's answer for `context`: the dispatch's own when one is running,
-/// otherwise the repository's schedule read against the clock now.
+/// otherwise the schedule of the repository the write is aimed at, read against
+/// the clock now.
 ///
-/// A schedule that does not parse and a clock that will not say are closed.
+/// A schedule that does not parse, a clock that will not say, and an aimed-at
+/// repository whose rows this machine cannot read are closed.
 pub(crate) fn state(context: &Context) -> Mode {
     if let Some(mode) = scoped() {
         return mode;
     }
-    let fallback = context
-        .get("Git operation window")
-        .and_then(GitOperationWindow::parse)
-        .unwrap_or(GitOperationWindow::Disabled);
-    let window = schedule::effective_in(&context.skill_dir, &context.repo_dir, &fallback);
+    let window = match aimed_at(context) {
+        Aimed::Caller => {
+            let fallback = context
+                .get("Git operation window")
+                .and_then(GitOperationWindow::parse)
+                .unwrap_or(GitOperationWindow::Disabled);
+            schedule::effective_in(&context.skill_dir, &context.repo_dir, &fallback)
+        }
+        Aimed::Checkout(checkout) => {
+            let fallback = crate::skill::installed_config_in_keeping_what_parses(
+                &context.skill_dir,
+                &checkout,
+            )
+            .0
+            .git_operation_window;
+            schedule::effective_in(&context.skill_dir, &checkout, &fallback)
+        }
+        Aimed::Unreadable => GitOperationWindow::Unreadable,
+    };
     if schedule::permits_now(&window, schedule::now_minutes()) {
         Mode::Open
     } else {
         Mode::Closed(window)
+    }
+}
+
+/// Which checkout's rows decide the window for `context`.
+enum Aimed {
+    /// The caller's own checkout, when the write is not pinned to another
+    /// repository or is pinned to the caller's own.
+    Caller,
+    /// A checkout of the repository the write is aimed at, found among the
+    /// checkouts that answer for themselves.
+    Checkout(std::path::PathBuf),
+    /// The aimed-at repository has no checkout whose rows can be read.
+    Unreadable,
+}
+
+/// Resolves the aimed-at repository to a local checkout, and only to one.
+///
+/// `context.repo` is the pin the dispatch built from the filing repository or
+/// the tracker's named one; the caller's `repo_dir` stays the caller's. A pin
+/// that names the caller's own checkout decides there. Otherwise the checkout
+/// is one the machine recorded for that repository — `known_repositories` lists
+/// only checkouts carrying their own `estigia.local.md`, which is the rows the
+/// issue means. No checkout for the pin closes rather than inheriting the
+/// caller's schedule.
+fn aimed_at(context: &Context) -> Aimed {
+    let Some(pinned) = context.repo.as_deref() else {
+        return Aimed::Caller;
+    };
+    let Ok(pinned) = crate::config::RepoRef::parse(pinned) else {
+        return Aimed::Unreadable;
+    };
+    if crate::skill::github_repository_of(&context.repo_dir).as_ref() == Some(&pinned) {
+        return Aimed::Caller;
+    }
+    let Ok(home) = crate::paths::home_dir() else {
+        return Aimed::Unreadable;
+    };
+    match crate::skill::known_repositories(&home)
+        .into_iter()
+        .find(|checkout| crate::skill::github_repository_of(checkout).as_ref() == Some(&pinned))
+    {
+        Some(checkout) => Aimed::Checkout(checkout),
+        None => Aimed::Unreadable,
     }
 }
 
