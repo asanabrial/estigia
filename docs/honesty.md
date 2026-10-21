@@ -1251,6 +1251,16 @@ pointer that leaves it names the document it points at.
   the rule rather than the spelling. The same reading refuses a POSIX `Worktree location`, which is
   right for a drive-relative path.
 
+- **The interpreter inventory is prose, and nothing derives it from the suite.** `AGENTS.md` states
+  which tests require `node`, `tar`, `bash` and `python3`, and
+  [`testing.md`](testing.md) carries the catalogue those totals are read from. No test counts
+  spawns: a search of `tests/` and `src/` for a reader of any total finds none, and the nearest
+  guard — `no_workflow_needs_only_interpreters_it_sets_up` in `tests/release.rs` — asks that one
+  named test still exists and that both workflows install a runtime, not how many tests spawn one.
+  A driver added or deleted changes the truth of both pages and reddens neither; review is what
+  holds them. The catalogue's own test names are the suite's, so a renamed test leaves this file
+  naming a test that is gone, and only a person following the link notices.
+
 ## The OpenCode plugin, and what it knows about a call
 
 - **What the OpenCode plugin knows about where a call runs, and what it does not.** The gate decides
