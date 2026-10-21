@@ -33,6 +33,23 @@ fn closed() -> Mode {
 }
 
 #[test]
+fn a_repository_with_no_readable_rows_is_denied_without_claiming_a_range() {
+    let refusal =
+        crate::harness::operation_window::denial(&GitOperationWindow::Unreadable, Some(12 * 60));
+    assert_eq!(refusal.code, "git-operation-window-denied");
+    assert!(
+        !refusal.message.contains("08:00"),
+        "the denial claimed a range the repository does not have: {}",
+        refusal.message
+    );
+    assert!(
+        refusal.message.contains("no checkout"),
+        "the denial did not say the rows are missing: {}",
+        refusal.message
+    );
+}
+
+#[test]
 fn a_disabled_window_is_open_at_any_hour() {
     at(23 * 60, || {
         assert!(matches!(state(&context("disabled")), Mode::Open));

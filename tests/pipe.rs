@@ -1028,6 +1028,28 @@ fn name_origin(repo: &std::path::Path, url: &str) {
     );
 }
 
+/// A checkout of `name` carrying `window` as its own row, recorded under `home`.
+///
+/// The window resolves a write aimed at `name` to this checkout's rows, so a
+/// cross-repository filing is judged by the destination's own schedule.
+fn destination_checkout(home: &std::path::Path, name: &str, window: &str) -> tempfile::TempDir {
+    let directory = tempfile::tempdir().expect("a destination checkout");
+    assert!(
+        checked_git(directory.path(), &["init", "--quiet", "-b", "main"]),
+        "the destination is a checkout"
+    );
+    name_origin(directory.path(), &format!("git@github.com:{name}.git"));
+    let file = estigia::skill::repository_config_path(directory.path());
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
+    std::fs::write(
+        &file,
+        format!("| Setting | Value |\n|---|---|\n| Git operation window | {window} |\n"),
+    )
+    .expect("the rows");
+    estigia::skill::remember_repository(home, directory.path());
+    directory
+}
+
 /// Seeds the fixture's local store with one issue per `(number, state)`, so the
 /// queue read that decides from the store sees them without a GitHub read.
 fn seed_store(home: &std::path::Path, rows: &[(u64, &str)]) {

@@ -36,6 +36,11 @@ pub(super) fn rig() -> Rig {
     crate::paths::replace_atomically(&directory.path().join("body.md"), BODY).expect("a body file");
     crate::paths::replace_atomically(&directory.path().join("note.md"), "A note.\n")
         .expect("a note file");
+    git(directory.path(), &["init", "--quiet", "-b", "main"]);
+    git(
+        directory.path(),
+        &["remote", "add", "origin", "git@github.com:fixture/repo.git"],
+    );
     let context = Context {
         skill_dir: directory.path().to_path_buf(),
         repo_dir: directory.path().to_path_buf(),
@@ -71,6 +76,41 @@ pub(super) fn repo() -> Repo {
         owner: "fixture".to_owned(),
         name: "repo".to_owned(),
     }
+}
+
+/// The window rows a checkout carries in its own `estigia.local.md`.
+pub(super) fn rows(window: &str) -> String {
+    format!("| Setting | Value |\n|---|---|\n| Git operation window | {window} |\n")
+}
+
+/// A checkout of `name` on this machine, carrying `window` as its own row and
+/// recorded among the checkouts that answer for themselves under `home`.
+///
+/// Its `origin` names the repository on GitHub, which is what lets the window
+/// resolve a write aimed at `name` to this checkout's rows.
+pub(super) fn destination(home: &std::path::Path, name: &str, window: &str) -> tempfile::TempDir {
+    let directory = tempfile::tempdir().expect("a destination checkout");
+    git(directory.path(), &["init", "--quiet", "-b", "main"]);
+    git(
+        directory.path(),
+        &[
+            "remote",
+            "add",
+            "origin",
+            &format!("git@github.com:{name}.git"),
+        ],
+    );
+    let file = crate::skill::repository_config_path(directory.path());
+    std::fs::create_dir_all(file.parent().expect("a parent")).expect("the rows directory");
+    crate::paths::replace_atomically(&file, &rows(window)).expect("the rows");
+    crate::skill::remember_repository(home, directory.path());
+    directory
+}
+
+/// Runs `body` with `home` as this machine's home, so a repository recorded
+/// under it is one the window can find.
+pub(super) fn with_home<T>(home: &std::path::Path, body: impl FnOnce() -> T) -> T {
+    crate::test_env::with_home_env(home, home, home, body)
 }
 
 impl Rig {
@@ -124,9 +164,13 @@ impl Rig {
     }
 
     pub(super) fn queue(&self) -> Vec<(OutboxKind, u64)> {
+        self.queue_for(&repo())
+    }
+
+    pub(super) fn queue_for(&self, repo: &Repo) -> Vec<(OutboxKind, u64)> {
         let store = Store::open(&store_path().expect("a path")).expect("opens");
         store
-            .outbox(&repo())
+            .outbox(repo)
             .expect("reads")
             .iter()
             .map(|row| (row.kind, row.issue))
@@ -497,7 +541,15 @@ fn repository_rig() -> Rig {
     git(&repo, &["config", "user.name", "Estigia test"]);
     git(
         &repo,
-        &["remote", "add", "origin", &origin.to_string_lossy()],
+        &["remote", "add", "origin", "git@github.com:fixture/repo.git"],
+    );
+    git(
+        &repo,
+        &[
+            "config",
+            &format!("url.{}.insteadOf", origin.display()),
+            "git@github.com:fixture/repo.git",
+        ],
     );
     crate::paths::replace_atomically(&repo.join("one.txt"), "one\n").expect("content");
     git(&repo, &["add", "one.txt"]);
@@ -686,4 +738,5 @@ fn a_branch_started_by_default_still_issues_develop_and_links() {
     assert!(asked(&rig).contains("issue develop 12"), "{}", asked(&rig));
 }
 
+mod aimed;
 mod engine;

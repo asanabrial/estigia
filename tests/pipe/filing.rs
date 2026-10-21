@@ -70,6 +70,7 @@ fn create_with_a_repo_files_in_that_repository_and_leaves_the_issue_unclaimed() 
     let rig = tracker_rig();
     let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
     name_origin_o_r(repo);
+    let _destination = destination_checkout(home, "o/b", "disabled");
     let trace = tempfile::tempdir().expect("a trace directory");
     let (log, env_log) = (trace.path().join("calls.log"), trace.path().join("env.log"));
     let body = trace.path().join("body.md");
