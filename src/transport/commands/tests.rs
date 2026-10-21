@@ -1414,21 +1414,22 @@ fn ensure_states_creates_the_labels_while_the_window_is_open() {
     })
     .expect("an open window creates the labels");
 
+    let expected: Vec<String> = crate::config::STATES
+        .iter()
+        .map(|state| format!("status:{state}"))
+        .collect();
     assert_eq!(answer["ok"], true, "{answer}");
     assert_eq!(answer["deferred"], serde_json::Value::Null, "{answer}");
-    assert_eq!(
-        the_six_labels(&answer).len(),
-        crate::config::STATES.len(),
-        "{answer}"
-    );
+    assert_eq!(the_six_labels(&answer), expected, "{answer}");
     let calls = std::fs::read_to_string(&log).expect("the calls were logged");
-    let created = calls
+    let created: Vec<String> = calls
         .lines()
-        .filter(|line| line.contains("label create"))
-        .count();
+        .filter_map(|line| line.strip_prefix("label create "))
+        .filter_map(|rest| rest.split_whitespace().next())
+        .map(str::to_owned)
+        .collect();
     assert_eq!(
-        created,
-        crate::config::STATES.len(),
-        "an open window did not create each label once: {calls}"
+        created, expected,
+        "an open window did not create each label once, in order: {calls}"
     );
 }
