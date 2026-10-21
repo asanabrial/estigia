@@ -134,9 +134,26 @@ fn inventory() -> Vec<Refusal> {
         crate::harness::mailbox::unavailable("the local store could not be opened"),
         crate::harness::mcp::messaging::needs_a_person("claude-abcd1234"),
         crate::harness::mcp::messaging::not_allowed("claude-abcd1234", "pi-ghost"),
-        crate::harness::mcp::messaging::issue_has_no_holder(12),
-        crate::harness::mcp::messaging::holder_unreadable("the store could not be opened"),
+        crate::harness::mcp::messaging::reply_unknown(12),
+        crate::harness::mcp::messaging::reply_has_no_sender(12),
+        crate::harness::mcp::messaging::reply_sender_gone("pi-ghost"),
         crate::harness::mcp::messaging::question_failed("the client closed its input"),
+        {
+            let empty = crate::harness::mcp::address::Narrowed {
+                matched: Vec::new(),
+                closest: Vec::new(),
+                live: 0,
+            };
+            crate::harness::mcp::address::no_live_session("opencode", &empty)
+        },
+        {
+            let both = crate::harness::mcp::address::Narrowed {
+                matched: Vec::new(),
+                closest: Vec::new(),
+                live: 2,
+            };
+            crate::harness::mcp::address::recipient_ambiguous("opencode", &both)
+        },
         Refusal::not_started(
             "read-failed",
             "the reviewer's answer could not be read from standard input",

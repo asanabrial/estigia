@@ -1,14 +1,31 @@
 # The session registry
 
-`estigia sessions [--json]` answers one question: which sessions has this machine seen, which issue does
-each hold, and is each still there. `estigia sessions send` puts a message in another session's mailbox, and the
-hook point of each runtime delivers it. The `send_message` and `list_sessions` MCP tools are the same two
-doors for an agent ([below](#the-mcp-tools)). The last section lists what does not exist yet.
+`estigia sessions [--json]` answers one question: who is around on this machine, which issue does each
+hold, and how can it be reached. `estigia sessions --all` answers the wider one: every row the registry
+has ever written. `estigia sessions send` puts a message in another session's mailbox, and the hook point
+of each runtime delivers it. The `send_message` and `list_sessions` MCP tools are the same two doors for
+an agent ([below](#the-mcp-tools)), and all four take the same addresses. The last section lists what
+does not exist yet.
 
 ## What is recorded
 
 `~/.estigia/state.db` carries a `sessions` table, one row per run id: the runtime, the host's session id, the
-directory the session started in, when it started, when Estigia last saw it, and when and why it ended.
+directory the session started in, when it started, when Estigia last saw it, when and why it ended, the
+short name the registry minted for it, the build that registered it, and how its adapter says an idle
+session is woken.
+
+The **short name** is `<repository>-<n>` (`estigia-1`), minted when the row is first written from a
+per-repository ordinal in the store. It is kept for the life of the run id and never reused, so it is what
+a person can say and what a recipient can read back. A row written before names existed has none, and is
+still addressable by its run id.
+
+The **build** is the `estigia` binary that registered the row (`0.1.1 (ad3e8a07e0)`). A running session
+keeps the build it started with, so a row can name a build older than the one answering; the answer says
+so, and says that restarting the session, or the MCP server it runs, is what updates it.
+
+The **wake** is what the adapter recorded: `poll` (Pi and OpenCode 2 ask the mailbox repeatedly while
+idle), `stop-waiter` (Claude Code parks a process at the end of a turn), or nothing. Nothing is a fact
+about the row, not about the runtime: an adapter that records no wake gets no claim that one exists.
 
 - `estigia session start` and the Claude Code and Codex `SessionStart` hook write or refresh the row. A session that starts again under the same run id
   keeps its first start time and is no longer ended.
@@ -22,8 +39,12 @@ registry holds no claim of its own, and the tracker remains the authority on whe
 
 ## What `estigia sessions` shows
 
-Each entry carries `run_id`, `runtime`, `session_id`, `status`, `issue`, `state`, `last_seen`, `silent_for`,
-`repo_dir`, `worktree`, `ended_at`, `end_reason`, `waiting` and `undelivered_sent`, under `--json` as a `sessions` list beside `stale_after`.
+Each entry carries `name`, `run_id`, `runtime`, `session_id`, `status`, `issue`, `state`, `last_seen`,
+`silent_for`, `repo_dir`, `worktree`, `ended_at`, `end_reason`, `waiting`, `undelivered_sent`, `build` and
+`wake`, under `--json` as a `sessions` list beside `stale_after`, `of` (how many rows the registry holds)
+and `all`. `estigia sessions` prints the live rows only, one line each; `estigia sessions --all` prints
+every row with its status. The live view is the answer to "who is around"; the full registry is opt-in
+because it is mostly rows whose sessions are gone.
 
 | `status` | Meaning |
 |---|---|
@@ -39,13 +60,16 @@ A store that is present and cannot be read is refused, not listed as empty.
 
 ## The mailbox
 
-`estigia sessions send <run-id> "<text>"` (or `--file <path>`) writes one row to the `messages` table of
-`state.db` (schema 12): the sender's run id when one is known, the recipient's run id, the text, and when it was
-sent. The sender is `--run-id`, or `--session-id` with `--runtime`, or the ambient `ESTIGIA_RUN_ID`; a person at a
+`estigia sessions send <address> "<text>"` (or `--file <path>`) writes one row to the `messages` table of
+`state.db`: the sender's run id when one is known, the recipient's run id, the text, and when it was
+sent. The address is the same vocabulary the MCP tools take ([below](#addressing-a-session)). The sender is `--run-id`, or `--session-id` with `--runtime`, or the ambient `ESTIGIA_RUN_ID`; a person at a
 terminal sends with none, and the message is shown as from a person.
 
-- The recipient must be a session the registry knows. A run id nobody registered is refused with
-  `message-recipient-unknown` and nothing is recorded.
+- The recipient must resolve to one registry row. An address that names nobody live is refused with
+  `message-no-live-session`, and one that names several with `message-recipient-ambiguous`; neither
+  records anything. The mailbox itself still refuses a run id no row carries with
+  `message-recipient-unknown`, which the address path reaches only when a row disappears between
+  resolution and the write.
 - A recipient that has ended is accepted: the row is written, it stays undelivered, and `estigia sessions` shows it
   against the sender (`undelivered_sent`) for as long as it stays so. An empty message and one over 8192 bytes are refused.
 - Sending is a write to Estigia's own state, like `estigia goal stop-after`, not a write to the repository: it needs
@@ -159,20 +183,53 @@ send can be sent again.
 Neither side's session is changed by what arrives: a message is text for a model, not an instruction the
 gate treats differently.
 
+## Addressing a session
+
+`send_message`, `list_sessions`, `estigia sessions send` and `estigia sessions` all take one address
+vocabulary. It is resolved against the registry **at the moment of the call**, over the live rows the
+listing shows, never against an earlier listing — a session that registered a second ago is found.
+
+| What a person says | What it names |
+|---|---|
+| `opencode` | every live session of that runtime |
+| `opencode@estigia` | that runtime in that repository (`@` takes a repository name or a directory) |
+| `#96` | every live session whose pointer names issue 96, in any repository |
+| `estigia#96` | the same, in that repository only |
+| `estigia-2` | one session by the short name the registry gave it |
+| `opencode-sesea451598815b2` | one session by its run id |
+
+A bare number is an issue number, as it always was. A run id or a short name names that row whether it
+is live or not — a sender who names it exactly meant it, and a message to an ended session is accepted
+and stays undelivered. Every other form is about who is around, so it reads live rows only.
+
+- **One match** is delivered to, and the answer names it: short name, run id, runtime, repository, the
+  issue it holds, how it is woken, and that the row is *queued for the recipient's next hook point*. No
+  answer claims a wake that happened; whether the recipient woke is not observable here.
+- **No match** is refused with `message-no-live-session`, which names the address, how many sessions are
+  live, and the closest ones — same runtime, or same repository — one line each, so the sender can relay
+  it to a person without parsing anything.
+- **Several matches** are refused with `message-recipient-ambiguous`, listing every candidate the same
+  way. Nothing is sent. Ambiguity is a question, not a guess.
+
+A delivered message opens with the sender in the same form — `From estigia-2 (opencode, estigia), \`run-id\``
+— and carries the id of its own row. Answering is `send_message {reply_to: <id>, text}`: the recipient is
+the session that sent it, with no run id to copy. A row a person sent has no session to answer and is
+refused `message-reply-has-no-sender`; an id the mailbox does not hold is `message-reply-unknown`.
+
+`list_sessions` with no arguments is the bounded default: the live sessions only, one line each, beside
+`live_count`, `of` (how many rows the registry holds), `build` and `skew` (which live rows registered
+with another build). With `address` it answers `matched` and `live`, plus `closest` when nothing matched.
+With any of `status`, `runtime`, `run`, `session_id`, `repo_dir`, `limit` or `cursor` it answers the
+bounded, versioned page described in [Bounded session discovery](#bounded-session-discovery) — that is
+the opt-in for the whole registry.
+
 ## The MCP tools
 
-`list_sessions` with no arguments answers the object `estigia sessions --json` prints (`sessions` beside
-`stale_after`), built by the same function. With any of `status`, `runtime`, `run`, `session_id`, `repo_dir`,
-`limit` or `cursor` it answers a bounded, versioned page instead, described in
-[Bounded session discovery](#bounded-session-discovery).
-
-`send_message` takes `run_id` (the sender, this run's id, held to the shape every tool's `run_id` is), `to` and
-`text`, and calls the same `mailbox::send` as `estigia sessions send`, so the recipient, empty-text and size
-refusals above are the same ones. `to` is a run id, or an issue number written `12` or `#12`. An issue resolves to
-the run the local store's timeline shows holding it (the claim reducer over the stored timeline, as for any holder
-decision), never to a run pointer or a label. An issue with no live holder is refused with
-`message-issue-has-no-holder` and nothing is recorded. Both tools answer from the local store and bypass the
-tracker transport, so they need neither a tracker nor a repository host transport and are not binding operations.
+`send_message` takes `run_id` (the sender, this run's id, held to the shape every tool's `run_id` is),
+`to` (an address) or `reply_to` (a message being answered), and `text`, and calls the same
+`mailbox::send` as `estigia sessions send`, so the empty-text and size refusals above are the same ones.
+Both tools answer from the local store and bypass the tracker transport, so they need neither a tracker
+nor a repository host transport and are not binding operations.
 
 Consent follows who started the send. A person at a terminal is never asked. An agent's `send_message` is asked
 about before any row is written, through MCP elicitation (protocol `2025-06-18`):
@@ -181,23 +238,24 @@ about before any row is written, through MCP elicitation (protocol `2025-06-18`)
   inspected: `{}` and `{"form":{},"url":{}}` both count.
 - With no such capability, and no session grant, the send is refused with `message-needs-a-person` and nothing is
   recorded.
-- Otherwise the server sends `elicitation/create` with a message naming the sender, the recipient run id, the issue
-  the recipient holds when it is known, and the text, and a schema with one required string `choice`: `allow_once`,
-  `allow_session` or `deny`.
+- Otherwise the server sends `elicitation/create` with a message naming the sender, the recipient in the
+  addressable form (`estigia-1 (run id), opencode in estigia, holds #96, seen just now`), and the text, and a
+  schema with one required string `choice`: `allow_once`, `allow_session` or `deny`.
 - `accept` with `allow_once` sends. `accept` with `allow_session` sends and remembers the grant, keyed by the
   sender's run id, until that server process exits (one MCP server process is one agent session). Everything else
   is refused with `message-not-allowed` and nothing is recorded: `deny`, `decline`, `cancel`, an unknown choice, an
   error response, or no answer in 15 minutes. A question that could not be put or whose answer could not be read
   (a failed write, a read error, a closed input) is refused `message-question-failed` instead, because the person
   was never asked and the refusal must not read as their decision.
-- An issue number is resolved against the clock; an unreadable clock is `message-holder-unreadable`, never a holder.
+- An address that names nobody live, or several, is refused before the question is put, with the candidates
+  and nothing recorded.
 - While the server waits, any other line from the client is queued and served after the tool call answers. Requests
   are still served one at a time.
 - The tool has no argument that skips the question, and the binary cannot tell whether a person asked the agent to
   send. A person who wants no prompt sends from the CLI.
 
-The issue named in the question for a run-id recipient is read from that run's pointer, for display only; the
-store decides only the resolution of an issue number.
+The issue the question shows is read from the recipient's pointer, for display only; it is not what decides
+the recipient. The address does, and a pointer is never a claim.
 
 What was measured, on Claude Code 2.1.300 (2026-10-15):
 
@@ -324,15 +382,19 @@ claim of its own.
 
 ## What does not exist yet
 
-- Nothing refreshes `last_seen` on a gated write, so a session that holds no claim and runs longer than six hours
-  reads `stale` while it is alive. Touching the registry from the gate is the next slice.
-- No pid is recorded, and no host API is asked whether a session is alive.
+- Nothing refreshes `last_seen` on a gated write, so a session that runs longer than six hours without a
+  `SessionStart` reads `stale` while it is alive, and no row is ever archived: the full registry grows
+  without bound. A heartbeat from the gate, a configured retention horizon, and a default view that hides
+  what it archived are the next slice of the session-registry work.
+- No pid is recorded, and no host API is asked whether a session is alive. `wake` is what the adapter named
+  when it registered the session; nothing here asks the host whether that is still true.
 - There is no Claude Code `UserPromptSubmit` or `PostToolUse` hook, since setup registers neither. A Codex or
   OpenCode session that makes no tool call receives nothing until it makes one, and a Codex session also at the end of
   a turn when the loop is on. A Claude Code session is woken while idle for up to 3600 seconds after its last turn
   ended (the waiter's `timeout`); after that, and in a session set up before the waiter existed, mail waits for the next
   turn's `PreToolUse`.
-- Only Claude Code, Pi and OpenCode 2 wake an idle session. Codex's `Stop` hook runs synchronously and continues the turn that is
+- Only Claude Code, Pi and OpenCode 2 wake an idle session. The wake each one recorded is in its row; a row
+  with no wake says so rather than claiming one. Codex's `Stop` hook runs synchronously and continues the turn that is
   ending; it cannot start one. OpenCode 2 is woken by a poll, not by a notice that a row was written, and
   OpenCode 1 is not woken; OpenCode's `generate` is not used. Codex `turn/steer` needs the daemon and is not built.
 

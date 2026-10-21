@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use super::{Store, int, unreadable};
 use crate::transport::Failure;
 
@@ -6,6 +8,7 @@ pub(crate) struct SessionSeen<'a> {
     pub(crate) runtime: &'a str,
     pub(crate) session_id: &'a str,
     pub(crate) repo_dir: Option<&'a str>,
+    pub(crate) wake: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,23 +21,51 @@ pub(crate) struct SessionRow {
     pub(crate) last_seen: u64,
     pub(crate) ended_at: Option<u64>,
     pub(crate) end_reason: Option<String>,
+    pub(crate) name: Option<String>,
+    pub(crate) build: Option<String>,
+    pub(crate) wake: Option<String>,
 }
 
 fn seconds(value: i64) -> u64 {
     u64::try_from(value).unwrap_or_default()
 }
 
+const NAME_ATTEMPTS: u32 = 5;
+
+fn basename(dir: &str) -> &str {
+    Path::new(dir)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("session")
+}
+
 impl Store {
     pub(crate) fn session_seen(&self, seen: &SessionSeen<'_>, now: u64) -> Result<(), Failure> {
-        self.connection()
-            .execute(
-                "INSERT INTO sessions (run_id, runtime, session_id, repo_dir, started_at, last_seen)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+        for _ in 0..NAME_ATTEMPTS {
+            let ord = match seen.repo_dir {
+                Some(dir) => self
+                    .connection()
+                    .query_row(
+                        "SELECT COALESCE(MAX(ord), 0) + 1 FROM sessions WHERE repo_dir = ?1",
+                        rusqlite::params![dir],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .map_err(unreadable("read the next session name"))?,
+                None => 0,
+            };
+            let name = seen.repo_dir.map(|dir| format!("{}-{ord}", basename(dir)));
+            let written = self.connection().execute(
+                "INSERT INTO sessions (run_id, runtime, session_id, repo_dir, started_at, last_seen,
+                                       name, ord, build, wake)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, ?7, ?8, ?9)
                  ON CONFLICT (run_id) DO UPDATE SET
                     runtime = excluded.runtime,
                     session_id = excluded.session_id,
                     repo_dir = excluded.repo_dir,
                     last_seen = excluded.last_seen,
+                    build = excluded.build,
+                    wake = excluded.wake,
                     ended_at = NULL,
                     end_reason = NULL",
                 rusqlite::params![
@@ -42,10 +73,31 @@ impl Store {
                     seen.runtime,
                     seen.session_id,
                     seen.repo_dir,
-                    int(now)
+                    int(now),
+                    name,
+                    ord,
+                    crate::build_info::VERSION,
+                    seen.wake
                 ],
+            );
+            match written {
+                Ok(_) => return Ok(()),
+                Err(error) if contention(&error) => continue,
+                Err(error) => return Err(unreadable("record a session")(error)),
+            }
+        }
+        Err(Failure::Read(
+            "record a session: its short name could not be minted after five attempts".to_owned(),
+        ))
+    }
+
+    pub(crate) fn session_wake(&self, run_id: &str, wake: &str) -> Result<(), Failure> {
+        self.connection()
+            .execute(
+                "UPDATE sessions SET wake = ?2 WHERE run_id = ?1",
+                rusqlite::params![run_id, wake],
             )
-            .map_err(unreadable("record a session"))?;
+            .map_err(unreadable("record how a session wakes"))?;
         Ok(())
     }
 
@@ -69,7 +121,7 @@ impl Store {
             .connection()
             .prepare(
                 "SELECT run_id, runtime, session_id, repo_dir, started_at, last_seen, ended_at,
-                        end_reason FROM sessions ORDER BY last_seen DESC, run_id",
+                        end_reason, name, build, wake FROM sessions ORDER BY last_seen DESC, run_id",
             )
             .map_err(unreadable("read the sessions"))?;
         statement
@@ -83,10 +135,21 @@ impl Store {
                     last_seen: seconds(row.get(5)?),
                     ended_at: row.get::<_, Option<i64>>(6)?.map(seconds),
                     end_reason: row.get(7)?,
+                    name: row.get(8)?,
+                    build: row.get(9)?,
+                    wake: row.get(10)?,
                 })
             })
             .map_err(unreadable("read the sessions"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(unreadable("read the sessions"))
     }
+}
+
+fn contention(error: &rusqlite::Error) -> bool {
+    matches!(
+        error,
+        rusqlite::Error::SqliteFailure(inner, _)
+            if inner.code == rusqlite::ErrorCode::ConstraintViolation
+    )
 }

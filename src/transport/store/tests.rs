@@ -270,7 +270,7 @@ fn the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema() {
     assert_eq!(mode, "wal");
     assert_eq!(keys, 1);
     assert_eq!(synchronous, 2, "FULL");
-    assert_eq!(store.schema_version().expect("reads"), 12);
+    assert_eq!(store.schema_version().expect("reads"), 13);
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn reopening_keeps_the_schema_and_a_newer_one_is_refused() {
             .expect("reopens")
             .schema_version()
             .expect("reads"),
-        12
+        13
     );
 
     rusqlite::Connection::open(&path)
@@ -495,7 +495,7 @@ fn doctor_reports_the_path_the_schema_and_the_last_hours_calls() {
         panic!("a readable store is fine: {:?}", check.health);
     };
     assert!(
-        detail.contains("state.db") && detail.contains("schema 12"),
+        detail.contains("state.db") && detail.contains("schema 13"),
         "{detail}"
     );
     assert!(detail.contains("3 GraphQL, 0 REST"), "{detail}");
@@ -702,7 +702,7 @@ fn a_migration_another_opener_finished_while_this_one_waited_is_not_applied_twic
     })
     .expect("the slower opener finds the schema already laid down");
 
-    assert_eq!(slow.schema_version().expect("reads"), 12);
+    assert_eq!(slow.schema_version().expect("reads"), 13);
 }
 
 #[test]
@@ -1328,7 +1328,7 @@ fn recorded(inserted: super::jobs::Inserted) -> bool {
 #[test]
 fn migration_five_creates_the_review_jobs_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 12);
+    assert_eq!(store.schema_version().expect("a version"), 13);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('review_jobs')")
@@ -1364,7 +1364,7 @@ fn migration_five_creates_the_review_jobs_table() {
 #[test]
 fn migration_six_creates_the_blocked_clauses_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 12);
+    assert_eq!(store.schema_version().expect("a version"), 13);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('blocked_clauses')")
@@ -1381,7 +1381,7 @@ fn migration_six_creates_the_blocked_clauses_table() {
 #[test]
 fn migration_seven_creates_the_record_tables() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 12);
+    assert_eq!(store.schema_version().expect("a version"), 13);
     for (table, wanted) in [
         ("decisions", ["at", "body"].as_slice()),
         ("roles", ["at", "body"].as_slice()),
@@ -2636,6 +2636,7 @@ fn seen(store: &Store, run_id: &str, now: u64) {
                 runtime: "pi",
                 session_id: "host-id",
                 repo_dir: Some("/work/repo"),
+                wake: None,
             },
             now,
         )
@@ -2654,6 +2655,68 @@ fn a_session_seen_again_keeps_its_start_and_moves_its_last_seen() {
     assert_eq!(rows[0].runtime, "pi");
     assert_eq!(rows[0].repo_dir.as_deref(), Some("/work/repo"));
     assert_eq!(rows[0].ended_at, None);
+}
+
+#[test]
+fn a_session_is_given_a_short_name_from_its_repository_and_keeps_it() {
+    let (_directory, store) = open();
+    seen(&store, "pi-aaaa", 100);
+    seen(&store, "pi-bbbb", 110);
+    seen(&store, "pi-aaaa", 120);
+    seen(&store, "claude-cccc", 130);
+
+    let mut names: Vec<String> = store
+        .sessions()
+        .expect("the sessions read")
+        .into_iter()
+        .filter_map(|row| row.name)
+        .collect();
+    names.sort();
+    assert_eq!(names, vec!["repo-1", "repo-2", "repo-3"]);
+    let again = store.sessions().expect("the sessions read");
+    let aaaa = again
+        .iter()
+        .find(|row| row.run_id == "pi-aaaa")
+        .expect("the restarted row");
+    assert_eq!(aaaa.name.as_deref(), Some("repo-1"), "a restart renamed it");
+}
+
+#[test]
+fn a_registration_refreshes_the_build_and_the_wake_it_names() {
+    let (_directory, store) = open();
+    store
+        .session_seen(
+            &super::SessionSeen {
+                run_id: "pi-aaaa",
+                runtime: "pi",
+                session_id: "host-id",
+                repo_dir: Some("/work/repo"),
+                wake: Some("poll"),
+            },
+            100,
+        )
+        .expect("the session is recorded");
+    let first = &store.sessions().expect("the sessions read")[0];
+    assert_eq!(first.wake.as_deref(), Some("poll"));
+    assert_eq!(first.build.as_deref(), Some(crate::build_info::VERSION));
+
+    store
+        .session_seen(
+            &super::SessionSeen {
+                run_id: "pi-aaaa",
+                runtime: "pi",
+                session_id: "host-id",
+                repo_dir: Some("/work/repo"),
+                wake: None,
+            },
+            200,
+        )
+        .expect("the session is recorded again");
+    let again = &store.sessions().expect("the sessions read")[0];
+    assert_eq!(
+        again.wake, None,
+        "an old reachability survived a registration"
+    );
 }
 
 #[test]

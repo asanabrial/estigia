@@ -433,19 +433,24 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "send_message",
         contract_name: "send_message",
-        description: "Leave a message for another session on this machine, delivered at its next \
-                      hook point. The person is asked first, every time unless they allowed this \
-                      session; with nobody to ask, nothing is recorded. Local to the store; the \
-                      tracker is not touched.",
+        description: "Leave a message for another session, delivered at its next hook point. \
+                      Address it as a person speaks; `reply_to` answers a delivered message. \
+                      Zero or several matches answer the candidates and send nothing. The \
+                      person is asked first.",
         operation: "send-message",
         arguments: &[
             RUN_ID,
-            Argument::required(
+            Argument::optional(
                 "to",
                 "string",
-                "The recipient run id, or an issue number (`12` or `#12`): the run the store \
-                 shows holding it.",
+                "The recipient: `opencode`, `opencode@estigia`, `#96`, `estigia-2` or a run id, over live sessions now. Give this or `reply_to`.",
             ),
+            Argument::optional(
+                "reply_to",
+                "integer",
+                "The message being answered; the recipient is its sender. Give this or `to`.",
+            )
+            .counting_from(1),
             Argument::required("text", "string", "The message."),
         ],
         effect: PointerEffect::None,
@@ -454,22 +459,24 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "list_sessions",
         contract_name: "list_sessions",
-        description: "The sessions registered on this machine: run id, runtime, status, the issue \
-                      each holds, last seen, mail waiting. With no options it answers exactly the \
-                      entries `estigia sessions --json` prints. With `status`, `runtime`, `run`, \
-                      `session_id` or `repo_dir` it answers a bounded, versioned page of the rows \
-                      those selectors match, ordered by start time and run id, with `limit` rows \
-                      and a `next_cursor` to continue the same snapshot. A cursor is bound to its \
-                      selectors, snapshot and store: a malformed, edited, mismatched, expired or \
-                      replaced-store cursor is refused, never silently restarted. Read-only.",
+        description: "Who is around: with no arguments, the live sessions only, beside how many \
+                      rows the registry holds. `address` takes `send_message`'s vocabulary and \
+                      answers the matches, or the closest when none. The page selectors \
+                      (`status`, `runtime`, `run`, `session_id`, `repo_dir`, `limit`, `cursor`) \
+                      read the whole registry as a bounded page. Read-only.",
         operation: "list-sessions",
         arguments: &[
+            Argument::optional(
+                "address",
+                "string",
+                "The sessions this address names, plus the closest when it names none; \
+                 `send_message`'s vocabulary.",
+            ),
             Argument::optional(
                 "status",
                 "string",
                 "Answer only sessions in this state: live, stale, ended or unknown. \
-                 `unregistered` is refused: a bounded page is the registry rows, and a \
-                 pointer-only run has no start time to freeze.",
+                 `unregistered` is refused: a pointer-only run has no start time to freeze.",
             )
             .of(crate::cli::sessions::STATUSES),
             Argument::optional("runtime", "string", "Answer only sessions of this runtime."),

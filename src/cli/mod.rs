@@ -311,7 +311,7 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
 
         Command::Status => status(cli.json),
 
-        Command::Sessions { action } => sessions_command(action.as_ref(), cli.json),
+        Command::Sessions { action, all } => sessions_command(action.as_ref(), *all, cli.json),
 
         Command::Update => update(cli.json),
 
@@ -4675,6 +4675,7 @@ fn wait_for_mail(
     let deadline = std::time::Duration::from_secs(
         harness::mailbox::WAIT_TIMEOUT_SECONDS - harness::mailbox::WAIT_MARGIN_SECONDS,
     );
+    harness::registry::record_wake(&context.state_root, &run_id, "stop-waiter");
     if let Some(text) = harness::mailbox::wait(
         &context.state_root,
         &run_id,
@@ -6066,9 +6067,9 @@ pub(crate) struct GoalReading {
 }
 
 /// `estigia sessions`: the list, or `send`.
-fn sessions_command(action: Option<&SessionsAction>, json: bool) -> Result<(), Refusal> {
+fn sessions_command(action: Option<&SessionsAction>, all: bool, json: bool) -> Result<(), Refusal> {
     match action {
-        None => sessions::sessions(json),
+        None => sessions::sessions(json, all),
         Some(SessionsAction::Send {
             session,
             text,
@@ -6104,11 +6105,18 @@ fn session_lifecycle(action: &SessionAction, json: bool) -> Result<(), Refusal> 
             runtime,
             reason,
             previous_session_id,
+            wake,
         } => {
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let context = gate_context(&cwd.to_string_lossy())?;
             harness::session::maintain(&context.state_root);
-            harness::registry::record_start(&context.state_root, runtime, session_id, &cwd);
+            harness::registry::record_start(
+                &context.state_root,
+                runtime,
+                session_id,
+                &cwd,
+                wake.as_deref(),
+            );
             let run = harness::session::load(
                 &context.state_root,
                 &harness::session::run_id(runtime, session_id),

@@ -17748,6 +17748,8 @@ fn the_pi_extension_appends_the_binarys_session_context_to_the_prompt_sections_a
             "sess-1",
             "--runtime",
             "pi",
+            "--wake",
+            "poll",
             "--reason",
             "startup"
         ])
@@ -17781,6 +17783,8 @@ fn the_pi_extension_forwards_why_a_session_started_and_which_session_it_came_fro
             "sess-2",
             "--runtime",
             "pi",
+            "--wake",
+            "poll",
             "--reason",
             "fork",
             "--previous-session-id",
@@ -17806,6 +17810,8 @@ fn the_pi_extension_forwards_why_a_session_started_and_which_session_it_came_fro
             "sess-2",
             "--runtime",
             "pi",
+            "--wake",
+            "poll",
             "--reason",
             "fork"
         ]),
@@ -17946,6 +17952,8 @@ fn a_pi_child_asks_about_the_root_session_and_never_ends_it() {
             "root-1",
             "--runtime",
             "pi",
+            "--wake",
+            "poll",
             "--reason",
             "startup"
         ]])

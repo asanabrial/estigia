@@ -3,15 +3,15 @@
 //! The mailbox is [`crate::harness::mailbox`]; this file is the door an agent reaches it
 //! through, and the consent that door adds. A person sending from a terminal is never asked;
 //! an agent is, and with nobody to ask the send is refused and nothing is recorded. The
-//! reasoning is in `docs/sessions.md`.
-
-use std::collections::BTreeSet;
+//! reasoning is in `docs/sessions.md`, and the address vocabulary both verbs share is
+//! [`super::address`].
 
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 
-use super::{NamedRun, ToolFailure};
+use super::{NamedRun, ToolFailure, address};
+use crate::cli::sessions::Listed;
 use crate::harness::{GateContext, mailbox, session};
-use crate::identity::Identity;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use crate::transport::store;
 
@@ -89,22 +89,40 @@ pub(crate) fn question_failed(detail: &str) -> Refusal {
     )
 }
 
-pub(crate) fn holder_unreadable(detail: &str) -> Refusal {
-    Refusal::unavailable(
-        "message-holder-unreadable",
-        format!("the holder of the issue could not be read from the local store: {detail}"),
+pub(crate) fn reply_unknown(id: i64) -> Refusal {
+    Refusal::not_started(
+        "message-reply-unknown",
+        format!(
+            "this machine's mailbox holds no message {id}, so there is no sender to answer; \
+             nothing was sent"
+        ),
         Resolution::no_command(
-            NoCommandReason::WorldAction,
-            "read the store again; an unreadable holder is not no holder",
+            NoCommandReason::OperatorKnowledge,
+            "the id the delivered message carried, or `to` to name a recipient directly",
         ),
     )
 }
 
-pub(crate) fn issue_has_no_holder(issue: u64) -> Refusal {
+pub(crate) fn reply_has_no_sender(id: i64) -> Refusal {
     Refusal::not_started(
-        "message-issue-has-no-holder",
+        "message-reply-has-no-sender",
         format!(
-            "the local store shows no live holder of #{issue}, so there is no session to address"
+            "message {id} was sent by a person, not by a session, so there is no run to answer; \
+             nothing was sent"
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "`to` to name the recipient the answer belongs to",
+        ),
+    )
+}
+
+pub(crate) fn reply_sender_gone(run_id: &str) -> Refusal {
+    Refusal::not_started(
+        "message-reply-sender-gone",
+        format!(
+            "the sender of that message (`{run_id}`) is no longer in this machine's registry, so \
+             there is nowhere to deliver an answer; nothing was sent"
         ),
         Resolution::run("estigia sessions"),
     )
@@ -114,6 +132,10 @@ fn refused(refusal: Refusal) -> ToolFailure {
     ToolFailure::Refused(Box::new(refusal))
 }
 
+fn malformed(detail: String) -> ToolFailure {
+    ToolFailure::Malformed(detail)
+}
+
 fn issue_number(to: &str) -> Option<u64> {
     let digits = to.strip_prefix('#').unwrap_or(to);
     (!digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
@@ -121,33 +143,53 @@ fn issue_number(to: &str) -> Option<u64> {
         .flatten()
 }
 
-fn holder_of(context: &GateContext, issue: u64) -> Result<String, Refusal> {
-    let transport = crate::transport::Context::live(
-        context.skill_root.clone(),
-        context.repo_dir.clone(),
-        context.tracker.named_repo(),
-    );
-    let repo = crate::transport::claim::repo_of(&transport)
-        .map_err(|failure| holder_unreadable(&failure.detail()))?;
-    let opened = store::open_for_read(&store::beside(&context.state_root))
-        .map_err(|failure| holder_unreadable(&failure.detail()))?
-        .ok_or_else(|| issue_has_no_holder(issue))?;
-    let comments = opened
-        .timeline(&repo, issue)
-        .map_err(|failure| holder_unreadable(&failure.detail()))?;
-    let now = session::stamp_of(
-        session::now_seconds().ok_or_else(|| holder_unreadable("the clock could not be read"))?,
-    );
-    crate::transport::claim::holding(&comments, &now)
-        .holder
-        .ok_or_else(|| issue_has_no_holder(issue))
+/// A bare number has always meant an issue number, so it keeps meaning one.
+fn address_of(to: &str) -> String {
+    match issue_number(to) {
+        Some(number) => format!("#{number}"),
+        None => to.to_owned(),
+    }
 }
 
-fn question(sender: &str, recipient: &str, held: Option<u64>, text: &str) -> String {
-    let holds = held.map_or_else(String::new, |issue| format!(", which holds #{issue}"));
+fn resolved(context: &GateContext, said: &str) -> Result<Listed, Refusal> {
+    let narrowed = address::resolve(&context.state_root, said)?;
+    match narrowed.matched.as_slice() {
+        [only] => Ok(only.clone()),
+        [] => Err(address::no_live_session(said, &narrowed)),
+        _ => Err(address::recipient_ambiguous(said, &narrowed)),
+    }
+}
+
+fn mailbox_unreadable(detail: &str) -> Refusal {
+    Refusal::unavailable(
+        "message-store-unavailable",
+        format!("the mailbox could not be read: {detail}"),
+        Resolution::no_command(NoCommandReason::WorldAction, "read the mailbox again"),
+    )
+}
+
+fn reply_recipient(context: &GateContext, id: i64) -> Result<Listed, Refusal> {
+    let opened = store::open_for_read(&store::beside(&context.state_root))
+        .map_err(|failure| mailbox_unreadable(&failure.detail()))?
+        .ok_or_else(|| reply_unknown(id))?;
+    let message = opened
+        .message(id)
+        .map_err(|failure| mailbox_unreadable(&failure.detail()))?
+        .ok_or_else(|| reply_unknown(id))?;
+    let sender = message
+        .sender_run_id
+        .ok_or_else(|| reply_has_no_sender(id))?;
+    crate::cli::sessions::entries(&context.state_root)?
+        .into_iter()
+        .find(|entry| entry.run_id == sender)
+        .ok_or_else(|| reply_sender_gone(&sender))
+}
+
+fn question(sender: &str, row: &Listed, text: &str) -> String {
     format!(
-        "{sender} wants to send a message to {recipient}{holds}:\n\n{text}\n\n\
-         The recipient reads it as another session's request, not as yours."
+        "{sender} wants to send a message to {}:\n\n{text}\n\n\
+         The recipient reads it as another session's request, not as yours.",
+        row.line()
     )
 }
 
@@ -181,6 +223,29 @@ fn choice_of(response: &Value) -> &str {
     }
 }
 
+fn wake_word(wake: Option<&str>) -> &'static str {
+    match wake {
+        Some("poll") => "the recipient polls for mail while idle",
+        Some("stop-waiter") => "the recipient parks a Stop waiter between turns",
+        _ => "this session recorded no idle wake, so delivery waits for its next hook point",
+    }
+}
+
+fn row_json(row: &Listed) -> Value {
+    json!({
+        "name": row.spoken(),
+        "run_id": row.run_id,
+        "runtime": row.runtime,
+        "repo": row.repo_dir.as_deref().map(crate::cli::sessions::basename),
+        "repo_dir": row.repo_dir,
+        "issue": row.issue,
+        "state": row.state,
+        "silent_for": row.silent_for,
+        "waiting": row.waiting,
+        "build": row.build.as_deref().filter(|build| *build != crate::build_info::VERSION),
+    })
+}
+
 pub(super) fn send_message(
     arguments: &Value,
     context: &GateContext,
@@ -188,26 +253,40 @@ pub(super) fn send_message(
     consent: Option<&mut Consent<'_>>,
 ) -> Result<Value, ToolFailure> {
     let sender = named.map_or("", |run| run.id);
-    let field = |name: &str| -> Result<&str, ToolFailure> {
-        arguments.get(name).and_then(Value::as_str).ok_or_else(|| {
-            ToolFailure::Malformed(format!("`{name}` is a string; send_message needs it"))
-        })
-    };
-    let to = field("to")?.trim();
-    let text = field("text")?.trim_end();
-
-    let (recipient, held) = match issue_number(to) {
-        Some(issue) => (holder_of(context, issue).map_err(refused)?, Some(issue)),
-        None => {
-            let held = match session::load(&context.state_root, to).issue {
-                Some(Identity::Number(number)) => Some(number),
-                _ => None,
-            };
-            (to.to_owned(), held)
+    let text = arguments
+        .get("text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| malformed("`text` is a string; send_message needs it".to_owned()))?
+        .trim_end();
+    let recipient = match (arguments.get("reply_to"), arguments.get("to")) {
+        (Some(reply), None) => {
+            let id = reply.as_i64().ok_or_else(|| {
+                malformed("`reply_to` is the number of the message being answered".to_owned())
+            })?;
+            reply_recipient(context, id).map_err(refused)?
+        }
+        (None, Some(to)) => {
+            let to = to
+                .as_str()
+                .ok_or_else(|| malformed("`to` is an address string".to_owned()))?;
+            let said = address_of(to.trim());
+            resolved(context, &said).map_err(refused)?
+        }
+        (Some(_), Some(_)) => {
+            return Err(malformed(
+                "give `to` or `reply_to`, never both: `reply_to` answers the session that sent a \
+                 message, `to` names a recipient"
+                    .to_owned(),
+            ));
+        }
+        (None, None) => {
+            return Err(malformed(
+                "send_message needs `to` (an address) or `reply_to` (the message being answered)"
+                    .to_owned(),
+            ));
         }
     };
-
-    mailbox::admissible(&context.state_root, &recipient, text).map_err(refused)?;
+    mailbox::admissible(&context.state_root, &recipient.run_id, text).map_err(refused)?;
 
     let Some(consent) = consent else {
         return Err(refused(needs_a_person(sender)));
@@ -216,10 +295,9 @@ pub(super) fn send_message(
         if !consent.declared {
             return Err(refused(needs_a_person(sender)));
         }
-        let answer = consent.client.elicit(
-            &question(sender, &recipient, held, text),
-            requested_schema(),
-        );
+        let answer = consent
+            .client
+            .elicit(&question(sender, &recipient, text), requested_schema());
         let answer = match answer {
             Ok(answer) => answer,
             Err(Unasked::Unanswered) => Value::Null,
@@ -230,17 +308,18 @@ pub(super) fn send_message(
             ALLOW_SESSION => {
                 consent.grants.insert(sender.to_owned());
             }
-            _ => return Err(refused(not_allowed(sender, &recipient))),
+            _ => return Err(refused(not_allowed(sender, &recipient.run_id))),
         }
     }
 
-    let receipt =
-        mailbox::send(&context.state_root, Some(sender), &recipient, text).map_err(refused)?;
+    let receipt = mailbox::send(&context.state_root, Some(sender), &recipient.run_id, text)
+        .map_err(refused)?;
     Ok(text_result(
         json!({
             "message": receipt.id,
-            "recipient": recipient,
-            "sender": sender,
+            "to": row_json(&recipient),
+            "delivery": "queued for the recipient's next hook point",
+            "wake": wake_word(recipient.wake.as_deref()),
             "recipient_ended": receipt.recipient_ended,
         })
         .to_string(),
@@ -251,17 +330,48 @@ pub(super) fn list_sessions(
     arguments: &Value,
     context: &GateContext,
 ) -> Result<Value, ToolFailure> {
-    if arguments.as_object().is_some_and(|sent| !sent.is_empty()) {
+    let paged = [
+        "status",
+        "runtime",
+        "run",
+        "session_id",
+        "repo_dir",
+        "limit",
+        "cursor",
+    ]
+    .iter()
+    .any(|name| arguments.get(*name).is_some());
+    if let Some(asked) = arguments.get("address").and_then(Value::as_str) {
+        if paged {
+            return Err(malformed(
+                "`address` answers the live registry by what a person calls a session; the page \
+                 selectors answer the whole registry. Give one or the other."
+                    .to_owned(),
+            ));
+        }
+        let narrowed = address::resolve(&context.state_root, asked).map_err(refused)?;
+        let closest: Vec<Value> = if narrowed.matched.is_empty() {
+            narrowed.closest.iter().map(row_json).collect()
+        } else {
+            Vec::new()
+        };
+        return Ok(text_result(
+            json!({
+                "asked": asked,
+                "matched": narrowed.matched.len(),
+                "live": narrowed.matched.iter().map(row_json).collect::<Vec<_>>(),
+                "closest": closest,
+                "live_count": narrowed.live,
+            })
+            .to_string(),
+        ));
+    }
+    if paged {
         return crate::cli::sessions::page(arguments, &context.state_root, session::now_seconds())
             .map(|page| text_result(page.to_string()))
             .map_err(refused);
     }
-    let entries = crate::cli::sessions::entries(&context.state_root).map_err(refused)?;
-    Ok(text_result(
-        json!({
-            "sessions": entries,
-            "stale_after": crate::cli::sessions::STALE_AFTER_SECONDS,
-        })
-        .to_string(),
-    ))
+    address::around(&context.state_root)
+        .map(|answer| text_result(answer.to_string()))
+        .map_err(refused)
 }

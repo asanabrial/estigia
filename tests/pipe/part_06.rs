@@ -2803,7 +2803,7 @@ fn a_pi_session_end_forgets_the_pointer_only_when_the_session_is_really_over() {
 }
 
 fn listed_sessions(rig: &TrackerRig) -> Vec<serde_json::Value> {
-    let (said, stderr, ok) = pi_session_run(rig, &["sessions", "--json"]);
+    let (said, stderr, ok) = pi_session_run(rig, &["sessions", "--json", "--all"]);
     assert!(ok, "{said}{stderr}");
     let parsed: serde_json::Value = serde_json::from_str(said.trim()).expect("sessions is JSON");
     parsed["sessions"].as_array().expect("a list").clone()
@@ -2879,7 +2879,7 @@ fn sessions_lists_every_session_with_its_claim_and_marks_the_silent_and_the_ende
     let listed = listed_sessions(&rig);
     assert_eq!(session_named(&listed, &alive)["status"], "ended");
 
-    let (plain, _, ok) = pi_session_run(&rig, &["sessions"]);
+    let (plain, _, ok) = pi_session_run(&rig, &["sessions", "--all"]);
     assert!(
         ok && plain.contains(&crashed) && plain.contains("stale") && plain.contains("#12"),
         "{plain}"
@@ -3032,7 +3032,7 @@ fn a_message_for_a_session_nobody_registered_is_refused_and_records_nothing() {
     pi_start(&rig, "alice");
     let (said, stderr, ok) = send_from(&rig, "alice", "pi-ghost", "hello?");
     assert!(!ok, "{said}");
-    assert!(stderr.contains("message-recipient-unknown"), "{stderr}");
+    assert!(stderr.contains("message-no-live-session"), "{stderr}");
     let listed = listed_sessions(&rig);
     assert!(
         listed

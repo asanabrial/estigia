@@ -17,22 +17,75 @@ pub(crate) const CURSOR_TTL_SECONDS: u64 = 15 * 60;
 pub(crate) const MAX_CURSOR_BYTES: usize = 4096;
 pub(crate) const MAX_SELECTOR_BYTES: usize = 256;
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub(crate) struct Listed {
-    run_id: String,
-    runtime: String,
-    session_id: Option<String>,
-    status: &'static str,
-    issue: Option<Identity>,
-    state: Option<String>,
-    last_seen: Option<u64>,
-    silent_for: Option<u64>,
-    repo_dir: Option<String>,
-    worktree: Option<String>,
-    ended_at: Option<u64>,
-    end_reason: Option<String>,
-    waiting: u64,
-    undelivered_sent: u64,
+    pub(crate) run_id: String,
+    pub(crate) name: Option<String>,
+    pub(crate) runtime: String,
+    pub(crate) session_id: Option<String>,
+    pub(crate) status: &'static str,
+    pub(crate) issue: Option<Identity>,
+    pub(crate) state: Option<String>,
+    pub(crate) last_seen: Option<u64>,
+    pub(crate) silent_for: Option<u64>,
+    pub(crate) repo_dir: Option<String>,
+    pub(crate) worktree: Option<String>,
+    pub(crate) ended_at: Option<u64>,
+    pub(crate) end_reason: Option<String>,
+    pub(crate) waiting: u64,
+    pub(crate) undelivered_sent: u64,
+    pub(crate) build: Option<String>,
+    pub(crate) wake: Option<String>,
+}
+
+impl Listed {
+    /// The word a sender can use for this row: its short name, or its run id
+    /// when the row predates names.
+    pub(crate) fn spoken(&self) -> &str {
+        self.name.as_deref().unwrap_or(&self.run_id)
+    }
+
+    /// One line a person can read, and relay, without parsing.
+    pub(crate) fn line(&self) -> String {
+        let held = match (&self.issue, &self.state) {
+            (Some(Identity::Number(number)), Some(state)) => format!("#{number} {state}"),
+            (Some(issue), Some(state)) => format!("{issue} {state}"),
+            (Some(Identity::Number(number)), None) => format!("#{number}"),
+            (Some(issue), None) => issue.to_string(),
+            _ => "nothing".to_owned(),
+        };
+        let repo = self
+            .repo_dir
+            .as_deref()
+            .map_or_else(|| "-".to_owned(), |dir| basename(dir).to_owned());
+        let seen = self.silent_for.map_or_else(
+            || "never seen".to_owned(),
+            |seconds| format!("seen {}", session::age(seconds)),
+        );
+        let build = self
+            .build
+            .as_deref()
+            .filter(|build| *build != crate::build_info::VERSION)
+            .map_or_else(String::new, |build| format!("  on {build}"));
+        format!(
+            "{} ({}), {} in {}, holds {}, {}{}",
+            self.spoken(),
+            self.run_id,
+            self.runtime,
+            repo,
+            held,
+            seen,
+            build
+        )
+    }
+}
+
+pub(crate) fn basename(dir: &str) -> &str {
+    Path::new(dir)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(dir)
 }
 
 fn status_of(ended: bool, last_seen: Option<u64>, now: Option<u64>) -> &'static str {
@@ -340,6 +393,9 @@ fn registry_and_pointers(
                 end_reason: row.end_reason,
                 waiting: 0,
                 undelivered_sent: 0,
+                name: row.name,
+                build: row.build,
+                wake: row.wake,
             },
         ));
     }
@@ -369,6 +425,9 @@ fn registry_and_pointers(
             end_reason: None,
             waiting: 0,
             undelivered_sent: 0,
+            name: None,
+            build: None,
+            wake: None,
         });
     }
     (registry, unregistered)
@@ -520,20 +579,35 @@ pub(crate) fn page(arguments: &Value, root: &Path, now: Option<u64>) -> Result<V
     }))
 }
 
-pub(super) fn sessions(json: bool) -> Result<(), Refusal> {
+pub(super) fn sessions(json: bool, all: bool) -> Result<(), Refusal> {
     let root = session::state_root(None)?;
     let entries = entries(&root)?;
+    let shown: Vec<&Listed> = entries
+        .iter()
+        .filter(|entry| all || entry.status == "live")
+        .collect();
     if json {
         super::print_json(&serde_json::json!({
-            "sessions": entries,
+            "sessions": shown,
             "stale_after": STALE_AFTER_SECONDS,
+            "of": entries.len(),
+            "all": all,
         }));
         return Ok(());
     }
     if entries.is_empty() {
         say!("no session has registered on this machine");
+        return Ok(());
     }
-    for entry in &entries {
+    if shown.is_empty() {
+        say!(
+            "no session is live on this machine; `estigia sessions --all` lists the {} row(s) the \
+             registry holds",
+            entries.len()
+        );
+        return Ok(());
+    }
+    for entry in &shown {
         let held = match (&entry.issue, &entry.state) {
             (Some(Identity::Number(number)), Some(state)) => format!("#{number} {state}"),
             (Some(issue), Some(state)) => format!("{issue} {state}"),
@@ -554,14 +628,47 @@ pub(super) fn sessions(json: bool) -> Result<(), Refusal> {
                 entry.undelivered_sent
             ));
         }
+        let build = entry
+            .build
+            .as_deref()
+            .filter(|build| *build != crate::build_info::VERSION)
+            .map_or_else(String::new, |build| format!("  on {build}"));
         say!(
-            "{}  {}  {}  {}  last seen {}{}",
+            "{}  {}  {}  {}  {}  last seen {}{}{}",
+            entry.spoken(),
             entry.run_id,
-            entry.status,
+            if all { entry.status } else { "live" },
             entry.runtime,
             held,
             seen,
-            mail
+            mail,
+            build
+        );
+    }
+    let behind: Vec<&str> = shown
+        .iter()
+        .filter(|entry| {
+            entry
+                .build
+                .as_deref()
+                .is_some_and(|build| build != crate::build_info::VERSION)
+        })
+        .map(|entry| entry.spoken())
+        .collect();
+    if !behind.is_empty() {
+        say!(
+            "{} registered with another build; this binary is {}. Restart that session, or the \
+             MCP server it runs, to update it — a running session keeps the build it started \
+             with.",
+            behind.join(", "),
+            crate::build_info::VERSION
+        );
+    }
+    if !all {
+        say!(
+            "{} of {} rows are live; `estigia sessions --all` shows the rest",
+            shown.len(),
+            entries.len()
         );
     }
     Ok(())
@@ -595,23 +702,43 @@ pub(super) fn send(
         (None, None) => String::new(),
     };
     let root = session::state_root(None)?;
-    let receipt = mailbox::send(&root, sender, recipient, body.trim_end())?;
+    let narrowed = crate::harness::mcp::address::resolve(&root, recipient)?;
+    let row = match narrowed.matched.as_slice() {
+        [only] => only.clone(),
+        [] => {
+            return Err(crate::harness::mcp::address::no_live_session(
+                recipient, &narrowed,
+            ));
+        }
+        _ => {
+            return Err(crate::harness::mcp::address::recipient_ambiguous(
+                recipient, &narrowed,
+            ));
+        }
+    };
+    let receipt = mailbox::send(&root, sender, &row.run_id, body.trim_end())?;
     if json {
         super::print_json(&serde_json::json!({
             "message": receipt.id,
-            "recipient": recipient,
+            "recipient": row.run_id,
+            "name": row.spoken(),
+            "runtime": row.runtime,
+            "repo": row.repo_dir.as_deref().map(basename),
             "sender": sender,
             "recipient_ended": receipt.recipient_ended,
         }));
         return Ok(());
     }
     say!(
-        "recorded message {} for {recipient}; it is delivered at that session's next hook point",
-        receipt.id
+        "recorded message {} for {}; it is delivered at that session's next hook point",
+        receipt.id,
+        row.line()
     );
     if receipt.recipient_ended {
         say!(
-            "{recipient} has ended, so this message stays undelivered and is listed against your session in `estigia sessions`"
+            "{} has ended, so this message stays undelivered and is listed against your session \
+             in `estigia sessions`",
+            row.spoken()
         );
     }
     Ok(())

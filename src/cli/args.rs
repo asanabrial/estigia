@@ -179,6 +179,10 @@ pub enum Command {
     /// holds, and mark the silent and the ended ones. With `send`, put a
     /// message in one of them.
     Sessions {
+        /// List every row the registry holds, not only the live ones.
+        #[arg(long)]
+        all: bool,
+
         /// What to do beyond listing.
         #[command(subcommand)]
         action: Option<SessionsAction>,
@@ -620,6 +624,13 @@ pub enum SessionAction {
         /// The session the host left to begin this one.
         #[arg(long, value_parser = session)]
         previous_session_id: Option<String>,
+
+        /// How this host wakes the session when mail arrives while it is idle:
+        /// `poll` (it asks repeatedly), or `stop-waiter` (a process parks at the
+        /// end of a turn). Omitted when the adapter records nothing, and the
+        /// row then says so rather than guessing.
+        #[arg(long, value_parser = ["poll", "stop-waiter"])]
+        wake: Option<String>,
     },
     /// Print the messages other sessions left for this one, and record them as
     /// delivered. Prints nothing when none wait.
