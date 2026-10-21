@@ -36,6 +36,8 @@ pub use launch::{Recording, launch, launch_recorded, settle};
 pub use relay::Relay;
 pub use role::Role;
 
+use std::collections::BTreeMap;
+
 use crate::config::ModelRouting;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 
@@ -71,12 +73,42 @@ pub struct Invocation {
     pub model: Option<String>,
 }
 
+/// What a reviewer's CLI reported spending to answer, under the provider's own
+/// counter names. A counter the CLI did not report is absent, never zero.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Usage {
+    /// The provider whose counters these are, as its adapter names it.
+    pub provider: String,
+    /// The counters the CLI reported, by the provider's own names.
+    pub counters: BTreeMap<String, u64>,
+}
+
+/// One reviewer run's answer, with the provider's own usage counters when its
+/// CLI reported them. The counters never enter the answer bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Review {
+    /// The reviewer's raw answer, byte for byte.
+    pub answer: Vec<u8>,
+    /// The provider's own counters, or `None` when the CLI reported none.
+    pub usage: Option<Usage>,
+}
+
 /// Something that can run an [`Invocation`] and return the reviewer's raw
 /// answer, or refuse with a [`ReviewerCode`]. It never returns a partial or
 /// empty answer in place of a failure.
 pub trait Adapter {
     /// Runs the invocation to completion.
     fn review(&self, invocation: &Invocation) -> Result<Vec<u8>, Refusal>;
+
+    /// [`Adapter::review`], with the provider's own usage counters when its CLI
+    /// reported them. The default answers no usage: an adapter whose CLI
+    /// reports none is not made to invent one.
+    fn review_with_usage(&self, invocation: &Invocation) -> Result<Review, Refusal> {
+        self.review(invocation).map(|answer| Review {
+            answer,
+            usage: None,
+        })
+    }
 
     /// Whether this adapter cannot run in process and the host must relay it.
     ///

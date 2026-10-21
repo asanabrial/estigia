@@ -689,11 +689,63 @@ role's template sits in that same uncached user message whether it leads or trai
 cannot share what was never shared.
 
 **What this does not settle.** One CLI, one model and one machine on one day, so the figure is a
-property of that reviewer and not of every reviewer. The CLI `launch_review_input` starts discards
-its own usage report, so the prompt above was driven directly through the CLI rather than through a
-recorded launch. And the four lenses run concurrently, so a prefix the CLI did cache would not be
+property of that reviewer and not of every reviewer. At the time of this measurement the CLI
+`launch_review_input` starts discarded its own usage report, so the prompt above was driven directly
+through the CLI rather than through a recorded launch; the launch now preserves that report (see
+*Preserving the reviewer CLI's own usage* below), and no measurement reads it yet. And the four
+lenses run concurrently, so a prefix the CLI did cache would not be
 reused by a lens that started before the first returned — the saving would need them serialised,
 which the issue puts out of scope.
+
+## Preserving the reviewer CLI's own usage
+
+A review that runs through a CLI reports what it cost, and until this change Estigia threw that
+away: `parse_result` in `src/reviewer/adapters.rs` read the `result` text and the error fields out of
+the CLI's JSON and dropped the `usage` object beside them. The counters are now preserved, and
+preserved *separately* from the admitted answer.
+
+**Where it lives.** The runner writes the counters into the job's own directory as `usage.json`,
+beside `result.json` and never inside it. The artifact is:
+
+```json
+{"format":1,"provider":"claude","counters":{"cache_creation_input_tokens":0,"cache_read_input_tokens":250,"input_tokens":100,"output_tokens":20}}
+```
+
+`provider` names the adapter's provider (`claude`); `counters` carries only the counters the CLI
+reported, under the CLI's own names. A counter the CLI did not report is **absent** from the object,
+never `0` — an unobserved counter is unknown, and a zero would be read as a measurement. A `usage`
+object that is absent, or present and malformed (not an object, or a counter that is not a whole
+number), preserves nothing: no file is written, and the review succeeds or fails exactly as it did
+before.
+
+**Reading it back.** `estigia::reviewer::job::read_usage(dir)` answers the counters a finished job
+preserved. `None` is the **unknown** state, and it has two causes that are deliberately not
+distinguished: the CLI reported no usage, or the counters could not be stored. An artifact that
+exists but is not JSON, is another format, names no provider, holds no counters or carries a counter
+that is not a whole number is an `Err` — corrupt rather than unknown. An empty counter set is
+refused the same way, because the writer never emits one.
+
+**A failed usage write is not the job's outcome.** The answer is the outcome whatever happens to the
+artifact: a usage write that fails is reported on the runner's standard error (the `runner.err` the
+detached spawner already captures) and leaves the counters unknown, rather than turning a review that
+succeeded into a refusal. Auxiliary work must never conceal or overwrite a command's answer, and a
+missing `usage.json` is therefore read as unknown, never as zero.
+
+**Why separately.** The admitted answer's bytes are byte-identical whether or not the CLI reported
+usage, and `result.json` is byte-identical with and without it. That is the point of the separation:
+a counter can never contaminate what a reviewer is admitted to have said, and a change to what is
+counted cannot move a verdict.
+
+**Which providers report what.** Only the Claude adapter's `--output-format json` result carries a
+`usage` object, and it is the four counters above. The Codex adapter takes its answer from the
+`--output-last-message` file, and its standard output carries no usage object at all, so it
+preserves nothing; the relay runs no CLI in this process and reports none either. No counter is
+invented for an adapter that does not report one.
+
+**What this does not do.** The totals `scripts/measure-transcripts.py` prints do not fold this in:
+they are read from Claude Code's own `.jsonl` transcripts, not from a job's `usage.json`, and
+nothing in the script reaches this artifact. A preserved artifact is not a measurement until
+something reads it; `read_usage` is the reader, and no measurement calls it yet.
 
 ## Re-measuring after a change
 

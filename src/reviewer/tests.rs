@@ -1028,6 +1028,152 @@ fn result_object(is_error: bool, text: &str) -> String {
     serde_json::json!([{ "stdout_exact": stdout }]).to_string()
 }
 
+fn claude_result(result: &str, usage: Option<serde_json::Value>) -> String {
+    let mut object = serde_json::json!({
+        "type": "result", "subtype": "success", "is_error": false, "result": result
+    });
+    if let Some(usage) = usage {
+        object["usage"] = usage;
+    }
+    serde_json::json!([{ "stdout_exact": object.to_string() }]).to_string()
+}
+
+#[test]
+fn claude_preserves_the_usage_its_result_carries_beside_the_answer() {
+    let answers = claude_result(
+        "verdict",
+        Some(serde_json::json!({
+            "input_tokens": 100,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 250,
+            "output_tokens": 20,
+        })),
+    );
+    with_fake_clis(
+        &["claude"],
+        &[("ESTIGIA_FAKE_ANSWERS", OsStr::new(&answers))],
+        |bin| {
+            let review = ClaudeCode::new(on_path(bin, "claude"))
+                .review_with_usage(&invocation(b"p", None))
+                .unwrap();
+            assert_eq!(review.answer, b"verdict");
+            let usage = review.usage.expect("the CLI reported usage");
+            assert_eq!(usage.provider, "claude");
+            assert_eq!(
+                usage.counters,
+                [
+                    ("cache_creation_input_tokens".to_owned(), 0_u64),
+                    ("cache_read_input_tokens".to_owned(), 250),
+                    ("input_tokens".to_owned(), 100),
+                    ("output_tokens".to_owned(), 20),
+                ]
+                .into_iter()
+                .collect(),
+            );
+        },
+    );
+}
+
+#[test]
+fn the_admitted_answer_is_byte_identical_whether_or_not_the_cli_reported_usage() {
+    let with_usage = claude_result(
+        "verdict",
+        Some(serde_json::json!({"input_tokens": 100, "output_tokens": 20})),
+    );
+    let without_usage = claude_result("verdict", None);
+    let mut answers = Vec::new();
+    for scripted in [&with_usage, &without_usage] {
+        with_fake_clis(
+            &["claude"],
+            &[("ESTIGIA_FAKE_ANSWERS", OsStr::new(scripted))],
+            |bin| {
+                let review = ClaudeCode::new(on_path(bin, "claude"))
+                    .review_with_usage(&invocation(b"p", None))
+                    .unwrap();
+                answers.push(review.answer);
+            },
+        );
+    }
+    assert_eq!(answers[0], answers[1]);
+    assert_eq!(answers[0], b"verdict");
+}
+
+#[test]
+fn a_result_with_no_usage_reports_none() {
+    let answers = claude_result("verdict", None);
+    with_fake_clis(
+        &["claude"],
+        &[("ESTIGIA_FAKE_ANSWERS", OsStr::new(&answers))],
+        |bin| {
+            let review = ClaudeCode::new(on_path(bin, "claude"))
+                .review_with_usage(&invocation(b"p", None))
+                .unwrap();
+            assert_eq!(review.answer, b"verdict");
+            assert_eq!(review.usage, None);
+        },
+    );
+}
+
+#[test]
+fn a_malformed_usage_object_reports_none_and_leaves_the_answer_alone() {
+    for usage in [
+        serde_json::json!(["not", "an", "object"]),
+        serde_json::json!({"input_tokens": "many"}),
+        serde_json::json!({"input_tokens": -1}),
+    ] {
+        let answers = claude_result("verdict", Some(usage.clone()));
+        with_fake_clis(
+            &["claude"],
+            &[("ESTIGIA_FAKE_ANSWERS", OsStr::new(&answers))],
+            |bin| {
+                let review = ClaudeCode::new(on_path(bin, "claude"))
+                    .review_with_usage(&invocation(b"p", None))
+                    .unwrap();
+                assert_eq!(review.answer, b"verdict", "{usage}");
+                assert_eq!(review.usage, None, "{usage}");
+            },
+        );
+    }
+}
+
+#[test]
+fn a_counter_the_usage_object_omits_stays_absent_and_is_never_zero() {
+    let answers = claude_result(
+        "verdict",
+        Some(serde_json::json!({"input_tokens": 7, "output_tokens": 3})),
+    );
+    with_fake_clis(
+        &["claude"],
+        &[("ESTIGIA_FAKE_ANSWERS", OsStr::new(&answers))],
+        |bin| {
+            let review = ClaudeCode::new(on_path(bin, "claude"))
+                .review_with_usage(&invocation(b"p", None))
+                .unwrap();
+            let usage = review.usage.expect("the CLI reported usage");
+            assert_eq!(usage.counters.get("input_tokens"), Some(&7));
+            assert_eq!(usage.counters.get("output_tokens"), Some(&3));
+            assert_eq!(usage.counters.get("cache_read_input_tokens"), None);
+            assert_eq!(usage.counters.get("cache_creation_input_tokens"), None);
+            assert_eq!(usage.counters.len(), 2);
+        },
+    );
+}
+
+#[test]
+fn codex_reports_no_usage_because_its_output_carries_none() {
+    with_fake_clis(
+        &["codex"],
+        &[("ESTIGIA_FAKE_WRITE_ARG_FILE", OsStr::new("the answer"))],
+        |bin| {
+            let review = Codex::new(on_path(bin, "codex"))
+                .review_with_usage(&invocation(b"p", None))
+                .unwrap();
+            assert_eq!(review.answer, b"the answer");
+            assert_eq!(review.usage, None);
+        },
+    );
+}
+
 #[test]
 fn an_error_result_on_a_zero_exit_is_never_the_answer() {
     let (code, message) = refusal_code_for(&result_object(true, "API Error: 429 rate limit"), "p");

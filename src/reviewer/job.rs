@@ -1,8 +1,9 @@
 //! A reviewer run that outlives the call that asked for it.
 //!
 //! A job is a directory: a manifest and a prompt written before the launch, a
-//! `lock` the runner holds for as long as it lives, and a `result.json` it
-//! leaves behind. [`run`] is the runner's whole body and is what the hidden
+//! `lock` the runner holds for as long as it lives, a `result.json` it leaves
+//! behind, and a `usage.json` beside it when the reviewer's CLI reported what
+//! it spent. [`run`] is the runner's whole body and is what the hidden
 //! `estigia __review-job <dir>` subcommand calls; [`spawn_review_job`] starts
 //! that subcommand detached from the caller. Liveness is the lock and the result
 //! file, never a process id: see [`job_status`].
@@ -15,7 +16,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use super::{Adapter, Invocation, Receipt, run as run_cli};
+use super::{Adapter, Invocation, Receipt, Usage, run as run_cli};
 use crate::outcome::Refusal;
 use crate::paths::{replace_atomically, replace_bytes_atomically};
 use crate::transport::Failure;
@@ -30,6 +31,7 @@ const PROMPT: &str = "prompt.bin";
 const LOCK: &str = "lock";
 const STARTED: &str = "started";
 const RESULT: &str = "result.json";
+const USAGE: &str = "usage.json";
 const RUNNER_OUT: &str = "runner.out";
 const RUNNER_ERR: &str = "runner.err";
 const STARTUP: Duration = Duration::from_secs(10);
@@ -228,6 +230,34 @@ fn result_json(outcome: &Result<Vec<u8>, Refusal>) -> serde_json::Value {
     }
 }
 
+fn usage_json(usage: &Usage) -> serde_json::Value {
+    serde_json::json!({
+        "format": FORMAT,
+        "provider": usage.provider,
+        "counters": usage.counters,
+    })
+}
+
+/// Writes the provider's own usage, or nothing when there is none to preserve.
+/// An empty counter set writes nothing too, so an artifact this writer leaves is
+/// always one [`read_usage`] accepts.
+fn write_usage(dir: &Path, usage: Option<&Usage>) -> std::io::Result<()> {
+    let Some(usage) = usage.filter(|usage| !usage.counters.is_empty()) else {
+        return Ok(());
+    };
+    replace_atomically(&dir.join(USAGE), &usage_json(usage).to_string())
+}
+
+fn report_usage_failure(dir: &Path, error: &std::io::Error) {
+    use std::io::Write as _;
+    let _ = writeln!(
+        std::io::stderr(),
+        "the review job usage artifact {} could not be written: {error}; the reviewer's answer is \
+         still the job's outcome, and its counters are unknown",
+        dir.join(USAGE).display()
+    );
+}
+
 fn take_lock(dir: &Path) -> Result<File, Refusal> {
     let file = File::options()
         .read(true)
@@ -243,9 +273,16 @@ fn take_lock(dir: &Path) -> Result<File, Refusal> {
 
 /// The runner: holds the job's lock for as long as it runs, asks the selected
 /// adapter for the reviewer's answer exactly as a synchronous launch would, and
-/// leaves `result.json`. It writes nothing else outside `dir`, and never the
-/// ledger. A manifest it cannot read, or an adapter it cannot select, is
-/// recorded as a refusal rather than left as a silent absence.
+/// leaves `result.json` with the provider's own usage in `usage.json` beside it
+/// when the reviewer's CLI reported any. The answer is the outcome whatever
+/// happens to the usage: a usage write that fails is reported on the runner's
+/// standard error rather than turning a review that succeeded into a refusal,
+/// and the result is then written without the artifact. The usage is written
+/// before the result and never inside it, so the admitted answer's bytes do not
+/// move with it, and a reader of a result with no usage beside it must read the
+/// counters as unknown, never as zero. It writes nothing else outside `dir`, and
+/// never the ledger. A manifest it cannot read, or an adapter it cannot select,
+/// is recorded as a refusal rather than left as a silent absence.
 pub fn run(
     dir: &Path,
     select: &dyn Fn() -> Result<Box<dyn Adapter>, Refusal>,
@@ -253,7 +290,13 @@ pub fn run(
     let _lock = take_lock(dir)?;
     replace_atomically(&dir.join(STARTED), "")
         .map_err(|e| refused(format!("the review job could not mark itself started: {e}")))?;
-    let outcome = load(dir).and_then(|invocation| select()?.review(&invocation));
+    let outcome = load(dir).and_then(|invocation| {
+        let review = select()?.review_with_usage(&invocation)?;
+        if let Err(error) = write_usage(dir, review.usage.as_ref()) {
+            report_usage_failure(dir, &error);
+        }
+        Ok(review.answer)
+    });
     replace_atomically(&dir.join(RESULT), &result_json(&outcome).to_string())
         .map_err(|e| refused(format!("the review job result could not be written: {e}")))
 }
@@ -288,6 +331,51 @@ fn read_result(dir: &Path) -> Result<Option<JobResult>, Failure> {
         }))),
         _ => Err(unreadable("carries a refusal that is incomplete")),
     }
+}
+
+/// Reads the provider's own usage a job preserved in `usage.json`, or `None`
+/// when the directory holds no artifact — which is the unknown state: either the
+/// reviewer's CLI reported no usage or the counters could not be stored, and
+/// neither is a measurement. An artifact that exists but is not JSON, is another
+/// format, names no provider, holds no counters or carries a counter that is not
+/// a whole number is an `Err`: it is corrupt rather than unknown. An empty
+/// counter set is refused the same way, because the writer never emits one. It is
+/// written beside `result.json` and never inside it, so reading it never moves
+/// the admitted answer.
+pub fn read_usage(dir: &Path) -> Result<Option<Usage>, Failure> {
+    let raw = match std::fs::read(dir.join(USAGE)) {
+        Ok(raw) => raw,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(unwritten("read a review job usage", e)),
+    };
+    let unreadable = |what: &str| Failure::Read(format!("the review job usage {what}"));
+    let value: serde_json::Value =
+        serde_json::from_slice(&raw).map_err(|_| unreadable("is not JSON"))?;
+    if value.get("format").and_then(serde_json::Value::as_u64) != Some(u64::from(FORMAT)) {
+        return Err(unreadable("is a format this binary does not read"));
+    }
+    let provider = value
+        .get("provider")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| unreadable("names no provider"))?;
+    let counters = value
+        .get("counters")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| unreadable("holds no counters"))?;
+    let mut counted = std::collections::BTreeMap::new();
+    for (name, count) in counters {
+        let count = count
+            .as_u64()
+            .ok_or_else(|| unreadable("carries a counter that is not a whole number"))?;
+        counted.insert(name.clone(), count);
+    }
+    if counted.is_empty() {
+        return Err(unreadable("carries no counters"));
+    }
+    Ok(Some(Usage {
+        provider: provider.to_owned(),
+        counters: counted,
+    }))
 }
 
 /// Reads where a job stands. A result file decides first. Otherwise a held lock
@@ -438,7 +526,9 @@ pub fn model_of(dir: &Path) -> Result<Option<String>, Failure> {
         .map(str::to_owned))
 }
 
-/// Deletes a job's `result.json`, once what it carried has been recorded.
+/// Deletes a job's `result.json`, once what it carried has been recorded. It
+/// leaves `usage.json` and every other file in the directory: the usage holds no
+/// answer bytes, and leaving it is what keeps it readable after admission.
 pub fn discard_result(dir: &Path) -> Result<(), Failure> {
     match std::fs::remove_file(dir.join(RESULT)) {
         Ok(()) => Ok(()),
