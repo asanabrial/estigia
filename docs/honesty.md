@@ -10327,9 +10327,10 @@ test that drives the binary. What it does not measure:
 ## The session registry
 
 `estigia sessions` lists the rows `estigia session start` and `estigia session end` write to the `sessions` table,
-joined with the run pointers. What this measures is two pipe tests that drive the binary — a started, a crashed,
-an unregistered and an ended session, with the crashed row aged in the store — and four store unit tests. What it
-does not measure:
+joined with the run pointers. What this measures is four pipe tests that drive the binary — a started, a crashed,
+an unregistered and an ended session, with the crashed row aged in the store; a bounded walk of five registered
+sessions whose pages have neither an omission nor a duplicate; and each refusal a page answers — and four store
+unit tests. What it does not measure:
 
 - **`last_seen` is refreshed by a session start and by a verified claim, not by every gated write.** A session
   that holds no claim and runs past the six-hour bound reads `stale` while alive. The bound is a constant, chosen
@@ -10342,11 +10343,13 @@ does not measure:
   with an uppercase letter is filed under a digested name, so its pointer is not found and its issue is not shown.
   Minted ids from the hosts measured here are lowercase; the case was found while writing the test and is not fixed.
 - **No pid, no host query.** Nothing asks a runtime whether a session is alive.
-- **A bounded `list_sessions` snapshot is a filtered re-read, not one consistent read of the machine.** Each
+- **A bounded snapshot is a filtered re-read, not one consistent read of the machine.** Each
   page re-reads the store and keeps the rows whose `started_at <= taken_at`; the ordering key is immutable, so a
   full traversal has neither omissions nor duplicates under the tested mutations, but a row's `status` and
   `last_seen` are re-derived per page and can differ between pages. The cursor's digest detects corruption and an
-  edit that does not recompute it; it is **not a MAC**, and possession of a cursor is not authorization.
+  edit that does not recompute it; it is **not a MAC**, and possession of a cursor is not authorization. The
+  CLI's `--limit` and `--cursor` are adapters of the same read, so every limit here holds for it as it does for
+  `list_sessions`.
 - **A snapshot's membership is frozen only to the second.** `started_at` has second granularity, so
   `started_at <= taken_at` admits a session that registers in the same wall-clock second as `taken_at` but after
   the page was taken, and a later page can show a row the first page never had. The ordering key is what is

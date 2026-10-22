@@ -2,10 +2,11 @@
 
 `estigia sessions [--json]` answers one question: who is around on this machine, which issue does each
 hold, and how can it be reached. `estigia sessions --all` answers the wider one: every row the registry
-has ever written. `estigia sessions send` puts a message in another session's mailbox, and the hook point
-of each runtime delivers it. The `send_message` and `list_sessions` MCP tools are the same two doors for
-an agent ([below](#the-mcp-tools)), and all four take the same addresses. The last section lists what
-does not exist yet.
+has ever written, and `--limit N` with `--cursor TOKEN` answers it one page at a time. `estigia sessions
+send` puts a message in another session's mailbox, and the hook point of each runtime delivers it. The
+`send_message` and `list_sessions` MCP tools are the same two doors for an agent
+([below](#the-mcp-tools)), and all four take the same addresses. The last section lists what does not
+exist yet.
 
 ## What is recorded
 
@@ -44,7 +45,8 @@ Each entry carries `name`, `run_id`, `runtime`, `session_id`, `status`, `issue`,
 `wake`, under `--json` as a `sessions` list beside `stale_after`, `of` (how many rows the registry holds)
 and `all`. `estigia sessions` prints the live rows only, one line each; `estigia sessions --all` prints
 every row with its status. The live view is the answer to "who is around"; the full registry is opt-in
-because it is mostly rows whose sessions are gone.
+because it is mostly rows whose sessions are gone. `--limit` or `--cursor` replaces that whole list with
+one page of it, as [Bounded session discovery](#bounded-session-discovery) describes.
 
 | `status` | Meaning |
 |---|---|
@@ -307,13 +309,14 @@ Codex and OpenCode.
 
 ## Bounded session discovery
 
-`list_sessions` with any option answers a **page** of the registry rather than the whole list. The answer is a
-versioned object: `version`, the page's `sessions`, its own accounting (`limit`, `returned`, `matched` — the rows
-the selectors matched as this page was taken — and `more`), a `next_cursor` that is `null` once the snapshot is
-exhausted, and the snapshot's identity (`taken_at`, and `stale_after` as before). The page reads the clock once,
-for `taken_at` and a cursor's age; a clock that will not answer is refused `clock-unreadable`, never read as no
-time. `estigia sessions` and a `list_sessions` call with no options are unchanged: neither is bounded, and a
-caller that asks for nothing still gets every row.
+`list_sessions` with any option, or `estigia sessions` with `--limit` and/or `--cursor`, answers a **page**
+of the registry rather than the whole list. Both are adapters of one bounded read, so the accounting and the
+cursors are the same from either. The answer is a versioned object: `version`, the page's `sessions`, its own
+accounting (`limit`, `returned`, `matched` — the rows the selectors matched as this page was taken — and
+`more`), a `next_cursor` that is `null` once the snapshot is exhausted, and the snapshot's identity
+(`taken_at`, and `stale_after` as before). The page reads the clock once, for `taken_at` and a cursor's age; a
+clock that will not answer is refused `clock-unreadable`, never read as no time. A call with no page option on
+either door is unbounded, and a caller that asks for nothing still gets every row.
 
 The selectors are `status` (`live`, `stale`, `ended` or `unknown`), `runtime`, `run` (a run id),
 `session_id` and `repo_dir`. Each is at most 256 bytes: a longer one is refused when it is given, with
@@ -322,8 +325,19 @@ bound hex-encode to 3,029 of the 4,096 bytes a cursor may be, leaving room for t
 identity. `limit` is a positive whole number, default 50 and at most 500; a value that is
 not one — including an explicit `null` — is refused by the server's argument boundary (`flags_for`), which
 every tool call passes through before it is dispatched, and one above 500 by the page itself, rather than
-clamped. `cursor` is the `next_cursor` of the page before. The bounded form is the tool's alone: `estigia
-sessions` takes neither a page size nor a cursor, and reaches no page.
+clamped. `cursor` is the `next_cursor` of the page before. The CLI takes no selector: `--limit N` is a page
+size and `--cursor TOKEN` continues a walk, and it asks for `status=live` unless `--all` is given, when it
+asks for every status. `estigia sessions --limit 20` therefore walks the live rows and `estigia sessions
+--all --limit 20` walks the registry; a cursor issued under one is refused `sessions-cursor-mismatch` under
+the other. A `limit` above the maximum is `sessions-limit-too-large` from either door, and `--limit 0` is
+refused by the parser before anything is read.
+
+**What each door prints.** `list_sessions` answers the page's JSON. `estigia sessions --json` with a page
+flag prints the same bytes, the compact JSON the tool's caller sees; without `--json` it prints each row in
+the line the unbounded list uses, then one footer naming how many rows the page returned, how many matched,
+whether more remain, and the next cursor when there is one — `2 of 5 row(s) on this page; more remain — the
+next cursor is <token>`, and `1 of 5 row(s) on this page; nothing more remains` at the end of a traversal.
+A traversal continues by giving `--cursor <token>` again, with the same `--all` and `--limit` it started with.
 
 **Ordering and the snapshot.** A bounded page's snapshot is the registry rows with an immutable start, and a page
 orders them by `(started_at, run_id)`; the snapshot is every such row whose `started_at <= taken_at`. `started_at`
@@ -343,7 +357,7 @@ sound; the value a selector compares is not in the snapshot, so it cannot be. `s
 from the row as each page reads it, which is the only place they exist, so a row whose status changes between
 pages can leave a `status`-filtered traversal, and `matched` is the count as that page was taken rather than a
 count held constant across the walk. A caller that needs every row matching a `status` — a complete set rather
-than a walk — should read the whole list (no options, or `estigia sessions`) and filter it itself: that is one
+than a walk — should read the whole list (no page flag, on either door) and filter it itself: that is one
 read of the registry against one clock, so the statuses in one answer agree with each other. A bounded traversal
 is for walking a large registry a page at a time; a selector on it is a convenience that reads the row as each
 page is taken.
@@ -352,8 +366,9 @@ page is taken.
 ordering), the selectors it was issued for, the snapshot's `taken_at`, the key of the last row returned, and an
 identity of the store file — its device and inode on Unix, its volume and file index on Windows. A path with no
 store answers `absent`, and a store whose identity cannot be read answers `unknown`. A later call must repeat the
-same selectors; the cursor continues one snapshot, not "the same query run again". The cursor is refused, never
-silently restarted, when:
+same selectors; the cursor continues one snapshot, not "the same query run again". The CLI keeps every code in
+the table below, because it maps `--limit` and `--cursor` onto the page and answers what the page answers. The
+cursor is refused, never silently restarted, when:
 
 | Refusal | When |
 |---|---|

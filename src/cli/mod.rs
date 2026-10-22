@@ -311,7 +311,12 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
 
         Command::Status => status(cli.json),
 
-        Command::Sessions { action, all } => sessions_command(action.as_ref(), *all, cli.json),
+        Command::Sessions {
+            action,
+            all,
+            limit,
+            cursor,
+        } => sessions_command(action.as_ref(), *all, *limit, cursor.as_deref(), cli.json),
 
         Command::Update => update(cli.json),
 
@@ -6067,9 +6072,15 @@ pub(crate) struct GoalReading {
 }
 
 /// `estigia sessions`: the list, or `send`.
-fn sessions_command(action: Option<&SessionsAction>, all: bool, json: bool) -> Result<(), Refusal> {
+fn sessions_command(
+    action: Option<&SessionsAction>,
+    all: bool,
+    limit: Option<u64>,
+    cursor: Option<&str>,
+    json: bool,
+) -> Result<(), Refusal> {
     match action {
-        None => sessions::sessions(json, all),
+        None => sessions::sessions(json, all, limit, cursor),
         Some(SessionsAction::Send {
             session,
             text,
