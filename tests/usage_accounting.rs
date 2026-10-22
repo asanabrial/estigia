@@ -173,3 +173,77 @@ fn the_readable_table_names_the_unknown_class_and_the_floor() {
         "the attribution limit is stated where the figures are:\n{table}"
     );
 }
+
+#[test]
+fn each_context_reports_its_turns_models_effort_and_tool_calls() {
+    let report = measured();
+    let repo = report
+        .pointer("/by_repo/estigia")
+        .expect("the estigia fixture project is measured");
+    assert_eq!(
+        repo.pointer("/turn_profile/orchestrator"),
+        Some(&serde_json::json!({
+            "model_turns": 3,
+            "served_models": {"claude-opus-5-5": 3},
+            "requested_models": {"claude-opus-5-5": 2, "unknown": 1},
+            "efforts": {"medium": 2, "unknown": 1},
+            "tool_calls": 2
+        })),
+        "one turn per message identity, a retried fragment's tool call counted once, \
+         and a field a record omits counted under unknown"
+    );
+    assert_eq!(
+        repo.pointer("/turn_profile/reviewers"),
+        Some(&serde_json::json!({
+            "model_turns": 1,
+            "served_models": {"claude-sonnet-5-5": 1},
+            "requested_models": {"unknown": 1},
+            "efforts": {"high": 1},
+            "tool_calls": 0
+        }))
+    );
+    assert_eq!(number(repo, "/subagents_launched"), 1);
+}
+
+#[test]
+fn the_usage_classes_are_split_by_the_model_that_answered() {
+    let report = measured();
+    assert_eq!(
+        report.pointer("/overall/usage_by_model"),
+        Some(&serde_json::json!({
+            "claude-opus-5-5": {"input": 7, "cache_read": 300, "cache_creation": 7, "output": 11},
+            "claude-sonnet-5-5": {"input": 1, "cache_read": 0, "cache_creation": 2, "output": 3},
+            "unknown": {"input": 5, "cache_read": null, "cache_creation": null, "output": null}
+        })),
+        "a record naming no model is measured under unknown, and its missing classes stay null"
+    );
+}
+
+#[test]
+fn each_session_is_listed_with_its_wall_clock_span() {
+    let report = measured();
+    let sessions = report
+        .pointer("/sessions")
+        .and_then(Value::as_array)
+        .expect("the per-session rows");
+    assert_eq!(sessions.len(), 2);
+    let alpha = sessions
+        .iter()
+        .find(|row| row["path"] == "-Users-asanabrial-repo-estigia/alpha.jsonl")
+        .expect("the alpha session row");
+    assert_eq!(
+        alpha["wall_clock_seconds"],
+        serde_json::json!(100.0),
+        "first record to last, the subagent's transcript included"
+    );
+    assert_eq!(alpha["subagents_launched"], serde_json::json!(1));
+    assert_eq!(alpha["issue"], serde_json::json!(148));
+    let thin = sessions
+        .iter()
+        .find(|row| row["path"] == "-Users-asanabrial-repo-thin/only.jsonl")
+        .expect("the thin session row");
+    assert!(
+        thin["wall_clock_seconds"].is_null(),
+        "a session with no timestamp has an unknown span, not a zero one: {thin}"
+    );
+}

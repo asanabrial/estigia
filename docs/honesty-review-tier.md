@@ -35,6 +35,15 @@
   against the base script covers the fields the classes do not reach, and says nothing about whether
   the classes are the ones a cost comparison needs.
 
+- **A session's span, turns and models are what its transcript says, not what was billed.**
+  `wall_clock_seconds` runs from a session's first timestamped record to its last, subagents
+  included: it is not *time to a verified delivery* unless the session ended at that delivery, and
+  idle time inside it is counted. `served_models` is the model the API response names and
+  `requested_models` the one Claude Code recorded asking for; neither is a billing record, and a
+  record that names neither is counted `unknown`. A turn is a distinct assistant message identity,
+  and a tool call a distinct `tool_use` identity, so a retry the CLI recorded under a new identity
+  counts again. Codex, Pi and OpenCode transcripts are not read at all.
+
 - **A `never-ran` verdict is recorded evidence, not verified evidence.** Read through `record_computed_verdict`: it approves under a publication lane whose failing
   runs report `steps: []` on every job only when the caller supplies `--never-ran-evidence-file`,
   and it stores that file's content in the marker verbatim — on the same footing as a finding's

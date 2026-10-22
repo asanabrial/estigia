@@ -1,2 +1,2 @@
-{"type":"user","message":{"role":"user","content":"review"}}
-{"type":"assistant","uuid":"s1","message":{"id":"sm1","usage":{"input_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":2,"output_tokens":3},"content":[{"type":"text","text":"a finding"}]}}
+{"type":"user","timestamp":"2026-10-22T10:01:00.000Z","message":{"role":"user","content":"review"}}
+{"type":"assistant","uuid":"s1","timestamp":"2026-10-22T10:01:40.000Z","effort":"high","message":{"id":"sm1","model":"claude-sonnet-5-5","usage":{"input_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":2,"output_tokens":3},"content":[{"type":"text","text":"a finding"}]}}

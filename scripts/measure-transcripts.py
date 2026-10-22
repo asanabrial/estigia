@@ -17,10 +17,18 @@ CLI's mapping, and a class no measured record carried is `null` rather than
 them is counted in `usage.records_missing_a_counter`, which makes the class
 totals a floor rather than a silent one. A provider whose cached counters are
 already inside its input total needs its own mapping, not this one.
+
+`turn_profile` counts, per context, the model turns (distinct assistant message
+identities), the model the API answered with, the model the CLI asked for, the
+effort, and the tool calls (distinct `tool_use` identities). `usage_by_model`
+splits the usage classes by the model that answered, and `sessions` lists each
+session with its wall-clock span and the subagents it launched. A field a record
+does not carry is counted under `unknown`, never guessed.
 """
 
 import argparse
 import collections
+import datetime
 import glob
 import json
 import os
@@ -74,14 +82,120 @@ def merge_usage(target, source):
     return target
 
 
-def measured_usages(records):
+UNKNOWN = "unknown"
+
+
+def measured_records(records):
     seen = set()
     for record in records:
         message = record.get("message") or {}
         message_id = message.get("id") or record.get("uuid")
         if record.get("type") == "assistant" and "usage" in message and message_id not in seen:
             seen.add(message_id)
-            yield message["usage"]
+            yield record
+
+
+def measured_usages(records):
+    for record in measured_records(records):
+        yield record["message"]["usage"]
+
+
+def assistant_turns(records):
+    seen = set()
+    for record in records:
+        if record.get("type") != "assistant":
+            continue
+        message = record.get("message") or {}
+        message_id = message.get("id") or record.get("uuid")
+        if message_id not in seen:
+            seen.add(message_id)
+            yield record
+
+
+def tool_call_count(records):
+    identities = set()
+    anonymous = 0
+    for record in records:
+        if record.get("type") != "assistant":
+            continue
+        content = (record.get("message") or {}).get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if block.get("type") != "tool_use":
+                continue
+            if block.get("id"):
+                identities.add(block["id"])
+            else:
+                anonymous += 1
+    return len(identities) + anonymous
+
+
+def new_turn_profile():
+    return {
+        "model_turns": 0,
+        "served_models": {},
+        "requested_models": {},
+        "efforts": {},
+        "tool_calls": 0,
+    }
+
+
+def tally(counts, key):
+    key = key if key else UNKNOWN
+    counts[key] = counts.get(key, 0) + 1
+
+
+def turn_profile(records):
+    profile = new_turn_profile()
+    for record in assistant_turns(records):
+        profile["model_turns"] += 1
+        tally(profile["served_models"], (record.get("message") or {}).get("model"))
+        tally(profile["requested_models"], record.get("requestedModel"))
+        tally(profile["efforts"], record.get("effort"))
+    profile["tool_calls"] = tool_call_count(records)
+    return profile
+
+
+def merge_turn_profile(target, source):
+    target["model_turns"] += source["model_turns"]
+    target["tool_calls"] += source["tool_calls"]
+    for field in ("served_models", "requested_models", "efforts"):
+        for key, count in source[field].items():
+            target[field][key] = target[field].get(key, 0) + count
+    return target
+
+
+def usage_by_model(records):
+    totals = {}
+    for record in measured_records(records):
+        model = record["message"].get("model") or UNKNOWN
+        totals[model] = add_usage(totals.get(model, new_usage_total()), record["message"]["usage"])
+    return totals
+
+
+def merge_usage_by_model(target, source):
+    for model, total in source.items():
+        target[model] = merge_usage(target.get(model, new_usage_total()), total)
+    return target
+
+
+def timestamps(records):
+    for record in records:
+        stamp = record.get("timestamp")
+        if not isinstance(stamp, str):
+            continue
+        try:
+            yield datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+
+
+def wall_clock_seconds(stamps):
+    stamps = list(stamps)
+    if not stamps:
+        return None
+    return (max(stamps) - min(stamps)).total_seconds()
 
 
 def repo_of(project_dir_name):
@@ -168,6 +282,7 @@ def session_usage(records):
 def measure_session(path):
     records = read_jsonl(path)
     counts = issue_counts(records)
+    stamps = list(timestamps(records))
     session = {
         "path": path,
         "mtime": os.path.getmtime(path),
@@ -177,6 +292,9 @@ def measure_session(path):
         "issues": sorted(str(issue) for issue in counts),
         "usage": {"orchestrator": session_usage(records)},
         "subagents": collections.defaultdict(int),
+        "turn_profile": {"orchestrator": turn_profile(records)},
+        "usage_by_model": usage_by_model(records),
+        "subagents_launched": 0,
     }
     directory = path[:-6]
     for subagent_path in sorted(glob.glob(os.path.join(directory, "subagents", "*.jsonl"))):
@@ -186,6 +304,13 @@ def measure_session(path):
         session["usage"][kind] = merge_usage(
             session["usage"].get(kind, new_usage_total()), session_usage(transcripts)
         )
+        session["turn_profile"][kind] = merge_turn_profile(
+            session["turn_profile"].get(kind, new_turn_profile()), turn_profile(transcripts)
+        )
+        merge_usage_by_model(session["usage_by_model"], usage_by_model(transcripts))
+        session["subagents_launched"] += 1
+        stamps.extend(timestamps(transcripts))
+    session["wall_clock_seconds"] = wall_clock_seconds(stamps)
     return session
 
 
@@ -206,6 +331,9 @@ def find_project_sessions(projects_dir):
 def summarise(sessions):
     context_totals = collections.defaultdict(int)
     usage_totals = {}
+    profiles = {}
+    by_model = {}
+    subagents_launched = 0
     forced_turns = []
     per_issue = collections.defaultdict(int)
     several_issues = 0
@@ -216,6 +344,10 @@ def summarise(sessions):
             context_totals[kind] += tokens
         for kind, total in session["usage"].items():
             usage_totals[kind] = merge_usage(usage_totals.get(kind, new_usage_total()), total)
+        for kind, profile in session["turn_profile"].items():
+            profiles[kind] = merge_turn_profile(profiles.get(kind, new_turn_profile()), profile)
+        merge_usage_by_model(by_model, session["usage_by_model"])
+        subagents_launched += session["subagents_launched"]
         forced_turns.extend(session["forced_stop_turns"])
         if session["issue"] is not None:
             per_issue[str(session["issue"])] += session["orchestrator_tokens"]
@@ -235,6 +367,11 @@ def summarise(sessions):
                 total["records_missing_a_counter"] for total in usage_totals.values()
             ),
         },
+        "turn_profile": dict(sorted(profiles.items())),
+        "usage_by_model": {
+            model: dict(total["tokens"]) for model, total in sorted(by_model.items())
+        },
+        "subagents_launched": subagents_launched,
         "sessions_with_several_issues": several_issues,
         "forced_stop_turns_count": len(forced_turns),
         "forced_stop_turns_median_context": (
@@ -242,6 +379,21 @@ def summarise(sessions):
         ),
         "per_issue_input_tokens": per_issue,
         "last_modified": last_modified,
+    }
+
+
+def session_row(projects_dir, session):
+    return {
+        "path": os.path.relpath(session["path"], projects_dir),
+        "issue": session["issue"],
+        "wall_clock_seconds": session["wall_clock_seconds"],
+        "subagents_launched": session["subagents_launched"],
+        "turn_profile": dict(sorted(session["turn_profile"].items())),
+        "usage": {kind: dict(total["tokens"]) for kind, total in sorted(session["usage"].items())},
+        "usage_by_model": {
+            model: dict(total["tokens"])
+            for model, total in sorted(session["usage_by_model"].items())
+        },
     }
 
 
@@ -305,7 +457,12 @@ def main(argv):
         per_repo_summary[repo] = summarise(sessions)
     overall = summarise(all_sessions)
 
-    result = {"projects": args.projects, "by_repo": per_repo_summary, "overall": overall}
+    result = {
+        "projects": args.projects,
+        "by_repo": per_repo_summary,
+        "overall": overall,
+        "sessions": [session_row(args.projects, session) for session in all_sessions],
+    }
 
     if not args.json:
         for repo, summary in sorted(per_repo_summary.items()):
