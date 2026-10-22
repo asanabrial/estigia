@@ -17,6 +17,14 @@ pub(crate) fn record(
     projection: &str,
     at: &str,
 ) -> Result<(), Refusal> {
+    if issue == 0 || runtime.is_empty() || projection.is_empty() || at.is_empty() {
+        return Err(row_unwritten(
+            "the transport's answer named no issue, runtime, projection or time",
+            issue,
+            runtime,
+            projection,
+        ));
+    }
     let opened = store::Store::open(&store::beside(state_root))
         .map_err(|failure| row_unwritten(&failure.detail(), issue, runtime, projection))?;
     opened

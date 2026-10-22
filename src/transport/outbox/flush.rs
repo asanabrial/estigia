@@ -637,7 +637,12 @@ impl<'a> Engine<'a> {
             .get(crate::transport::handoff::QUEUED_RUNTIME)
             .and_then(serde_json::Value::as_str)
         {
-            crate::transport::handoff::require_unheld(self.context, row.issue, runtime, self.now)?;
+            crate::transport::handoff::require_unheld(
+                self.context,
+                row.issue,
+                Some(runtime),
+                self.now,
+            )?;
             crate::transport::handoff::project_labels(self.context, row.issue, runtime)?;
         }
         Ok(())

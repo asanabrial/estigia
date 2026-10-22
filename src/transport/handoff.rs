@@ -42,7 +42,7 @@ fn runtime_unreadable(runtime: &str) -> Failure {
 pub fn record(context: &Context, what: &Handoff<'_>) -> Result<Value, Failure> {
     crate::harness::session::runtime_component(what.runtime)
         .map_err(|_| runtime_unreadable(what.runtime))?;
-    require_unheld(context, what.issue, what.runtime, what.now)?;
+    require_unheld(context, what.issue, None, what.now)?;
 
     let projection = if outbox::is_closed(context) {
         let repo = claim::repo_of(context)?;
@@ -52,7 +52,7 @@ pub fn record(context: &Context, what: &Handoff<'_>) -> Result<Value, Failure> {
             &repo,
             what.issue,
             OutboxKind::Reconverge,
-            &json!({ "handoff": what.runtime }),
+            &json!({ QUEUED_RUNTIME: what.runtime }),
             what.now,
         )?;
         json!({ "projection": "deferred", "queued": seq })
@@ -72,18 +72,20 @@ pub fn record(context: &Context, what: &Handoff<'_>) -> Result<Value, Failure> {
     }))
 }
 
-/// Refuses a handoff of an issue a live claim holds under another runtime.
+/// Refuses a handoff of an issue a live claim holds, except one held under
+/// `recipient`: a queued projection whose recipient already claimed the issue
+/// still lands.
 pub(crate) fn require_unheld(
     context: &Context,
     issue: u64,
-    runtime: &str,
+    recipient: Option<&str>,
     now: &str,
 ) -> Result<(), Failure> {
     let comments = claim::timeline(context, issue, now)?;
     let Some(held) = claim::holding(&comments, now).event else {
         return Ok(());
     };
-    if held.runtime.as_deref() == Some(runtime) {
+    if recipient.is_some() && held.runtime.as_deref() == recipient {
         return Ok(());
     }
     let holder = held
@@ -97,7 +99,7 @@ pub(crate) fn require_unheld(
         "holder": held.run_id,
         "holder_runtime": held.runtime,
         "action": format!(
-            "`{issue}` is held by `{}` ({holder}); release it before handing it to {runtime}, \
+            "`{issue}` is held by `{}` ({holder}); release it before handing it over, \
              because a handoff is a destination and never a claim",
             held.run_id
         ),

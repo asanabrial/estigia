@@ -138,7 +138,7 @@ fn refused(refusal: Refusal) -> ToolFailure {
 /// Read from the words, because the instruction is prose the recipient follows
 /// rather than a field the sender declares. A phrase quoted as something *not*
 /// to run reads the same here; the refusal is what the person answers.
-fn flow_issued(text: &str) -> Vec<u64> {
+pub(super) fn flow_issued(text: &str) -> Vec<u64> {
     let words: Vec<&str> = text.split_whitespace().collect();
     let mut found: Vec<u64> = Vec::new();
     for window in words.windows(3) {

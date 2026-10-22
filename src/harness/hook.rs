@@ -908,7 +908,12 @@ fn handoff_paragraph(context: &GateContext, run: &session::Run) -> String {
                 .from_run_id
                 .as_deref()
                 .map_or_else(|| "a person".to_owned(), |run| format!("`{run}`"));
-            format!("#{} by {by} at {}", row.issue, row.created_at)
+            let label = if row.projection == "landed" {
+                ""
+            } else {
+                ", its `dev:` label queued and not yet read back on the tracker"
+            };
+            format!("#{} by {by} at {}{label}", row.issue, row.created_at)
         })
         .collect::<Vec<_>>()
         .join(", ");

@@ -213,15 +213,19 @@ message a session and does not claim anything — the recipient still claims thr
   the outbox and the answer says `projection: deferred` with the queue position; a later `flush`
   projects it, reads it back, and marks the row `landed`. Re-running `handoff` is how a caller
   reconciles its answer.
-- **A held issue is refused** with `handoff-issue-held` and nothing is written. A handoff is a
+- **A held issue is refused** with `handoff-issue-held` and nothing is written, whichever runtime
+  holds it — the local ledger is what is read, since that is where a claim lives. A handoff is a
   destination, not a claim: overwriting the holder's `dev:` label would tell every reader the wrong
-  runtime. Release the issue first.
+  runtime. Release the issue first. A queued projection is checked again when the outbox flushes it,
+  and there the one holder that does not refuse it is a run of the runtime it was handed to: the
+  recipient took it before the label landed.
 - **The label is explainable.** `claim` refuses a `dev:` label the store cannot explain, and a
   handoff row is that explanation — so the recipient's `claim` is not blocked by the handoff that
   sent it there.
 - **A later session sees it.** `SessionStart` of a session of that runtime whose repository is that
   directory names each waiting issue, who handed it over and when, and says a handoff is a request,
-  never a claim. `list_sessions` and `estigia sessions --json` carry the same list as `handoffs` on
+  never a claim. A row whose projection is still `deferred` says its `dev:` label is queued and not
+  yet read back, so a label that may never land is not presented as one that did. `list_sessions` and `estigia sessions --json` carry the same list as `handoffs` on
   every row of that runtime in that repository.
 
 The directory recorded is the one the handoff ran in. A session started in a *worktree* of that

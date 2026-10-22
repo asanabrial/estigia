@@ -863,6 +863,23 @@ fn a_handoff_of_an_issue_claimed_only_in_the_store_is_refused() {
 }
 
 #[test]
+fn a_handoff_to_the_holders_own_runtime_is_refused_too() {
+    let rig = labelled_rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim recorded in the store");
+    let queued = rig.queue();
+    let failure = rig
+        .closed(
+            "handoff",
+            &["--issue", "12", "--to", "claude", "--run-id", "claude-b"],
+        )
+        .expect_err("a held issue is not handed over, whoever holds it");
+
+    assert_eq!(failure.envelope()["reason"], "handoff-issue-held");
+    assert_eq!(rig.queue(), queued);
+}
+
+#[test]
 fn a_handoff_naming_an_unlabellable_runtime_writes_nothing() {
     let rig = labelled_rig();
     let failure = rig

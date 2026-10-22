@@ -6331,6 +6331,24 @@ mod send_message {
     }
 
     #[test]
+    fn every_flow_dev_instruction_is_read_whatever_its_spelling_and_nothing_else_is() {
+        use super::super::messaging::flow_issued;
+        assert_eq!(flow_issued("flow dev #12"), vec![12]);
+        assert_eq!(flow_issued("run /flow dev 12x now"), vec![12]);
+        assert_eq!(
+            flow_issued("Flow DEV 7, then flow dev 9 and flow dev 7"),
+            vec![7, 9]
+        );
+        assert_eq!(flow_issued("please flow dev"), Vec::<u64>::new());
+        assert_eq!(flow_issued("flow dev next"), Vec::<u64>::new());
+        assert_eq!(
+            flow_issued("flow dev 99999999999999999999999"),
+            Vec::<u64>::new()
+        );
+        assert_eq!(flow_issued("flow triage 12"), Vec::<u64>::new());
+    }
+
+    #[test]
     fn a_flow_instruction_for_the_issue_it_holds_is_delivered() {
         let rig = Rig::new();
         rig.hold(436, RECIPIENT);
@@ -7612,6 +7630,53 @@ mod handoff {
         assert!(text.contains("#723"), "{text}");
         assert!(text.contains("handed to `opencode`"), "{text}");
         assert!(text.contains(SENDER), "{text}");
+    }
+
+    #[test]
+    fn a_deferred_handoff_is_shown_at_session_start_as_not_yet_on_the_tracker() {
+        let rig = Rig::new();
+        rig.store()
+            .record_handoff(
+                &rig.context().repo_dir.display().to_string(),
+                723,
+                "opencode",
+                Some(SENDER),
+                "deferred",
+                "2026-10-22T21:00:00Z",
+            )
+            .expect("a deferred row");
+
+        let run = crate::harness::session::Run::new("opencode-later0a1b2c3d".to_owned());
+        let text = crate::harness::hook::session_start_text(&rig.context(), &run, None);
+        assert!(text.contains("#723"), "{text}");
+        assert!(text.contains("not yet read back"), "{text}");
+
+        rig.handoff();
+        let text = crate::harness::hook::session_start_text(&rig.context(), &run, None);
+        assert!(!text.contains("not yet read back"), "{text}");
+    }
+
+    #[test]
+    fn a_handoff_row_the_answer_does_not_name_is_refused_rather_than_written_as_issue_zero() {
+        let rig = Rig::new();
+        let refused = crate::harness::handoff::record(
+            &rig.context().state_root,
+            &rig.context().repo_dir,
+            0,
+            "",
+            SENDER,
+            "landed",
+            "2026-10-22T21:00:00Z",
+        )
+        .expect_err("an answer naming no issue or runtime is not a row");
+
+        assert_eq!(refused.code, "handoff-row-unwritten");
+        assert!(
+            rig.store()
+                .handoffs()
+                .expect("the handoffs read")
+                .is_empty()
+        );
     }
 
     #[test]
