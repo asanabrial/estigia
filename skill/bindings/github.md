@@ -142,6 +142,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `create` | `SCRIPT create` |
 | `list_state` | `SCRIPT list-state` |
 | `claim` | `SCRIPT claim` — see *Claim* in github/operations.md |
+| `handoff` | `SCRIPT handoff` — see *Handing an issue to another runtime* in github/operations.md |
 | `verify_claim` | `SCRIPT verify-claim` |
 | `transition` | `SCRIPT transition` |
 | `comment` | `SCRIPT comment` |

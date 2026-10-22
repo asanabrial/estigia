@@ -203,4 +203,16 @@ pub(super) const MIGRATIONS: &[&str] = &[
     CREATE UNIQUE INDEX sessions_name ON sessions (repo_dir, name)
         WHERE name IS NOT NULL;
     ",
+    "
+    ALTER TABLE sessions ADD COLUMN pane TEXT;
+    CREATE TABLE handoffs (
+        repo_dir TEXT NOT NULL,
+        issue INTEGER NOT NULL,
+        runtime TEXT NOT NULL,
+        from_run_id TEXT,
+        created_at TEXT NOT NULL,
+        projection TEXT NOT NULL CHECK (projection IN ('landed', 'deferred')),
+        PRIMARY KEY (repo_dir, issue, runtime)
+    );
+    ",
 ];

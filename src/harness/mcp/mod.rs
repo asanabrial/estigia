@@ -1352,6 +1352,32 @@ fn run_tool_asking(
         return Err(failure);
     }
 
+    // The handoff record is local, and it is what a later session of that
+    // runtime reads at `SessionStart`; the label the transport projected is the
+    // tracker's half of the same fact.
+    if tool.operation == "handoff" {
+        let body = answer.body.as_ref();
+        let field = |name: &str| {
+            body.and_then(|value| value.get(name))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+        };
+        let issue = arguments
+            .get("issue")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        crate::harness::handoff::record(
+            &context.state_root,
+            &context.repo_dir,
+            issue,
+            field("to"),
+            run_id,
+            field("projection"),
+            field("at"),
+        )
+        .map_err(|refusal| ToolFailure::Refused(Box::new(refusal)))?;
+    }
+
     // A pointer keyed by nothing is a file nobody reads and a state the real
     // run never learns — `transition` used to land here with an empty
     // run-id, and the pointer for `""` recorded a move the real run went on

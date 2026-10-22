@@ -114,16 +114,37 @@ fn known_runtime(rows: &[Listed], word: &str) -> bool {
 }
 
 pub(crate) fn resolve(root: &Path, address: &str) -> Result<Narrowed, Refusal> {
+    resolve_in(root, address, None)
+}
+
+/// [`resolve`], narrowed to the sessions a directory holds.
+///
+/// `repo_dir` is compared as a directory, not as text: a trailing separator or
+/// a symlink is the same checkout, and a session that registered no directory
+/// is not in any repository and so matches none.
+pub(crate) fn resolve_in(
+    root: &Path,
+    address: &str,
+    repo_dir: Option<&str>,
+) -> Result<Narrowed, Refusal> {
     let every = crate::cli::sessions::entries(root)?;
     let live: Vec<Listed> = every
         .iter()
         .filter(|entry| entry.status == "live")
+        .filter(|entry| {
+            repo_dir.is_none_or(|wanted| {
+                entry.repo_dir.as_deref().is_some_and(|held| {
+                    crate::paths::same_directory(Path::new(held), Path::new(wanted))
+                })
+            })
+        })
         .cloned()
         .collect();
     let address = address.trim();
-    let word = address.strip_prefix("runtime:").unwrap_or(address);
+    let explicit_runtime = address.strip_prefix("runtime:");
+    let word = explicit_runtime.unwrap_or(address);
 
-    let bare = !word.contains('#') && !word.contains('@');
+    let bare = explicit_runtime.is_none() && !word.contains('#') && !word.contains('@');
     if bare {
         // A run id is unique by construction; a short name is unique only
         // within one repository, so every row carrying it is a candidate and
@@ -154,7 +175,9 @@ pub(crate) fn resolve(root: &Path, address: &str) -> Result<Narrowed, Refusal> {
     let mut wanted_issue: Option<String> = None;
     let mut wanted_name: Option<String> = None;
 
-    if let Some((repo, issue)) = word.split_once('#') {
+    if let Some(runtime) = explicit_runtime {
+        wanted_runtime = Some(runtime.trim().to_owned());
+    } else if let Some((repo, issue)) = word.split_once('#') {
         wanted_issue = Some(issue.trim().to_owned());
         if !repo.trim().is_empty() {
             wanted_repos.push(repo.trim().to_owned());
@@ -216,7 +239,7 @@ pub(crate) fn around(root: &Path) -> Result<Value, Refusal> {
         .iter()
         .filter(|entry| entry.status == "live")
         .map(|entry| {
-            json!({
+            let mut row = json!({
                 "name": entry.spoken(),
                 "run_id": entry.run_id,
                 "runtime": entry.runtime,
@@ -226,7 +249,14 @@ pub(crate) fn around(root: &Path) -> Result<Value, Refusal> {
                 "silent_for": entry.silent_for,
                 "waiting": entry.waiting,
                 "build": entry.build.as_deref().filter(|build| *build != crate::build_info::VERSION),
-            })
+            });
+            if let Some(pane) = &entry.pane {
+                row["pane"] = json!(pane);
+            }
+            if !entry.handoffs.is_empty() {
+                row["handoffs"] = json!(entry.handoffs);
+            }
+            row
         })
         .collect();
     let behind: Vec<String> = every

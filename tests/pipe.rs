@@ -88,6 +88,7 @@ fn estigia_command() -> Command {
     command.env_remove("CLAUDE_CONFIG_DIR");
     command.env_remove("DSH_HOME");
     command.env_remove("PI_CODING_AGENT_DIR");
+    command.env_remove("HERDR_PANE_ID");
     command
 }
 

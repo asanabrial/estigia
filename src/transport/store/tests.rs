@@ -270,7 +270,7 @@ fn the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema() {
     assert_eq!(mode, "wal");
     assert_eq!(keys, 1);
     assert_eq!(synchronous, 2, "FULL");
-    assert_eq!(store.schema_version().expect("reads"), 13);
+    assert_eq!(store.schema_version().expect("reads"), 14);
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn reopening_keeps_the_schema_and_a_newer_one_is_refused() {
             .expect("reopens")
             .schema_version()
             .expect("reads"),
-        13
+        14
     );
 
     rusqlite::Connection::open(&path)
@@ -495,7 +495,7 @@ fn doctor_reports_the_path_the_schema_and_the_last_hours_calls() {
         panic!("a readable store is fine: {:?}", check.health);
     };
     assert!(
-        detail.contains("state.db") && detail.contains("schema 13"),
+        detail.contains("state.db") && detail.contains("schema 14"),
         "{detail}"
     );
     assert!(detail.contains("3 GraphQL, 0 REST"), "{detail}");
@@ -702,7 +702,7 @@ fn a_migration_another_opener_finished_while_this_one_waited_is_not_applied_twic
     })
     .expect("the slower opener finds the schema already laid down");
 
-    assert_eq!(slow.schema_version().expect("reads"), 13);
+    assert_eq!(slow.schema_version().expect("reads"), 14);
 }
 
 #[test]
@@ -1328,7 +1328,7 @@ fn recorded(inserted: super::jobs::Inserted) -> bool {
 #[test]
 fn migration_five_creates_the_review_jobs_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 13);
+    assert_eq!(store.schema_version().expect("a version"), 14);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('review_jobs')")
@@ -1364,7 +1364,7 @@ fn migration_five_creates_the_review_jobs_table() {
 #[test]
 fn migration_six_creates_the_blocked_clauses_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 13);
+    assert_eq!(store.schema_version().expect("a version"), 14);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('blocked_clauses')")
@@ -1381,7 +1381,7 @@ fn migration_six_creates_the_blocked_clauses_table() {
 #[test]
 fn migration_seven_creates_the_record_tables() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 13);
+    assert_eq!(store.schema_version().expect("a version"), 14);
     for (table, wanted) in [
         ("decisions", ["at", "body"].as_slice()),
         ("roles", ["at", "body"].as_slice()),
@@ -2637,6 +2637,7 @@ fn seen(store: &Store, run_id: &str, now: u64) {
                 session_id: "host-id",
                 repo_dir: Some("/work/repo"),
                 wake: None,
+                pane: None,
             },
             now,
         )
@@ -2692,6 +2693,7 @@ fn a_registration_refreshes_the_build_and_the_wake_it_names() {
                 session_id: "host-id",
                 repo_dir: Some("/work/repo"),
                 wake: Some("poll"),
+                pane: None,
             },
             100,
         )
@@ -2708,6 +2710,7 @@ fn a_registration_refreshes_the_build_and_the_wake_it_names() {
                 session_id: "host-id",
                 repo_dir: Some("/work/repo"),
                 wake: None,
+                pane: None,
             },
             200,
         )

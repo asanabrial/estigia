@@ -155,6 +155,31 @@ fn inventory() -> Vec<Refusal> {
             };
             crate::harness::mcp::address::recipient_ambiguous("opencode", &both)
         },
+        {
+            let holder = crate::cli::sessions::Listed {
+                run_id: "claude-holder0".to_owned(),
+                name: None,
+                runtime: "claude".to_owned(),
+                session_id: None,
+                status: "live",
+                issue: Some(crate::identity::Identity::Number(12)),
+                state: Some("in-progress".to_owned()),
+                last_seen: Some(1),
+                silent_for: Some(0),
+                repo_dir: Some("/repo".to_owned()),
+                worktree: None,
+                ended_at: None,
+                end_reason: None,
+                waiting: 0,
+                undelivered_sent: 0,
+                build: None,
+                wake: None,
+                pane: None,
+                handoffs: Vec::new(),
+            };
+            crate::harness::mcp::messaging::flow_conflict(&holder, "flow dev 13")
+                .expect("a session holding #12 told to work #13 is refused")
+        },
         Refusal::not_started(
             "read-failed",
             "the reviewer's answer could not be read from standard input",
@@ -1231,6 +1256,18 @@ fn after_writing() -> Vec<Refusal> {
             resolution: Resolution::no_command(
                 crate::outcome::NoCommandReason::WorldAction,
                 "a writable standard output for the relay",
+            ),
+            observed: None,
+        },
+        Refusal {
+            code: "handoff-row-unwritten",
+            message: "the `dev:<runtime>` projection landed and the handoff row did not".to_owned(),
+            outcome: MutationOutcome::Unknown,
+            class: crate::harness::refusal_class::class_of_code("handoff-row-unwritten"),
+            replay: crate::outcome::Replayability::StatusRequired,
+            resolution: Resolution::no_command(
+                NoCommandReason::WorldAction,
+                "read the issue's labels to establish what landed, then repeat the handoff",
             ),
             observed: None,
         },

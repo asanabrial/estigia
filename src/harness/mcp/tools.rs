@@ -436,15 +436,24 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "send_message",
         description: "Leave a message for another session, delivered at its next hook point. \
                       Address it as a person speaks; `reply_to` answers a delivered message. \
-                      Zero or several matches answer the candidates and send nothing. The \
-                      person is asked first.",
+                      Zero or several matches answer the candidates and send nothing. A message \
+                      that tells a session holding another issue to `flow dev` it is refused. \
+                      The person is asked first.",
         operation: "send-message",
         arguments: &[
             RUN_ID,
             Argument::optional(
                 "to",
                 "string",
-                "The recipient: `opencode`, `opencode@estigia`, `#96`, `estigia-2` or a run id, over live sessions now. Give this or `reply_to`.",
+                "The recipient: `runtime:opencode`, `opencode@estigia`, `#96`, `estigia-2` or a \
+                 run id, over live sessions now. Give this or `reply_to`.",
+            ),
+            Argument::optional(
+                "repo_dir",
+                "string",
+                "The directory the recipient must be running in; narrows `to`, so \
+                 `runtime:opencode` with this reaches the live OpenCode session there. Read \
+                 only with `to`.",
             ),
             Argument::optional(
                 "reply_to",
@@ -453,6 +462,27 @@ pub const TOOLS: &[Tool] = &[
             )
             .counting_from(1),
             Argument::required("text", "string", "The message."),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
+        name: "handoff",
+        contract_name: "handoff",
+        description: "Hand an issue to another runtime: records the handoff in this machine's \
+                      store for that runtime's next session in this repository, and projects its \
+                      `dev:<runtime>` label with read-back through the outbox. The issue must not \
+                      be held: a handoff is a destination, never a claim. It does not message a \
+                      session; `send_message` does that, addressed with `runtime:<name>`.",
+        operation: "handoff",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::required(
+                "to",
+                "string",
+                "The runtime the issue is handed to — a label-safe word such as `opencode`.",
+            ),
         ],
         effect: PointerEffect::None,
         writes: true,
@@ -1593,6 +1623,7 @@ pub const TRACKER_WRITERS: &[&str] = &[
     "create",
     "ensure_states",
     "flush",
+    "handoff",
     "handoff_review",
     "record_review_finding",
     "record_disposition",

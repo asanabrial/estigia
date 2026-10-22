@@ -433,6 +433,12 @@ impl Ledger {
         self.store.timeline(&self.repo, self.issue)
     }
 
+    /// Whether this store handed the issue to `runtime` in `repo_dir`.
+    pub(crate) fn handoff_explains(&self, repo_dir: &Path, runtime: &str) -> Result<bool, Failure> {
+        self.store
+            .handoff_explains(&repo_dir.display().to_string(), self.issue, runtime)
+    }
+
     /// The workflow state the store holds for the issue, if it holds one.
     pub(crate) fn state(&self) -> Result<Option<String>, Failure> {
         let found: Option<Option<String>> = self

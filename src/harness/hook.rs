@@ -20,6 +20,7 @@ use serde_json::{Value, json};
 
 use super::{Action, Decision, GateContext, RENEWAL_WINDOW, classify_observing, session};
 use crate::outcome::{CheckoutObserved, CheckoutSource, Observed, Refusal};
+use crate::transport::store;
 
 /// The lifecycle events Estigia registers for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -842,13 +843,14 @@ This session carries no identity Estigia can derive a run id from, so nothing ca
             }
         });
     }
+    let handoff = handoff_paragraph(context, run);
     json!({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": format!(
                 "## Estigia
 
-Run id `{}`. {held}{isolation}{dirt}{delegated}{inline}{}{}{}{}",
+Run id `{}`. {held}{handoff}{isolation}{dirt}{delegated}{inline}{}{}{}{}",
                 run.run_id,
                 drift_note(context),
                 build_note(context),
@@ -857,6 +859,68 @@ Run id `{}`. {held}{isolation}{dirt}{delegated}{inline}{}{}{}{}",
             ),
         }
     })
+}
+
+/// The issues another run handed to this runtime in this repository.
+///
+/// A handoff is a request, not a claim: the store records it so a session that
+/// starts later can see it, and taking one still goes through `claim`. A store
+/// that exists and cannot be read says so, because silence would be read as
+/// nothing having been handed over.
+fn handoff_paragraph(context: &GateContext, run: &session::Run) -> String {
+    let session::RunIdShape::Named { runtime } = session::run_id_shape(&run.run_id) else {
+        return String::new();
+    };
+    let held = match store::open_for_read(&store::beside(&context.state_root)) {
+        Ok(Some(opened)) => opened.handoffs(),
+        Ok(None) => return String::new(),
+        Err(failure) => {
+            return format!(
+                "\n\nThe handoffs recorded for `{runtime}` in this repository could not be read, \
+                 so whether an issue waits for this session is unknown: {}",
+                failure.detail()
+            );
+        }
+    };
+    let Ok(rows) = held else {
+        return format!(
+            "\n\nThe handoffs recorded for `{runtime}` in this repository could not be read, so \
+             whether an issue waits for this session is unknown"
+        );
+    };
+    let waiting: Vec<&store::HandoffRow> = rows
+        .iter()
+        .filter(|row| {
+            row.runtime == runtime
+                && crate::paths::same_directory(
+                    std::path::Path::new(&row.repo_dir),
+                    &context.repo_dir,
+                )
+        })
+        .collect();
+    if waiting.is_empty() {
+        return String::new();
+    }
+    let named = waiting
+        .iter()
+        .map(|row| {
+            let by = row
+                .from_run_id
+                .as_deref()
+                .map_or_else(|| "a person".to_owned(), |run| format!("`{run}`"));
+            let label = if row.projection == "landed" {
+                ""
+            } else {
+                ", its `dev:` label queued and not yet read back on the tracker"
+            };
+            format!("#{} by {by} at {}{label}", row.issue, row.created_at)
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "\n\nIssues handed to `{runtime}` in this repository: {named}. A handoff is a request, \
+         never a claim: take one through `claim` when it is yours."
+    )
 }
 
 /// The session a new one was started from, as the host reported it.

@@ -3610,3 +3610,60 @@ fn claude_code_and_codex_hooks_hand_a_waiting_message_to_the_agent_once() {
         );
     }
 }
+
+#[test]
+fn a_session_started_in_a_herdr_pane_records_it_and_one_started_outside_carries_none() {
+    let rig = tracker_rig();
+    let started_in_pane = tracker_command(rig.home.path(), rig.repo.path(), rig.bin.path(), "[]")
+        .env("HERDR_PANE_ID", "wE:pA")
+        .args([
+            "session",
+            "start",
+            "--session-id",
+            "PANE",
+            "--runtime",
+            "opencode",
+            "--wake",
+            "poll",
+            "--json",
+        ])
+        .output()
+        .expect("the binary runs in a pane");
+    assert!(
+        started_in_pane.status.success(),
+        "{}",
+        String::from_utf8_lossy(&started_in_pane.stderr)
+    );
+    let started_outside = tracker_command(rig.home.path(), rig.repo.path(), rig.bin.path(), "[]")
+        .args([
+            "session",
+            "start",
+            "--session-id",
+            "PLAIN",
+            "--runtime",
+            "claude",
+            "--json",
+        ])
+        .output()
+        .expect("the binary runs outside a pane");
+    assert!(
+        started_outside.status.success(),
+        "{}",
+        String::from_utf8_lossy(&started_outside.stderr)
+    );
+
+    let listed = listed_sessions(&rig);
+    let recorded = session_named(
+        &listed,
+        &estigia::harness::session::run_id("opencode", "PANE"),
+    );
+    assert_eq!(recorded["pane"], "wE:pA", "{recorded}");
+    let plain = session_named(
+        &listed,
+        &estigia::harness::session::run_id("claude", "PLAIN"),
+    );
+    assert!(
+        plain.get("pane").is_none(),
+        "a session started outside a pane invented one: {plain}"
+    );
+}

@@ -5833,7 +5833,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 47_044;
+const TOOLS_LIST_CEILING: usize = 48_117;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -6051,6 +6051,7 @@ mod send_message {
                             session_id: "host-session",
                             repo_dir: None,
                             wake: None,
+                            pane: None,
                         },
                         1_000,
                     )
@@ -6142,6 +6143,7 @@ mod send_message {
                         session_id,
                         repo_dir,
                         wake: None,
+                        pane: None,
                     },
                     now,
                 )
@@ -6214,6 +6216,149 @@ mod send_message {
             "params": { "name": "send_message",
                 "arguments": { "run_id": from, "to": to, "text": text } },
         })
+    }
+
+    fn send_to_repo(id: u64, to: &str, repo_dir: &std::path::Path, text: &str) -> Value {
+        json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": { "name": "send_message",
+                "arguments": { "run_id": SENDER, "to": to,
+                               "repo_dir": repo_dir.display().to_string(), "text": text } },
+        })
+    }
+
+    #[test]
+    fn a_runtime_selector_and_a_repository_deliver_to_the_one_live_session_there() {
+        let rig = Rig::new();
+        let repo = rig.root.path().join("investora");
+        std::fs::create_dir_all(&repo).expect("a checkout");
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        rig.seen(
+            "opencode-only0a1b2c3d",
+            "opencode",
+            "ses_only",
+            Some(&repo.display().to_string()),
+            now,
+        );
+
+        let output = rig.serve(&[
+            initialize(asks()),
+            send_to_repo(2, "runtime:opencode", &repo, "hello"),
+            choose(1, "allow_once"),
+        ]);
+        assert_eq!(reply(&output, 2)["result"]["isError"], false, "{output:?}");
+        assert_eq!(rig.rows_to("opencode-only0a1b2c3d"), 1, "{output:?}");
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn two_live_sessions_of_that_runtime_there_answer_both_and_send_nothing() {
+        let rig = Rig::new();
+        let repo = rig.root.path().join("investora");
+        std::fs::create_dir_all(&repo).expect("a checkout");
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        for (run_id, session_id) in [
+            ("opencode-one0a1b2c3d", "ses_one"),
+            ("opencode-two0a1b2c3d", "ses_two"),
+        ] {
+            rig.seen(
+                run_id,
+                "opencode",
+                session_id,
+                Some(&repo.display().to_string()),
+                now,
+            );
+        }
+
+        let output = rig.serve(&[
+            initialize(asks()),
+            send_to_repo(2, "runtime:opencode", &repo, "hello"),
+        ]);
+        let text = text_of(reply(&output, 2));
+        assert!(text.contains("message-recipient-ambiguous"), "{text}");
+        for run_id in ["opencode-one0a1b2c3d", "opencode-two0a1b2c3d"] {
+            assert!(text.contains(run_id), "{run_id} missing from {text}");
+        }
+        assert!(questions(&output).is_empty(), "{output:?}");
+        assert_eq!(rig.rows_to("opencode-one0a1b2c3d"), 0);
+        assert_eq!(rig.rows_to("opencode-two0a1b2c3d"), 0);
+    }
+
+    #[test]
+    fn a_runtime_selector_there_names_no_session_when_none_of_that_runtime_is_live() {
+        let rig = Rig::new();
+        let repo = rig.root.path().join("investora");
+        std::fs::create_dir_all(&repo).expect("a checkout");
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        rig.seen(
+            "claude-there0a1b2c3d",
+            "claude",
+            "host",
+            Some(&repo.display().to_string()),
+            now,
+        );
+
+        let output = rig.serve(&[
+            initialize(asks()),
+            send_to_repo(2, "runtime:opencode", &repo, "hello"),
+        ]);
+        let text = text_of(reply(&output, 2));
+        assert!(text.contains("message-no-live-session"), "{text}");
+        assert!(questions(&output).is_empty(), "{output:?}");
+        assert_eq!(rig.rows_to("claude-there0a1b2c3d"), 0);
+    }
+
+    #[test]
+    fn a_flow_instruction_for_another_issue_is_refused_before_anything_is_recorded() {
+        let rig = Rig::new();
+        rig.hold(436, RECIPIENT);
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(
+                2,
+                RECIPIENT,
+                "flow dev 723\n\nWork it as you did the last one.",
+            ),
+        ]);
+        let text = text_of(reply(&output, 2));
+        assert!(
+            text.contains("message-recipient-holds-another-issue"),
+            "{text}"
+        );
+        assert!(text.contains("436") && text.contains("723"), "{text}");
+        assert!(questions(&output).is_empty(), "{output:?}");
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn every_flow_dev_instruction_is_read_whatever_its_spelling_and_nothing_else_is() {
+        use super::super::messaging::flow_issued;
+        assert_eq!(flow_issued("flow dev #12"), vec![12]);
+        assert_eq!(flow_issued("run /flow dev 12x now"), vec![12]);
+        assert_eq!(
+            flow_issued("Flow DEV 7, then flow dev 9 and flow dev 7"),
+            vec![7, 9]
+        );
+        assert_eq!(flow_issued("please flow dev"), Vec::<u64>::new());
+        assert_eq!(flow_issued("flow dev next"), Vec::<u64>::new());
+        assert_eq!(
+            flow_issued("flow dev 99999999999999999999999"),
+            Vec::<u64>::new()
+        );
+        assert_eq!(flow_issued("flow triage 12"), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn a_flow_instruction_for_the_issue_it_holds_is_delivered() {
+        let rig = Rig::new();
+        rig.hold(436, RECIPIENT);
+        let output = rig.serve(&[
+            initialize(asks()),
+            send(2, RECIPIENT, "flow dev 436\n\nCarry on."),
+            choose(1, "allow_once"),
+        ]);
+        assert_eq!(reply(&output, 2)["result"]["isError"], false);
+        assert_eq!(rig.rows_to(RECIPIENT), 1);
     }
 
     fn answer(number: u64, result: Value) -> Value {
@@ -7335,5 +7480,245 @@ mod send_message {
             "a row registered in the second of `taken_at` was not admitted: {:?}",
             run_ids(&second)
         );
+    }
+}
+
+mod handoff {
+    use super::*;
+    use crate::transport::store::{self, SessionSeen, Store};
+
+    const SENDER: &str = "claude-hand0a1b2c3d";
+
+    fn answered(result: Value) -> Value {
+        serde_json::from_str(result["content"][0]["text"].as_str().expect("text")).expect("json")
+    }
+
+    struct Rig {
+        root: tempfile::TempDir,
+        repo: std::path::PathBuf,
+        labels: std::path::PathBuf,
+        log: std::path::PathBuf,
+    }
+
+    impl Rig {
+        fn new() -> Self {
+            let root = tempfile::tempdir().expect("a temporary root");
+            let repo = root.path().join("investora");
+            std::fs::create_dir_all(&repo).expect("a checkout");
+            let labels = root.path().join("labels.json");
+            std::fs::write(&labels, "[]").expect("the labels");
+            let log = root.path().join("gh.log");
+            Self {
+                root,
+                repo,
+                labels,
+                log,
+            }
+        }
+
+        fn context(&self) -> GateContext {
+            let mut context = bare_context(&self.root, &self.repo);
+            context.tracker = crate::config::Tracker::Github {
+                repo: Some(crate::config::RepoRef::parse("asanabrial/investora").expect("a repo")),
+            };
+            context
+        }
+
+        fn store(&self) -> Store {
+            Store::open(&store::beside(&self.context().state_root)).expect("the store opens")
+        }
+
+        fn script(&self) -> String {
+            crate::test_env::answers(&[
+                json!({
+                    "matches": "view 723 --json labels",
+                    "labels": true,
+                    "status": 0,
+                }),
+                crate::test_env::issue_view_answer(
+                    723,
+                    json!({ "body": "Body.", "labels": [], "comments": [] }),
+                ),
+            ])
+        }
+
+        fn call(&self) -> Result<serde_json::Value, ToolFailure> {
+            let bin = crate::test_env::scripted_gh();
+            crate::test_env::with_labelled_logging_gh(
+                bin.path(),
+                &self.script(),
+                &self.labels,
+                &self.log,
+                || {
+                    crate::transport::window::with_mode(
+                        crate::transport::window::Mode::Open,
+                        || {
+                            run_tool(
+                                "handoff",
+                                &json!({ "issue": 723, "to": "opencode", "run_id": SENDER }),
+                                Ok(&self.context()),
+                            )
+                        },
+                    )
+                },
+            )
+        }
+
+        fn handoff(&self) -> serde_json::Value {
+            answered(self.call().expect("a handoff"))
+        }
+
+        fn seen(
+            &self,
+            run_id: &str,
+            runtime: &str,
+            repo_dir: &std::path::Path,
+            pane: Option<&str>,
+        ) {
+            self.store()
+                .session_seen(
+                    &SessionSeen {
+                        run_id,
+                        runtime,
+                        session_id: "host",
+                        repo_dir: Some(&repo_dir.display().to_string()),
+                        wake: Some("poll"),
+                        pane,
+                    },
+                    crate::harness::session::now_seconds().expect("a clock"),
+                )
+                .expect("a session registers");
+        }
+    }
+
+    #[test]
+    fn a_handoff_records_the_issue_the_runtime_the_sender_and_the_time() {
+        let rig = Rig::new();
+        let answer = rig.handoff();
+
+        assert_eq!(answer["projection"], "landed", "{answer}");
+        assert_eq!(answer["to"], "opencode", "{answer}");
+        assert_eq!(answer["issue"], 723, "{answer}");
+        assert_eq!(answer["from_run"], SENDER, "{answer}");
+        assert!(
+            answer["at"].as_str().is_some_and(|at| !at.is_empty()),
+            "{answer}"
+        );
+        assert!(
+            crate::test_env::logged_writes(&rig.log)
+                .iter()
+                .any(|line| line.contains("issue edit 723")
+                    && line.contains("--add-label dev:opencode")),
+            "the dev:opencode label was not projected: {:?}",
+            crate::test_env::logged_writes(&rig.log)
+        );
+
+        let rows = rig.store().handoffs().expect("the handoffs read");
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!(rows[0].issue, 723);
+        assert_eq!(rows[0].runtime, "opencode");
+        assert_eq!(rows[0].from_run_id.as_deref(), Some(SENDER));
+        assert_eq!(rows[0].projection, "landed");
+        assert_eq!(
+            rows[0].repo_dir,
+            rig.context().repo_dir.display().to_string()
+        );
+    }
+
+    #[test]
+    fn a_later_session_of_that_runtime_there_sees_the_handoff_at_session_start() {
+        let rig = Rig::new();
+        rig.handoff();
+
+        let run = crate::harness::session::Run::new("opencode-later0a1b2c3d".to_owned());
+        let text = crate::harness::hook::session_start_text(&rig.context(), &run, None);
+        assert!(text.contains("#723"), "{text}");
+        assert!(text.contains("handed to `opencode`"), "{text}");
+        assert!(text.contains(SENDER), "{text}");
+    }
+
+    #[test]
+    fn a_deferred_handoff_is_shown_at_session_start_as_not_yet_on_the_tracker() {
+        let rig = Rig::new();
+        rig.store()
+            .record_handoff(
+                &rig.context().repo_dir.display().to_string(),
+                723,
+                "opencode",
+                Some(SENDER),
+                "deferred",
+                "2026-10-22T21:00:00Z",
+            )
+            .expect("a deferred row");
+
+        let run = crate::harness::session::Run::new("opencode-later0a1b2c3d".to_owned());
+        let text = crate::harness::hook::session_start_text(&rig.context(), &run, None);
+        assert!(text.contains("#723"), "{text}");
+        assert!(text.contains("not yet read back"), "{text}");
+
+        rig.handoff();
+        let text = crate::harness::hook::session_start_text(&rig.context(), &run, None);
+        assert!(!text.contains("not yet read back"), "{text}");
+    }
+
+    #[test]
+    fn a_handoff_row_the_answer_does_not_name_is_refused_rather_than_written_as_issue_zero() {
+        let rig = Rig::new();
+        let refused = crate::harness::handoff::record(
+            &rig.context().state_root,
+            &rig.context().repo_dir,
+            0,
+            "",
+            SENDER,
+            "landed",
+            "2026-10-22T21:00:00Z",
+        )
+        .expect_err("an answer naming no issue or runtime is not a row");
+
+        assert_eq!(refused.code, "handoff-row-unwritten");
+        assert!(
+            rig.store()
+                .handoffs()
+                .expect("the handoffs read")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn only_the_live_rows_of_that_runtime_in_that_repository_carry_the_handoff() {
+        let rig = Rig::new();
+        rig.handoff();
+        let context = rig.context();
+        rig.seen(
+            "opencode-later0a1b2c3d",
+            "opencode",
+            &rig.repo,
+            Some("wE:pA"),
+        );
+        let elsewhere = rig.root.path().join("estigia");
+        std::fs::create_dir_all(&elsewhere).expect("another checkout");
+        rig.seen("opencode-other0a1b2c3d", "opencode", &elsewhere, None);
+        rig.seen("claude-there0a1b2c3d", "claude", &rig.repo, None);
+
+        let answer = answered(run_tool("list_sessions", &json!({}), Ok(&context)).expect("a list"));
+        let rows = answer["live"].as_array().expect("live rows");
+        let here = rows
+            .iter()
+            .find(|row| row["run_id"] == "opencode-later0a1b2c3d")
+            .expect("the session there");
+        assert_eq!(here["handoffs"][0]["issue"], 723, "{answer}");
+        assert_eq!(here["handoffs"][0]["from_run_id"], SENDER, "{answer}");
+        assert_eq!(here["pane"], "wE:pA", "{answer}");
+        let other = rows
+            .iter()
+            .find(|row| row["run_id"] == "opencode-other0a1b2c3d")
+            .expect("the session elsewhere");
+        assert!(other.get("handoffs").is_none(), "{answer}");
+        assert!(other.get("pane").is_none(), "{answer}");
+        let claude = rows
+            .iter()
+            .find(|row| row["run_id"] == "claude-there0a1b2c3d")
+            .expect("the claude session");
+        assert!(claude.get("handoffs").is_none(), "{answer}");
     }
 }

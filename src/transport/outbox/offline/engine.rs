@@ -1063,3 +1063,94 @@ fn a_write_the_flush_makes_gives_up_before_the_lease_runs_out() {
     let limit = how.timeout.expect("a deadline");
     assert!(limit < std::time::Duration::from_secs(outbox::flush::LEASE_SECONDS));
 }
+
+impl Rig {
+    fn flushed_labelled(
+        &self,
+        answers: &[serde_json::Value],
+    ) -> Result<serde_json::Value, Failure> {
+        let script = crate::test_env::answers(answers);
+        let bin = crate::test_env::scripted_gh();
+        let runs = self.directory.path().join("runs");
+        crate::test_env::with_labelled_logging_gh(
+            bin.path(),
+            &script,
+            self.labels.as_ref().expect("a labelled rig"),
+            &self.log,
+            || {
+                crate::harness::operation_window::with_now_override(Some(noon), || {
+                    outbox::flush::run(&self.context, &runs, NOW)
+                })
+            },
+        )
+    }
+}
+
+#[test]
+fn a_queued_handoff_projects_its_label_and_marks_the_row_sent() {
+    let rig = labelled_rig();
+    rig.closed("handoff", &handoff_flags())
+        .expect("a handoff while closed");
+    assert_eq!(state_of(OutboxKind::Reconverge), vec![OutboxState::Queued]);
+
+    let report = rig
+        .flushed_labelled(&[
+            serde_json::json!({
+                "matches": "view 12 --json labels",
+                "labels": true,
+                "status": 0,
+            }),
+            view(12, "in-progress"),
+        ])
+        .expect("a flush");
+    assert_eq!(report["sent"], 1, "{report}");
+    assert!(
+        rig.asked().contains("--add-label dev:opencode"),
+        "the flush did not project the label: {}",
+        rig.asked()
+    );
+    assert!(
+        landed_labels(&rig)
+            .iter()
+            .any(|label| label == "dev:opencode"),
+        "the label did not land"
+    );
+    assert_eq!(state_of(OutboxKind::Reconverge), vec![OutboxState::Sent]);
+}
+
+#[test]
+fn a_flushed_handoff_marks_its_store_row_landed() {
+    let rig = labelled_rig();
+    Store::open(&store_path().expect("a path"))
+        .expect("opens")
+        .record_handoff(
+            &rig.context.repo_dir.display().to_string(),
+            12,
+            "opencode",
+            Some("claude-a"),
+            "deferred",
+            NOW,
+        )
+        .expect("the row the tool writes after the transport queues");
+
+    rig.closed("handoff", &handoff_flags())
+        .expect("a handoff while closed");
+    rig.flushed_labelled(&[
+        serde_json::json!({
+            "matches": "view 12 --json labels",
+            "labels": true,
+            "status": 0,
+        }),
+        view(12, "in-progress"),
+    ])
+    .expect("a flush");
+
+    let landed = Store::open(&store_path().expect("a path"))
+        .expect("opens")
+        .handoffs()
+        .expect("the handoffs")
+        .into_iter()
+        .find(|row| row.issue == 12 && row.runtime == "opencode")
+        .expect("the handoff row");
+    assert_eq!(landed.projection, "landed");
+}

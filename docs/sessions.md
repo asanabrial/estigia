@@ -12,8 +12,8 @@ exist yet.
 
 `~/.estigia/state.db` carries a `sessions` table, one row per run id: the runtime, the host's session id, the
 directory the session started in, when it started, when Estigia last saw it, when and why it ended, the
-short name the registry minted for it, the build that registered it, and how its adapter says an idle
-session is woken.
+short name the registry minted for it, the build that registered it, how its adapter says an idle
+session is woken, and the host pane the registering process was started in.
 
 The **short name** is `<repository>-<n>` (`estigia-1`), minted when the row is first written from a
 per-repository ordinal in the store. It is kept for the life of the run id and never reused, so it is what
@@ -28,6 +28,14 @@ The **wake** is what the adapter recorded: `poll` (Pi and OpenCode 2 ask the mai
 idle), `stop-waiter` (Claude Code parks a process at the end of a turn), or nothing. Nothing is a fact
 about the row, not about the runtime: an adapter that records no wake gets no claim that one exists.
 
+The **pane** is the host identifier the adapter could observe, and only that: `HERDR_PANE_ID`, read
+from the environment of the process that called `estigia session start`. It was measured on herdr
+0.9.3 and 0.9.5, where a process inside a pane carries `HERDR_PANE_ID=w0:p1` — and on the OpenCode
+process in that pane, which is the process the adapter runs in. A session started outside a pane
+carries none, and a field the adapter cannot observe is absent rather than guessed. No service URL is
+recorded: no adapter sees one, and the OpenCode service's `/api/session` answers 401 to an
+unauthenticated caller (2026-10-21, `127.0.0.1:49374`), so a URL alone would not be a way in.
+
 - `estigia session start` and the Claude Code and Codex `SessionStart` hook write or refresh the row. A session that starts again under the same run id
   keeps its first start time and is no longer ended.
 - `estigia session end` and the `SessionEnd` hook stamp `ended_at` (and `end_reason`, when the host gave one) when the session is really over. A `new`, `resume`,
@@ -41,9 +49,11 @@ registry holds no claim of its own, and the tracker remains the authority on whe
 ## What `estigia sessions` shows
 
 Each entry carries `name`, `run_id`, `runtime`, `session_id`, `status`, `issue`, `state`, `last_seen`,
-`silent_for`, `repo_dir`, `worktree`, `ended_at`, `end_reason`, `waiting`, `undelivered_sent`, `build` and
-`wake`, under `--json` as a `sessions` list beside `stale_after`, `of` (how many rows the registry holds)
-and `all`. `estigia sessions` prints the live rows only, one line each; `estigia sessions --all` prints
+`silent_for`, `repo_dir`, `worktree`, `ended_at`, `end_reason`, `waiting`, `undelivered_sent`, `build`,
+`wake`, `pane` and `handoffs`, under `--json` as a `sessions` list beside `stale_after`, `of` (how many
+rows the registry holds) and `all`. `pane` is absent when the adapter recorded none, and `handoffs` is
+absent when the store holds none for that runtime in that repository; both absences are facts, not
+nulls to be filled in. `handoffs` is a list of `{issue, from_run_id, at, projection}`, oldest first. `estigia sessions` prints the live rows only, one line each; `estigia sessions --all` prints
 every row with its status. The live view is the answer to "who is around"; the full registry is opt-in
 because it is mostly rows whose sessions are gone. `--limit` or `--cursor` replaces that whole list with
 one page of it, as [Bounded session discovery](#bounded-session-discovery) describes.
@@ -187,6 +197,41 @@ send can be sent again.
 Neither side's session is changed by what arrives: a message is text for a model, not an instruction the
 gate treats differently.
 
+## Handing an issue to another runtime
+
+`handoff` (and `estigia handoff <issue> --to <runtime> --run-id <run>`) records `{issue, runtime,
+from_run, at}` in `~/.estigia/state.db` and projects `dev:<runtime>` on the issue. It is the one call
+the 2026-10-21 operator request needed: the issue, who handed it over, and where it went. It does not
+message a session and does not claim anything — the recipient still claims through `claim`.
+
+- **The row** is keyed by `(repo_dir, issue, runtime)`, so a retry of the same handoff refreshes who
+  made it and when rather than reading as two handoffs. `projection` records `landed` (the label was
+  read back) or `deferred` (it was queued).
+- **The label** is the protocol: exactly one `dev:<runtime>` on the issue, the same label a claim
+  projects. It is written and read back twice; a read-back that never agrees is a write failure, not
+  an answer. While the git operation window is closed the projection is queued as a `reconverge` in
+  the outbox and the answer says `projection: deferred` with the queue position; a later `flush`
+  projects it, reads it back, and marks the row `landed`. Re-running `handoff` is how a caller
+  reconciles its answer.
+- **A held issue is refused** with `handoff-issue-held` and nothing is written, whichever runtime
+  holds it — the local ledger is what is read, since that is where a claim lives. A handoff is a
+  destination, not a claim: overwriting the holder's `dev:` label would tell every reader the wrong
+  runtime. Release the issue first. A queued projection is checked again when the outbox flushes it,
+  and there the one holder that does not refuse it is a run of the runtime it was handed to: the
+  recipient took it before the label landed.
+- **The label is explainable.** `claim` refuses a `dev:` label the store cannot explain, and a
+  handoff row is that explanation — so the recipient's `claim` is not blocked by the handoff that
+  sent it there.
+- **A later session sees it.** `SessionStart` of a session of that runtime whose repository is that
+  directory names each waiting issue, who handed it over and when, and says a handoff is a request,
+  never a claim. A row whose projection is still `deferred` says its `dev:` label is queued and not
+  yet read back, so a label that may never land is not presented as one that did. `list_sessions` and `estigia sessions --json` carry the same list as `handoffs` on
+  every row of that runtime in that repository.
+
+The directory recorded is the one the handoff ran in. A session started in a *worktree* of that
+repository registered a different directory and does not see it; hand over from where the recipient
+will run, or address the recipient directly with `send_message`.
+
 ## Addressing a session
 
 `send_message`, `list_sessions`, `estigia sessions send` and `estigia sessions` all take one address
@@ -196,6 +241,7 @@ listing shows, never against an earlier listing — a session that registered a 
 | What a person says | What it names |
 |---|---|
 | `opencode` | every live session of that runtime |
+| `runtime:opencode` | every live session of that runtime, and nothing else — an unknown runtime is no match, never a short name |
 | `opencode@estigia` | that runtime in that repository (`@` takes a repository name or a directory) |
 | `#96` | every live session whose pointer names issue 96, in any repository |
 | `estigia#96` | the same, in that repository only |
@@ -214,6 +260,22 @@ and stays undelivered. Every other form is about who is around, so it reads live
   it to a person without parsing anything.
 - **Several matches** are refused with `message-recipient-ambiguous`, listing every candidate the same
   way. Nothing is sent. Ambiguity is a question, not a guess.
+
+`send_message` also takes `repo_dir`, which narrows `to` to sessions registered in that directory: it
+is how a run says *the live OpenCode session of `investora`* in one call. The comparison is by
+directory, so a trailing separator or a symlink is the same checkout, and a session that registered no
+directory is in none. `reply_to` refuses `repo_dir`, because a reply's recipient is the sender of the
+message being answered. The CLI has no `--repo-dir` on `sessions send`; `opencode@investora` names the
+same session there.
+
+**A message that tells a session to work another issue is refused.** If the text carries a
+`flow dev <n>` instruction and the recipient's pointer names an issue other than `n`, the send is
+refused `message-recipient-holds-another-issue` before the person is asked and before any row is
+written. A recipient holding nothing, or holding `n`, is sent to. This is a refusal rather than a
+warning because a warning is a message that still arrives, and two runs believing they own two
+different things in one session is the state this check exists to prevent. The instruction is read
+from the words of the message, so a phrase quoted as something *not* to run is refused too; the
+person can rephrase it. `estigia sessions send` applies the same rule.
 
 A delivered message opens with the sender in the same form — `From estigia-2 (opencode, estigia), \`run-id\``
 — and carries the id of its own row. Answering is `send_message {reply_to: <id>, text}`: the recipient is
@@ -421,5 +483,15 @@ claim of its own.
   with no wake says so rather than claiming one. Codex's `Stop` hook runs synchronously and continues the turn that is
   ending; it cannot start one. OpenCode 2 is woken by a poll, not by a notice that a row was written, and
   OpenCode 1 is not woken; OpenCode's `generate` is not used. Codex `turn/steer` needs the daemon and is not built.
+- A handoff is never consumed or expired. Every later session of that runtime in that repository sees
+  it at `SessionStart`, whether or not anybody took the issue; nothing records that it was read or
+  declined. A store that grows one row per `(repository, issue, runtime)` is the whole cost until a
+  retention rule exists.
+- `handoff` records a reachability hint and does not deliver through it. There is no `herdr` prompt,
+  no terminal injection and no read receipt: delivering the instruction is `send_message`, and the
+  host-specific path stays outside Estigia because it bypasses consent and stamping.
+- No adapter records an OpenCode service URL. The session id and the pane are what the adapter can
+  observe; the service's own API answered 401 to an unauthenticated caller on 2026-10-21, so a URL
+  without the adapter's credential would not be a way in even if it were recorded.
 
 [`honesty.md`](honesty.md) records what this does not measure.

@@ -19404,3 +19404,62 @@ fn release_ci_does_not_send_a_lane_it_could_not_read_to_the_merge() {
     assert_eq!(lane["state"], "unreadable", "{lane}");
     assert_eq!(next, "ci_status");
 }
+
+#[test]
+fn a_handoff_the_store_recorded_explains_the_dev_label_to_a_later_claim() {
+    let directory = tempfile::tempdir().expect("a directory for the store");
+    let context = context_at(directory.path());
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        crate::test_env::issue_view_answer(
+            12,
+            issue_payload(&[], &["fixture"], &["dev:opencode", "status:in-progress"]),
+        ),
+        serde_json::json!({ "matches": "api user", "stdout": "{\"login\":\"fixture\"}", "status": 0 }),
+    ]);
+
+    let refused = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        claim(&context, &acquisition(12, "claude-a"))
+    })
+    .expect_err("the store cannot explain a label nobody handed over");
+    assert_eq!(reason(refused), "foreign-projection");
+
+    let opened = crate::transport::store::Store::open(
+        &crate::transport::store::store_path().expect("a store path"),
+    )
+    .expect("the store opens");
+    opened
+        .record_handoff(
+            &context.repo_dir.display().to_string(),
+            12,
+            "opencode",
+            Some("claude-a"),
+            "landed",
+            RECLAIM_NOW,
+        )
+        .expect("the handoff is recorded");
+
+    let (claimed, stored) = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        (
+            claim(&context, &acquisition(12, "claude-a")),
+            store_timeline(&context, 12),
+        )
+    });
+    assert!(
+        !matches!(
+            claimed
+                .as_ref()
+                .err()
+                .map(|failure| reason(failure.clone()))
+                .as_deref(),
+            Some("foreign-projection")
+        ),
+        "the recorded handoff did not explain its own label: {claimed:?}"
+    );
+    assert!(
+        ownership::ownership_events(&stored)
+            .iter()
+            .any(|event| event.run_id == "claude-a"),
+        "the claim was refused after the handoff explained its label: {stored:?}"
+    );
+}

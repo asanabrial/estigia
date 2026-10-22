@@ -118,6 +118,7 @@ fn correction_confirmation_rereads_new_holders_and_failed_ownership() {
                                 session_id: "late",
                                 repo_dir: trees.join("issue-2-open").to_str(),
                                 wake: None,
+                                pane: None,
                             },
                             1,
                         )
@@ -465,6 +466,7 @@ fn ownership_reads_nonended_sessions_and_refuses_corrupt_pointers_and_store() {
                 session_id: "held",
                 repo_dir: checkout.to_str(),
                 wake: None,
+                pane: None,
             },
             1,
         )

@@ -757,6 +757,15 @@ fn run_operation(
                 other => other,
             })
         }
+        "handoff" => super::handoff::record(
+            context,
+            &super::handoff::Handoff {
+                issue: issue()?,
+                runtime: f.need("to", operation)?,
+                run_id: run_id()?,
+                now,
+            },
+        ),
         "handoff-review" => super::claim::handoff_review(
             context,
             &super::claim::HandoffReview {
