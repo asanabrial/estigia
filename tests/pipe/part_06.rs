@@ -2930,14 +2930,14 @@ fn the_cli_walks_a_bounded_session_registry_a_page_at_a_time_without_omissions_o
     let mut said = legacy.lines();
     for row in &rows {
         let line = said.next().expect("a row line");
-        let prefix = format!(
-            "{}  {}  live  pi  -  last seen ",
-            row["name"].as_str().expect("a name"),
-            row["run_id"].as_str().expect("a run id"),
-        );
-        assert!(
-            line.starts_with(&prefix),
-            "the list without a page flag changed its fields: {line}"
+        assert_eq!(
+            line,
+            format!(
+                "{}  {}  live  pi  -  last seen just now",
+                row["name"].as_str().expect("a name"),
+                row["run_id"].as_str().expect("a run id"),
+            ),
+            "the list without a page flag changed its fields"
         );
     }
     assert_eq!(
@@ -3144,6 +3144,10 @@ fn a_bounded_session_page_answers_an_empty_registry_and_offers_no_cursor_with_no
     assert_eq!(
         page["more"], false,
         "a page with nothing after it said more remain: {page}"
+    );
+    assert!(
+        page.get("next_cursor").is_some(),
+        "a last page dropped `next_cursor` instead of spelling it null: {page}"
     );
     assert_eq!(
         page["next_cursor"],
