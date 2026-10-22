@@ -103,11 +103,22 @@ fn over_bytes(measured: usize, ceiling: usize) -> bool {
     measured > ceiling
 }
 
+fn registry_of(path: &str) -> &'static str {
+    if DOCUMENTS.iter().any(|(name, _)| *name == path) {
+        "DOCUMENTS"
+    } else if OWN_INSTRUCTIONS.iter().any(|(name, _)| *name == path) {
+        "OWN_INSTRUCTIONS"
+    } else {
+        "the table that registers it"
+    }
+}
+
 fn byte_refusal(path: &str, measured: usize, ceiling: usize) -> String {
+    let registry = registry_of(path);
     format!(
         "{path} is {measured} bytes, above the registered ceiling of {ceiling}. \
          If the growth is deliberate, raise the entry for {path} in \
-         tests/instruction_ceiling.rs DOCUMENTS and let the review see the number move."
+         tests/instruction_ceiling.rs {registry} and let the review see the number move."
     )
 }
 
@@ -282,4 +293,27 @@ fn this_repositorys_own_instructions_stay_under_their_registered_ceilings() {
              something other than the file it names"
         );
     }
+}
+
+#[test]
+fn a_refusal_names_the_registry_that_holds_the_entry() {
+    let shipped = byte_refusal("skill/SKILL.md", 1, 0);
+    assert!(
+        shipped.contains("instruction_ceiling.rs DOCUMENTS"),
+        "a shipped skill file's refusal must send the reader to DOCUMENTS: {shipped}"
+    );
+    let own = byte_refusal("AGENTS.md", 1, 0);
+    assert!(
+        own.contains("instruction_ceiling.rs OWN_INSTRUCTIONS"),
+        "an own-instruction entry's refusal must send the reader to OWN_INSTRUCTIONS: {own}"
+    );
+    assert!(
+        !own.contains("DOCUMENTS"),
+        "an own-instruction entry's refusal points at a table that does not hold it: {own}"
+    );
+    let unregistered = byte_refusal("nowhere/absent.md", 1, 0);
+    assert!(
+        !unregistered.contains("DOCUMENTS") && !unregistered.contains("OWN_INSTRUCTIONS"),
+        "a path neither table holds is sent to a table that cannot hold it: {unregistered}"
+    );
 }
