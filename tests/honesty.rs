@@ -5131,3 +5131,85 @@ fn the_silence_the_skill_states_is_the_one_ownership_applies() {
         );
     }
 }
+/// Every test the catalogue names is a function this crate still has.
+///
+/// `docs/testing.md` is the inventory `AGENTS.md` gave up: which test drives which generated
+/// integration, and what each one needs on the machine. It is prose, so a renamed or deleted test
+/// left it naming something that is gone — and `honesty.md` said only a person following the link
+/// would notice. This is that person, automated: the names are read back out of the source with
+/// comments stripped, and a name the suite no longer holds fails here.
+#[test]
+fn every_test_the_catalogue_names_is_still_a_function() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let catalogue = std::fs::read_to_string(root.join("docs/testing.md"))
+        .expect("the catalogue ships with the crate");
+
+    let mut functions: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut read = 0_usize;
+    let mut pending = vec![root.join("src"), root.join("tests")];
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            if !path.extension().is_some_and(|kind| kind == "rs") {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            read += 1;
+            for line in estigia::source_text::code_of(&text).lines() {
+                let line = line.trim_start();
+                let Some(rest) = line.strip_prefix("fn ") else {
+                    continue;
+                };
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if !name.is_empty() {
+                    functions.insert(name);
+                }
+            }
+        }
+    }
+    assert!(
+        read > 20,
+        "the walk read {read} source files, too few to be this crate"
+    );
+
+    let mut named: Vec<String> = Vec::new();
+    for piece in catalogue.split('`').skip(1).step_by(2) {
+        let looks_like_a_test_name = piece.len() >= 12
+            && piece.contains('_')
+            && piece
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+        if looks_like_a_test_name {
+            named.push(piece.to_owned());
+        }
+    }
+    assert!(
+        named.len() > 50,
+        "only {} names were read out of the catalogue, so this guard would agree with almost \
+         everything",
+        named.len()
+    );
+
+    let missing: Vec<&String> = named
+        .iter()
+        .filter(|name| !functions.contains(*name))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "docs/testing.md names tests this crate no longer holds: {missing:?}. Rename the entry with \
+         the test, or delete it — a catalogue that names a test somebody removed is a red line \
+         nobody can find"
+    );
+}
