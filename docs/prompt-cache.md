@@ -24,14 +24,15 @@ HOME=$(mktemp -d) estigia session start --session-id probe-a --runtime pi --wake
 ```
 
 1,228 bytes, and 1,228 bytes again for a second probe: the section's *size* is stable while its
-*content* is not. The two answers differ on one line — the run id — and the four parts it carries have
-four different lifetimes:
+*content* is not. Both probes held no claim, so the 126 below is that form's length, not the length of a
+line naming a held issue. The two answers differ on one line — the run id — and the four parts it
+carries have four different lifetimes:
 
 | Part | Bytes here | Changes when |
 |---|---|---|
 | The `## Estigia` heading | 10 | never |
 | The "no contract is installed in …" sentence | 141 | the machine's setup changes |
-| The run-id line: which issue the run holds, and whether the gate is armed | 126 | a claim, a renewal, a transition, or a session start |
+| The run-id line in its no-claim form: the run's id, that it holds no issue, and that the gate is unarmed | 126 | a claim, a renewal, a transition, or a session start |
 | The uncommitted-work paragraph, naming each checkout and how many files it holds | 945, with five checkouts and their full paths | **any file is edited in any checkout of the repository** |
 
 The four parts are separated by blank lines, which are the remaining six bytes: 10 + 126 + 141 + 945 + 6
