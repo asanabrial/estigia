@@ -310,7 +310,7 @@ pub(super) fn limit_too_large(limit: u64) -> Refusal {
     Refusal::not_started(
         "sessions-limit-too-large",
         format!(
-            "`limit` is {limit} and the most this tool answers is {MAX_LIMIT}; nothing was listed"
+            "`limit` is {limit} and the most a page answers is {MAX_LIMIT}; nothing was listed"
         ),
         Resolution::no_command(
             NoCommandReason::OperatorKnowledge,
@@ -486,8 +486,52 @@ pub(crate) fn entries(root: &Path) -> Result<Vec<Listed>, Refusal> {
     Ok(entries)
 }
 
+pub(super) struct Page {
+    version: u64,
+    taken_at: u64,
+    limit: u64,
+    returned: usize,
+    matched: usize,
+    more: bool,
+    next_cursor: Option<String>,
+    sessions: Vec<Listed>,
+}
+
+impl Page {
+    fn answer(&self) -> Value {
+        serde_json::json!({
+            "version": self.version,
+            "taken_at": self.taken_at,
+            "stale_after": STALE_AFTER_SECONDS,
+            "limit": self.limit,
+            "returned": self.returned,
+            "matched": self.matched,
+            "more": self.more,
+            "next_cursor": self.next_cursor,
+            "sessions": self.sessions,
+        })
+    }
+
+    fn footer(&self) -> String {
+        match self.next_cursor.as_deref() {
+            Some(cursor) => format!(
+                "{} of {} row(s) on this page; more remain — the next cursor is {cursor}",
+                self.returned, self.matched
+            ),
+            None => format!(
+                "{} of {} row(s) on this page; nothing more remains",
+                self.returned, self.matched
+            ),
+        }
+    }
+}
+
 /// One bounded page of the session registry, or the refusal that says why not.
 pub(crate) fn page(arguments: &Value, root: &Path, now: Option<u64>) -> Result<Value, Refusal> {
+    one_page(arguments, root, now).map(|page| page.answer())
+}
+
+pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Result<Page, Refusal> {
     let now = now.ok_or_else(clock_unreadable)?;
     let selectors = Selectors::of(arguments);
     if let Some((name, bytes)) = selectors.over_the_bound() {
@@ -565,22 +609,97 @@ pub(crate) fn page(arguments: &Value, root: &Path, now: Option<u64>) -> Result<V
     } else {
         None
     };
-    let sessions: Vec<&Listed> = page.iter().map(|entry| &entry.1).collect();
-    Ok(serde_json::json!({
-        "version": PAGE_VERSION,
-        "taken_at": taken_at,
-        "stale_after": STALE_AFTER_SECONDS,
-        "limit": limit,
-        "returned": returned,
-        "matched": matching.len(),
-        "more": more,
-        "next_cursor": next_cursor,
-        "sessions": sessions,
-    }))
+    let sessions: Vec<Listed> = page.iter().map(|entry| entry.1.clone()).collect();
+    Ok(Page {
+        version: PAGE_VERSION,
+        taken_at,
+        limit,
+        returned,
+        matched: matching.len(),
+        more,
+        next_cursor,
+        sessions,
+    })
 }
 
-pub(super) fn sessions(json: bool, all: bool) -> Result<(), Refusal> {
+fn row_line(entry: &Listed, all: bool) -> String {
+    let held = match (&entry.issue, &entry.state) {
+        (Some(Identity::Number(number)), Some(state)) => format!("#{number} {state}"),
+        (Some(issue), Some(state)) => format!("{issue} {state}"),
+        (Some(Identity::Number(number)), None) => format!("#{number}"),
+        (Some(issue), None) => issue.to_string(),
+        _ => "-".to_owned(),
+    };
+    let seen = entry
+        .silent_for
+        .map_or_else(|| "never seen".to_owned(), session::age);
+    let mut mail = String::new();
+    if entry.waiting > 0 {
+        mail.push_str(&format!("  {} waiting to be delivered", entry.waiting));
+    }
+    if entry.undelivered_sent > 0 {
+        mail.push_str(&format!(
+            "  {} sent and not delivered",
+            entry.undelivered_sent
+        ));
+    }
+    let build = entry
+        .build
+        .as_deref()
+        .filter(|build| *build != crate::build_info::VERSION)
+        .map_or_else(String::new, |build| format!("  on {build}"));
+    format!(
+        "{}  {}  {}  {}  {}  last seen {}{}{}",
+        entry.spoken(),
+        entry.run_id,
+        if all { entry.status } else { "live" },
+        entry.runtime,
+        held,
+        seen,
+        mail,
+        build
+    )
+}
+
+fn bounded_listing(
+    json: bool,
+    all: bool,
+    limit: Option<u64>,
+    cursor: Option<&str>,
+    root: &Path,
+) -> Result<(), Refusal> {
+    let mut arguments = serde_json::Map::new();
+    if !all {
+        arguments.insert("status".to_owned(), Value::from("live"));
+    }
+    if let Some(limit) = limit {
+        arguments.insert("limit".to_owned(), Value::from(limit));
+    }
+    if let Some(cursor) = cursor {
+        arguments.insert("cursor".to_owned(), Value::from(cursor));
+    }
+    let answer = one_page(&Value::Object(arguments), root, session::now_seconds())?;
+    if json {
+        say!("{}", answer.answer());
+        return Ok(());
+    }
+    for entry in &answer.sessions {
+        say!("{}", row_line(entry, all));
+    }
+    say!("{}", answer.footer());
+    Ok(())
+}
+
+pub(super) fn sessions(
+    json: bool,
+    all: bool,
+    limit: Option<u64>,
+    cursor: Option<&str>,
+) -> Result<(), Refusal> {
     let root = session::state_root(None)?;
+    if limit.is_some() || cursor.is_some() {
+        return bounded_listing(json, all, limit, cursor, &root);
+    }
     let entries = entries(&root)?;
     let shown: Vec<&Listed> = entries
         .iter()
@@ -608,42 +727,7 @@ pub(super) fn sessions(json: bool, all: bool) -> Result<(), Refusal> {
         return Ok(());
     }
     for entry in &shown {
-        let held = match (&entry.issue, &entry.state) {
-            (Some(Identity::Number(number)), Some(state)) => format!("#{number} {state}"),
-            (Some(issue), Some(state)) => format!("{issue} {state}"),
-            (Some(Identity::Number(number)), None) => format!("#{number}"),
-            (Some(issue), None) => issue.to_string(),
-            _ => "-".to_owned(),
-        };
-        let seen = entry
-            .silent_for
-            .map_or_else(|| "never seen".to_owned(), session::age);
-        let mut mail = String::new();
-        if entry.waiting > 0 {
-            mail.push_str(&format!("  {} waiting to be delivered", entry.waiting));
-        }
-        if entry.undelivered_sent > 0 {
-            mail.push_str(&format!(
-                "  {} sent and not delivered",
-                entry.undelivered_sent
-            ));
-        }
-        let build = entry
-            .build
-            .as_deref()
-            .filter(|build| *build != crate::build_info::VERSION)
-            .map_or_else(String::new, |build| format!("  on {build}"));
-        say!(
-            "{}  {}  {}  {}  {}  last seen {}{}{}",
-            entry.spoken(),
-            entry.run_id,
-            if all { entry.status } else { "live" },
-            entry.runtime,
-            held,
-            seen,
-            mail,
-            build
-        );
+        say!("{}", row_line(entry, all));
     }
     let behind: Vec<&str> = shown
         .iter()

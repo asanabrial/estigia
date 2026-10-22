@@ -183,6 +183,16 @@ pub enum Command {
         #[arg(long)]
         all: bool,
 
+        /// Take one page of at most this many rows, live ones unless `--all` is
+        /// given, rather than the whole list.
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u64).range(1..))]
+        limit: Option<u64>,
+
+        /// Continue the page a `next_cursor` came from, exactly as it gave the
+        /// token, rather than beginning a new snapshot.
+        #[arg(long, value_name = "TOKEN")]
+        cursor: Option<String>,
+
         /// What to do beyond listing.
         #[command(subcommand)]
         action: Option<SessionsAction>,

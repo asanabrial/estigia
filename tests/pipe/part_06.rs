@@ -2899,6 +2899,270 @@ fn sessions_on_a_machine_that_never_registered_one_lists_none_and_creates_no_sto
     );
 }
 
+#[test]
+fn the_cli_walks_a_bounded_session_registry_a_page_at_a_time_without_omissions_or_duplicates() {
+    let rig = tracker_rig();
+    let mut registered = Vec::new();
+    for session in ["one", "two", "three", "four", "five"] {
+        registered.push(pi_start(&rig, session));
+    }
+    registered.sort();
+
+    let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "--json"]);
+    assert!(ok, "{said}{stderr}");
+    let listed: serde_json::Value = serde_json::from_str(said.trim()).expect("sessions is JSON");
+    assert_eq!(listed["of"], 5, "{listed}");
+    assert_eq!(listed["all"], false, "{listed}");
+    let rows = listed["sessions"].as_array().expect("a list").clone();
+    assert_eq!(rows.len(), 5, "{rows:?}");
+    let mut listed_ids: Vec<String> = rows
+        .iter()
+        .map(|row| row["run_id"].as_str().expect("a run id").to_owned())
+        .collect();
+    listed_ids.sort();
+    assert_eq!(
+        listed_ids, registered,
+        "the unbounded list is not the registry it was taken from"
+    );
+
+    let (legacy, stderr, ok) = pi_session_run(&rig, &["sessions"]);
+    assert!(ok, "{legacy}{stderr}");
+    let mut said = legacy.lines();
+    for row in &rows {
+        let silence = row["silent_for"].as_u64().expect("a silence in seconds");
+        assert!(
+            silence < 60,
+            "this listing was taken more than a minute after the fixture registered, so the age \
+             bucket moved under the expectation: {row}"
+        );
+        let line = said.next().expect("a row line");
+        assert_eq!(
+            line,
+            format!(
+                "{}  {}  live  pi  -  last seen {}",
+                row["name"].as_str().expect("a name"),
+                row["run_id"].as_str().expect("a run id"),
+                estigia::harness::session::age(silence),
+            ),
+            "the list without a page flag changed its fields"
+        );
+    }
+    assert_eq!(
+        said.next(),
+        Some("5 of 5 rows are live; `estigia sessions --all` shows the rest"),
+        "the list without a page flag changed its footer"
+    );
+    assert_eq!(
+        said.next(),
+        None,
+        "the list without a page flag gained a line"
+    );
+
+    let mut walked: Vec<String> = Vec::new();
+    let mut cursor: Option<String> = None;
+    let mut pages = 0;
+    loop {
+        let mut arguments = ["sessions", "--json", "--limit", "2"]
+            .map(str::to_owned)
+            .to_vec();
+        if let Some(token) = &cursor {
+            arguments.push("--cursor".to_owned());
+            arguments.push(token.clone());
+        }
+        let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
+        let (said, stderr, ok) = pi_session_run(&rig, &borrowed);
+        assert!(ok, "{said}{stderr}");
+        let page: serde_json::Value = serde_json::from_str(said.trim()).expect("a page is JSON");
+        assert_eq!(
+            serde_json::to_string(&page).expect("the page serializes"),
+            said.trim(),
+            "the page is not the compact JSON the tool's caller sees"
+        );
+        assert_eq!(page["version"], 1, "{page}");
+        assert_eq!(page["limit"], 2, "{page}");
+        assert_eq!(page["matched"], 5, "the snapshot moved: {page}");
+        let rows = page["sessions"].as_array().expect("a list of rows");
+        assert_eq!(page["returned"], rows.len(), "{page}");
+        assert!(!rows.is_empty(), "a page carried no rows");
+        walked.extend(
+            rows.iter()
+                .map(|row| row["run_id"].as_str().expect("a run id").to_owned()),
+        );
+        pages += 1;
+        match page["next_cursor"].as_str() {
+            Some(token) => cursor = Some(token.to_owned()),
+            None => break,
+        }
+    }
+    assert_eq!(pages, 3, "the page size did not hold: {walked:?}");
+    assert_eq!(
+        walked.len(),
+        registered.len(),
+        "the walk omitted a row: {walked:?}"
+    );
+    let mut unique = walked.clone();
+    unique.sort();
+    unique.dedup();
+    assert_eq!(
+        unique.len(),
+        walked.len(),
+        "the walk repeated a row: {walked:?}"
+    );
+    assert_eq!(unique, registered, "the walk is not the registry");
+
+    let mut prose: Vec<String> = Vec::new();
+    let mut token: Option<String> = None;
+    loop {
+        let mut arguments = ["sessions", "--limit", "2"].to_vec();
+        if let Some(token) = &token {
+            arguments.push("--cursor");
+            arguments.push(token);
+        }
+        let (said, stderr, ok) = pi_session_run(&rig, &arguments);
+        assert!(ok, "{said}{stderr}");
+        let lines: Vec<&str> = said.lines().collect();
+        let (footer, shown) = lines.split_last().expect("a footer");
+        for line in shown {
+            let run_id = line.split("  ").nth(1).expect("a run id on the row");
+            assert!(
+                registered.iter().any(|known| known == run_id),
+                "a page showed a row the registry does not hold: {line}"
+            );
+            prose.push(run_id.to_owned());
+        }
+        match footer.strip_prefix("2 of 5 row(s) on this page; more remain — the next cursor is ")
+        {
+            Some(carried) => token = Some(carried.to_owned()),
+            None => {
+                assert_eq!(
+                    *footer, "1 of 5 row(s) on this page; nothing more remains",
+                    "the last page's footer does not say the walk is over"
+                );
+                break;
+            }
+        }
+    }
+    assert_eq!(prose, walked, "the prose pages and the JSON pages differ");
+}
+
+#[test]
+fn a_bounded_session_call_keeps_each_refusal_the_page_answers() {
+    let rig = tracker_rig();
+    for session in ["one", "two", "three"] {
+        pi_start(&rig, session);
+    }
+    let (said, stderr, ok) = pi_session_run(
+        &rig,
+        &[
+            "session",
+            "end",
+            "--session-id",
+            "three",
+            "--runtime",
+            "pi",
+            "--reason",
+            "quit",
+        ],
+    );
+    assert!(ok, "{said}{stderr}");
+    let refused = |arguments: &[&str]| -> String {
+        let (said, stderr, ok) = pi_session_run(&rig, arguments);
+        assert!(!ok, "the call was answered: {said}{stderr}");
+        format!("{said}{stderr}")
+    };
+
+    let above = refused(&["sessions", "--limit", "501"]);
+    assert!(above.contains("sessions-limit-too-large"), "{above}");
+    let zero = refused(&["sessions", "--limit", "0"]);
+    assert!(zero.contains("--limit"), "{zero}");
+
+    let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "--json", "--limit", "1"]);
+    assert!(ok, "{said}{stderr}");
+    let page: serde_json::Value = serde_json::from_str(said.trim()).expect("JSON");
+    assert_eq!(
+        page["matched"], 2,
+        "a page without `--all` did not ask for the live rows alone: {page}"
+    );
+    let token = page["next_cursor"].as_str().expect("a cursor").to_owned();
+
+    let (payload, digest) = token.split_once('.').expect("a payload and a digest");
+    let mut flipped = payload.to_owned();
+    let first = flipped.as_bytes()[0];
+    flipped.replace_range(0..1, if first == b'a' { "b" } else { "a" });
+    let tampered = format!("{flipped}.{digest}");
+    let edited = refused(&["sessions", "--limit", "1", "--cursor", &tampered]);
+    assert!(edited.contains("sessions-cursor-tampered"), "{edited}");
+
+    let mismatched = refused(&["sessions", "--all", "--limit", "1", "--cursor", &token]);
+    assert!(
+        mismatched.contains("sessions-cursor-mismatch"),
+        "{mismatched}"
+    );
+
+    let malformed = refused(&["sessions", "--cursor", "not-a-cursor"]);
+    assert!(
+        malformed.contains("sessions-cursor-malformed"),
+        "{malformed}"
+    );
+
+    let (said, stderr, ok) = pi_session_run(
+        &rig,
+        &["sessions", "--json", "--limit", "2", "--cursor", &token],
+    );
+    assert!(ok, "a page size may change mid-walk: {said}{stderr}");
+    let page: serde_json::Value = serde_json::from_str(said.trim()).expect("JSON");
+    assert_eq!(
+        page["returned"], 1,
+        "the second page did not finish the walk: {page}"
+    );
+    assert_eq!(page["next_cursor"], serde_json::Value::Null, "{page}");
+
+    let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "--all", "--json", "--limit", "1"]);
+    assert!(ok, "{said}{stderr}");
+    let page: serde_json::Value = serde_json::from_str(said.trim()).expect("JSON");
+    assert_eq!(
+        page["matched"], 3,
+        "`--all` did not ask for every status: {page}"
+    );
+}
+
+#[test]
+fn a_bounded_session_page_answers_an_empty_registry_and_offers_no_cursor_with_nothing_left() {
+    let idle = tracker_rig();
+    let (said, stderr, ok) = pi_session_run(&idle, &["sessions", "--limit", "5"]);
+    assert!(ok, "{said}{stderr}");
+    assert_eq!(
+        said.trim(),
+        "0 of 0 row(s) on this page; nothing more remains",
+        "an empty page said something else"
+    );
+
+    let one = tracker_rig();
+    let only = pi_start(&one, "only");
+    let (said, stderr, ok) = pi_session_run(&one, &["sessions", "--json", "--limit", "1"]);
+    assert!(ok, "{said}{stderr}");
+    let page: serde_json::Value = serde_json::from_str(said.trim()).expect("JSON");
+    assert_eq!(page["returned"], 1, "{page}");
+    assert_eq!(
+        page["sessions"][0]["run_id"].as_str(),
+        Some(only.as_str()),
+        "the one row is not the one registered: {page}"
+    );
+    assert_eq!(
+        page["more"], false,
+        "a page with nothing after it said more remain: {page}"
+    );
+    assert!(
+        page.get("next_cursor").is_some(),
+        "a last page dropped `next_cursor` instead of spelling it null: {page}"
+    );
+    assert_eq!(
+        page["next_cursor"],
+        serde_json::Value::Null,
+        "a page with nothing after it handed out a cursor: {page}"
+    );
+}
+
 fn pi_start(rig: &TrackerRig, session: &str) -> String {
     let (said, _, ok) = pi_session_run(
         rig,
