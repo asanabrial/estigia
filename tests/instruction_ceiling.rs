@@ -104,10 +104,12 @@ fn over_bytes(measured: usize, ceiling: usize) -> bool {
 }
 
 fn registry_of(path: &str) -> &'static str {
-    if OWN_INSTRUCTIONS.iter().any(|(name, _)| *name == path) {
+    if DOCUMENTS.iter().any(|(name, _)| *name == path) {
+        "DOCUMENTS"
+    } else if OWN_INSTRUCTIONS.iter().any(|(name, _)| *name == path) {
         "OWN_INSTRUCTIONS"
     } else {
-        "DOCUMENTS"
+        "the table that registers it"
     }
 }
 
@@ -308,5 +310,10 @@ fn a_refusal_names_the_registry_that_holds_the_entry() {
     assert!(
         !own.contains("DOCUMENTS"),
         "an own-instruction entry's refusal points at a table that does not hold it: {own}"
+    );
+    let unregistered = byte_refusal("nowhere/absent.md", 1, 0);
+    assert!(
+        !unregistered.contains("DOCUMENTS") && !unregistered.contains("OWN_INSTRUCTIONS"),
+        "a path neither table holds is sent to a table that cannot hold it: {unregistered}"
     );
 }
