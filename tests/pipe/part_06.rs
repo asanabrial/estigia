@@ -3186,17 +3186,26 @@ fn a_sessions_send_refuses_every_listing_flag_before_it_writes() {
         "two listing flags wrote the message anyway"
     );
 
-    let (said, stderr, ok) =
-        pi_session_run(&rig, &["sessions", "send", &recipient, "wake up", "--all"]);
-    assert!(
-        !ok,
-        "a listing flag after `send` was accepted: {said}{stderr}"
-    );
-    assert_eq!(
-        waiting(&rig),
-        0,
-        "a trailing listing flag wrote the message"
-    );
+    for flag in [
+        vec!["--all"],
+        vec!["--limit", "5"],
+        vec!["--cursor", "not-a-cursor"],
+    ] {
+        let mut arguments = vec!["sessions", "send", recipient.as_str(), "wake up"];
+        arguments.extend(flag.iter().copied());
+        let (said, stderr, ok) = pi_session_run(&rig, &arguments);
+        assert!(
+            !ok,
+            "`{}` after `send` was accepted: {said}{stderr}",
+            flag[0]
+        );
+        assert_eq!(
+            waiting(&rig),
+            0,
+            "`{}` after `send` wrote the message",
+            flag[0]
+        );
+    }
 
     let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "send", &recipient, "wake up"]);
     assert!(
