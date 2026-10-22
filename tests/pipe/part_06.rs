@@ -3168,6 +3168,24 @@ fn a_sessions_send_refuses_every_listing_flag_before_it_writes() {
         );
     }
 
+    let (said, stderr, ok) = pi_session_run(
+        &rig,
+        &[
+            "sessions", "--all", "--limit", "5", "send", &recipient, "wake up",
+        ],
+    );
+    let refused = format!("{said}{stderr}");
+    assert!(!ok, "two listing flags beside `send` delivered: {refused}");
+    assert!(
+        refused.contains("--all, --limit") && refused.contains("were given"),
+        "the refusal does not name both flags it refused: {refused}"
+    );
+    assert_eq!(
+        waiting(&rig),
+        0,
+        "two listing flags wrote the message anyway"
+    );
+
     let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "send", &recipient, "wake up"]);
     assert!(
         ok,
