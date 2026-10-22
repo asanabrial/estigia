@@ -2929,13 +2929,20 @@ fn the_cli_walks_a_bounded_session_registry_a_page_at_a_time_without_omissions_o
     assert!(ok, "{legacy}{stderr}");
     let mut said = legacy.lines();
     for row in &rows {
+        let silence = row["silent_for"].as_u64().expect("a silence in seconds");
+        assert!(
+            silence < 60,
+            "this listing was taken more than a minute after the fixture registered, so the age \
+             bucket moved under the expectation: {row}"
+        );
         let line = said.next().expect("a row line");
         assert_eq!(
             line,
             format!(
-                "{}  {}  live  pi  -  last seen just now",
+                "{}  {}  live  pi  -  last seen {}",
                 row["name"].as_str().expect("a name"),
                 row["run_id"].as_str().expect("a run id"),
+                estigia::harness::session::age(silence),
             ),
             "the list without a page flag changed its fields"
         );
