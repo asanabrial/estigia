@@ -337,7 +337,9 @@ flag prints the same bytes, the compact JSON the tool's caller sees; without `--
 the line the unbounded list uses, then one footer naming how many rows the page returned, how many matched,
 whether more remain, and the next cursor when there is one — `2 of 5 row(s) on this page; more remain — the
 next cursor is <token>`, and `1 of 5 row(s) on this page; nothing more remains` at the end of a traversal.
-A traversal continues by giving `--cursor <token>` again, with the same `--all` and `--limit` it started with.
+A traversal continues by giving `--cursor <token>` again; `--all` must stay as it was, because the cursor
+is bound to the selectors it was issued for, while `--limit` may change from page to page — the cursor
+names the last row returned, not a page size.
 
 **Ordering and the snapshot.** A bounded page's snapshot is the registry rows with an immutable start, and a page
 orders them by `(started_at, run_id)`; the snapshot is every such row whose `started_at <= taken_at`. `started_at`

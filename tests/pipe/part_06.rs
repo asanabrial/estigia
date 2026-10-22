@@ -3085,6 +3085,18 @@ fn a_bounded_session_call_keeps_each_refusal_the_page_answers() {
         "{malformed}"
     );
 
+    let (said, stderr, ok) = pi_session_run(
+        &rig,
+        &["sessions", "--json", "--limit", "2", "--cursor", &token],
+    );
+    assert!(ok, "a page size may change mid-walk: {said}{stderr}");
+    let page: serde_json::Value = serde_json::from_str(said.trim()).expect("JSON");
+    assert_eq!(
+        page["returned"], 1,
+        "the second page did not finish the walk: {page}"
+    );
+    assert_eq!(page["next_cursor"], serde_json::Value::Null, "{page}");
+
     let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "--all", "--json", "--limit", "1"]);
     assert!(ok, "{said}{stderr}");
     let page: serde_json::Value = serde_json::from_str(said.trim()).expect("JSON");
