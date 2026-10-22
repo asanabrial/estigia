@@ -773,6 +773,19 @@ missing a counter). `tests/usage_accounting.rs` pins the classes against a hand-
 including the unknown and the missing-counter cases the live corpus does not exercise, and pins the
 readable table that names them.
 
+The JSON also carries what a methodology comparison needs beside tokens; the readable table does
+not, and is byte-identical to the one before. `turn_profile` counts, per context, the model turns
+(distinct assistant message identities), the model the API answered with (`served_models`, the
+record's `message.model`), the model the CLI asked for (`requested_models`, `requestedModel`), the
+effort, and the tool calls (distinct `tool_use` identities, so a retried fragment's call is counted
+once). `usage_by_model` splits the four classes by the model that answered, which is what a
+tariff-computed cost multiplies. `sessions` lists each session with its dominant issue, its
+`wall_clock_seconds` — first timestamped record to last, subagent transcripts included — and the
+subagents it launched. A field a record does not carry is counted under `unknown`, never inferred.
+Against the base script on a frozen copy of this machine's corpus (2026-10-23: 206 sessions, 87,020
+usage records), every field the base script reports is byte-identical, table included.
+`tests/usage_accounting.rs` pins the new fields against the same fixture.
+
 **Run on this machine, against this checkout, after the change landed and delivery sessions closed
 against it.** The condition the baseline's acceptance item 6 waited on is now met: the corpus under
 `~/.claude-personal/projects` holds delivery sessions whose own transcripts name a build carrying

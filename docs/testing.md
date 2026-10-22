@@ -185,11 +185,11 @@ and with `tar` as well:
 `the_npm_installer_refuses_an_archive_with_no_published_sum` and
 `the_npm_installer_places_nothing_the_lifecycle_record_refused`.
 
-One more interpreter joined that list with the transcript accounting: the five tests in
+One more interpreter joined that list with the transcript accounting: the eight tests in
 [`tests/usage_accounting.rs`](../tests/usage_accounting.rs) run the measurement script under
 `python3`, the interpreter that script is written in, and they are `#[cfg(unix)]` because `python3`
 is not the name Windows ships. They fail, never skip, without it, so the honest line is that one
-test requires `bash`, five require `python3` on Unix, and nothing else does; all of those read a
+test requires `bash`, eight require `python3` on Unix, and nothing else does; all of those read a
 missing interpreter as a broken build rather than an unbuilt fixture.
 
 ## Why `cargo doc` is on the list
