@@ -177,7 +177,8 @@ pub enum Command {
 
     /// List the sessions that registered on this machine, with the issue each
     /// holds, and mark the silent and the ended ones. With `send`, put a
-    /// message in one of them.
+    /// message in one of them. The three listing flags belong to the listing;
+    /// `send` takes none and refuses them before it writes.
     Sessions {
         /// List every row the registry holds, not only the live ones.
         #[arg(long)]
