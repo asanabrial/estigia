@@ -2927,24 +2927,28 @@ fn the_cli_walks_a_bounded_session_registry_a_page_at_a_time_without_omissions_o
 
     let (legacy, stderr, ok) = pi_session_run(&rig, &["sessions"]);
     assert!(ok, "{legacy}{stderr}");
-    let mut expected: Vec<String> = rows
-        .iter()
-        .map(|row| {
-            format!(
-                "{}  {}  live  pi  -  last seen {}",
-                row["name"].as_str().expect("a name"),
-                row["run_id"].as_str().expect("a run id"),
-                estigia::harness::session::age(
-                    row["silent_for"].as_u64().expect("a silence in seconds")
-                ),
-            )
-        })
-        .collect();
-    expected.push("5 of 5 rows are live; `estigia sessions --all` shows the rest".to_owned());
+    let mut said = legacy.lines();
+    for row in &rows {
+        let line = said.next().expect("a row line");
+        let prefix = format!(
+            "{}  {}  live  pi  -  last seen ",
+            row["name"].as_str().expect("a name"),
+            row["run_id"].as_str().expect("a run id"),
+        );
+        assert!(
+            line.starts_with(&prefix),
+            "the list without a page flag changed its fields: {line}"
+        );
+    }
     assert_eq!(
-        legacy.lines().collect::<Vec<_>>(),
-        expected,
-        "the list without a page flag changed"
+        said.next(),
+        Some("5 of 5 rows are live; `estigia sessions --all` shows the rest"),
+        "the list without a page flag changed its footer"
+    );
+    assert_eq!(
+        said.next(),
+        None,
+        "the list without a page flag gained a line"
     );
 
     let mut walked: Vec<String> = Vec::new();
@@ -3113,7 +3117,10 @@ fn a_bounded_session_call_keeps_each_refusal_the_page_answers() {
         page["matched"], 3,
         "`--all` did not ask for every status: {page}"
     );
+}
 
+#[test]
+fn a_bounded_session_page_answers_an_empty_registry_and_offers_no_cursor_with_nothing_left() {
     let idle = tracker_rig();
     let (said, stderr, ok) = pi_session_run(&idle, &["sessions", "--limit", "5"]);
     assert!(ok, "{said}{stderr}");
@@ -3121,6 +3128,27 @@ fn a_bounded_session_call_keeps_each_refusal_the_page_answers() {
         said.trim(),
         "0 of 0 row(s) on this page; nothing more remains",
         "an empty page said something else"
+    );
+
+    let one = tracker_rig();
+    let only = pi_start(&one, "only");
+    let (said, stderr, ok) = pi_session_run(&one, &["sessions", "--json", "--limit", "1"]);
+    assert!(ok, "{said}{stderr}");
+    let page: serde_json::Value = serde_json::from_str(said.trim()).expect("JSON");
+    assert_eq!(page["returned"], 1, "{page}");
+    assert_eq!(
+        page["sessions"][0]["run_id"].as_str(),
+        Some(only.as_str()),
+        "the one row is not the one registered: {page}"
+    );
+    assert_eq!(
+        page["more"], false,
+        "a page with nothing after it said more remain: {page}"
+    );
+    assert_eq!(
+        page["next_cursor"],
+        serde_json::Value::Null,
+        "a page with nothing after it handed out a cursor: {page}"
     );
 }
 

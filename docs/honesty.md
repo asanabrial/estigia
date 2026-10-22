@@ -10327,10 +10327,11 @@ test that drives the binary. What it does not measure:
 ## The session registry
 
 `estigia sessions` lists the rows `estigia session start` and `estigia session end` write to the `sessions` table,
-joined with the run pointers. What this measures is four pipe tests that drive the binary — a started, a crashed,
+joined with the run pointers. What this measures is five pipe tests that drive the binary — a started, a crashed,
 an unregistered and an ended session, with the crashed row aged in the store; a bounded walk of five registered
-sessions whose pages have neither an omission nor a duplicate; and each refusal a page answers — and four store
-unit tests. What it does not measure:
+sessions whose pages have neither an omission nor a duplicate; each refusal a page answers; and a page answering
+an empty registry while offering no cursor when nothing remains — and four store unit tests. What it does not
+measure:
 
 - **`last_seen` is refreshed by a session start and by a verified claim, not by every gated write.** A session
   that holds no claim and runs past the six-hour bound reads `stale` while alive. The bound is a constant, chosen
