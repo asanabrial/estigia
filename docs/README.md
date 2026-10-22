@@ -18,6 +18,7 @@ the document that owns it, and follows that document's own links from there.
 | [`testing.md`](testing.md) | Which test drives which generated integration, what each driver holds, and which interpreter the suite needs | you are reading a red line, or adding a test that runs something else |
 | [`honesty.md`](honesty.md) | What this instrument does **not** check, each gap with the measurement that found it | you are about to believe a claim |
 | [`honesty-review-tier.md`](honesty-review-tier.md) | What the review tier, the lens and the finding do not establish — the last run of the ledger above | you are reading a tier, a lens or a finding claim |
+| [`method.md`](method.md) | The principles Estigia's method works by, what each prevents and what holds it — a draft | you are asking why a run works the way it does |
 | [`parity.md`](parity.md) | Which `gentle-ai` revision Estigia measures against, and which layer is in scope | you are asking whether Estigia is at parity |
 | [`AGENTS.md`](../AGENTS.md) | How an agent works in this repository, and what it owes the documentation | you are about to change this repository |
 | [`CHANGELOG.md`](../CHANGELOG.md) | What changed, released version by released version | you need the history of a behaviour |
