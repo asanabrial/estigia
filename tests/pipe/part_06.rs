@@ -3127,6 +3127,106 @@ fn a_bounded_session_call_keeps_each_refusal_the_page_answers() {
 }
 
 #[test]
+fn a_sessions_send_refuses_every_listing_flag_before_it_writes() {
+    let rig = tracker_rig();
+    let recipient = pi_start(&rig, "recipient");
+    let waiting = |rig: &TrackerRig| -> u64 {
+        session_named(&listed_sessions(rig), &recipient)["waiting"]
+            .as_u64()
+            .expect("a waiting count")
+    };
+
+    for flag in [
+        vec!["--all"],
+        vec!["--limit", "5"],
+        vec!["--cursor", "not-a-cursor"],
+    ] {
+        let mut arguments = vec!["sessions"];
+        arguments.extend(flag.iter().copied());
+        arguments.extend(["send", recipient.as_str(), "wake up"]);
+        let (said, stderr, ok) = pi_session_run(&rig, &arguments);
+        let refused = format!("{said}{stderr}");
+        assert!(
+            !ok,
+            "`{}` beside `send` delivered the message: {refused}",
+            flag[0]
+        );
+        assert!(
+            refused.contains("sessions-send-takes-no-listing-flag"),
+            "`{}` beside `send` answered something else: {refused}",
+            flag[0]
+        );
+        assert!(
+            refused.contains(flag[0]) && refused.contains("takes no listing flag"),
+            "the refusal does not name the flag it refused and the rule: {refused}"
+        );
+        assert_eq!(
+            waiting(&rig),
+            0,
+            "`{}` beside `send` wrote the message anyway",
+            flag[0]
+        );
+    }
+
+    let (said, stderr, ok) = pi_session_run(
+        &rig,
+        &[
+            "sessions", "--all", "--limit", "5", "send", &recipient, "wake up",
+        ],
+    );
+    let refused = format!("{said}{stderr}");
+    assert!(!ok, "two listing flags beside `send` delivered: {refused}");
+    assert!(
+        refused.contains("--all, --limit") && refused.contains("were given"),
+        "the refusal does not name both flags it refused: {refused}"
+    );
+    assert_eq!(
+        waiting(&rig),
+        0,
+        "two listing flags wrote the message anyway"
+    );
+
+    for flag in [
+        vec!["--all"],
+        vec!["--limit", "5"],
+        vec!["--cursor", "not-a-cursor"],
+    ] {
+        let mut arguments = vec!["sessions", "send", recipient.as_str(), "wake up"];
+        arguments.extend(flag.iter().copied());
+        let (said, stderr, ok) = pi_session_run(&rig, &arguments);
+        assert!(
+            !ok,
+            "`{}` after `send` was accepted: {said}{stderr}",
+            flag[0]
+        );
+        assert_eq!(
+            waiting(&rig),
+            0,
+            "`{}` after `send` wrote the message",
+            flag[0]
+        );
+    }
+
+    let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "send", &recipient, "wake up"]);
+    assert!(
+        ok,
+        "the same call without a listing flag did not deliver: {said}{stderr}"
+    );
+    assert_eq!(
+        waiting(&rig),
+        1,
+        "the send did not put the row in the mailbox"
+    );
+
+    let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "--all", "--limit", "5"]);
+    assert!(ok, "`--all` no longer lists: {said}{stderr}");
+    assert!(
+        said.contains(&recipient),
+        "the listing door dropped the registered row: {said}"
+    );
+}
+
+#[test]
 fn a_bounded_session_page_answers_an_empty_registry_and_offers_no_cursor_with_nothing_left() {
     let idle = tracker_rig();
     let (said, stderr, ok) = pi_session_run(&idle, &["sessions", "--limit", "5"]);

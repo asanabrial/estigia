@@ -6089,6 +6089,17 @@ fn sessions_command(
             session_id,
             runtime,
         }) => {
+            let listing: Vec<&str> = [
+                all.then_some("--all"),
+                limit.is_some().then_some("--limit"),
+                cursor.is_some().then_some("--cursor"),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            if !listing.is_empty() {
+                return Err(sessions::listing_flags_beside_send(&listing));
+            }
             let ambient = std::env::var("ESTIGIA_RUN_ID").ok();
             let sender = gate_identity(
                 "estigia sessions send <run-id> \"<text>\"",

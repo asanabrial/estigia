@@ -128,6 +128,7 @@ fn inventory() -> Vec<Refusal> {
             crate::cli::sessions::MAX_SELECTOR_BYTES + 1,
         ),
         super::sessions::unregistered_not_bounded(),
+        super::sessions::listing_flags_beside_send(&["--all", "--limit"]),
         crate::harness::mailbox::empty(),
         crate::harness::mailbox::too_long(9000),
         crate::harness::mailbox::recipient_unknown("pi-ghost"),

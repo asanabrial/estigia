@@ -347,6 +347,23 @@ pub(super) fn unregistered_not_bounded() -> Refusal {
     )
 }
 
+pub(super) fn listing_flags_beside_send(flags: &[&str]) -> Refusal {
+    let named = flags.join(", ");
+    let (given, without) = if flags.len() == 1 {
+        ("was", "it")
+    } else {
+        ("were", "them")
+    };
+    Refusal::not_started(
+        "sessions-send-takes-no-listing-flag",
+        format!(
+            "{named} {given} given beside `send`, which takes no listing flag, so nothing was \
+             sent; the same call without {without} delivers"
+        ),
+        Resolution::run("estigia sessions send <run-id> \"<text>\""),
+    )
+}
+
 fn clock_unreadable() -> Refusal {
     Refusal::unavailable(
         "clock-unreadable",

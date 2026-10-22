@@ -161,6 +161,9 @@ Judgement calls that could have gone the other way:
 - `setting-not-read-back` is `unavailable` (the write landed and the read-back could not confirm it).
   The `*-not-read-back` and `repository-readback-missing` refusals whose outcome is already unknown
   are `unknown`.
+- `sessions-send-takes-no-listing-flag` is `refused`: the flags were read and they name the listing
+  door, which a `send` is not, so the rule says no and nothing is written. Nothing the run held moved,
+  so it is not `stale`, and the answer is the rule rather than an unread surface.
 - `assisted-claim-stale`, `assisted-claim-not-in-force` and `reviewer-definition-changed` are `stale`:
   what the run held moved. The five reasons the gate stands aside for (`not-watched`, `nothing-sworn`,
   `no-tracker`, `another-checkout`, `outside-the-claim`) are not refusals and carry no class.

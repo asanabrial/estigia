@@ -79,6 +79,8 @@ terminal sends with none, and the message is shown as from a person.
   is the record of the send. The MCP tools in [the next section](#the-mcp-tools) reach the same row.
 - `estigia sessions` shows `waiting` (rows addressed to this session and not yet delivered) and `undelivered_sent`
   (rows this session sent that nobody has taken) beside each session.
+- A send is not a listing and takes no listing flag; [Bounded session discovery](#bounded-session-discovery)
+  names the three that belong to the listing and the refusal they get beside `send`.
 
 Delivery is `estigia session deliver --session-id <id> --runtime <runtime>`, which prints the pending rows as one
 text block and stamps each `delivered_at` in the same statement, so two callers racing for one session split the
@@ -331,6 +333,11 @@ asks for every status. `estigia sessions --limit 20` therefore walks the live ro
 --all --limit 20` walks the registry; a cursor issued under one is refused `sessions-cursor-mismatch` under
 the other. A `limit` above the maximum is `sessions-limit-too-large` from either door, and `--limit 0` is
 refused by the parser before anything is read.
+
+**The listing flags belong to the listing door.** `--all`, `--limit` and `--cursor` decide which rows a
+page holds, and `send` has no rows: given beside it they are refused `sessions-send-takes-no-listing-flag`
+before the message is written, and the refusal says the same call without the flag delivers. The
+`sessions` position is where they parse; after `send` the parser refuses them as unexpected arguments.
 
 **What each door prints.** `list_sessions` answers the page's JSON. `estigia sessions --json` with a page
 flag prints the same bytes, the compact JSON the tool's caller sees; without `--json` it prints each row in
