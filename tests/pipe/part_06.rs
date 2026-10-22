@@ -3186,6 +3186,18 @@ fn a_sessions_send_refuses_every_listing_flag_before_it_writes() {
         "two listing flags wrote the message anyway"
     );
 
+    let (said, stderr, ok) =
+        pi_session_run(&rig, &["sessions", "send", &recipient, "wake up", "--all"]);
+    assert!(
+        !ok,
+        "a listing flag after `send` was accepted: {said}{stderr}"
+    );
+    assert_eq!(
+        waiting(&rig),
+        0,
+        "a trailing listing flag wrote the message"
+    );
+
     let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "send", &recipient, "wake up"]);
     assert!(
         ok,
