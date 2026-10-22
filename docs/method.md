@@ -1,124 +1,93 @@
 # The method
 
-**Status: draft.** This document states Estigia's own method — the principles a run works by, what
-each one prevents, and what holds it — and it decides no behaviour. The contract an agent reads is
-[`skill/SKILL.md`](../skill/SKILL.md); where the two disagree, the skill is what an agent follows
-and this document is the one that is wrong.
+**Status: draft.** This document states the method Estigia means an agent to work by, and it decides
+no behaviour. The contract an agent reads today is [`skill/SKILL.md`](../skill/SKILL.md); where the
+two disagree, the skill is what an agent follows and this document is the one that is wrong.
 
-The method grew out of gentle-ai v4's ODD workflow and its receipt-driven review, which
-[`parity.md`](parity.md) records as adopted with declared divergences. Read from the other side,
-those divergences are the method: the parts Estigia keeps where a literal port would have inverted
-it. This document states them as principles first and places the inherited sequence beneath them.
+## The premise: the harness carries the workflow, so the agent need not
 
-## The principles
+Estigia does not ask an agent to follow a workflow; it holds the tools. That is what lets the method
+be light. A rule the harness refuses to let anyone break does not have to be remembered: the agent
+meets it at the moment it applies, as a refusal whose `action` says what to do next, or as the
+`next` step `review_status` answers. A rule written into always-loaded text costs context on every
+turn, and is still only as good as the agent's attention.
 
-Each principle names what it prevents and who holds it. **Held by the harness** means a write that
-breaks it is refused whatever the run intended. **Held by the run** means nothing refuses it, and
-the gap is the run's discipline and the reviewer's attention — [`honesty.md`](honesty.md) is where
-such a gap is measured.
+So the method has two halves. **The flow** is the little an agent carries. **The harness** carries
+everything else, and the agent learns each piece of it only when it crosses it.
 
-### 1. A claim is the only authority to write
+## The flow
 
-A run writes to a repository only under a live claim on the issue the work belongs to, and the local
-store (`~/.estigia/state.db`) is the only record of who holds what. A label, an assignee, a tracker
-comment or an observed worktree is a projection of a claim, never the claim.
+An agent working an issue carries six steps and three rules.
 
-- **Prevents:** two runs building the same issue, and a stale signal read as ownership.
-- **Held by the harness:** the tool gate re-verifies the claim at the first write it observes and at
-  every irreversible boundary; the `pre-push` hook refuses a push no live claim authorises, whoever
-  typed it.
+1. **Claim.** `claim` the issue, with `transition_to` when it moves. Nothing is written before it.
+2. **Reproduce.** A test that fails against the code as it stands, for the reason the defect exists.
+   Work with no deterministic test says so instead.
+3. **Build** in the worktree the claim gave. Work of two or more meaningful steps records its tasks
+   with `task` first; small work does not.
+4. **Publish** with `publish_review`, asking for `with_review`.
+5. **Follow `next`.** Do what `review_status` answers until it stops.
+6. **Deliver and release.** Merge at the reviewed head when authorised, then `release` with the
+   evidence.
 
-### 2. A verdict authorises exactly the bytes it was computed over
+The three rules:
 
-A review is computed over a frozen target — base through head plus the uncommitted worktree — whose
-digest is the receipt. A push, a moved base or an edited file invalidates the verdict; reasoning that
-the change "probably" still applies does not earn it back.
-[`protocols/rdd.md`](../skill/protocols/rdd.md) owns the rule.
+- **A refusal is an instruction.** Do what its `action` says; do not retry the same call unchanged.
+- **Report only what was read back.** Never the state a write should have produced.
+- **An unreadable answer is not an answer.** A failed read is neither permission nor a stand-down:
+  report it and retry.
 
-- **Prevents:** a review of one tree released as the approval of another.
-- **Held by the harness:** `release_ci` compares the supplied receipt with the recorded one and with
-  the digest re-derived from the clean target, refusing a difference as `release-target-mismatch`.
-- **Held by the run:** the post-apply and pre-commit comparisons.
+## What the agent does not carry
 
-### 3. Delivery is gated, not advised
+Each of these is a rule the method depends on and the agent never has to hold in mind, because the
+harness refuses a call that breaks it.
 
-A pull request is marked ready and merged only over a computed `approved` verdict bound to its exact
-head and base. No judge records a verdict that releases; the verdict is computed from the recorded
-findings.
-
-- **Prevents:** an approval that is informational, which is an approval nothing waits for.
-- **Held by the harness:** the `pre-push` hook, the `gh pr create` and `gh pr merge` boundaries, and
-  `release_ci`. A spent correction budget stops at a person's `estigia recover`, which an agent's
-  shell line cannot run.
-
-### 4. A defect is reproduced before it is fixed
-
-A fix starts with a test that fails against the code as it stands, for the reason the defect exists.
-If turning the fix off leaves the suite green, the fix is not tested, and that is a finding.
-
-- **Prevents:** a fix whose test would pass without it, which measures nothing and is believed.
-- **Held by the run.** The shipped skill states test-first as the default; the stronger form — the
-  test fails *for the defect's reason*, and goes red again with the fix removed — is stated only in
-  [`AGENTS.md`](../AGENTS.md) today, for this repository's own work.
-
-### 5. Report only what was read back
-
-A state is reported after it was read back, never inferred from the write that should have produced
-it. An unreadable tracker, a failed read or an unplaceable repository is not an answer: it is
-neither permission to proceed nor a reason to stand down, and it is reported and retried.
-
-- **Prevents:** an outage read as clearance, and the nearest named state reported in place of the
-  real one.
-- **Held by the harness** where the transport performs the readback; **by the run** wherever it
-  reports a state in prose.
-
-### 6. What is not measured is said
-
-A gap that was found and not closed is written down with the measurement that found it, and a claim
-in a document is only as good as what holds it. A document describing the previous behaviour is
-worse than none, so behaviour and its description change together.
-
-- **Prevents:** a confident document that is wrong, which is believed longer than a missing one.
-- **Held by the harness** for counts: `tests/honesty.rs` fails when a count a document claims drifts
-  from the code. **Held by review** for everything else.
-
-### 7. A rule lives in one place
-
-When two places hold one rule, the fix is to remove a copy rather than to add a check that keeps
-them aligned. The skill's references each own their subject once; the runtime directive points at
-the skill rather than restating it.
-
-- **Prevents:** a rule that disagrees with itself, and the round spent finding which copy is right.
-- **Held by the run and by review.**
-
-## The sequence
-
-The work proceeds in seven steps, inherited from gentle-ai v4's ODD and stated as rules in
-[`skill/SKILL.md`](../skill/SKILL.md). Each step is here for the principles it serves.
-
-| Step | What it does | Serves |
+| Rule | Held by | How the agent meets it |
 |---|---|---|
-| Authorize | read-only work stays read-only; anything else is claimed first | 1 |
-| Explore | in proportion to the request | — |
-| Resolve uncertainty | at most one product question and one challenge to a premise | — |
-| Classify | two or more meaningful steps is substantial; fewer is small work | 7 |
-| Track | a substantial change records its task checklist in the store, under the claim, before the first write | 1, 5 |
-| Implement | one work-unit commit per task, test-first | 4 |
-| Publish and review | freeze the target, compute the verdict over its receipt, release CI | 2, 3 |
-| Close | deliver at the reviewed head, read the delivery back, record evidence and spend, release the claim | 3, 5, 6 |
+| A claim is the only authority to write | the tool gate and the `pre-push` hook | a refused write or push naming the claim |
+| A verdict authorises exactly the bytes it was computed over | the receipt digest; `release_ci` | `release-target-mismatch`, then a republish |
+| Delivery waits on a computed `approved` verdict | the `gh pr create` and `gh pr merge` boundaries; `release_ci` | `review_status` does not offer the next step |
+| A lineage gets a bounded number of corrections | `publish_review` | `correction-already-spent`, then `escalate_review` |
+| A moved head or base invalidates the verdict | `review_status`, comparing the pull request with the receipt | `pull-request-moved`, then `publish_review` |
+| An escalated review continues only through a person | `estigia recover`, which an agent's shell line cannot run | the stop `review_status` reports |
 
-Two rows differ from the inherited steps. **Publish and review** is its own step because the
-publication, not a commit, is the review candidate. **Close** is concrete here where the inherited
-step names only the word: closing is the delivery read back, the evidence recorded with the run-id,
-and `release`, which puts down the checkout this run created.
+[`protocols/rdd.md`](../skill/protocols/rdd.md), [`policies/blind-judges.md`](../skill/policies/blind-judges.md)
+and the binding's references own the detail of each, and an agent loads one only when its condition
+arises.
+
+## The test for a sentence in the flow
+
+A sentence belongs in the always-loaded flow only when both hold:
+
+- **the harness cannot hold it** — no refusal, readback or `next` step enforces it; and
+- **the agent needs it before anything could tell it** — by the time a refusal arrived, it would be
+  too late or there would be no refusal at all.
+
+Anything else goes to the harness, to a refusal's `action`, or to a reference loaded on its
+condition. The step *Reproduce* passes the test: nothing refuses a fix without a failing test. The
+claim's authority does not: the gate refuses the write, so the flow names `claim` as a step and
+leaves the rule to the gate.
+
+The size of what is always loaded is held by [`tests/instruction_ceiling.rs`](../tests/instruction_ceiling.rs);
+a lighter flow is measured there, as a ceiling moved down.
+
+## Where it came from
+
+The sequence grew out of gentle-ai v4's ODD workflow and its receipt-driven review, which
+[`parity.md`](parity.md) records as adopted with declared divergences. ODD's first four steps —
+authorize, explore, resolve uncertainty, classify — are judgment an agent already exercises, and the
+flow keeps only the classification that decides whether tasks are tracked. What Estigia adds is the
+half the agent does not carry: the claim, the receipt and the gated delivery are where ODD's text
+became Estigia's refusals.
 
 ## What this draft leaves open
 
+- **The skill is not yet this flow.** `skill/SKILL.md` still carries the decision gates, both roles
+  and the delivery rules as always-loaded text. Moving it to the flow above, sentence by sentence
+  through the test, is the change this draft prepares.
+- **The analyst role.** The flow covers working an issue; whether filing one is a second flow of the
+  same size, or a reference loaded on request, is not decided.
 - **The name.** The method is still referred to by the inherited names, ODD and RDD, in the skill,
-  the tools and the settings that retired them. Renaming is a contract change — an installed
-  `protocols/rdd.md` must be retracted the way the retired SDD files were — and is not made here.
-- **Principle 4 in the skill.** The stronger form of test-first is not yet shipped to other
-  people's agents.
+  the tools and the retired settings. Renaming is a contract change — an installed
+  `protocols/rdd.md` must be retracted the way the retired SDD files were.
 - **[`parity.md`](parity.md)'s framing.** It still reads gentle-ai as the target Estigia measures
-  against. Once this method is settled, that document answers where each part came from and what a
-  later gentle-ai release changes, not whether Estigia is at parity.
+  against; once the method is settled, it answers where each part came from instead.
