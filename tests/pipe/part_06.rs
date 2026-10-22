@@ -2915,6 +2915,15 @@ fn the_cli_walks_a_bounded_session_registry_a_page_at_a_time_without_omissions_o
     assert_eq!(listed["all"], false, "{listed}");
     let rows = listed["sessions"].as_array().expect("a list").clone();
     assert_eq!(rows.len(), 5, "{rows:?}");
+    let mut listed_ids: Vec<String> = rows
+        .iter()
+        .map(|row| row["run_id"].as_str().expect("a run id").to_owned())
+        .collect();
+    listed_ids.sort();
+    assert_eq!(
+        listed_ids, registered,
+        "the unbounded list is not the registry it was taken from"
+    );
 
     let (legacy, stderr, ok) = pi_session_run(&rig, &["sessions"]);
     assert!(ok, "{legacy}{stderr}");
@@ -3103,6 +3112,15 @@ fn a_bounded_session_call_keeps_each_refusal_the_page_answers() {
     assert_eq!(
         page["matched"], 3,
         "`--all` did not ask for every status: {page}"
+    );
+
+    let idle = tracker_rig();
+    let (said, stderr, ok) = pi_session_run(&idle, &["sessions", "--limit", "5"]);
+    assert!(ok, "{said}{stderr}");
+    assert_eq!(
+        said.trim(),
+        "0 of 0 row(s) on this page; nothing more remains",
+        "an empty page said something else"
     );
 }
 
