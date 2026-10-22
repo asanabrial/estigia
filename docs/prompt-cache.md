@@ -35,8 +35,11 @@ four different lifetimes:
 | The uncommitted-work paragraph, naming each checkout and how many files it holds | 945, with five checkouts and their full paths | **any file is edited in any checkout of the repository** |
 
 The four parts are separated by blank lines, which are the remaining six bytes: 10 + 126 + 141 + 945 + 6
-= 1,228. A fifth part appears when the build and the checkout disagree — with the binary one commit
-behind, the section was 1,797 bytes, the extra 567 saying the gate is not established as current.
+= 1,228. A fifth part appears when the build and the checkout disagree. Measured with the binary built
+at `c6cdb8b0` and the checkout at `e4be70e1`, one commit ahead of it, the same command with the same
+scratch `HOME` and session id answered **1,797 bytes in five parts**: the other four byte-identical, the
+new one 567 bytes saying the gate is not established as current, plus its 2-byte separator — 1,228 +
+569.
 
 The last row is the one worth reading twice. It is an inventory of other checkouts, none of which the
 running session is working on, and it changes on the most frequent event there is: **945 of the 1,228
