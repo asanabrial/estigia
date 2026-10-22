@@ -7550,10 +7550,15 @@ mod handoff {
                 &self.labels,
                 &self.log,
                 || {
-                    run_tool(
-                        "handoff",
-                        &json!({ "issue": 723, "to": "opencode", "run_id": SENDER }),
-                        Ok(&self.context()),
+                    crate::transport::window::with_mode(
+                        crate::transport::window::Mode::Open,
+                        || {
+                            run_tool(
+                                "handoff",
+                                &json!({ "issue": 723, "to": "opencode", "run_id": SENDER }),
+                                Ok(&self.context()),
+                            )
+                        },
                     )
                 },
             )
