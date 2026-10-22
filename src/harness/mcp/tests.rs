@@ -7345,13 +7345,14 @@ fn the_ensure_states_description_names_the_deferred_answer() {
         .find(|tool| tool.operation == "ensure-states")
         .expect("ensure_states is a tool");
     assert!(
-        tool.description.contains("deferred"),
+        tool.description
+            .contains("closed it answers `deferred` and writes nothing"),
         "`ensure_states` answers `deferred` while the git operation window is closed and its \
-         description never says so, so a caller reads that as the whole answer: {}",
+         description does not say so, so a caller reads that as the whole answer: {}",
         tool.description
     );
     assert!(
-        tool.description.contains("flush"),
+        tool.description.contains("creates the labels at the flush"),
         "the deferred answer leaves a caller with no idea where the labels then come from: {}",
         tool.description
     );
