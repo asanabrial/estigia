@@ -16,15 +16,16 @@ Claude or OpenCode session receives at its own start, only the delivery differs.
 
 ## Measured
 
-Run on 2026-10-22, this checkout's `estigia` binary, a scratch `HOME` so the real store was untouched:
+Run on 2026-10-22 with this checkout's `estigia` binary built at its own head and a scratch `HOME`, so
+the real store was untouched. The command is the extension's own, `--wake poll` included:
 
 ```
-HOME=$(mktemp -d) estigia session start --session-id probe-a --runtime pi
+HOME=$(mktemp -d) estigia session start --session-id probe-a --runtime pi --wake poll
 ```
 
 1,228 bytes, and 1,228 bytes again for a second probe: the section's *size* is stable while its
-*content* is not. The two answers differ on one line — the run id — and the three parts it carries have
-three different lifetimes:
+*content* is not. The two answers differ on one line — the run id — and the four parts it carries have
+four different lifetimes:
 
 | Part | Bytes here | Changes when |
 |---|---|---|
@@ -32,6 +33,10 @@ three different lifetimes:
 | The "no contract is installed in …" sentence | 141 | the machine's setup changes |
 | The run-id line: which issue the run holds, and whether the gate is armed | 126 | a claim, a renewal, a transition, or a session start |
 | The uncommitted-work paragraph, naming each checkout and how many files it holds | 945, with five checkouts and their full paths | **any file is edited in any checkout of the repository** |
+
+The four parts are separated by blank lines, which are the remaining six bytes: 10 + 126 + 141 + 945 + 6
+= 1,228. A fifth part appears when the build and the checkout disagree — with the binary one commit
+behind, the section was 1,797 bytes, the extra 567 saying the gate is not established as current.
 
 The last row is the one worth reading twice. It is an inventory of other checkouts, none of which the
 running session is working on, and it changes on the most frequent event there is: **945 of the 1,228

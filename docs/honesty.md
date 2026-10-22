@@ -10264,14 +10264,13 @@ does not measure:
   message, and that pi-ai folds it into the leading prompt for most providers, comes from reading
   Pi's source; no live session was run against a provider's cache.
 - **The uncommitted-work paragraph is the section's largest and most volatile part.** Measured on
-  2026-10-22 with `HOME=$(mktemp -d) estigia session start --session-id probe-a --runtime pi` against
-  this checkout's binary: 1,228 bytes, of which **945** are the paragraph naming five checkouts no run
-  holds and the files each carries, 141 the "no contract is installed" sentence, 126 the run-id line,
-  10 the heading. A second probe answered the same size and differed on the run-id line alone, so the
-  size is stable while the content is not. What this does not measure: any provider's cache — the
-  figures are bytes, not hits — and no session was run with a live claim, so the claim line's own
-  length is unmeasured. [`prompt-cache.md`](prompt-cache.md) carries the table and what a placement
-  change would have to answer.
+  2026-10-22 with `estigia session start --session-id probe-a --runtime pi --wake poll` under a scratch
+  `HOME`, against a binary built at the checkout's own head: 1,228 bytes, of which **945** are the
+  paragraph naming five checkouts no run holds and the files each carries, 141 the "no contract is
+  installed" sentence, 126 the run-id line, 10 the heading and 6 the blank lines between them. What
+  this does not measure: any provider's cache — the figures are bytes, not hits — and no session was
+  run with a live claim, so the claim line's own length is unmeasured.
+  [`prompt-cache.md`](prompt-cache.md) carries the table and its conditional fifth part.
 
 ## What `release_ci` says about CI
 
