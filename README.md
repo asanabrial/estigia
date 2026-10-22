@@ -15,7 +15,7 @@
   <a href="https://github.com/asanabrial/estigia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/asanabrial/estigia/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" /></a>
   <a href="https://www.rust-lang.org"><img alt="Rust 1.97+" src="https://img.shields.io/badge/rust-1.97%2B-orange.svg" /></a>
-  <a href="#the-tools"><img alt="MCP: 35 tools" src="https://img.shields.io/badge/MCP-35%20tools-purple.svg" /></a>
+  <a href="#the-tools"><img alt="MCP: 36 tools" src="https://img.shields.io/badge/MCP-36%20tools-purple.svg" /></a>
   <a href="#install"><img alt="Linux, macOS, Windows" src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg" /></a>
   <a href="https://glama.ai/mcp/servers/asanabrial/estigia"><img alt="Glama MCP server" src="https://glama.ai/mcp/servers/asanabrial/estigia/badges/score.svg" /></a>
 </p>
@@ -327,7 +327,7 @@ git
        └─ refuses a push no live claim authorises, whoever typed it
 ```
 
-Two halves, and both are needed. The **tools** are how an agent does workflow work at all — thirty-five
+Two halves, and both are needed. The **tools** are how an agent does workflow work at all — thirty-six
 operations with schemas, instead of composing `gh` by hand and hoping. A name the contract requires
 and no tool performs is declared with the reason it is not exposed rather than advertised, so the
 surface never offers a call nothing answers. The one force-push the
@@ -433,7 +433,7 @@ being wrong costs a refused write, never a damaged issue. A test enforces that s
 
 ## The tools
 
-Thirty-five operations, table-driven. Thirty-three each map to one the contract requires the binding to provide;
+Thirty-six operations, table-driven. Thirty-four each map to one the contract requires the binding to provide;
 `send_message` and `list_sessions` are answered from the local store and are not binding operations.
 `tools/list` carries a schema and a `readOnlyHint`, so an agent can tell a read from a write without
 reading this source:
@@ -449,12 +449,13 @@ read   target           (base, recorded_base, worktree, native_start, manifest)
 read   tasks            (issue)   # the ODD checklist, from the local store
 read   list_sessions    ([status, runtime, run, session_id, repo_dir, limit, cursor])   # bounded page; no options answers the entries `estigia sessions --json` prints
 WRITE  claim            (issue, run_id, horizon[, takeover, target_operation, force, reason_file])
+WRITE  handoff          (issue, run_id, to)   # records it locally; projects `dev:<to>` with read-back
 WRITE  heartbeat        (issue, run_id, expect_state, body_file)
 WRITE  transition       (issue, to, run_id)
 WRITE  comment          (issue, body_file)
 WRITE  blocked_until    (issue, run_id, until_issue, until_state)   # local store only: no tracker write
 WRITE  task             (issue, run_id, id, text, route)   # local store only: no tracker write
-WRITE  send_message     (run_id, to, text)   # local store only; the person is asked first, over MCP elicitation
+WRITE  send_message     (run_id, to, repo_dir, text)   # local store only; the person is asked first, over MCP elicitation
 WRITE  release          (issue, run_id)
 WRITE  ensure_states    ()
 WRITE  flush            ([read_only])   # sends what a closed git operation window queued, oldest first; refuses while it is closed
@@ -476,7 +477,7 @@ WRITE  record_spend     (issue, run_id, phase, epoch, pr, head, base, digest, co
 WRITE  release_ci       (issue, run_id, epoch, pr, head, base, digest)
 ```
 
-Thirty-five tools. The contract names seventeen operations every binding must map. The operations the
+Thirty-six tools. The contract names seventeen operations every binding must map. The operations the
 tools absorbed keep their capability under the surviving name: `claim` performs `reclaim` through
 `takeover`, `list_state` answers identities through `identities`, `review_status` carries the
 publication lane and the correction count, `review_read` reads what six tools used to, `review_tier`

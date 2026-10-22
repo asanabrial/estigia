@@ -12,6 +12,7 @@ use std::collections::BTreeSet;
 use super::{NamedRun, ToolFailure, address};
 use crate::cli::sessions::Listed;
 use crate::harness::{GateContext, mailbox, session};
+use crate::identity::Identity;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use crate::transport::store;
 
@@ -132,12 +133,75 @@ fn refused(refusal: Refusal) -> ToolFailure {
     ToolFailure::Refused(Box::new(refusal))
 }
 
+/// Every `flow dev <n>` instruction a message carries.
+///
+/// Read from the words, because the instruction is prose the recipient follows
+/// rather than a field the sender declares. A phrase quoted as something *not*
+/// to run reads the same here; the refusal is what the person answers.
+fn flow_issued(text: &str) -> Vec<u64> {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let mut found: Vec<u64> = Vec::new();
+    for window in words.windows(3) {
+        let verb = window[0].trim_start_matches('/');
+        if !verb.eq_ignore_ascii_case("flow") || !window[1].eq_ignore_ascii_case("dev") {
+            continue;
+        }
+        let digits = window[2].trim_start_matches('#');
+        let end = digits
+            .find(|character: char| !character.is_ascii_digit())
+            .unwrap_or(digits.len());
+        if let Ok(number) = digits[..end].parse::<u64>()
+            && !found.contains(&number)
+        {
+            found.push(number);
+        }
+    }
+    found
+}
+
+/// The refusal a message that sends a session after another issue gets.
+///
+/// A run holds one issue; telling it to work a second would leave two runs
+/// believing they own the same session's work. Nothing is recorded, so the
+/// sender can address the session that should take it instead.
+pub(crate) fn flow_conflict(recipient: &Listed, text: &str) -> Option<Refusal> {
+    let held = recipient.issue.clone()?;
+    let conflicting: Vec<u64> = flow_issued(text)
+        .into_iter()
+        .filter(|number| !matches!(&held, Identity::Number(held) if held == number))
+        .collect();
+    if conflicting.is_empty() {
+        return None;
+    }
+    let named = conflicting
+        .iter()
+        .map(|number| format!("#{number}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Some(Refusal::not_started(
+        "message-recipient-holds-another-issue",
+        format!(
+            "{} holds {held} and this message tells it `flow dev` {named}; nothing was sent, \
+             because a session that holds one issue cannot be told to work another",
+            recipient.line()
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            format!(
+                "a session holding {named}, or that issue released from {} before this one is \
+                 handed over",
+                recipient.spoken()
+            ),
+        ),
+    ))
+}
+
 fn malformed(detail: String) -> ToolFailure {
     ToolFailure::Malformed(detail)
 }
 
-fn resolved(context: &GateContext, said: &str) -> Result<Listed, Refusal> {
-    let narrowed = address::resolve(&context.state_root, said)?;
+fn resolved(context: &GateContext, said: &str, repo_dir: Option<&str>) -> Result<Listed, Refusal> {
+    let narrowed = address::resolve_in(&context.state_root, said, repo_dir)?;
     address::one(narrowed, said)
 }
 
@@ -213,7 +277,7 @@ fn wake_word(wake: Option<&str>) -> &'static str {
 }
 
 fn row_json(row: &Listed) -> Value {
-    json!({
+    let mut answer = json!({
         "name": row.spoken(),
         "run_id": row.run_id,
         "runtime": row.runtime,
@@ -223,8 +287,17 @@ fn row_json(row: &Listed) -> Value {
         "state": row.state,
         "silent_for": row.silent_for,
         "waiting": row.waiting,
+        "session_id": row.session_id,
+        "wake": row.wake,
         "build": row.build.as_deref().filter(|build| *build != crate::build_info::VERSION),
-    })
+    });
+    if let Some(pane) = &row.pane {
+        answer["pane"] = json!(pane);
+    }
+    if !row.handoffs.is_empty() {
+        answer["handoffs"] = json!(row.handoffs);
+    }
+    answer
 }
 
 pub(super) fn send_message(
@@ -239,8 +312,25 @@ pub(super) fn send_message(
         .and_then(Value::as_str)
         .ok_or_else(|| malformed("`text` is a string; send_message needs it".to_owned()))?
         .trim_end();
+    let repo_dir = match arguments.get("repo_dir") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(dir)) if !dir.trim().is_empty() => Some(dir.as_str()),
+        Some(_) => {
+            return Err(malformed(
+                "`repo_dir` is the directory the recipient must be running in, as a path"
+                    .to_owned(),
+            ));
+        }
+    };
     let recipient = match (arguments.get("reply_to"), arguments.get("to")) {
         (Some(reply), None) => {
+            if repo_dir.is_some() {
+                return Err(malformed(
+                    "`repo_dir` narrows `to`; a reply is addressed to the sender of the message \
+                     being answered, which the caller does not choose"
+                        .to_owned(),
+                ));
+            }
             let id = reply.as_i64().ok_or_else(|| {
                 malformed("`reply_to` is the number of the message being answered".to_owned())
             })?;
@@ -251,7 +341,7 @@ pub(super) fn send_message(
                 .as_str()
                 .ok_or_else(|| malformed("`to` is an address string".to_owned()))?;
             let said = address::spoken(to);
-            resolved(context, &said).map_err(refused)?
+            resolved(context, &said, repo_dir).map_err(refused)?
         }
         (Some(_), Some(_)) => {
             return Err(malformed(
@@ -268,6 +358,9 @@ pub(super) fn send_message(
         }
     };
     mailbox::admissible(&context.state_root, &recipient.run_id, text).map_err(refused)?;
+    if let Some(conflict) = flow_conflict(&recipient, text) {
+        return Err(refused(conflict));
+    }
 
     let Some(consent) = consent else {
         return Err(refused(needs_a_person(sender)));

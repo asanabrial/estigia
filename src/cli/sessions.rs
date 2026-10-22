@@ -17,6 +17,27 @@ pub(crate) const CURSOR_TTL_SECONDS: u64 = 15 * 60;
 pub(crate) const MAX_CURSOR_BYTES: usize = 4096;
 pub(crate) const MAX_SELECTOR_BYTES: usize = 256;
 
+/// An issue handed to a runtime, as the store recorded it and as a session of
+/// that runtime in that repository is shown it.
+#[derive(Serialize, Clone, PartialEq, Eq)]
+pub(crate) struct Handoff {
+    pub(crate) issue: u64,
+    pub(crate) from_run_id: Option<String>,
+    pub(crate) at: String,
+    pub(crate) projection: String,
+}
+
+impl Handoff {
+    fn of(row: &crate::transport::store::HandoffRow) -> Self {
+        Self {
+            issue: row.issue,
+            from_run_id: row.from_run_id.clone(),
+            at: row.created_at.clone(),
+            projection: row.projection.clone(),
+        }
+    }
+}
+
 #[derive(Serialize, Clone)]
 pub(crate) struct Listed {
     pub(crate) run_id: String,
@@ -36,6 +57,10 @@ pub(crate) struct Listed {
     pub(crate) undelivered_sent: u64,
     pub(crate) build: Option<String>,
     pub(crate) wake: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) pane: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) handoffs: Vec<Handoff>,
 }
 
 impl Listed {
@@ -413,6 +438,8 @@ fn registry_and_pointers(
                 name: row.name,
                 build: row.build,
                 wake: row.wake,
+                pane: row.pane,
+                handoffs: Vec::new(),
             },
         ));
     }
@@ -445,6 +472,8 @@ fn registry_and_pointers(
             name: None,
             build: None,
             wake: None,
+            pane: None,
+            handoffs: Vec::new(),
         });
     }
     (registry, unregistered)
@@ -473,8 +502,9 @@ pub(super) fn unreadable(detail: &str) -> Refusal {
 }
 
 type Mail = std::collections::BTreeMap<String, u64>;
+type Handoffs = Vec<store::HandoffRow>;
 
-fn read(root: &Path) -> Result<(Vec<SessionRow>, Mail, Mail), Refusal> {
+fn read(root: &Path) -> Result<(Vec<SessionRow>, Mail, Mail, Handoffs), Refusal> {
     match store::open_for_read(&store::beside(root)).map_err(|f| unreadable(&f.detail()))? {
         Some(opened) => Ok((
             opened.sessions().map_err(|f| unreadable(&f.detail()))?,
@@ -484,22 +514,38 @@ fn read(root: &Path) -> Result<(Vec<SessionRow>, Mail, Mail), Refusal> {
             opened
                 .messages_undelivered_from()
                 .map_err(|f| unreadable(&f.detail()))?,
+            opened.handoffs().map_err(|f| unreadable(&f.detail()))?,
         )),
         None => Ok(Default::default()),
     }
 }
 
-fn mail(entries: &mut [Listed], waiting: &Mail, undelivered: &Mail) {
+fn fill(entry: &mut Listed, waiting: &Mail, undelivered: &Mail, handoffs: &Handoffs) {
+    entry.waiting = waiting.get(&entry.run_id).copied().unwrap_or_default();
+    entry.undelivered_sent = undelivered.get(&entry.run_id).copied().unwrap_or_default();
+    entry.handoffs = match entry.repo_dir.as_deref() {
+        Some(dir) => handoffs
+            .iter()
+            .filter(|row| {
+                row.runtime == entry.runtime
+                    && crate::paths::same_directory(Path::new(&row.repo_dir), Path::new(dir))
+            })
+            .map(Handoff::of)
+            .collect(),
+        None => Vec::new(),
+    };
+}
+
+fn mail(entries: &mut [Listed], waiting: &Mail, undelivered: &Mail, handoffs: &Handoffs) {
     for entry in entries {
-        entry.waiting = waiting.get(&entry.run_id).copied().unwrap_or_default();
-        entry.undelivered_sent = undelivered.get(&entry.run_id).copied().unwrap_or_default();
+        fill(entry, waiting, undelivered, handoffs);
     }
 }
 
 pub(crate) fn entries(root: &Path) -> Result<Vec<Listed>, Refusal> {
-    let (rows, waiting, undelivered) = read(root)?;
+    let (rows, waiting, undelivered, handoffs) = read(root)?;
     let mut entries = listed(rows, session::holdings(root), session::now_seconds());
-    mail(&mut entries, &waiting, &undelivered);
+    mail(&mut entries, &waiting, &undelivered, &handoffs);
     Ok(entries)
 }
 
@@ -586,13 +632,12 @@ pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Resu
         None => (now, None),
     };
 
-    let (rows, waiting, undelivered) = read(root)?;
+    let (rows, waiting, undelivered, handoffs) = read(root)?;
     let (mut snapshot, _) = registry_and_pointers(rows, session::holdings(root), Some(taken_at));
     snapshot.retain(|(started_at, _)| *started_at <= taken_at);
     snapshot.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.run_id.cmp(&b.1.run_id)));
     for (_, entry) in &mut snapshot {
-        entry.waiting = waiting.get(&entry.run_id).copied().unwrap_or_default();
-        entry.undelivered_sent = undelivered.get(&entry.run_id).copied().unwrap_or_default();
+        fill(entry, &waiting, &undelivered, &handoffs);
     }
 
     let matching: Vec<&(u64, Listed)> = snapshot
@@ -806,7 +851,11 @@ pub(super) fn send(
     let said = crate::harness::mcp::address::spoken(recipient);
     let narrowed = crate::harness::mcp::address::resolve(&root, &said)?;
     let row = crate::harness::mcp::address::one(narrowed, &said)?;
-    let receipt = mailbox::send(&root, sender, &row.run_id, body.trim_end())?;
+    let body = body.trim_end();
+    if let Some(conflict) = crate::harness::mcp::messaging::flow_conflict(&row, body) {
+        return Err(conflict);
+    }
+    let receipt = mailbox::send(&root, sender, &row.run_id, body)?;
     if json {
         super::print_json(&serde_json::json!({
             "message": receipt.id,

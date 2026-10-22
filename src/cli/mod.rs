@@ -364,6 +364,8 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             cli.json,
         ),
 
+        Command::Handoff { issue, to, run_id } => handoff(issue, to, run_id, cli.json),
+
         Command::Recover {
             issue,
             epoch,
@@ -5120,6 +5122,40 @@ fn claim(
     say!("  writes from an agent Estigia does not gate are not seen — `estigia status`");
     say!("  says which agents it holds the tools for, and the push guard holds the push");
     say!("  whoever types it.");
+    Ok(())
+}
+
+/// Hands an issue to another runtime, recording it beside its label projection.
+fn handoff(issue: &str, to: &str, run_id: &str, json: bool) -> Result<(), Refusal> {
+    let number: u64 = issue
+        .trim()
+        .parse()
+        .map_err(|_| harness::issue_not_a_number(issue))?;
+    let result = tool(
+        "handoff",
+        &serde_json::json!({ "issue": number, "to": to, "run_id": run_id }),
+    )?;
+    let answer: serde_json::Value =
+        serde_json::from_str(&result).unwrap_or(serde_json::Value::String(result.clone()));
+    if json {
+        print_json(&answer);
+        return Ok(());
+    }
+    say!("{}", indented_for_a_person(result));
+    match answer
+        .get("projection")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+    {
+        "deferred" => say!(
+            "handed #{number} to {to}; the `dev:{to}` label is queued and lands when the git \
+             operation window opens and the queue is flushed"
+        ),
+        _ => say!(
+            "handed #{number} to {to}; the `dev:{to}` label was read back, and a session of that \
+             runtime in this repository sees the handoff at SessionStart"
+        ),
+    }
     Ok(())
 }
 

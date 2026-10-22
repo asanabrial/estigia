@@ -51,6 +51,7 @@ pub mod commands;
 pub mod dispatch;
 pub mod draft;
 pub mod generated;
+pub(crate) mod handoff;
 pub mod judges;
 pub mod linear;
 pub mod manifest;

@@ -377,6 +377,24 @@ pub enum Command {
         transition_to: Option<String>,
     },
 
+    /// Hand an issue to another runtime, and record who handed it over.
+    ///
+    /// Writes a row in this machine's store for that runtime's next session in this repository,
+    /// and projects `dev:<runtime>` on the issue with read-back through the outbox. A handoff is
+    /// a destination, never a claim: the recipient still claims the issue.
+    Handoff {
+        /// The issue number.
+        issue: String,
+
+        /// The runtime the issue is handed to, such as `opencode`.
+        #[arg(long)]
+        to: String,
+
+        /// This run's id, as `SessionStart` reported it.
+        #[arg(long, env = "ESTIGIA_RUN_ID", value_parser = present)]
+        run_id: String,
+    },
+
     /// Recover an escalated review, as a maintainer.
     ///
     /// A person's command: the gate refuses an agent's shell line for it. The named login must

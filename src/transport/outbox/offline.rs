@@ -28,6 +28,7 @@ pub(super) struct Rig {
     log: PathBuf,
     context: Context,
     script: String,
+    labels: Option<PathBuf>,
 }
 
 pub(super) fn rig() -> Rig {
@@ -67,7 +68,33 @@ pub(super) fn rig() -> Rig {
         log,
         context,
         script,
+        labels: None,
     }
+}
+
+/// A rig whose fake `gh` keeps one issue's labels across calls, so an edit can
+/// be read back. The handoff projection is exactly that read-write-read.
+pub(super) fn labelled_rig() -> Rig {
+    let mut rig = rig();
+    let labels = rig.directory.path().join("labels.json");
+    crate::paths::replace_atomically(&labels, "[\"status:in-progress\"]").expect("the labels");
+    rig.script = crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": "view 12 --json labels",
+            "labels": true,
+            "status": 0,
+        }),
+        crate::test_env::issue_view_answer(
+            12,
+            serde_json::json!({
+                "state": "OPEN",
+                "labels": [{ "name": "status:in-progress" }],
+                "comments": [],
+            }),
+        ),
+    ]);
+    rig.labels = Some(labels);
+    rig
 }
 
 pub(super) fn repo() -> Repo {
@@ -136,11 +163,21 @@ impl Rig {
     ) -> Result<serde_json::Value, Failure> {
         let flags: Vec<String> = flags.iter().map(|flag| (*flag).to_owned()).collect();
         let bin = crate::test_env::scripted_gh();
-        crate::test_env::with_logging_gh(bin.path(), &self.script, &self.log, || {
+        let call = || {
             crate::harness::operation_window::with_now_override(Some(clock), || {
                 dispatch(&self.context, operation, &flags, now)
             })
-        })
+        };
+        match &self.labels {
+            Some(labels) => crate::test_env::with_labelled_logging_gh(
+                bin.path(),
+                &self.script,
+                labels,
+                &self.log,
+                call,
+            ),
+            None => crate::test_env::with_logging_gh(bin.path(), &self.script, &self.log, call),
+        }
     }
 
     pub(super) fn closed(
@@ -740,3 +777,109 @@ fn a_branch_started_by_default_still_issues_develop_and_links() {
 
 mod aimed;
 mod engine;
+
+fn handoff_flags() -> Vec<&'static str> {
+    vec!["--issue", "12", "--to", "opencode", "--run-id", "claude-a"]
+}
+
+fn landed_labels(rig: &Rig) -> Vec<String> {
+    std::fs::read_to_string(rig.labels.as_ref().expect("a labelled rig"))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_handoff_while_open_projects_the_runtime_label_and_reads_it_back() {
+    let rig = labelled_rig();
+    let answer = rig
+        .open("handoff", &handoff_flags())
+        .expect("a handoff while open");
+
+    assert_eq!(answer["projection"], "landed", "{answer}");
+    assert_eq!(answer["to"], "opencode", "{answer}");
+    assert!(
+        rig.writes()
+            .iter()
+            .any(|line| line.contains("issue edit 12") && line.contains("--add-label dev:opencode")),
+        "the label was not projected: {:?}",
+        rig.writes()
+    );
+    assert!(
+        landed_labels(&rig)
+            .iter()
+            .any(|label| label == "dev:opencode"),
+        "the label did not land"
+    );
+    assert_eq!(rig.queue(), Vec::<(OutboxKind, u64)>::new());
+}
+
+#[test]
+fn a_handoff_while_closed_queues_the_projection_and_projects_nothing() {
+    let rig = labelled_rig();
+    let answer = rig
+        .closed("handoff", &handoff_flags())
+        .expect("a handoff while closed");
+
+    assert_eq!(answer["projection"], "deferred", "{answer}");
+    assert!(answer["queued"].as_u64().is_some(), "{answer}");
+    assert_eq!(rig.queue(), vec![(OutboxKind::Reconverge, 12)]);
+    assert_eq!(rig.writes(), Vec::<String>::new());
+}
+
+#[test]
+fn a_handoff_of_a_held_issue_is_refused_and_writes_nothing() {
+    let mut rig = labelled_rig();
+    rig.script = crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": "view 12 --json labels",
+            "labels": true,
+            "status": 0,
+        }),
+        crate::test_env::live_holder_issue("claude-a", 12, "in-progress"),
+    ]);
+    let failure = rig
+        .closed("handoff", &handoff_flags())
+        .expect_err("a held issue is not handed over");
+
+    assert_eq!(failure.envelope()["reason"], "handoff-issue-held");
+    assert_eq!(rig.writes(), Vec::<String>::new());
+    assert_eq!(rig.queue(), Vec::<(OutboxKind, u64)>::new());
+}
+
+#[test]
+fn a_handoff_of_an_issue_claimed_only_in_the_store_is_refused() {
+    let rig = labelled_rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim recorded in the store");
+    let queued = rig.queue();
+    let failure = rig
+        .closed("handoff", &handoff_flags())
+        .expect_err("the store's holder is a holder");
+
+    assert_eq!(failure.envelope()["reason"], "handoff-issue-held");
+    assert_eq!(failure.envelope()["holder"], "claude-a");
+    assert_eq!(rig.queue(), queued);
+}
+
+#[test]
+fn a_handoff_naming_an_unlabellable_runtime_writes_nothing() {
+    let rig = labelled_rig();
+    let failure = rig
+        .closed(
+            "handoff",
+            &[
+                "--issue",
+                "12",
+                "--to",
+                "OpenCode Two",
+                "--run-id",
+                "claude-a",
+            ],
+        )
+        .expect_err("a runtime a label cannot carry");
+
+    assert_eq!(failure.envelope()["reason"], "handoff-runtime-unreadable");
+    assert_eq!(rig.writes(), Vec::<String>::new());
+    assert_eq!(rig.queue(), Vec::<(OutboxKind, u64)>::new());
+}

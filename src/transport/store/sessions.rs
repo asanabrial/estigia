@@ -9,6 +9,7 @@ pub(crate) struct SessionSeen<'a> {
     pub(crate) session_id: &'a str,
     pub(crate) repo_dir: Option<&'a str>,
     pub(crate) wake: Option<&'a str>,
+    pub(crate) pane: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,6 +25,7 @@ pub(crate) struct SessionRow {
     pub(crate) name: Option<String>,
     pub(crate) build: Option<String>,
     pub(crate) wake: Option<String>,
+    pub(crate) pane: Option<String>,
 }
 
 fn seconds(value: i64) -> u64 {
@@ -57,8 +59,8 @@ impl Store {
             let name = seen.repo_dir.map(|dir| format!("{}-{ord}", basename(dir)));
             let written = self.connection().execute(
                 "INSERT INTO sessions (run_id, runtime, session_id, repo_dir, started_at, last_seen,
-                                       name, ord, build, wake)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, ?7, ?8, ?9)
+                                       name, ord, build, wake, pane)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT (run_id) DO UPDATE SET
                     runtime = excluded.runtime,
                     session_id = excluded.session_id,
@@ -66,6 +68,7 @@ impl Store {
                     last_seen = excluded.last_seen,
                     build = excluded.build,
                     wake = excluded.wake,
+                    pane = excluded.pane,
                     ended_at = NULL,
                     end_reason = NULL",
                 rusqlite::params![
@@ -77,7 +80,8 @@ impl Store {
                     name,
                     ord,
                     crate::build_info::VERSION,
-                    seen.wake
+                    seen.wake,
+                    seen.pane
                 ],
             );
             match written {
@@ -123,7 +127,8 @@ impl Store {
             .connection()
             .prepare(
                 "SELECT run_id, runtime, session_id, repo_dir, started_at, last_seen, ended_at,
-                        end_reason, name, build, wake FROM sessions ORDER BY last_seen DESC, run_id",
+                        end_reason, name, build, wake, pane FROM sessions
+                 ORDER BY last_seen DESC, run_id",
             )
             .map_err(unreadable("read the sessions"))?;
         statement
@@ -140,6 +145,7 @@ impl Store {
                     name: row.get(8)?,
                     build: row.get(9)?,
                     wake: row.get(10)?,
+                    pane: row.get(11)?,
                 })
             })
             .map_err(unreadable("read the sessions"))?

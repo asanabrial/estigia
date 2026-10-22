@@ -24,6 +24,7 @@ const UNAVAILABLE: &[&str] = &[
     "flush-detach-failed",
     "gate-input-not-json",
     "generated-reproduction-unavailable",
+    "handoff-runtime-unreadable",
     "home-not-resolvable",
     "home-unknown",
     "install-record-unreadable",
@@ -136,6 +137,7 @@ const STALE: &[&str] = &[
 ];
 const UNKNOWN: &[&str] = &[
     "ambiguous-write",
+    "handoff-row-unwritten",
     "push-guard-not-read-back",
     "push-guard-removal-not-read-back",
     "repository-readback-missing",
@@ -248,6 +250,7 @@ const REFUSED: &[&str] = &[
     "git-operation-window-denied",
     "goal-activity-body-unwritable",
     "goal-identity-missing",
+    "handoff-issue-held",
     "harness-not-installed",
     "heartbeat-body-invalid",
     "holder-not-stale",
@@ -311,6 +314,7 @@ const REFUSED: &[&str] = &[
     "message-no-live-session",
     "message-not-allowed",
     "message-recipient-ambiguous",
+    "message-recipient-holds-another-issue",
     "message-recipient-unknown",
     "message-reply-has-no-sender",
     "message-reply-sender-gone",

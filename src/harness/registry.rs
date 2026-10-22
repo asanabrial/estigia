@@ -23,9 +23,23 @@ pub(crate) fn record_start(
             session_id,
             repo_dir: repo_dir.to_str(),
             wake,
+            pane: ambient_pane().as_deref(),
         },
         now,
     );
+}
+
+/// The host pane the process registering the session was started in.
+///
+/// `HERDR_PANE_ID` is the identifier herdr exports to every process in a pane;
+/// it was read off a live `opencode` process inside herdr 0.9.3 and 0.9.5. A
+/// process started outside a pane carries none, and the row then says nothing
+/// rather than naming a pane nobody can reach.
+pub(crate) fn ambient_pane() -> Option<String> {
+    std::env::var("HERDR_PANE_ID")
+        .ok()
+        .map(|pane| pane.trim().to_owned())
+        .filter(|pane| !pane.is_empty())
 }
 
 /// Records how a host that is already running can be woken, without touching

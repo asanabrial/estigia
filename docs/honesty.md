@@ -2028,7 +2028,7 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 17,703 | file on disk |
+  | `skill/bindings/github.md` | 17,806 | file on disk |
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
@@ -10374,6 +10374,16 @@ measure:
   500) and the row shape. The baseline measurement — a real `list_sessions` call on 2026-10-18 returning 433
   sessions whose compact JSON was 141,698 UTF-8 bytes — is a response-size measurement, not a billed-token
   estimate.
+- **The pane is one environment variable, read once.** `HERDR_PANE_ID` was measured on 2026-10-22 inside herdr
+  0.9.3 and 0.9.5: the OpenCode processes in `w0:p1` and `wE:pA` carried it, and the value matched the pane ids
+  `herdr pane list` reported. One pipe test starts a session with the variable set and one without, and the
+  second asserts the field is absent. Not measured: a host that exports the same name for something else, a
+  Windows pane, or a pane id that is still the session's after the pane closes. The row records what the
+  registering process inherited, not a live host query, and it is a locator rather than a way in.
+- **No service URL is recorded for any runtime.** No adapter observes one. The OpenCode service seen on
+  2026-10-21 (`127.0.0.1:49374`) answered `GET /session` with HTML and `GET /api/session` with 401 to an
+  unauthenticated caller, so a recorded URL without the adapter's credential would not have been a way in.
+  The `session_id` the row carries is the addressable fact.
 
 ## The session mailbox
 
@@ -10446,6 +10456,22 @@ mail waiting; and Node tests that drive the generated Pi extension. What it does
   not authority; only the resolution of an issue number reads the store.
 - **A message is text from another session.** Delivery says so in its first lines; nothing stops a model from acting
   on it, and nothing here measures how the hosts' models treat it.
+- **The `flow dev` conflict rule reads the words of the message.** `send_message` and `estigia sessions send`
+  refuse a message whose text carries `flow dev <n>` while the recipient's pointer names another issue. The
+  detection is textual, so a sentence quoting the instruction as something *not* to run is refused as well, and
+  a differently spelled instruction (`/flow`, tabs inside it, a Linear key) is not detected at all. Both are
+  unit tests over the tool and the CLI; no live model was sent a conflicting instruction to see what it would
+  have done with it.
+- **The handoff's label read-back is against a stand-in `gh`, and the two halves share one store only in
+  production.** The store row, the `landed` and `deferred` answers, the projection and its two agreeing reads,
+  the queue-then-flush path, the held-issue refusal, `SessionStart` and `list_sessions` are each driven by unit
+  tests; the fake `gh` models the label edit in a file. No handoff was run against GitHub. The row is written by
+  the tool through `store::beside(state_root)` and the label by the transport through `store::store_path()`,
+  which are the same file in production and two scratch stores under `cargo test`; the explainability test seeds
+  the transport's store directly, so the suite does not cross that boundary the way the binary does.
+- **A handoff is never consumed, expired or read-stamped.** Every later session of that runtime in that
+  repository is told about it again; whether anybody took it is visible only from the tracker, through `claim`.
+  Nothing here measures a long-lived store's growth or a person's reaction to a stale line at `SessionStart`.
 
 ## The npm installer and the registries
 

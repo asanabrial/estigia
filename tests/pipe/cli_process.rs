@@ -384,6 +384,17 @@ fn every_command_that_prints_honours_the_global_json_flag() {
         vec!["uninstall", "--all", "--dry-run", "--json"],
         vec!["sync", "--json"],
         vec!["gate", "Write", "--input", "{}", "--json"],
+        // A runtime word no `dev:` label can carry, refused before any tracker
+        // read: the guard sees `--json` honoured on the half that prints nothing.
+        vec![
+            "handoff",
+            "7",
+            "--run-id",
+            "claude-nothing0",
+            "--to",
+            "Not A Runtime!",
+            "--json",
+        ],
         vec!["release", "--run-id", "claude-nothing0", "--json"],
         vec![
             "goal",
@@ -742,6 +753,7 @@ fn no_variable_the_crate_decides_on_escapes_the_fixture() {
         "CLAUDE_CONFIG_DIR",
         "DSH_HOME",
         "PI_CODING_AGENT_DIR",
+        "HERDR_PANE_ID",
     ];
     for name in &read {
         if ANSWERED.contains(&name.as_str())

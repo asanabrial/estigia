@@ -465,6 +465,26 @@ pub(crate) fn with_logging_gh<T>(
     )
 }
 
+/// [`with_logging_gh`] with the fake's label store pointed at `labels`, so a
+/// read after an `issue edit` answers what the edit did rather than the script.
+pub(crate) fn with_labelled_logging_gh<T>(
+    directory: &Path,
+    answers: &str,
+    labels: &Path,
+    log: &Path,
+    body: impl FnOnce() -> T,
+) -> T {
+    with_scripted_gh_window(
+        directory,
+        answers,
+        &[
+            ("ESTIGIA_FAKE_LABELS", labels.as_os_str().to_owned()),
+            ("ESTIGIA_FAKE_LOG", log.as_os_str().to_owned()),
+        ],
+        body,
+    )
+}
+
 /// [`with_scripted_gh`] with `ESTIGIA_FAKE_BODY_LOG` pointed at `body_log` for
 /// the same window, so the `--body-file` a write stages is readable after the
 /// write deletes it.

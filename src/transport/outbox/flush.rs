@@ -31,6 +31,7 @@ const WRITES_TO_GITHUB: &[&str] = &[
     "republish-review",
     "release-ci",
     "draft-pr",
+    "handoff",
 ];
 
 /// Whether `operation` writes to GitHub or publishes, so that a waiting queue
@@ -596,7 +597,16 @@ impl<'a> Engine<'a> {
     fn reconverge(&self, held: &mut Store, row: &OutboxRow) -> Result<Step, Failure> {
         self.begin(held, row)?;
         match self.project(row) {
-            Ok(()) => self.sent(held, row),
+            Ok(()) => {
+                if let Some(runtime) = row
+                    .payload
+                    .get(crate::transport::handoff::QUEUED_RUNTIME)
+                    .and_then(serde_json::Value::as_str)
+                {
+                    held.mark_handoff_landed(row.issue, runtime)?;
+                }
+                self.sent(held, row)
+            }
             Err(failure) => self.settle(held, row, &failure),
         }
     }
@@ -621,6 +631,14 @@ impl<'a> Engine<'a> {
                 self.now,
                 claim::Judge::Store(&ledger),
             )?;
+        }
+        if let Some(runtime) = row
+            .payload
+            .get(crate::transport::handoff::QUEUED_RUNTIME)
+            .and_then(serde_json::Value::as_str)
+        {
+            crate::transport::handoff::require_unheld(self.context, row.issue, runtime, self.now)?;
+            crate::transport::handoff::project_labels(self.context, row.issue, runtime)?;
         }
         Ok(())
     }

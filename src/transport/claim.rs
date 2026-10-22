@@ -10607,15 +10607,15 @@ fn require_explainable_projection(
                 .as_ref()
                 .is_some_and(|event| event.runtime.is_none() && holder_uses_runtime(event, runtime))
     };
-    let labels: Vec<String> = runtimes
-        .iter()
-        .filter(|label| {
-            label
-                .strip_prefix("dev:")
-                .is_some_and(|runtime| !explained(runtime))
-        })
-        .cloned()
-        .collect();
+    let mut labels: Vec<String> = Vec::new();
+    for label in runtimes {
+        let Some(runtime) = label.strip_prefix("dev:") else {
+            continue;
+        };
+        if !explained(runtime) && !ledger.handoff_explains(&context.repo_dir, runtime)? {
+            labels.push(label);
+        }
+    }
     let viewer = if assignees.is_empty() {
         None
     } else {

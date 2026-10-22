@@ -36,6 +36,22 @@ claim is adjudicated first, so its refusals are what a caller meets before anyth
 transition's own refusals follow; omitting the flag claims without moving, which leaves the separate
 `transition` call available.
 
+## Handing an issue to another runtime
+
+`handoff` states where an unheld issue is going, so a session of that runtime in that repository can
+find it at `SessionStart`. It writes a local row naming the issue, the runtime, the run that handed it
+over and the time, then projects exactly one `dev:<runtime>` label and reads it back twice. While the
+git operation window is closed the projection is queued as a `reconverge` and the answer is
+`projection: deferred` with the queue position.
+
+An issue a live claim holds is refused `handoff-issue-held` before anything is written: the label
+states a destination and must not overwrite the holder's. A `--to` that is not a single runtime word
+GitHub accepts in a label is refused `handoff-runtime-unreadable`, and nothing is written either. The
+record also explains that label to the
+recipient's later `claim`, which otherwise refuses a `dev:` label this store cannot account for. A
+handoff is not a claim, not a release and not a message: the recipient claims the issue, and delivering
+the instruction is `send_message` addressed as `runtime:<name>` with `repo_dir`.
+
 ## Publishing a review target
 
 requires a clean target. It **reuses** the single open PR or creates one and refuses on more than

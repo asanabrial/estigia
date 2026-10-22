@@ -98,7 +98,9 @@ replay advice that goes with it (`Refusal::classed`), and a refusal whose outcom
   `payload-rebuild-mismatch`, `publication-readback-disagrees`, `unexpected-state`: what was read is
   not what was expected.
 
-**`unknown`** — `write-failed` and `ambiguous-write`.
+**`unknown`** — `write-failed`, `ambiguous-write`, and `handoff-row-unwritten`: the label was
+projected on the tracker and the local record of it could not be written, so the two halves of one
+handoff disagree until somebody re-reads the issue.
 
 **`refused`** — everything else, on the rule that the caller named something the ledger does not hold,
 or broke a rule it can be told. That includes:
