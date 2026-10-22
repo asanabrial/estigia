@@ -556,6 +556,7 @@ the exact bytes a client receives for the table.
 | Issue #69, `publish_review` and `republish_review` take the same four arguments (ceiling set to the measured size) | 33 | 44,277 |
 | `send_message` and `list_sessions` join, answered from the local store (ceiling set to the measured size) | 35 | 45,266 |
 | `list_sessions` gains bounded discovery: seven optional selectors and paging arguments (ceiling set to the measured size) | 35 | 46,744 |
+| `ensure_states` says a closed git operation window answers `deferred` and that the labels come from the flush (ceiling set to the measured size) | 35 | 47,191 |
 
 Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
 retired aggregate verdict and the three `NOT_EXPOSED` names were removed outright; `reclaim`,
@@ -606,6 +607,12 @@ The `create` tool's `repo` argument and the `flush` description now say that the
 operation window decides, not the caller's — the behaviour a cross-repository filing changed to. That
 moved the list from **46,996** to **47,044** bytes, and `TOOLS_LIST_CEILING` was raised by exactly
 that difference: a caller filing elsewhere needs to know whose schedule it is held to.
+
+The `ensure_states` description now carries the answer the gate learned to give: while the git operation window
+is closed it answers `deferred` and writes nothing, and a queued create, claim or transition creates the
+labels at the flush. The list moved from **47,044** to **47,191** bytes, and `TOOLS_LIST_CEILING` was
+raised by exactly that difference: a caller that reads `deferred` as the whole answer has no reason to
+wait for the flush, and no way to know the labels will exist by then.
 
 `target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
 paid only by a call that passes `manifest`.
