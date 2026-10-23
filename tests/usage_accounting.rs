@@ -247,3 +247,33 @@ fn each_session_is_listed_with_its_wall_clock_span() {
         "a session with no timestamp has an unknown span, not a zero one: {thin}"
     );
 }
+
+#[test]
+fn a_malformed_transcript_is_measured_rather_than_crashing_the_run() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let output = Command::new("python3")
+        .arg(root.join("scripts/measure-transcripts.py"))
+        .arg("--projects")
+        .arg(root.join("tests/fixtures/usage/malformed"))
+        .arg("--json")
+        .output()
+        .expect("python3 runs the measurement script");
+    assert!(
+        output.status.success(),
+        "a naive timestamp beside an aware one, or a content element that is not an object, \
+         stopped the measurement: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: Value = serde_json::from_slice(&output.stdout).expect("one JSON object");
+    let session = &report["sessions"][0];
+    assert_eq!(
+        session["wall_clock_seconds"],
+        serde_json::json!(30.0),
+        "a stamp with no offset is read as UTC"
+    );
+    assert_eq!(
+        session["turn_profile"]["orchestrator"]["tool_calls"],
+        serde_json::json!(1),
+        "the stray element is skipped and the tool call beside it is still counted"
+    );
+}
