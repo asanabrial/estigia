@@ -780,8 +780,8 @@ record's `message.model`), the model the CLI asked for (`requested_models`, `req
 effort, and the tool calls (distinct `tool_use` identities, so a retried fragment's call is counted
 once). `usage_by_model` splits the four classes by the model that answered, which is what a
 tariff-computed cost multiplies. `sessions` lists each session with its dominant issue, its
-`wall_clock_seconds` — first timestamped record to last, subagent transcripts included — and the
-subagents it launched. A field a record does not carry is counted under `unknown`, never inferred.
+`wall_clock_seconds` — first timestamped record to last, subagent transcripts included, and `null`
+when any of those stamps carries no offset — and the subagents it launched. A field a record does not carry is counted under `unknown`, never inferred.
 Against the base script on a frozen copy of this machine's corpus (2026-10-23: 206 sessions, 87,020
 usage records), every field the base script reports is byte-identical, table included.
 `tests/usage_accounting.rs` pins the new fields against the same fixture.
@@ -1007,7 +1007,8 @@ report.
 | S3 | 3 | 3 | 83 | 0.59 | 0.69 | 13 | 15 |
 
 Every run delivered and none failed or timed out. Interventions, retries of a run and regressions
-were all zero, the last checked by `tests/usage_accounting.rs` at each merged commit. Reviewer jobs
+were all zero. Regressions were checked at each merged commit by `tests/usage_accounting.rs`, which
+is the suite covering the one script all three scenarios change. Reviewer jobs
 were never relaunched. **Cost per accepted task** is the CLI-computed cost of all attempts divided by
 accepted tasks: 10.62 USD for 9 accepted tasks over the 9 counted runs.
 

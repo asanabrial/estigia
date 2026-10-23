@@ -266,10 +266,10 @@ fn a_malformed_transcript_is_measured_rather_than_crashing_the_run() {
     );
     let report: Value = serde_json::from_slice(&output.stdout).expect("one JSON object");
     let session = &report["sessions"][0];
-    assert_eq!(
-        session["wall_clock_seconds"],
-        serde_json::json!(30.0),
-        "a stamp with no offset is read as UTC"
+    assert!(
+        session["wall_clock_seconds"].is_null(),
+        "a stamp with no offset has no known instant, so the span it bounds is unknown, \
+         not one computed under a guessed zone: {session}"
     );
     assert_eq!(
         session["turn_profile"]["orchestrator"]["tool_calls"],
