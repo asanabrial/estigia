@@ -1052,3 +1052,123 @@ run, which the runs never read in `bindings/github/delivery.md`. To make room, t
 Delegation* paragraph that describes what the gate records about delegated writes was shortened to
 its rule. Whether any of this saves a turn is for the validation rerun to measure, not for this
 paragraph to claim.
+
+## FLOW against the baseline
+
+The validation rerun is the FLOW validation issue. It reran the baseline's frozen scenarios on
+`estigia 0.1.1 (fdef71b93a)`, the build that carries FLOW. That build was installed with `cargo
+install` and synced into every root, and the readback after sync showed `#### FLOW` present and the
+ODD block gone. Everything else was held as in the baseline: seed, scratch `HOME`, `claude-personal`,
+`claude-opus-5-5` at `medium`, the estigia-only MCP set and the acceptance script. The design,
+including the arms and the pass criteria, was recorded on the issue before the first run.
+
+| run | accepted | active s | CLI cost USD | turns | tool calls | output | subagents | lenses | lens output | task rows | gate refusals |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| F-S1-c1 | yes | 498 | 1.23 | 36 | 38 | 12,063 | 0 | 4 | 403 | 0 | `unexpected-state` |
+| F-S1-c2 | yes | 500 | 1.10 | 28 | 32 | 10,838 | 0 | 4 | 420 | 0 | `unexpected-state` ×2 |
+| F-S1-c3 | no † | 231 | 0.93 | 22 | 22 | 8,037 | 0 | 0 | — | 0 | — |
+| F-S1-c3r | yes | 644 | 0.98 | 24 | 28 | 9,877 | 0 | 4 | 311 | 0 | `unexpected-state` |
+| F-S2-c1 | yes | 605 | 1.30 | 31 | 35 | 13,336 | 0 | 4 | 1,719 | 0 | `unexpected-state` |
+| F-S2-c2 | yes | 539 | 1.39 | 31 | 36 | 14,376 | 0 | 4 | 1,485 | 0 | `unexpected-state` |
+| F-S2-c3 | yes | 549 | 1.33 | 31 | 33 | 13,350 | 0 | 4 | 1,655 | 0 | `unexpected-state` |
+| F-S3-c1 | yes | 86 | 0.61 | 13 | 15 | 5,141 | 0 | 0 | — | 0 | — |
+| F-S3-c2 | yes | 125 | 0.90 | 17 | 20 | 9,279 | 1 | 0 | — | 0 | — |
+| F-S3-c3 | no † | 63 | 0.91 | 20 | 20 | 8,061 | 1 | 0 | — | 0 | — |
+| F-S3-c3r | yes | 91 | 0.56 | 11 | 13 | 4,243 | 0 | 0 | — | 0 | — |
+
+† **Cut by the harness, not failed by the run.** The harness ended a headless session 120 s after
+an assistant turn with no tool call. F-S1-c3 had ended its turn waiting for a backgrounded
+`cargo test`. F-S3-c3 had ended its turn waiting for a background analyst handoff, deferring its
+close evidence and release until that answer came; the answer arrived at 104 s, and no further turn
+followed before the cut. The harness was corrected to idle-cut only after 300 s with no background
+task pending. Each cut run was then replaced once, as the frozen design allows, and both replacements
+were accepted. Both cut runs are reported, and their cost is counted.
+
+| scenario | arm A median cost | FLOW median cost | Δ cost | A median active s | FLOW median active s | Δ time | A / FLOW median turns | A / FLOW cost per accepted task |
+|---|---|---|---|---|---|---|---|---|
+| S1 | 1.34 | 1.10 | **−18 %** | 532 | 500 | −6 % | 36 / 28 | 1.33 / 1.41 |
+| S2 | 1.52 | 1.33 | **−13 %** | 561 | 549 | −2 % | 38 / 31 | 1.52 / 1.34 |
+| S3 | 0.59 | 0.61 | +3 % | 83 | 91 | +10 % | 13 / 13 | 0.69 / 0.99 |
+
+Medians are over the three counted runs per scenario: the two replacements stand in for the runs
+the harness cut. **Cost per accepted task** divides the cost of every attempt, cut runs included,
+by accepted tasks. That is why S1 and S3 come out worse on that column: under FLOW, each paid for
+one attempt the harness wasted.
+
+What changed, read from the runs:
+
+- **Gate refusals at delivery disappeared.** In arm A, every S1 and S2 run was refused on a merge
+  spelling or a closing keyword before it delivered: six of six. Under FLOW, none of the six were.
+  This is the change *Deliver* made by stating both spellings. What remained in FLOW is one
+  `unexpected-state` per publishing run, which arm A had too, in two of six runs. Its cause was not
+  isolated here.
+- **No checklist on one-publication work.** Arm A recorded 2, 0 and 1 task rows on the same two-unit
+  issue; FLOW recorded 0 on every run, as the span rule asks. S2 still met acceptance three times out
+  of three.
+- **Turns fell 18–22 % on the publishing scenarios. Time did not move.** Most of a run's active time
+  is `cargo` and the four lenses, and FLOW changes neither.
+- **The targets were not met.** The programme's −40 % cost and −30 % time were hypotheses. The
+  measured effect is −13 to −18 % cost and −2 to −6 % time where a publication happens, and nothing
+  measurable on the no-change scenario.
+
+### Routing (arm B)
+
+Arm B reran S1 and S2 under FLOW with `Model routing` set to `unset` for `claude-code`. The lenses
+then ran on the CLI's default model instead of `sonnet`, and the row was restored afterwards and read
+back byte-identical.
+
+| run | accepted | active s | CLI cost USD | turns | lenses | lens output |
+|---|---|---|---|---|---|---|
+| B-S1-c1 | yes | 766 | 1.30 | 36 | 6 | 3,966 |
+| B-S1-c2 | yes | 601 | 1.17 | 32 | 4 | 2,689 |
+| B-S1-c3 | yes | 1,055 | 1.19 | 32 | 4 | 2,643 |
+| B-S2-c1 | yes | 585 | 1.37 | 34 | 4 | 5,203 |
+| B-S2-c2 | yes | 797 | 1.43 | 32 | 4 | 5,635 |
+| B-S2-c3 | yes | 1,108 | 1.29 | 29 | 4 | 4,157 |
+
+The two `c3` runs ran nine hours after the other four, because the git operation window closed
+between them; the harness, the build and the unset row were the same.
+
+Six of six runs were accepted. The orchestrator's cost barely moves with routing — median 1.19 against
+FLOW's 1.10 on S1, 1.37 against 1.33 on S2 — as it should: the orchestrator runs on the same model
+either way. What moves is the lenses. Without the `sonnet` row their median output was 2,689 tokens
+on S1 against FLOW's 403, and 5,203 on S2 against 1,655, and the median active time went from 500
+to 766 s on S1 and from 549 to 797 s on S2. B-S1-c2 was also refused once at delivery, on
+`delivery-pr-unidentified`, before it merged. The lenses'
+model is recorded in each job's manifest only when the row names one, so under `unset` it is
+**unknown**, not inferred; their cost is not computed. B-S1-c1 also started two extra lens jobs.
+
+### The native reference (arm C)
+
+Arm C ran Claude Code with `--setting-sources ""`, no MCP and no skill, so there were no hooks and no
+Estigia. The prompt asked it to fix the issue test-first, publish, merge and close. Its guarantees
+are **not** equivalent: there was no claim, no gate, no independent review, and no receipt binding a
+verdict to the merged bytes.
+
+| scenario | runs | accepted | median active s | median CLI cost USD | cost per accepted task USD |
+|---|---|---|---|---|---|
+| S1 | 3 | 2 | 291 | 0.31 | 0.45 |
+| S2 | 3 | 3 | 357 | 0.47 | 0.47 |
+| S3 | 3 | 2 | 52 | 0.21 | 0.46 |
+
+On S1 and S2, the native agent cost about a third of FLOW and took about 60 % of its active time. It failed
+twice, each time in a way Estigia exists to stop. C-S1-c3 ended its turn "waiting for the full suite
+before I commit" and the session exited with nothing committed: a headless run has no continuation
+once the turn ends. C-S3-c3 was asked to change nothing if the behaviour was already right. It
+confirmed the behaviour was right, then fixed two neighbouring crashes and merged them unreviewed
+into `main`. That gap is the price of the claim, the review and the continuation, and these figures
+measure that price; they do not argue that it should not be paid.
+
+### What was retired, and what was kept
+
+| residual item | decision | why |
+|---|---|---|
+| The seven ODD steps in `skill/SKILL.md` | retired by the FLOW contract change | FLOW met acceptance 9 of 9, once the harness's two cuts were replaced, and lost no guarantee: every claim, verdict, lens and merge topology check still ran |
+| The *References* row loading `protocols/rdd.md` on every review | **kept** | moving that load is an attention change, and nothing here measured it |
+| `protocols/rdd.md` as a file | **kept** | it is *Verify*'s reference, and no figure here argues for folding it |
+| ODD and RDD attribution in `docs/parity.md` | **kept** | it is history and licensing, not instruction |
+| The retired `Review protocol` row's migration message in `src/config/settings.rs` | **kept** | it serves installations that still carry the row |
+
+Nothing beyond the contract change itself is retired. The rerun shows FLOW doing the same work in
+fewer turns and with no delivery refusals, but it does not show any of the remaining items costing
+anything.

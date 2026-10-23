@@ -54,6 +54,20 @@
   figures say nothing about a change in `src/`, about a run that is interrupted and resumed, or about
   a review that rejects. Any FLOW comparison inherits every one of these limits.
 
+- **FLOW's measured effect is one runtime, one model and n = 3, against three scenarios on one
+  script.** The comparison in `docs/review-cost.md` (*FLOW against the baseline*) inherits every
+  limit of the baseline, and adds four of its own:
+  - The two arms ran hours apart on the same prompt cache, so cache state was not controlled.
+  - The harness changed between the arms. Its idle cut went from 120 s to 300 s and became aware of
+    background tasks after it had cut two FLOW runs. The two runs it cut were replaced once each, and
+    their cost is counted. The cut happens after a run's last turn, so the active-second figures do
+    not move with it, but the arm-A runs never met the corrected harness.
+  - Arm B's lenses ran on a model nobody recorded, because no `reviewer` row named one.
+  - Arm C's reduced guarantees mean its cost is a reference, not a target.
+
+  Gate refusals are counted from the run's own stream, by refusal code; a code a run met but never
+  printed would be missed.
+
 - **A `never-ran` verdict is recorded evidence, not verified evidence.** Read through `record_computed_verdict`: it approves under a publication lane whose failing
   runs report `steps: []` on every job only when the caller supplies `--never-ran-evidence-file`,
   and it stores that file's content in the marker verbatim — on the same footing as a finding's
