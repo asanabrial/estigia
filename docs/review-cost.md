@@ -967,9 +967,9 @@ absorption needs only a line in the map.
 
 ## The FLOW baseline: the current workflow, measured before FLOW lands
 
-This is arm A's baseline from #189: the workflow as shipped, with the ODD steps and the RDD review,
+This is arm A's baseline from the FLOW baseline issue: the workflow as shipped, with the ODD steps and the RDD review,
 measured under conditions frozen on the issue before the first run (revision 1, then revision 2 once
-the pilot had exposed two harness faults). #191 reruns the same scenarios on the build carrying
+the pilot had exposed two harness faults). The FLOW validation issue reruns the same scenarios on the build carrying
 FLOW, and only that pairing can show an effect. This section is the *before*, not a comparison.
 
 **Conditions.** Estigia `0.1.1 (7fa8b68ebd)` as the hook and MCP server, with the skill installed at
@@ -1038,7 +1038,7 @@ What the baseline shows about the current contract, as observations rather than 
   contract could have stated.
 
 The pilot's two calibration runs are excluded from the table, and the reason for each is recorded on
-#189 (revision 2). One distorted the suite through an exported `GIT_CONFIG_GLOBAL`. The other used a
+the baseline issue (revision 2). One distorted the suite through an exported `GIT_CONFIG_GLOBAL`. The other used a
 seed without `.github/`. Their CLI-computed cost, 4.72 USD, is part of what the baseline spent but
 not of what it measures. The limits — one runtime, one model, n = 3, uncontrolled cache — are in
 [`honesty-review-tier.md`](honesty-review-tier.md).
