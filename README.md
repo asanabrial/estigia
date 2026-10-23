@@ -446,7 +446,7 @@ read   review_status    (issue)   # carries `lane` and `corrections`
 read   review_read      (issue, view, epoch, id, with_text, candidate, request, path, side, pr, head, base, digest, phase, worktree)
 read   review_tier      (base, head, parent_head, clearing_finding)
 read   target           (base, recorded_base, worktree, native_start, manifest)
-read   tasks            (issue)   # the ODD checklist, from the local store
+read   tasks            (issue)   # the task checklist, from the local store
 read   list_sessions    ([status, runtime, run, session_id, repo_dir, limit, cursor])   # bounded page; no options answers the entries `estigia sessions --json` prints
 WRITE  claim            (issue, run_id, horizon[, takeover, target_operation, force, reason_file])
 WRITE  handoff          (issue, run_id, to)   # records it locally; projects `dev:<to>` with read-back

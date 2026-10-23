@@ -45,7 +45,7 @@ Past about 150k tokens of parent context, hand the next unit to a fresh worker. 
 
 The topology actually used is recorded at publication, not merely required here: `publish_review`/`republish_review` take `--topology` and `--topology-reason` and record them on the marker, and nothing refuses a declaration. See the binding contract for the exact mechanics and what it cannot prove.
 
-The writing row's reasons are **stated, not adjudicated**: no gate can judge whether a change is understood or its units independent, so nothing refuses a write that ignores them. What the gate does record, independent of the declaration above, is narrower: when a call's `agent_type` shows this run's own context wrote after a delegated one had already run this session, that target is named at `SessionStart` for the rest of the session and is gone at `SessionEnd` — a floor, since a write before that first delegated call is recorded as neither this run's own nor a delegate's.
+The writing row's reasons are **stated, not adjudicated**: nothing refuses a write that ignores them. The gate only names, at `SessionStart`, a target this run's own context wrote after a delegated one had run this session — a floor, not a count.
 
 Tests, builds, installs, and native review actions may each use a fresh per-action worker without changing the route. Child workers do not gain orchestration authority.
 
@@ -92,26 +92,29 @@ Before either role's first tracker write in an unfamiliar project, run the selec
 
 ### Developer
 
-#### The ODD protocol
+#### FLOW
 
-Implementation follows a seven-step protocol built on Estigia's two pillars: the
-claimed issue is the record of the work, and the publication is the review candidate. Its seven steps:
+FLOW (Fast, Lean, Outcome-driven Workflow) keeps Estigia's two pillars: the claimed issue is the
+record of the work, and the publication is the review candidate. Its capabilities merge or repeat,
+and are not calls, states or agents:
 
-1. **Authorize.** Read-only work stays read-only and writes no branch, worktree or file.
-2. **Explore**, in proportion to the request.
-3. **Resolve uncertainty.** At most one product question and at most one challenge to a premise.
-4. **Classify.** Two or more meaningful steps is substantial; fewer is small work.
-5. **Track before the first write.** A substantial change records its ordered task checklist with the
-   `task` operation on the claimed issue, never as a `comment` and never as a file in the checkout.
-   Each task carries a stable id, its acceptance, the route used (inline or delegated) and, once
-   done, the commit identity. A revision records the same id again, and a resume reads `tasks`,
-   which is the only source of truth.
-6. **Implement task by task.** One work-unit commit per task, Conventional Commit, test-first
-   wherever a deterministic test applies — the single default policy, not a flag.
-7. **Close.**
+1. **Understand.** Read-only work stays read-only. Explore in proportion; at most one product
+   question and one premise challenge.
+2. **Route.** Execute directly when the work is understood; plan briefly only for real uncertainty;
+   delegate only for a reason the table above names.
+3. **Execute.** Bounded changes, Conventional Commits, test-first wherever a deterministic test
+   applies — the default, not a flag.
+4. **Verify.** Deterministic evidence, then the review step 5 acquires.
+5. **Deliver.** Steps 6 and 7. A body or commit says `Refs #<n>`, never a closing keyword; the merge
+   is the bare `gh pr merge <pr> --merge --match-head-commit <head-sha>`, alone on its line, from
+   the primary checkout.
 
-Small work — classification step 4 answering fewer than two meaningful steps — writes no checklist
-but still needs an issue and a claim, as every write does.
+A checklist exists only when the work spans publications or sessions, divides into units with their
+own acceptance, or must survive an interruption. Record it with the `task` operation on the claimed
+issue and `compact: true`, never as a `comment` and never as a file in the checkout: a stable id,
+the kind and acceptance in its text, the route. An implementation row closes with its commit, any
+other row with `evidence`; `tasks` is the only source of truth. A model change alters neither
+authority nor independence.
 
 1. Resume this run's held issue at its recorded state before consulting queues. Otherwise drain unassigned `review` before `ready`, rechecking the delivery blocker before claiming published work. The review queue is requester-aware (`list_state` excludes an unresolved handoff's publishing and requesting runs); a failed candidate-timeline read makes it unreadable rather than eligible. An item in `blocked` whose every recorded clause already holds is discharged before the queue reads as empty — the analyst's drain rule, applied here: move it to the state its preserved evidence supports, then select and claim it under this run's own id.
 2. For `ready`, partition valid candidates by stable domain and declared scale, rank only within each partition, and choose the oldest partition head; a selected domain limits selection to its highest-ranked oldest item. Use oldest-first only when no candidate has a valid scale contract.
@@ -170,7 +173,7 @@ into this file. Each owns its subject once, so a rule that changes is changed in
 | [analyst issue template](assets/analyst-issue-template.md) | Filling a new finding's body. It owns the heading order, the fixed first heading, alert syntax, and attribution. |
 | [blind judges](policies/blind-judges.md) | `review_status` stops as escalated, a correction is owed, or a rule about how a lens's findings are settled or what reopens review is disputed. |
 | [judgment day](policies/judgment-day.md) | The operator explicitly asks for the adversarial panel: the method's rules, its isolation precondition and what a judge's closing statement reports. |
-| [receipt-driven development](protocols/rdd.md) | Every review. |
+| [receipt-driven review](protocols/rdd.md) | Every review. |
 
 The selected tracker binding under `bindings/` owns exact commands, capability differences,
 unsupported behaviour, and tracker-specific readbacks. Its executable owns mechanical operations and

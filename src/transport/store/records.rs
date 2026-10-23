@@ -12,7 +12,7 @@ pub(crate) struct Recorded<'a> {
     pub(crate) review: Option<&'a str>,
 }
 
-/// One ODD checklist row as the store holds it.
+/// One task checklist row as the store holds it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TaskRow {
     pub(crate) id: String,

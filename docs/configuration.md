@@ -446,6 +446,13 @@ the next `setup`. It says the shape of the work decides the model and the effort
 agent records what it chose; what that record is and is not is in
 [`docs/honesty.md`](honesty.md).
 
+A model chosen for a phase changes neither the run's authority nor review independence: a
+review by the context that wrote the change is not independent on any model. Three facts are
+kept apart, because they can disagree: the model **requested** (the routing row, or the
+`--model` a launch passed), the model a launcher **declared** it used, and the model
+**telemetry** shows answering (`served_models` in `scripts/measure-transcripts.py`). No adapter
+switches the model inside one agent today; an agent that cannot switch keeps its model and says so.
+
 The `Authorisation posture` row above is a different thing, and it is the shipped default. It carries the two
 authorisations that can ask: `balanced` makes `Delivery authorisation` and `Transition
 authorisation` both `auto`, and `cautious` makes both `ask`. An explicit authorisation written
