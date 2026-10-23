@@ -104,8 +104,9 @@ and are not calls, states or agents:
    delegate only for a reason the table above names.
 3. **Execute.** Bounded changes, Conventional Commits, test-first wherever a deterministic test
    applies — the default, not a flag.
-4. **Verify.** Deterministic evidence, then the review step 5 acquires.
-5. **Deliver.** Steps 6 and 7. A body or commit says `Refs #<n>`, never a closing keyword; the merge
+4. **Verify.** Deterministic evidence, then the review that *Renew before publishing*, in the
+   numbered list below, acquires.
+5. **Deliver.** That list's delivery and close. A body or commit says `Refs #<n>`, never a closing keyword; the merge
    is the bare `gh pr merge <pr> --merge --match-head-commit <head-sha>`, alone on its line, from
    the primary checkout.
 

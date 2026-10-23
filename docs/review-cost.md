@@ -1044,7 +1044,7 @@ not of what it measures. The limits — one runtime, one model, n = 3, uncontrol
 [`honesty-review-tier.md`](honesty-review-tier.md).
 
 **What FLOW changed in the always-loaded contract.** Replacing the seven ODD steps with FLOW moved
-`skill/SKILL.md` from 31,159 to 30,991 bytes, 168 fewer; `bindings/github.md` is unchanged. Two of
+`skill/SKILL.md` from 31,159 to 31,064 bytes, 95 fewer; `bindings/github.md` is unchanged. Two of
 those changes answer what the baseline observed: the checklist is tied to the work's span rather than
 to a count of steps, and *Deliver* now carries the two spellings the gate refused in every S1 and S2
 run, which the runs never read in `bindings/github/delivery.md`. To make room, the *Direct Work

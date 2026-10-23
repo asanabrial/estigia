@@ -8713,7 +8713,7 @@ pointer that leaves it names the document it points at.
 - **FLOW's routing rules are instructions, and nothing measures whether a run followed them.**
   `skill/SKILL.md` *FLOW* says when a checklist is written, that a task acknowledgment asks for
   `compact: true`, that a row which is not a commit closes with `evidence`, and the two delivery
-  spellings. The store enforces only the last of the row rules — `task` refuses a `done` row with
+  spellings. The store enforces only the `evidence` rule — `task` refuses a `done` row with
   neither a commit nor evidence — and the gate refuses a wrong spelling after it is tried; whether
   work that spans one publication skipped the checklist, or a row named its kind, is the run's
   word. The effect on cost and time is not claimed here: `docs/review-cost.md` holds the baseline,
