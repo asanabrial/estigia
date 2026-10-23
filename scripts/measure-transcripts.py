@@ -23,7 +23,8 @@ identities), the model the API answered with, the model the CLI asked for, the
 effort, and the tool calls (distinct `tool_use` identities). `usage_by_model`
 splits the usage classes by the model that answered, and `sessions` lists each
 session with its wall-clock span and the subagents it launched. A field a record
-does not carry is counted under `unknown`, never guessed.
+does not carry is counted under `unknown`, never guessed, and a session holding a
+timestamp with no offset has an unknown span.
 """
 
 import argparse
@@ -189,14 +190,12 @@ def timestamps(records):
             moment = datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
         except ValueError:
             continue
-        if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=datetime.timezone.utc)
-        yield moment
+        yield moment if moment.tzinfo is not None else None
 
 
 def wall_clock_seconds(stamps):
     stamps = list(stamps)
-    if not stamps:
+    if not stamps or None in stamps:
         return None
     return (max(stamps) - min(stamps)).total_seconds()
 
