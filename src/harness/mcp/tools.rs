@@ -572,7 +572,7 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "task",
         contract_name: "task",
-        description: "Record or revise one row of the claimed issue's ODD task checklist in the \
+        description: "Record or revise one row of the claimed issue's task checklist in the \
                       local store: a stable id, its acceptance, the route used and, once done, \
                       the commit identity or, when the work is not a commit, an `evidence` note \
                       naming where it is recorded. Needs the live claim; nothing is written to \
@@ -633,7 +633,7 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "tasks",
         contract_name: "tasks",
-        description: "The ODD task checklist the local store holds for an issue, in the order \
+        description: "The task checklist the local store holds for an issue, in the order \
                       the tasks were first recorded. Read-only, and needs no claim: a run \
                       resuming an issue reads it first.",
         operation: "tasks",

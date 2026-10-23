@@ -7846,8 +7846,8 @@ fn the_contract_tracks_tasks_with_the_task_operation_and_never_in_a_comment_or_a
     let skill = include_str!("../../../skill/SKILL.md");
     let flat = skill.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        flat.contains("records its ordered task checklist with the `task` operation"),
-        "the ODD protocol no longer tracks tasks with the task operation"
+        flat.contains("Record it with the `task` operation on the claimed issue"),
+        "the FLOW contract no longer tracks tasks with the task operation"
     );
     assert!(
         flat.contains("never as a `comment` and never as a file in the checkout"),
@@ -7859,27 +7859,59 @@ fn the_contract_tracks_tasks_with_the_task_operation_and_never_in_a_comment_or_a
     );
 }
 
-/// The seven ODD steps, the evidence budget and test-first are all stated in
-/// the shipped skill.
+/// FLOW's five capabilities, the evidence budget and test-first are all stated
+/// in the shipped skill.
 #[test]
-fn the_contract_states_the_odd_protocol_its_budget_and_test_first() {
+fn the_contract_states_flow_its_budget_and_test_first() {
     let skill = include_str!("../../../skill/SKILL.md");
     let flat = skill.split_whitespace().collect::<Vec<_>>().join(" ");
     for needle in [
-        "**Authorize.**",
-        "**Explore**,",
-        "**Resolve uncertainty.**",
-        "**Classify.**",
-        "**Track before the first write.**",
-        "**Implement task by task.**",
-        "**Close.**",
+        "**Understand.**",
+        "**Route.**",
+        "**Execute.**",
+        "**Verify.**",
+        "**Deliver.**",
         "At most 3 calls and about 10k tokens stays inline",
         "More than about 5 sequential lookups delegates one explorer with a ~2k-token handoff",
         "test-first",
     ] {
         assert!(
             flat.contains(needle),
-            "the ODD protocol does not state {needle:?}"
+            "the FLOW contract does not state {needle:?}"
+        );
+    }
+}
+
+/// FLOW writes a checklist only for work that needs recovering, keeps each
+/// acknowledgment to the changed row, closes a row that is not a commit with
+/// evidence, and states the two delivery spellings the gate refuses otherwise.
+/// The no-role run reads the same contract: there is no second protocol left.
+#[test]
+fn the_contract_routes_a_checklist_by_span_and_states_the_delivery_spellings() {
+    let skill = include_str!("../../../skill/SKILL.md");
+    let flat = skill.split_whitespace().collect::<Vec<_>>().join(" ");
+    for needle in [
+        "A checklist exists only when the work spans publications or sessions, divides into units \
+         with their own acceptance, or must survive an interruption.",
+        "`compact: true`",
+        "An implementation row closes with its commit, any other row with `evidence`",
+        "says `Refs #<n>`, never a closing keyword",
+        "is the bare `gh pr merge <pr> --merge --match-head-commit <head-sha>`, alone on its line",
+        "Invoked with no role word | The combined analyst-developer: load both rule books",
+        "#### FLOW",
+    ] {
+        assert!(
+            flat.contains(needle),
+            "the FLOW contract does not state {needle:?}"
+        );
+    }
+    for gone in [
+        "Two or more meaningful steps is substantial",
+        "#### The ODD protocol",
+    ] {
+        assert!(
+            !flat.contains(gone),
+            "the shipped skill still states {gone:?}"
         );
     }
 }

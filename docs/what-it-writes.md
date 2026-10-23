@@ -211,7 +211,7 @@ Five invariants, and the tests are named after them:
 
    `~/.estigia/state.db`, with its `-wal` and `-shm` files, is written at run time and never by
    `setup`. The workflow state that has no GitHub object to live in is only here: the dedup
-   identity and the `blocked-until` clauses `create` and `blocked_until` record, and the ODD task
+   identity and the `blocked-until` clauses `create` and `blocked_until` record, and the task
    checklist `task` records, none of which is written to the tracker. The transport creates it: the first dispatched operation that spawns `gh` records its
    call counts there, the first operation of the claim family that touches an issue imports that
    issue's history there, and the gate appends every decision and role observation there. `estigia
@@ -1241,7 +1241,7 @@ nothing. `docs/honesty.md` says what that table does and does not establish.
 `setup` fences in an adapter's instruction file, between `BEGIN ESTIGIA WORKFLOW AUTHORITY` and
 `END ESTIGIA WORKFLOW AUTHORITY`. A second `setup`, or a first one over a block an earlier build
 wrote, replaces the span in place and keeps what the operator wrote around it; it never appends a
-second block. It carries the three rules and names the skill, and it does not restate the ODD protocol
+second block. It carries the three rules and names the skill, and it does not restate the FLOW contract
 or the review rules: those are in the skill the block names, so a runtime reads them where the tokens
 are paid for when they are needed. The binary-launched review (`launch_review_input` and
 `collect_review_input`, through a `claude` or `codex` CLI on the machine) depends on that CLI and not

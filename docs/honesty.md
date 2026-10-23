@@ -8710,7 +8710,15 @@ pointer that leaves it names the document it points at.
   still carries is recorded only
   when that issue is imported, so one added to such a body after its first import is not seen; a
   clause recorded with `blocked_until` has no such gap.
-- **The dedup identity, the `blocked-until` clauses and the ODD checklist are recorded in the store
+- **FLOW's routing rules are instructions, and nothing measures whether a run followed them.**
+  `skill/SKILL.md` *FLOW* says when a checklist is written, that a task acknowledgment asks for
+  `compact: true`, that a row which is not a commit closes with `evidence`, and the two delivery
+  spellings. The store enforces only the `evidence` rule — `task` refuses a `done` row with
+  neither a commit nor evidence — and the gate refuses a wrong spelling after it is tried; whether
+  work that spans one publication skipped the checklist, or a row named its kind, is the run's
+  word. The effect on cost and time is not claimed here: `docs/review-cost.md` holds the baseline,
+  and only the validation rerun against it can measure one.
+- **The dedup identity, the `blocked-until` clauses and the task checklist are recorded in the store
   and nowhere else.** `create` records the identity and any clauses in the
   transaction that admits the issue and writes no `analysis` or `blocked-until` marker to the body;
   `blocked_until` adds or clears clauses and `task` records the checklist, and none of the three

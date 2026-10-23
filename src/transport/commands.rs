@@ -1128,7 +1128,7 @@ fn task_json(row: &super::store::TaskRow) -> serde_json::Value {
     })
 }
 
-/// `task` — record or update one row of the claimed issue's ODD checklist.
+/// `task` — record or update one row of the claimed issue's task checklist.
 ///
 /// The checklist lives in the local store, never on the tracker: a write is
 /// refused unless the run holds the issue, and a revision is the same id with new
@@ -1225,7 +1225,7 @@ pub fn task(context: &Context, call: &TaskCall<'_>) -> Result<serde_json::Value,
     }))
 }
 
-/// `tasks` — the ODD checklist the store holds for one issue, in the order the
+/// `tasks` — the task checklist the store holds for one issue, in the order the
 /// tasks were first recorded. Read-only and needing no claim: a run resuming an
 /// issue reads it before it holds anything.
 pub fn tasks(context: &Context, issue: u64) -> Result<serde_json::Value, Failure> {

@@ -310,3 +310,67 @@ fn setup_and_sync_refuse_every_retired_agent_and_write_nothing() {
         assert!(ok, "uninstall {slug} was refused: {stderr}");
     }
 }
+
+#[test]
+fn a_sync_that_installs_a_new_contract_leaves_the_store_and_the_configuration_alone() {
+    let home = tempfile::tempdir().expect("a temporary home");
+    let (_, stderr, ok) = run(home.path(), &["setup", "claude-code"], "");
+    assert!(ok, "setup failed: {stderr}");
+    for (setting, value, agent) in [
+        ("Change size", "400", None),
+        (
+            "Model routing",
+            "developer=sonnet, analyst=opus; developer=medium",
+            Some("claude-code"),
+        ),
+    ] {
+        let mut args = vec!["config", "set", setting, value];
+        if let Some(agent) = agent {
+            args.extend(["--agent", agent]);
+        }
+        let (_, stderr, ok) = run(home.path(), &args, "");
+        assert!(ok, "config set {setting} failed: {stderr}");
+    }
+    let store = home.path().join(".estigia").join("state.db");
+    std::fs::create_dir_all(store.parent().expect("the store's directory")).expect("a store root");
+    let held = b"claims, tasks and receipts a run in flight still holds".to_vec();
+    std::fs::write(&store, &held).expect("a store in flight");
+    let contract = home
+        .path()
+        .join(".claude")
+        .join("skills")
+        .join(estigia::skill::DIRECTORY)
+        .join("SKILL.md");
+    let installed = std::fs::read_to_string(&contract).expect("the installed contract");
+    assert!(
+        installed.contains("#### FLOW"),
+        "the fixture's assumed contract has drifted"
+    );
+    std::fs::write(
+        &contract,
+        installed.replace("#### FLOW", "#### The ODD protocol"),
+    )
+    .expect("an older contract in place");
+    let (before, stderr, ok) = run(home.path(), &["config", "list"], "");
+    assert!(ok, "config list failed: {stderr}");
+
+    let (_, stderr, ok) = run(home.path(), &["sync", "--allow-source-build"], "");
+    assert!(ok, "sync failed: {stderr}");
+    let synced = std::fs::read_to_string(&contract).expect("the synced contract");
+    assert!(
+        synced.contains("#### FLOW") && !synced.contains("#### The ODD protocol"),
+        "sync left the older contract installed"
+    );
+
+    assert_eq!(
+        std::fs::read(&store).expect("the store after sync"),
+        held,
+        "sync wrote the store a run in flight reads its claim, tasks and receipts from"
+    );
+    let (after, stderr, ok) = run(home.path(), &["config", "list"], "");
+    assert!(ok, "config list failed after sync: {stderr}");
+    assert_eq!(
+        before, after,
+        "sync changed the configuration it was meant to keep"
+    );
+}

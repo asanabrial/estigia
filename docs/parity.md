@@ -39,9 +39,10 @@ Estigia is a **workflow authority** and nothing else. The comparison covers exac
 | Adapter registration | which runtimes Estigia sits in front of, and how |
 | The installer lifecycle | what setup writes, what it records, and what uninstall takes back |
 
-## ODD and RDD are adopted, with two pillars kept
+## ODD and RDD are adopted as FLOW, with two pillars kept
 
-Estigia adopts gentle-ai v4's ODD workflow and RDD review: small work stays
+Estigia adopts gentle-ai v4's ODD workflow and RDD review, stated as one contract, FLOW (Fast,
+Lean, Outcome-driven Workflow), in `skill/SKILL.md`: small work stays
 small, review is sized by risk, a lineage gets a bounded number of corrections, and Judgment Day is opt-in. The
 differences that follow are each settled in the next section. Two of Estigia's own pillars are kept
 where a literal port would invert them, and both are declared divergences with a cost.
@@ -236,9 +237,13 @@ at the top of this document, and the symbol or file is the citation that holds.
   lines 214-236. File counts are no longer a delegation trigger in v4
   (`manifest.go`, lines 83-85), and the writing row's `2+ non-trivial files` is the one file-count
   boundary v4 keeps. Estigia no longer keeps it: its writing row delegates for a named reason only.
-- **The ODD protocol's seven steps:** `internal/components/agentguidance/routing.go`, lines 33-48,
+- **FLOW's capabilities adapt the ODD protocol's seven steps:** `internal/components/agentguidance/routing.go`, lines 33-48,
   adapted to Estigia's two kept pillars (the claimed issue is the record of the work, and the
-  publication is the review candidate), as the section above settles.
+  publication is the review candidate), as the section above settles. Authorize, explore and resolve
+  uncertainty are *Understand*; classify is *Route*, whose checklist trigger is the work's span,
+  divisibility or need to survive an interruption rather than v4's count of meaningful steps;
+  track and implement are *Execute* and the checklist paragraph; close is *Deliver*. RDD is
+  *Verify*, and `protocols/rdd.md` stays its reference.
 - **Test-first as the single default policy:** `routing.go`, line 119. `internal/cli/sync.go`, lines
   226-228, retires v4's `--strict-tdd` flag, which is why the skill states test-first as a default
   and not as a switch.

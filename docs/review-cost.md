@@ -1042,3 +1042,12 @@ the baseline issue (revision 2). One distorted the suite through an exported `GI
 seed without `.github/`. Their CLI-computed cost, 4.72 USD, is part of what the baseline spent but
 not of what it measures. The limits — one runtime, one model, n = 3, uncontrolled cache — are in
 [`honesty-review-tier.md`](honesty-review-tier.md).
+
+**What FLOW changed in the always-loaded contract.** Replacing the seven ODD steps with FLOW moved
+`skill/SKILL.md` from 31,159 to 31,064 bytes, 95 fewer; `bindings/github.md` is unchanged. Two of
+those changes answer what the baseline observed: the checklist is tied to the work's span rather than
+to a count of steps, and *Deliver* now carries the two spellings the gate refused in every S1 and S2
+run, which the runs never read in `bindings/github/delivery.md`. To make room, the *Direct Work
+Delegation* paragraph that describes what the gate records about delegated writes was shortened to
+its rule. Whether any of this saves a turn is for the validation rerun to measure, not for this
+paragraph to claim.
