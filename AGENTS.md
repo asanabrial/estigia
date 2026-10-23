@@ -129,7 +129,7 @@ a second copy that will disagree.
 
    **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
    --no-deps`. One hundred and eleven tests **require** `node` on the path, four of them `tar` too,
-   one requires `bash`, eight in `tests/usage_accounting.rs` require `python3` on Unix; all of
+   one requires `bash`, nine in `tests/usage_accounting.rs` require `python3` on Unix; all of
    those fail rather than skip without it, and `doctor` asks for none. Which test drives which
    generated integration, which driver carries it and what each one needs is
    [`docs/testing.md`](docs/testing.md) — inventory, kept there so that this file carries what

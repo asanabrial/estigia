@@ -44,6 +44,16 @@
   and a tool call a distinct `tool_use` identity, so a retry the CLI recorded under a new identity
   counts again. Codex, Pi and OpenCode transcripts are not read at all.
 
+- **The FLOW baseline is three runs of three scenarios on one runtime, and it proves no effect.**
+  `docs/review-cost.md`'s baseline section measures Claude Code `2.1.309` on `claude-opus-5-5` at
+  `medium`, with only the `estigia` MCP server and a scratch `HOME`, against a scratch copy of this
+  repository. n = 3 per scenario supports a description, not a significance claim. Prompt-cache state
+  was recorded, not controlled: every run shared the profile's cache, so later runs may have read
+  what earlier runs wrote. The lenses' cost is not computed, and the CLI's `total_cost_usd` is the
+  CLI's own tariff arithmetic, not a bill. The three scenarios all touch one Python script, so the
+  figures say nothing about a change in `src/`, about a run that is interrupted and resumed, or about
+  a review that rejects. Any FLOW comparison inherits every one of these limits.
+
 - **A `never-ran` verdict is recorded evidence, not verified evidence.** Read through `record_computed_verdict`: it approves under a publication lane whose failing
   runs report `steps: []` on every job only when the caller supplies `--never-ran-evidence-file`,
   and it stores that file's content in the marker verbatim — on the same footing as a finding's

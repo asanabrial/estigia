@@ -964,3 +964,81 @@ bare), except a row the agent performs by hand, a segment led by `with` or `its`
 `last_activity`. A name left over is reported as absorbed when the map's left-hand side lists it. A second test
 holds the map to the code: none of its left-hand names is a tool, and the call each answers with exists. A new
 absorption needs only a line in the map.
+
+## The FLOW baseline: the current workflow, measured before FLOW lands
+
+This is arm A's baseline from #189: the workflow as shipped, with the ODD steps and the RDD review,
+measured under conditions frozen on the issue before the first run (revision 1, then revision 2 once
+the pilot had exposed two harness faults). #191 reruns the same scenarios on the build carrying
+FLOW, and only that pairing can show an effect. This section is the *before*, not a comparison.
+
+**Conditions.** Estigia `0.1.1 (7fa8b68ebd)` as the hook and MCP server, with the skill installed at
+that build. Claude Code `2.1.309`, headless, `--model claude-opus-5-5` at effort `medium`, with the
+operator's `claude-personal` profile and only the `estigia` MCP server. A fresh scratch `HOME` per run,
+so no run touched this repository's store or tracker. The seed is a private scratch repository whose
+tree is byte-identical to `7bf02ee9`, `.github/` included, with Actions disabled. `main` is reset
+before every run, and the operator configuration is as `estigia config list` reported it (model
+routing, delivery and transitions `auto`, publication lane `off`). Each scenario is a fresh issue
+handed to `/flow dev <n>`, with no human input inside a run. A run that stops to ask counts as a
+failure.
+
+**Scenarios.** S1, a one-file fix plus its test (`--projects` naming a missing directory exits 2).
+S2, a two-unit change (a `--since` filter and its documentation). S3, a no-change outcome: an
+investigation that closes with evidence and no pull request. Acceptance is checked by the
+operator's script after each run, against the merged commit or the issue, not by the run's own
+report.
+
+| run | accepted | active s | CLI cost USD | input | cache read | cache creation | output | turns | tool calls | subagents | lenses | lens input | lens output | task rows |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| A-S1-c1 | yes | 532 | 1.43 | 80 | 2,740,665 | 76,578 | 13,299 | 40 | 43 | 0 | 4 | 22,530 | 46 | 0 |
+| A-S1-c2 | yes | 726 | 1.34 | 72 | 2,422,552 | 76,477 | 12,107 | 36 | 40 | 0 | 4 | 20,333 | 268 | 0 |
+| A-S1-c3 | yes | 495 | 1.23 | 66 | 2,186,819 | 71,362 | 10,896 | 33 | 35 | 0 | 4 | 22,970 | 56 | 0 |
+| A-S2-c1 | yes | 856 | 1.71 | 86 | 3,353,735 | 86,295 | 17,483 | 43 | 50 | 0 | 4 | 28,610 | 1,027 | 2 |
+| A-S2-c2 | yes | 553 | 1.32 | 56 | 2,031,978 | 78,690 | 14,204 | 28 | 36 | 0 | 4 | 28,262 | 1,645 | 0 |
+| A-S2-c3 | yes | 561 | 1.52 | 76 | 2,860,689 | 80,849 | 15,280 | 38 | 44 | 0 | 4 | 28,790 | 1,306 | 1 |
+| A-S3-c1 | yes | 98 | 0.92 | 40 | 868,463 | 85,357 | 8,645 | 20 | 24 | 1 | 0 | — | — | 0 |
+| A-S3-c2 | yes | 71 | 0.59 | 26 | 660,090 | 46,413 | 4,190 | 13 | 15 | 0 | 0 | — | — | 0 |
+| A-S3-c3 | yes | 83 | 0.56 | 22 | 542,926 | 44,482 | 4,909 | 11 | 14 | 0 | 0 | — | — | 0 |
+
+| scenario | runs | accepted | median active s | median CLI cost USD | cost per accepted task USD | median turns | median tool calls |
+|---|---|---|---|---|---|---|---|
+| S1 | 3 | 3 | 532 | 1.34 | 1.33 | 36 | 40 |
+| S2 | 3 | 3 | 561 | 1.52 | 1.52 | 38 | 44 |
+| S3 | 3 | 3 | 83 | 0.59 | 0.69 | 13 | 15 |
+
+Every run delivered and none failed or timed out. Interventions, retries of a run and regressions
+were all zero, the last checked by `tests/usage_accounting.rs` at each merged commit. Reviewer jobs
+were never relaunched. **Cost per accepted task** is the CLI-computed cost of all attempts divided by
+accepted tasks: 10.62 USD for 9 accepted tasks over the 9 counted runs.
+
+How each column is read:
+
+- **Tokens, turns, tool calls and subagents** come from the run's own transcript through
+  `scripts/measure-transcripts.py` (`usage`, `turn_profile`, `subagents_launched`), with every
+  context summed. The served model was `claude-opus-5-5` on every turn, and so was the requested one.
+- **Active seconds** run from the first stream event to the last assistant turn. The transcript's
+  own `wall_clock_seconds` is about 120 s longer, because the profile's `Stop` hook with
+  `--wait-mail` keeps a headless session open after its last turn, and the harness ends it on that
+  idle.
+- **CLI cost** is the `total_cost_usd` Claude Code reports for the session: computed by the CLI at its
+  own tariffs, not billed. It does not include the lenses.
+- **Lenses** are `launch_review_input`'s detached `sonnet` reviewers. Their counters come from each
+  job's `usage.json`, and their cost is not computed here.
+- **Task rows** are the rows `task` recorded in the run's scratch store.
+
+What the baseline shows about the current contract, as observations rather than effects:
+
+- The ODD checklist rule fired unevenly on the one two-unit scenario: S2 recorded 2, 0 and 1 rows
+  over three runs of the same issue.
+- S3's no-change close needed no publication and no lens, and cost under half of S1.
+- Every S1 and S2 run was refused at least once by the gate before it delivered, and S3 never was.
+  Read from the run's own stream: `delivery-pr-unidentified` on a merge spelling, in all six;
+  `closing-keyword-live` on a publication body, in four; `unexpected-state`, in two; and
+  `delivery-pr-repository-option`, in one. Each refusal is a turn spent learning a spelling the
+  contract could have stated.
+
+The pilot's two calibration runs are excluded from the table, and the reason for each is recorded on
+#189 (revision 2). One distorted the suite through an exported `GIT_CONFIG_GLOBAL`. The other used a
+seed without `.github/`. Their CLI-computed cost, 4.72 USD, is part of what the baseline spent but
+not of what it measures. The limits — one runtime, one model, n = 3, uncontrolled cache — are in
+[`honesty-review-tier.md`](honesty-review-tier.md).

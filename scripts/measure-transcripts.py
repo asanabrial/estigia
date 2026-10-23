@@ -85,14 +85,22 @@ def merge_usage(target, source):
 UNKNOWN = "unknown"
 
 
-def measured_records(records):
+def first_per_message(records, with_usage):
     seen = set()
     for record in records:
+        if record.get("type") != "assistant":
+            continue
         message = record.get("message") or {}
+        if with_usage and "usage" not in message:
+            continue
         message_id = message.get("id") or record.get("uuid")
-        if record.get("type") == "assistant" and "usage" in message and message_id not in seen:
+        if message_id not in seen:
             seen.add(message_id)
             yield record
+
+
+def measured_records(records):
+    return first_per_message(records, with_usage=True)
 
 
 def measured_usages(records):
@@ -101,15 +109,7 @@ def measured_usages(records):
 
 
 def assistant_turns(records):
-    seen = set()
-    for record in records:
-        if record.get("type") != "assistant":
-            continue
-        message = record.get("message") or {}
-        message_id = message.get("id") or record.get("uuid")
-        if message_id not in seen:
-            seen.add(message_id)
-            yield record
+    return first_per_message(records, with_usage=False)
 
 
 def tool_call_count(records):
@@ -122,7 +122,7 @@ def tool_call_count(records):
         if not isinstance(content, list):
             continue
         for block in content:
-            if block.get("type") != "tool_use":
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
                 continue
             if block.get("id"):
                 identities.add(block["id"])
@@ -186,9 +186,12 @@ def timestamps(records):
         if not isinstance(stamp, str):
             continue
         try:
-            yield datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            moment = datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
         except ValueError:
             continue
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=datetime.timezone.utc)
+        yield moment
 
 
 def wall_clock_seconds(stamps):
@@ -236,7 +239,7 @@ def issue_counts(records):
         if not isinstance(content, list):
             continue
         for block in content:
-            if block.get("type") != "tool_use":
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
                 continue
             name = block.get("name", "")
             if not name.startswith("mcp__estigia__"):
