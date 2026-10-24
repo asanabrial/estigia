@@ -3099,15 +3099,21 @@ fn spread_repository_rows(
     options: &SetupOptions,
 ) -> Result<(), Refusal> {
     let here = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    for setting in crate::config::SETTINGS {
-        if setting.scope() != crate::config::Scope::Repository {
-            continue;
-        }
-        let value = setting.value_of(config);
-        if value == setting.value_of(installed) {
-            continue;
-        }
-        repository_set(*setting, &value, &here, options)?;
+    let rows: Vec<(Setting, String)> = crate::config::SETTINGS
+        .iter()
+        .filter(|setting| {
+            setting.scope() == crate::config::Scope::Repository
+                && **setting != Setting::DeliveryPreset
+                && setting.value_of(config) != setting.value_of(installed)
+        })
+        .map(|setting| (*setting, setting.value_of(config)))
+        .collect();
+    if rows.is_empty() {
+        return Ok(());
+    }
+    let path = repository_write(&rows, &here, options)?;
+    for (setting, value) in &rows {
+        say!("{} = {} in {}", setting.label(), value, path.display());
     }
     Ok(())
 }
@@ -3163,7 +3169,19 @@ fn repository_set(
     options: &SetupOptions,
 ) -> Result<(), Refusal> {
     let rows = repository_rows_for(setting, value)?;
-    for (row, row_value) in &rows {
+    let path = repository_write(&rows, here, options)?;
+    say!("{} = {} in {}", setting.label(), value, path.display());
+    Ok(())
+}
+
+/// Writes `rows` into this repository's own file as one change, refusing before
+/// anything is written when the file would hold rows that cannot both hold.
+fn repository_write(
+    rows: &[(Setting, String)],
+    here: &std::path::Path,
+    options: &SetupOptions,
+) -> Result<std::path::PathBuf, Refusal> {
+    for (row, row_value) in rows {
         refuse_a_row_looser_than_an_agent_holds(*row, row_value, options)?;
     }
     // A repository first: creating `.git` here would not make a checkout.
@@ -3214,7 +3232,7 @@ fn repository_set(
         None => crate::config::Config::default(),
     };
     let mut speaks_for = spoken_for;
-    for (row, row_value) in &rows {
+    for (row, row_value) in rows {
         row.apply(&mut config, row_value)?;
         if !speaks_for.contains(row) {
             speaks_for.push(*row);
@@ -3268,6 +3286,9 @@ fn repository_set(
             Resolution::run("estigia config set Tracker github --repo"),
         ));
     }
+    if let Some(conflict) = config.delivery_conflict() {
+        return Err(conflict);
+    }
     setup::write_repository_configuration(&path, &config, &speaks_for)?;
     // The caller's home when one was named, so tests never write the real profile.
     if let Some(home) = options
@@ -3277,8 +3298,7 @@ fn repository_set(
     {
         skill::remember_repository(&home, here);
     }
-    say!("{} = {} in {}", setting.label(), value, path.display());
-    Ok(())
+    Ok(path)
 }
 
 /// The rows one `config set --repo` writes: the row itself, or the two a
@@ -3287,6 +3307,31 @@ fn repository_set(
 /// Refuses what a repository may not say before anything else is asked: an
 /// agent row, and `balanced`, which would be a grant rather than a tightening.
 fn repository_rows_for(setting: Setting, value: &str) -> Result<Vec<(Setting, String)>, Refusal> {
+    if setting == Setting::DeliveryPreset {
+        let mut preset = Config::default();
+        setting.apply(&mut preset, value)?;
+        if value.trim().eq_ignore_ascii_case("custom") {
+            return Err(Refusal::not_started(
+                "delivery-preset-custom-sets-nothing",
+                "`Delivery preset` reads `custom` when the rows below it match no preset, and \
+                 writing it would set nothing",
+                Resolution::no_command(
+                    crate::outcome::NoCommandReason::OperatorKnowledge,
+                    "a preset (`autonomous`, `assisted` or `team`), or the row you want to change",
+                ),
+            ));
+        }
+        return Ok([
+            Setting::Workflow,
+            Setting::SelfReview,
+            Setting::ReadyBy,
+            Setting::CorrectionsAfterReady,
+            Setting::MergeBy,
+        ]
+        .into_iter()
+        .map(|row| (row, row.value_of(&preset)))
+        .collect());
+    }
     if setting == Setting::Profile {
         setting.apply(&mut Config::default(), value)?;
         return match value.trim().to_lowercase().as_str() {
@@ -4148,6 +4193,11 @@ fn doctor(json: bool) -> Result<(), Refusal> {
                 Resolution::run("estigia config set Workflow assisted --repo"),
             ));
         }
+    }
+    if let Some(conflict) =
+        harness::doctor::delivery_conflict_in_force(skill_root.as_deref(), &repo_dir)
+    {
+        return Err(conflict);
     }
     let checks = harness::doctor::full(
         skill_root.as_deref(),

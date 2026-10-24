@@ -6089,7 +6089,7 @@ fn the_answer_under_the_cursor_says_what_choosing_it_does() {
     while app.picker().get(app.pick).map(String::as_str) != Some("reading") {
         app.press(Key::Down);
     }
-    let picking = rows(&app, 96, 30).join("\n");
+    let picking = rows(&app, 96, 40).join("\n");
     assert!(
         picking.contains("established by reading"),
         "arrowing onto an answer does not say what it means:\n{picking}"
@@ -7269,6 +7269,26 @@ fn every_row_the_cursor_can_be_on_is_drawn_highlighted_and_is_the_only_one_a_key
                     Some(setting @ (Setting::Delivery | Setting::Transitions)) => {
                         vec![setting, Setting::Profile]
                     }
+                    Some(
+                        setting @ (Setting::DeliveryPreset
+                        | Setting::Workflow
+                        | Setting::SelfReview
+                        | Setting::ReadyBy
+                        | Setting::CorrectionsAfterReady
+                        | Setting::MergeBy),
+                    ) => {
+                        let mut preset_rows = vec![
+                            Setting::DeliveryPreset,
+                            Setting::SelfReview,
+                            Setting::ReadyBy,
+                            Setting::CorrectionsAfterReady,
+                            Setting::MergeBy,
+                        ];
+                        if matches!(setting, Setting::DeliveryPreset | Setting::Workflow) {
+                            preset_rows.push(Setting::Workflow);
+                        }
+                        preset_rows
+                    }
                     Some(setting) => vec![setting],
                     None => vec![Setting::Models],
                 };
@@ -8380,4 +8400,43 @@ fn the_every_agent_page_advises_before_one_id_goes_to_agents_with_different_cata
     type_in(&mut app, "my-fine-tune");
     app.press(Key::Enter);
     assert_eq!(app.message, None, "an ID in no catalog was advised");
+}
+
+#[test]
+fn the_delivery_preset_fills_its_rows_on_the_screen_and_a_fixed_row_says_why() {
+    let mut app = App::one_table(None, Config::default());
+    walk_to(&mut app, Setting::ReadyBy);
+    let painted = rows(&app, 110, 60).join("\n");
+    assert!(
+        painted.contains("fixed while `Claim workflow` is `autonomous`"),
+        "a row autonomous fixes is offered as if it could be chosen:\n{painted}"
+    );
+    let preset_at = painted
+        .find("Delivery preset")
+        .expect("the preset is drawn");
+    let workflow_at = painted
+        .find("Claim workflow ")
+        .expect("Claim workflow is drawn");
+    let merge_at = painted.find("Merge by").expect("Merge by is drawn");
+    assert!(
+        preset_at < workflow_at && workflow_at < merge_at,
+        "{painted}"
+    );
+
+    app.set(Setting::DeliveryPreset, "team").expect("team");
+    for (setting, value) in [
+        (Setting::Workflow, "assisted"),
+        (Setting::SelfReview, "on"),
+        (Setting::ReadyBy, "agent"),
+        (Setting::CorrectionsAfterReady, "push-ready"),
+        (Setting::MergeBy, "person"),
+    ] {
+        assert_eq!(app.shown_value(setting), value, "{}", setting.label());
+    }
+    let painted = rows(&app, 110, 60).join("\n");
+    assert!(!painted.contains("fixed while"), "{painted}");
+
+    app.set(Setting::SelfReview, "off").expect("off");
+    assert_eq!(app.shown_value(Setting::DeliveryPreset), "custom");
+    assert_eq!(app.shown_value(Setting::MergeBy), "person");
 }
