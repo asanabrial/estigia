@@ -618,6 +618,14 @@ were trimmed by that much rather than the ceiling moved. With `compact: true` an
 and `review_status` drops from `next.arguments` the fields `receipt` already holds, so the receipt is
 named once. Without it every answer is byte-identical to before.
 
+`release`'s `spend` description names the fields a record needs and says that the receipt fields
+default to the held review transaction, which moved the list from **48,497** to **48,597** bytes.
+`TOOLS_LIST_CEILING` was raised by exactly that difference. In the lever bench (*The cost and time
+levers against the baseline*), 16 of 18 publishing runs spent a `ToolSearch` turn on `record_spend`
+or `review_read` only to learn those fields or the receipt, and 6 had a first `release` refused
+`missing-argument` for want of the receipt. One turn there costs about 50,000 tokens of context;
+the hundred bytes are paid once per session.
+
 `target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
 paid only by a call that passes `manifest`.
 
