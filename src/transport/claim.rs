@@ -11518,7 +11518,8 @@ fn epoch_of(event: &ownership::Event) -> String {
     )
 }
 
-/// Refuses `target-operation-mismatch` before a release that folds a close into
+/// Refuses `target-operation-mismatch`, or `nothing-to-unassign` for a run that
+/// holds nothing, before a release that folds a close into
 /// itself writes anything, so a takeover between the discovery and the write
 /// cannot leave a half-closed delivery behind the refusal. Reads only; every
 /// other refusal stays [`plan_release`]'s.
@@ -11534,7 +11535,9 @@ pub(crate) fn check_release_epoch(context: &Context, what: &Departure<'_>) -> Re
         .chain(&ownership.stale)
         .find(|event| event.run_id == what.run_id)
     else {
-        return Ok(());
+        return Err(Failure::Stop(
+            serde_json::json!({ "ok": false, "reason": "nothing-to-unassign" }),
+        ));
     };
     let target = epoch_of(mine);
     if requested == target {
