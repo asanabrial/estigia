@@ -1363,6 +1363,17 @@ pub fn workflow_in_force(skill_root: Option<&Path>, repo_dir: &Path) -> crate::c
         .workflow
 }
 
+/// The first pair of delivery rows in force here that cannot both hold.
+pub fn delivery_conflict_in_force(
+    skill_root: Option<&Path>,
+    repo_dir: &Path,
+) -> Option<crate::outcome::Refusal> {
+    skill_root
+        .map(|root| crate::skill::installed_config_in_keeping_what_parses(root, repo_dir).0)
+        .unwrap_or_default()
+        .delivery_conflict()
+}
+
 /// Every check `estigia doctor` runs, assembled, so the claim about how many
 /// there are can be measured in one place.
 pub fn full(

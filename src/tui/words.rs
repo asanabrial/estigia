@@ -427,6 +427,57 @@ pub const SPANISH: &[(&str, &str)] = &[
         "quién da fe de un reclamo en este repositorio: Estigia escribe en el tracker, o el equipo coordina y Estigia no",
     ),
     ("`autonomous`, or `assisted`", "`autonomous` o `assisted`"),
+    ("Delivery", "Entrega"),
+    ("Delivery preset", "Configuración de entrega"),
+    (
+        "the delivery rows below at once: a known flow in one choice, which any row after it overrides",
+        "las filas de entrega de abajo de una vez: un flujo conocido en una sola elección, que cualquier fila posterior sustituye",
+    ),
+    (
+        "`autonomous`, `assisted`, `team`, or `custom`",
+        "`autonomous`, `assisted`, `team` o `custom`",
+    ),
+    ("State names", "Nombres de estado"),
+    (
+        "the tracker's own name for each state Estigia moves an issue into, under a Linear tracker",
+        "el nombre propio del tracker para cada estado al que Estigia mueve una issue, con un tracker Linear",
+    ),
+    (
+        "`none`, or comma-separated `<state>=<Name>` pairs, the state one of in-progress, review or done, under a Linear tracker",
+        "`none`, o pares `<state>=<Name>` separados por comas, siendo el estado in-progress, review o done, con un tracker Linear",
+    ),
+    ("Self review", "Revisión propia"),
+    (
+        "whether the run reviews its own change in a fresh context before it is marked ready",
+        "si la ejecución revisa su propio cambio en un contexto nuevo antes de marcarlo listo",
+    ),
+    ("Ready by", "Lo marca listo"),
+    (
+        "who marks the draft pull request ready for review",
+        "quién marca el pull request en borrador como listo para revisión",
+    ),
+    ("`agent`, or `person`", "`agent` o `person`"),
+    ("External reviewers", "Revisores externos"),
+    (
+        "the CI checks and people a ready pull request waits on, in order: a stage starts only once every earlier one is complete",
+        "los checks de CI y las personas a las que espera un pull request listo, en orden: una etapa empieza solo cuando todas las anteriores han terminado",
+    ),
+    (
+        "`none`, or comma-separated stages in the order they run: `check:<check name>` or `check:<check name>@<login>` for a CI check, and `review:<login>`, `review:<org>/<team>` or `review:any` for a person, any of them ending in :advisory when its comments need not be addressed, as in `review:any:advisory`",
+        "`none`, o etapas separadas por comas en el orden en que se ejecutan: `check:<check name>` o `check:<check name>@<login>` para un check de CI, y `review:<login>`, `review:<org>/<team>` o `review:any` para una persona; cualquiera puede terminar en :advisory cuando sus comentarios no hace falta atenderlos, como en `review:any:advisory`",
+    ),
+    ("Corrections after ready", "Correcciones tras listo"),
+    (
+        "what the run does to a pull request that is already ready when it has a correction to publish",
+        "qué hace la ejecución con un pull request que ya está listo cuando tiene una corrección que publicar",
+    ),
+    ("`refuse`, `redraft`, or `push-ready`", "`refuse`, `redraft` o `push-ready`"),
+    ("Merge by", "Lo mergea"),
+    ("who merges the reviewed pull request", "quién mergea el pull request revisado"),
+    (
+        "fixed while `Claim workflow` is `autonomous`: choose `team` or `assisted` in `Delivery preset` to change it",
+        "fija mientras `Claim workflow` sea `autonomous`: elige `team` o `assisted` en `Delivery preset` para cambiarla",
+    ),
     ("Review budget", "Presupuesto de revisión"),
     (
         "the per-context token figure a review is reported against, and nothing more",

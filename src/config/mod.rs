@@ -14,14 +14,18 @@ use crate::harness::population::{Disposition, Population};
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 
 mod block;
+mod delivery;
 mod settings;
 
 pub use block::{BLOCK_BEGIN, BLOCK_END, CONFIG_FENCE};
+pub use delivery::{
+    Corrections, DeliveryPreset, MAPPED_STATES, Party, PresetRows, ReviewStage, StageKind,
+};
 pub(crate) use settings::retired_setting_report;
 pub use settings::{
-    AGENT_SETTINGS, Answers, CutBy, CutShort, EVERYWHERE_SETTINGS, Group, MACHINE_SETTINGS,
-    OPTIONS_SETTINGS, READ_BY_THE_TRANSPORT, REPOSITORY_SETTINGS, SETTINGS, Scope, Setting,
-    authority_of, reaches_the_transport, rendered_authority, rows as table_rows,
+    AGENT_SETTINGS, Answers, CutBy, CutShort, EVERYWHERE_SETTINGS, FIXED_UNDER_AUTONOMOUS, Group,
+    MACHINE_SETTINGS, OPTIONS_SETTINGS, READ_BY_THE_TRANSPORT, REPOSITORY_SETTINGS, SETTINGS,
+    Scope, Setting, authority_of, reaches_the_transport, rendered_authority, rows as table_rows,
     rows_split_by_a_separator,
 };
 
@@ -902,6 +906,19 @@ pub struct Config {
     pub issue_requirement: IssueRequirement,
     /// Who witnesses a claim in this repository.
     pub workflow: Workflow,
+    /// `State names`: Estigia's states mapped onto the tracker's own.
+    pub state_names: Vec<(String, String)>,
+    /// `Self review` as written; [`Config::self_review`] is the value in force.
+    pub self_review: Option<bool>,
+    /// `Ready by` as written; [`Config::ready_by`] is the value in force.
+    pub ready_by: Option<Party>,
+    /// `External reviewers`, in the order the stages run.
+    pub external_reviewers: Vec<ReviewStage>,
+    /// `Corrections after ready` as written; [`Config::corrections_after_ready`]
+    /// is the value in force.
+    pub corrections_after_ready: Option<Corrections>,
+    /// `Merge by` as written; [`Config::merge_by`] is the value in force.
+    pub merge_by: Option<Party>,
     /// Whether OpenCode's optional loop plugin is written.
     pub loop_plugin: LoopPlugin,
     /// Whether OpenCode's generic `/goal` and `/loop` plugin is written.
@@ -1008,6 +1025,12 @@ impl Default for Config {
             publication_lane: PublicationLane::On,
             issue_requirement: IssueRequirement::Ask,
             workflow: Workflow::Autonomous,
+            state_names: Vec::new(),
+            self_review: None,
+            ready_by: None,
+            external_reviewers: Vec::new(),
+            corrections_after_ready: None,
+            merge_by: None,
             // No loop plugin: it ships behind a flag and
             // stays behind the default.
             loop_plugin: LoopPlugin::Off,

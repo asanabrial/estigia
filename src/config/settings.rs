@@ -13,7 +13,7 @@ use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use super::{
     Authority, Config, DEFAULT_ASK_TIMEOUT, Evidence, GitOperationWindow, IssueRequirement,
     Language, LoopPlugin, Profile, PublicationLane, RepoRef, RepositoryHost, ReviewBudget, Tracker,
-    Workflow, WorktreeRoot,
+    Workflow, WorktreeRoot, delivery,
 };
 use crate::setup::AgentAdapter;
 
@@ -65,6 +65,20 @@ pub enum Setting {
     IssueRequirement,
     /// Who witnesses a claim in this repository: Estigia, or the team.
     Workflow,
+    /// The delivery rows in one word: a preset that fills the five it names.
+    DeliveryPreset,
+    /// Estigia's workflow states mapped onto the tracker's own state names.
+    StateNames,
+    /// Whether the run reviews its own change before it is marked ready.
+    SelfReview,
+    /// Who marks the pull request ready for review.
+    ReadyBy,
+    /// The CI checks and people whose reviews a pull request waits on, in order.
+    ExternalReviewers,
+    /// What a correction does to a pull request that is already ready.
+    CorrectionsAfterReady,
+    /// Who merges the reviewed pull request.
+    MergeBy,
     /// Whether OpenCode's optional loop plugin is written.
     LoopPlugin,
     /// Whether OpenCode also gets the generic `/goal` and `/loop` plugin.
@@ -91,10 +105,20 @@ pub const SETTINGS: &[Setting] = &[
     // Repository & tracker.
     Setting::Tracker,
     Setting::RepositoryHost,
-    Setting::Workflow,
     Setting::IssueRequirement,
     Setting::Integration,
     Setting::Worktree,
+    // Delivery, in the order the steps happen. The preset first, for the
+    // reason `Profile` leads Authority: it writes the rows below it, and a row
+    // that follows wins.
+    Setting::DeliveryPreset,
+    Setting::Workflow,
+    Setting::StateNames,
+    Setting::SelfReview,
+    Setting::ReadyBy,
+    Setting::ExternalReviewers,
+    Setting::CorrectionsAfterReady,
+    Setting::MergeBy,
     // Gate limits.
     Setting::Boundaries,
     Setting::Window,
@@ -118,15 +142,17 @@ pub const SETTINGS: &[Setting] = &[
 /// reference show the same groups in the same order.
 ///
 /// A group is a *theme*, not a scope: `Repository & tracker` holds both the
-/// facts every checkout shares and the two rows only a repository's own file
-/// answers, because they are one question — where the work lives and who
-/// witnesses it — and the scope column already says which is which.
+/// facts every checkout shares and `Unclaimed write policy`, which only a
+/// repository's own file answers, because they are one question — where the
+/// work lives — and the scope column already says which is which.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
     /// Who authorises the two things that can ask.
     Authority,
-    /// Where the issues live, who witnesses a claim, and how work integrates.
+    /// Where the issues live and how work integrates.
     Repository,
+    /// Who takes each step from a finished change to its merge.
+    Delivery,
     /// What the gate will not let a run do, and how long a decision rides.
     GateLimits,
     /// What a verdict must be backed by, and how large a change may get.
@@ -142,6 +168,7 @@ impl Group {
     pub const ALL: &[Group] = &[
         Group::Authority,
         Group::Repository,
+        Group::Delivery,
         Group::GateLimits,
         Group::ReviewAndChange,
         Group::AgentRuntime,
@@ -155,6 +182,7 @@ impl Group {
         match self {
             Self::Authority => "Authority",
             Self::Repository => "Repository & tracker",
+            Self::Delivery => "Delivery",
             Self::GateLimits => "Gate limits",
             Self::ReviewAndChange => "Review & change",
             Self::AgentRuntime => "Agent runtime",
@@ -268,7 +296,7 @@ pub const AGENT_SETTINGS: &[Setting] = &[
 ///
 /// Not every row here is read the same way. Most are read by an agent, out
 /// of the prose, or by the transport — but nine rows reach the gate's
-/// `GateContext`, the seven here and the two repository-only rows, and eight
+/// `GateContext`, the seven here and two of the repository-only rows, and eight
 /// of them feed its own allow/deny decision: `Repository host` is carried so
 /// MCP publication tools can bind to it rather than so `decide` branches on
 /// it, and `Workflow` decides only for the pointer an `assisted` run left.
@@ -305,7 +333,17 @@ pub const EVERYWHERE_SETTINGS: &[Setting] = &[
 pub const MACHINE_SETTINGS: &[Setting] = &[Setting::Summary, Setting::Body];
 
 /// The rows only a repository's own file answers, in table order.
-pub const REPOSITORY_SETTINGS: &[Setting] = &[Setting::Workflow, Setting::IssueRequirement];
+pub const REPOSITORY_SETTINGS: &[Setting] = &[
+    Setting::IssueRequirement,
+    Setting::DeliveryPreset,
+    Setting::Workflow,
+    Setting::StateNames,
+    Setting::SelfReview,
+    Setting::ReadyBy,
+    Setting::ExternalReviewers,
+    Setting::CorrectionsAfterReady,
+    Setting::MergeBy,
+];
 
 /// Everything the options page offers, in table order.
 ///
@@ -316,10 +354,17 @@ pub const REPOSITORY_SETTINGS: &[Setting] = &[Setting::Workflow, Setting::IssueR
 pub const OPTIONS_SETTINGS: &[Setting] = &[
     Setting::Tracker,
     Setting::RepositoryHost,
-    Setting::Workflow,
     Setting::IssueRequirement,
     Setting::Integration,
     Setting::Worktree,
+    Setting::DeliveryPreset,
+    Setting::Workflow,
+    Setting::StateNames,
+    Setting::SelfReview,
+    Setting::ReadyBy,
+    Setting::ExternalReviewers,
+    Setting::CorrectionsAfterReady,
+    Setting::MergeBy,
     Setting::Boundaries,
     Setting::Window,
     Setting::GitOperationWindow,
@@ -416,7 +461,15 @@ impl Setting {
             // Written across every checkout somebody has, so they belong to
             // the person rather than to the repository.
             Self::Summary | Self::Body => Scope::Machine,
-            Self::IssueRequirement | Self::Workflow => Scope::Repository,
+            Self::IssueRequirement
+            | Self::Workflow
+            | Self::DeliveryPreset
+            | Self::StateNames
+            | Self::SelfReview
+            | Self::ReadyBy
+            | Self::ExternalReviewers
+            | Self::CorrectionsAfterReady
+            | Self::MergeBy => Scope::Repository,
         }
     }
 
@@ -432,10 +485,17 @@ impl Setting {
             Self::Profile | Self::Delivery | Self::Transitions => Group::Authority,
             Self::Tracker
             | Self::RepositoryHost
-            | Self::Workflow
             | Self::IssueRequirement
             | Self::Integration
             | Self::Worktree => Group::Repository,
+            Self::DeliveryPreset
+            | Self::Workflow
+            | Self::StateNames
+            | Self::SelfReview
+            | Self::ReadyBy
+            | Self::ExternalReviewers
+            | Self::CorrectionsAfterReady
+            | Self::MergeBy => Group::Delivery,
             Self::Boundaries | Self::Window | Self::GitOperationWindow => Group::GateLimits,
             Self::Evidence
             | Self::PublicationLane
@@ -500,7 +560,14 @@ impl Setting {
             | Self::Summary
             | Self::Body
             | Self::LoopPlugin
-            | Self::GoalLoopPlugin => false,
+            | Self::GoalLoopPlugin
+            | Self::DeliveryPreset
+            | Self::StateNames
+            | Self::SelfReview
+            | Self::ReadyBy
+            | Self::ExternalReviewers
+            | Self::CorrectionsAfterReady
+            | Self::MergeBy => false,
         }
     }
 
@@ -550,6 +617,28 @@ impl Setting {
                 "who witnesses a claim in this repository: Estigia writes the tracker, or the \
                  team coordinates and Estigia does not"
             }
+            Self::DeliveryPreset => {
+                "the delivery rows below at once: a known flow in one choice, which any row after \
+                 it overrides"
+            }
+            Self::StateNames => {
+                "the tracker's own name for each state Estigia moves an issue into, under a \
+                 Linear tracker"
+            }
+            Self::SelfReview => {
+                "whether the run reviews its own change in a fresh context before it is marked \
+                 ready"
+            }
+            Self::ReadyBy => "who marks the draft pull request ready for review",
+            Self::ExternalReviewers => {
+                "the CI checks and people a ready pull request waits on, in order: a stage starts \
+                 only once every earlier one is complete"
+            }
+            Self::CorrectionsAfterReady => {
+                "what the run does to a pull request that is already ready when it has a \
+                 correction to publish"
+            }
+            Self::MergeBy => "who merges the reviewed pull request",
             Self::Boundaries => "the commands this repository treats as one-way doors",
             Self::Summary => "the language the summary sentence at the top of an issue is in",
             Self::Body => "the language the rest of an issue body is written in",
@@ -605,6 +694,18 @@ impl Setting {
             Self::CorrectionsPerLineage => Answers::some(&["3", "1"]),
             Self::IssueRequirement => Answers::all(&["ask", "off", "required"]),
             Self::Workflow => Answers::all(&["autonomous", "assisted"]),
+            // `custom` is accepted and not offered, for the reason `Profile`'s is.
+            Self::DeliveryPreset => Answers::some(&["autonomous", "assisted", "team"]),
+            Self::StateNames => Answers::some(&[
+                "none",
+                "in-progress=In Progress, review=In Review, done=Done",
+            ]),
+            Self::SelfReview => Answers::all(&["on", "off"]),
+            Self::ReadyBy | Self::MergeBy => Answers::all(&["agent", "person"]),
+            Self::ExternalReviewers => {
+                Answers::some(&["none", "check:cubic@cubic-dev-ai[bot], review:any"])
+            }
+            Self::CorrectionsAfterReady => Answers::all(&["refuse", "redraft", "push-ready"]),
             Self::Boundaries => Answers::some(&[
                 "none",
                 "git push --force",
@@ -640,6 +741,13 @@ impl Setting {
             Self::Body => "Issue body language",
             Self::IssueRequirement => "Unclaimed write policy",
             Self::Workflow => "Claim workflow",
+            Self::DeliveryPreset => "Delivery preset",
+            Self::StateNames => "State names",
+            Self::SelfReview => "Self review",
+            Self::ReadyBy => "Ready by",
+            Self::ExternalReviewers => "External reviewers",
+            Self::CorrectionsAfterReady => "Corrections after ready",
+            Self::MergeBy => "Merge by",
             Self::LoopPlugin => "Loop plugin",
             Self::GoalLoopPlugin => "Goal loop plugin",
         }
@@ -781,6 +889,49 @@ impl Setting {
                 "a tool that writes the tracker is refused here, and the loops find no work; the \
                  team decides who takes an issue"
             }
+            (Self::DeliveryPreset, "autonomous") => {
+                "Estigia claims, reviews its own change, marks it ready and merges it"
+            }
+            (Self::DeliveryPreset, "assisted") => {
+                "the team coordinates and the run stops at a draft pull request; people do the rest"
+            }
+            (Self::DeliveryPreset, "team") => {
+                "the team coordinates; the run reviews its own draft, marks it ready, waits on \
+                 the external reviewers and addresses their comments, and a person merges"
+            }
+            (Self::DeliveryPreset, _) => {
+                "the rows below match no preset; each one says what it does"
+            }
+            (Self::StateNames, "none") => "Estigia moves no state on the tracker's side",
+            (Self::StateNames, _) => {
+                "the Linear issue is moved to the state named beside each of Estigia's"
+            }
+            (Self::SelfReview, "on") => {
+                "the run reviews its change in a context that did not write it before it is ready"
+            }
+            (Self::SelfReview, "off") => {
+                "no review by the run; the people reviewing are the review"
+            }
+            (Self::ReadyBy | Self::MergeBy, "agent") => "the run does it",
+            (Self::ReadyBy | Self::MergeBy, "person") => {
+                "a person does it, and the run waits for it rather than doing it"
+            }
+            (Self::ExternalReviewers, "none") => "no stage: nothing outside Estigia is waited on",
+            (Self::ExternalReviewers, _) => {
+                "each stage in turn: a check whose run must complete and whose author's comments \
+                 are read, or a person whose review is requested only once the earlier stages are \
+                 done"
+            }
+            (Self::CorrectionsAfterReady, "refuse") => {
+                "nothing is published to a ready pull request; a person decides what happens to it"
+            }
+            (Self::CorrectionsAfterReady, "redraft") => {
+                "the pull request goes back to draft before the correction is pushed"
+            }
+            (Self::CorrectionsAfterReady, "push-ready") => {
+                "the correction is pushed to the ready pull request, so its CI and its reviewers \
+                 see it at once"
+            }
             (Self::ReviewBudget, "none") => "off: no per-context figure is declared",
             (Self::ReviewBudget, _) => {
                 "that many tokens is what a single review context is reported against; \
@@ -872,6 +1023,20 @@ impl Setting {
             Self::PublicationLane => "`on`, or `off`",
             Self::IssueRequirement => "`ask`, `off`, or `required`",
             Self::Workflow => "`autonomous`, or `assisted`",
+            Self::DeliveryPreset => "`autonomous`, `assisted`, `team`, or `custom`",
+            Self::StateNames => {
+                "`none`, or comma-separated `<state>=<Name>` pairs, the state one of in-progress, \
+                 review or done, under a Linear tracker"
+            }
+            Self::SelfReview => "`on`, or `off`",
+            Self::ReadyBy | Self::MergeBy => "`agent`, or `person`",
+            Self::ExternalReviewers => {
+                "`none`, or comma-separated stages in the order they run: `check:<check name>` or \
+                 `check:<check name>@<login>` for a CI check, and `review:<login>`, \
+                 `review:<org>/<team>` or `review:any` for a person, any of them ending in \
+                 :advisory when its comments need not be addressed, as in `review:any:advisory`"
+            }
+            Self::CorrectionsAfterReady => "`refuse`, `redraft`, or `push-ready`",
             Self::ReviewBudget => "`none`, or a token count such as `150000`",
             Self::ChangeSize => "a number of lines, such as `800`",
             Self::CorrectionsPerLineage => "a positive whole number, such as `3`",
@@ -1117,6 +1282,38 @@ impl Setting {
                     _ => return Err(self.reject(value)),
                 }
             }
+            Self::DeliveryPreset => {
+                if lower(value) == "custom" {
+                    return Ok(());
+                }
+                let preset =
+                    super::DeliveryPreset::parse(value).ok_or_else(|| self.reject(value))?;
+                config.set_delivery_preset(preset);
+            }
+            Self::StateNames => {
+                config.state_names =
+                    delivery::parse_state_names(value).ok_or_else(|| self.reject(value))?;
+            }
+            Self::SelfReview => {
+                config.self_review =
+                    Some(delivery::parse_switch(value).ok_or_else(|| self.reject(value))?);
+            }
+            Self::ReadyBy => {
+                config.ready_by =
+                    Some(delivery::parse_party(value).ok_or_else(|| self.reject(value))?);
+            }
+            Self::ExternalReviewers => {
+                config.external_reviewers =
+                    delivery::parse_stages(value).ok_or_else(|| self.reject(value))?;
+            }
+            Self::CorrectionsAfterReady => {
+                config.corrections_after_ready =
+                    Some(delivery::parse_corrections(value).ok_or_else(|| self.reject(value))?);
+            }
+            Self::MergeBy => {
+                config.merge_by =
+                    Some(delivery::parse_party(value).ok_or_else(|| self.reject(value))?);
+            }
             Self::GoalLoopPlugin => {
                 config.goal_loop_plugin = match lower(value).as_str() {
                     "on" => LoopPlugin::On,
@@ -1176,6 +1373,16 @@ impl Setting {
             Self::PublicationLane => config.publication_lane.as_value().to_owned(),
             Self::IssueRequirement => config.issue_requirement.as_value().to_owned(),
             Self::Workflow => config.workflow.as_value().to_owned(),
+            Self::DeliveryPreset => config.delivery_preset().map_or_else(
+                || "custom".to_owned(),
+                |preset| preset.as_value().to_owned(),
+            ),
+            Self::StateNames => delivery::render_state_names(&config.state_names),
+            Self::SelfReview => if config.self_review() { "on" } else { "off" }.to_owned(),
+            Self::ReadyBy => config.ready_by().as_value().to_owned(),
+            Self::ExternalReviewers => delivery::render_stages(&config.external_reviewers),
+            Self::CorrectionsAfterReady => config.corrections_after_ready().as_value().to_owned(),
+            Self::MergeBy => config.merge_by().as_value().to_owned(),
             Self::ReviewBudget => config.review_budget.as_value(),
             Self::Boundaries => {
                 if config.boundaries.is_empty() {
@@ -1189,6 +1396,21 @@ impl Setting {
             Self::LoopPlugin => config.loop_plugin.as_value().to_owned(),
             Self::GoalLoopPlugin => config.goal_loop_plugin.as_value().to_owned(),
         }
+    }
+
+    /// Why this row cannot be chosen under `config`, or `None` when it can.
+    pub fn fixed_by(self, config: &Config) -> Option<&'static str> {
+        let fixed_under_autonomous = matches!(
+            self,
+            Self::StateNames
+                | Self::SelfReview
+                | Self::ReadyBy
+                | Self::ExternalReviewers
+                | Self::CorrectionsAfterReady
+                | Self::MergeBy
+        );
+        (fixed_under_autonomous && config.workflow == Workflow::Autonomous)
+            .then_some(FIXED_UNDER_AUTONOMOUS)
     }
 
     /// The third column: what the skill does when nothing is configured.
@@ -1211,6 +1433,10 @@ impl Setting {
         )
     }
 }
+
+/// What [`Setting::fixed_by`] answers for a delivery row under `autonomous`.
+pub const FIXED_UNDER_AUTONOMOUS: &str = "fixed while `Claim workflow` is `autonomous`: choose \
+     `team` or `assisted` in `Delivery preset` to change it";
 
 fn lower(value: &str) -> String {
     value.trim().to_ascii_lowercase()
