@@ -2505,6 +2505,12 @@ fn detail_of_setting(app: &App) -> Vec<Line<'static>> {
         },
         muted(),
     ));
+    if let Some(why) = setting.fixed_by(app.shown_config(setting)) {
+        lines.push(Line::styled(
+            t!(app.tongue, why).to_owned(),
+            Style::default().fg(Color::Yellow),
+        ));
+    }
     if app.page == Page::Detail
         && let Some(why) = app.applies(setting).because()
     {

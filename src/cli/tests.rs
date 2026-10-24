@@ -210,6 +210,38 @@ fn inventory() -> Vec<Refusal> {
             Resolution::run("estigia config set Tracker github --repo"),
         ),
         Refusal::not_started(
+            "autonomous-fixes-delivery-rows",
+            "`Claim workflow` is `autonomous`, which fixes `Ready by` at the autonomous preset's value",
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "set `Delivery preset` to `team` or `assisted`, or `Claim workflow` to `assisted`",
+            ),
+        ),
+        Refusal::not_started(
+            "assisted-merge-is-the-persons",
+            "`Merge by` is `agent` and `Claim workflow` is `assisted`",
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "set `Merge by` to `person`, or `Delivery preset` to `autonomous`",
+            ),
+        ),
+        Refusal::not_started(
+            "state-names-need-linear",
+            "`State names` maps states onto a tracker whose states Estigia writes as labels",
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "set `State names` to `none`, or `Tracker` to `linear <team-key>`",
+            ),
+        ),
+        Refusal::not_started(
+            "delivery-preset-custom-sets-nothing",
+            "`Delivery preset` reads `custom` when the rows below it match no preset",
+            Resolution::no_command(
+                NoCommandReason::OperatorKnowledge,
+                "a preset (`autonomous`, `assisted` or `team`), or the row you want to change",
+            ),
+        ),
+        Refusal::not_started(
             "read-only-tracker-admits-only-assisted",
             "`Tracker linear` is read-only and admits only assisted work",
             Resolution::no_command(
@@ -10020,6 +10052,97 @@ fn a_machine_wide_linear_tracker_is_refused_for_the_machine_and_for_an_agent() {
         assert_eq!(refusal.code, "linear-is-per-repository");
         assert_eq!(refusal.outcome, MutationOutcome::NotStarted);
     }
+}
+
+fn delivery_rig() -> (tempfile::TempDir, tempfile::TempDir, SetupOptions) {
+    let repo = tempfile::tempdir().expect("a repository");
+    std::fs::create_dir_all(repo.path().join(".git")).expect("a checkout");
+    let home = tempfile::tempdir().expect("a temporary home");
+    let options = SetupOptions {
+        home_dir: Some(home.path().to_path_buf()),
+        ..SetupOptions::default()
+    };
+    (repo, home, options)
+}
+
+fn repository_file(repo: &std::path::Path) -> String {
+    std::fs::read_to_string(crate::skill::repository_config_path(repo)).unwrap_or_default()
+}
+
+#[test]
+fn a_delivery_preset_is_written_as_the_rows_it_stands_for_and_moves_between_presets_whole() {
+    let (repo, _home, options) = delivery_rig();
+    super::repository_set(Setting::DeliveryPreset, "team", repo.path(), &options)
+        .expect("team is taken");
+    let written = repository_file(repo.path());
+    for row in [
+        "| Claim workflow | assisted |",
+        "| Self review | on |",
+        "| Ready by | agent |",
+        "| Corrections after ready | push-ready |",
+        "| Merge by | person |",
+    ] {
+        assert!(written.contains(row), "{row} missing: {written}");
+    }
+    assert!(
+        !written.contains("Delivery preset"),
+        "the preset is a reading of the rows, not a row of its own: {written}"
+    );
+    super::repository_set(Setting::DeliveryPreset, "autonomous", repo.path(), &options)
+        .expect("leaving team for autonomous is one write, not five that disagree on the way");
+    assert!(repository_file(repo.path()).contains("| Merge by | agent |"));
+    let refusal = super::repository_set(Setting::DeliveryPreset, "custom", repo.path(), &options)
+        .expect_err("custom names no rows");
+    assert_eq!(refusal.code, "delivery-preset-custom-sets-nothing");
+}
+
+#[test]
+fn a_delivery_row_autonomous_fixes_is_refused_and_not_written() {
+    let (repo, _home, options) = delivery_rig();
+    let refusal = super::repository_set(Setting::MergeBy, "person", repo.path(), &options)
+        .expect_err("autonomous fixes Merge by");
+    assert_eq!(refusal.code, "autonomous-fixes-delivery-rows");
+    assert!(!repository_file(repo.path()).contains("Merge by"));
+
+    super::repository_set(Setting::Workflow, "assisted", repo.path(), &options)
+        .expect("assisted is taken");
+    super::repository_set(Setting::MergeBy, "person", repo.path(), &options)
+        .expect("under assisted a person merges");
+    let refusal = super::repository_set(Setting::MergeBy, "agent", repo.path(), &options)
+        .expect_err("an assisted run cannot deliver");
+    assert_eq!(refusal.code, "assisted-merge-is-the-persons");
+    assert!(repository_file(repo.path()).contains("| Merge by | person |"));
+}
+
+#[test]
+fn the_screen_saves_a_changed_preset_as_one_write() {
+    let (repo, _home, options) = delivery_rig();
+    let mut installed = Config::default();
+    Setting::DeliveryPreset
+        .apply(&mut installed, "team")
+        .expect("team");
+    super::repository_set(Setting::DeliveryPreset, "team", repo.path(), &options).expect("team");
+    let mut edited = installed.clone();
+    Setting::DeliveryPreset
+        .apply(&mut edited, "autonomous")
+        .expect("autonomous");
+    let rows: Vec<(Setting, String)> = crate::config::SETTINGS
+        .iter()
+        .filter(|setting| {
+            setting.scope() == crate::config::Scope::Repository
+                && **setting != Setting::DeliveryPreset
+                && setting.value_of(&edited) != setting.value_of(&installed)
+        })
+        .map(|setting| (*setting, setting.value_of(&edited)))
+        .collect();
+    super::repository_write(&rows, repo.path(), &options)
+        .expect("the rows a preset changes are saved together");
+    let written = repository_file(repo.path());
+    assert!(
+        written.contains("| Claim workflow | autonomous |"),
+        "{written}"
+    );
+    assert!(written.contains("| Merge by | agent |"), "{written}");
 }
 
 #[test]

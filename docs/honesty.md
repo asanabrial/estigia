@@ -7313,8 +7313,16 @@ pointer that leaves it names the document it points at.
   `the_stop_hook_with_an_empty_queue_answers_as_before`; a queued claim's owner and runtime label
   are projected from the store, not from the payload, measured by
   `a_queued_claim_projects_the_assignee_and_runtime_label_from_the_store`.
-- **No setting is read by nobody.**
-  An operator sets twenty-two rows and `config list` reports all of them. Measured: `context.get` is
+- **Seven rows are read by nobody yet.** `Delivery preset`, `State names`, `Self review`, `Ready by`,
+  `External reviewers`, `Corrections after ready` and `Merge by` are typed, validated against each other
+  and saved, and no tool, gate decision or sentence an agent is given acts on them: the behaviour they
+  name is not built yet. `READ_BY_NOBODY` in `tests/honesty.rs` lists five of them and fails
+  when one is read and not taken off the list; `State names` and `Ready by` are missing from it only
+  because the crossing reads a label occurring anywhere in the skill's prose as a reader, and both
+  phrases occur in sentences about something else. Until then setting one changes what `config list`
+  says and nothing a run does.
+- **No other setting is read by nobody.**
+  An operator sets twenty-nine rows and `config list` reports all of them. Measured: `context.get` is
   called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location`, `Review budget` (for the review forecast line) and `Git operation window`. The gate reads
   `Irreversible commands`, and the payload's prose names the rest of the acted-on rows. That once
   left `Delivery authorisation`, `Transition authorisation`, `Delivery route`, `Merge strategy`,

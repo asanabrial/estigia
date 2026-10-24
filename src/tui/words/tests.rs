@@ -38,6 +38,7 @@ fn lines_the_screen_says() -> Vec<String> {
         // rather than a literal, so the source scan cannot see them.
         found.push(setting.scope_label().to_owned());
     }
+    found.push(crate::config::FIXED_UNDER_AUTONOMOUS.to_owned());
     for group in crate::config::Group::ALL {
         found.push(group.label().to_owned());
     }

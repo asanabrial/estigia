@@ -111,6 +111,13 @@ fn every_variant() -> Vec<Setting> {
             | Setting::Body
             | Setting::IssueRequirement
             | Setting::Workflow
+            | Setting::DeliveryPreset
+            | Setting::StateNames
+            | Setting::SelfReview
+            | Setting::ReadyBy
+            | Setting::ExternalReviewers
+            | Setting::CorrectionsAfterReady
+            | Setting::MergeBy
             | Setting::LoopPlugin
             | Setting::GoalLoopPlugin => setting,
         }
@@ -179,6 +186,13 @@ fn every_setting_is_in_the_table() {
         Setting::Body,
         Setting::IssueRequirement,
         Setting::Workflow,
+        Setting::DeliveryPreset,
+        Setting::StateNames,
+        Setting::SelfReview,
+        Setting::ReadyBy,
+        Setting::ExternalReviewers,
+        Setting::CorrectionsAfterReady,
+        Setting::MergeBy,
         Setting::LoopPlugin,
         Setting::GoalLoopPlugin,
     ];
@@ -297,6 +311,26 @@ fn a_closed_list_offers_every_value_its_type_can_hold() {
                 |c, v| c.workflow = v,
                 setting,
             )),
+            Setting::SelfReview => Some(rendered(
+                vec![true, false],
+                |c, v| c.self_review = Some(v),
+                setting,
+            )),
+            Setting::ReadyBy => Some(rendered(
+                crate::config::Party::ALL.to_vec(),
+                |c, v| c.ready_by = Some(v),
+                setting,
+            )),
+            Setting::MergeBy => Some(rendered(
+                crate::config::Party::ALL.to_vec(),
+                |c, v| c.merge_by = Some(v),
+                setting,
+            )),
+            Setting::CorrectionsAfterReady => Some(rendered(
+                crate::config::Corrections::ALL.to_vec(),
+                |c, v| c.corrections_after_ready = Some(v),
+                setting,
+            )),
             Setting::LoopPlugin => Some(rendered(
                 LoopPlugin::all(),
                 |c, v| c.loop_plugin = v,
@@ -325,7 +359,10 @@ fn a_closed_list_offers_every_value_its_type_can_hold() {
             | Setting::GitOperationWindow
             | Setting::Boundaries
             | Setting::Summary
-            | Setting::Body => None,
+            | Setting::Body
+            | Setting::DeliveryPreset
+            | Setting::StateNames
+            | Setting::ExternalReviewers => None,
         };
 
         let answers = setting.answers();
@@ -603,6 +640,12 @@ fn a_rendered_table_reads_back_identically() {
         publication_lane: crate::config::PublicationLane::Off,
         issue_requirement: crate::config::IssueRequirement::Ask,
         workflow: crate::config::Workflow::Autonomous,
+        state_names: Vec::new(),
+        self_review: None,
+        ready_by: None,
+        external_reviewers: Vec::new(),
+        corrections_after_ready: None,
+        merge_by: None,
         // Not the default, so a round trip that dropped the row would show.
         loop_plugin: LoopPlugin::On,
         goal_loop_plugin: LoopPlugin::On,
@@ -2146,9 +2189,9 @@ fn the_gate_reads_exactly_the_rows_it_decides_from() {
         vec![
             Setting::Tracker,
             Setting::RepositoryHost,
-            Setting::Workflow,
             Setting::IssueRequirement,
             Setting::Integration,
+            Setting::Workflow,
             Setting::Boundaries,
             Setting::Window,
             Setting::GitOperationWindow,
