@@ -9733,8 +9733,9 @@ fn published(
          checkout to search, record each lens report and the computed verdict, then release_ci with \
          this exact receipt"
     } else {
-        "transition --to review, hand each judge a checkout of base/head to search, record each \
-         lens report and the computed verdict, then release_ci with this exact receipt"
+        "ask for start_review on the publication, or transition --to review, launch_review_input \
+         and collect_review_input for each slot review_status offers, record_computed_verdict, \
+         then release_ci with this exact receipt"
     };
     // The topology declaration, the lineage, the autoclose verdict and its
     // mandatory follow-up all moved to `review_transaction` — see

@@ -49,6 +49,9 @@ mod part_10;
 mod release;
 #[path = "pipe/review_family.rs"]
 mod review_family;
+#[cfg(unix)]
+#[path = "pipe/review_fold.rs"]
+mod review_fold;
 #[path = "pipe/review_job.rs"]
 mod review_job;
 #[path = "pipe/sources.rs"]
@@ -1172,9 +1175,9 @@ const INLINE_PAYLOAD_NEXT: &str = "transition --to review, hand each judge the `
      this answer rather than a checkout to search, record each lens report and the computed \
      verdict, then release_ci with this exact receipt";
 
-const OMITTED_PAYLOAD_NEXT: &str = "transition --to review, hand each judge a checkout of \
-     base/head to search, record each lens report and the computed verdict, then release_ci with \
-     this exact receipt";
+const OMITTED_PAYLOAD_NEXT: &str = "ask for start_review on the publication, or transition \
+     --to review, launch_review_input and collect_review_input for each slot review_status \
+     offers, record_computed_verdict, then release_ci with this exact receipt";
 
 fn correction_budget_sha(at: &std::path::Path, what: &str) -> String {
     let out = Command::new("git")

@@ -318,11 +318,12 @@ they just pushed, once per publication epoch and not once per push, and record w
 and how many on the receipt. Dispatching does not mark the pull request ready. A workflow that must
 not run per publication (a release lane, a nightly) is named on `Publication lanes exclude`.
 `record_computed_verdict` then refuses an `approved` verdict for a head whose check runs are red or
-unfinished, so the cheapest disqualifying signal is collected before the most expensive resource is
-spent rather than after it. A repository with no dispatchable candidate gets the old ordering:
+unfinished, so the cheapest disqualifying signal comes before the most expensive spend. A repository with no dispatchable candidate gets the old ordering:
 Estigia cannot prove a lane exists, and absence still proceeds. `publish_review` makes a
 reused PR draft and reads that back before push, or creates a new PR with `--draft`; the lenses can
-therefore run before ordinary cooperative CI. `release_ci` replays the live claim, the newest receipt on its own pull request, draft PR and coherent target, then
+therefore run before ordinary cooperative CI. `start_review` and `record_verdict` fold the
+transition, launches and verdict into them; `release_ci` stays its own.
+`release_ci` replays the live claim, the newest receipt on its own pull request, draft PR and coherent target, then
 marks ready and reads the result back.
 
 **`release_ci` answers whether CI will run.** Its answer carries `lane`, the reading `review_status`
@@ -332,9 +333,8 @@ gives, and `next`: `merge` when `lane.state` is `not-consulted`, `disabled` or `
 
 **Draft toggle is the flow's job, not a manual gesture.** `publish_review` / `republish_review` call
 `ensure_draft` before the push so a ready PR cannot emit the per-push pull-request event and expose
-the new head before the review barrier is restored; `release_ci` marks ready afterwards. Outside the
-Estigia lane an operator may still toggle draft → ready by hand to get checks onto a head — that is
-the outside-the-lane path, not what the flow requires. The publication lane's check runs do **not**
+the new head before the review barrier is restored; `release_ci` marks ready afterwards. An operator may still
+toggle draft → ready by hand to get checks onto a head; the flow does not require it. The publication lane's check runs do **not**
 populate the pull request merge box; only a `pull_request`
 event does. The workflow also carries `merge_group:` so a merge-queue entry can run the same suite
 after ready; whether that run satisfies required contexts is a live-repository

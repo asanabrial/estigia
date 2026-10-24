@@ -201,9 +201,10 @@ files started and how many on the receipt, and dispatching does not mark the PR 
 (its jobs all report no steps), launch — gated on evidence rather than green; running, wait or
 launch knowing the computed verdict may not be recordable; absent, proceed; disabled, CI cannot run, so proceed
 and merge as *CI, merge and delivery* states for such a repository; unreadable, not clearance.
-Nothing refuses a review launched over a red lane. `record_computed_verdict`
+`start_review` skips a red or unreadable lane; nothing else refuses launches.
+`record_computed_verdict`
 refuses an approval for a head whose lane is red or unfinished, so a platform-only failure is
-found before the review rounds are spent rather than after. A repository with no dispatchable lane has
+found before rounds are spent. A repository with no dispatchable lane has
 no check runs on its head, which proceeds unchanged: Estigia does not parse consumer YAML for the
 trigger, and cannot prove a lane exists. GitHub cannot make the ready write conditional atomically, and
 out-of-band collaborators or repository workflows can bypass the order, start other CI, push new
