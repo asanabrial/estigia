@@ -6745,7 +6745,6 @@ pub fn record_spend(
     validate_spend(spend)?;
     let conditions = spend.conditions.trim();
     let receipt = review_receipt(spend.epoch, spend.pr, spend.head, spend.base, spend.digest)?;
-    let read = || timeline(context, spend.issue, spend.now);
     let pr_field = spend.pr.to_string();
     let input_field = spend.input.to_string();
     let tokens_field = spend.tokens.to_string();
@@ -6761,7 +6760,8 @@ pub fn record_spend(
         ("digest", spend.digest),
         ("conditions", conditions),
     ];
-    let comments = read()?;
+    let ledger = Ledger::open(context, spend.issue, spend.now)?;
+    let comments = ledger.timeline()?;
     reject_operation_kind_conflict(&comments, &operation_id, &["spend"])?;
     // Diverges from `record_review_finding`'s `require_recorded_receipt`: a
     // spend record states a historical fact about a round that happened, not
@@ -6791,8 +6791,9 @@ pub fn record_spend(
         }));
     }
 
-    verify_claim(
+    verify_held(
         context,
+        &ledger,
         spend.issue,
         spend.run_id,
         "review",
@@ -6829,11 +6830,11 @@ pub fn record_spend(
         ),
         &marker,
     );
-    super::commands::record_entry(context, spend.issue, &body, spend.now)?;
+    ledger.append(&body, spend.now)?;
 
     let mut seen = Vec::new();
     for _ in 0..VISIBILITY_ATTEMPTS {
-        let observed = read().ok();
+        let observed = ledger.timeline().ok();
         let visible = observed.as_ref().is_some_and(|data| {
             operation_marker(data, &operation_id, OperationKind::Spend, &expected)
                 .ok()
@@ -8483,7 +8484,8 @@ fn publish_with_sleep(
         expected_epoch,
         now,
     } = *what;
-    verify_claim(context, issue, run_id, expect_state, now, None)?;
+    let ledger = Ledger::open(context, issue, now)?;
+    verify_held(context, &ledger, issue, run_id, expect_state, now, None)?;
     // Before the first remote call that is not a read: the internal push this
     // publication ends in is an ordinary push, so outside the permitted period
     // it is denied here rather than at the ref it would move.
@@ -8649,15 +8651,18 @@ fn publish_with_sleep(
 
     // Read from the timeline here, before `ensure_draft` may rewrite the pull
     // request: a failed read here is a failed read, not an absent parent.
-    let comments = timeline(context, issue, now).map_err(|failure| match failure {
-        Failure::Read(message) => Failure::Read(format!(
-            "{message} \u{2014} reading the publication lineage"
-        )),
-        Failure::Write(message) => Failure::Write(format!(
-            "{message} \u{2014} reading the publication lineage"
-        )),
-        other => other,
-    })?;
+    let comments = ledger
+        .sync(context)
+        .and_then(|()| ledger.timeline())
+        .map_err(|failure| match failure {
+            Failure::Read(message) => Failure::Read(format!(
+                "{message} \u{2014} reading the publication lineage"
+            )),
+            Failure::Write(message) => Failure::Write(format!(
+                "{message} \u{2014} reading the publication lineage"
+            )),
+            other => other,
+        })?;
     let reused_pr = reused.as_ref().map(pr_number);
     let parent_here = publication_on(&comments, reused_pr)?;
     if let Some(expected) = expected_epoch {
@@ -8925,6 +8930,7 @@ fn publish_with_sleep(
     let declared_fields = declared.marker_fields(computed);
     let answer = published(
         context,
+        &ledger,
         issue,
         run_id,
         branch,
@@ -9381,6 +9387,7 @@ fn marker_detail_fields(
 )]
 fn published(
     context: &Context,
+    ledger: &Ledger,
     issue: u64,
     run_id: &str,
     branch: &str,
@@ -9714,7 +9721,7 @@ fn published(
             Failure::Write("the published marker could not be rendered".to_owned())
         })?,
     );
-    super::commands::record_entry(context, issue, &note, now)?;
+    ledger.append(&note, now)?;
 
     // Two `next` sentences, not one edited by a flag check downstream. The
     // omitted-payload one must not tell a judge to be handed bytes this answer
@@ -10612,7 +10619,7 @@ fn require_explainable_projection(
     context: &Context,
     ledger: &Ledger,
     what: &Acquisition<'_>,
-) -> Result<(), Failure> {
+) -> Result<serde_json::Value, Failure> {
     let data = super::gh_json(
         &[
             "issue",
@@ -10655,7 +10662,7 @@ fn require_explainable_projection(
         .filter(|login| viewer.as_deref() != Some(login.as_str()))
         .collect();
     if labels.is_empty() && assignees.is_empty() {
-        return Ok(());
+        return Ok(data);
     }
     Err(Failure::Stop(serde_json::json!({
         "ok": false,
@@ -10773,6 +10780,27 @@ pub(crate) fn converge_ownership_projection_from(
     now: &str,
     judge: Judge<'_>,
 ) -> Result<serde_json::Value, Failure> {
+    converge_with(context, issue, event, login, now, judge, Known::default())
+}
+
+/// What the caller already read or made in this call, so the projection does
+/// not read or make it again: the `assignees,labels` payload to count as its
+/// first read, and the one label already created.
+#[derive(Default)]
+struct Known {
+    projection: Option<serde_json::Value>,
+    label: Option<String>,
+}
+
+fn converge_with(
+    context: &Context,
+    issue: u64,
+    event: Option<ownership::Event>,
+    login: Option<&str>,
+    now: &str,
+    judge: Judge<'_>,
+    known: Known,
+) -> Result<serde_json::Value, Failure> {
     let fields = match judge {
         Judge::Payload => "assignees,labels,comments",
         Judge::Store(_) => "assignees,labels",
@@ -10781,7 +10809,14 @@ pub(crate) fn converge_ownership_projection_from(
         Some(named) if !named.is_empty() => named.to_owned(),
         _ => viewer_login(context)?,
     };
+    let prefetched = std::cell::RefCell::new(match judge {
+        Judge::Store(_) => known.projection,
+        Judge::Payload => None,
+    });
     let read = || -> Result<serde_json::Value, Failure> {
+        if let Some(data) = prefetched.borrow_mut().take() {
+            return Ok(data);
+        }
         super::gh_json(
             &["issue", "view", &issue.to_string(), "--json", fields],
             Some(&context.repo_dir),
@@ -10885,7 +10920,9 @@ pub(crate) fn converge_ownership_projection_from(
             edit.push(gone.clone());
         }
         for wanted in wanted_runtimes.difference(&runtimes) {
-            super::commands::ensure_label(context, wanted, "bfd4f2")?;
+            if known.label.as_deref() != Some(wanted.as_str()) {
+                super::commands::ensure_label(context, wanted, "bfd4f2")?;
+            }
             edit.push("--add-label".to_owned());
             edit.push(wanted.clone());
         }
@@ -11171,8 +11208,9 @@ pub fn claim(context: &Context, what: &Acquisition<'_>) -> Result<serde_json::Va
     require_horizon(what.horizon, None)?;
 
     let ledger = Ledger::open(context, what.issue, what.now)?;
+    let mut known = Known::default();
     if !super::outbox::is_provisional(what.issue) {
-        require_explainable_projection(context, &ledger, what)?;
+        known.projection = Some(require_explainable_projection(context, &ledger, what)?);
     }
     let decided = ledger.transact(|tx| {
         let comments = tx.timeline()?;
@@ -11284,14 +11322,15 @@ pub fn claim(context: &Context, what: &Acquisition<'_>) -> Result<serde_json::Va
 
     let closed = super::outbox::is_closed(context);
     if !closed && (decided.wrote || decided.adjudication.is_ok()) {
-        super::commands::ensure_label(context, &format!("dev:{}", what.runtime), "bfd4f2")
-            .map_err(|failure| {
-                Failure::Write(format!(
-                    "the claim is recorded in the local store but its label could not be \
-                     made: {}",
-                    failure.detail()
-                ))
-            })?;
+        let label = format!("dev:{}", what.runtime);
+        super::commands::ensure_label(context, &label, "bfd4f2").map_err(|failure| {
+            Failure::Write(format!(
+                "the claim is recorded in the local store but its label could not be \
+                 made: {}",
+                failure.detail()
+            ))
+        })?;
+        known.label = Some(label);
     }
     let (adjudication, event) = (decided.adjudication, decided.event);
     let mut answer = adjudication?;
@@ -11304,7 +11343,7 @@ pub fn claim(context: &Context, what: &Acquisition<'_>) -> Result<serde_json::Va
     // and the issue page showed nothing — no assignee, and whatever `dev:` label
     // the previous holder left behind — so this side answered `ok` at the point
     // the transport was still working.
-    let deferred = project_ownership(context, what.issue, event, what.now, &ledger)?;
+    let deferred = project_ownership(context, what.issue, event, what.now, &ledger, known)?;
 
     answer["issue"] = serde_json::json!(what.issue);
     mark_deferred(&mut answer, deferred);
@@ -11329,6 +11368,7 @@ fn project_ownership(
     event: Option<ownership::Event>,
     now: &str,
     ledger: &Ledger,
+    known: Known,
 ) -> Result<Option<u64>, Failure> {
     if super::outbox::is_closed(context) {
         return super::outbox::queue(
@@ -11340,7 +11380,15 @@ fn project_ownership(
         )
         .map(Some);
     }
-    converge_ownership_projection_from(context, issue, event, None, now, Judge::Store(ledger))?;
+    converge_with(
+        context,
+        issue,
+        event,
+        None,
+        now,
+        Judge::Store(ledger),
+        known,
+    )?;
     Ok(None)
 }
 
@@ -11748,7 +11796,14 @@ pub fn unassign(context: &Context, what: &Departure<'_>) -> Result<serde_json::V
     // step two commands happen to share. A release moves the projection off the
     // run that let go — or onto whoever the timeline says holds it now, which is
     // why the reducer's event is what it is told rather than "nobody".
-    let deferred = project_ownership(context, what.issue, after.event.clone(), what.now, &ledger)?;
+    let deferred = project_ownership(
+        context,
+        what.issue,
+        after.event.clone(),
+        what.now,
+        &ledger,
+        Known::default(),
+    )?;
 
     let mut answer = release_answer(context, what, after.holder.is_some(), &comments);
     mark_deferred(&mut answer, deferred);
@@ -12187,7 +12242,14 @@ pub fn reclaim(context: &Context, what: &Reclaim<'_>) -> Result<serde_json::Valu
     // is most of the point: the displaced holder's assignee and `dev:` label
     // stay on the issue until somebody takes them off, and an issue that still
     // names the run it was taken from is an issue nobody can read correctly.
-    let deferred = project_ownership(context, what.issue, event, what.now, &ledger)?;
+    let deferred = project_ownership(
+        context,
+        what.issue,
+        event,
+        what.now,
+        &ledger,
+        Known::default(),
+    )?;
 
     let mut answer = serde_json::json!({
         "ok": true,

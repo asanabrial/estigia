@@ -1261,7 +1261,7 @@ fn a_handoff_naming_an_unlabellable_runtime_writes_nothing() {
 #[test]
 fn a_read_that_fails_after_the_spend_landed_is_reported_with_the_spend() {
     let (rig, delivery) = delivered_rig();
-    let (rig, answer) = close_failing_read(rig, &delivery.spend("sealed"), Some(13));
+    let (rig, answer) = close_failing_read(rig, &delivery.spend("sealed"), Some(7));
     let answer = answer.expect("a stop after a landed write is an answer, not a refusal");
 
     assert_eq!(answer["close_incomplete"]["step"], "transition", "{answer}");
@@ -1278,7 +1278,7 @@ fn a_read_that_fails_after_the_spend_landed_is_reported_with_the_spend() {
 fn repeating_a_stopped_close_with_the_same_spend_completes_it() {
     let (rig, delivery) = delivered_rig();
     let spend = delivery.spend("sealed");
-    let (mut rig, stopped) = close_failing_read(rig, &spend, Some(17));
+    let (mut rig, stopped) = close_failing_read(rig, &spend, Some(11));
     let stopped = stopped.expect("a stop after landed writes is an answer");
     assert_eq!(stopped["close_incomplete"]["step"], "release", "{stopped}");
     assert_eq!(rig.state(12).as_deref(), Some("done"), "{stopped}");
