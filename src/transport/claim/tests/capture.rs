@@ -840,6 +840,7 @@ fn findings_recorded_is_what_landed_on_the_timeline_not_the_answer_count() {
         answer["findings_recorded"], 1,
         "findings_recorded must count the timeline, not the answer: {answer}"
     );
+    assert_eq!(answer["findings"][0]["id"], "already-there", "{answer}");
 }
 
 #[test]
@@ -3521,23 +3522,38 @@ fn collecting_the_answer_records_it_once_and_a_second_collect_writes_nothing() {
     let first = launched(
         &world,
         RELIABILITY_LENS,
-        answer_of(&[answered_finding("a-comment-hides-the-body", "src/foo.rs:1")]),
+        answer_of(&[
+            answered_finding("a-comment-hides-the-body", "src/foo.rs:1"),
+            answered_finding("b-second", "src/foo.rs:1"),
+        ]),
     );
     wait_until_done(&first);
 
     let recorded = collect(&world, RELIABILITY_LENS)
         .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
 
-    assert_eq!(recorded["findings_recorded"], 1);
+    assert_eq!(recorded["findings_recorded"], 2);
     assert_eq!(job_state(&world, &first), "admitted");
     assert!(!job_dir(&first).join("result.json").exists());
     assert_eq!(next_after(&world)["operation"], "record_computed_verdict");
     let again = collect(&world, RELIABILITY_LENS)
         .unwrap_or_else(|failure| panic!("refused: {}", failure.envelope()));
     assert_eq!(again["admitted"], true);
-    assert_eq!(again["findings_recorded"], 1);
+    assert_eq!(again["findings_recorded"], 2);
     let (findings, reports) = on_the_timeline(&world);
-    assert_eq!((findings.len(), reports.len()), (1, 1));
+    assert_eq!((findings.len(), reports.len()), (2, 1));
+    let mut named = serde_json::json!([{
+        "id": "a-comment-hides-the-body",
+        "class": findings[0].class,
+        "blocking": findings[0].is_severe(),
+        "lens": findings[0].lens,
+        "location": "src/foo.rs:1",
+    }]);
+    let mut second = named[0].clone();
+    second["id"] = "b-second".into();
+    named.as_array_mut().expect("a list").push(second);
+    assert_eq!(recorded["findings"], named, "{recorded}");
+    assert_eq!(again["findings"], named, "{again}");
 }
 
 #[test]
