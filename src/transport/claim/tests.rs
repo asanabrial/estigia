@@ -440,6 +440,40 @@ fn a_claim_is_recorded_in_the_store_in_the_transaction_that_decides_it() {
         !calls.contains("assignees,labels,comments"),
         "the projection still asks GitHub for the comments it no longer judges by: {calls}"
     );
+    assert_eq!(
+        calls.matches("--json assignees,labels").count(),
+        4,
+        "the projection read again what the claim's own check had just read: {calls}"
+    );
+}
+
+#[test]
+fn a_fresh_claim_makes_its_label_once() {
+    let directory = tempfile::tempdir().expect("a directory for the counter");
+    let log = directory.path().join("gh.log");
+    let context = context_at(directory.path());
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        crate::test_env::issue_view_answer(
+            12,
+            issue_payload(&[], &["fixture"], &["status:in-progress"]),
+        ),
+        serde_json::json!({
+            "matches": "api user",
+            "stdout": "{\"login\":\"fixture\"}", "status": 0,
+        }),
+    ]);
+
+    let _ = crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+        claim(&context, &acquisition(12, "claude-a"))
+    });
+
+    let calls = std::fs::read_to_string(&log).expect("the fake gh logged its calls");
+    assert_eq!(
+        calls.matches("label create dev:claude").count(),
+        1,
+        "{calls}"
+    );
 }
 
 /// Two runs claiming one issue at once: the store serialises them and the
@@ -11736,6 +11770,61 @@ fn a_replay_of_a_recorded_spend_answers_from_its_own_marker() {
     );
 }
 
+fn rest_calls(log: &std::path::Path) -> usize {
+    std::fs::read_to_string(log)
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| line.starts_with("api repos/"))
+        .count()
+}
+
+#[test]
+fn recording_a_spend_opens_the_ledger_once() {
+    let (root, context) = context_with_no_repository();
+    let receipt = ReviewTransaction {
+        epoch: "2".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    };
+    let claim = wrote(
+        "1",
+        format!(
+            "claiming.\n\n{}\n",
+            super::super::markers::render(
+                "claim",
+                &[
+                    ("run-id", "claude-a"),
+                    ("runtime", "claude"),
+                    ("horizon", "2099-01-01T00:00Z"),
+                    ("op-id", &"a".repeat(32)),
+                ],
+            )
+            .expect("a claim marker")
+        ),
+    );
+    let stdout = stdout_with(&[claim, published(&receipt)]);
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[crate::test_env::issue_view_answer(42, stdout)]);
+    let log = root.path().join("gh.log");
+
+    let operation_id = "1".repeat(32);
+    let spend = spend_review(&operation_id, "review", &receipt, "sealed");
+    let answer = crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+        record_spend(&context, &spend)
+    })
+    .expect("a spend against a held review records");
+
+    assert_eq!(answer["reused_existing_spend"], false);
+    assert_eq!(
+        rest_calls(&log),
+        2,
+        "one open is the open check and the comment sync: {}",
+        std::fs::read_to_string(&log).unwrap_or_default()
+    );
+}
+
 /// `spend_summary` refuses an unrecognised `--phase` before it reads the
 /// tracker at all — no scripted `gh` is wired here either.
 #[test]
@@ -19494,4 +19583,23 @@ fn a_handoff_the_store_recorded_explains_the_dev_label_to_a_later_claim() {
             .any(|event| event.run_id == "claude-a"),
         "the claim was refused after the handoff explained its label: {stored:?}"
     );
+}
+
+#[test]
+fn a_publication_opens_the_ledger_once_and_syncs_comments_before_the_pull_request_is_touched() {
+    let world = republish_world();
+    let head = world.commit("two.txt", 1);
+
+    let (answer, calls) = world.drive(&[], &head, None, Some("publish-review"));
+
+    answer.unwrap_or_else(|failure| panic!("{}", failure.envelope()));
+    let open_checks = calls
+        .lines()
+        .filter(|line| line.starts_with("api repos/{owner}/{repo}/issues/123\t"))
+        .count();
+    let syncs = calls
+        .lines()
+        .filter(|line| line.starts_with("api repos/{owner}/{repo}/issues/123/comments"))
+        .count();
+    assert_eq!((open_checks, syncs), (1, 2), "{calls}");
 }

@@ -8664,7 +8664,12 @@ pointer that leaves it names the document it points at.
   ledger open makes, the issue and the comments since the last sync, and a marker another run or
   a person posted on GitHub is seen through that sync. Each timeline read is its own ledger open,
   so an operation that reads the timeline several times pays those two calls each time, where it
-  paid one GraphQL call; the capture family is the exception, because `launch_review_input` opens
+  paid one GraphQL call; `record_spend` opens the ledger once, for the receipt check, the claim
+  check, the write and the readback (two REST calls, where it was eight), and `publish_review`
+  opens it once at the top and for the entry it records after the push, and pays one more comments
+  sync at the lineage read, before the pull request is touched, and one full open before a leased
+  push, so a stand-down reaches the store ahead of each boundary it could stop; the capture
+  family is the exception, because `launch_review_input` opens
   the ledger once and reuses it for the claim check, the timeline read and the slot write, and
   `collect_review_input` reuses the ledger it opened for the admission's policy and lens-precheck
   reads — the recorders the admission then calls still open their own, one per read they make. A
@@ -8782,6 +8787,14 @@ pointer that leaves it names the document it points at.
   command that writes a stand-down or an `adjudication` into the store, which does not exist, and
   until it does an older binary's claim, a `reclaim` comment and an old binary's findings are not
   seen by a newer binary at all.
+- **`gh repo view` is asked once per thread for each checkout and named repository, and a `claim`
+  reads the projection it refuses on once for the converge.** `repo_identity` keeps the owner and
+  name it read (a failed read is not kept), so a `transition` with a board configured makes one
+  `gh repo view` where it made two, and the claim's converge takes the `assignees,labels` payload
+  the foreign-projection check read as its first read and does not create the `dev:` label the
+  claim has just created. The converge's second, agreeing read and its post-edit proof reads are
+  still made, so the projection is still read back from GitHub. A repository renamed or
+  transferred while a process lives is still called by its old name until the thread ends.
 - **The `gh` call counter is best-effort and counts spawns, not cost.** It tallies on the thread
   that runs `transport::dispatch`, at the one place the transport spawns a process, and writes
   one transaction per operation, with a row per kind. A `gh` spawned outside a dispatched

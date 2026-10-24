@@ -63,14 +63,30 @@ const KEYWORDS: &[&str] = &[
     "closes", "closed", "close", "fixes", "fixed", "fix", "resolves", "resolved", "resolve",
 ];
 
+type IdentityKey = (std::path::PathBuf, Option<String>);
+
+thread_local! {
+    static IDENTITIES: std::cell::RefCell<std::collections::HashMap<IdentityKey, (String, String)>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
 /// Who this repository is, for the GraphQL query.
+///
+/// Asked of `gh repo view` once per thread for each checkout and each named
+/// repository; a failed read is never kept.
 pub(super) fn repo_identity(context: &Context) -> Result<(String, String), Failure> {
+    let key = (context.repo_dir.clone(), context.repo.clone());
+    if let Some(known) = IDENTITIES.with(|cached| cached.borrow().get(&key).cloned()) {
+        return Ok(known);
+    }
     let data = super::gh_json(
         &["repo", "view", "--json", "owner,name"],
         Some(&context.repo_dir),
     )?
     .ok_or_else(|| Failure::Read("gh repo view returned nothing".to_owned()))?;
-    identity_of(&data)
+    let identity = identity_of(&data)?;
+    IDENTITIES.with(|cached| cached.borrow_mut().insert(key, identity.clone()));
+    Ok(identity)
 }
 
 /// The owner and name in a `gh repo view` answer, or a read that did not answer.

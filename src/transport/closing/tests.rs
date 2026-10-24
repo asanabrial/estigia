@@ -217,3 +217,74 @@ fn follow_up_names_both_the_transition_and_the_release() {
         super::FOLLOW_UP
     );
 }
+
+fn identity_context(directory: &std::path::Path, repo: Option<&str>) -> Context {
+    Context {
+        skill_dir: directory.to_path_buf(),
+        repo_dir: directory.to_path_buf(),
+        config: Vec::new(),
+        repo: repo.map(ToOwned::to_owned),
+    }
+}
+
+fn repo_views(log: &std::path::Path) -> usize {
+    std::fs::read_to_string(log)
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| line.starts_with("repo view"))
+        .count()
+}
+
+#[test]
+fn a_repository_is_asked_who_it_is_once_per_checkout() {
+    let first = tempfile::tempdir().expect("a directory");
+    let second = tempfile::tempdir().expect("a directory");
+    let log = first.path().join("gh.log");
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[serde_json::json!({
+        "matches": "repo view",
+        "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+        "status": 0,
+    })]);
+
+    crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+        for _ in 0..3 {
+            assert_eq!(
+                repo_identity(&identity_context(first.path(), None)).expect("named"),
+                ("o".to_owned(), "r".to_owned())
+            );
+        }
+        assert_eq!(repo_views(&log), 1, "a known checkout was asked again");
+        repo_identity(&identity_context(second.path(), None)).expect("named");
+        repo_identity(&identity_context(first.path(), Some("x/y"))).expect("named");
+    });
+
+    assert_eq!(
+        repo_views(&log),
+        3,
+        "another checkout, or another named repository, shared an answer"
+    );
+}
+
+#[test]
+fn a_failed_identity_read_is_not_remembered() {
+    let directory = tempfile::tempdir().expect("a directory");
+    let bin = crate::test_env::scripted_gh();
+    let failing = crate::test_env::answers(&[serde_json::json!({
+        "matches": "repo view", "stderr": "no", "status": 1,
+    })]);
+    let working = crate::test_env::answers(&[serde_json::json!({
+        "matches": "repo view",
+        "stdout": "{\"owner\":{\"login\":\"o\"},\"name\":\"r\"}",
+        "status": 0,
+    })]);
+    let context = identity_context(directory.path(), None);
+
+    crate::test_env::with_scripted_gh(bin.path(), &failing, || {
+        repo_identity(&context).expect_err("a failing read named a repository");
+    });
+
+    crate::test_env::with_scripted_gh(bin.path(), &working, || {
+        repo_identity(&context).expect("the next read is made, not replayed")
+    });
+}
