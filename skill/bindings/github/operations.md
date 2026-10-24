@@ -162,12 +162,12 @@ records that it happened; `budget-refrozen` is left
 to a base that did not advance past the parent's. A first publication is never budgeted, and
 only `budget-candidate-tree` is written for it.
 
-`--with-review` adds the review tier for the published `base..head` (with its own forecast) and the
-first `review_status` read (whose `forecast` names the next step's horizon) to the publication's
-answer, so the `review_tier` and `review_status` reads that always follow a publication are not a
-second round trip. Both reads are read-only and decide nothing. A read that fails is reported under
-`review_reads_unavailable` rather than refusing the call, because the push already landed and a
-second publication mints a new epoch rather than repeating this one.
+`--with-review` adds the review tier and the first `review_status` to the answer. A
+failed read is reported under `review_reads_unavailable`, not refused: a second
+publication mints a new epoch. `--start-review` implies it, moves the issue to `review` and launches
+every `launch_review_input` input unless the lane is `red` or unreadable; the outcome is
+`review_start`. `--record-verdict` on `collect_review_input` records the computed verdict only when
+nothing runs and `review_status` names `record_computed_verdict`; else it returns that status.
 
 ## Recording a finding
 

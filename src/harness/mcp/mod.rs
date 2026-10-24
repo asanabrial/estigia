@@ -355,7 +355,7 @@ fn call(
 fn worktree_to_name(tool: &tools::Tool, flags: &[String], run: &session::Run) -> Option<String> {
     if !matches!(
         tool.operation,
-        "publish-review" | "republish-review" | "release-ci" | "unassign"
+        "publish-review" | "republish-review" | "release-ci" | "unassign" | "collect-review-input"
     ) {
         return None;
     }
@@ -1570,6 +1570,7 @@ pub(crate) fn apply_effect(
         receipt.is_complete().then_some(receipt)
     };
     let published_receipt = body.and_then(receipt_from);
+    let review_started = body.is_some_and(|body| body["review_start"]["transitioned"] == true);
     let supplied_receipt = receipt_from(arguments);
     let claimed_receipt = body
         .and_then(|body| body.get("review_transaction"))
@@ -1686,6 +1687,9 @@ pub(crate) fn apply_effect(
                 run.reviewed_head = None;
                 if let Some(receipt) = &published_receipt {
                     run.review_transaction = Some(receipt.clone());
+                }
+                if review_started {
+                    run.state = Some("review".to_owned());
                 }
                 run.mark_verified();
             }

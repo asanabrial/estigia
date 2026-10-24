@@ -248,20 +248,18 @@ const RAISE_REASON: Argument = Argument::optional(
 const EXPECTED_EPOCH: Argument = Argument::optional(
     "expected_epoch",
     "string",
-    "The epoch of the newest publication on this branch's pull request as your answer read it, \
-     or `none`. Refused `expected-epoch-moved` before any push when it differs. Omit to ask \
-     nothing.",
+    "The epoch of the newest publication on this branch's pull request, or `none`. Refused \
+     `expected-epoch-moved` before any push when it differs. Omit to ask nothing.",
 );
 // Shared between `publish_review` and `republish_review`, so one wording
 // cannot drift from the other.
 const INLINE_PAYLOAD: Argument = Argument::optional(
     "inline_payload",
     "boolean",
-    "Carry the payload's full diff text in the answer. Defaults to false; `payload_bytes` and \
-     `payload_digest` are always present, and the text can make the answer too large for the \
-     MCP surface to return. Ask only when you launch the reviewer yourself; \
-     `launch_review_input` needs nothing handed to it. Ask at publication time: publishing \
-     again mints a new epoch.",
+    "Carry the payload's full diff text in the answer; default false (`payload_bytes` and \
+     `payload_digest` are always present). It can make the answer too large to return, and \
+     `launch_review_input` needs none. Ask at publication time: publishing again mints a new \
+     epoch.",
 );
 
 // Shared between `publish_review` and `republish_review`, so one wording
@@ -269,9 +267,15 @@ const INLINE_PAYLOAD: Argument = Argument::optional(
 const WITH_REVIEW: Argument = Argument::optional(
     "with_review",
     "boolean",
-    "Add the review tier for `base..head`, its forecast and the first `review_status` read to \
-     this answer. Defaults to false; a read that fails is reported under \
-     `review_reads_unavailable` rather than refusing a push that already landed.",
+    "Add the tier and the first `review_status` to this answer. A failed read is reported under \
+     `review_reads_unavailable`, not refused.",
+);
+
+const START_REVIEW: Argument = Argument::optional(
+    "start_review",
+    "boolean",
+    "Also move the issue to review and launch every slot the first `review_status` offers, \
+     unless the lane is red or unreadable. Implies `with_review`.",
 );
 
 const NO_LINK: Argument = Argument::optional(
@@ -925,6 +929,12 @@ pub const TOOLS: &[Tool] = &[
                  checks once. Capped at 900.",
             )
             .counting_from(1),
+            Argument::optional(
+                "record_verdict",
+                "boolean",
+                "Also record the computed verdict when no slot is running and `review_status` \
+                 then names `record_computed_verdict`; otherwise records nothing.",
+            ),
         ],
         effect: PointerEffect::Renew,
         writes: true,
@@ -1162,18 +1172,15 @@ pub const TOOLS: &[Tool] = &[
             Argument::required(
                 "pr_title",
                 "string",
-                "The pull request title — the same short-name rule as issue title; see \
-                 domain-composition.md's title row.",
+                "The pull request title, short-named as an issue title is.",
             ),
             Argument::required("pr_body_file", "string", "Path to the pull request body."),
             Argument::optional("worktree", "string", "The isolated checkout."),
             Argument::optional(
                 "expect_state",
                 "string",
-                concat!(
-                    "The state this run believes the issue is in. Defaults to in-progress; a ",
-                    "publish after a review sent work back is made from review."
-                ),
+                "The state this run believes the issue is in. Defaults to in-progress; review after \
+                 a review sent work back.",
             )
             .of(crate::config::STATES),
             INLINE_PAYLOAD,
@@ -1185,6 +1192,7 @@ pub const TOOLS: &[Tool] = &[
             RAISE_REASON,
             EXPECTED_EPOCH,
             WITH_REVIEW,
+            START_REVIEW,
         ],
         effect: PointerEffect::Published,
         writes: true,
@@ -1205,18 +1213,15 @@ pub const TOOLS: &[Tool] = &[
             Argument::required(
                 "pr_title",
                 "string",
-                "The pull request title — the same short-name rule as issue title; see \
-                 domain-composition.md's title row.",
+                "The pull request title, short-named as an issue title is.",
             ),
             Argument::required("pr_body_file", "string", "Path to the pull request body."),
             Argument::optional("worktree", "string", "The isolated checkout."),
             Argument::optional(
                 "expect_state",
                 "string",
-                concat!(
-                    "The state this run believes the issue is in. Defaults to in-progress; a ",
-                    "republish after review sent work back is made from review."
-                ),
+                "The state this run believes the issue is in. Defaults to in-progress; review after \
+                 a review sent work back.",
             )
             .of(crate::config::STATES),
             INLINE_PAYLOAD,
@@ -1228,6 +1233,7 @@ pub const TOOLS: &[Tool] = &[
             RAISE_REASON,
             EXPECTED_EPOCH,
             WITH_REVIEW,
+            START_REVIEW,
         ],
         effect: PointerEffect::Published,
         writes: true,

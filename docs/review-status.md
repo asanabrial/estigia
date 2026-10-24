@@ -7,7 +7,10 @@ no claim, and decides nothing the tools do not already decide: each state below 
 functions the tools judge with ([`claim.rs`](../src/transport/claim.rs),
 [`claim/status.rs`](../src/transport/claim/status.rs)). `publish_review` and `republish_review` take
 `--with-review`, which returns the first `review_status` (with its forecast) beside the publication it
-just made, so the read that always follows a publication is not a second round trip.
+just made, so the read that always follows a publication is not a second round trip. `--start-review`
+adds the transition to `review` and the launch of every slot that first status offers, and
+`collect_review_input`'s `--record-verdict` records the computed verdict when this status then names it
+(`skill/bindings/github/operations.md` owns the answer keys).
 
 ## What it reads
 

@@ -31,6 +31,8 @@ const SWITCHES: &[&str] = &[
     "manifest",
     "inline-payload",
     "with-review",
+    "start-review",
+    "record-verdict",
     "with-text",
     "reproduce",
     "clear",
@@ -288,6 +290,194 @@ fn with_review_reads(
     match super::claim::review_status(context, issue) {
         Ok(status) => answer["review_status"] = status,
         Err(failure) => answer["review_reads_unavailable"] = failure.envelope(),
+    }
+    answer
+}
+
+const REVIEW_STATE: &str = "review";
+
+struct ReviewStart<'a> {
+    issue: u64,
+    run_id: &'a str,
+    expect_state: &'a str,
+    now: &'a str,
+}
+
+fn begin_review(context: &Context, start: &ReviewStart<'_>) -> serde_json::Value {
+    if start.expect_state == REVIEW_STATE {
+        return serde_json::json!({ "transitioned": true });
+    }
+    match super::commands::transition(
+        context,
+        start.issue,
+        REVIEW_STATE,
+        Some(start.expect_state),
+        start.now,
+    ) {
+        Ok(_) => serde_json::json!({ "transitioned": true }),
+        Err(failure) => serde_json::json!({
+            "transitioned": false,
+            "transition_failure": failure.envelope(),
+        }),
+    }
+}
+
+fn launch_each(
+    context: &Context,
+    (issue, run_id): (u64, &str),
+    names: &[&str],
+    batch: bool,
+    now: &str,
+    launched: &mut Vec<serde_json::Value>,
+) -> Result<(), (String, Failure)> {
+    for name in names {
+        let input = super::claim::CaptureInput {
+            issue,
+            run_id,
+            name,
+            wait_seconds: 0,
+            now,
+        };
+        match super::claim::launch_review_input(context, &input) {
+            Ok(answer) => launched.push(answer),
+            Err(failure) if batch && soft_capture(&failure, "capture-already-running") => {
+                launched.push(pending_slot(name, &failure));
+            }
+            Err(failure) => return Err(((*name).to_owned(), failure)),
+        }
+    }
+    Ok(())
+}
+
+fn with_review_start(
+    context: &Context,
+    start: &ReviewStart<'_>,
+    mut report: serde_json::Value,
+    mut answer: serde_json::Value,
+) -> serde_json::Value {
+    let skip = |report: &mut serde_json::Value, cause: &str, detail: serde_json::Value| {
+        report["launch_skipped"] = serde_json::json!({ "cause": cause, "detail": detail });
+    };
+    let next = answer["review_status"]["next"].clone();
+    if report["transitioned"] != true {
+        skip(&mut report, "transition-failed", serde_json::Value::Null);
+    } else if !answer["review_status"].is_object() {
+        skip(
+            &mut report,
+            "review-status-unavailable",
+            serde_json::Value::Null,
+        );
+    } else if next["kind"] != "collect" {
+        skip(
+            &mut report,
+            "next-is-not-collect",
+            next["reason_code"].clone(),
+        );
+    } else {
+        let names: Vec<&str> = next["inputs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|input| input["capture"] == "launch_review_input")
+            .filter_map(|input| input["name"].as_str())
+            .collect();
+        let head = answer["head"].as_str().unwrap_or_default();
+        let lane = if names.is_empty() {
+            Ok(serde_json::Value::Null)
+        } else {
+            super::claim::publication_lane(context, head, answer["pr"].as_u64())
+        };
+        match lane {
+            Err(failure) => skip(
+                &mut report,
+                "publication-lane-unreadable",
+                failure.envelope(),
+            ),
+            Ok(lane) if lane["state"] == "red" => skip(&mut report, "publication-lane-red", lane),
+            Ok(_) => {
+                let mut launched = Vec::new();
+                let outcome = launch_each(
+                    context,
+                    (start.issue, start.run_id),
+                    &names,
+                    true,
+                    start.now,
+                    &mut launched,
+                );
+                report["launched"] = serde_json::Value::Array(launched);
+                if let Err((name, failure)) = outcome {
+                    report["launch_failure"] =
+                        serde_json::json!({ "name": name, "failure": failure.envelope() });
+                }
+            }
+        }
+    }
+    answer["review_start"] = report;
+    answer
+}
+
+fn with_recorded_verdict(
+    context: &Context,
+    (issue, run_id): (u64, &str),
+    worktree: Option<&Path>,
+    now: &str,
+    mut answer: serde_json::Value,
+) -> serde_json::Value {
+    let status = match super::claim::review_status(context, issue) {
+        Ok(status) => status,
+        Err(failure) => {
+            answer["verdict_unavailable"] = failure.envelope();
+            return answer;
+        }
+    };
+    let next = &status["next"];
+    if next["operation"] != "record_computed_verdict" {
+        answer["review_status"] = status;
+        return answer;
+    }
+    let arguments = &next["arguments"];
+    let field = |name: &str| arguments[name].as_str().unwrap_or_default();
+    let pr = arguments["pr"].as_u64().unwrap_or_default();
+    let (epoch, head, base, digest) = (
+        field("epoch"),
+        field("head"),
+        field("base"),
+        field("digest"),
+    );
+    let receipt = super::claim::ReviewTransaction {
+        epoch: epoch.to_owned(),
+        pr,
+        head: head.to_owned(),
+        base: base.to_owned(),
+        digest: digest.to_owned(),
+    };
+    if !receipt.is_complete() {
+        answer["verdict_unavailable"] = serde_json::json!({ "cause": "receipt-incomplete" });
+        return answer;
+    }
+    let operation_id = super::claim::review_operation_id(
+        "review-computed-verdict",
+        &[run_id, epoch, &pr.to_string(), head, base, digest],
+    );
+    let recorded = super::claim::record_computed_verdict(
+        context,
+        &super::claim::ComputedVerdictReview {
+            issue,
+            run_id,
+            operation_id: &operation_id,
+            epoch,
+            pr,
+            head,
+            base,
+            digest,
+            worktree,
+            never_ran_evidence_file: None,
+            now,
+        },
+    );
+    match recorded {
+        Ok(verdict) => answer["verdict"] = verdict,
+        Err(failure) => answer["verdict_failure"] = failure.envelope(),
     }
     answer
 }
@@ -975,22 +1165,8 @@ fn run_operation(
             let batch = f.get("names").is_some();
             let names = capture_names(&f, operation)?;
             let mut launched = Vec::with_capacity(names.len());
-            for name in &names {
-                let input = super::claim::CaptureInput {
-                    issue,
-                    run_id,
-                    name,
-                    wait_seconds: 0,
-                    now,
-                };
-                match super::claim::launch_review_input(context, &input) {
-                    Ok(answer) => launched.push(answer),
-                    Err(failure) if batch && soft_capture(&failure, "capture-already-running") => {
-                        launched.push(pending_slot(name, &failure));
-                    }
-                    Err(failure) => return Err(failure),
-                }
-            }
+            launch_each(context, (issue, run_id), &names, batch, now, &mut launched)
+                .map_err(|(_, failure)| failure)?;
             if batch {
                 Ok(serde_json::json!({
                     "ok": true,
@@ -1042,15 +1218,27 @@ fn run_operation(
                     Err(failure) => return Err(failure),
                 }
             }
-            if batch {
-                Ok(serde_json::json!({
+            let running = collected
+                .iter()
+                .any(|slot| slot["reason_code"] == "capture-running");
+            let mut answer = if batch {
+                serde_json::json!({
                     "ok": true,
                     "issue": issue,
                     "collected": collected,
-                }))
+                })
             } else {
-                Ok(collected.pop().unwrap_or(serde_json::Value::Null))
+                collected.pop().unwrap_or(serde_json::Value::Null)
+            };
+            if f.on("record-verdict") {
+                answer = if running {
+                    answer["verdict_skipped"] = serde_json::json!("capture-running");
+                    answer
+                } else {
+                    with_recorded_verdict(context, (issue, run_id), f.path("worktree"), now, answer)
+                };
             }
+            Ok(answer)
         }
         "review-computed-verdict" => super::claim::record_computed_verdict(
             context,
@@ -1091,12 +1279,18 @@ fn run_operation(
                 focus_reason: f.get("focus-reason"),
             };
 
+            let start = ReviewStart {
+                issue,
+                run_id: run_id()?,
+                expect_state: f.get("expect-state").unwrap_or("in-progress"),
+                now,
+            };
             let answer = super::claim::publish_review(
                 context,
                 &super::claim::Publication {
                     issue,
-                    run_id: run_id()?,
-                    expect_state: f.get("expect-state").unwrap_or("in-progress"),
+                    run_id: start.run_id,
+                    expect_state: start.expect_state,
                     base: f.need("base", operation)?,
                     branch: f.need("branch", operation)?,
                     title: f.need("pr-title", operation)?,
@@ -1118,14 +1312,20 @@ fn run_operation(
                     now,
                 },
             )?;
-            Ok(with_review_reads(
+            let starting = f.on("start-review");
+            let report = starting.then(|| begin_review(context, &start));
+            let answer = with_review_reads(
                 context,
                 issue,
                 f.path("worktree"),
-                f.on("with-review"),
+                f.on("with-review") || starting,
                 (f.get("focus"), declaration),
                 answer,
-            ))
+            );
+            Ok(match report {
+                Some(report) => with_review_start(context, &start, report, answer),
+                None => answer,
+            })
         }
         // The same arguments as `publish-review`, read the same way, because the
         // two differ in the push and in nothing else. Spelled out rather than
@@ -1140,12 +1340,18 @@ fn run_operation(
                 focus_reason: f.get("focus-reason"),
             };
 
+            let start = ReviewStart {
+                issue,
+                run_id: run_id()?,
+                expect_state: f.get("expect-state").unwrap_or("in-progress"),
+                now,
+            };
             let answer = super::claim::republish_review(
                 context,
                 &super::claim::Publication {
                     issue,
-                    run_id: run_id()?,
-                    expect_state: f.get("expect-state").unwrap_or("in-progress"),
+                    run_id: start.run_id,
+                    expect_state: start.expect_state,
                     base: f.need("base", operation)?,
                     branch: f.need("branch", operation)?,
                     title: f.need("pr-title", operation)?,
@@ -1160,14 +1366,20 @@ fn run_operation(
                     now,
                 },
             )?;
-            Ok(with_review_reads(
+            let starting = f.on("start-review");
+            let report = starting.then(|| begin_review(context, &start));
+            let answer = with_review_reads(
                 context,
                 issue,
                 f.path("worktree"),
-                f.on("with-review"),
+                f.on("with-review") || starting,
                 (f.get("focus"), declaration),
                 answer,
-            ))
+            );
+            Ok(match report {
+                Some(report) => with_review_start(context, &start, report, answer),
+                None => answer,
+            })
         }
         "spend" => super::claim::record_spend(
             context,

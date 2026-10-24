@@ -125,13 +125,13 @@ authority nor independence.
    epoch, PR, head, base and clean-target digest, then transition to `review`; read the publication
    lane before acquiring reviewers, and use `republish_review` for a rewritten history —
    [repository delivery](references/repository-delivery.md) owns the lane reading, the cooperative
-   CI ordering and the force-push rule. Ask for `with_review` on the publication to bring the tier,
-   its forecast and the first `review_status` back in the same answer, so the `review_tier` and
-   `review_status` reads that follow are not a second round trip. Then follow `review_status`'s `next`
-   transition until it stops, which in order is: `launch_review_input` and then
-   `collect_review_input` for every slot it offers (pass `names` to launch or collect
-   them all in one call); `record_computed_verdict` for the
-   exact receipt; `release_ci`. Call `escalate_review` when a spent correction leaves the decision
+   CI ordering and the force-push rule. Ask for `start_review` on the publication to transition, read
+   `review_status` and launch every slot it offers in one call, unless
+   the lane is red; `with_review` brings the tier and status alone. Then follow `review_status`'s
+   `next` until it stops: `launch_review_input` and `collect_review_input` for every slot it offers
+   (`names` batches either; `record_verdict` on the collect records the verdict once
+   `review_status` names it); `record_computed_verdict` for the receipt; `release_ci`, its own
+   call. Call `escalate_review` when a spent correction leaves the decision
    to a person, and `handoff_review` when this run cannot obtain the required distinct context.
    Load [blind judges](policies/blind-judges.md) only on an escalated stop, a correction, or a disputed
    rule: it owns the settlement order, the refutation batch, the

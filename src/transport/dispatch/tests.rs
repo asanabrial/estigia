@@ -453,6 +453,12 @@ fn every_flag_a_tool_sends_is_one_the_dispatcher_reads() {
              direction of the one operation that has to be safe",
         ),
         (
+            "collect-review-input",
+            "worktree",
+            "filled by the harness from the run pointer, and read only by `--record-verdict`, \
+             which hands it to the verdict a standalone call would take it for",
+        ),
+        (
             "start-branch",
             "repo-name",
             "derived from the checkout when absent, as the original derives it",
