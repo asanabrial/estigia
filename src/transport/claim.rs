@@ -6657,27 +6657,10 @@ pub fn record_disposition(
     })))
 }
 
-/// Records one measurement of what a phase cost against a publication
-/// receipt.
-///
-/// Follows [`record_review_finding`]'s shape — receipt validation, marker
-/// composition, idempotent replay and readback — with two deliberate
-/// divergences, both named where they diverge below:
-///
-/// - the receipt need not be the issue's *current* one, checked with
-///   `known_publication` rather than `require_recorded_receipt`;
-/// - `conditions` joins the receipt and the phase as this record's identity,
-///   because two measurements that vary only the conditions are two records,
-///   not a replay of one.
-///
-/// Nothing here refuses on the *number*: a caller-supplied `input`, `tokens`,
-/// `seconds` or `contexts` is recorded, not verified. `docs/honesty.md` says
-/// what that costs.
-pub fn record_spend(
-    context: &Context,
-    spend: &SpendReview<'_>,
-) -> Result<serde_json::Value, Failure> {
-    let operation_id = require_operation_id(Some(spend.operation_id))?;
+/// The checks of [`record_spend`] that read nothing: the phase vocabulary, the
+/// conditions and the four counts. Run alone, they let a release refuse every
+/// record it carries before it writes the first.
+pub(crate) fn validate_spend(spend: &SpendReview<'_>) -> Result<(), Failure> {
     if !SPEND_PHASES.contains(&spend.phase) {
         return Err(Failure::ConfigDefect(serde_json::json!({
             "ok": false, "reason": "invalid-spend-phase", "value": spend.phase,
@@ -6709,6 +6692,58 @@ pub fn record_spend(
             })));
         }
     }
+    Ok(())
+}
+
+fn require_known_spend_receipt(
+    comments: &[ownership::Comment],
+    receipt: &ReviewTransaction,
+) -> Result<(), Failure> {
+    if known_publication(comments, receipt) {
+        return Ok(());
+    }
+    Err(Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "spend-transaction-unknown",
+        "action": "name a receipt this issue's timeline actually published; a fabricated \
+                   or mistyped epoch settles nothing",
+    })))
+}
+
+/// Reads, without writing, that a spend record names a receipt this issue
+/// published. A release that carries several runs this over all of them, after
+/// [`validate_spend`], before it records one.
+pub(crate) fn check_spend_receipt(
+    context: &Context,
+    spend: &SpendReview<'_>,
+) -> Result<(), Failure> {
+    let receipt = review_receipt(spend.epoch, spend.pr, spend.head, spend.base, spend.digest)?;
+    require_known_spend_receipt(&timeline(context, spend.issue, spend.now)?, &receipt)
+}
+
+/// Records one measurement of what a phase cost against a publication
+/// receipt.
+///
+/// Follows [`record_review_finding`]'s shape — receipt validation, marker
+/// composition, idempotent replay and readback — with two deliberate
+/// divergences, both named where they diverge below:
+///
+/// - the receipt need not be the issue's *current* one, checked with
+///   `known_publication` rather than `require_recorded_receipt`;
+/// - `conditions` joins the receipt and the phase as this record's identity,
+///   because two measurements that vary only the conditions are two records,
+///   not a replay of one.
+///
+/// Nothing here refuses on the *number*: a caller-supplied `input`, `tokens`,
+/// `seconds` or `contexts` is recorded, not verified. `docs/honesty.md` says
+/// what that costs.
+pub fn record_spend(
+    context: &Context,
+    spend: &SpendReview<'_>,
+) -> Result<serde_json::Value, Failure> {
+    let operation_id = require_operation_id(Some(spend.operation_id))?;
+    validate_spend(spend)?;
+    let conditions = spend.conditions.trim();
     let receipt = review_receipt(spend.epoch, spend.pr, spend.head, spend.base, spend.digest)?;
     let read = || timeline(context, spend.issue, spend.now);
     let pr_field = spend.pr.to_string();
@@ -6733,14 +6768,7 @@ pub fn record_spend(
     // a judgement about the round currently under review, so it must still
     // remain recordable once a later publication supersedes the receipt it
     // names. It still has to name a receipt this timeline actually published.
-    if !known_publication(&comments, &receipt) {
-        return Err(Failure::Stop(serde_json::json!({
-            "ok": false,
-            "reason": "spend-transaction-unknown",
-            "action": "name a receipt this issue's timeline actually published; a fabricated \
-                       or mistyped epoch settles nothing",
-        })));
-    }
+    require_known_spend_receipt(&comments, &receipt)?;
     if let Some(marker) =
         operation_marker(&comments, &operation_id, OperationKind::Spend, &expected)?
     {
@@ -11464,12 +11492,7 @@ pub fn plan_release(
         })));
     }
 
-    let target = ownership::ownership_epoch(
-        mine.operation_id.as_deref(),
-        mine.comment.id.as_deref(),
-        &mine.comment.created_at,
-        &mine.comment.body,
-    );
+    let target = epoch_of(mine);
     match requested_target {
         None => Ok(Release::Confirm {
             target_operation: target,
@@ -11484,6 +11507,48 @@ pub fn plan_release(
             target_operation: target,
         }),
     }
+}
+
+fn epoch_of(event: &ownership::Event) -> String {
+    ownership::ownership_epoch(
+        event.operation_id.as_deref(),
+        event.comment.id.as_deref(),
+        &event.comment.created_at,
+        &event.comment.body,
+    )
+}
+
+/// Refuses `target-operation-mismatch`, or `nothing-to-unassign` for a run that
+/// holds nothing, before a release that folds a close into
+/// itself writes anything, so a takeover between the discovery and the write
+/// cannot leave a half-closed delivery behind the refusal. Reads only; every
+/// other refusal stays [`plan_release`]'s.
+pub(crate) fn check_release_epoch(context: &Context, what: &Departure<'_>) -> Result<(), Failure> {
+    let Some(requested) = what.target_operation else {
+        return Ok(());
+    };
+    let comments = timeline(context, what.issue, what.now)?;
+    let ownership = holding(&comments, what.now);
+    let Some(mine) = ownership
+        .live
+        .iter()
+        .chain(&ownership.stale)
+        .find(|event| event.run_id == what.run_id)
+    else {
+        return Err(Failure::Stop(
+            serde_json::json!({ "ok": false, "reason": "nothing-to-unassign" }),
+        ));
+    };
+    let target = epoch_of(mine);
+    if requested == target {
+        return Ok(());
+    }
+    Err(Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "target-operation-mismatch",
+        "expected": target,
+        "provided": requested,
+    })))
 }
 
 /// Everything one release needs to say about itself.

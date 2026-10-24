@@ -563,16 +563,17 @@ tier's own `lenses`; so does the whole-change fallback, whichever reason it name
 
 ## Releasing an issue
 
-`unassign` puts the issue down without changing its state. Discovery is read-only and answers the
-exact epoch to name; repeating with `--target-operation` authorises only that epoch. It also
-converges the `dev:` label projection and, once the tracker confirms the close is the registered
-delivery and the checkout carries nothing unpublished, puts the isolated checkout down.
+`unassign` puts the issue down. Discovery is read-only, writes nothing whatever the call
+carries, and answers the epoch to name; `--target-operation` authorises only that epoch. A run
+holding the issue names none: the tool fills it from the claim's operation id, and after
+a takeover the old epoch is refused `target-operation-mismatch` before any write. The release
+converges the `dev:` label and, once the close is the registered delivery and nothing is
+unpublished, puts the isolated checkout down.
 
-`--evidence-file <f>` posts the close-evidence comment as a note in the same call, and `--spend
-<json>` records one measurement through `record_spend` — the same fields, the same `review`-state
-and live-claim checks, and the same operation identity as the separate call. They run in that
-order, comment then measurement, before the release itself, so each part's own refusals are what a
-caller meets in the order they fire. Omit either to release without it. `--spend` keeps
-`record_spend`'s own `review`-state check, so a merged release carrying one is called while the
-issue is still in `review`; a run that records the measurement after its `done` transition uses the
-separate `record_spend` call, which refuses there for the same reason.
+`--evidence-file <f>` and `--spend <json>` (one object with `record_spend`'s fields, or an array)
+fold the close in, in the order the store allows: each spend record while the issue is in `review`,
+`done` (from `review` only), the evidence note, the release. A bad spend refuses before any write. A stop after a
+write landed is not a refusal: the answer carries `close_incomplete` (`step`, `failure`) beside what
+landed and the claim is still held: repeat with the same `spend` (it replays), and without
+`evidence_file` once `evidence` landed. Call it from `review`; after `done` a new spend is
+`unexpected-state`.

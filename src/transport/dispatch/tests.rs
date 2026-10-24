@@ -791,60 +791,93 @@ fn hand_call(operation: &str, extra: &[&str]) -> serde_json::Value {
 }
 
 fn merged_release(extra: &[&str]) -> Vec<String> {
-    let mut flags: Vec<String> = ["--issue", "7", "--run-id", "run"]
-        .iter()
-        .map(|part| (*part).to_owned())
-        .collect();
+    let mut flags: Vec<String> = [
+        "--issue",
+        "7",
+        "--run-id",
+        "run",
+        "--runtime",
+        "claude",
+        "--operation-id",
+        "op",
+        "--target-operation",
+        "epoch",
+    ]
+    .iter()
+    .map(|part| (*part).to_owned())
+    .collect();
     flags.extend(extra.iter().map(|part| (*part).to_owned()));
     flags
 }
 
-/// A merged `release` refuses what its parts refuse, in the order they run.
+fn spend_object(phase: &str, input: u64) -> serde_json::Value {
+    serde_json::json!({
+        "phase": phase,
+        "epoch": "e",
+        "pr": 7,
+        "head": "h",
+        "base": "b",
+        "digest": "d",
+        "conditions": "sealed",
+        "input": input,
+        "tokens": 1,
+        "seconds": 1,
+        "contexts": 1,
+    })
+}
+
+/// A release that carries a close refuses everything it can refuse before it
+/// writes anything.
 ///
-/// The close-evidence comment and the spend record are the two writes that end
-/// a delivery beside the release, so `unassign` carries them: the comment runs
-/// first, then the measurement, then the release. A missing evidence file is
-/// the comment's own `comment-body-invalid`, and it fires before the spend is
-/// even read; a malformed spend is the spend's own `malformed-argument`, and it
-/// fires before the release reaches the tracker. Both are asserted with no `gh`
-/// on the path, so a part that had run out of order would answer with its own
-/// read failure instead of the refusal named here.
+/// The spend is read first, as one object or an array, and every element is
+/// checked before the first is recorded. All of it is asserted with no `gh` on
+/// the path, so a part that ran before its turn would answer with its own read
+/// failure instead of the refusal named here.
 #[test]
-fn a_merged_release_refuses_its_parts_in_order() {
+fn a_merged_release_refuses_what_it_can_before_it_writes() {
     let root = tempfile::tempdir().expect("a directory");
     let context = context(root.path());
+    let refused = |extra: &[&str]| {
+        super::dispatch(
+            &context,
+            "unassign",
+            &merged_release(extra),
+            "2026-01-01T00:00:00Z",
+        )
+        .expect_err("the release was accepted")
+        .envelope()
+    };
 
-    let evidence_first = super::dispatch(
-        &context,
-        "unassign",
-        &merged_release(&[
-            "--evidence-file",
-            "/no/such/close-evidence.md",
-            "--spend",
-            "not json",
-        ]),
-        "2026-01-01T00:00:00Z",
-    )
-    .expect_err("a missing evidence file was accepted")
-    .envelope();
-    assert_eq!(
-        evidence_first["reason"], "comment-body-invalid",
-        "the evidence comment did not run before the spend: {evidence_first}"
-    );
+    let malformed = refused(&[
+        "--evidence-file",
+        "/no/such/close-evidence.md",
+        "--spend",
+        "not json",
+    ]);
+    assert_eq!(malformed["reason"], "malformed-argument", "{malformed}");
+    assert_eq!(malformed["argument"], "--spend", "{malformed}");
 
-    let spend_second = super::dispatch(
-        &context,
-        "unassign",
-        &merged_release(&["--spend", "not json"]),
-        "2026-01-01T00:00:00Z",
-    )
-    .expect_err("a malformed spend was accepted")
-    .envelope();
-    assert_eq!(
-        spend_second["reason"], "malformed-argument",
-        "the spend did not run before the release: {spend_second}"
-    );
-    assert_eq!(spend_second["argument"], "--spend", "{spend_second}");
+    let empty = refused(&["--spend", "[]"]);
+    assert_eq!(empty["reason"], "malformed-argument", "{empty}");
+
+    let mut incomplete = spend_object("review", 1);
+    incomplete
+        .as_object_mut()
+        .expect("an object")
+        .remove("digest");
+    let missing = refused(&[
+        "--spend",
+        &serde_json::json!([spend_object("review", 1), incomplete]).to_string(),
+    ]);
+    assert_eq!(missing["reason"], "missing-argument", "{missing}");
+
+    let second_invalid = serde_json::json!([spend_object("review", 1), spend_object("review", 0)]);
+    let zero = refused(&["--spend", &second_invalid.to_string()]);
+    assert_eq!(zero["reason"], "non-positive-spend-value", "{zero}");
+
+    let wrong_phase = serde_json::json!([spend_object("review", 1), spend_object("nonsense", 1)]);
+    let phase = refused(&["--spend", &wrong_phase.to_string()]);
+    assert_eq!(phase["reason"], "invalid-spend-phase", "{phase}");
 }
 
 /// A merged `claim` accepts the state it moves to and refuses a claim with no

@@ -1003,6 +1003,10 @@ fn run_tool_asking(
         // is a note about what was last read, not authority, so the call
         // still goes through with a fresh key that is simply not recorded.
         let holds_it = run.issue_number() == Some(issue);
+        if let Some(epoch) = held_release_epoch(&run, issue, &flags) {
+            flags.push("--target-operation".to_owned());
+            flags.push(epoch);
+        }
         let key = match run.release_id.clone() {
             Some(existing) if holds_it => existing,
             _ => {
@@ -1474,6 +1478,17 @@ fn should_reissue_claim(
         )
 }
 
+/// The epoch a `release` of the issue this run holds ends, when the call did
+/// not name one: the claim's own operation id, which the pointer recorded. A
+/// takeover changes the epoch, and the transport still refuses the old one as
+/// `target-operation-mismatch`; a pointer with no id keeps the discovery call.
+fn held_release_epoch(run: &session::Run, issue: u64, flags: &[String]) -> Option<String> {
+    if run.issue_number() != Some(issue) || flags.iter().any(|flag| flag == "--target-operation") {
+        return None;
+    }
+    run.operation_id.clone()
+}
+
 /// Turns the transport's dispatch answer into the MCP refusal and applies
 /// the local consequence of an uncertain publication.
 fn refusal_from_answer(
@@ -1514,6 +1529,11 @@ pub(crate) fn apply_effect(
         return true;
     }
     let effect = tool.effect;
+    if effect == PointerEffect::Forget
+        && body.is_some_and(|body| body.get("close_incomplete").is_some())
+    {
+        return true;
+    }
     if effect == PointerEffect::Forget {
         // Removing the file is the record: if it is gone, the run holds
         // nothing, which is what was asked for.

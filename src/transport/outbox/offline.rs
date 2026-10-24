@@ -29,6 +29,7 @@ pub(super) struct Rig {
     context: Context,
     script: String,
     labels: Option<PathBuf>,
+    counts: Option<PathBuf>,
 }
 
 pub(super) fn rig() -> Rig {
@@ -69,6 +70,7 @@ pub(super) fn rig() -> Rig {
         context,
         script,
         labels: None,
+        counts: None,
     }
 }
 
@@ -176,7 +178,12 @@ impl Rig {
                 &self.log,
                 call,
             ),
-            None => crate::test_env::with_logging_gh(bin.path(), &self.script, &self.log, call),
+            None => match &self.counts {
+                Some(counts) => {
+                    crate::test_env::with_counting_gh(bin.path(), &self.script, counts, call)
+                }
+                None => crate::test_env::with_logging_gh(bin.path(), &self.script, &self.log, call),
+            },
         }
     }
 
@@ -459,6 +466,356 @@ fn a_release_while_closed_queues_its_projection_and_its_evidence() {
     let kinds: Vec<_> = rig.queue().into_iter().map(|(kind, _)| kind).collect();
     assert!(kinds.contains(&OutboxKind::Comment), "{kinds:?}");
     assert_eq!(rig.writes(), Vec::<String>::new());
+}
+
+fn comments_queued(rig: &Rig) -> usize {
+    rig.queue()
+        .into_iter()
+        .filter(|(kind, _)| *kind == OutboxKind::Comment)
+        .count()
+}
+
+#[test]
+fn a_release_from_review_closes_the_delivery_in_one_call() {
+    let rig = rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    rig.closed("transition", &["--issue", "12", "--to", "review"])
+        .expect("a transition to review");
+    let found = rig
+        .closed("unassign", &claim_flags("12", "claude-a", SECOND))
+        .expect("a discovery");
+    let target = found["target_operation"].as_str().expect("an epoch");
+    let mut release = claim_flags("12", "claude-a", SECOND);
+    let note = rig.path("note.md");
+    release.extend(["--target-operation", target, "--evidence-file", &note]);
+    let released = rig.closed("unassign", &release).expect("a release");
+
+    assert_eq!(rig.state(12).as_deref(), Some("done"), "{released}");
+    assert_eq!(comments_queued(&rig), 1);
+    assert!(released.get("transition").is_some(), "{released}");
+}
+
+struct Delivery {
+    epoch: String,
+    head: String,
+    base: String,
+    digest: String,
+}
+
+impl Delivery {
+    fn spend(&self, conditions: &str) -> serde_json::Value {
+        serde_json::json!({
+            "phase": "orchestrator",
+            "epoch": self.epoch,
+            "pr": 7,
+            "head": self.head,
+            "base": self.base,
+            "digest": self.digest,
+            "conditions": conditions,
+            "input": 1000,
+            "tokens": 50000,
+            "seconds": 120,
+            "contexts": 1,
+        })
+    }
+}
+
+fn commit(at: &std::path::Path, parent: Option<&str>, message: &str) -> String {
+    if let Some(parent) = parent {
+        git(at, &["checkout", "--quiet", "--detach", parent]);
+    }
+    git(
+        at,
+        &[
+            "-c",
+            "user.name=probe",
+            "-c",
+            "user.email=probe@example.com",
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            message,
+        ],
+    );
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(at)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("git rev-parse runs");
+    String::from_utf8(output.stdout)
+        .expect("a sha")
+        .trim()
+        .to_owned()
+}
+
+fn delivered_rig() -> (Rig, Delivery) {
+    let mut rig = rig();
+    let at = rig.directory.path().to_path_buf();
+    let base = commit(&at, None, "base");
+    let first = commit(&at, Some(&base), "integration tip");
+    let head = commit(&at, Some(&base), "reviewed head");
+    let merge = "d".repeat(40);
+    let delivery = Delivery {
+        epoch: "2".repeat(32),
+        head: head.clone(),
+        base,
+        digest: "c".repeat(64),
+    };
+    let published = crate::transport::markers::render(
+        "published",
+        &[
+            ("run-id", "claude-a"),
+            ("epoch", &delivery.epoch),
+            ("pr", "7"),
+            ("head", &delivery.head),
+            ("base", &delivery.base),
+            ("digest", &delivery.digest),
+        ],
+    )
+    .expect("a receipt marker");
+    rig.script = crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": "pr view 7 --json mergeCommit",
+            "stdout": serde_json::json!({"mergeCommit": {"oid": merge}}).to_string(),
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "repo view --json owner,name",
+            "stdout": serde_json::json!({"owner": {"login": "fixture"}, "name": "repo"}).to_string(),
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": format!("commits/{merge}"),
+            "stdout": serde_json::json!({"parents": [{"sha": first}, {"sha": head}]}).to_string(),
+            "status": 0,
+        }),
+        crate::test_env::issue_view_answer(
+            12,
+            serde_json::json!({
+                "state": "OPEN",
+                "labels": [{ "name": "status:in-progress" }],
+                "comments": [{
+                    "id": "IC_published",
+                    "createdAt": "2026-01-01T19:00:00Z",
+                    "viewerDidAuthor": true,
+                    "includesCreatedEdit": false,
+                    "body": format!("published.\n\n{published}\n"),
+                }],
+            }),
+        ),
+        serde_json::json!({ "matches": "issues?state=open", "stdout": "[[]]", "status": 0 }),
+    ]);
+    (rig, delivery)
+}
+
+fn close_in(rig: Rig, spend: &serde_json::Value) -> (Rig, Result<serde_json::Value, Failure>) {
+    close_failing_read(rig, spend, None)
+}
+
+fn close_failing_read(
+    mut rig: Rig,
+    spend: &serde_json::Value,
+    failing_issue_view: Option<u64>,
+) -> (Rig, Result<serde_json::Value, Failure>) {
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    rig.closed("transition", &["--issue", "12", "--to", "review"])
+        .expect("a transition to review");
+    let found = rig
+        .closed("unassign", &claim_flags("12", "claude-a", SECOND))
+        .expect("a discovery");
+    let target = found["target_operation"].as_str().expect("an epoch");
+    let mut release = claim_flags("12", "claude-a", SECOND);
+    let note = rig.path("note.md");
+    let spend = spend.to_string();
+    release.extend([
+        "--target-operation",
+        target,
+        "--evidence-file",
+        &note,
+        "--spend",
+        &spend,
+    ]);
+    if let Some(nth) = failing_issue_view {
+        let counts = rig.directory.path().join("counts.json");
+        crate::paths::replace_atomically(&counts, "{}").expect("a fresh count");
+        rig.counts = Some(counts);
+        let mut entries: Vec<serde_json::Value> =
+            serde_json::from_str(&rig.script).expect("a script");
+        entries.insert(
+            0,
+            serde_json::json!({"matches": "issues/12", "nth": nth, "stdout": "", "status": 1}),
+        );
+        rig.script = crate::test_env::answers(&entries);
+    }
+    let answer = rig.closed("unassign", &release);
+    (rig, answer)
+}
+
+fn assert_closed(rig: &Rig, answer: &serde_json::Value, recorded: usize) {
+    assert_eq!(rig.state(12).as_deref(), Some("done"), "{answer}");
+    assert_eq!(comments_queued(rig), 1, "{answer}");
+    assert!(answer.get("close_incomplete").is_none(), "{answer}");
+    let spend = &answer["spend"];
+    let spends = spend.as_array().map_or(1, Vec::len);
+    assert_eq!(spends, recorded, "{answer}");
+    assert!(answer["delivery"].is_null(), "{answer}");
+    assert!(
+        answer["transition"]["delivery"]["merge_commit"].is_string(),
+        "{answer}"
+    );
+    let held = rig
+        .closed(
+            "verify-claim",
+            &[
+                "--issue",
+                "12",
+                "--run-id",
+                "claude-a",
+                "--expect-state",
+                "done",
+            ],
+        )
+        .expect_err("the claim was still held after the release");
+    assert_eq!(held.envelope()["reason"], "not-current-live-holder");
+}
+
+#[test]
+fn one_release_records_the_spend_moves_to_done_posts_the_evidence_and_unassigns() {
+    let (rig, delivery) = delivered_rig();
+    let (rig, answer) = close_in(rig, &delivery.spend("sealed"));
+    assert_closed(&rig, &answer.expect("one call closes the delivery"), 1);
+}
+
+#[test]
+fn one_release_records_every_phase_of_an_array_of_spend() {
+    let (rig, delivery) = delivered_rig();
+    let spend = serde_json::json!([
+        delivery.spend("sealed"),
+        delivery.spend("checkout budgeted")
+    ]);
+    let (rig, answer) = close_in(rig, &spend);
+    assert_closed(&rig, &answer.expect("one call closes the delivery"), 2);
+}
+
+#[test]
+fn a_spend_carried_after_done_is_refused_unexpected_state_and_posts_nothing() {
+    let (rig, delivery) = delivered_rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    rig.closed("transition", &["--issue", "12", "--to", "review"])
+        .expect("a transition to review");
+    rig.closed("transition", &["--issue", "12", "--to", "done"])
+        .expect("a verified delivery moves to done");
+    let found = rig
+        .closed("unassign", &claim_flags("12", "claude-a", SECOND))
+        .expect("a discovery");
+    let target = found["target_operation"].as_str().expect("an epoch");
+    let mut release = claim_flags("12", "claude-a", SECOND);
+    let note = rig.path("note.md");
+    let spend = delivery.spend("sealed").to_string();
+    release.extend([
+        "--target-operation",
+        target,
+        "--evidence-file",
+        &note,
+        "--spend",
+        &spend,
+    ]);
+    let refused = rig
+        .closed("unassign", &release)
+        .expect_err("a spend after done was recorded")
+        .envelope();
+
+    assert_eq!(refused["reason"], "unexpected-state", "{refused}");
+    assert_eq!(comments_queued(&rig), 0);
+}
+
+#[test]
+fn a_close_that_stops_after_a_write_reports_it_instead_of_refusing() {
+    let rig = rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    rig.closed("transition", &["--issue", "12", "--to", "review"])
+        .expect("a transition to review");
+    let found = rig
+        .closed("unassign", &claim_flags("12", "claude-a", SECOND))
+        .expect("a discovery");
+    let target = found["target_operation"].as_str().expect("an epoch");
+    let mut release = claim_flags("12", "claude-a", SECOND);
+    release.extend([
+        "--target-operation",
+        target,
+        "--evidence-file",
+        "/no/such/close-evidence.md",
+    ]);
+    let answer = rig
+        .closed("unassign", &release)
+        .expect("a stop after a landed write is an answer, not a refusal");
+
+    assert_eq!(rig.state(12).as_deref(), Some("done"));
+    assert_eq!(answer["close_incomplete"]["step"], "evidence", "{answer}");
+    assert_eq!(
+        answer["close_incomplete"]["failure"]["reason"], "comment-body-invalid",
+        "{answer}"
+    );
+    assert!(answer.get("transition").is_some(), "{answer}");
+}
+
+#[test]
+fn a_release_after_a_takeover_is_refused_before_it_closes_anything() {
+    let rig = rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    rig.closed("transition", &["--issue", "12", "--to", "review"])
+        .expect("a transition to review");
+    let found = rig
+        .closed("unassign", &claim_flags("12", "claude-a", SECOND))
+        .expect("a discovery");
+    let held = found["target_operation"].as_str().expect("an epoch");
+
+    let reason = rig.path("note.md");
+    for (run, operation) in [
+        ("claude-b", "1111111111111111aaaaaaaaaaaaaaaa"),
+        ("claude-a", "2222222222222222bbbbbbbbbbbbbbbb"),
+    ] {
+        let mut takeover = claim_flags("12", run, operation);
+        takeover.extend(["--takeover", "--force", "--reason-file", &reason]);
+        let discovered = rig.closed("claim", &takeover).expect("a discovery");
+        let target = discovered["target_operation"].as_str().expect("an epoch");
+        takeover.extend(["--target-operation", target]);
+        rig.closed("claim", &takeover).expect("a takeover");
+    }
+
+    let mut release = claim_flags("12", "claude-a", "3333333333333333cccccccccccccccc");
+    release.extend(["--target-operation", held, "--evidence-file", &reason]);
+    let refused = rig
+        .closed("unassign", &release)
+        .expect_err("a release naming the epoch before the takeover was accepted")
+        .envelope();
+
+    assert_eq!(refused["reason"], "target-operation-mismatch", "{refused}");
+    assert_eq!(rig.state(12).as_deref(), Some("review"));
+    assert_eq!(comments_queued(&rig), 0);
+}
+
+#[test]
+fn a_discovery_release_writes_no_comment_and_no_spend() {
+    let rig = rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    let mut discover = claim_flags("12", "claude-a", SECOND);
+    let note = rig.path("note.md");
+    discover.extend(["--evidence-file", &note, "--spend", "not json"]);
+    let found = rig
+        .closed("unassign", &discover)
+        .expect("a discovery writes nothing, so nothing in it can refuse");
+
+    assert_eq!(found["write_performed"], false, "{found}");
+    assert_eq!(comments_queued(&rig), 0);
 }
 
 #[test]
@@ -899,4 +1256,63 @@ fn a_handoff_naming_an_unlabellable_runtime_writes_nothing() {
     assert_eq!(failure.envelope()["reason"], "handoff-runtime-unreadable");
     assert_eq!(rig.writes(), Vec::<String>::new());
     assert_eq!(rig.queue(), Vec::<(OutboxKind, u64)>::new());
+}
+
+#[test]
+fn a_read_that_fails_after_the_spend_landed_is_reported_with_the_spend() {
+    let (rig, delivery) = delivered_rig();
+    let (rig, answer) = close_failing_read(rig, &delivery.spend("sealed"), Some(13));
+    let answer = answer.expect("a stop after a landed write is an answer, not a refusal");
+
+    assert_eq!(answer["close_incomplete"]["step"], "transition", "{answer}");
+    assert_eq!(
+        answer["close_incomplete"]["failure"]["reason"], "read-failed",
+        "{answer}"
+    );
+    assert_eq!(answer["spend"]["ok"], true, "{answer}");
+    assert_eq!(rig.state(12).as_deref(), Some("review"));
+    assert_eq!(comments_queued(&rig), 0);
+}
+
+#[test]
+fn repeating_a_stopped_close_with_the_same_spend_completes_it() {
+    let (rig, delivery) = delivered_rig();
+    let spend = delivery.spend("sealed");
+    let (mut rig, stopped) = close_failing_read(rig, &spend, Some(17));
+    let stopped = stopped.expect("a stop after landed writes is an answer");
+    assert_eq!(stopped["close_incomplete"]["step"], "release", "{stopped}");
+    assert_eq!(rig.state(12).as_deref(), Some("done"), "{stopped}");
+
+    rig.counts = None;
+    let mut entries: Vec<serde_json::Value> = serde_json::from_str(&rig.script).expect("a script");
+    entries.remove(0);
+    rig.script = crate::test_env::answers(&entries);
+    let found = rig
+        .closed("unassign", &claim_flags("12", "claude-a", SECOND))
+        .expect("a discovery");
+    let target = found["target_operation"].as_str().expect("an epoch");
+    let mut again = claim_flags("12", "claude-a", SECOND);
+    let spend = spend.to_string();
+    again.extend(["--target-operation", target, "--spend", &spend]);
+    let resumed = rig
+        .closed("unassign", &again)
+        .expect("the repeated call completes");
+
+    assert!(resumed.get("close_incomplete").is_none(), "{resumed}");
+    assert_eq!(resumed["spend"]["reused_existing_spend"], true, "{resumed}");
+    assert_eq!(comments_queued(&rig), 1, "{resumed}");
+    let held = rig
+        .closed(
+            "verify-claim",
+            &[
+                "--issue",
+                "12",
+                "--run-id",
+                "claude-a",
+                "--expect-state",
+                "done",
+            ],
+        )
+        .expect_err("the claim was still held after the repeated release");
+    assert_eq!(held.envelope()["reason"], "not-current-live-holder");
 }

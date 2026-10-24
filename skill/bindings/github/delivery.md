@@ -461,10 +461,10 @@ permission to rewrite release history.
 
 ### Closing
 
-`close` moves the state to `done` **first** — `SCRIPT transition --issue <n> --to done` — then posts
-the closing note with `gh issue comment <n> --body-file <file>`, then a bare `gh issue close <n>`.
-`gh issue close` has NO file variant (`-c/--comment` is inline-only, confirmed against
-`gh issue close --help`), so the note goes through the file-based comment path and the close carries
+`close` moves the state to `done` **first**, then posts the closing note, then a bare `gh issue close
+<n>`. A run's own delivery does the first two as one `release` from `review` (operations.md,
+*Releasing an issue*).
+`gh issue close` has NO file variant (`-c/--comment` is inline-only), so the note goes through the file-based comment path and the close carries
 no body at all.
 
 **Run the transition even when GitHub already closed the issue.** Under `gh issue develop` the merge
@@ -478,7 +478,7 @@ issue as already closed — that is success, not an error.
 **`done` verifies the merge.** With a confirmed review receipt on the issue, `transition --to done` first
 reads the receipt's pull request and is refused as `delivery-not-verified` unless it is merged by a merge
 commit whose second parent is the reviewed head and whose first parent descends from the reviewed base. The
-refusal names the merge commit and its parents. It runs after the merge and `record_spend`, needs no closing
+refusal names the merge commit and its parents. It runs after the merge and after the spend is recorded, needs no closing
 reference, and the answer carries `delivery` (pull request, merge commit, parents). No receipt, no check.
 
 That is the **final-delivery** path. An intermediate slice of a retained issue must not borrow it.

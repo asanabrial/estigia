@@ -14,6 +14,7 @@
 
 use std::path::Path;
 
+use super::claim::Departure;
 use super::{Context, Failure};
 
 /// The flags this transport takes with no value at all.
@@ -305,99 +306,254 @@ fn post_close_evidence(
     super::commands::comment(context, issue, path, Some(run_id), Some("note"), now)
 }
 
-/// One spend record a merged `unassign` carries, parsed from its JSON object
-/// and recorded through [`super::claim::record_spend`] unchanged — so its own
-/// refusals, its `review`-state check and its operation identity all still
-/// apply. The operation id is derived exactly as the tool server derives a
-/// standalone `spend`'s, so a merged record and a separate one naming the same
-/// measurement read back as one event.
-fn record_merged_spend(
-    context: &Context,
-    issue: u64,
-    run_id: &str,
-    spend: &str,
-    now: &str,
-) -> Result<serde_json::Value, Failure> {
-    let value: serde_json::Value = serde_json::from_str(spend).map_err(|error| {
-        Failure::ConfigDefect(serde_json::json!({
-            "ok": false,
-            "reason": "malformed-argument",
-            "argument": "--spend",
-            "detail": format!("--spend is one JSON object: {error}"),
-        }))
-    })?;
-    let missing = |field: &str| {
-        Failure::ConfigDefect(serde_json::json!({
-            "ok": false,
-            "reason": "missing-argument",
-            "argument": "--spend",
-            "detail": format!("--spend has no `{field}`"),
-        }))
-    };
-    let text = |field: &str| -> Result<String, Failure> {
-        value
-            .get(field)
+/// One spend record a merged `unassign` carries, parsed from its JSON object.
+/// The operation id is derived exactly as the tool server derives a standalone
+/// `spend`'s, so a merged record and a separate one naming the same measurement
+/// read back as one event.
+struct MergedSpend {
+    operation_id: String,
+    phase: String,
+    epoch: String,
+    pr: u64,
+    head: String,
+    base: String,
+    digest: String,
+    conditions: String,
+    counts: [u64; 4],
+    note: String,
+}
+
+impl MergedSpend {
+    fn parse(run_id: &str, value: &serde_json::Value) -> Result<Self, Failure> {
+        let missing = |field: &str| {
+            Failure::ConfigDefect(serde_json::json!({
+                "ok": false,
+                "reason": "missing-argument",
+                "argument": "--spend",
+                "detail": format!("--spend has no `{field}`"),
+            }))
+        };
+        let text = |field: &str| -> Result<String, Failure> {
+            value
+                .get(field)
+                .and_then(serde_json::Value::as_str)
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| missing(field))
+        };
+        let count = |field: &str| -> Result<u64, Failure> {
+            value
+                .get(field)
+                .and_then(serde_json::Value::as_u64)
+                .ok_or_else(|| missing(field))
+        };
+        let phase = text("phase")?;
+        let epoch = text("epoch")?;
+        let pr = count("pr")?;
+        let head = text("head")?;
+        let base = text("base")?;
+        let digest = text("digest")?;
+        let conditions = text("conditions")?;
+        let counts = [
+            count("input")?,
+            count("tokens")?,
+            count("seconds")?,
+            count("contexts")?,
+        ];
+        let note = value
+            .get("note")
             .and_then(serde_json::Value::as_str)
-            .map(ToOwned::to_owned)
-            .ok_or_else(|| missing(field))
-    };
-    let count = |field: &str| -> Result<u64, Failure> {
-        value
-            .get(field)
-            .and_then(serde_json::Value::as_u64)
-            .ok_or_else(|| missing(field))
-    };
-    let phase = text("phase")?;
-    let epoch = text("epoch")?;
-    let pr = count("pr")?;
-    let head = text("head")?;
-    let base = text("base")?;
-    let digest = text("digest")?;
-    let conditions = text("conditions")?;
-    let input = count("input")?;
-    let tokens = count("tokens")?;
-    let seconds = count("seconds")?;
-    let contexts = count("contexts")?;
-    let note = value
-        .get("note")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default()
-        .to_owned();
-    let pr_field = pr.to_string();
-    let operation_id = super::claim::review_operation_id(
-        "spend",
-        &[
-            run_id,
-            &phase,
-            &epoch,
-            &pr_field,
-            &head,
-            &base,
-            &digest,
-            &conditions,
-        ],
-    );
-    super::claim::record_spend(
-        context,
-        &super::claim::SpendReview {
+            .unwrap_or_default()
+            .to_owned();
+        let pr_field = pr.to_string();
+        let operation_id = super::claim::review_operation_id(
+            "spend",
+            &[
+                run_id,
+                &phase,
+                &epoch,
+                &pr_field,
+                &head,
+                &base,
+                &digest,
+                &conditions,
+            ],
+        );
+        Ok(Self {
+            operation_id,
+            phase,
+            epoch,
+            pr,
+            head,
+            base,
+            digest,
+            conditions,
+            counts,
+            note,
+        })
+    }
+
+    fn review<'a>(
+        &'a self,
+        issue: u64,
+        run_id: &'a str,
+        now: &'a str,
+    ) -> super::claim::SpendReview<'a> {
+        let [input, tokens, seconds, contexts] = self.counts;
+        super::claim::SpendReview {
             issue,
             run_id,
-            operation_id: &operation_id,
-            phase: &phase,
-            epoch: &epoch,
-            pr,
-            head: &head,
-            base: &base,
-            digest: &digest,
-            conditions: &conditions,
+            operation_id: &self.operation_id,
+            phase: &self.phase,
+            epoch: &self.epoch,
+            pr: self.pr,
+            head: &self.head,
+            base: &self.base,
+            digest: &self.digest,
+            conditions: &self.conditions,
             input,
             tokens,
             seconds,
             contexts,
-            note: &note,
+            note: &self.note,
             now,
-        },
-    )
+        }
+    }
+}
+
+/// `--spend` as a list of records: one JSON object or an array of them, every
+/// element parsed before any is recorded.
+fn parse_merged_spends(run_id: &str, spend: &str) -> Result<Vec<MergedSpend>, Failure> {
+    let malformed = |detail: String| {
+        Failure::ConfigDefect(serde_json::json!({
+            "ok": false,
+            "reason": "malformed-argument",
+            "argument": "--spend",
+            "detail": detail,
+        }))
+    };
+    let value: serde_json::Value = serde_json::from_str(spend)
+        .map_err(|error| malformed(format!("--spend is a JSON object or an array: {error}")))?;
+    let records = match value {
+        serde_json::Value::Array(records) if !records.is_empty() => records,
+        serde_json::Value::Array(_) => {
+            return Err(malformed("--spend is an empty array".to_owned()));
+        }
+        single => vec![single],
+    };
+    records
+        .iter()
+        .map(|record| MergedSpend::parse(run_id, record))
+        .collect()
+}
+
+/// A landed write followed by a refusal: the answer a release gives when its
+/// close stopped part-way. A refusal would clear what the pointer recorded
+/// about a claim that is still held, so the stop is named in the answer.
+fn close_incomplete(
+    mut done: serde_json::Map<String, serde_json::Value>,
+    step: &str,
+    failure: &Failure,
+) -> serde_json::Value {
+    done.insert("ok".to_owned(), serde_json::json!(false));
+    done.insert(
+        "close_incomplete".to_owned(),
+        serde_json::json!({ "step": step, "failure": failure.envelope() }),
+    );
+    serde_json::Value::Object(done)
+}
+
+/// A release that folds its close into itself, in the order the store forces:
+/// every spend record while the issue is still in `review`, the move to `done`,
+/// the evidence comment, then the release. Everything refusable without a
+/// write is refused first; a stop after a write landed comes back under
+/// `close_incomplete` with what did land.
+fn merged_release(
+    context: &Context,
+    departure: &Departure<'_>,
+    evidence: Option<&Path>,
+    spend: Option<&str>,
+) -> Result<serde_json::Value, Failure> {
+    let (issue, run_id, now) = (departure.issue, departure.run_id, departure.now);
+    let spends = match spend {
+        Some(spend) => parse_merged_spends(run_id, spend)?,
+        None => Vec::new(),
+    };
+    for record in &spends {
+        super::claim::validate_spend(&record.review(issue, run_id, now))?;
+    }
+    for record in &spends {
+        super::claim::check_spend_receipt(context, &record.review(issue, run_id, now))?;
+    }
+    if evidence.is_none() && spends.is_empty() {
+        return super::claim::unassign(context, departure);
+    }
+    super::claim::check_release_epoch(context, departure)?;
+
+    let mut done = serde_json::Map::new();
+    let mut landed = false;
+    let stopped = |done: &mut serde_json::Map<_, _>, step: &str, failure: Failure, landed| {
+        if landed {
+            Ok(close_incomplete(std::mem::take(done), step, &failure))
+        } else {
+            Err(failure)
+        }
+    };
+
+    let spend_answer = |mut recorded: Vec<serde_json::Value>| match recorded.len() {
+        0 => None,
+        1 => Some(recorded.remove(0)),
+        _ => Some(serde_json::Value::Array(recorded)),
+    };
+    let mut recorded = Vec::new();
+    for record in &spends {
+        match super::claim::record_spend(context, &record.review(issue, run_id, now)) {
+            Ok(answer) => {
+                landed = true;
+                recorded.push(answer);
+            }
+            Err(failure) => {
+                if let Some(spent) = spend_answer(recorded) {
+                    done.insert("spend".to_owned(), spent);
+                }
+                return stopped(&mut done, "spend", failure, landed);
+            }
+        }
+    }
+    if let Some(spent) = spend_answer(recorded) {
+        done.insert("spend".to_owned(), spent);
+    }
+
+    let state = super::store::Ledger::open(context, issue, now).and_then(|ledger| ledger.state());
+    let in_review = match state {
+        Ok(state) => state.as_deref() == Some("review"),
+        Err(failure) => return stopped(&mut done, "transition", failure, landed),
+    };
+    if in_review {
+        match super::commands::transition(context, issue, "done", None, now) {
+            Ok(moved) => {
+                landed = true;
+                done.insert("transition".to_owned(), moved);
+            }
+            Err(failure) => return stopped(&mut done, "transition", failure, landed),
+        }
+    }
+    if let Some(path) = evidence {
+        match post_close_evidence(context, issue, path, run_id, now) {
+            Ok(posted) => {
+                landed = true;
+                done.insert("evidence".to_owned(), posted);
+            }
+            Err(failure) => return stopped(&mut done, "evidence", failure, landed),
+        }
+    }
+    match super::claim::unassign(context, departure) {
+        Ok(serde_json::Value::Object(mut fields)) => {
+            fields.extend(done);
+            Ok(serde_json::Value::Object(fields))
+        }
+        Ok(other) => Ok(other),
+        Err(failure) => stopped(&mut done, "release", failure, landed),
+    }
 }
 
 /// Runs one transport operation in this process.
@@ -713,49 +869,20 @@ fn run_operation(
             }
         }
         "unassign" => {
-            let issue = issue()?;
-            let run_id = run_id()?;
-            // The close-evidence comment and the spend figures are the two
-            // writes that end a delivery beside the release, so the release
-            // carries them: the comment first, then the measurement, then the
-            // release. Each runs through its own operation, so its own
-            // refusals — a missing body file, a blank condition, a
-            // `review`-state check — are what a caller meets, in that order.
-            let mut extras = serde_json::Map::new();
-            if let Some(path) = f.path("evidence-file") {
-                extras.insert(
-                    "evidence".to_owned(),
-                    post_close_evidence(context, issue, path, run_id, now)?,
-                );
+            let departure = Departure {
+                issue: issue()?,
+                run_id: run_id()?,
+                runtime: f.need("runtime", operation)?,
+                operation_id: f.need("operation-id", operation)?,
+                target_operation: f.get("target-operation"),
+                held_by_other: f.on("held-by-other"),
+                worktree: f.path("worktree"),
+                now,
+            };
+            if departure.target_operation.is_none() {
+                return super::claim::unassign(context, &departure);
             }
-            if let Some(spend) = f.get("spend") {
-                extras.insert(
-                    "spend".to_owned(),
-                    record_merged_spend(context, issue, run_id, spend, now)?,
-                );
-            }
-            let released = super::claim::unassign(
-                context,
-                &super::claim::Departure {
-                    issue,
-                    run_id,
-                    runtime: f.need("runtime", operation)?,
-                    operation_id: f.need("operation-id", operation)?,
-                    target_operation: f.get("target-operation"),
-                    held_by_other: f.on("held-by-other"),
-                    worktree: f.path("worktree"),
-                    now,
-                },
-            )?;
-            Ok(match released {
-                serde_json::Value::Object(mut fields) => {
-                    for (key, value) in extras {
-                        fields.insert(key, value);
-                    }
-                    serde_json::Value::Object(fields)
-                }
-                other => other,
-            })
+            merged_release(context, &departure, f.path("evidence-file"), f.get("spend"))
         }
         "handoff" => super::handoff::record(
             context,
