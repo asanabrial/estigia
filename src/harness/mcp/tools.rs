@@ -683,8 +683,9 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "spend",
                 "string",
-                "One JSON object or an array with `record_spend`'s fields and checks, all checked \
-                 before any write. Omit to record none.",
+                "One JSON object or an array: `phase`, `conditions`, `input`, `tokens`, \
+                 `seconds`, `contexts`, optional `note`. The receipt fields default to the \
+                 held review transaction. All checked before any write. Omit to record none.",
             ),
         ],
         effect: PointerEffect::Forget,

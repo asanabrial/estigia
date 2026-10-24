@@ -571,7 +571,8 @@ converges the `dev:` label and, once the close is the registered delivery and no
 unpublished, puts the isolated checkout down.
 
 `--evidence-file <f>` and `--spend <json>` (one object with `record_spend`'s fields, or an array)
-fold the close in, in the order the store allows: each spend record while the issue is in `review`,
+fold the close in. A held run may omit a record's receipt fields; the tool fills them from its
+review transaction and keeps any the record names. The close folds in, in the order the store allows: each spend record while the issue is in `review`,
 `done` (from `review` only), the evidence note, the release. A bad spend refuses before any write. A stop after a
 write landed is not a refusal: the answer carries `close_incomplete` (`step`, `failure`) beside what
 landed and the claim is still held: repeat with the same `spend` (it replays), and without

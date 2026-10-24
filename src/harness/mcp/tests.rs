@@ -5833,7 +5833,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 48_497;
+const TOOLS_LIST_CEILING: usize = 48_597;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -7892,4 +7892,112 @@ fn a_compact_review_status_names_the_receipt_once() {
     super::without_repeated_receipt(&mut kept);
     assert_eq!(kept["next"]["arguments"]["head"], "other");
     assert!(kept["next"]["arguments"].get("epoch").is_none());
+}
+
+#[test]
+fn a_held_release_fills_each_spend_record_from_the_review_transaction() {
+    let mut run = crate::harness::session::Run::new("claude-held0a1b2c3d".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    let bare = r#"{"phase":"orchestrator","conditions":"inline","input":1,"tokens":2,"seconds":3,"contexts":1}"#;
+
+    assert_eq!(super::held_spend_receipt(&run, 12, bare), None);
+
+    run.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "e1".to_owned(),
+        pr: 7,
+        head: "h1".to_owned(),
+        base: "b1".to_owned(),
+        digest: "d1".to_owned(),
+    });
+    let filled: Value =
+        serde_json::from_str(&super::held_spend_receipt(&run, 12, bare).expect("filled"))
+            .expect("json");
+    assert_eq!(filled["epoch"], "e1");
+    assert_eq!(filled["pr"], 7);
+    assert_eq!(filled["head"], "h1");
+    assert_eq!(filled["base"], "b1");
+    assert_eq!(filled["digest"], "d1");
+    assert_eq!(filled["phase"], "orchestrator");
+
+    let array = format!(
+        r#"[{bare},{{"phase":"review","epoch":"named","conditions":"x","input":1,"tokens":1,"seconds":1,"contexts":4}}]"#
+    );
+    let filled: Value =
+        serde_json::from_str(&super::held_spend_receipt(&run, 12, &array).expect("filled"))
+            .expect("json");
+    assert_eq!(filled[0]["epoch"], "e1");
+    assert_eq!(
+        filled[1]["epoch"], "named",
+        "the caller's own field was overwritten"
+    );
+    assert_eq!(filled[1]["digest"], "d1");
+
+    assert_eq!(
+        super::held_spend_receipt(&run, 13, bare),
+        None,
+        "another issue's spend borrowed this run's receipt"
+    );
+    assert_eq!(super::held_spend_receipt(&run, 12, "not json"), None);
+}
+
+#[test]
+fn a_held_release_rewrites_only_the_spend_flag_value() {
+    let mut run = crate::harness::session::Run::new("claude-held0a1b2c3d".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "e1".to_owned(),
+        pr: 7,
+        head: "h1".to_owned(),
+        base: "b1".to_owned(),
+        digest: "d1".to_owned(),
+    });
+    let mut flags = vec![
+        "--evidence-file".to_owned(),
+        "note.md".to_owned(),
+        "--spend".to_owned(),
+        r#"{"phase":"orchestrator"}"#.to_owned(),
+    ];
+    let mut expected = flags.clone();
+    super::default_spend_receipt(&run, 12, &mut flags);
+    let filled: Value = serde_json::from_str(&flags[3]).expect("json");
+    assert_eq!(filled["epoch"], "e1");
+    expected[3] = flags[3].clone();
+    assert_eq!(flags, expected);
+
+    let mut without = vec!["--evidence-file".to_owned(), "note.md".to_owned()];
+    super::default_spend_receipt(&run, 12, &mut without);
+    assert_eq!(without, ["--evidence-file", "note.md"]);
+}
+
+#[test]
+fn a_held_release_spend_without_its_receipt_is_not_refused_for_the_receipt() {
+    let root = tempfile::tempdir().expect("a state root");
+    let repo_dir = root.path().join("repo");
+    std::fs::create_dir_all(&repo_dir).expect("a checkout");
+    let context = bare_context(&root, &repo_dir);
+    std::fs::create_dir_all(&context.state_root).expect("the state directory");
+    let mut run = crate::harness::session::Run::new("claude-spend0a1b2c3d".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.repo_dir = Some(repo_dir);
+    run.operation_id = Some("epoch-of-the-claim".to_owned());
+    run.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "e1".to_owned(),
+        pr: 7,
+        head: "h1".to_owned(),
+        base: "b1".to_owned(),
+        digest: "d1".to_owned(),
+    });
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer is written");
+    let spend = json!({"phase": "orchestrator", "conditions": "inline", "input": 1, "tokens": 2, "seconds": 3, "contexts": 1});
+    let answer = super::run_tool(
+        "release",
+        &json!({"issue": 12, "run_id": "claude-spend0a1b2c3d", "spend": spend.to_string()}),
+        Ok(&context),
+    );
+    let text = match &answer {
+        Ok(body) => body.to_string(),
+        Err(super::ToolFailure::Refused(refusal)) => format!("{} {refusal}", refusal.code),
+        Err(other) => format!("{other:?}"),
+    };
+    assert!(!text.contains("--spend has no"), "{text}");
 }

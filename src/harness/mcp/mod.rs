@@ -1008,6 +1008,7 @@ fn run_tool_asking(
             flags.push("--target-operation".to_owned());
             flags.push(epoch);
         }
+        default_spend_receipt(&run, issue, &mut flags);
         let key = match run.release_id.clone() {
             Some(existing) if holds_it => existing,
             _ => {
@@ -1498,6 +1499,46 @@ fn held_release_epoch(run: &session::Run, issue: u64, flags: &[String]) -> Optio
         return None;
     }
     run.operation_id.clone()
+}
+
+/// Fills the receipt fields a `--spend` record leaves out from the review
+/// transaction the run holds for this issue. A field the caller named is kept,
+/// so the store still checks it against the receipt.
+fn default_spend_receipt(run: &session::Run, issue: u64, flags: &mut [String]) {
+    let Some(at) = flags.iter().position(|flag| flag == "--spend") else {
+        return;
+    };
+    if let Some(value) = flags.get(at + 1)
+        && let Some(filled) = held_spend_receipt(run, issue, value)
+    {
+        flags[at + 1] = filled;
+    }
+}
+
+fn held_spend_receipt(run: &session::Run, issue: u64, spend: &str) -> Option<String> {
+    if run.issue_number() != Some(issue) {
+        return None;
+    }
+    let receipt = run.review_transaction.as_ref()?;
+    let mut value: Value = serde_json::from_str(spend).ok()?;
+    let fill = |record: &mut Value| {
+        if let Some(record) = record.as_object_mut() {
+            for (field, default) in [
+                ("epoch", json!(receipt.epoch)),
+                ("pr", json!(receipt.pr)),
+                ("head", json!(receipt.head)),
+                ("base", json!(receipt.base)),
+                ("digest", json!(receipt.digest)),
+            ] {
+                record.entry(field).or_insert(default);
+            }
+        }
+    };
+    match &mut value {
+        Value::Array(records) => records.iter_mut().for_each(fill),
+        record => fill(record),
+    }
+    Some(value.to_string())
 }
 
 /// Turns the transport's dispatch answer into the MCP refusal and applies
