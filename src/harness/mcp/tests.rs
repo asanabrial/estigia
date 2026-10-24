@@ -1526,7 +1526,7 @@ fn a_tool_answer_is_rendered_compact_because_the_model_pays_per_byte() {
             {"path": "src/main.rs", "mode": "100644", "blob": "b".repeat(40)},
         ],
     });
-    let text = super::answer_text(Some(body.clone()));
+    let text = super::answer_text(Some(body.clone()), false);
     assert_eq!(
         text.lines().count(),
         1,
@@ -1546,7 +1546,7 @@ fn a_tool_answer_is_rendered_compact_because_the_model_pays_per_byte() {
 
 #[test]
 fn an_answer_with_no_body_still_says_it_worked() {
-    let text = super::answer_text(None);
+    let text = super::answer_text(None, false);
     let answered: serde_json::Value = serde_json::from_str(&text).expect("the answer is JSON");
     assert_eq!(answered["ok"], true);
     assert_eq!(
@@ -1564,7 +1564,7 @@ fn an_answer_with_no_body_still_says_it_worked() {
 #[test]
 fn an_object_body_gets_the_build_identity_inserted() {
     let body = json!({"issue": 12});
-    let text = super::answer_text(Some(body));
+    let text = super::answer_text(Some(body), false);
     let answered: serde_json::Value = serde_json::from_str(&text).expect("the answer is JSON");
     assert_eq!(answered["issue"], 12);
     assert_eq!(
@@ -1576,7 +1576,7 @@ fn an_object_body_gets_the_build_identity_inserted() {
 
 #[test]
 fn a_non_object_body_is_left_alone_rather_than_corrupted() {
-    let text = super::answer_text(Some(json!("plain string")));
+    let text = super::answer_text(Some(json!("plain string")), false);
     assert_eq!(
         text, r#""plain string""#,
         "a non-object body must not be turned into an object carrying `build`: {text}"
@@ -5833,7 +5833,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 48_117;
+const TOOLS_LIST_CEILING: usize = 48_497;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -7805,4 +7805,91 @@ fn an_incomplete_close_leaves_the_pointer_the_run_still_needs() {
             .is_none(),
         "a finished release kept the pointer"
     );
+}
+
+#[test]
+fn only_the_core_delivery_tools_are_marked_always_loaded() {
+    let listed = result(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
+    let marked: std::collections::BTreeSet<&str> = listed["tools"]
+        .as_array()
+        .expect("a tool list")
+        .iter()
+        .filter(|tool| tool["_meta"]["anthropic/alwaysLoad"] == true)
+        .filter_map(|tool| tool["name"].as_str())
+        .collect();
+    let core: std::collections::BTreeSet<&str> = [
+        "claim",
+        "start_branch",
+        "publish_review",
+        "launch_review_input",
+        "collect_review_input",
+        "record_computed_verdict",
+        "release_ci",
+        "release",
+        "transition",
+        "review_status",
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(marked, core);
+    for tool in listed["tools"].as_array().expect("a tool list") {
+        if !core.contains(tool["name"].as_str().unwrap_or_default()) {
+            assert!(tool.get("_meta").is_none(), "{tool}");
+        }
+    }
+}
+
+#[test]
+fn every_tool_accepts_compact_and_only_task_sends_it_on() {
+    let listed = result(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
+    for tool in listed["tools"].as_array().expect("a tool list") {
+        assert_eq!(
+            tool["inputSchema"]["properties"]["compact"]["type"], "boolean",
+            "{}",
+            tool["name"]
+        );
+    }
+    let claim = tools::find("review_status").expect("review_status");
+    let flags = super::flags_for(claim, &json!({"issue": 5, "compact": true}));
+    assert!(
+        !matches!(flags, Err(super::ToolFailure::Malformed(_))),
+        "claim refused compact"
+    );
+    assert!(!flags.unwrap_or_default().contains(&"--compact".to_owned()));
+}
+
+#[test]
+fn a_compact_answer_omits_build_and_a_plain_one_keeps_it() {
+    let plain = super::answer_text(Some(json!({"ok": true})), false);
+    assert!(plain.contains("\"build\""), "{plain}");
+    let compact = super::answer_text(Some(json!({"ok": true})), true);
+    assert_eq!(compact, r#"{"ok":true}"#);
+    assert_eq!(super::answer_text(None, true), r#"{"ok":true}"#);
+}
+
+#[test]
+fn a_compact_review_status_names_the_receipt_once() {
+    let receipt = json!({"epoch": "e1", "pr": 7, "head": "h", "base": "b", "digest": "d"});
+    let status = json!({
+        "ok": true,
+        "issue": 5,
+        "receipt": receipt,
+        "next": {
+            "kind": "execute",
+            "operation": "release_ci",
+            "arguments": {"issue": 5, "epoch": "e1", "pr": 7, "head": "h", "base": "b", "digest": "d"},
+        },
+    });
+    let mut compacted = status.clone();
+    super::without_repeated_receipt(&mut compacted);
+    assert_eq!(compacted["receipt"], receipt);
+    assert_eq!(compacted["next"]["arguments"], json!({"issue": 5}));
+    assert_eq!(compacted["next"]["operation"], "release_ci");
+
+    let mut stale = status;
+    stale["next"]["arguments"]["head"] = json!("other");
+    let mut kept = stale.clone();
+    super::without_repeated_receipt(&mut kept);
+    assert_eq!(kept["next"]["arguments"]["head"], "other");
+    assert!(kept["next"]["arguments"].get("epoch").is_none());
 }

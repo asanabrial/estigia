@@ -556,6 +556,7 @@ the exact bytes a client receives for the table.
 | Issue #69, `publish_review` and `republish_review` take the same four arguments (ceiling set to the measured size) | 33 | 44,277 |
 | `send_message` and `list_sessions` join, answered from the local store (ceiling set to the measured size) | 35 | 45,266 |
 | `list_sessions` gains bounded discovery: seven optional selectors and paging arguments (ceiling set to the measured size) | 35 | 46,744 |
+| Ten core tools carry `_meta` and every tool takes `compact`; descriptions trimmed to pay for `compact` (ceiling 48,117 raised to 48,497) | 36 | 48,496 |
 
 Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
 retired aggregate verdict and the three `NOT_EXPOSED` names were removed outright; `reclaim`,
@@ -606,6 +607,16 @@ The `create` tool's `repo` argument and the `flush` description now say that the
 operation window decides, not the caller's — the behaviour a cross-repository filing changed to. That
 moved the list from **46,996** to **47,044** bytes, and `TOOLS_LIST_CEILING` was raised by exactly
 that difference: a caller filing elsewhere needs to know whose schedule it is held to.
+
+The ten delivery tools (`ALWAYS_LOADED` in `src/harness/mcp/tools.rs`) carry
+`"_meta": {"anthropic/alwaysLoad": true}`, which Claude Code reads to load a tool's schema at the start
+of a session instead of spending one to three `ToolSearch` turns on it before the first `claim`; other
+clients ignore the key. The ten `_meta` objects add 380 bytes, and `TOOLS_LIST_CEILING` was raised by
+exactly that, from **48,117** to **48,497**. Every tool also takes `compact`, which adds
+`"compact":{"type":"boolean"}` to the 35 schemas that did not declare it (1,015 bytes); descriptions
+were trimmed by that much rather than the ceiling moved. With `compact: true` an answer omits `build`,
+and `review_status` drops from `next.arguments` the fields `receipt` already holds, so the receipt is
+named once. Without it every answer is byte-identical to before.
 
 `target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
 paid only by a call that passes `manifest`.

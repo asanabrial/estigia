@@ -436,7 +436,11 @@ being wrong costs a refused write, never a damaged issue. A test enforces that s
 Thirty-six operations, table-driven. Thirty-four each map to one the contract requires the binding to provide;
 `send_message` and `list_sessions` are answered from the local store and are not binding operations.
 `tools/list` carries a schema and a `readOnlyHint`, so an agent can tell a read from a write without
-reading this source:
+reading this source. The ten delivery tools (`claim`, `start_branch`, `publish_review`,
+`launch_review_input`, `collect_review_input`, `record_computed_verdict`, `release_ci`, `release`,
+`transition`, `review_status`) carry `_meta["anthropic/alwaysLoad"]`, so a host that defers MCP tools loads
+them at the start; every tool takes `compact`, which drops `build` from the answer
+([`docs/review-cost.md`](docs/review-cost.md#what-the-tool-menu-itself-costs)):
 
 ```
 read   verify_claim     (issue, run_id, expect_state)
