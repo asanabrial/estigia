@@ -96,6 +96,18 @@ fn finished(dir: &std::path::Path) -> JobResult {
     }
 }
 
+fn settled(dir: &std::path::Path) -> JobStatus {
+    let until = Instant::now() + Duration::from_secs(10);
+    loop {
+        match job_status(dir).expect("a readable status") {
+            JobStatus::Running if Instant::now() <= until => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            other => return other,
+        }
+    }
+}
+
 #[test]
 fn the_runner_leaves_the_answer_the_adapter_gave_byte_for_byte() {
     let (_root, dir) = prepared();
@@ -297,7 +309,7 @@ fn discarding_the_result_leaves_the_usage_artifact_readable() {
     let _ = finished(&dir);
 
     super::discard_result(&dir).expect("the result is discarded");
-    assert_eq!(job_status(&dir).expect("status"), JobStatus::Lost);
+    assert_eq!(settled(&dir), JobStatus::Lost);
     assert_eq!(read_usage(&dir).expect("readable"), Some(reported));
 }
 
