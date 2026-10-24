@@ -7748,7 +7748,7 @@ pointer that leaves it names the document it points at.
 - **The identity and the verdict reach different surfaces, and a refused call carries neither.**
   `answer_text` (`src/harness/mcp/mod.rs`) inserts a `build` object — `commit()` and `dirty()` from
   `src/build_info.rs`, read directly and not through `gate_age_verdict` — into a successful tool
-  answer whose body is a JSON object; a body of any other shape is left as it was. `gate_version`'s
+  answer whose body is a JSON object, unless the call passed `compact: true`; a body of any other shape is left as it was. `gate_version`'s
   `Health`, which is what `gate_age_verdict` decides, has two callers: `doctor`'s `gate-version`
   row, as it always has, and now `hook::session_start_response`, which renders it into
   a sentence at `SessionStart` when it is not `Fine`. It reaches no tool answer, so no tool answer

@@ -217,8 +217,7 @@ const TOPOLOGY: Argument = Argument::optional(
     "topology",
     "string",
     "How this delivery was executed: `inline`, `analyst`, `developer:<n>` or free text, per \
-     SKILL.md's Direct Work Delegation table. Declared, not observed; read back through \
-     `review_read` (`view: transaction`).",
+     SKILL.md's Direct Work Delegation table. Declared, not observed.",
 );
 const TOPOLOGY_REASON: Argument = Argument::optional(
     "topology_reason",
@@ -228,8 +227,8 @@ const TOPOLOGY_REASON: Argument = Argument::optional(
 const FOCUS: Argument = Argument::optional(
     "focus",
     "string",
-    "The lens a `medium` change runs: risk, resilience, readability or reliability. \
-     Defaults to reliability; `high` runs all four regardless.",
+    "The lens a `medium` change runs: risk, resilience, readability or reliability \
+     (default); `high` runs all four.",
 )
 .of(REVIEW_FOCUSES);
 const FOCUS_REASON: Argument =
@@ -256,10 +255,9 @@ const EXPECTED_EPOCH: Argument = Argument::optional(
 const INLINE_PAYLOAD: Argument = Argument::optional(
     "inline_payload",
     "boolean",
-    "Carry the payload's full diff text in the answer; default false (`payload_bytes` and \
-     `payload_digest` are always present). It can make the answer too large to return, and \
-     `launch_review_input` needs none. Ask at publication time: publishing again mints a new \
-     epoch.",
+    "Carry the payload's full diff text in the answer; default false. It can make the \
+     answer too large to return, and `launch_review_input` needs none. Ask at publication \
+     time: publishing again mints a new epoch.",
 );
 
 // Shared between `publish_review` and `republish_review`, so one wording
@@ -267,8 +265,8 @@ const INLINE_PAYLOAD: Argument = Argument::optional(
 const WITH_REVIEW: Argument = Argument::optional(
     "with_review",
     "boolean",
-    "Add the tier and the first `review_status` to this answer. A failed read is reported under \
-     `review_reads_unavailable`, not refused.",
+    "Add the tier and the first `review_status` to this answer; a failed read is reported \
+     under `review_reads_unavailable`.",
 );
 
 const START_REVIEW: Argument = Argument::optional(
@@ -285,15 +283,30 @@ const NO_LINK: Argument = Argument::optional(
      branch closes the issue when its PR merges. Answers `link_outcome: skipped`.",
 );
 
+/// The delivery tools `tools/list` marks `anthropic/alwaysLoad`; every other tool stays deferred.
+pub const ALWAYS_LOADED: &[&str] = &[
+    "claim",
+    "start_branch",
+    "publish_review",
+    "launch_review_input",
+    "collect_review_input",
+    "record_computed_verdict",
+    "release_ci",
+    "release",
+    "transition",
+    "review_status",
+];
+
 /// Every operation Estigia exposes.
 pub const TOOLS: &[Tool] = &[
     Tool {
         name: "claim",
         contract_name: "claim",
         description: "Swear to an issue. Adjudicated by the local store; the earliest live \
-                      claim wins. From then on a repository write the gate sees is measured \
-                      against it, and a push it does not justify is refused. With `takeover` it displaces an abandoned holder: discovery is read-only and \
-                      answers the epoch to name; repeat with `target_operation` to take it over.",
+                      claim wins. From then on a repository write the gate sees is measured against \
+                      it, and a push it does not justify is refused. `takeover` displaces an \
+                      abandoned holder: discovery is read-only and answers the epoch to name; \
+                      repeat with `target_operation`.",
         operation: "claim",
         arguments: &[
             ISSUE,
@@ -441,8 +454,8 @@ pub const TOOLS: &[Tool] = &[
         description: "Leave a message for another session, delivered at its next hook point. \
                       Address it as a person speaks; `reply_to` answers a delivered message. \
                       Zero or several matches answer the candidates and send nothing. A message \
-                      that tells a session holding another issue to `flow dev` it is refused. \
-                      The person is asked first.",
+                      telling a session holding another issue to `flow dev` it is refused. The \
+                      person is asked first.",
         operation: "send-message",
         arguments: &[
             RUN_ID,
@@ -456,8 +469,7 @@ pub const TOOLS: &[Tool] = &[
                 "repo_dir",
                 "string",
                 "The directory the recipient must be running in; narrows `to`, so \
-                 `runtime:opencode` with this reaches the live OpenCode session there. Read \
-                 only with `to`.",
+                 `runtime:opencode` with this reaches the live OpenCode session there.",
             ),
             Argument::optional(
                 "reply_to",
@@ -494,7 +506,7 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "list_sessions",
         contract_name: "list_sessions",
-        description: "Who is around: with no arguments, the live sessions only, beside how many \
+        description: "Who is around: with no arguments, the live sessions beside how many \
                       rows the registry holds. `address` takes `send_message`'s vocabulary and \
                       answers the matches, or the closest when none. The page selectors \
                       (`status`, `runtime`, `run`, `session_id`, `repo_dir`, `limit`, `cursor`) \
@@ -579,9 +591,8 @@ pub const TOOLS: &[Tool] = &[
         description: "Record or revise one row of the claimed issue's task checklist in the \
                       local store: a stable id, its acceptance, the route used and, once done, \
                       the commit identity or, when the work is not a commit, an `evidence` note \
-                      naming where it is recorded. Needs the live claim; nothing is written to \
-                      the tracker. The answer carries the whole checklist, or with `compact` the \
-                      changed row alone.",
+                      naming where it is recorded. Needs the live claim; nothing reaches the tracker. The answer carries the whole checklist, or with `compact` the \
+                      changed row.",
         operation: "task",
         arguments: &[
             ISSUE,
@@ -745,8 +756,8 @@ pub const TOOLS: &[Tool] = &[
                 "class",
                 "string",
                 "`severe`: a reproducible correctness, security, reliability or contract \
-                 defect with concrete impact. `warning`: a bounded risk with no demonstrated \
-                 incorrectness. `suggestion`: optional improvement or preference.",
+                 defect with concrete impact. `warning`: a bounded risk, nothing demonstrated. \
+                 `suggestion`: an optional improvement.",
             )
             .of(FINDING_CLASSES),
             Argument::required(
@@ -788,11 +799,11 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "location",
                 "string",
-                "Where this defect lives: `path:line` or `path:start-end`, the path \
-                 repository-relative. Required of a severe finding whose `causal_disposition` \
-                 is `introduced` or `worsened`. A malformed value is always refused. Where owed, \
-                 every line must fall inside a changed hunk; a path touched only by deletion, \
-                 a binary edit or a mode change settles by being touched.",
+                "Where this defect lives: `path:line` or `path:start-end`, repository-relative. \
+                 Required of a severe finding whose `causal_disposition` is `introduced` or \
+                 `worsened`; every line must fall inside a changed hunk, and a path touched \
+                 only by deletion, a binary edit or a mode change settles by being touched. A \
+                 malformed value is refused.",
             ),
         ],
         effect: PointerEffect::Renew,
@@ -839,7 +850,7 @@ pub const TOOLS: &[Tool] = &[
                       `severe` (the computed verdict adjudicates it; one also recorded as \
                       non-severe is answered for that non-severe recording), an id the receipt \
                       never recorded, a duplicate, a blank or filler reason, a `filed` entry \
-                      naming no issue. A retry reads back the batch already recorded.",
+                      naming no issue. A retry reads back the recorded batch.",
         operation: "review-disposition",
         arguments: &[
             ISSUE,
@@ -869,9 +880,8 @@ pub const TOOLS: &[Tool] = &[
                       body. The reviewer is the first installed `claude` or `codex` CLI in a \
                       detached tool-less job under a 15 minute deadline, or the relay on an \
                       OpenCode run with its plugin. Answers `{job, deadline_at}` per slot, or \
-                      `{launched: [...]}`, and records nothing. A batch reports a slot that \
-                      cannot start. Requires a live review claim. `collect_review_input` \
-                      records the answer.",
+                      `{launched: [...]}`; a batch reports a slot that cannot start. Requires a \
+                      live review claim; `collect_review_input` records the answer.",
         operation: "launch-review-input",
         arguments: &[
             ISSUE,
@@ -900,12 +910,11 @@ pub const TOOLS: &[Tool] = &[
                       job collects it, and `review_status` must still be a `collect` offering \
                       each slot. A running job is refused unless `wait_seconds` is given; a batch \
                       reports a running slot rather than stopping. A lens's findings are checked \
-                      as `record_review_finding` checks them before any is written, so one bad \
-                      finding rejects the answer and writes nothing; then the lens report is \
-                      recorded. A `refutation-batch` answer must name each listed finding once \
-                      and nothing else. A `review-validator` `fail` or `unavailable` inspection \
-                      is recorded, not rejected. A second call for a recorded job writes \
-                      nothing. Requires a live review claim.",
+                      as `record_review_finding` checks them, and one bad finding rejects the \
+                      answer and writes nothing. A `refutation-batch` answer must name each \
+                      listed finding once and nothing else. A `review-validator` `fail` or \
+                      `unavailable` inspection is recorded, not rejected. A second call for a \
+                      recorded job writes nothing. Requires a live review claim.",
         operation: "collect-review-input",
         arguments: &[
             ISSUE,
@@ -943,7 +952,7 @@ pub const TOOLS: &[Tool] = &[
         name: "record_computed_verdict",
         contract_name: "review_computed_verdict",
         description: "Compute the verdict an exact review transaction's finding ledger supports \
-                      and record it once; the caller supplies the receipt, never the outcome. \
+                      and record it once; the caller supplies the receipt, not the outcome. \
                       `approved` needs every licensed lens reported, no severe finding open or \
                       escalated, and the publication lane cleared; `rejected` rests on a severe \
                       finding that stands; `escalated` on one the ledger cannot settle. An \
@@ -965,9 +974,9 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "never_ran_evidence_file",
                 "string",
-                "Path to your own local verification that the publication lane's run never \
-                 executed a step, read only for an `approved` computation over a lane answering \
-                 `publication-lane-never-ran`. Stored, not verified.",
+                "Path to your own local verification that the lane's run never executed a step, \
+                 read only for an `approved` computation over `publication-lane-never-ran`. \
+                 Stored, not verified.",
             ),
         ],
         effect: PointerEffect::Renew,
@@ -978,7 +987,7 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "record_spend",
         description: "Record one measurement of what a phase cost against a review transaction: \
                       bytes handed in, tokens, seconds and agents. A round's cost stays \
-                      recordable after a later republish supersedes it. Recorded, not verified.",
+                      recordable after a republish. Recorded, not verified.",
         operation: "spend",
         arguments: &[
             ISSUE,
@@ -1027,10 +1036,11 @@ pub const TOOLS: &[Tool] = &[
         description: "The one next step of this issue's review, so the route is followed rather \
                       than chosen. `next.kind` is `execute` (run `next.operation` with \
                       `next.arguments`, adding your run id, an operation id and the tool's own \
-                      non-receipt arguments), `collect` (obtain each of `next.inputs` with its \
+                      non-receipt arguments; with `compact` those carry only what `receipt` \
+                      does not), `collect` (obtain each of `next.inputs` with its \
                       `capture` operation, then ask again) or `stop` (`next.reason_code` and \
-                      `next.continuation`). The answer also carries the `receipt` it was read \
-                      against and a `forecast` horizon; every command it names carries that \
+                      `next.continuation`). The answer carries the `receipt` it was read \
+                      against and a `forecast` horizon; each named command carries that \
                       receipt, or `expected_epoch`, so a later publication makes it refuse as \
                       stale. An unreadable store, pull request or lane is an `unavailable` \
                       refusal, never a state. Read-only, no claim.",
@@ -1062,8 +1072,8 @@ pub const TOOLS: &[Tool] = &[
                 "integer",
                 concat!(
                     "How many issues to read at most. Defaults to 200, a ceiling and not a ",
-                    "total: the answer's `at_limit` says when the queue was cut. A cut keeps ",
-                    "the oldest matching issues."
+                    "total: the answer's `at_limit` says when the queue was cut, keeping ",
+                    "the oldest."
                 ),
             )
             .counting_from(1),
@@ -1141,15 +1151,13 @@ pub const TOOLS: &[Tool] = &[
                 "epoch",
                 "string",
                 "The publication epoch the finding was recorded against. Renders the issue's \
-                 marker as `review` instead of `analysis`, and is what lets a filed issue name \
-                 the review that found it.",
+                 marker as `review` instead of `analysis` and names the review that found it.",
             ),
             Argument::optional(
                 "findings",
                 "string",
                 "One or more finding identities, `+`-separated, this issue files. Refused \
-                 without `epoch` — a finding identity means nothing without the receipt it was \
-                 recorded against.",
+                 without `epoch`.",
             ),
             FILING_REPO,
         ],
@@ -1179,8 +1187,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "expect_state",
                 "string",
-                "The state this run believes the issue is in. Defaults to in-progress; review after \
-                 a review sent work back.",
+                "The state this run believes the issue is in. Defaults to in-progress.",
             )
             .of(crate::config::STATES),
             INLINE_PAYLOAD,
@@ -1202,8 +1209,8 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "republish_review",
         description: "Republish a branch whose history was rewritten, rebased or amended. Leases \
                       against the head the last publication recorded and refuses when the remote \
-                      moved. Use publish_review for every ordinary publication; this one \
-                      destroys remote history.",
+                      moved. Use publish_review for ordinary publication; this destroys remote \
+                      history.",
         operation: "republish-review",
         arguments: &[
             ISSUE,
@@ -1220,8 +1227,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "expect_state",
                 "string",
-                "The state this run believes the issue is in. Defaults to in-progress; review after \
-                 a review sent work back.",
+                "The state this run believes the issue is in. Defaults to in-progress.",
             )
             .of(crate::config::STATES),
             INLINE_PAYLOAD,
@@ -1241,7 +1247,7 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "release_ci",
         contract_name: "release_ci",
-        description: "Release one exact reviewed draft target to CI. Re-verifies the live review claim, the newest review transaction, the draft PR identity and a coherent clean target before marking ready, then confirms by readback. A `warning` or `suggestion` never blocks it.",
+        description: "Release one exact reviewed draft target to CI. Re-verifies the live review claim, the newest review transaction, the draft PR identity and a clean target before marking ready, then confirms by readback. A `warning` or `suggestion` never blocks it.",
         operation: "release-ci",
         arguments: &[
             ISSUE,
@@ -1290,9 +1296,9 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "judge_workspaces",
         description: "Mint one bare working directory per Judgment Day judge for a panel over an \
                       exact review transaction, and refuse rather than return a short list. The \
-                      directories are siblings of the claimed checkout, distinct, not nested and \
-                      outside it, with no git checkout of the reviewed head. It proves nothing \
-                      about where a judge wrote.",
+                      directories are distinct siblings of the claimed checkout, not nested, \
+                      with no git checkout of the reviewed head. It proves nothing about where a \
+                      judge wrote.",
         operation: "judge-workspaces",
         arguments: &[
             ISSUE,
@@ -1385,15 +1391,12 @@ pub const TOOLS: &[Tool] = &[
                       shell-source extension or an execute-bit flip is touched; `low` when at \
                       least one path changed and every authored byte is proven passive prose \
                       and nothing configures anything; `medium` otherwise, including a range \
-                      that changed no path (a `nothing_measured` reason, never `low`). It reads \
-                      a boundary, not a size. `lenses` is a fixed allocation per tier: `medium` \
-                      answers one lens, the `focus` argument's (default `reliability`); `high` \
-                      answers four lenses, `review-risk`, `review-readback`, \
-                      `review-readability` and `review-reliability`; `low` answers zero. \
-                      `lens_roles` names the reviewers the count licenses; no judge count is \
-                      carried. Reads the whole `base..head`; \
-                      a repair round names `parent_head` to read its narrower range when that is \
-                      recoverable. Read-only, no claim, decides nothing itself.",
+                      that changed no path (`nothing_measured`, never `low`). `lenses` is a \
+                      fixed allocation per tier: `medium` answers one lens, the `focus` argument's \
+                      (default `reliability`); `high` answers four lenses, `review-risk`, \
+                      `review-readback`, `review-readability` and `review-reliability`; `low` \
+                      answers zero. `parent_head` narrows a repair round's range. \
+                      Read-only, no claim.",
         operation: "review-tier",
         arguments: &[
             Argument::required("base", "string", "The base commit-ish."),
@@ -1401,10 +1404,9 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "parent_head",
                 "string",
-                "The parent publication's head commit-ish, for a repair round. When it is an \
-                 ancestor of `head`, the base did not move and `parent_head..head` touches a \
-                 path, that narrower range is read; otherwise the whole `base..head`, with the \
-                 reason.",
+                "The parent publication's head commit-ish, for a repair round. Read as a \
+                 narrower range when an ancestor of `head`, the base did not move and the range \
+                 touches a path; otherwise the whole `base..head`, with the reason.",
             ),
             Argument::optional(
                 "clearing_finding",
@@ -1509,8 +1511,8 @@ pub const TOOLS: &[Tool] = &[
                 "reproduce",
                 "boolean",
                 "`verdict` only: run the generated-file commands the base declares in \
-                 `estigia.generated.toml`. This executes repository code and may use the \
-                 network. Omitted, `generated_files` lists the touched paths as `not-run`.",
+                 `estigia.generated.toml`. Executes repository code and may use the network. \
+                 Omitted, `generated_files` lists the touched paths as `not-run`.",
             ),
             Argument::optional(
                 "phase",
@@ -1703,7 +1705,14 @@ impl Tool {
                 required.push(Value::String(argument.name.to_owned()));
             }
         }
-        json!({
+        if !self
+            .arguments
+            .iter()
+            .any(|argument| argument.name == "compact")
+        {
+            properties.insert("compact".to_owned(), json!({"type": "boolean"}));
+        }
+        let mut schema = json!({
             "name": self.name,
             "description": self.description,
             "inputSchema": {
@@ -1714,6 +1723,10 @@ impl Tool {
             "annotations": {
                 "readOnlyHint": !self.writes,
             },
-        })
+        });
+        if ALWAYS_LOADED.contains(&self.name) {
+            schema["_meta"] = json!({"anthropic/alwaysLoad": true});
+        }
+        schema
     }
 }

@@ -370,6 +370,7 @@ fn flags_for(tool: &tools::Tool, arguments: &Value) -> Result<Vec<String>, ToolF
         let unknown: Vec<&str> = sent
             .keys()
             .map(String::as_str)
+            .filter(|key| *key != "compact")
             .filter(|key| !tool.arguments.iter().any(|argument| argument.name == *key))
             .collect();
         if !unknown.is_empty() {
@@ -1397,7 +1398,15 @@ fn run_tool_asking(
             context,
         ))
     };
-    let mut text = answer_text(answer.body);
+    let compact = arguments.get("compact").and_then(Value::as_bool) == Some(true);
+    let mut body = answer.body;
+    if compact
+        && tool.name == "review_status"
+        && let Some(status) = body.as_mut()
+    {
+        without_repeated_receipt(status);
+    }
+    let mut text = answer_text(body, compact);
     if let Some(notice) = checkout_notice(tool.operation, arguments, claim_worktree.as_deref()) {
         text.push_str("\n\n");
         text.push_str(&notice);
@@ -1444,9 +1453,11 @@ fn checkout_notice(
 /// byte. The CLI's non-`--json` road re-indents this same string for a
 /// terminal rather than relying on this one; see
 /// [`crate::cli::indented_for_a_person`].
-fn answer_text(body: Option<serde_json::Value>) -> String {
+fn answer_text(body: Option<serde_json::Value>, compact: bool) -> String {
     let mut body = body.unwrap_or(json!({"ok": true}));
-    if let Value::Object(fields) = &mut body {
+    if let Value::Object(fields) = &mut body
+        && !compact
+    {
         fields.insert(
             "build".to_owned(),
             json!({
@@ -1741,6 +1752,16 @@ fn success(id: Value, result: Value) -> Value {
 
 fn error_response(id: Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+}
+
+fn without_repeated_receipt(status: &mut Value) {
+    let receipt = status["receipt"].clone();
+    let Some(arguments) = status["next"]["arguments"].as_object_mut() else {
+        return;
+    };
+    if let Some(receipt) = receipt.as_object() {
+        arguments.retain(|name, value| receipt.get(name) != Some(value));
+    }
 }
 
 #[cfg(test)]
