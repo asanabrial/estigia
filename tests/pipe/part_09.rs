@@ -1669,6 +1669,7 @@ fn a_delivery_that_follows_the_sequence_puts_its_own_claim_down() {
     );
     estigia::harness::session::update(&runs_dir, run_id, |run| {
         run.release_id = Some(release_op.clone());
+        run.operation_id = Some(claim_op.to_string());
         run.worktree = Some(kept_checkout.clone());
     });
 

@@ -461,6 +461,101 @@ fn a_release_while_closed_queues_its_projection_and_its_evidence() {
     assert_eq!(rig.writes(), Vec::<String>::new());
 }
 
+fn comments_queued(rig: &Rig) -> usize {
+    rig.queue()
+        .into_iter()
+        .filter(|(kind, _)| *kind == OutboxKind::Comment)
+        .count()
+}
+
+#[test]
+fn a_release_from_review_closes_the_delivery_in_one_call() {
+    let rig = rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    rig.closed("transition", &["--issue", "12", "--to", "review"])
+        .expect("a transition to review");
+    let found = rig
+        .closed("unassign", &claim_flags("12", "claude-a", SECOND))
+        .expect("a discovery");
+    let target = found["target_operation"].as_str().expect("an epoch");
+    let mut release = claim_flags("12", "claude-a", SECOND);
+    let note = rig.path("note.md");
+    release.extend(["--target-operation", target, "--evidence-file", &note]);
+    let released = rig.closed("unassign", &release).expect("a release");
+
+    assert_eq!(rig.state(12).as_deref(), Some("done"), "{released}");
+    assert_eq!(comments_queued(&rig), 1);
+    assert!(released.get("transition").is_some(), "{released}");
+}
+
+#[test]
+fn a_release_naming_another_epoch_is_refused_before_it_closes_anything() {
+    let rig = rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    rig.closed("transition", &["--issue", "12", "--to", "review"])
+        .expect("a transition to review");
+    let mut release = claim_flags("12", "claude-a", SECOND);
+    let note = rig.path("note.md");
+    release.extend(["--target-operation", SECOND, "--evidence-file", &note]);
+    let refused = rig
+        .closed("unassign", &release)
+        .expect_err("an epoch the run does not hold was accepted")
+        .envelope();
+
+    assert_eq!(refused["reason"], "target-operation-mismatch", "{refused}");
+    assert_eq!(rig.state(12).as_deref(), Some("review"));
+    assert_eq!(comments_queued(&rig), 0);
+}
+
+#[test]
+fn a_close_that_stops_after_a_write_reports_it_instead_of_refusing() {
+    let rig = rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    rig.closed("transition", &["--issue", "12", "--to", "review"])
+        .expect("a transition to review");
+    let found = rig
+        .closed("unassign", &claim_flags("12", "claude-a", SECOND))
+        .expect("a discovery");
+    let target = found["target_operation"].as_str().expect("an epoch");
+    let mut release = claim_flags("12", "claude-a", SECOND);
+    release.extend([
+        "--target-operation",
+        target,
+        "--evidence-file",
+        "/no/such/close-evidence.md",
+    ]);
+    let answer = rig
+        .closed("unassign", &release)
+        .expect("a stop after a landed write is an answer, not a refusal");
+
+    assert_eq!(rig.state(12).as_deref(), Some("done"));
+    assert_eq!(answer["close_incomplete"]["step"], "evidence", "{answer}");
+    assert_eq!(
+        answer["close_incomplete"]["failure"]["reason"], "comment-body-invalid",
+        "{answer}"
+    );
+    assert!(answer.get("transition").is_some(), "{answer}");
+}
+
+#[test]
+fn a_discovery_release_writes_no_comment_and_no_spend() {
+    let rig = rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    let mut discover = claim_flags("12", "claude-a", SECOND);
+    let note = rig.path("note.md");
+    discover.extend(["--evidence-file", &note, "--spend", "not json"]);
+    let found = rig
+        .closed("unassign", &discover)
+        .expect("a discovery writes nothing, so nothing in it can refuse");
+
+    assert_eq!(found["write_performed"], false, "{found}");
+    assert_eq!(comments_queued(&rig), 0);
+}
+
 #[test]
 fn a_takeover_while_closed_queues_its_projection() {
     let rig = rig();

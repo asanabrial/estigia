@@ -7722,3 +7722,87 @@ mod handoff {
         assert!(claude.get("handoffs").is_none(), "{answer}");
     }
 }
+
+#[test]
+fn a_release_of_the_held_issue_names_the_epoch_the_claim_recorded() {
+    let mut run = crate::harness::session::Run::new("claude-held0a1b2c3d".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    let none: Vec<String> = Vec::new();
+
+    assert_eq!(super::held_release_epoch(&run, 12, &none), None);
+
+    run.operation_id = Some("epoch-of-the-claim".to_owned());
+    assert_eq!(
+        super::held_release_epoch(&run, 12, &none).as_deref(),
+        Some("epoch-of-the-claim")
+    );
+    assert_eq!(
+        super::held_release_epoch(&run, 13, &none),
+        None,
+        "another issue's release borrowed this claim's epoch"
+    );
+    let named = vec!["--target-operation".to_owned(), "chosen".to_owned()];
+    assert_eq!(
+        super::held_release_epoch(&run, 12, &named),
+        None,
+        "the caller's own epoch was overwritten"
+    );
+}
+
+#[test]
+fn an_incomplete_close_leaves_the_pointer_the_run_still_needs() {
+    let root = tempfile::tempdir().expect("a state root");
+    let context = GateContext {
+        integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
+        flag: None,
+        stand_down: None,
+        skill_root: root.path().join("skill"),
+        repo_dir: root.path().join("repo"),
+        state_root: root.path().join("state"),
+        operation_window: Default::default(),
+        issue_requirement: crate::config::IssueRequirement::Off,
+        workflow: Some(crate::config::Workflow::Autonomous),
+        window: super::super::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        repository_host: crate::config::RepositoryHost::Github { repo: None },
+        boundaries: Vec::new(),
+    };
+    std::fs::create_dir_all(&context.state_root).expect("the state directory");
+    let tool = TOOLS
+        .iter()
+        .find(|tool| tool.name == "release")
+        .expect("the tool is listed");
+    let mut run = crate::harness::session::Run::new("claude-close0a1b2c3d".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    crate::harness::session::store(&context.state_root, &run).expect("the pointer is written");
+    let arguments = json!({"issue": 12, "run_id": "claude-close0a1b2c3d"});
+
+    super::apply_effect(
+        tool,
+        &arguments,
+        Some(&json!({"close_incomplete": {"step": "evidence"}})),
+        &mut run,
+        &context,
+    );
+    assert!(
+        crate::harness::session::load(&context.state_root, "claude-close0a1b2c3d")
+            .issue
+            .is_some(),
+        "a close that stopped part-way cleared the pointer of a claim still held"
+    );
+
+    super::apply_effect(
+        tool,
+        &arguments,
+        Some(&json!({"ok": true})),
+        &mut run,
+        &context,
+    );
+    assert!(
+        crate::harness::session::load(&context.state_root, "claude-close0a1b2c3d")
+            .issue
+            .is_none(),
+        "a finished release kept the pointer"
+    );
+}

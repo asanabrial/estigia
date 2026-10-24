@@ -645,10 +645,11 @@ pub const TOOLS: &[Tool] = &[
         name: "release",
         contract_name: "unassign",
         description: "Put the issue down. Discovery is read-only and answers the epoch to name; \
-                      repeat with `target_operation` to release it. Converges the `dev:` label, \
-                      and puts down this run's isolated checkout when the close is this run's own \
-                      delivery and nothing in it is unpublished; otherwise the checkout is kept \
-                      and the answer says why.",
+                      repeat with `target_operation`, or omit it when this run holds the \
+                      issue. With `evidence_file` or `spend` it closes the delivery \
+                      from `review`: spend, `done`, evidence, release. Converges the `dev:` \
+                      label, and puts down this run's checkout when the close is its own \
+                      delivery and nothing in it is unpublished; otherwise it is kept, and why.",
         operation: "unassign",
         arguments: &[
             ISSUE,
@@ -662,15 +663,13 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "evidence_file",
                 "string",
-                "Path to the close-evidence comment, posted as a note before the release. \
-                 Omit to release without one.",
+                "Path to the close-evidence note. Omit to post none.",
             ),
             Argument::optional(
                 "spend",
                 "string",
-                "The spend figures to record before the release, as one JSON object with the \
-                 fields `record_spend` takes, and the same checks. Omit to release without \
-                 recording one.",
+                "One JSON object or an array with `record_spend`'s fields and checks, all checked \
+                 before any write. Omit to record none.",
             ),
         ],
         effect: PointerEffect::Forget,
