@@ -170,7 +170,7 @@ impl Tool {
         // the host left markers where claim/review_findings would not look when
         // the two pins differ.
         match self.name {
-            "publish_review" | "republish_review" | "release_ci" | "draft_pr"
+            "publish_review" | "republish_review" | "release_ci" | "draft_pr" | "ready_pr"
             | "judge_workspaces" => TransportBind::RepositoryHost,
             _ => TransportBind::Tracker,
         }
@@ -1371,6 +1371,19 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "ready_pr",
+        contract_name: "ready pull request",
+        description: "Mark an assisted run's open draft pull request ready for review, where the \
+                      `Workflow` row is `assisted` and `Ready by` is `agent`, once its head is the \
+                      checkout's, and read it back. Refuses where `Ready by` is `person`. Writes \
+                      nothing to the tracker. The branch and checkout are the ones `assist` \
+                      recorded.",
+        operation: "ready-pr",
+        arguments: &[RUN_ID],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
         name: "check_closing_keywords",
         contract_name: "check closing keywords",
         description: "Scan the branch and its commit messages for keywords that would close the \
@@ -1590,6 +1603,7 @@ pub const POINTER_ONLY: &[(&str, &str)] = &[
     ("claim", "state"),
     ("transition", "run_id"),
     ("draft_pr", "run_id"),
+    ("ready_pr", "run_id"),
 ];
 
 /// Whether an argument is bookkeeping rather than a flag.
@@ -1648,7 +1662,7 @@ pub const TRACKER_WRITERS: &[&str] = &[
 
 /// The tools that exist only where `Workflow` is `assisted`, and are refused
 /// everywhere else.
-pub const ASSISTED_ONLY: &[&str] = &["assist", "draft_pr"];
+pub const ASSISTED_ONLY: &[&str] = &["assist", "draft_pr", "ready_pr"];
 
 /// The tools answered from Estigia's own store, never by the transport.
 ///

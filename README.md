@@ -467,6 +467,7 @@ WRITE  start_branch     (issue, run_id, branch, base)
 WRITE  judge_workspaces (issue, run_id, epoch, pr, head, base, digest, count)   # bare per-judge directories, Judgment Day's
 WRITE  assist           (issue, run_id, branch, base)         # assisted repositories only
 WRITE  draft_pr         (run_id, title, body_file)            # assisted repositories only
+WRITE  ready_pr         (run_id)                              # assisted repositories only; `Ready by agent`
 WRITE  create           (identity, title, body_file, priority, domain, runtime, run_id)   # identity and clauses go to the local store, not the body; optional `repo` (owner/name) files in another repository, unclaimed
 WRITE  publish_review   (issue, run_id, branch, base, pr_title, pr_body_file)
 WRITE  republish_review (issue, run_id, branch, base, pr_title, pr_body_file)   # leased force-push

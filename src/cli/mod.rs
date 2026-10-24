@@ -3036,7 +3036,8 @@ fn write_edited_table(
             // The repository's own rows cannot be held by the contract, so they
             // go to the checkout's own file. `SETTINGS` filtered by scope, the
             // same predicate every other list uses.
-            spread_repository_rows(installed, config, options)?;
+            let here = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            spread_repository_rows(installed, config, &here, options)?;
         }
     }
     let effective = read_back(match agent {
@@ -3096,9 +3097,9 @@ fn spread_edited_rows(
 fn spread_repository_rows(
     installed: &Config,
     config: &Config,
+    here: &std::path::Path,
     options: &SetupOptions,
 ) -> Result<(), Refusal> {
-    let here = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let rows: Vec<(Setting, String)> = crate::config::SETTINGS
         .iter()
         .filter(|setting| {
@@ -3111,7 +3112,7 @@ fn spread_repository_rows(
     if rows.is_empty() {
         return Ok(());
     }
-    let path = repository_write(&rows, &here, options)?;
+    let path = repository_write(&rows, here, options)?;
     for (setting, value) in &rows {
         say!("{} = {} in {}", setting.label(), value, path.display());
     }

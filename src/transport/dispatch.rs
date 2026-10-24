@@ -1588,6 +1588,15 @@ fn run_operation(
                 worktree: Path::new(f.need("worktree", operation)?),
                 title: f.need("title", operation)?,
                 body_file: Path::new(f.need("body-file", operation)?),
+                corrections: context.layered().corrections_after_ready(),
+            },
+        ),
+        "ready-pr" => super::draft::mark_ready(
+            context,
+            &super::draft::Ready {
+                branch: f.need("branch", operation)?,
+                worktree: Path::new(f.need("worktree", operation)?),
+                ready_by: context.layered().ready_by(),
             },
         ),
         _ => Err(Failure::ConfigDefect(serde_json::json!({

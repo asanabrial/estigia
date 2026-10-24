@@ -71,6 +71,15 @@ impl Rig {
     }
 
     fn call(&self, title: &str, body_file: &std::path::Path) -> Result<serde_json::Value, Failure> {
+        self.call_correcting(title, body_file, Corrections::Refuse)
+    }
+
+    fn call_correcting(
+        &self,
+        title: &str,
+        body_file: &std::path::Path,
+        corrections: Corrections,
+    ) -> Result<serde_json::Value, Failure> {
         draft_with_sleep(
             &self.context,
             &Draft {
@@ -78,6 +87,19 @@ impl Rig {
                 worktree: self.repo(),
                 title,
                 body_file,
+                corrections,
+            },
+            &mut |_| {},
+        )
+    }
+
+    fn ready(&self, ready_by: crate::config::Party) -> Result<serde_json::Value, Failure> {
+        mark_ready_with_sleep(
+            &self.context,
+            &Ready {
+                branch: "issue-12",
+                worktree: self.repo(),
+                ready_by,
             },
             &mut |_| {},
         )
@@ -349,4 +371,177 @@ fn two_drafts_of_one_branch_stage_to_distinct_files_and_one_cleanup_leaves_the_o
         "second"
     );
     std::fs::remove_file(&second).expect("the second draft cleans up");
+}
+
+#[test]
+fn a_correction_is_pushed_to_a_ready_pull_request_when_the_row_says_push_ready() {
+    let rig = rig();
+    let body = rig.body("Words.");
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let existing = serde_json::json!([view(&rig.head, false)]);
+    let answers = script(&existing, &view(&rig.head, false));
+    let answer = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.call_correcting("A title", &body, Corrections::PushReady)
+    })
+    .expect("the correction reaches the ready pull request");
+    assert_eq!(answer["draft"], false);
+    assert!(rig.on_origin(), "the correction was not pushed");
+    assert!(
+        !logged(&rig, &log)
+            .iter()
+            .any(|call| call.starts_with("pr create") || call.starts_with("pr ready")),
+        "a ready pull request was recreated or converted"
+    );
+}
+
+#[test]
+fn a_ready_pull_request_goes_back_to_draft_before_the_push_when_the_row_says_redraft() {
+    let rig = rig();
+    let body = rig.body("Words.");
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let existing = serde_json::json!([view(&rig.head, false)]);
+    let answers = crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": r#"{"defaultBranchRef":{"name":"main"}}"#,
+        }),
+        serde_json::json!({ "matches": "pr list", "stdout": existing.to_string() }),
+        serde_json::json!({ "matches": "pr ready", "stdout": "" }),
+        serde_json::json!({ "matches": "pr view", "stdout": view(&rig.head, true).to_string() }),
+    ]);
+    let answer = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.call_correcting("A title", &body, Corrections::Redraft)
+    })
+    .expect("the pull request is back to draft and carries the correction");
+    assert_eq!(answer["draft"], true);
+    assert!(rig.on_origin());
+    assert!(
+        logged(&rig, &log)
+            .iter()
+            .any(|call| call.starts_with("pr ready 7 --undo")),
+        "the pull request was never returned to draft"
+    );
+}
+
+#[test]
+fn a_redraft_that_does_not_read_back_pushes_nothing() {
+    let rig = rig();
+    let body = rig.body("Words.");
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let existing = serde_json::json!([view(&rig.head, false)]);
+    let answers = crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": r#"{"defaultBranchRef":{"name":"main"}}"#,
+        }),
+        serde_json::json!({ "matches": "pr list", "stdout": existing.to_string() }),
+        serde_json::json!({ "matches": "pr ready", "stdout": "" }),
+        serde_json::json!({ "matches": "pr view", "stdout": view(&rig.head, false).to_string() }),
+    ]);
+    let failure = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.call_correcting("A title", &body, Corrections::Redraft)
+    })
+    .expect_err("a redraft nobody read back was taken as done");
+    assert_eq!(reason(&failure), "draft-pr-redraft-not-read-back");
+    assert!(!rig.on_origin(), "a correction was pushed to a ready pull request");
+}
+
+fn ready_script(existing: &serde_json::Value, viewed: &serde_json::Value) -> String {
+    crate::test_env::answers(&[
+        serde_json::json!({ "matches": "pr list", "stdout": existing.to_string() }),
+        serde_json::json!({ "matches": "pr ready", "stdout": "" }),
+        serde_json::json!({ "matches": "pr view", "stdout": viewed.to_string() }),
+    ])
+}
+
+#[test]
+fn ready_marks_the_draft_ready_and_reads_it_back() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = ready_script(
+        &serde_json::json!([view(&rig.head, true)]),
+        &view(&rig.head, false),
+    );
+    let answer = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.ready(crate::config::Party::Agent)
+    })
+    .expect("ready");
+    assert_eq!(answer["draft"], false);
+    assert_eq!(answer["already_ready"], false);
+    assert!(
+        logged(&rig, &log)
+            .iter()
+            .any(|call| call == "pr ready 7"),
+        "{:?}",
+        logged(&rig, &log)
+    );
+}
+
+#[test]
+fn ready_is_refused_where_a_person_marks_it_and_nothing_is_asked_of_github() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = ready_script(
+        &serde_json::json!([view(&rig.head, true)]),
+        &view(&rig.head, false),
+    );
+    let failure = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.ready(crate::config::Party::Person)
+    })
+    .expect_err("the run marked ready what a person marks");
+    assert_eq!(reason(&failure), "ready-is-the-persons");
+    assert!(logged(&rig, &log).is_empty(), "{:?}", logged(&rig, &log));
+}
+
+#[test]
+fn ready_is_refused_when_the_pull_request_is_not_at_the_checkouts_head() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let stale = "0".repeat(40);
+    let answers = ready_script(
+        &serde_json::json!([view(&stale, true)]),
+        &view(&stale, false),
+    );
+    let failure = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.ready(crate::config::Party::Agent)
+    })
+    .expect_err("an unpublished head was marked ready");
+    assert_eq!(reason(&failure), "ready-pr-head-not-published");
+    assert!(!logged(&rig, &log).iter().any(|call| call.starts_with("pr ready")));
+}
+
+#[test]
+fn ready_on_a_ready_pull_request_converts_nothing_and_says_so() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = ready_script(
+        &serde_json::json!([view(&rig.head, false)]),
+        &view(&rig.head, false),
+    );
+    let answer = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.ready(crate::config::Party::Agent)
+    })
+    .expect("already ready");
+    assert_eq!(answer["already_ready"], true);
+    assert!(!logged(&rig, &log).iter().any(|call| call.starts_with("pr ready")));
+}
+
+#[test]
+fn ready_without_an_open_pull_request_names_draft_pr() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = ready_script(&serde_json::json!([]), &view(&rig.head, false));
+    let failure = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.ready(crate::config::Party::Agent)
+    })
+    .expect_err("nothing to mark ready");
+    assert_eq!(reason(&failure), "ready-pr-no-open-pull-request");
 }

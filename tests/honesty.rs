@@ -3853,9 +3853,7 @@ fn every_setting_is_read_by_the_gate_the_transport_or_the_prose() {
     // the transport, or a sentence an agent is given.
     const READ_BY_NOBODY: &[&str] = &[
         "Delivery preset",
-        "Self review",
         "External reviewers",
-        "Corrections after ready",
         "Merge by",
     ];
 

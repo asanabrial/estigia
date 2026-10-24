@@ -410,7 +410,12 @@ fn every_flag_a_tool_sends_is_one_the_dispatcher_reads() {
     const MINTED: &[&str] = &["operation-id", "runtime"];
     // Read from the run pointer by the tool server, so a caller cannot name
     // another branch or checkout.
-    const FROM_THE_POINTER: &[(&str, &str)] = &[("draft-pr", "branch"), ("draft-pr", "worktree")];
+    const FROM_THE_POINTER: &[(&str, &str)] = &[
+        ("draft-pr", "branch"),
+        ("draft-pr", "worktree"),
+        ("ready-pr", "branch"),
+        ("ready-pr", "worktree"),
+    ];
     // Flags an arm reads that are not a caller's to send, with why.
     //
     // Every entry is an operator switch or a value derived from the checkout. A

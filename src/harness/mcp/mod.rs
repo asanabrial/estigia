@@ -1269,7 +1269,7 @@ fn run_tool_asking(
         flags.push(key);
     }
 
-    if tool.operation == "draft-pr" {
+    if tool.operation == "draft-pr" || tool.operation == "ready-pr" {
         let (Some(branch), Some(worktree), true) = (&run.branch, &run.worktree, run.assisted)
         else {
             return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
