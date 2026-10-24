@@ -1102,12 +1102,16 @@ fn lens_findings(
     context: &Context,
     input: &CaptureInput<'_>,
     receipt: &ReviewTransaction,
-) -> Result<usize, Failure> {
+    answer: &mut serde_json::Value,
+) -> Result<(), Failure> {
     let comments = timeline(context, input.issue, input.now).map_err(after_a_write)?;
-    Ok(findings_for(&comments, receipt)
+    let found: Vec<_> = findings_for(&comments, receipt)
         .into_iter()
         .filter(|found| found.reviewer == input.name)
-        .count())
+        .collect();
+    answer["findings_recorded"] = found.len().into();
+    answer["findings"] = found.iter().map(super::ReviewFinding::brief).collect();
+    Ok(())
 }
 
 fn same_receipt(current: &ReviewTransaction, job: &Job) -> bool {
@@ -1233,7 +1237,7 @@ fn admitted_again(
             base: job.receipt.base.clone(),
             digest: job.receipt.digest.clone(),
         };
-        answer["findings_recorded"] = lens_findings(context, input, &receipt)?.into();
+        lens_findings(context, input, &receipt, &mut answer)?;
     }
     Ok(answer)
 }
@@ -1322,7 +1326,7 @@ fn admit(
     });
     match admitted {
         RoleResult::Findings(_) => {
-            response["findings_recorded"] = lens_findings(context, input, receipt)?.into();
+            lens_findings(context, input, receipt, &mut response)?;
         }
         RoleResult::Outcomes(outcomes) => response["outcomes_recorded"] = outcomes.len().into(),
         RoleResult::Validation(_) => response["result"] = validated.unwrap_or_default(),

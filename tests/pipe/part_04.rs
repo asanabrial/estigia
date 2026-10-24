@@ -1474,6 +1474,7 @@ fn release_ci_restores_a_receipt_for_a_run_that_did_not_publish_it() {
     assert_eq!(answered["next"], "ci_status", "{text}");
     assert_eq!(answered["lane"]["state"], "unreadable", "{text}");
     assert_eq!(answered["basis"], "structural-readback", "{text}");
+    assert_eq!(answered["findings"], serde_json::json!([]), "{text}");
 
     let pointer: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(runs.join(format!("{resuming_run}.json")))
