@@ -68,6 +68,19 @@
   Gate refusals are counted from the run's own stream, by refusal code; a code a run met but never
   printed would be missed.
 
+- **The lever arms are n = 3 on the same three scenarios, and their time figures track `cargo`, not
+  Estigia.** *The cost and time levers against the baseline* in `docs/review-cost.md` inherits every
+  limit above, and adds four of its own:
+  - The arms were interleaved run by run, which spreads cache state across them but does not control
+    it.
+  - Arm T's environment was inherited by the MCP server that launches the lenses, so it may have
+    reached them too. Their environment was not recorded, and the saving is not the
+    orchestrator's alone.
+  - A run's active time moves with how often the model chose to run the full suite: once to three
+    times on the same scenario. A difference in time between arms is within that spread.
+  - Whether a run ran the full suite is read from its shell commands by pattern. A suite run through
+    a wrapper the pattern does not name would be missed.
+
 - **A `never-ran` verdict is recorded evidence, not verified evidence.** Read through `record_computed_verdict`: it approves under a publication lane whose failing
   runs report `steps: []` on every job only when the caller supplies `--never-ran-evidence-file`,
   and it stores that file's content in the marker verbatim — on the same footing as a finding's

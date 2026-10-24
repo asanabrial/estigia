@@ -1183,3 +1183,150 @@ measure that price; they do not argue that it should not be paid.
 Nothing beyond the contract change itself is retired. The rerun shows FLOW doing the same work in
 fewer turns and with no delivery refusals, but it does not show any of the remaining items costing
 anything.
+
+## The cost and time levers against the baseline
+
+This rerun measures four changes. They were made after the FLOW validation, against the anatomy of
+its runs:
+
+- `release` closes in one call;
+- `publish_review` can start the review, and `collect_review_input` can record a computed verdict;
+- the ten delivery tools are always loaded, and every tool accepts `compact`;
+- each tracker fact is read once per call.
+
+The build was `estigia 0.1.1 (5bb61940a3)`, installed and synced into every root. Everything else
+was held as in *FLOW against the baseline*: seed, scratch `HOME`, `claude-personal`, the estigia-only
+MCP set, the acceptance script, and the 300 s idle cut that is aware of background tasks. The arms
+were interleaved run by run, G, T, D, so that no arm ran on a cache another arm had left behind for
+hours.
+
+- **G**: the build, with the installation's defaults on `claude-opus-5-5`.
+- **T**: G with `CLAUDE_CODE_PROMPT_CACHE_TTL=5m` in the session's environment. Claude Code's
+  *Prompt caching* page documents this as an operator setting, not Estigia configuration. Opus 5.5
+  writes the one-hour cache at twice the input price and the five-minute cache at the input price.
+- **D**: G with the orchestrator on `claude-sonnet-5-5`. This is an experiment on quality, and
+  nothing here adopts it.
+
+A fourth arm planned the profile's unrelated skills set to `skillOverrides: "off"`. It was dropped
+after a one-turn probe. The setting shrank the skill listing from 18,396 to 599 bytes, but the first
+turn's context went from 33,770 to 33,939 tokens. The listing that setting removes is not the part
+that reaches the model, so the arm would have measured nothing.
+
+| run | accepted | active s | CLI cost USD | turns | tool calls | output | lenses | lens findings | gate refusals |
+|---|---|---|---|---|---|---|---|---|---|
+| G-S1-c1 | yes | 516 | 1.07 | 24 | 25 | 8,679 | 4 | 1 | — |
+| G-S1-c2 | yes | 635 | 1.02 | 27 | 27 | 10,993 | 4 | 1 | — |
+| G-S1-c3 | yes | 540 | 0.95 | 26 | 27 | 8,867 | 4 | 1 | — |
+| G-S2-c1 | yes | 677 | 1.01 | 22 | 22 | 10,263 | 4 | 3 | — |
+| G-S2-c2 | yes | 561 | 1.06 | 24 | 26 | 11,057 | 4 | 2 | — |
+| G-S2-c3 | yes | 882 | 1.07 | 25 | 25 | 10,995 | 4 | 2 | — |
+| G-S3-c1 | yes | 72 | 0.45 | 7 | 8 | 3,872 | 0 | — | — |
+| G-S3-c2 | yes | 74 | 0.50 | 11 | 12 | 3,668 | 0 | — | — |
+| G-S3-c3 | no † | 70 | 0.94 | 19 | 20 | 10,184 | 0 | — | — |
+| G-S3-c3r | yes | 92 | 0.52 | 10 | 11 | 4,752 | 0 | — | — |
+| T-S1-c1 | yes | 514 | 0.77 | 23 | 22 | 8,052 | 4 | 0 | — |
+| T-S1-c2 | yes | 501 | 0.83 | 24 | 24 | 8,966 | 4 | 0 | `delivery-pr-unidentified` |
+| T-S1-c3 | yes | 511 | 0.84 | 25 | 24 | 8,880 | 4 | 0 | — |
+| T-S2-c1 | yes | 510 | 0.87 | 20 | 23 | 9,937 | 4 | 1 | — |
+| T-S2-c2 | yes | 519 | 0.90 | 21 | 24 | 10,639 | 4 | 3 | — |
+| T-S2-c3 | yes | 554 | 1.07 | 28 | 29 | 12,831 | 4 | 2 | — |
+| T-S3-c1 | yes | 87 | 0.52 | 13 | 13 | 4,411 | 0 | — | — |
+| T-S3-c2 | yes | 91 | 0.46 | 10 | 11 | 3,665 | 0 | — | — |
+| T-S3-c3 | yes | 78 | 0.51 | 13 | 14 | 4,207 | 0 | — | — |
+| D-S1-c1 | yes | 621 | 0.42 | 19 | 20 | 5,747 | 4 | 0 | — |
+| D-S1-c2 | yes | 221 | 0.29 | 13 | 14 | 4,754 | 4 | 0 | — |
+| D-S1-c3 | yes | 240 | 0.37 | 20 | 21 | 6,804 | 4 | 0 | `delivery-pr-unidentified` |
+| D-S2-c1 | yes | 232 | 0.45 | 20 | 23 | 8,217 | 4 | 2 | — |
+| D-S2-c2 | yes | 431 | 0.40 | 17 | 17 | 6,900 | 4 | 2 | — |
+| D-S2-c3 | yes | 219 | 0.41 | 18 | 19 | 6,823 | 4 | 3 | — |
+| D-S3-c1 | yes | 60 | 0.23 | 9 | 10 | 3,340 | 0 | — | — |
+| D-S3-c2 | yes | 56 | 0.22 | 8 | 9 | 2,895 | 0 | — | — |
+| D-S3-c3 | yes | 67 | 0.22 | 8 | 9 | 3,115 | 0 | — | — |
+
+† **Cut by the harness, in the same way it cut F-S3-c3.** The run delegated an out-of-scope finding
+to a background analyst and ended its turn with "Waiting for the analyst handoff to report back
+before closing". The handoff answered, refused, because the run had given the analyst a run id the
+store does not issue. No further turn followed, and the session idled out. The run was replaced
+once, as the frozen design allows. Its cost is counted.
+
+Arm A is the baseline and arm A′ is FLOW, both from the sections above. Medians are over the three
+counted runs. Cost per accepted task divides every attempt's cost, cut runs included, by accepted
+tasks.
+
+| scenario | arm | median cost | Δ vs A | Δ vs A′ | median active s | Δ vs A | Δ vs A′ | median turns | cost per accepted task |
+|---|---|---|---|---|---|---|---|---|---|
+| S1 | G | 1.02 | −24 % | −7 % | 540 | +2 % | +8 % | 26 | 1.01 |
+| S1 | T | 0.83 | **−38 %** | −24 % | 511 | −4 % | +2 % | 24 | 0.82 |
+| S1 | D | 0.37 | −72 % | −66 % | 240 | −55 % | −52 % | 19 | 0.36 |
+| S2 | G | 1.06 | −30 % | −20 % | 677 | +21 % | +23 % | 24 | 1.05 |
+| S2 | T | 0.90 | **−41 %** | −32 % | 519 | −7 % | −5 % | 21 | 0.95 |
+| S2 | D | 0.41 | −73 % | −69 % | 232 | −59 % | −58 % | 18 | 0.42 |
+| S3 | G | 0.50 | −14 % | −17 % | 74 | −11 % | −19 % | 10 | 0.81 |
+| S3 | T | 0.51 | −13 % | −16 % | 87 | +5 % | −4 % | 13 | 0.49 |
+| S3 | D | 0.22 | −62 % | −63 % | 60 | −28 % | −34 % | 8 | 0.22 |
+
+Over all three scenarios, the cost per accepted task was:
+
+| arm | cost per accepted task USD | Δ vs A |
+|---|---|---|
+| A | 1.18 | — |
+| A′ | 1.25 | +6 % |
+| G | 0.96 | −19 % |
+| T | 0.75 | −36 % |
+| D | 0.33 | −72 % |
+
+### Which lever moved what
+
+Read from each run's stream: tokens by class, the first turn's context, and wall time per tool kind.
+
+- **Estigia's own calls fell by a fifth.** The median time inside Estigia tools on a publishing run
+  went from 103–107 s under FLOW to 84–85 s under G. Turns fell from 28–31 to 24–26, because the
+  close, the review start and the verdict no longer each take a turn of their own.
+- **Cache reads and output fell, and the first turn grew.** Against FLOW on S1, G read 1.61 M cached
+  tokens against 1.78 M, and wrote 8.9k output tokens against 10.8k. The always-loaded tool schemas
+  raised the first turn's context from 44.6k to 50.0k tokens. That cost is paid once per session,
+  and the turns it saves outweigh it.
+- **Time did not fall, because `cargo` decides it.** The `cargo test` median on S2 was 431 s under
+  G, against 261 s under FLOW. Two of the three G-S2 runs ran the full suite three times where one
+  run is what the repository asks before publishing. That variance is the model's, not the levers'.
+  It is also why G is slower than FLOW on S1 and S2 while spending less.
+- **The five-minute cache cut the price, not the tokens.** T wrote more to the cache than G, 72k
+  against 58k cache-creation tokens on S1, because a cache that lapses is written again. Each write
+  costs half as much, so the net was −19 % against G on S1 and −15 % on S2. On S3 the five-minute
+  cache bought nothing, and the run is too short for either cache to lapse.
+- **D was cheap and fast by doing less.** The Sonnet orchestrator ran the full suite before
+  publishing in 2 of its 6 publishing runs. Every Opus run in every arm ran it at least once. Its
+  time is mostly the suite it skipped, and its cost is the cheaper model plus fewer turns.
+
+### Against the pass criteria
+
+The criteria were recorded before the first run.
+
+| criterion | G | T | D |
+|---|---|---|---|
+| every run accepted | 9 of 9, after one harness cut was replaced | 9 of 9 | 9 of 9 |
+| no delivery refusal | met | **not met**: one `delivery-pr-unidentified` | **not met**: one `delivery-pr-unidentified` |
+| lens findings no more severe than FLOW's | **not met**: two `warning` findings, FLOW's worst was `suggestion` | met | met |
+| every claim, verdict and merge topology check ran | met | met | met, but the repository's full-suite rule was skipped in 4 of 6 publishing runs |
+| −40 % cost against A | no: −19 % per accepted task | no: −36 % per accepted task, −38 % and −41 % on the publishing medians | yes |
+| −30 % active time against A | no | no | yes |
+
+The refusals were:
+
+- **T-S1-c2** chained `git fetch … && gh pr merge`. That is the spelling FLOW's *Deliver* step names
+  as refused.
+- **D-S1-c3** posted close evidence in a heredoc that named the merge command.
+
+Both refusals were recovered on the next turn, and neither has anything to do with the cache's
+lifetime or the levers. The two `warning` findings in G are test gaps of the same kind the other
+arms' lenses classified `suggestion`: an invalid `--since` value and a subagent-only timestamp left
+untested. Nothing blocked, and the verdicts were `approved`.
+
+**No arm meets both targets with every criterion met.** The four levers cut the cost per accepted
+task by 19 % and left time where `cargo` puts it. Adding the five-minute cache reaches −36 %, and
+−40 % on the S2 median. D reaches both targets by not running what the repository asks to be run,
+and that is the quality the targets were bound not to lose. Nothing here recommends T or D: T missed
+a frozen criterion, and D is out of scope by design. `docs/configuration.md` is unchanged.
+
+What remains is the time. A publishing run's active time is still about half `cargo test`, and
+nothing Estigia sends changes how often the model runs the suite.
