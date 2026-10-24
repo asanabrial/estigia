@@ -755,3 +755,55 @@ fn essential_env_drops_home_and_keeps_path_case_insensitively() {
         "PATH, spelled as the caller spelled it, did not survive: {kept:?}"
     );
 }
+
+#[test]
+fn the_layered_configuration_carries_the_repositorys_own_delivery_rows() {
+    let root = tempfile::tempdir().expect("a root");
+    let skill_dir = root.path().join("skill");
+    let repo_dir = root.path().join("repo");
+    std::fs::create_dir_all(&skill_dir).expect("a skill root");
+    std::fs::create_dir_all(repo_dir.join(".git")).expect("a checkout");
+    std::fs::write(
+        skill_dir.join(crate::skill::CONTRACT),
+        crate::skill::CONTRACT_CONTENTS,
+    )
+    .expect("a contract");
+    let mut written = crate::config::Config::default();
+    for (setting, value) in [
+        (crate::config::Setting::DeliveryPreset, "team"),
+        (
+            crate::config::Setting::ExternalReviewers,
+            "check:cubic@cubic-dev-ai[bot], review:any",
+        ),
+    ] {
+        setting.apply(&mut written, value).expect("a row");
+    }
+    crate::setup::write_repository_configuration(
+        &crate::skill::repository_config_path(&repo_dir),
+        &written,
+        &[
+            crate::config::Setting::Workflow,
+            crate::config::Setting::SelfReview,
+            crate::config::Setting::ReadyBy,
+            crate::config::Setting::ExternalReviewers,
+            crate::config::Setting::CorrectionsAfterReady,
+            crate::config::Setting::MergeBy,
+        ],
+    )
+    .expect("the repository's file");
+    let context = Context {
+        skill_dir,
+        repo_dir,
+        config: Vec::new(),
+        repo: None,
+    };
+    let layered = context.layered();
+    assert_eq!(
+        layered.corrections_after_ready(),
+        crate::config::Corrections::PushReady,
+        "draft_pr would read the assisted default instead of this repository's row"
+    );
+    assert_eq!(layered.ready_by(), crate::config::Party::Agent);
+    assert_eq!(layered.merge_by(), crate::config::Party::Person);
+    assert_eq!(layered.external_reviewers, written.external_reviewers);
+}

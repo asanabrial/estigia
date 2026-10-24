@@ -59,6 +59,7 @@ const UNAVAILABLE: &[&str] = &[
     "review-head-unreadable",
     "review-lens-report-readback-failed",
     "review-refutation-readback-failed",
+    "review-request-not-read-back",
     "review-status-issue-not-in-store",
     "review-status-store-unreadable",
     "reviewer-canonical-unavailable",

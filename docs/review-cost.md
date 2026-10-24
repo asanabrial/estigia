@@ -629,7 +629,9 @@ the hundred bytes are paid once per session.
 `ready_pr`, the assisted tool that marks a run's draft ready where `Ready by` is `agent`, moved the
 list from **48,597** to **49,012** bytes, and `TOOLS_LIST_CEILING` was raised by exactly that
 difference. It is listed only where `Claim workflow` is `assisted`, so an autonomous session's menu
-does not carry it; the ceiling measures the whole list, which is the larger of the two.
+does not carry it; the ceiling measures the whole list, which is the larger of the two. `review_stages`, the
+assisted tool that reads where a ready pull request stands in `External reviewers`, moved it again,
+to **49,701** bytes, and the ceiling followed by exactly that difference.
 
 `target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
 paid only by a call that passes `manifest`.

@@ -172,6 +172,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | assisted checkout | `SCRIPT assist` |
 | draft pull request | `SCRIPT draft-pr` |
 | ready pull request | `SCRIPT ready-pr` |
+| review stages | `SCRIPT review-stages` |
 | `changelog-notes` | `SCRIPT changelog-notes --version <x.y.z> --file <changelog> [--out <f>]` |
 
 Not scripted, performed by the agent after verifying SHAs (`github/delivery.md`): `ci_status`, `merge`,

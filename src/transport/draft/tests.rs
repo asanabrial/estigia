@@ -554,3 +554,40 @@ fn ready_without_an_open_pull_request_names_draft_pr() {
     .expect_err("nothing to mark ready");
     assert_eq!(reason(&failure), "ready-pr-no-open-pull-request");
 }
+
+#[test]
+fn ready_that_never_reads_back_ready_is_not_reported_ready() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = ready_script(
+        &serde_json::json!([view(&rig.head, true)]),
+        &view(&rig.head, true),
+    );
+    let failure = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.ready(crate::config::Party::Agent)
+    })
+    .expect_err("a pull request GitHub still shows as a draft was reported ready");
+    assert_eq!(reason(&failure), "ready-pr-readback-failed");
+}
+
+#[test]
+fn ready_with_two_open_pull_requests_changes_nothing() {
+    let rig = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = rig.root.path().join("gh.log");
+    let answers = ready_script(
+        &serde_json::json!([view(&rig.head, true), view(&rig.head, true)]),
+        &view(&rig.head, false),
+    );
+    let failure = crate::test_env::with_logging_gh(bin.path(), &answers, &log, || {
+        rig.ready(crate::config::Party::Agent)
+    })
+    .expect_err("one of two pull requests was picked");
+    assert_eq!(reason(&failure), "ambiguous-open-prs");
+    assert!(
+        !logged(&rig, &log)
+            .iter()
+            .any(|call| call.starts_with("pr ready"))
+    );
+}

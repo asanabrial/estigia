@@ -15,7 +15,7 @@
   <a href="https://github.com/asanabrial/estigia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/asanabrial/estigia/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" /></a>
   <a href="https://www.rust-lang.org"><img alt="Rust 1.97+" src="https://img.shields.io/badge/rust-1.97%2B-orange.svg" /></a>
-  <a href="#the-tools"><img alt="MCP: 37 tools" src="https://img.shields.io/badge/MCP-37%20tools-purple.svg" /></a>
+  <a href="#the-tools"><img alt="MCP: 38 tools" src="https://img.shields.io/badge/MCP-38%20tools-purple.svg" /></a>
   <a href="#install"><img alt="Linux, macOS, Windows" src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg" /></a>
   <a href="https://glama.ai/mcp/servers/asanabrial/estigia"><img alt="Glama MCP server" src="https://glama.ai/mcp/servers/asanabrial/estigia/badges/score.svg" /></a>
 </p>
@@ -327,7 +327,7 @@ git
        └─ refuses a push no live claim authorises, whoever typed it
 ```
 
-Two halves, and both are needed. The **tools** are how an agent does workflow work at all — thirty-seven
+Two halves, and both are needed. The **tools** are how an agent does workflow work at all — thirty-eight
 operations with schemas, instead of composing `gh` by hand and hoping. A name the contract requires
 and no tool performs is declared with the reason it is not exposed rather than advertised, so the
 surface never offers a call nothing answers. The one force-push the
@@ -433,7 +433,7 @@ being wrong costs a refused write, never a damaged issue. A test enforces that s
 
 ## The tools
 
-Thirty-seven operations, table-driven. Thirty-five each map to one the contract requires the binding to provide;
+Thirty-eight operations, table-driven. Thirty-six each map to one the contract requires the binding to provide;
 `send_message` and `list_sessions` are answered from the local store and are not binding operations.
 `tools/list` carries a schema and a `readOnlyHint`, so an agent can tell a read from a write without
 reading this source. The ten delivery tools (`claim`, `start_branch`, `publish_review`,
@@ -468,6 +468,7 @@ WRITE  judge_workspaces (issue, run_id, epoch, pr, head, base, digest, count)   
 WRITE  assist           (issue, run_id, branch, base)         # assisted repositories only
 WRITE  draft_pr         (run_id, title, body_file)            # assisted repositories only
 WRITE  ready_pr         (run_id)                              # assisted repositories only; `Ready by agent`
+WRITE  review_stages    (run_id, [request_review])            # assisted repositories only; reads, and requests a review with `request_review`
 WRITE  create           (identity, title, body_file, priority, domain, runtime, run_id)   # identity and clauses go to the local store, not the body; optional `repo` (owner/name) files in another repository, unclaimed
 WRITE  publish_review   (issue, run_id, branch, base, pr_title, pr_body_file)
 WRITE  republish_review (issue, run_id, branch, base, pr_title, pr_body_file)   # leased force-push
@@ -482,7 +483,7 @@ WRITE  record_spend     (issue, run_id, phase, epoch, pr, head, base, digest, co
 WRITE  release_ci       (issue, run_id, epoch, pr, head, base, digest)
 ```
 
-Thirty-seven tools. The contract names seventeen operations every binding must map. The operations the
+Thirty-eight tools. The contract names seventeen operations every binding must map. The operations the
 tools absorbed keep their capability under the surviving name: `claim` performs `reclaim` through
 `takeover`, `list_state` answers identities through `identities`, `review_status` carries the
 publication lane and the correction count, `review_read` reads what six tools used to, `review_tier`

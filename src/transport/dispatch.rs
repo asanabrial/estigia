@@ -38,6 +38,7 @@ const SWITCHES: &[&str] = &[
     "clear",
     "compact",
     "takeover",
+    "request-review",
     "identities",
     "include-heading",
     "read-only",
@@ -1591,6 +1592,19 @@ fn run_operation(
                 corrections: context.layered().corrections_after_ready(),
             },
         ),
+        "review-stages" => {
+            let layered = context.layered();
+            super::stages::review_stages(
+                context,
+                &super::stages::Stages {
+                    branch: f.need("branch", operation)?,
+                    stages: &layered.external_reviewers,
+                    ready_by: layered.ready_by(),
+                    merge_by: layered.merge_by(),
+                    request: f.on("request-review"),
+                },
+            )
+        }
         "ready-pr" => super::draft::mark_ready(
             context,
             &super::draft::Ready {
