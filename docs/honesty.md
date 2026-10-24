@@ -619,7 +619,9 @@ pointer that leaves it names the document it points at.
   `a_config_defect_after_a_write_is_reported_as_committed`. The pre-check does not read
   `operation-id-kind-conflict`, the replay branch or `verify_claim`, so a kind conflict surfaces as a
   failed write after earlier writes. `findings_recorded` is the number of findings the capture reads
-  back from the timeline for that lens and receipt, not the count in the answer.
+  back from the timeline for that lens and receipt, not the count in the answer. `findings` lists
+  those same findings by `id`, `class`, `blocking`, `lens` and `location`, without their text, and
+  `release_ci` answers the receipt's findings in the same shape; the text stays behind `review_read`.
 
   **A repair is described to the lens.** The criteria handed to the reviewer carry the issue's body and,
   for a publication with lineage, the parent epoch, the rule that a severe finding new to the repair

@@ -840,6 +840,7 @@ fn findings_recorded_is_what_landed_on_the_timeline_not_the_answer_count() {
         answer["findings_recorded"], 1,
         "findings_recorded must count the timeline, not the answer: {answer}"
     );
+    assert_eq!(answer["findings"][0]["id"], "already-there", "{answer}");
 }
 
 #[test]
@@ -3538,6 +3539,15 @@ fn collecting_the_answer_records_it_once_and_a_second_collect_writes_nothing() {
     assert_eq!(again["findings_recorded"], 1);
     let (findings, reports) = on_the_timeline(&world);
     assert_eq!((findings.len(), reports.len()), (1, 1));
+    let named = serde_json::json!([{
+        "id": "a-comment-hides-the-body",
+        "class": findings[0].class,
+        "blocking": findings[0].is_severe(),
+        "lens": findings[0].lens,
+        "location": "src/foo.rs:1",
+    }]);
+    assert_eq!(recorded["findings"], named, "{recorded}");
+    assert_eq!(again["findings"], named, "{again}");
 }
 
 #[test]

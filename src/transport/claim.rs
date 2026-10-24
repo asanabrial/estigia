@@ -2208,6 +2208,18 @@ pub(crate) fn says_nothing(text: &str) -> bool {
 }
 
 impl ReviewFinding {
+    /// The finding as an answer names it without its text: enough to decide
+    /// whether to read the rest.
+    pub(crate) fn brief(&self) -> serde_json::Value {
+        serde_json::json!({
+            "id": self.id,
+            "class": self.class,
+            "blocking": self.is_severe(),
+            "lens": self.lens,
+            "location": self.location,
+        })
+    }
+
     fn from_marker(marker: &super::markers::Marker) -> Option<Self> {
         let operation_id = marker.get("op-id")?.clone();
         let attester = marker.get("run-id")?.clone();
@@ -10015,6 +10027,10 @@ pub fn release_ci(
     .map(|_| ());
     ready_outcome(ready_write, view_pr(context, release.pr), &supplied)?;
     let (lane, next) = ci_outlook(context, release.head, release.pr);
+    let findings: Vec<_> = findings_for(&comments, &supplied)
+        .iter()
+        .map(ReviewFinding::brief)
+        .collect();
     Ok(serde_json::json!({
         "ok": true,
         "issue": release.issue,
@@ -10028,6 +10044,7 @@ pub fn release_ci(
         "ci_released": next == "ci_status",
         "lane": lane,
         "next": next,
+        "findings": findings,
     }))
 }
 
