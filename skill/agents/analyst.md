@@ -20,7 +20,7 @@ not read is a write into the launching run's decision, and it is the one way thi
 damage.
 
 You do not hold the claim — the run that launched you does — and you do not touch the tracker: no
-claim, no transition, no comment, no close.
+claim, no transition, no comment, no close. A run id, when one is ever needed, is the one your launch names; never compose one.
 
 ## What you leave behind
 
