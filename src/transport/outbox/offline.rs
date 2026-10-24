@@ -29,6 +29,7 @@ pub(super) struct Rig {
     context: Context,
     script: String,
     labels: Option<PathBuf>,
+    counts: Option<PathBuf>,
 }
 
 pub(super) fn rig() -> Rig {
@@ -69,6 +70,7 @@ pub(super) fn rig() -> Rig {
         context,
         script,
         labels: None,
+        counts: None,
     }
 }
 
@@ -176,7 +178,12 @@ impl Rig {
                 &self.log,
                 call,
             ),
-            None => crate::test_env::with_logging_gh(bin.path(), &self.script, &self.log, call),
+            None => match &self.counts {
+                Some(counts) => {
+                    crate::test_env::with_counting_gh(bin.path(), &self.script, counts, call)
+                }
+                None => crate::test_env::with_logging_gh(bin.path(), &self.script, &self.log, call),
+            },
         }
     }
 
@@ -605,6 +612,14 @@ fn delivered_rig() -> (Rig, Delivery) {
 }
 
 fn close_in(rig: Rig, spend: &serde_json::Value) -> (Rig, Result<serde_json::Value, Failure>) {
+    close_failing_read(rig, spend, None)
+}
+
+fn close_failing_read(
+    mut rig: Rig,
+    spend: &serde_json::Value,
+    failing_issue_view: Option<u64>,
+) -> (Rig, Result<serde_json::Value, Failure>) {
     rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
         .expect("a claim");
     rig.closed("transition", &["--issue", "12", "--to", "review"])
@@ -624,6 +639,18 @@ fn close_in(rig: Rig, spend: &serde_json::Value) -> (Rig, Result<serde_json::Val
         "--spend",
         &spend,
     ]);
+    if let Some(nth) = failing_issue_view {
+        let counts = rig.directory.path().join("counts.json");
+        crate::paths::replace_atomically(&counts, "{}").expect("a fresh count");
+        rig.counts = Some(counts);
+        let mut entries: Vec<serde_json::Value> =
+            serde_json::from_str(&rig.script).expect("a script");
+        entries.insert(
+            0,
+            serde_json::json!({"matches": "issues/12", "nth": nth, "stdout": "", "status": 1}),
+        );
+        rig.script = crate::test_env::answers(&entries);
+    }
     let answer = rig.closed("unassign", &release);
     (rig, answer)
 }
@@ -1229,4 +1256,63 @@ fn a_handoff_naming_an_unlabellable_runtime_writes_nothing() {
     assert_eq!(failure.envelope()["reason"], "handoff-runtime-unreadable");
     assert_eq!(rig.writes(), Vec::<String>::new());
     assert_eq!(rig.queue(), Vec::<(OutboxKind, u64)>::new());
+}
+
+#[test]
+fn a_read_that_fails_after_the_spend_landed_is_reported_with_the_spend() {
+    let (rig, delivery) = delivered_rig();
+    let (rig, answer) = close_failing_read(rig, &delivery.spend("sealed"), Some(13));
+    let answer = answer.expect("a stop after a landed write is an answer, not a refusal");
+
+    assert_eq!(answer["close_incomplete"]["step"], "transition", "{answer}");
+    assert_eq!(
+        answer["close_incomplete"]["failure"]["reason"], "read-failed",
+        "{answer}"
+    );
+    assert_eq!(answer["spend"]["ok"], true, "{answer}");
+    assert_eq!(rig.state(12).as_deref(), Some("review"));
+    assert_eq!(comments_queued(&rig), 0);
+}
+
+#[test]
+fn repeating_a_stopped_close_with_the_same_spend_completes_it() {
+    let (rig, delivery) = delivered_rig();
+    let spend = delivery.spend("sealed");
+    let (mut rig, stopped) = close_failing_read(rig, &spend, Some(17));
+    let stopped = stopped.expect("a stop after landed writes is an answer");
+    assert_eq!(stopped["close_incomplete"]["step"], "release", "{stopped}");
+    assert_eq!(rig.state(12).as_deref(), Some("done"), "{stopped}");
+
+    rig.counts = None;
+    let mut entries: Vec<serde_json::Value> = serde_json::from_str(&rig.script).expect("a script");
+    entries.remove(0);
+    rig.script = crate::test_env::answers(&entries);
+    let found = rig
+        .closed("unassign", &claim_flags("12", "claude-a", SECOND))
+        .expect("a discovery");
+    let target = found["target_operation"].as_str().expect("an epoch");
+    let mut again = claim_flags("12", "claude-a", SECOND);
+    let spend = spend.to_string();
+    again.extend(["--target-operation", target, "--spend", &spend]);
+    let resumed = rig
+        .closed("unassign", &again)
+        .expect("the repeated call completes");
+
+    assert!(resumed.get("close_incomplete").is_none(), "{resumed}");
+    assert_eq!(resumed["spend"]["reused_existing_spend"], true, "{resumed}");
+    assert_eq!(comments_queued(&rig), 1, "{resumed}");
+    let held = rig
+        .closed(
+            "verify-claim",
+            &[
+                "--issue",
+                "12",
+                "--run-id",
+                "claude-a",
+                "--expect-state",
+                "done",
+            ],
+        )
+        .expect_err("the claim was still held after the repeated release");
+    assert_eq!(held.envelope()["reason"], "not-current-live-holder");
 }

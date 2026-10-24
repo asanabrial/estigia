@@ -572,8 +572,8 @@ unpublished, puts the isolated checkout down.
 
 `--evidence-file <f>` and `--spend <json>` (one object with `record_spend`'s fields, or an array)
 fold the close in, in the order the store allows: each spend record while the issue is in `review`,
-`transition` to `done` (from `review` only), the evidence note, the release. A
-malformed spend, or one naming an unpublished receipt, refuses before any write. A stop after a
+`done` (from `review` only), the evidence note, the release. A bad spend refuses before any write. A stop after a
 write landed is not a refusal: the answer carries `close_incomplete` (`step`, `failure`) beside what
-landed, the claim is still held, and repeating the call resumes. Call it from `review`; after `done`
-a new spend is `unexpected-state`.
+landed and the claim is still held: repeat with the same `spend` (it replays), and without
+`evidence_file` once `evidence` landed. Call it from `review`; after `done` a new spend is
+`unexpected-state`.

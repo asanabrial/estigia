@@ -499,6 +499,11 @@ fn merged_release(
         }
     };
 
+    let spend_answer = |mut recorded: Vec<serde_json::Value>| match recorded.len() {
+        0 => None,
+        1 => Some(recorded.remove(0)),
+        _ => Some(serde_json::Value::Array(recorded)),
+    };
     let mut recorded = Vec::new();
     for record in &spends {
         match super::claim::record_spend(context, &record.review(issue, run_id, now)) {
@@ -507,28 +512,22 @@ fn merged_release(
                 recorded.push(answer);
             }
             Err(failure) => {
-                if landed {
-                    done.insert("spend".to_owned(), serde_json::Value::Array(recorded));
+                if let Some(spent) = spend_answer(recorded) {
+                    done.insert("spend".to_owned(), spent);
                 }
                 return stopped(&mut done, "spend", failure, landed);
             }
         }
     }
-    if !recorded.is_empty() {
-        done.insert(
-            "spend".to_owned(),
-            if recorded.len() == 1 {
-                recorded.remove(0)
-            } else {
-                serde_json::Value::Array(recorded)
-            },
-        );
+    if let Some(spent) = spend_answer(recorded) {
+        done.insert("spend".to_owned(), spent);
     }
 
-    let in_review = super::store::Ledger::open(context, issue, now)?
-        .state()?
-        .as_deref()
-        == Some("review");
+    let state = super::store::Ledger::open(context, issue, now).and_then(|ledger| ledger.state());
+    let in_review = match state {
+        Ok(state) => state.as_deref() == Some("review"),
+        Err(failure) => return stopped(&mut done, "transition", failure, landed),
+    };
     if in_review {
         match super::commands::transition(context, issue, "done", None, now) {
             Ok(moved) => {
