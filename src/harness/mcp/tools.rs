@@ -1373,11 +1373,9 @@ pub const TOOLS: &[Tool] = &[
     Tool {
         name: "ready_pr",
         contract_name: "ready pull request",
-        description: "Mark an assisted run's open draft pull request ready for review, where the \
-                      `Workflow` row is `assisted` and `Ready by` is `agent`, once its head is the \
-                      checkout's, and read it back. Refuses where `Ready by` is `person`. Writes \
-                      nothing to the tracker. The branch and checkout are the ones `assist` \
-                      recorded.",
+        description: "Mark an assisted run's draft ready for review where `Ready by` is `agent`, \
+                      once its head is the checkout's, and read it back. Writes nothing to the \
+                      tracker.",
         operation: "ready-pr",
         arguments: &[RUN_ID],
         effect: PointerEffect::None,

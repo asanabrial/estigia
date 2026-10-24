@@ -10129,7 +10129,10 @@ fn the_screen_saves_a_changed_preset_as_one_write() {
     super::spread_repository_rows(&installed, &edited, repo.path(), &options)
         .expect("the rows a preset changes are saved together, never one by one");
     let written = repository_file(repo.path());
-    assert!(written.contains("| Claim workflow | autonomous |"), "{written}");
+    assert!(
+        written.contains("| Claim workflow | autonomous |"),
+        "{written}"
+    );
     assert!(written.contains("| Merge by | agent |"), "{written}");
     assert!(!written.contains("Delivery preset"), "{written}");
 }
@@ -10138,13 +10141,19 @@ fn the_screen_saves_a_changed_preset_as_one_write() {
 fn doctor_refuses_a_repository_file_holding_delivery_rows_that_cannot_both_hold() {
     let (repo, _home, options) = delivery_rig();
     let skill_root = tempfile::tempdir().expect("a skill root");
+    std::fs::write(
+        skill_root.path().join(crate::skill::CONTRACT),
+        crate::skill::CONTRACT_CONTENTS,
+    )
+    .expect("a contract");
     super::repository_set(Setting::DeliveryPreset, "team", repo.path(), &options).expect("team");
     assert_eq!(
         crate::harness::doctor::delivery_conflict_in_force(Some(skill_root.path()), repo.path()),
         None
     );
     let path = crate::skill::repository_config_path(repo.path());
-    let edited = repository_file(repo.path()).replace("| Merge by | person |", "| Merge by | agent |");
+    let edited =
+        repository_file(repo.path()).replace("| Merge by | person |", "| Merge by | agent |");
     std::fs::write(&path, edited).expect("a hand edit");
     let refusal =
         crate::harness::doctor::delivery_conflict_in_force(Some(skill_root.path()), repo.path())

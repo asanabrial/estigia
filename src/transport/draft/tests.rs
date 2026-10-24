@@ -446,7 +446,10 @@ fn a_redraft_that_does_not_read_back_pushes_nothing() {
     })
     .expect_err("a redraft nobody read back was taken as done");
     assert_eq!(reason(&failure), "draft-pr-redraft-not-read-back");
-    assert!(!rig.on_origin(), "a correction was pushed to a ready pull request");
+    assert!(
+        !rig.on_origin(),
+        "a correction was pushed to a ready pull request"
+    );
 }
 
 fn ready_script(existing: &serde_json::Value, viewed: &serde_json::Value) -> String {
@@ -473,9 +476,7 @@ fn ready_marks_the_draft_ready_and_reads_it_back() {
     assert_eq!(answer["draft"], false);
     assert_eq!(answer["already_ready"], false);
     assert!(
-        logged(&rig, &log)
-            .iter()
-            .any(|call| call == "pr ready 7"),
+        logged(&rig, &log).iter().any(|call| call == "pr ready 7"),
         "{:?}",
         logged(&rig, &log)
     );
@@ -513,7 +514,11 @@ fn ready_is_refused_when_the_pull_request_is_not_at_the_checkouts_head() {
     })
     .expect_err("an unpublished head was marked ready");
     assert_eq!(reason(&failure), "ready-pr-head-not-published");
-    assert!(!logged(&rig, &log).iter().any(|call| call.starts_with("pr ready")));
+    assert!(
+        !logged(&rig, &log)
+            .iter()
+            .any(|call| call.starts_with("pr ready"))
+    );
 }
 
 #[test]
@@ -530,7 +535,11 @@ fn ready_on_a_ready_pull_request_converts_nothing_and_says_so() {
     })
     .expect("already ready");
     assert_eq!(answer["already_ready"], true);
-    assert!(!logged(&rig, &log).iter().any(|call| call.starts_with("pr ready")));
+    assert!(
+        !logged(&rig, &log)
+            .iter()
+            .any(|call| call.starts_with("pr ready"))
+    );
 }
 
 #[test]

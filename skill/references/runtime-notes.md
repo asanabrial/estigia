@@ -36,6 +36,14 @@ refused outside it — is how a runtime learns which mode it is in. The Decision
 path (`assist`, work in its worktree, `draft_pr`, report the URL, stop); it needs no claim and no
 heartbeat, so the team-mechanics, identity and renewal sections below do not apply to it.
 
+How far that path goes is the repository's *Delivery* rows. Where `Self review` is `on`, the run
+reviews its own change in a context that did not write it before the pull request is marked ready;
+nothing records that review, so it is the run's to have done. Where `Ready by` is `agent`, the run
+then marks its draft ready with `ready_pr`; where it is `person`, the run stops at the draft. A
+correction to a pull request that is already ready goes through `draft_pr` as
+`Corrections after ready` says: `refuse` stops and leaves it to the person, `redraft` returns it to
+draft first, and `push-ready` pushes to it as it stands.
+
 ## Independent review contexts
 
 Adversarial review is an analyst run over a bounded change. It is repository-read-only, produces
