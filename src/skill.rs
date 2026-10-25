@@ -272,6 +272,14 @@ pub const FILES: &[SkillFile] = &[
         contents: include_str!("../skill/bindings/github/setup.md"),
     },
     SkillFile {
+        path: "references/analyst.md",
+        contents: include_str!("../skill/references/analyst.md"),
+    },
+    SkillFile {
+        path: "references/decision-gates.md",
+        contents: include_str!("../skill/references/decision-gates.md"),
+    },
+    SkillFile {
         path: "references/domain-composition.md",
         contents: include_str!("../skill/references/domain-composition.md"),
     },
@@ -4728,6 +4736,8 @@ mod tests {
         "bindings/github/recovery.md",
         "bindings/github/refusals.md",
         "bindings/github/setup.md",
+        "references/analyst.md",
+        "references/decision-gates.md",
         "references/domain-composition.md",
         "references/repository-delivery.md",
         "policies/blind-judges.md",

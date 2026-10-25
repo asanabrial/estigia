@@ -1823,22 +1823,23 @@ fn every_named_disposition_uses_a_transport_state() {
         ),
         "the contract does not name where a non-routine human adjudication waits go"
     );
+    let analyst = include_str!("../../skill/references/analyst.md");
     assert!(
-        contract.contains("built work cleared to continue delivery returns to `review`"),
+        analyst.contains("built work cleared to continue delivery returns to `review`"),
         "the contract does not restore discharged built work to delivery"
     );
     assert!(
-        contract.contains("work requiring implementation returns to `ready`"),
+        analyst.contains("work requiring implementation returns to `ready`"),
         "the contract does not restore discharged implementation work to ready"
     );
     assert!(
-        contract.contains(
+        analyst.contains(
             "re-derives the tier and re-acquires what it licenses against the exact latest receipt"
         ),
         "the contract does not say a discharged decision still needs a panel, so a run will invent a verdict"
     );
     assert!(
-        contract.contains("a person's decision is not a verdict"),
+        analyst.contains("a person's decision is not a verdict"),
         "the contract does not forbid recording the person as the missing verdict"
     );
 }

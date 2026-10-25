@@ -32,7 +32,7 @@ Decision Gates table in `SKILL.md` owns that order, and this file does not resta
 
 `flow <issue-number>` is a form with no role word, and it exists only where the repository's
 `Claim workflow` row is `assisted`: a refusal that names the `Claim workflow` row — a tracker write refused under `assisted`, or `assist`
-refused outside it — is how a runtime learns which mode it is in. The Decision Gates row owns the
+refused outside it — is how a runtime learns which mode it is in. The assisted row in [decision gates](decision-gates.md) owns the
 path (`assist`, work in its worktree, `draft_pr`, report the URL, stop); it needs no claim and no
 heartbeat, so the team-mechanics, identity and renewal sections below do not apply to it.
 
