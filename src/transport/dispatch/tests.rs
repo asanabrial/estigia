@@ -415,6 +415,7 @@ fn every_flag_a_tool_sends_is_one_the_dispatcher_reads() {
         ("draft-pr", "worktree"),
         ("ready-pr", "branch"),
         ("ready-pr", "worktree"),
+        ("review-stages", "branch"),
     ];
     // Flags an arm reads that are not a caller's to send, with why.
     //

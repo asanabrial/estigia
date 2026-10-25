@@ -34,6 +34,7 @@ pub const SCRIPTED: &[&str] = &[
     "assist",
     "draft-pr",
     "ready-pr",
+    "review-stages",
     "publish-review",
     "republish-review",
     "handoff",

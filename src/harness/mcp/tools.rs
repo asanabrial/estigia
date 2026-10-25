@@ -171,7 +171,7 @@ impl Tool {
         // the two pins differ.
         match self.name {
             "publish_review" | "republish_review" | "release_ci" | "draft_pr" | "ready_pr"
-            | "judge_workspaces" => TransportBind::RepositoryHost,
+            | "review_stages" | "judge_workspaces" => TransportBind::RepositoryHost,
             _ => TransportBind::Tracker,
         }
     }
@@ -1382,6 +1382,25 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "review_stages",
+        contract_name: "review stages",
+        description: "Where an assisted run's pull request stands in `External reviewers`, read \
+                      from GitHub: a check still running, comments to address, a review to \
+                      request or awaited, the merge awaited, or merged. Review comments come back \
+                      as data. `request_review` asks for the review the current stage waits on.",
+        operation: "review-stages",
+        arguments: &[
+            RUN_ID,
+            Argument::optional(
+                "request_review",
+                "boolean",
+                "Request the review the current stage waits on, when every earlier stage is done.",
+            ),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
         name: "check_closing_keywords",
         contract_name: "check closing keywords",
         description: "Scan the branch and its commit messages for keywords that would close the \
@@ -1602,6 +1621,7 @@ pub const POINTER_ONLY: &[(&str, &str)] = &[
     ("transition", "run_id"),
     ("draft_pr", "run_id"),
     ("ready_pr", "run_id"),
+    ("review_stages", "run_id"),
 ];
 
 /// Whether an argument is bookkeeping rather than a flag.
@@ -1660,7 +1680,7 @@ pub const TRACKER_WRITERS: &[&str] = &[
 
 /// The tools that exist only where `Workflow` is `assisted`, and are refused
 /// everywhere else.
-pub const ASSISTED_ONLY: &[&str] = &["assist", "draft_pr", "ready_pr"];
+pub const ASSISTED_ONLY: &[&str] = &["assist", "draft_pr", "ready_pr", "review_stages"];
 
 /// The tools answered from Estigia's own store, never by the transport.
 ///
