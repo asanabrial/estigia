@@ -991,6 +991,32 @@ bare), except a row the agent performs by hand, a segment led by `with` or `its`
 holds the map to the code: none of its left-hand names is a tool, and the call each answers with exists. A new
 absorption needs only a line in the map.
 
+### The always-loaded pair, a third trim
+
+Same counting as above, measured from `ff0401cf`. No rule changed meaning: the analyst's
+steps, its two Decision Gates rows and its Output Contract bullet moved to `references/analyst.md`,
+which the References table loads when the role is analyst or the run is the combined
+analyst-developer; the eight rarer Decision Gates rows (assisted, no tracker, unreadable tracker,
+failed routing read, a renewal that answers "stop", a failed renewal read, an abandoned holder, work
+to put down) moved to `references/decision-gates.md`, behind one row in the main table that names
+them. Three restatements of `references/repository-delivery.md` and the delivery binding became links.
+
+| File | Before | After |
+|---|---:|---:|
+| `skill/SKILL.md` | 31,481 | 25,475 |
+| `skill/bindings/github.md` | 17,989 | 17,989 |
+| `SKILL.md` plus `bindings/github.md`, loaded on every GitHub activation | 49,470 | 43,464 |
+| `skill/references/analyst.md`, new, loaded for the analyst and the combined role | 0 | 3,183 |
+| `skill/references/decision-gates.md`, new, loaded when a rare row applies | 0 | 4,069 |
+| All shipped `skill/**/*.md` | 424,936 | 426,215 |
+
+The always-loaded pair is 6,006 bytes lighter, about 1,500 tokens at the four-bytes-per-token ratio
+this document assumes, and a developer run no longer pays for the analyst's half. The shipped total
+grew by 1,279 bytes, the two new files' headings and the pointers that load them: this moves bytes
+off the path every run reads, it does not remove them. A combined run (bare `flow`) loads
+`analyst.md` as well and so reads `SKILL.md` plus 3,183 bytes, still less than before by 2,823.
+`skill/references/runtime-notes.md` grew by 33 bytes to link the moved assisted row.
+
 ## The FLOW baseline: the current workflow, measured before FLOW lands
 
 This is arm A's baseline from the FLOW baseline issue: the workflow as shipped, with the ODD steps and the RDD review,

@@ -9365,7 +9365,7 @@ pointer that leaves it names the document it points at.
   `blocked` because one ran out. What stands in its place is worth stating exactly, because it is less
   than it looks.
 
-  **The judgement triggers are prose a run applies to itself.** `SKILL.md`'s decision gate — a known
+  **The judgement triggers are prose a run applies to itself.** The put-down row of `skill/references/decision-gates.md` — a known
   mistake repeated, three hypotheses without narrowing, more editing than measuring — is read by the
   run that would have to admit one of the three about its own work, and nothing here checks any of
   them. They were the better half of the rule that went, and they are unenforced.
