@@ -292,6 +292,7 @@ pub const ALWAYS_LOADED: &[&str] = &[
     "collect_review_input",
     "record_computed_verdict",
     "release_ci",
+    "deliver",
     "release",
     "transition",
     "review_status",
@@ -1288,6 +1289,39 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "deliver",
+        contract_name: "deliver",
+        description: "The tail after `publish_review` in one call: verdict, `release_ci`, CI, \
+                      merge through the `gh pr merge` gate's decision, topology readback, close \
+                      with generated evidence. Answers `delivered`, `pending` with `ask_after` \
+                      (call again; no landed write repeats) or `stopped` with `step`, `reason` \
+                      and any `next`; nothing is written past a stop.",
+        operation: "deliver",
+        arguments: &[
+            ISSUE,
+            RUN_ID,
+            Argument::optional(
+                "wait_seconds",
+                "integer",
+                "The longest a pending step waits inside this call, 1 to 50; default 20.",
+            )
+            .counting_from(1),
+            Argument::optional(
+                "spend",
+                "string",
+                "As `release`'s `spend`: the close records it, receipt fields defaulted.",
+            ),
+            Argument::optional(
+                "appendix_file",
+                "string",
+                "Path to your text appended to the generated evidence: the local suite command \
+                 and result. Required when the CI lane reads `disabled` or `never-ran`.",
+            ),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
         name: "start_branch",
         contract_name: "branch + worktree",
         description: "Create the isolated checkout for this issue, verifying the claim first.",
@@ -1699,6 +1733,7 @@ pub const TRACKER_WRITERS: &[&str] = &[
     "publish_review",
     "republish_review",
     "release_ci",
+    "deliver",
     "start_branch",
 ];
 
@@ -1706,12 +1741,12 @@ pub const TRACKER_WRITERS: &[&str] = &[
 /// everywhere else.
 pub const ASSISTED_ONLY: &[&str] = &["assist", "draft_pr", "ready_pr", "review_stages"];
 
-/// The tools answered from Estigia's own store, never by the transport.
+/// The tools this server answers itself, never as one transport operation.
 ///
 /// `run_tool` takes them before the transport context is built, and the tests that walk
 /// [`TOOLS`] against the transport's operations and the binding's rows name this list as
-/// their exemption.
-pub const LOCAL_STORE_TOOLS: &[&str] = &["send_message", "list_sessions"];
+/// their exemption. `deliver` is the composite: it calls other tools and the gate.
+pub const LOCAL_STORE_TOOLS: &[&str] = &["send_message", "list_sessions", "deliver"];
 
 /// Whether a tool is answered from Estigia's own store.
 pub fn is_local_store(name: &str) -> bool {

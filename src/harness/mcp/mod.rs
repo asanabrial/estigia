@@ -17,6 +17,7 @@ use super::{GateContext, session, tracker};
 use crate::outcome::{Refusal, Resolution};
 
 pub(crate) mod address;
+mod deliver;
 pub(crate) mod messaging;
 pub mod tools;
 
@@ -831,6 +832,7 @@ fn run_tool_asking(
             return messaging::send_message(arguments, context, named.as_ref(), consent);
         }
         "list_sessions" => return messaging::list_sessions(arguments, context),
+        "deliver" => return deliver::deliver(arguments, context, named.as_ref()),
         _ => {}
     }
 

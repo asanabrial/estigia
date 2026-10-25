@@ -51,7 +51,9 @@ where a literal port would invert them, and both are declared divergences with a
   `allowed: false` with `unmanaged`, and delivery is ordinary repository policy
   (`internal/cli/review_facade.go`, external). Estigia keeps the pre-push hook, the `gh pr create`
   and `gh pr merge` boundaries and `release_ci`, so a pull request is marked ready and merged only
-  over a computed `approved` verdict bound to its exact head and base. The cost: every publication
+  over a computed `approved` verdict bound to its exact head and base. `deliver` merges through that
+  same decision, not a copy of it: it builds the `gh pr merge` boundary action and asks the gate's own
+  adjudication, so a runtime whose shell is not gated reaches the merge through the same checks. The cost: every publication
   waits on its review before it can ship, a base that moves after the verdict forces a republish and
   a new review, and an escalated receipt waits on a person's `estigia recover` where v4 would let
   ordinary policy deliver it.

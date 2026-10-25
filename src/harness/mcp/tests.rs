@@ -5873,7 +5873,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 50_588;
+const TOOLS_LIST_CEILING: usize = 51_747;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -7866,6 +7866,7 @@ fn only_the_core_delivery_tools_are_marked_always_loaded() {
         "collect_review_input",
         "record_computed_verdict",
         "release_ci",
+        "deliver",
         "release",
         "transition",
         "review_status",

@@ -309,6 +309,21 @@ CI interpretation and merge are not scripted. Releasing the exact reviewed draft
 and is the `release_ci` operation in github.md; deciding that the configured review evidence is sufficient
 remains with the agent because Estigia cannot observe whether the lenses ran or were blind.
 
+**`deliver` runs the steps that need no judgement.** After `publish_review`, a run whose verdict is
+computable calls `deliver`: it records the computed verdict, releases CI, waits for it, merges at the
+reviewed head, reads the topology back and closes, and stops at the first step that needs a decision,
+answering `stopped` with the `step`, a `reason` and `review_status`'s `next`. The hand-backs are
+`receipt` (none held, or it moved), `review` (a verdict that is not `approved`, or a next that needs a
+context), `authorisation` (`Merge by` is not `agent`, or `Delivery authorisation` is not `auto`),
+`ci` (`ci-red`; `head-moved`; `ci-absent`, no check ten minutes after the release; `appendix-required`),
+`base` (`base-advanced`: the base moved and does not merge clean), `version` (a manifest version
+changed, so *Version tags* applies), `merge` (the gate's refusal, GitHub's, or a queue or approval
+rule that left it unmerged) and `close`. A step that has to wait answers `pending` with `ask_after`
+instead of blocking past 50 s. It reads the pull request's whole rollup as the required set, whatever the lane says (a
+`not-consulted` lane is no evidence CI does not run); only where the lane reads `disabled` or
+`never-ran`, when no CI can run, does it skip the rollup and need `appendix_file` with the local suite command and
+result, which is appended to the generated evidence.
+
 **Before `ci_status`, call `release_ci` with the latest reviewed receipt.** It records the release for
 that exact receipt, and the `gh pr merge` boundary refuses a merge whose receipt it never released,
 whichever route took the pull request out of draft. A compatible repository
@@ -502,6 +517,11 @@ the retained state. The run still holds the issue; the close never took it away.
 Two calls means a partial-failure case: if the comment lands but the close errors, the issue is left
 open with its closing note already posted — retry only the bare `gh issue close <n>`, never re-post
 the note.
+
+`deliver` writes the closing note itself: the receipt, the tier and its lens roles, the computed
+verdict, the findings by class, the checks receipt when one exists, the CI summary, the merge commit
+and its parents, the spend and the run id, under a one-line summary in `Summary language`, then the
+agent's appendix. It closes the GitHub issue if the merge left it open and reads it back.
 
 Carry your run identity in the closing comment and state what was actually verified: review verdict,
 CI run or checks, measured numbers, tests run, PR, **the delivering commit SHA**, and every version
