@@ -8700,7 +8700,11 @@ pointer that leaves it names the document it points at.
   a person posted on GitHub is seen through that sync. Each timeline read is its own ledger open,
   so an operation that reads the timeline several times pays those two calls each time, where it
   paid one GraphQL call; `record_spend` opens the ledger once, for the receipt check, the claim
-  check, the write and the readback (two REST calls, where it was eight), and `publish_review`
+  check, the write and the readback (two REST calls, where it was eight); a `release` that folds
+  its close in opens it once and reuses it for every spend record's receipt check and write, the
+  epoch check, the state read, the move to `done` and the release (two REST calls, where one spend
+  record took twelve), and `claim` with `transition_to` opens it once for both (two, where it was
+  four); `publish_review`
   opens it once at the top and for the entry it records after the push, and pays one more comments
   sync at the lineage read, before the pull request is touched, and one full open before a leased
   push, so a stand-down reaches the store ahead of each boundary it could stop; the capture

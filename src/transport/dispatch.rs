@@ -672,13 +672,14 @@ fn merged_release(
     for record in &spends {
         super::claim::validate_spend(&record.review(issue, run_id, now))?;
     }
-    for record in &spends {
-        super::claim::check_spend_receipt(context, &record.review(issue, run_id, now))?;
-    }
     if evidence.is_none() && spends.is_empty() {
         return super::claim::unassign(context, departure);
     }
-    super::claim::check_release_epoch(context, departure)?;
+    let ledger = super::store::Ledger::open(context, issue, now)?;
+    for record in &spends {
+        super::claim::check_spend_receipt(&ledger, &record.review(issue, run_id, now))?;
+    }
+    super::claim::check_release_epoch(&ledger, departure)?;
 
     let mut done = serde_json::Map::new();
     let mut landed = false;
@@ -697,7 +698,7 @@ fn merged_release(
     };
     let mut recorded = Vec::new();
     for record in &spends {
-        match super::claim::record_spend(context, &record.review(issue, run_id, now)) {
+        match super::claim::record_spend_on(context, &ledger, &record.review(issue, run_id, now)) {
             Ok(answer) => {
                 landed = true;
                 recorded.push(answer);
@@ -714,13 +715,13 @@ fn merged_release(
         done.insert("spend".to_owned(), spent);
     }
 
-    let state = super::store::Ledger::open(context, issue, now).and_then(|ledger| ledger.state());
+    let state = ledger.state();
     let in_review = match state {
         Ok(state) => state.as_deref() == Some("review"),
         Err(failure) => return stopped(&mut done, "transition", failure, landed),
     };
     if in_review {
-        match super::commands::transition(context, issue, "done", None, now) {
+        match super::commands::transition_on(context, &ledger, issue, "done", None, now) {
             Ok(moved) => {
                 landed = true;
                 done.insert("transition".to_owned(), moved);
@@ -737,7 +738,7 @@ fn merged_release(
             Err(failure) => return stopped(&mut done, "evidence", failure, landed),
         }
     }
-    match super::claim::unassign(context, departure) {
+    match super::claim::unassign_on(context, &ledger, departure) {
         Ok(serde_json::Value::Object(mut fields)) => {
             fields.extend(done);
             Ok(serde_json::Value::Object(fields))
@@ -1036,26 +1037,28 @@ fn run_operation(
                     },
                 )
             } else {
-                let answer = super::claim::claim(
-                    context,
-                    &super::claim::Acquisition {
-                        issue,
-                        run_id: run_id()?,
-                        runtime: f.need("runtime", operation)?,
-                        horizon: f.need("horizon", operation)?,
-                        operation_id: f.need("operation-id", operation)?,
-                        now,
-                    },
-                )?;
+                let acquisition = super::claim::Acquisition {
+                    issue,
+                    run_id: run_id()?,
+                    runtime: f.need("runtime", operation)?,
+                    horizon: f.need("horizon", operation)?,
+                    operation_id: f.need("operation-id", operation)?,
+                    now,
+                };
                 // The `claim` then `transition` pair as one call: the claim is
                 // adjudicated first, so its refusal is what a caller meets before
                 // anything moves, and the transition's own refusals follow it.
                 match f.get("transition-to") {
                     Some(to) => {
-                        let moved = super::commands::transition(context, issue, to, None, now)?;
+                        super::claim::claim_checks(&acquisition)?;
+                        let ledger = super::store::Ledger::open(context, issue, now)?;
+                        let answer = super::claim::claim_on(context, &ledger, &acquisition)?;
+                        super::commands::require_state(to)?;
+                        let moved =
+                            super::commands::transition_on(context, &ledger, issue, to, None, now)?;
                         Ok(merged_step(answer, "transition", moved))
                     }
-                    None => Ok(answer),
+                    None => super::claim::claim(context, &acquisition),
                 }
             }
         }

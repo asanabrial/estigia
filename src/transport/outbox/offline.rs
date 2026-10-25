@@ -618,7 +618,7 @@ fn close_in(rig: Rig, spend: &serde_json::Value) -> (Rig, Result<serde_json::Val
 fn close_failing_read(
     mut rig: Rig,
     spend: &serde_json::Value,
-    failing_issue_view: Option<u64>,
+    failing_read: Option<(&str, u64)>,
 ) -> (Rig, Result<serde_json::Value, Failure>) {
     rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
         .expect("a claim");
@@ -639,7 +639,7 @@ fn close_failing_read(
         "--spend",
         &spend,
     ]);
-    if let Some(nth) = failing_issue_view {
+    if let Some((matches, nth)) = failing_read {
         let counts = rig.directory.path().join("counts.json");
         crate::paths::replace_atomically(&counts, "{}").expect("a fresh count");
         rig.counts = Some(counts);
@@ -647,7 +647,7 @@ fn close_failing_read(
             serde_json::from_str(&rig.script).expect("a script");
         entries.insert(
             0,
-            serde_json::json!({"matches": "issues/12", "nth": nth, "stdout": "", "status": 1}),
+            serde_json::json!({"matches": matches, "nth": nth, "stdout": "", "status": 1}),
         );
         rig.script = crate::test_env::answers(&entries);
     }
@@ -688,6 +688,55 @@ fn one_release_records_the_spend_moves_to_done_posts_the_evidence_and_unassigns(
     let (rig, delivery) = delivered_rig();
     let (rig, answer) = close_in(rig, &delivery.spend("sealed"));
     assert_closed(&rig, &answer.expect("one call closes the delivery"), 1);
+}
+
+#[test]
+fn a_claim_that_transitions_opens_the_ledger_once() {
+    let (rig, _) = delivered_rig();
+    let mut flags = claim_flags("12", "claude-a", FIRST);
+    flags.extend(["--transition-to", "in-progress"]);
+    let opened = crate::transport::store::ledger_opens();
+    let answer = rig
+        .closed("claim", &flags)
+        .expect("a claim that transitions");
+    let during = crate::transport::store::ledger_opens() - opened;
+    assert_eq!(answer["transition"]["to"], "in-progress", "{answer}");
+    assert_eq!(rig.state(12).as_deref(), Some("in-progress"), "{answer}");
+    assert_eq!(during, 1, "{answer}");
+}
+
+#[test]
+fn a_merged_release_opens_the_ledger_once() {
+    let (rig, delivery) = delivered_rig();
+    rig.closed("claim", &claim_flags("12", "claude-a", FIRST))
+        .expect("a claim");
+    rig.closed("transition", &["--issue", "12", "--to", "review"])
+        .expect("a transition to review");
+    let found = rig
+        .closed("unassign", &claim_flags("12", "claude-a", SECOND))
+        .expect("a discovery");
+    let target = found["target_operation"]
+        .as_str()
+        .expect("an epoch")
+        .to_owned();
+    let mut release = claim_flags("12", "claude-a", SECOND);
+    let note = rig.path("note.md");
+    let spend = delivery.spend("sealed").to_string();
+    release.extend([
+        "--target-operation",
+        &target,
+        "--evidence-file",
+        &note,
+        "--spend",
+        &spend,
+    ]);
+    let opened = crate::transport::store::ledger_opens();
+    let answer = rig
+        .closed("unassign", &release)
+        .expect("one call closes the delivery");
+    let during = crate::transport::store::ledger_opens() - opened;
+    assert_closed(&rig, &answer, 1);
+    assert_eq!(during, 1, "{answer}");
 }
 
 #[test]
@@ -1261,7 +1310,7 @@ fn a_handoff_naming_an_unlabellable_runtime_writes_nothing() {
 #[test]
 fn a_read_that_fails_after_the_spend_landed_is_reported_with_the_spend() {
     let (rig, delivery) = delivered_rig();
-    let (rig, answer) = close_failing_read(rig, &delivery.spend("sealed"), Some(7));
+    let (rig, answer) = close_failing_read(rig, &delivery.spend("sealed"), Some(("pr view", 1)));
     let answer = answer.expect("a stop after a landed write is an answer, not a refusal");
 
     assert_eq!(answer["close_incomplete"]["step"], "transition", "{answer}");
@@ -1278,7 +1327,7 @@ fn a_read_that_fails_after_the_spend_landed_is_reported_with_the_spend() {
 fn repeating_a_stopped_close_with_the_same_spend_completes_it() {
     let (rig, delivery) = delivered_rig();
     let spend = delivery.spend("sealed");
-    let (mut rig, stopped) = close_failing_read(rig, &spend, Some(11));
+    let (mut rig, stopped) = close_failing_read(rig, &spend, Some(("issue view", 1)));
     let stopped = stopped.expect("a stop after landed writes is an answer");
     assert_eq!(stopped["close_incomplete"]["step"], "release", "{stopped}");
     assert_eq!(rig.state(12).as_deref(), Some("done"), "{stopped}");
