@@ -30,7 +30,7 @@ const MANIFEST: &str = "manifest.json";
 const PROMPT: &str = "prompt.bin";
 const LOCK: &str = "lock";
 const STARTED: &str = "started";
-const RESULT: &str = "result.json";
+pub(crate) const RESULT: &str = "result.json";
 const USAGE: &str = "usage.json";
 const RUNNER_OUT: &str = "runner.out";
 const RUNNER_ERR: &str = "runner.err";
@@ -62,11 +62,11 @@ pub enum JobResult {
 
 /// Where a job stands, read from its directory alone.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum JobStatus {
+pub enum JobStatus<T = JobResult> {
     /// The runner holds the lock.
     Running,
     /// The runner left a result.
-    Finished(JobResult),
+    Finished(T),
     /// Nothing holds the lock and no result exists: the runner died.
     Lost,
 }
@@ -129,7 +129,7 @@ fn unwritten(what: &str, error: impl std::fmt::Display) -> Failure {
     Failure::Read(format!("could not {what}: {error}"))
 }
 
-fn refused(message: String) -> Refusal {
+pub(crate) fn refused(message: String) -> Refusal {
     run_cli::launch_failed(message)
 }
 
@@ -258,7 +258,7 @@ fn report_usage_failure(dir: &Path, error: &std::io::Error) {
     );
 }
 
-fn take_lock(dir: &Path) -> Result<File, Refusal> {
+pub(crate) fn take_lock(dir: &Path) -> Result<File, Refusal> {
     let file = File::options()
         .read(true)
         .write(true)
@@ -269,6 +269,14 @@ fn take_lock(dir: &Path) -> Result<File, Refusal> {
     file.try_lock()
         .map_err(|e| refused(format!("the review job lock is held or unavailable: {e}")))?;
     Ok(file)
+}
+
+/// Takes a job's lock and marks the job started, for a runner of any kind.
+pub(crate) fn begin(dir: &Path) -> Result<File, Refusal> {
+    let lock = take_lock(dir)?;
+    replace_atomically(&dir.join(STARTED), "")
+        .map_err(|e| refused(format!("the review job could not mark itself started: {e}")))?;
+    Ok(lock)
 }
 
 /// The runner: holds the job's lock for as long as it runs, asks the selected
@@ -287,9 +295,7 @@ pub fn run(
     dir: &Path,
     select: &dyn Fn() -> Result<Box<dyn Adapter>, Refusal>,
 ) -> Result<(), Refusal> {
-    let _lock = take_lock(dir)?;
-    replace_atomically(&dir.join(STARTED), "")
-        .map_err(|e| refused(format!("the review job could not mark itself started: {e}")))?;
+    let _lock = begin(dir)?;
     let outcome = load(dir).and_then(|invocation| {
         let review = select()?.review_with_usage(&invocation)?;
         if let Err(error) = write_usage(dir, review.usage.as_ref()) {
@@ -383,7 +389,15 @@ pub fn read_usage(dir: &Path) -> Result<Option<Usage>, Failure> {
 /// checked once more after taking the lock so a runner that finished between
 /// the two reads is not called lost.
 pub fn job_status(dir: &Path) -> Result<JobStatus, Failure> {
-    if let Some(result) = read_result(dir)? {
+    job_status_with(dir, read_result)
+}
+
+/// [`job_status`] over a result file another reader decodes.
+pub(crate) fn job_status_with<T>(
+    dir: &Path,
+    read: impl Fn(&Path) -> Result<Option<T>, Failure>,
+) -> Result<JobStatus<T>, Failure> {
+    if let Some(result) = read(dir)? {
         return Ok(JobStatus::Finished(result));
     }
     let lock = match File::options().read(true).write(true).open(dir.join(LOCK)) {
@@ -394,14 +408,17 @@ pub fn job_status(dir: &Path) -> Result<JobStatus, Failure> {
     match lock.try_lock() {
         Err(std::fs::TryLockError::WouldBlock) => Ok(JobStatus::Running),
         Err(std::fs::TryLockError::Error(e)) => Err(unwritten("test a review job lock", e)),
-        Ok(()) => Ok(match read_result(dir)? {
+        Ok(()) => Ok(match read(dir)? {
             Some(result) => JobStatus::Finished(result),
             None => JobStatus::Lost,
         }),
     }
 }
 
-fn await_started(dir: &Path, mut dead: impl FnMut() -> Option<String>) -> Result<(), Failure> {
+pub(crate) fn await_started(
+    dir: &Path,
+    mut dead: impl FnMut() -> Option<String>,
+) -> Result<(), Failure> {
     let began = Instant::now();
     loop {
         if dir.join(STARTED).exists() || dir.join(RESULT).exists() {
@@ -466,6 +483,14 @@ fn refused_to_detach(error: &std::io::Error) -> bool {
 
 impl Spawner for Detached {
     fn start(&self, dir: &Path) -> Result<u32, Failure> {
+        self.start_as("__review-job", dir)
+    }
+}
+
+impl Detached {
+    /// Starts `subcommand <dir>` of the re-executed binary, detached, and
+    /// returns once it reports in.
+    pub(crate) fn start_as(&self, subcommand: &str, dir: &Path) -> Result<u32, Failure> {
         let executable = match &self.executable {
             Some(named) => named.clone(),
             None => std::env::current_exe().map_err(|e| unwritten("find this executable", e))?,
@@ -479,7 +504,7 @@ impl Spawner for Detached {
         };
         let mut command = Command::new(executable);
         command
-            .arg("__review-job")
+            .arg(subcommand)
             .arg(dir)
             .stdin(Stdio::null())
             .stdout(open(RUNNER_OUT)?)

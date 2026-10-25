@@ -21,6 +21,8 @@
 //! what more than one module needs: the `fake_process`-backed rig, the tracker
 //! and git helpers, and the constants the moved tests share.
 
+#[path = "pipe/check_job.rs"]
+mod check_job;
 #[path = "pipe/cli_process.rs"]
 mod cli_process;
 #[path = "pipe/config.rs"]

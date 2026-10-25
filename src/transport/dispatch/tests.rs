@@ -459,6 +459,19 @@ fn every_flag_a_tool_sends_is_one_the_dispatcher_reads() {
              direction of the one operation that has to be safe",
         ),
         (
+            "run-checks",
+            "base",
+            "filled by the harness from the base the run pointer's published receipt names, so \
+             the checks are bound to the target that was published and a caller cannot pick \
+             another",
+        ),
+        (
+            "run-checks",
+            "worktree",
+            "filled by the harness from the run pointer: it names the directory the declared \
+             commands run in, and one a caller could aim would run them anywhere",
+        ),
+        (
             "collect-review-input",
             "worktree",
             "filled by the harness from the run pointer, and read only by `--record-verdict`, \
@@ -1329,4 +1342,25 @@ fn the_task_arm_reads_the_compact_switch_and_answers_the_changed_row_alone() {
         Some(1),
         "the legacy answer lost the whole checklist: {legacy}"
     );
+}
+
+#[test]
+fn a_run_checks_wait_that_is_not_an_integer_is_refused_malformed() {
+    let root = tempfile::tempdir().expect("a directory");
+    let context = context(root.path());
+    let flags: Vec<String> = [
+        "--issue",
+        "42",
+        "--run-id",
+        "claude-a",
+        "--wait-seconds",
+        "soon",
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    let refused = super::dispatch(&context, "run-checks", &flags, "2026-01-01T00:00:00Z")
+        .expect_err("a non-integer wait was accepted")
+        .envelope();
+    assert_eq!(refused["reason"], "malformed-argument", "{refused}");
+    assert_eq!(refused["argument"], "--wait-seconds", "{refused}");
 }

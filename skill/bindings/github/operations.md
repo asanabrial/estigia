@@ -429,6 +429,10 @@ by `--attempt` 1 to 3, and the third writes the escalated receipt with cause `va
 over-budget correction is refused `correction-budget-exceeded` before anything is pushed, so no
 receipt exists to escalate.
 
+## Running declared checks
+
+`run_checks` runs the `[[check]]` tables the base's `estigia.generated.toml` declares, as a detached job against the clean checkout, and records a receipt for the published target's digest and the declared commands. It answers `declared: false` and records nothing when the base declares none, `cached` when a receipt already stands, and `running` with `ask_after` while a job is out: call again, with `wait_seconds` (at most 50) to wait. A finished answer carries each check's exit, seconds and output tail. While the base declares checks, the verdict and `release_ci` refuse without a passing receipt for the exact digest: `checks-receipt-missing`, or `checks-failed`.
+
 ## Recording a computed verdict
 
 `review_read` with `view: verdict` answers, and `review_computed_verdict` records once, the verdict one exact
