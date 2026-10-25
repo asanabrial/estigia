@@ -2579,7 +2579,7 @@ fn the_gate_reaches_the_checks_that_run_after_the_tracker_agrees() {
         pointer(state, reviewed);
         let answers = serde_json::to_string(&serde_json::json!([
             pr_view_entry(12, &head),
-            issue_view_entry(state),
+            released_issue_view_entry(state, &"a".repeat(32), reviewed),
         ]))
         .expect("the script serialises");
         let (out, err, _) = run_with_tracker(
@@ -2814,7 +2814,7 @@ fn a_resumed_worktree_is_the_checkout_whose_reviewed_head_is_spent() {
         arguments.extend(["--input", &input]);
         let answers = serde_json::to_string(&serde_json::json!([
             pr_view_entry(command_pr, &reviewed),
-            issue_view_entry("review"),
+            released_issue_view_entry("review", &"a".repeat(32), reviewed_head),
         ]))
         .expect("the script serialises");
         let (out, err, _) =

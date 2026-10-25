@@ -771,6 +771,32 @@ fn issue_answer(state: &str) -> String {
         .expect("the script serialises")
 }
 
+/// [`issue_view_entry`], with a `ci-release` marker for the receipt the merge
+/// pipe tests put in the pointer, under the given epoch.
+fn released_issue_view_entry(state: &str, epoch: &str, head: &str) -> serde_json::Value {
+    let mut entry = issue_view_entry(state);
+    let mut issue: serde_json::Value =
+        serde_json::from_str(entry["stdout"].as_str().expect("the view")).expect("json");
+    let marker = format!(
+        "<!-- issue-flow: ci-release encoding=pct run-id=claude-abcd1234 epoch={epoch} pr=12 \
+         head={head} base={} digest={} -->",
+        "b".repeat(40),
+        "c".repeat(64)
+    );
+    issue["comments"]
+        .as_array_mut()
+        .expect("comments")
+        .push(serde_json::json!({
+            "id": "IC_2",
+            "createdAt": "2026-01-01T00:01Z",
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": format!("CI released.\n\n{marker}\n"),
+        }));
+    entry["stdout"] = issue.to_string().into();
+    entry
+}
+
 /// One `ESTIGIA_FAKE_ANSWERS` entry answering `gh pr view <pr>` with the PR
 /// sitting at `head_ref_oid`.
 ///

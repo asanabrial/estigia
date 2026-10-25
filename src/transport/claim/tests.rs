@@ -15592,6 +15592,50 @@ fn a_ci_release_on_an_imported_issue_reads_no_graphql_timeline() {
     assert_eq!(graphql, 0, "the timeline came from the store");
 }
 
+#[test]
+fn a_ci_release_its_verdict_does_not_admit_records_no_release() {
+    let (receipt, comments) = review_world();
+    let release = CiRelease {
+        issue: 42,
+        run_id: "claude-a",
+        epoch: &receipt.epoch,
+        pr: receipt.pr,
+        head: &receipt.head,
+        base: &receipt.base,
+        digest: &receipt.digest,
+        worktree: None,
+        now: "2026-08-31T00:00:00Z",
+    };
+    let (_root, context) = context_with_no_repository();
+    let directory = tempfile::tempdir().expect("a store directory");
+    let path = directory.path().join("state.db");
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[crate::test_env::issue_view_answer(
+        42,
+        stdout_with(&comments),
+    )]);
+    let answer = crate::transport::store::with_store_at(&path, || {
+        crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            Ledger::open(&context, 42, RECLAIM_NOW).expect("the first touch imports the issue");
+            release_ci(&context, &release)
+        })
+    });
+
+    assert_eq!(
+        reason(answer.expect_err("no verdict was recorded, so nothing is released")),
+        "qualifying-review-verdict-missing"
+    );
+    let released: i64 = rusqlite::Connection::open(&path)
+        .expect("the store opens")
+        .query_row(
+            "SELECT COUNT(*) FROM entries WHERE body LIKE '%issue-flow: ci-release %'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the count reads");
+    assert_eq!(released, 0, "a release the basis refused was recorded");
+}
+
 /// An `approved` receipt a retired-style accepted verdict left behind is not a
 /// release basis: delivery reads the computed verdict alone, so an accepted verdict
 /// and its receipt over a `medium` change release nothing.

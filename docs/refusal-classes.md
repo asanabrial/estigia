@@ -131,6 +131,8 @@ or broke a rule it can be told. That includes:
   repository the gate does not read), `delivery-pr-mismatch`,
   `complete-review-transaction-missing`, `complete-review-transaction-not-selected`: the command or the
   checkout is not one a receipt can be selected for;
+- `merge-without-ci-release`: the local store holds no `ci-release` for the exact receipt being
+  merged, so no verdict was checked for those bytes;
 - `inspect-parent-missing`: the publication named for an inspection was published with no recorded
   parent, or as a recovered successor, a fresh candidate, so there is no correction to look at;
 - `transport-refused`, the catch-all for a reason the transport vocabulary does not name.

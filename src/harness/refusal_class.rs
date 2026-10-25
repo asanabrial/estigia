@@ -319,6 +319,7 @@ const REFUSED: &[&str] = &[
     "loop-not-writable",
     "malformed-argument",
     "merge-strategy-retired",
+    "merge-without-ci-release",
     "message-empty",
     "message-needs-a-person",
     "message-no-live-session",
@@ -530,7 +531,8 @@ mod tests {
     use super::*;
     use crate::harness::tracker::TRANSPORT_VOCABULARY;
 
-    const GATE_CODES: [&str; 9] = [
+    const GATE_CODES: [&str; 10] = [
+        "merge-without-ci-release",
         "delivery-pr-unidentified",
         "delivery-pr-repository-option",
         "complete-review-transaction-missing",

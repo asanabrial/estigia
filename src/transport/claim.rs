@@ -10019,6 +10019,7 @@ pub fn release_ci(
         })));
     }
 
+    record_ci_release(&ledger, release, &supplied)?;
     let ready_write = super::run(
         &["gh", "pr", "ready", &release.pr.to_string()],
         Some(&context.repo_dir),
@@ -10046,6 +10047,72 @@ pub fn release_ci(
         "next": next,
         "findings": findings,
     }))
+}
+
+/// Records that `release_ci` admitted these exact bytes, once per receipt: the
+/// `gh pr merge` boundary reads it back from the local store.
+fn record_ci_release(
+    ledger: &Ledger,
+    release: &CiRelease<'_>,
+    receipt: &ReviewTransaction,
+) -> Result<(), Failure> {
+    if ci_released(&ledger.timeline()?, receipt) {
+        return Ok(());
+    }
+    let pr = receipt.pr.to_string();
+    let marker = super::markers::render(
+        "ci-release",
+        &[
+            ("run-id", release.run_id),
+            ("epoch", &receipt.epoch),
+            ("pr", &pr),
+            ("head", &receipt.head),
+            ("base", &receipt.base),
+            ("digest", &receipt.digest),
+        ],
+    )
+    .ok_or_else(|| {
+        Failure::Stop(serde_json::json!({"ok": false, "reason": "invalid-marker-attribute"}))
+    })?;
+    let body = protocol_body(
+        &format!(
+            "CI released for publication epoch `{}` by `{}`.",
+            receipt.epoch, release.run_id
+        ),
+        &marker,
+    );
+    ledger.append(&body, release.now)
+}
+
+/// Whether a trusted `ci-release` marker names exactly this receipt.
+pub(crate) fn ci_released(comments: &[ownership::Comment], receipt: &ReviewTransaction) -> bool {
+    let pr = receipt.pr.to_string();
+    comments
+        .iter()
+        .filter(|comment| comment.viewer_did_author && !comment.includes_created_edit)
+        .flat_map(|comment| super::markers::parse(&comment.body))
+        .any(|marker| {
+            let is = |key: &str, value: &str| marker.get(key).map(String::as_str) == Some(value);
+            is("kind", "ci-release")
+                && is("epoch", &receipt.epoch)
+                && is("pr", &pr)
+                && is("head", &receipt.head)
+                && is("base", &receipt.base)
+                && is("digest", &receipt.digest)
+        })
+}
+
+/// Whether the local store records a CI release for exactly this receipt,
+/// read without opening the store for writing.
+pub fn ci_release_recorded(
+    context: &Context,
+    issue: u64,
+    receipt: &ReviewTransaction,
+) -> Result<bool, Failure> {
+    Ok(ci_released(
+        &Ledger::read_timeline_of(context, issue)?,
+        receipt,
+    ))
 }
 
 /// What a run does once `release_ci` has marked the pull request ready: the

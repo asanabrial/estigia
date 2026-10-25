@@ -8542,3 +8542,39 @@ fn a_drive_lettered_directory_is_a_plain_directory_and_a_drive_relative_one_is_n
         assert!(!exact, "{command}");
     }
 }
+
+#[test]
+fn a_merge_reads_its_ci_release_and_an_unreadable_store_refuses() {
+    let (action, _) = classify("Bash", &json!({"command": "gh pr merge 54 --merge"}));
+    let mut run = Run::new("claude-abcd1234".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.review_transaction = Some(crate::transport::claim::ReviewTransaction {
+        epoch: "a".repeat(32),
+        pr: 54,
+        head: "e".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    });
+    let answering = |answer: Result<bool, crate::transport::Failure>| {
+        let answer = std::cell::RefCell::new(Some(answer));
+        super::unreleased_merge(&action, &run, &|issue, receipt| {
+            assert_eq!(issue, 12);
+            assert_eq!(receipt.pr, 54);
+            answer.borrow_mut().take().expect("read once")
+        })
+    };
+
+    assert!(answering(Ok(true)).is_none());
+    assert_eq!(
+        answering(Ok(false)).map(|refusal| refusal.code),
+        Some("merge-without-ci-release")
+    );
+    let unreadable = answering(Err(crate::transport::Failure::Read(
+        "the store could not be read".to_owned(),
+    )))
+    .expect("an unreadable store refuses");
+    assert_eq!(unreadable.code, "read-failed");
+
+    let (push, _) = classify("Bash", &json!({"command": "git push"}));
+    assert!(super::unreleased_merge(&push, &run, &|_, _| Ok(false)).is_none());
+}
