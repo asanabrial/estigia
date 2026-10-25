@@ -143,6 +143,7 @@ const UNKNOWN: &[&str] = &[
     "handoff-row-unwritten",
     "linear-move-not-read-back",
     "linear-move-refused",
+    "linear-move-unconfirmed",
     "push-guard-not-read-back",
     "push-guard-removal-not-read-back",
     "repository-readback-missing",

@@ -37,6 +37,13 @@ pub const QUERY: &str =
 pub const STATES_QUERY: &str = "query EstigiaStates($id: String!) { issue(id: $id) { id state { \
                                 name } team { states { nodes { id name } } } } }";
 
+/// The workflow state `assist` moves an issue into, as `State names` keys it.
+pub const STARTED: &str = "in-progress";
+/// The workflow state `ready_pr` moves an issue into.
+pub const IN_REVIEW: &str = "review";
+/// The workflow state `review_stages` moves an issue into on reading the merge.
+pub const DELIVERED: &str = "done";
+
 /// The one mutation this source sends: the issue's workflow state.
 pub const MOVE_MUTATION: &str = "mutation EstigiaMove($id: String!, $stateId: String!) { \
                                  issueUpdate(id: $id, input: { stateId: $stateId }) { success } }";
@@ -96,11 +103,20 @@ pub fn move_issue(identity: &Identity, target: &str) -> Result<serde_json::Value
         "variables": { "id": id, "stateId": state_id },
     })
     .to_string();
-    let answer: serde_json::Value = serde_json::from_str(&post(&body)?).map_err(|error| {
-        unreachable_api(&Failure::Read(format!(
-            "Linear returned unparseable JSON: {error}"
-        )))
-    })?;
+    let answer = post(&body)
+        .and_then(|text| json_of(&text))
+        .map_err(|failure| {
+            Failure::Stop(serde_json::json!({
+                "ok": false,
+                "reason": "linear-move-unconfirmed",
+                "world": "unknown",
+                "detail": format!(
+                    "moving {identity} to {target:?} was sent and no answer could be read: {}",
+                    failure.detail()
+                ),
+                "action": "read the issue in Linear; do not report it moved or unmoved",
+            }))
+        })?;
     let accepted = answer
         .get("data")
         .and_then(|data| data.get("issueUpdate"))
@@ -151,11 +167,7 @@ fn read_states(identity: &Identity) -> Result<States, Failure> {
         "variables": { "id": identity.to_string() },
     })
     .to_string();
-    let value: serde_json::Value = serde_json::from_str(&post(&body)?).map_err(|error| {
-        unreachable_api(&Failure::Read(format!(
-            "Linear returned unparseable JSON: {error}"
-        )))
-    })?;
+    let value = json_of(&post(&body)?)?;
     let issue = value
         .get("data")
         .and_then(|data| data.get("issue"))
@@ -444,15 +456,19 @@ fn split_status(stdout: &str) -> (Option<u16>, String) {
     }
 }
 
-/// Reads the issue out of Linear's answer, or names the key as unknown.
-fn parse(text: &str, identity: &Identity) -> Result<Issue, Failure> {
-    let value: serde_json::Value = serde_json::from_str(text).map_err(|error| {
-        // A 2xx that is not Linear's JSON is not an answer this source knows:
-        // reporting a bare `read-failed` would hide that it was Linear.
+/// A 2xx body as JSON. One that is not Linear's JSON is not an answer this
+/// source knows: reporting a bare `read-failed` would hide that it was Linear.
+fn json_of(text: &str) -> Result<serde_json::Value, Failure> {
+    serde_json::from_str(text).map_err(|error| {
         unreachable_api(&Failure::Read(format!(
             "Linear returned unparseable JSON: {error}"
         )))
-    })?;
+    })
+}
+
+/// Reads the issue out of Linear's answer, or names the key as unknown.
+fn parse(text: &str, identity: &Identity) -> Result<Issue, Failure> {
+    let value = json_of(text)?;
     let data = value.get("data").filter(|data| !data.is_null());
     let errors = graphql_errors(&value);
     if data.is_none() && !errors.is_empty() {

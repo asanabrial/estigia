@@ -565,3 +565,132 @@ fn follow_state_moves_only_a_mapped_state_of_a_linear_issue() {
         "a move that failed was not reported beside the answer"
     );
 }
+
+#[test]
+fn the_states_follow_state_is_called_with_are_ones_state_names_maps() {
+    for state in [super::STARTED, super::IN_REVIEW, super::DELIVERED] {
+        assert!(
+            crate::config::MAPPED_STATES.contains(&state),
+            "{state} is moved to and `State names` cannot map it"
+        );
+    }
+}
+
+#[test]
+fn a_move_whose_answer_cannot_be_read_is_an_unknown_world() {
+    let endpoint = Endpoint::in_turn(&[&states_in("Todo"), "not json"]);
+    let failure = moved(&endpoint, "Done").expect_err("an unreadable answer to a sent move");
+    assert_eq!(a_reason(&failure), "linear-move-unconfirmed");
+    assert_eq!(failure.envelope()["world"], "unknown");
+}
+
+fn merged_pull_request() -> String {
+    serde_json::json!({ "data": { "repository": { "pullRequest": {
+        "number": 7, "state": "MERGED", "isDraft": false, "headRefOid": "abc",
+        "mergeCommit": { "oid": "m1" }, "author": { "login": "alexis" },
+        "reviewRequests": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
+        "latestReviews": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
+        "reviewThreads": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
+        "commits": { "nodes": [] },
+    }}}})
+    .to_string()
+}
+
+fn linear_repository(root: &std::path::Path) -> crate::transport::Context {
+    let skill_dir = root.join("skill");
+    let repo_dir = root.join("repo");
+    std::fs::create_dir_all(&skill_dir).expect("a skill root");
+    std::fs::create_dir_all(repo_dir.join(".git")).expect("a checkout");
+    std::fs::write(
+        skill_dir.join(crate::skill::CONTRACT),
+        crate::skill::CONTRACT_CONTENTS,
+    )
+    .expect("a contract");
+    let mut config = crate::config::Config::default();
+    for (setting, value) in [
+        (crate::config::Setting::Tracker, "linear ENG"),
+        (crate::config::Setting::DeliveryPreset, "team"),
+        (crate::config::Setting::StateNames, "done=Done"),
+    ] {
+        setting.apply(&mut config, value).expect("a row");
+    }
+    crate::setup::write_repository_configuration(
+        &crate::skill::repository_config_path(&repo_dir),
+        &config,
+        &[
+            crate::config::Setting::Tracker,
+            crate::config::Setting::Workflow,
+            crate::config::Setting::StateNames,
+            crate::config::Setting::SelfReview,
+            crate::config::Setting::ReadyBy,
+            crate::config::Setting::CorrectionsAfterReady,
+            crate::config::Setting::MergeBy,
+        ],
+    )
+    .expect("the repository's file");
+    crate::transport::Context {
+        skill_dir,
+        repo_dir,
+        config: Vec::new(),
+        repo: None,
+    }
+}
+
+fn stages_through_dispatch(
+    context: &crate::transport::Context,
+    issue: &str,
+    linear: &str,
+) -> Result<serde_json::Value, crate::transport::Failure> {
+    let bin = crate::test_env::scripted_gh();
+    let answers = crate::test_env::answers(&[
+        serde_json::json!({ "matches": "pr list", "stdout": r#"[{"number":7}]"# }),
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": r#"{"owner":{"login":"example"},"name":"repo"}"#,
+        }),
+        serde_json::json!({ "matches": "api graphql", "stdout": merged_pull_request() }),
+    ]);
+    let flags: Vec<String> = ["--branch", "eng-123", "--issue", issue]
+        .iter()
+        .map(|part| (*part).to_owned())
+        .collect();
+    with_linear_env(Some("lin_api_test"), linear, || {
+        crate::test_env::with_scripted_gh(bin.path(), &answers, || {
+            crate::transport::dispatch::dispatch(
+                context,
+                "review-stages",
+                &flags,
+                "2026-10-25T00:00:00Z",
+            )
+        })
+    })
+}
+
+#[test]
+fn reading_the_merge_through_dispatch_moves_the_linear_issue_to_its_done_name() {
+    let root = tempfile::tempdir().expect("a root");
+    let context = linear_repository(root.path());
+    let endpoint = Endpoint::in_turn(&[&states_in("In Review"), ACCEPTED, &states_in("Done")]);
+    let answer = stages_through_dispatch(&context, "ENG-123", &endpoint.url).expect("merged");
+    assert_eq!(answer["position"], "merged");
+    assert_eq!(answer["linear_state"]["state"], "Done", "{answer}");
+    assert_eq!(
+        endpoint
+            .sent()
+            .iter()
+            .filter(|body| body.contains("mutation"))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn a_github_issue_read_merged_through_dispatch_sends_nothing_to_linear() {
+    let root = tempfile::tempdir().expect("a root");
+    let context = linear_repository(root.path());
+    let endpoint = Endpoint::in_turn(&[&states_in("In Review")]);
+    let answer = stages_through_dispatch(&context, "7", &endpoint.url).expect("merged");
+    assert_eq!(answer["position"], "merged");
+    assert!(answer.get("linear_state").is_none(), "{answer}");
+    assert!(endpoint.sent().is_empty(), "{:?}", endpoint.sent());
+}

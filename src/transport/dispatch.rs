@@ -1578,7 +1578,7 @@ fn run_operation(
             Ok(super::linear::follow_state(
                 &context.layered().state_names,
                 Some(&issue),
-                "in-progress",
+                super::linear::STARTED,
                 started,
             ))
         }
@@ -1618,7 +1618,7 @@ fn run_operation(
                 return Ok(super::linear::follow_state(
                     &layered.state_names,
                     issue.as_ref(),
-                    "done",
+                    super::linear::DELIVERED,
                     read,
                 ));
             }
@@ -1638,7 +1638,7 @@ fn run_operation(
             Ok(super::linear::follow_state(
                 &layered.state_names,
                 issue.as_ref(),
-                "review",
+                super::linear::IN_REVIEW,
                 ready,
             ))
         }
