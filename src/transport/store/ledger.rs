@@ -160,6 +160,16 @@ impl Ledger {
             .map_err(|failure| status_store_unreadable(issue, &failure.detail()))
     }
 
+    /// The issue's timeline as the store holds it, the repository named by the
+    /// tracker's own answer for the issue, without opening the store for writing.
+    pub(crate) fn read_timeline_of(
+        context: &Context,
+        issue: u64,
+    ) -> Result<Vec<ownership::Comment>, Failure> {
+        let facts = read_facts(context, issue)?;
+        Self::read_timeline_at(&store_path()?, &facts.repo, issue)
+    }
+
     /// The jobs of the issue's newest launch of each input on `epoch`, read from the store
     /// without opening it for writing.
     pub(crate) fn read_jobs_at(

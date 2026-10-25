@@ -1097,6 +1097,73 @@ pub(crate) fn complete_review_transaction_missing(pr: u64) -> Refusal {
     )
 }
 
+pub(crate) fn merge_without_ci_release(pr: u64) -> Refusal {
+    Refusal::not_started(
+        "merge-without-ci-release",
+        format!(
+            "PR #{pr} has no CI release recorded for this run's exact review receipt, so no \
+             verdict was checked for the bytes being merged"
+        ),
+        Resolution::no_command(
+            NoCommandReason::WorldAction,
+            "`release_ci` with this exact receipt, which checks the verdict and marks the pull \
+             request ready",
+        ),
+    )
+}
+
+/// The `gh pr merge` boundary's verdict check: `release_ci` records a release
+/// only over the basis it admits, so the merge reads that record for exactly
+/// the receipt the pointer holds. An unreadable store refuses.
+pub(crate) fn unreleased_merge(
+    action: &Action,
+    run: &Run,
+    released: &dyn Fn(
+        u64,
+        &crate::transport::claim::ReviewTransaction,
+    ) -> Result<bool, crate::transport::Failure>,
+) -> Option<Refusal> {
+    let Action::Boundary {
+        command,
+        pr: Some(pr),
+        ..
+    } = action
+    else {
+        return None;
+    };
+    if command != "gh pr merge" {
+        return None;
+    }
+    let receipt = run.review_transaction.as_ref()?;
+    let issue = run.issue_number()?;
+    match released(issue, receipt) {
+        Ok(true) => None,
+        Ok(false) => Some(merge_without_ci_release(*pr)),
+        Err(failure) => tracker::translate(
+            &tracker::Answer {
+                code: failure.code(),
+                body: Some(failure.envelope()),
+            },
+            "boundary",
+        ),
+    }
+}
+
+/// [`unreleased_merge`]'s reader against the live local store.
+pub(crate) fn live_release_reader(
+    context: &GateContext,
+) -> impl Fn(u64, &crate::transport::claim::ReviewTransaction) -> Result<bool, crate::transport::Failure>
++ '_ {
+    move |issue, receipt| {
+        let transport = crate::transport::Context::live(
+            context.skill_root.clone(),
+            context.repo_dir.clone(),
+            context.tracker.named_repo(),
+        );
+        crate::transport::claim::ci_release_recorded(&transport, issue, receipt)
+    }
+}
+
 pub(crate) fn delivery_pr_mismatch(command_pr: u64, receipt_pr: u64) -> Refusal {
     Refusal::not_started(
         "delivery-pr-mismatch",
@@ -3260,6 +3327,7 @@ fn decide_observing(
                 &context.repo_dir,
                 &live_pr_head_reader(context),
             )
+            .or_else(|| unreleased_merge(action, run, &live_release_reader(context)))
         {
             return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
         }
@@ -3388,7 +3456,9 @@ fn decide_observing(
                     run,
                     &context.repo_dir,
                     &live_pr_head_reader(context),
-                ) {
+                )
+                .or_else(|| unreleased_merge(action, run, &live_release_reader(context)))
+                {
                     return Decision::Deny(Box::new(prefixed(refusal, &subject, observed)));
                 }
                 if let Action::Boundary {

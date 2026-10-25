@@ -63,7 +63,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
     let allowed = merge(
         &serde_json::to_string(&serde_json::json!([
             pr_view_entry(12, &reviewed),
-            issue_view_entry("review"),
+            released_issue_view_entry("review", &"a".repeat(32), &reviewed),
         ]))
         .expect("the script serialises"),
     );
@@ -78,7 +78,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
     let refused = merge(
         &serde_json::to_string(&serde_json::json!([
             pr_view_entry(12, &moved),
-            issue_view_entry("review"),
+            released_issue_view_entry("review", &"a".repeat(32), &reviewed),
         ]))
         .expect("the script serialises"),
     );
@@ -96,7 +96,7 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
     let unreadable = merge(
         &serde_json::to_string(&serde_json::json!([
             { "matches": "pr view 12", "status": 1, "stderr": "gh: pull request not found" },
-            issue_view_entry("review"),
+            released_issue_view_entry("review", &"a".repeat(32), &reviewed),
         ]))
         .expect("the script serialises"),
     );
@@ -108,6 +108,69 @@ fn a_gh_pr_merge_is_judged_by_the_pr_head_not_the_launch_checkouts_head() {
         unreadable.contains("read-failed"),
         "an unreadable PR head was not refused as a failed read: {unreadable}"
     );
+}
+
+/// The merge boundary reads the CI release `release_ci` recorded for exactly
+/// the receipt the pointer holds: without one, or with one for another epoch of
+/// the same pull request, the merge is refused even though the PR head matches.
+#[test]
+fn a_gh_pr_merge_without_a_ci_release_for_the_exact_receipt_is_refused() {
+    let reviewed = "e".repeat(40);
+    for issue_view in [
+        issue_view_entry("review"),
+        released_issue_view_entry("review", &"9".repeat(32), &reviewed),
+    ] {
+        let rig = tracker_rig();
+        let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+        let pointer = serde_json::json!({
+            "run_id": "claude-abcd1234",
+            "issue": 12,
+            "revision": 1,
+            "state": "review",
+            "repo_dir": repo,
+            "worktree": serde_json::Value::Null,
+            "review_receipt": {
+                "epoch": "a".repeat(32),
+                "pr": 12,
+                "head": reviewed,
+                "base": "b".repeat(40),
+                "digest": "c".repeat(64),
+            },
+            "reviewed_head": serde_json::Value::Null,
+        });
+        std::fs::write(
+            home.join(".estigia")
+                .join("runs")
+                .join("claude-abcd1234.json"),
+            serde_json::to_string(&pointer).expect("the pointer serialises"),
+        )
+        .expect("the pointer is written");
+        let answers = serde_json::to_string(&serde_json::json!([
+            pr_view_entry(12, &reviewed),
+            issue_view,
+        ]))
+        .expect("the script serialises");
+        let (out, err, _) = run_with_tracker(
+            home,
+            repo,
+            bin,
+            &answers,
+            &[
+                "gate",
+                "Bash",
+                "--run-id",
+                "claude-abcd1234",
+                "--input",
+                r#"{"command":"gh pr merge 12"}"#,
+            ],
+            "",
+        );
+        let answered = format!("{out}{err}");
+        assert!(
+            answered.contains("merge-without-ci-release"),
+            "a merge with no CI release for the exact receipt was not refused: {answered}"
+        );
+    }
 }
 
 /// The floor a compound line's classification is measured against: a bare
@@ -1483,6 +1546,22 @@ fn release_ci_restores_a_receipt_for_a_run_that_did_not_publish_it() {
     .expect("the pointer is valid JSON");
     assert_eq!(pointer["review_transaction"]["epoch"], epoch, "{pointer}");
     assert_eq!(pointer["review_transaction"]["head"], head, "{pointer}");
+
+    let store = rusqlite::Connection::open(home.join(".estigia").join("state.db"))
+        .expect("the store opens");
+    let released: Vec<String> = store
+        .prepare("SELECT body FROM entries WHERE source = 'local' AND body LIKE '%issue-flow: ci-release %'")
+        .expect("the query prepares")
+        .query_map([], |row| row.get(0))
+        .expect("the query runs")
+        .filter_map(Result::ok)
+        .collect();
+    assert_eq!(released.len(), 1, "{released:?}");
+    assert!(
+        released[0].contains(&format!("epoch={epoch}"))
+            && released[0].contains(&format!("head={head}")),
+        "the CI release names another receipt: {released:?}"
+    );
 }
 
 /// A `warning` on the receipt is informational, so delivery does not wait on

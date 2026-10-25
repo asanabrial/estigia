@@ -309,7 +309,9 @@ CI interpretation and merge are not scripted. Releasing the exact reviewed draft
 and is the `release_ci` operation in github.md; deciding that the configured review evidence is sufficient
 remains with the agent because Estigia cannot observe whether the lenses ran or were blind.
 
-**Before `ci_status`, call `release_ci` with the latest reviewed receipt.** A compatible repository
+**Before `ci_status`, call `release_ci` with the latest reviewed receipt.** It records the release for
+that exact receipt, and the `gh pr merge` boundary refuses a merge whose receipt it never released,
+whichever route took the pull request out of draft. A compatible repository
 starts PR CI on `ready_for_review` and not on topic push, open, synchronize, or reopen; Estigia's own
 `.github/workflows/ci.yml` is the example. Any active workflow under `.github/workflows/` that accepts
 `workflow_dispatch` is a **publication lane** candidate: `publish_review` and `republish_review`
