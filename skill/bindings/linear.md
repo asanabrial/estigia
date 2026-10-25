@@ -35,11 +35,13 @@ GitHub integration links the draft pull request, which is that integration actin
 
 ## The credential
 
-The API key is read from the environment variable `LINEAR_API_KEY`, never from a configuration file
-somebody could commit. It should be read-only where Linear allows it, unless `State names` maps a
-state, which needs write access to issues. A missing or rejected
-credential, an unknown key, a finished issue, or an unreachable API stops the run before any
-repository write, and the refusal names which it was.
+Every operation goes through the `linear` CLI (schpet/linear-cli) as `linear api <operation>
+--variables-json <variables>`, the way GitHub goes through `gh`. The CLI holds the credential:
+the login `linear auth login` stored, or `LINEAR_API_KEY`, which it reads first. Estigia never reads
+or writes the key, and the workspace is the CLI's own choice. The credential should be read-only
+where Linear allows it, unless `State names` maps a state, which needs write access to issues. A
+missing CLI, a missing or rejected credential, an unknown key, a finished issue, or an unreachable
+API stops the run before any repository write, and the refusal names which it was.
 
 ## Moving a mapped state
 
@@ -64,16 +66,17 @@ with `State names` at `none` a read-only one is enough.
 
 Each stops the run before any repository write and names its reason:
 
-- `linear-credential-missing` — `LINEAR_API_KEY` is unset.
-- `linear-credential-rejected` — Linear refused the credential (401 or 403, or an authentication
-  error in the answer's `errors`).
+- `linear-cli-missing` — the `linear` program is not on `PATH`.
+- `linear-credential-missing` — the CLI holds no credential: no `linear auth login` and no
+  `LINEAR_API_KEY`.
+- `linear-credential-rejected` — Linear refused the credential (an authentication error in the
+  answer's `errors`).
 - `linear-team-mismatch` — the key's team is not the configured `<team-key>`.
 - `issue-not-open` — the issue's state type is `completed` or `canceled`.
-- `linear-credential-malformed` — the credential or the endpoint holds a quote, a backslash or a
-  control character the curl configuration cannot carry.
 - `linear-issue-unknown` — Linear knows no issue with that key.
-- `linear-unreachable` — the API could not be reached, or answered something that is not Linear's
-  JSON, or answered errors with no data.
+- `linear-unreachable` — the CLI failed without Linear's JSON (the API could not be reached, or it
+  did not answer within 30 seconds), answered something that is not Linear's JSON, or Linear
+  answered errors with no data.
 
 And one defect rather than an answer: `issue-has-no-number`, when a Linear key reaches an operation
 only a numbering tracker performs (every such operation is refused for Linear before it is reached).

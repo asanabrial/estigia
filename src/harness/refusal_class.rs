@@ -308,7 +308,7 @@ const REFUSED: &[&str] = &[
     "lens-finding-location-outside-the-diff",
     "lens-finding-location-required",
     "lifecycle-release-publication-failed",
-    "linear-credential-malformed",
+    "linear-cli-missing",
     "linear-credential-missing",
     "linear-credential-rejected",
     "linear-is-per-repository",
