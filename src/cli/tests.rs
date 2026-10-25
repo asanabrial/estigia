@@ -403,6 +403,7 @@ fn inventory() -> Vec<Refusal> {
         crate::harness::delivery_pr_unidentified(None),
         crate::harness::delivery_pr_repository_option(),
         crate::harness::complete_review_transaction_missing(54),
+        crate::harness::merge_without_ci_release(54),
         crate::harness::delivery_pr_mismatch(54, 55),
         crate::harness::complete_review_transaction_not_selected(),
         crate::harness::several_irreversible_fragments(&[

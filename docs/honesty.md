@@ -2034,7 +2034,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 39,572 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 39,751 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -6419,7 +6419,11 @@ pointer that leaves it names the document it points at.
   complete. Their refusals also invalidate that authority when the transport says a write committed
   or cannot exclude one; a conclusive pre-write or read-only refusal preserves it. Verdict and
   CI-release effects restore a supplied complete receipt atomically into a reviewer's pointer after a
-  handoff removed the publisher's pointer.
+  handoff removed the publisher's pointer. `gh pr merge` is also refused `merge-without-ci-release`
+  unless the local store holds a trusted `ci-release` marker for exactly the pointer's receipt,
+  which `release_ci` writes only over the basis it admits; the read is the issue's facts and then
+  the store read-only, and an unreadable one refuses. A marker is trusted as every other is: written
+  by this identity and never edited, so an imported comment carrying one counts the same.
   A `claim` restores one too: its answer carries the issue's newest publication under
   `review_transaction` when that publication is confirmed, stands approved and unescalated, and its
   pull request is open at the receipt's head with a base that is the receipt's or has advanced cleanly

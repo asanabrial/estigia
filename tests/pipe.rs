@@ -777,6 +777,32 @@ fn issue_answer(state: &str) -> String {
 /// Ordered ahead of any `issue view` entry it is combined with: `matches` is a
 /// substring test, and `pr view {pr}`/`issue view` never overlap, but a widened
 /// matcher added later should still see this one first.
+/// [`issue_view_entry`], with a `ci-release` marker for the receipt the merge
+/// pipe tests put in the pointer, under the given epoch.
+fn released_issue_view_entry(state: &str, epoch: &str, head: &str) -> serde_json::Value {
+    let mut entry = issue_view_entry(state);
+    let mut issue: serde_json::Value =
+        serde_json::from_str(entry["stdout"].as_str().expect("the view")).expect("json");
+    let marker = format!(
+        "<!-- issue-flow: ci-release encoding=pct run-id=claude-abcd1234 epoch={epoch} pr=12 \
+         head={head} base={} digest={} -->",
+        "b".repeat(40),
+        "c".repeat(64)
+    );
+    issue["comments"]
+        .as_array_mut()
+        .expect("comments")
+        .push(serde_json::json!({
+            "id": "IC_2",
+            "createdAt": "2026-01-01T00:01Z",
+            "viewerDidAuthor": true,
+            "includesCreatedEdit": false,
+            "body": format!("CI released.\n\n{marker}\n"),
+        }));
+    entry["stdout"] = issue.to_string().into();
+    entry
+}
+
 fn pr_view_entry(pr: u64, head_ref_oid: &str) -> serde_json::Value {
     let view = serde_json::json!({
         "number": pr,
