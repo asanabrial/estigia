@@ -137,45 +137,6 @@ pub(crate) fn with_process_env<T>(name: &'static str, value: &str, body: impl Fn
     answer
 }
 
-/// Run `body` with the Linear credential and endpoint set, and put both back.
-///
-/// The two variables the read-only Linear source reads, under the one lock for
-/// the same reason the setters above take it: `crate::transport::linear` reads
-/// them from the process environment, and a test on another thread must not see
-/// this window. `credential` of `None` stands for unset, which is the missing
-/// credential a refusal names.
-pub(crate) fn with_linear_env<T>(
-    credential: Option<&str>,
-    endpoint: &str,
-    body: impl FnOnce() -> T,
-) -> T {
-    let guard = ENVIRONMENT.lock().unwrap_or_else(PoisonError::into_inner);
-
-    let credential_var = crate::transport::linear::CREDENTIAL_VAR;
-    let endpoint_var = crate::transport::linear::ENDPOINT_VAR;
-    let saved = vec![
-        (credential_var, std::env::var_os(credential_var)),
-        (endpoint_var, std::env::var_os(endpoint_var)),
-    ];
-    let restore = RestoreEnvOnDrop { saved };
-    // SAFETY: `ENVIRONMENT` is the only lock over this process's environment,
-    // and this is the only writer of these two variables in this module, held
-    // for the whole of `body` — by `guard` on success, and by `restore`'s own
-    // `Drop` impl if `body` panics, which runs before `guard` is released
-    // either way. The source reads them only from inside `body`.
-    unsafe {
-        match credential {
-            Some(value) => std::env::set_var(credential_var, value),
-            None => std::env::remove_var(credential_var),
-        }
-        std::env::set_var(endpoint_var, endpoint);
-    }
-    let answer = body();
-    drop(restore);
-    drop(guard);
-    answer
-}
-
 /// Run `body` with `XDG_CONFIG_HOME` set, and put back what was there.
 ///
 /// An empty value stands for *absent*, which is what `absolute_or_none` already
