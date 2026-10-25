@@ -32,6 +32,7 @@ struct World {
 }
 
 fn commit(dir: &Path, file: &str, text: &str, message: &str) -> String {
+    std::fs::create_dir_all(dir.join(file).parent().expect("a parent")).expect("a directory");
     std::fs::write(dir.join(file), text).expect("a file");
     git(dir, &["add", file]);
     git(dir, &["commit", "--quiet", "-m", message]);
@@ -39,6 +40,10 @@ fn commit(dir: &Path, file: &str, text: &str, message: &str) -> String {
 }
 
 fn world(head_file: &str, head_text: &str) -> World {
+    world_over(&[], |dir| commit(dir, head_file, head_text, "topic"))
+}
+
+fn world_over(base_files: &[(&str, &str)], topic: impl FnOnce(&Path) -> String) -> World {
     let origin = tempfile::tempdir().expect("an origin");
     git(origin.path(), &["init", "--quiet", "--bare", "-b", "main"]);
     let work = tempfile::tempdir().expect("a checkout");
@@ -46,7 +51,10 @@ fn world(head_file: &str, head_text: &str) -> World {
     git(dir, &["init", "--quiet", "-b", "main"]);
     git(dir, &["config", "user.email", "nobody@example.invalid"]);
     git(dir, &["config", "user.name", "nobody"]);
-    let base = commit(dir, "a.txt", "one\n", "base");
+    let mut base = commit(dir, "a.txt", "one\n", "base");
+    for (file, text) in base_files {
+        base = commit(dir, file, text, "base file");
+    }
     git(
         dir,
         &[
@@ -58,7 +66,7 @@ fn world(head_file: &str, head_text: &str) -> World {
     );
     git(dir, &["push", "--quiet", "origin", "main"]);
     git(dir, &["checkout", "--quiet", "-b", "topic"]);
-    let head = commit(dir, head_file, head_text, "topic");
+    let head = topic(dir);
     let tree = git(dir, &["rev-parse", "HEAD^{tree}"]);
     let merge = git(
         dir,
@@ -106,7 +114,7 @@ struct Fake {
     delivery_auto: bool,
     language: String,
     stamp: Option<String>,
-    lane: (Value, bool),
+    lane: Value,
     checks: Result<Option<Value>, Value>,
     now: u64,
     evidence: RefCell<String>,
@@ -187,7 +195,7 @@ fn fake(world: &World) -> Fake {
         delivery_auto: true,
         language: "English".into(),
         stamp: None,
-        lane: (json!({"state": "running"}), false),
+        lane: json!({"state": "running"}),
         checks: Ok(Some(
             json!({"passed": true, "checks": [{"name": "suite", "exit": 0}]}),
         )),
@@ -246,7 +254,7 @@ impl Hands for Fake {
         Ok(self.stamp.clone())
     }
 
-    fn lane(&self, _receipt: &ReviewTransaction) -> (Value, bool) {
+    fn lane(&self, _receipt: &ReviewTransaction) -> Value {
         self.lane.clone()
     }
 
@@ -727,19 +735,13 @@ fn a_merged_pull_request_resumes_at_the_close_without_a_second_merge() {
 fn a_lane_with_no_ci_needs_the_appendix_and_carries_it_into_the_evidence() {
     let world = world("b.txt", "two\n");
     let mut without = fake(&world);
-    without.lane = (
-        json!({"state": "never-ran", "annotation": "no minutes left"}),
-        true,
-    );
+    without.lane = json!({"state": "never-ran", "annotation": "no minutes left"});
     let ran = drive(&without, &green_script(&world), &request());
     assert_eq!(stopped(&ran), ("ci", "appendix-required"));
     assert!(!merged_by_gh(&ran));
 
     let mut with = fake(&world);
-    with.lane = (
-        json!({"state": "never-ran", "annotation": "no minutes left"}),
-        true,
-    );
+    with.lane = json!({"state": "never-ran", "annotation": "no minutes left"});
     let given = Request {
         appendix: Some("cargo test: 4112 passed".into()),
         ..request()
@@ -913,7 +915,7 @@ fn the_live_merge_decision_is_the_gate_s_own_and_never_allows_a_run_that_holds_n
 fn a_lane_reading_not_consulted_still_reads_the_rollup_and_hands_back_red_ci() {
     let world = world("b.txt", "two\n");
     let mut held = fake(&world);
-    held.lane = (json!({"state": "not-consulted"}), true);
+    held.lane = json!({"state": "not-consulted"});
     let script = [pr_view(&world, json!([check("COMPLETED", "FAILURE")]))];
     let ran = drive(&held, &script, &request());
     assert_eq!(stopped(&ran), ("ci", "ci-red"));
@@ -931,7 +933,7 @@ fn a_lane_reading_not_consulted_still_reads_the_rollup_and_hands_back_red_ci() {
 fn an_empty_rollup_on_a_lane_not_consulted_delivers_without_waiting() {
     let world = world("b.txt", "two\n");
     let mut held = fake(&world);
-    held.lane = (json!({"state": "not-consulted"}), true);
+    held.lane = json!({"state": "not-consulted"});
     let mut script = green_script(&world);
     script[0] = pr_view(&world, json!([]));
     let ran = drive(&held, &script, &request());
@@ -989,4 +991,132 @@ fn a_checks_receipt_that_cannot_be_read_is_said_so_in_the_evidence() {
         evidence.contains("Declared checks receipt: could not be read"),
         "{evidence}"
     );
+}
+
+const CARGO: &str = "[package]\nname = \"x\"\nversion = \"1.0.0\"\n\n[dependencies]\na = \"1\"\nb = \"1\"\nc = \"1\"\nd = \"1\"\n";
+
+fn manifest_moved(base: &[(&str, &str)], topic: impl FnOnce(&Path) -> String) -> Ran {
+    let world = world_over(base, topic);
+    drive(&fake(&world), &green_script(&world), &request())
+}
+
+#[test]
+fn a_renamed_manifest_whose_version_changed_hands_back() {
+    let ran = manifest_moved(&[("old/Cargo.toml", CARGO)], |dir| {
+        std::fs::create_dir_all(dir.join("new")).expect("a directory");
+        git(dir, &["mv", "old/Cargo.toml", "new/Cargo.toml"]);
+        let bumped = CARGO.replace("1.0.0", "1.0.1");
+        std::fs::write(dir.join("new/Cargo.toml"), bumped).expect("a bump");
+        git(dir, &["add", "new/Cargo.toml"]);
+        git(dir, &["commit", "--quiet", "-m", "rename and bump"]);
+        git(dir, &["rev-parse", "HEAD"])
+    });
+    assert_eq!(stopped(&ran), ("version", "version-changed"));
+    assert_eq!(
+        ran.answer["stopped"]["manifests"][0]["path"],
+        "new/Cargo.toml"
+    );
+}
+
+#[test]
+fn a_renamed_manifest_with_the_same_version_passes() {
+    let ran = manifest_moved(&[("old/Cargo.toml", CARGO)], |dir| {
+        std::fs::create_dir_all(dir.join("new")).expect("a directory");
+        git(dir, &["mv", "old/Cargo.toml", "new/Cargo.toml"]);
+        git(dir, &["commit", "--quiet", "-m", "rename"]);
+        git(dir, &["rev-parse", "HEAD"])
+    });
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+}
+
+#[test]
+fn an_added_manifest_with_a_version_and_a_deleted_one_both_hand_back() {
+    let added = manifest_moved(&[], |dir| commit(dir, "Cargo.toml", CARGO, "add"));
+    assert_eq!(stopped(&added), ("version", "version-changed"));
+    assert_eq!(added.answer["stopped"]["manifests"][0]["from"], Value::Null);
+
+    let deleted = manifest_moved(&[("Cargo.toml", CARGO)], |dir| {
+        git(dir, &["rm", "--quiet", "Cargo.toml"]);
+        git(dir, &["commit", "--quiet", "-m", "delete"]);
+        git(dir, &["rev-parse", "HEAD"])
+    });
+    assert_eq!(stopped(&deleted), ("version", "version-changed"));
+    assert_eq!(deleted.answer["stopped"]["manifests"][0]["to"], Value::Null);
+}
+
+#[test]
+fn a_merge_that_answered_and_reads_open_is_unconfirmed_and_does_not_close() {
+    let world = world("b.txt", "two\n");
+    let held = fake(&world);
+    let script = [
+        pr_view(&world, json!([check("COMPLETED", "SUCCESS")])),
+        json!({"matches": "pr merge", "stdout": "", "status": 0}),
+        json!({"matches": "mergeCommit", "stdout": "{\"state\":\"OPEN\",\"mergeCommit\":null}", "status": 0}),
+    ];
+    let ran = drive(&held, &script, &request());
+    assert_eq!(stopped(&ran), ("merge", "merge-unconfirmed"));
+    assert!(!called(&held).contains(&"release".to_owned()));
+}
+
+#[test]
+fn a_failing_issue_close_is_delivery_incomplete() {
+    let world = world("b.txt", "two\n");
+    let held = fake(&world);
+    let mut script = green_script(&world);
+    script.retain(|entry| entry["matches"] != "issue view");
+    script.push(json!({"matches": "issue view", "stdout": "{\"state\":\"OPEN\"}", "status": 0}));
+    script.push(json!({"matches": "issue close", "stderr": "denied", "status": 1}));
+    let ran = drive(&held, &script, &request());
+    assert_eq!(ran.answer["ok"], false, "{}", ran.answer);
+    assert_eq!(ran.answer["delivered"], false);
+    assert_eq!(ran.answer["delivery_incomplete"]["step"], "issue-close");
+    assert!(called(&held).contains(&"release".to_owned()));
+}
+
+#[test]
+fn an_already_closed_issue_is_not_closed_again() {
+    let world = world("b.txt", "two\n");
+    let mut script = green_script(&world);
+    script.retain(|entry| entry["matches"] != "issue view");
+    script.push(json!({"matches": "issue view", "stdout": "{\"state\":\"CLOSED\"}", "status": 0}));
+    let ran = drive(&fake(&world), &script, &request());
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    assert!(
+        !ran.gh.iter().any(|line| line.starts_with("issue close")),
+        "{:?}",
+        ran.gh
+    );
+}
+
+#[test]
+fn an_unreadable_appendix_file_is_handed_back_before_anything_runs() {
+    let root = tempfile::tempdir().expect("a root");
+    let context = GateContext {
+        integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
+        flag: None,
+        stand_down: None,
+        skill_root: root.path().join("skill"),
+        repo_dir: root.path().to_path_buf(),
+        state_root: root.path().join("state"),
+        operation_window: Default::default(),
+        issue_requirement: crate::config::IssueRequirement::Off,
+        decision_mode: crate::config::DecisionMode::Ask,
+        workflow: Some(crate::config::Workflow::Autonomous),
+        window: crate::harness::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        repository_host: crate::config::RepositoryHost::Github { repo: None },
+        boundaries: Vec::new(),
+    };
+    let named = NamedRun {
+        id: "claude-abcd1234",
+        runtime: "claude",
+    };
+    let missing = root.path().join("absent.md").display().to_string();
+    let arguments = json!({"issue": 218, "run_id": "claude-abcd1234", "appendix_file": missing});
+    let result = deliver(&arguments, &context, Some(&named)).expect("an answer");
+    let text = result["content"][0]["text"].as_str().unwrap_or_default();
+    let answer: Value = serde_json::from_str(text).expect("JSON");
+    assert_eq!(answer["stopped"]["step"], "appendix", "{answer}");
+    assert_eq!(answer["stopped"]["reason"], "appendix-unreadable");
 }

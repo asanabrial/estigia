@@ -4585,6 +4585,10 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
          symbol family this change does not take",
     ),
     (
+        "base-unreadable",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
         "blocked-until",
         "a control marker kind (`markers::parse`), a symbol family beside the refusal codes rather \
          than one of them",
@@ -4719,6 +4723,10 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
          refusal codes",
     ),
     (
+        "merge-unknown",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
         "never-ran",
         "an answer value the read-only `publication_lane` operation reports, not a refusal code",
     ),
@@ -4791,6 +4799,14 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
         "target-run-mismatch",
         "a `ReclaimDiscard::as_str` condition a refusal carries, a distinct symbol family from the \
          refusal codes",
+    ),
+    (
+        "version-changed",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
+        "version-unreadable",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
     ),
 ];
 

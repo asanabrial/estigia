@@ -316,9 +316,11 @@ answering `stopped` with the `step`, a `reason` and `review_status`'s `next`. Th
 `receipt` (none held, or it moved), `review` (a verdict that is not `approved`, or a next that needs a
 context), `authorisation` (`Merge by` is not `agent`, or `Delivery authorisation` is not `auto`),
 `ci` (`ci-red`; `head-moved`; `ci-absent`, no check ten minutes after the release; `appendix-required`),
-`base` (`base-advanced`: the base moved and does not merge clean), `version` (a manifest version
-changed, so *Version tags* applies), `merge` (the gate's refusal, GitHub's, or a queue or approval
-rule that left it unmerged) and `close`. A step that has to wait answers `pending` with `ask_after`
+`base` (`base-advanced`: the base moved and does not merge clean; `base-unreadable`: the merge test
+itself failed), `version` (`version-changed`, so *Version tags* applies, a rename included;
+`version-unreadable`: a changed manifest could not be read), `merge` (the gate's refusal, GitHub's, or
+a queue or approval rule that left it unmerged; `merge-unknown`: no read-back answered, so the next
+call re-reads and never re-merges) and `close`. A step that has to wait answers `pending` with `ask_after`
 instead of blocking past 50 s. It reads the pull request's whole rollup as the required set, whatever the lane says (a
 `not-consulted` lane is no evidence CI does not run), though on that lane an empty rollup passes at once
 rather than waiting; only where the lane reads `disabled` or
