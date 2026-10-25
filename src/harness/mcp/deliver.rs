@@ -50,7 +50,7 @@ pub(super) trait Hands {
     fn settings(&self) -> Settings;
     fn release_stamp(&self, receipt: &ReviewTransaction) -> Result<Option<String>, Value>;
     fn lane(&self, receipt: &ReviewTransaction) -> (Value, bool);
-    fn checks_receipt(&self, receipt: &ReviewTransaction) -> Option<Value>;
+    fn checks_receipt(&self, receipt: &ReviewTransaction) -> Result<Option<Value>, Value>;
     fn scratch(&self) -> PathBuf;
     fn now(&self) -> u64;
 }
@@ -209,11 +209,16 @@ pub(super) fn package_version(text: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn manifest_version(path: &str, text: &str) -> Option<String> {
-    match path.rsplit('/').next()? {
-        "Cargo.toml" => cargo_version(text),
-        "package.json" => package_version(text),
-        _ => None,
+fn manifest_version(path: &str, text: &str) -> Result<Option<String>, ()> {
+    match path.rsplit('/').next() {
+        Some("Cargo.toml") => text
+            .parse::<toml_edit::DocumentMut>()
+            .map(|_| cargo_version(text))
+            .map_err(|_| ()),
+        Some("package.json") => serde_json::from_str::<Value>(text)
+            .map(|_| package_version(text))
+            .map_err(|_| ()),
+        _ => Ok(None),
     }
 }
 
@@ -487,13 +492,18 @@ impl<H: Hands> Deliver<'_, H> {
                 &["git", "merge-tree", "--write-tree", &tip, &receipt.head],
                 How::tolerated(),
             )
-            .map_err(|failure| failed("base", "base-advanced", &failure))?;
+            .map_err(|failure| failed("base", "base-unreadable", &failure))?;
         if merge.status == 0 {
             return Ok(());
         }
+        let reason = if merge.status == 1 && !merge.stdout.trim().is_empty() {
+            "base-advanced"
+        } else {
+            "base-unreadable"
+        };
         Err(stop(
             "base",
-            "base-advanced",
+            reason,
             json!({
                 "tip": tip,
                 "reviewed_base": receipt.base,
@@ -506,22 +516,33 @@ impl<H: Hands> Deliver<'_, H> {
         let changed = self.git(
             "version",
             "version-unreadable",
-            &["diff", "--name-only", &receipt.base, &receipt.head],
+            &["diff", "--name-status", &receipt.base, &receipt.head],
         )?;
         let mut moved = Vec::new();
-        for path in changed
-            .lines()
-            .filter(|path| matches!(path.rsplit('/').next(), Some("Cargo.toml" | "package.json")))
-        {
+        for line in changed.lines() {
+            let (status, path) = line.split_once('\t').unwrap_or_default();
+            if !matches!(path.rsplit('/').next(), Some("Cargo.toml" | "package.json")) {
+                continue;
+            }
             let at = |revision: &str| {
                 let spec = format!("{revision}:{path}");
-                self.hands
-                    .exec(&["git", "show", &spec], How::tolerated())
-                    .ok()
-                    .filter(|output| output.status == 0)
-                    .and_then(|output| manifest_version(path, &output.stdout))
+                let shown = self.hands.exec(&["git", "show", &spec], How::tolerated());
+                let read = match &shown {
+                    Ok(output) if output.status == 0 => manifest_version(path, &output.stdout),
+                    _ => Err(()),
+                };
+                read.map_err(|()| stop("version", "version-unreadable", json!({"path": path})))
             };
-            let (before, after) = (at(&receipt.base), at(&receipt.head));
+            let before = if status == "A" {
+                None
+            } else {
+                at(&receipt.base)?
+            };
+            let after = if status == "D" {
+                None
+            } else {
+                at(&receipt.head)?
+            };
             if before != after {
                 moved.push(json!({"path": path, "from": before, "to": after}));
             }
@@ -563,6 +584,7 @@ impl<H: Hands> Deliver<'_, H> {
             Err(failure) => Some(failure.detail()),
         };
         let branch = view["baseRefName"].as_str().unwrap_or_default().to_owned();
+        let mut read = false;
         for attempt in 0..READBACK_ATTEMPTS {
             if attempt > 0 {
                 std::thread::sleep(self.request.readback_pause);
@@ -570,6 +592,7 @@ impl<H: Hands> Deliver<'_, H> {
             let Ok(seen) = self.read_pr("merge", receipt, MERGED_FIELDS) else {
                 continue;
             };
+            read = true;
             if let (Some("MERGED"), Some(sha)) =
                 (seen["state"].as_str(), seen["mergeCommit"]["oid"].as_str())
             {
@@ -580,6 +603,14 @@ impl<H: Hands> Deliver<'_, H> {
                     parents,
                 });
             }
+        }
+        if !read {
+            let detail = "the outcome could not be read and may have landed: deliver again re-reads it and never re-merges";
+            return Err(stop(
+                "merge",
+                "merge-unknown",
+                json!({"landed": null, "detail": detail}),
+            ));
         }
         Err(match refusal {
             Some(said) => stop(
@@ -743,7 +774,10 @@ impl<H: Hands> Deliver<'_, H> {
                 "verdict",
                 json!({"pr": receipt.pr, "head": receipt.head, "base": receipt.base, "digest": receipt.digest}),
             ),
-            checks: self.hands.checks_receipt(receipt),
+            checks: self
+                .hands
+                .checks_receipt(receipt)
+                .unwrap_or_else(|refusal| Some(json!({"unavailable": refusal["code"]}))),
             ci: ci.clone(),
             spend: self.request.spend.clone(),
             appendix: self.request.appendix.clone(),
@@ -886,6 +920,9 @@ pub(super) fn evidence(facts: &Facts) -> String {
             .to_owned()
     });
     let checks = match &facts.checks {
+        Some(recorded) if recorded.get("unavailable").is_some() => {
+            "could not be read; unknown whether one was recorded".to_owned()
+        }
         Some(recorded) => format!(
             "{} ({})",
             if recorded["passed"] == true {
@@ -1055,17 +1092,14 @@ impl Hands for Live<'_> {
         (lane, next == "merge")
     }
 
-    fn checks_receipt(&self, receipt: &ReviewTransaction) -> Option<Value> {
-        let issue = session::load(&self.context.state_root, self.run_id).issue_number()?;
-        let worktree = session::load(&self.context.state_root, self.run_id).worktree;
-        transport::claim::checks_receipt_summary(
-            &self.transport,
-            issue,
-            receipt,
-            worktree.as_deref(),
-        )
-        .ok()
-        .flatten()
+    fn checks_receipt(&self, receipt: &ReviewTransaction) -> Result<Option<Value>, Value> {
+        let held = session::load(&self.context.state_root, self.run_id);
+        let Some(issue) = held.issue_number() else {
+            return Ok(None);
+        };
+        let worktree = held.worktree.as_deref();
+        transport::claim::checks_receipt_summary(&self.transport, issue, receipt, worktree)
+            .map_err(|failure| failure.envelope())
     }
 
     fn scratch(&self) -> PathBuf {

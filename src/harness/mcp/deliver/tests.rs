@@ -107,6 +107,7 @@ struct Fake {
     language: String,
     stamp: Option<String>,
     lane: (Value, bool),
+    checks: Result<Option<Value>, Value>,
     now: u64,
     evidence: RefCell<String>,
 }
@@ -187,6 +188,9 @@ fn fake(world: &World) -> Fake {
         language: "English".into(),
         stamp: None,
         lane: (json!({"state": "running"}), false),
+        checks: Ok(Some(
+            json!({"passed": true, "checks": [{"name": "suite", "exit": 0}]}),
+        )),
         now: NOW,
         evidence: RefCell::new(String::new()),
     }
@@ -246,8 +250,8 @@ impl Hands for Fake {
         self.lane.clone()
     }
 
-    fn checks_receipt(&self, _receipt: &ReviewTransaction) -> Option<Value> {
-        Some(json!({"passed": true, "checks": [{"name": "suite", "exit": 0}]}))
+    fn checks_receipt(&self, _receipt: &ReviewTransaction) -> Result<Option<Value>, Value> {
+        self.checks.clone()
     }
 
     fn scratch(&self) -> PathBuf {
@@ -921,4 +925,50 @@ fn a_lane_reading_not_consulted_still_reads_the_rollup_and_hands_back_red_ci() {
 
     let ran = drive(&held, &green_script(&world), &request());
     assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+}
+
+#[test]
+fn a_merge_whose_every_readback_fails_is_unknown_not_refused() {
+    let world = world("b.txt", "two\n");
+    let held = fake(&world);
+    let script = [
+        pr_view(&world, json!([check("COMPLETED", "SUCCESS")])),
+        json!({"matches": "pr merge", "stderr": "reset", "status": 1}),
+        json!({"matches": "mergeCommit", "stderr": "boom", "status": 1}),
+    ];
+    let ran = drive(&held, &script, &request());
+    assert_eq!(stopped(&ran), ("merge", "merge-unknown"));
+    assert!(ran.answer["stopped"]["landed"].is_null());
+    assert!(!called(&held).contains(&"release".to_owned()));
+}
+
+#[test]
+fn an_unparsable_manifest_is_not_an_unchanged_version() {
+    for (file, text) in [("Cargo.toml", "[package\n"), ("package.json", "{not json")] {
+        let world = world(file, text);
+        let ran = drive(&fake(&world), &green_script(&world), &request());
+        assert_eq!(stopped(&ran), ("version", "version-unreadable"));
+    }
+}
+
+#[test]
+fn a_merge_tree_that_fails_is_unreadable_not_an_advanced_base() {
+    let mut world = world("b.txt", "two\n");
+    advance_base(&world, "c.txt", "elsewhere\n");
+    world.head = "f".repeat(40);
+    let ran = drive(&fake(&world), &green_script(&world), &request());
+    assert_eq!(stopped(&ran), ("base", "base-unreadable"));
+}
+
+#[test]
+fn a_checks_receipt_that_cannot_be_read_is_said_so_in_the_evidence() {
+    let world = world("b.txt", "two\n");
+    let mut held = fake(&world);
+    held.checks = Err(json!({"code": "read-failed"}));
+    drive(&held, &green_script(&world), &request());
+    let evidence = held.evidence.borrow();
+    assert!(
+        evidence.contains("Declared checks receipt: could not be read"),
+        "{evidence}"
+    );
 }
