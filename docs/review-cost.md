@@ -1,711 +1,221 @@
 # What a review costs, and what actually spends it
 
-The question was whether Estigia's blind-review panel is expensive because its judges are slow
-readers, or for some other reason. This measures it: two panels, four judges, one review target,
-launched concurrently on 2026-08-30 by `claude-ac6d2184b9c7fca3`, design fixed before either panel
-ran. Two measurements are recorded here: this one, which compares two briefs inside this
-repository, and a second below, which compares this repository's panel against the other
-project's own binary.
+Ordinary review acquires lenses only; Judgment Day is the opt-in that acquires judges. A review's
+forecast counts lenses alone. This document holds what each piece of that costs, the method for
+measuring it again, and one result table per question. The limits of every measurement are in the
+last section, so a figure and the reason to distrust it are read together.
 
-Ordinary review no longer acquires judges: it licenses lenses only, and Judgment Day is
-the opt-in. The judge and panel figures below are measured history of the shape that preceded it,
-and they stay as measured; what a lens costs is measured in the sections on lenses. A review's
-forecast counts lenses alone.
-
-It is one document in [the reference set](README.md); the rows this measures are in
+It is one document in [the reference set](README.md); the rows it measures are in
 [`configuration.md`](configuration.md), and [`honesty.md`](honesty.md) says what the recording cannot
 count.
 
-**What was under review**, identical for every judge. This is not a review transaction in this
-repository's own sense — `skill/references/repository-delivery.md`'s *Publish, review, and verify*
-section defines that as epoch,
-PR, head, base, target digest and payload digest, and no epoch was reachable here: the PR was
-already merged before this measurement ran.
+## What spent the cost of a panel: grading, not reading
 
-| | |
-|---|---|
-| Pull request | "Let the gate see the worktree a call names" |
-| Base | `883864e8261fa93eadd94390e4f38a768fd3ee9a` |
-| Head | `39ffe43ca68d6ab3e27f6137f0069e5b73e69355` |
-| Size | 5 files, 796 insertions, 54 deletions |
-
-Chosen because it is the change the question already argues from: four publications and eight blind
-judges on three rejections with no code defect ever found, and a diff that mixes code and prose,
-which is the axis the grading question turns on.
-
-## The result that inverts the premise
+Two panels of two judges each reviewed one change (5 files, 796 insertions, 54 deletions), launched
+concurrently on 2026-08-30 with the design fixed before either ran. Arm E was the installed
+`review-blind` definition; Arm C was the comparison project's rubric pasted into an `analyst` carrier.
 
 | | tokens | tool uses | panel latency (concurrent) | summed judge time | findings (summed) | severe (identities) |
 |---|---|---|---|---|---|---|
-| Arm E — `review-blind`, the definition `estigia setup` installs | 291,408 | 69 | 558.1 s | 1078.7 s | 17 | 1 |
-| Arm C — the comparison rubric, pasted into an `analyst` carrier | 268,162 | 72 | 491.0 s | 912.8 s | 4 | 0 |
+| Arm E | 291,408 | 69 | 558.1 s | 1078.7 s | 17 | 1 |
+| Arm C | 268,162 | 72 | 491.0 s | 912.8 s | 4 | 0 |
 | **E / C** | **+8.7%** | −4% | **+13.7%** | +18.2% | 4.25x | 1 vs 0 |
 
-Per judge: E1 133,651 tok / 520.6 s; E2 157,757 tok / 558.1 s; C1 127,021 tok / 491.0 s; C2
-141,141 tok / 421.8 s. These are what the agent harness's own completion report returned for each
-launched judge at the moment it finished — token count, tool-use count and duration in
-milliseconds — not a reconstruction from a retained transcript; no artifact of the measurement is
-kept in this repository (see `docs/honesty.md`).
+The figures are what the agent harness's completion report returned for each judge. The panels came
+within nine percent on tokens and fourteen on latency against a 4.25x difference in what they
+reported, so the judges were not slower readers. What spent the cost was grading: both Arm E judges
+filed the one behavioural finding `severe`, the only class that blocks, and a block forces a
+republish that invalidates every verdict and pays the full panel again. The multiplier is the round
+count, and the grading sets the round count. Every prose finding in Arm E came back `warning` or
+`suggestion`, so the documentation rule was not what made the review expensive. The judges used
+`severe` as an escalation channel because no choosing rule reached them; that rule now lives in
+`skill/agents/review-blind.md`, and the policy keeps it because the definition is installed on
+Claude Code alone.
 
-**The two panels came within nine percent on tokens and fourteen on latency, against a 4.25x
-difference in what they reported.** What that does not show is a judge reading more slowly under
-one brief than the other.
+## Against the other project's own binary
 
-A severe finding forces a republish, and a republish invalidates every verdict and restarts the
-panel — a verdict could be `rejected` only over a `severe` finding (the verdict has since become
-computed from the ledger, so the rule is the ledger's now), and the next round
-pays the full panel again. Arm E produced one severe finding: E1 and E2 independently recorded a
-severe finding with the same identity, E2's version carrying an extra limb E1 did not raise, and
-under the `Blind judges: two blind` row this repository carried at the time, both judges confirming a
-severe finding with the same identity is what blocks and buys a repair round. Arm C produced none and would have approved on the same
-bytes. One round of Arm E costs 291,408 tokens; a rejection forces the next round to pay that
-again, and this change paid a full panel four times over. The multiplier is the round count, and the
-round count is set by grading, not by reading speed.
-
-## What each panel found, and how each panel graded it
-
-Both arms read the same bytes. Separating what a judge noticed from what class it gave the fact is
-the whole of what follows.
-
-### The finding that decides it
-
-The change's third acceptance criterion: *"A call naming a directory covered by another run's
-pointer is refused."* The test that asserts it passes a `--run-id`; at the time, the only shipped
-caller passed none, so the criterion was satisfied only on a road no shipped adapter took. A later change gave the shipped adapter a derived identity from the host's session id, so it takes that
-road when the host supplies one.
-
-| Judge | Arm | What it did with that fact |
-|---|---|---|
-| E1 | E | **severe** — would block delivery |
-| E2 | E | **severe** — would block delivery |
-| C1 | C | did not raise it |
-| C2 | C | raised it in its `evidence` array, explicitly declined to file it as a finding: disclosed in `docs/honesty.md` and the PR body, consistent with the operator's recorded invariant, therefore "an accepted trade rather than an undisclosed defect" |
-
-Three of four judges reached the same reading of the same bytes. Under Estigia's rubric, both
-judges confirming a severe finding with the same identity blocks, and the change is rejected.
-Under the comparison rubric it is not a finding at all and the change is approved. Nothing about
-the bytes explains the difference — the brief does. That claim has a bound: these are the same
-bytes this repository's own two-blind panel accepted for real, merging the PR as `fb0fd04`, so
-judge-to-judge variance inside one brief is at least as consistent with the split above as a
-difference between briefs is — bounded in turn by the judge definition having changed between
-that panel and this one, so the two readings are not of quite the same brief either.
-
-### A second split, finer-grained
-
-The PR body describes `held_by_a_pointer` as reading `repo_dir` and `worktree`; the shipped
-function reads `worktree` only, and one of the change's own tests exists to refuse the `repo_dir`
-reading. Three judges raised this and split into two classes: C1 **WARNING**; C2 **SUGGESTION**
-and E1 **suggestion** agree. Same defect, two classes, inside one arm — worth keeping on its own,
-because it means the comparison rubric does not eliminate grading variance either; it only changes
-where the variance lands.
-
-### Where the panels agreed
-
-The stale "before this fix" doc comments on added tests — describing a base state that never
-existed, since the behaviour they name belongs to an intermediate draft of the same PR — were
-raised by E1 (**warning**) and C1 (**WARNING**). Identical grade under both briefs.
-
-This matters for cause 1 below: Estigia's judges did not over-grade prose. Every prose finding in
-Arm E came back `warning` or `suggestion` — the class `skill/policies/blind-judges.md`'s *What a finding is*
-prescribes — from judges that never received that document (it is routed to the orchestrator, not
-the judge; see "Where the rule lives" below). The over-grading was on the one finding that was
-about *behaviour*, not on any of the prose.
-
-The severity-choosing rule was withheld from the judge prompts by design, fixed before either
-panel launched, not a gap noticed afterward.
-
-## Why Arm E graded the behavioural finding severe, in the judge's own words
-
-E1, justifying its class:
-
-> "I raise it `severe` rather than `warning` only because the criterion is explicit, the surface is
-> a delivery boundary, and this is the class that reaches the operator for a ruling."
-
-It added: "A recommendation exists and does not require a code round." E2 landed in the same place
-independently: "Whether criterion 3 is waived is an operator call, not mine — I am flagging it,
-not deciding it."
-
-Neither judge was misapplying a rubric it had. The definition as it then read gave it three words
-and a consequence, and no criterion for choosing between them. Each judge used `severe` as
-an escalation channel, because `severe` is the only class that blocks. That is a sharper
-statement of the defect than its report carried: the missing choosing rule does not merely let a prose
-finding block. It collapses two distinct needs — *this is a defect* and *a human must decide this*
-— into one word, and the word costs a full repair round. Both judges wanted to escalate without
-blocking, and the vocabulary had no way to say that.
-
-## Where the rule lives, and where it is not routed
-
-> [!NOTE]
-> **This section measures the tree as it stood at the time of the measurement, before the choosing rule was added.**
-> Every `skill/agents/review-blind.md` and `skill/policies/blind-judges.md` coordinate below is
-> that tree's: the definition now carries the choosing rule,
-> and the policy keeps it because the definition is installed on Claude Code alone. The finding
-> this section reports is what produced the choosing rule; it is not a claim about the tree you are reading.
-
-The three class names are stated in more than one place — `skill/bindings/github.md`'s own
-`review_finding` row is among them; the linear and trello bindings carry no such definition.
-Where they live is not the point; that no choosing criterion reaches the judge from any of them is.
-The policy then gave a criterion for choosing between `warning` and
-`suggestion` scoped to one kind of finding — a mismatch between prose and behaviour, not the
-behavioural defect this measurement's severe finding turned on. Neither it nor the cosmetic criterion beside it reached the judge. That file is routed to the orchestrator —
-`skill/SKILL.md` lists it in the References table the orchestrating run reads on activation —
-and the judge never activates the skill: its own definition states that its starting context is
-only this definition and the launch prompt — a sentence the choosing-rule change left standing — which does not
-include the skill's reference table. The judge's own definition gave no criterion for choosing
-between the three classes for any kind of finding.
-
-The comparison project, as measured at `a537c63e` (at `v4.0.0` `internal/components/sdd/` is gone and
-`jd-judge-a.md`'s severity floor ships as written, at line 45, with no render step to delete it),
-states the equivalent rule inside its rendered judge prompt, which is the difference that matters: two spans of `internal/components/sdd/boundedreview.go` tell a
-judge, in its own context, what does not rise to a finding at all and what cannot block. It also
-carries the same defect one layer along — its own strongest statement of the rule
-(`internal/assets/claude/agents/jd-judge-a.md:45`) is deleted at render
-(`internal/components/sdd/boundedreview.go:182-198`), so it too ships a severity rule no judge
-receives; it merely keeps a weaker one that survives. Neither project routed its best severity
-rule to its judges. The comparison routes a lesser one; Estigia routed none — a sharper result
-than "the other panel is faster", and a structural one, not an impression. That is what the choosing-rule change
-changed, and only for the one adapter that installs the definition.
-
-A different asymmetry turns out, on inspection, to be symmetric: the comparison project presents
-four severity classes to every judge, but its own gate
-(`internal/reviewtransaction/transaction.go:1621-1632`) reads only two — nothing anywhere
-distinguishes its other two from each other. Estigia's gate does the same to its own three:
-nothing distinguishes `warning` from `suggestion`, which carry identical cost in the policy's own
-table — "Recorded beside the verdict; never withdraws an acceptance" against "The same"
-(`skill/policies/blind-judges.md`, *What a finding is*). Both projects hand a judge more classes than their
-gate distinguishes; that is a fact true of both, not an asymmetry between them.
-
-A further asymmetry bears on how the two verdicts should be weighed against each other at all: the
-comparison project's own panel "carries no delivery authority" (its `judgment-day/SKILL.md:24`),
-where Estigia's verdict releases CI and gates delivery. The two panels are not staking the same
-thing on a `severe` call, so this measurement compares brief-plus-carrier cost and grading, not
-authority-for-authority.
-
-## Which of the issue's four causes this measurement can and cannot distinguish
-
-The issue named four candidate explanations. This measurement settles two, refutes one, and cannot
-reach the fourth.
-
-1. **No shared severity rubric — confirmed, and it is the dominant cause.** Established
-   structurally (no criterion for choosing between the three classes reaches the judge for any
-   kind of finding, general or scoped — see above) and now behaviourally: the same fact is
-   severe under one brief and not a finding at all under the other. It has
-   a rival worth naming: this repository's own two-blind panel accepted the PR's exact bytes
-   for real, merging them as `fb0fd04`, so judge-to-judge variance within one brief is at least
-   as consistent with that as a brief-to-brief difference is. That rival is itself bounded — the
-   judge definition changed between the change's own panels and this measurement, so the panel that
-   merged the PR and Arm E did not read under quite the same brief either.
-2. **`reading` as the evidence standard — confirmed as stated, and it is symmetric.** All four
-   judges ran read-only and all four disclosed it. For Arm E that disclosure was compelled
-   rather than volunteered: `src/setup/mod.rs` appends `VERDICT_BASIS_REQUIREMENT`
-   (`src/skill.rs`) to every rendered judge regardless of evidence standard, and
-   `skill/policies/judgment-day.md`'s *What a judge's closing statement must report* asks a `reading` judge by name for "the plain
-   statement that it executed nothing." Arm C's brief asked for what was inspected and not for
-   what was executed, so those two disclosed without being asked. The standard cannot explain a
-   *difference* between the arms, because both arms had it.
-3. **The author — not measured, and out of this design's reach.** Arm E's rejection would have
-   bought a repair round; this measurement stopped before the repair, so whether a fix in one file
-   is left unrepaired in the next is neither reproduced nor refuted here.
-4. **This repository's documentation rule making prose a defect — refuted as an explanation of the
-   cost.** It predicts Estigia's judges rejecting on prose. They did not: every prose finding in
-   Arm E was non-blocking. The severe finding was about behaviour at a delivery boundary. The
-   rulebook asymmetry named in `AGENTS.md`'s documentation-currency rule (`AGENTS.md`) is real,
-   but it is not what makes a review expensive here — the missing choosing rule is.
-
-## What the first measurement cannot settle
-
-`docs/honesty.md`'s review-cost entry carries the limits on this measurement.
-
-## Conclusion
-
-Estigia's judges weighted this review target correctly on the axis this repository is strict
-about: every prose finding came back `warning` or `suggestion` — and after a later change, incorrect or
-stale comments and documentation are **never `severe`**, so those grades match the rulebook even
-from judges that never received it. What would force a repair round here was one behavioural
-finding pushed to `severe` because `severe` is the only class that blocks. That is not a rubric to
-loosen. The fix this measurement points at is the one already filed: a criterion for
-choosing between `severe` and `warning`, and a way to escalate a judgment call to the operator
-without spending a repair round to do it.
-
-## A second measurement: the other system, not its rubric
-
-The measurement above ran two arms, and **both were Estigia agents** — Arm E the installed
-`review-blind` definition, Arm C that comparison rubric pasted into an `analyst` carrier. It compared
-briefs. This one compares systems: C's own binary, built from source and run against a review
-transaction this repository produced.
-
-It also names an epoch, which the first measurement records it could not. It does not reproduce both
-digests that definition asks for: the target digest is below, the payload digest is not.
-
-| | |
-|---|---|
-| Epoch | `2cbde7ffe09ff262d07cd885087520f7` |
-| PR | 167 |
-| Head | `61e50ae3d490eac097b56d850c61a86e876841a0` |
-| Base | `298936559023856ef100f9b229aab72001b1ec1d` |
-| Target digest | `c6a9823d96e9df75875fc124f1e7744946c6a8ff479e3e231fe32053e898edec` |
-| Size | 12 files, 2,199 changed lines by C's own count |
-| Measured against | that project at `a537c63e`, re-confirmed at `4db804e5` |
-
-Run on 2026-08-30 by `claude-9ac42328ad6a45a2`, against two independent throwaway clones so the
-classification was reproduced rather than observed once.
-
-**Which version.** The first pass ran against `a537c63e`, 3,003 commits behind that project's `main`,
-in a checkout whose directory name said "latest". Every figure here was re-taken against `4db804e5`,
-its `main` the same day, and the classifier answered identically. Four things were compared across
-that range and all four unchanged: `internal/reviewtransaction/risk.go` and
-`internal/reviewerprovider/contract.go`, byte-identical; and the constants
-`MaxCompactCorrectionAttempts` and `MaxFrozenCandidateDiffBytes`. The first pass recorded no commit at
-all, and that is why this one does.
-
-### The tier this candidate got is a false positive
-
-C answered `high` and selected four lenses. The signal it fired on does not describe the file it names.
-
-The stated reason was *"this change gets a deeper review because it touches code that starts other
-processes in `tests/honesty.rs`"*. The recorded `risk_reasons` are
-`{"code":"process_boundary","signal":"shell_process","path":"tests/honesty.rs"}` — a **content scan**,
-not the hot-path signal. That scan is a `git grep` for
-
-```
-(^#!)|((^|[^[:alnum:]_])(subprocess|execute_process|exec)([^[:alnum:]_]|$))
-```
-
-`tests/honesty.rs` is `#![allow(clippy::unwrap_used, clippy::expect_used)]`, a Rust crate-level
-inner attribute whose first two bytes are a shebang's, and which the first alternative matches.
-`hasHighSignal` returns true for any signal, so one match carries the whole candidate to the top tier.
-
-What was checked in that file, at **this** repository's head rather than at the head C scanned:
-`Command::new`, `.spawn(` and `process::` return nothing; `spawn` appears twice in
-`tests/honesty.rs`, inside assertion strings; no `subprocess`, `execute_process` or standalone `exec` appears.
-Which line C's own grep matched is not in its recorded output, and the clones are deleted.
-
-Absent that signal the candidate carries no other and is not passive-only, so it classifies `medium`
-and takes one lens. **That corrected figure is derived from reading C's source, not observed** — no run
-produced it. Every figure below depending on the lens count is given both ways.
-
-### What C decides before any model is called
-
-C classifies risk and selects reviewers deterministically, in Go, and publishes the result in a
-consent prompt. Against this candidate, twice, on two separate clones:
+Run on 2026-08-30 against that project at `a537c63e`, re-confirmed at `4db804e5`, on a review
+transaction this repository produced (PR 167, head `61e50ae3`, base `29893655`, 12 files, 2,199
+changed lines by its own count). Its risk classifier is deterministic Go that runs before any model is
+called, and the reviewer it launches has no tools: the whole candidate patch is in the prompt.
 
 | | as answered | as derived |
 |---|---|---|
 | `risk_level` | `high` | `medium` |
 | lenses | four | one |
-| `correction_budget` | 200 lines | 200 lines |
-| corrections permitted | 1 | 1 |
+| prompt bytes per lens | 158,056 to 158,102 | ~158,000 |
+| four-lens total | 632,309 | — |
+| `correction_budget` / corrections permitted | 200 lines / 1 | 200 lines / 1 |
 
-**Size did not choose the tier.** `ClassifyRisk` takes a signal or hot-path hit first, and its own
-comment says *"Change volume, file count, model, provider, profile, and effort are intentionally not
-classifier inputs"*; `CountChangedLines` runs anyway and *"its result deliberately does not reach the
-decision"*. The 2,199 lines are reported and unused.
+The answer `high` is a false positive: a content scan matched the crate-level inner attribute
+`#![allow(...)]` at the top of `tests/honesty.rs` as a shebang. The `medium` column is derived from
+its source, not observed. Change size never chooses its tier: line counts are computed and unused.
 
-**A tier with no reviewer exists.** `SelectReviewLenses` answers `RiskLow` with `[]string{}` — zero
-lenses, no model call — reached when every authored path is passive content and no configuration is
-touched. Passive is computed from candidate bytes, not declared by the caller.
+What follows from the table:
 
-That tier would not have covered this change, and it would not cover this repository's `skill/`
-either: `isOperationalMarkdownPath` walks every segment of the path, not the filename alone, and
-excludes any segment tokenising to `skill`, `agent`, `prompt`, `instruction` or `workflow` — so the
-leading `skill/` disqualifies the whole tree, on the stated grounds that such documents *"are consumed
-as instructions rather than read as prose"*. It would cover `docs/`, `README.md` and `CHANGELOG.md`.
+- **Bytes against tokens.** At four bytes per token, an assumption and not a measurement, 632,309
+  bytes is roughly 158,000 tokens, about one Estigia judge, and one lens is about a quarter of one.
+  Three of the six judges on the issue's receipts reported 147,249, 178,100 and 171,667 tokens when
+  each was handed a checkout to search; under the payload-first shape the same harness reported
+  121,973 and 145,840, and later 105,250 and 97,485. Which shape a figure came from is part of the
+  figure. The orchestrator hands a judge the receipt's payload as primary evidence, see
+  [judgment day](../skill/policies/judgment-day.md).
+- **A tier with no reviewer exists there too.** Its `low` answers zero lenses when every authored
+  path is passive content. Anything under a `skill`, `agent`, `prompt`, `instruction` or `workflow`
+  segment is not passive there, so this repository's `skill/` would not qualify; `docs/`, `README.md`
+  and `CHANGELOG.md` would.
+- **Bounding the rounds.** That project allows one correction, capped at
+  `min(200, ceil(originalChangedLines / 2))`. Here a lineage gets the corrections the
+  `Corrections per lineage` row allows (default 3), and `publish_review` refuses the next as
+  `correction-already-spent` before anything is pushed. `correction_budget_check` refuses a repair
+  whose cumulative changed lines exceed the frozen budget, matching their formula. A round over an
+  honest correction range hands each lens and the refuter only `parent-head..head`; a round whose
+  range is not honest (`delta-range-reason` recorded) hands the whole target again. The targeted
+  validator reads a correction beside the tier's lenses rather than instead of them, so the saving a
+  correction buys there is not bought here. Their maintainer-authorised successor lineage is
+  `estigia recover`, a person's command: a recovered change pays a full new review and never at a
+  lower tier than the lineage it replaces. `review_tier`'s `raise` can lift a tier to `high` and
+  never lower it, see [`operations.md`](../skill/bindings/github/operations.md).
 
-### What each side sends a reviewer
-
-C materialises the whole candidate patch into the prompt and forbids the reviewer from reading
-anything else — *"Do not read the working tree, the index, HEAD, or any other file, and do not run any
-command."* The reviewer process is launched with no tools.
-
-| lens | bytes |
-|---|---:|
-| `review-risk` | 158,056 |
-| `review-resilience` | 158,070 |
-| `review-readability` | 158,102 |
-| `review-reliability` | 158,081 |
-| **four-lens total, as answered** | **632,309** |
-| **one lens, as derived** | **~158,000** |
-
-The one-lens figure is rounded because which lens a `medium` tier selects was never observed; the four
-measured prompts span 46 bytes. `review_tier` now names it: the `focus` argument, `reliability` by
-default, as in the source project.
-
-`review_tier` also takes a `raise`: one of six risk items (`authorization`, `migration`,
-`input`, `concurrency`, `irreversibility`, `contract`) with a reason. A raise lifts
-the tier to `high` and cannot lower it, so it can only buy the four lenses above where the diff signals
-bought fewer; the answer keeps the derived tier as `computed_level` and echoes the item and reason.
-`focus_reason` is echoed beside a `focus` the same way. `review_tier` itself
-is read-only and stores nothing; `publish_review` and `republish_review` take the same declaration and record the
-raise, its reason, the focus, its reason and the computed tier on the published marker, which `review_read` with
-`view: transaction` answers. The tier the gate derives (`review_status`, the computed verdict, `release_ci`) takes the
-larger of the diff's tier and `high` when a recorded raise names one of the six items, so a raise buys the four lenses
-and never fewer; the lens counts per tier are unchanged. The limit is that a raise is a caller's word: it can add
-review and nothing checks that the item applies. [`honesty-review-tier.md`](honesty-review-tier.md) says what else
-it does not cover.
-
-The orchestrator hands a judge the receipt's payload as primary evidence — Estigia materialises it
-and answers `--inline-payload`; the handing is an instruction — and names the claims the change
-makes about text the payload does not show, reserving the checkout for those; see
-[judgment day](../skill/policies/judgment-day.md).
-
-The figures below predate that shape — the handing, not the rubric. Three of the six judges on
-the issue's three receipts reported, through the agent harness's own completion reports: **147,249**,
-**178,100** and **171,667** tokens — each handed a checkout to search. Under the shape described
-above the same harness reported **121,973** and **145,840**, and later **105,250** and **97,485**.
-Which shape a figure came from is part of the figure, and the comparison below is drawn on the older
-one.
-
-**Those two columns are bytes and tokens and must be converted before they can be compared.** At four
-bytes per token — a ratio this measurement assumes and does not measure — 632,309 bytes is roughly
-158,000 tokens and 158,000 bytes roughly 40,000. So the four-lens panel C ran is about **one** Estigia
-judge, and the one-lens panel derived above about **a quarter** of one. The issue was given six judges.
-
-What that compares is the size of what each system hands a reviewer. It does not compare how fast
-either reads it or how either grades what it finds; nothing here measured either.
-
-### The ceiling
-
-The measurement above concludes *"the multiplier is the round count"*. C bounds that number:
-`MaxCompactCorrectionAttempts = 1`, and the one correction is capped at
-`min(200, ceil(originalChangedLines / 2))` (`risk.go:227-232` at `4db804e5`; `risk.go:230-234` at
-`v4.0.0`, where `MaxCorrectionChangedLines` and `MaxCompactCorrectionAttempts` are unchanged at 200 and 1) — 200 lines here. **Corrected: an
-earlier version of this line read `originalChangedLines/2` with no round-up, which misreported C's
-own code rather than its behaviour** — the Go rounds an odd count up, and Estigia's own port
-(`src/transport/tier.rs`'s `correction_budget`) matches it. Exceeding either escalates to a successor
-lineage requiring a maintainer's authorisation.
-
-Estigia now bounds the same two things, and both are enforcement. The count: a lineage — an original
-candidate and its repairs on one pull request — gets the corrections the `Corrections per lineage`
-row allows (default 3, where C allows 1), and the publish call refuses the next one as
-`correction-already-spent` before anything is pushed (`src/transport/claim.rs`'s `corrections_spent`
-and `corrections_per_lineage`; `docs/honesty.md` records what the count does not read). Each
-correction a lineage spends is another round the panel's cost multiplies by, but a round over an
-honest correction range hands each lens, and the refuter that judges their findings, only `parent-head..head` (a lens also gets the parent's findings), not the
-whole target; a round whose range is not honest (`delta-range-reason` recorded) hands the whole
-target again. The setting that used
-to bound rounds, `Repair ceiling`, was instruction rather than enforcement; it is retired, and the
-new row is enforced by the same refusal. The size: the correction budget (`skill/bindings/github.md`, `src/transport/claim.rs`'s
-`correction_budget_check`) refuses a repair publication whose cumulative changed lines exceed the
-frozen budget, before anything is pushed. A republish over an approved receipt is a new candidate and
-a new lineage, so it spends no correction and stays bounded by its pull request's budget and scope.
-The correction is also read by a targeted validator, as in C, but in addition to the tier's own lenses
-rather than instead of it, so the spend a correction saves in C is not saved here. C's other half, a
-successor lineage requiring a maintainer's authorisation, exists here as `estigia recover`, a person's command: it releases
-nothing, so a recovered change pays a full new review, and its tier floor means the successor never
-reviews with fewer lenses than the lineage it replaces.
-
-C also asks a human before each medium- or high-risk review, `blocking: true`, and grants nothing
-forward: *"nothing is granted for later candidates, so each later medium- or high-risk candidate asks
-again."*
-
-### Three refusals
-
-Two destroyed reviewer executions; the first reached no reviewer:
-
-1. `review capture-result accepts either --repository-context or --cwd, not both` — the contract
-   renders the exact tokens for each step and refuses a request that adds one. **No reviewer ran.**
-2. `reviewer lens context emission already exists with different bytes` — measuring a lens's prompt
-   with `review lens-context` records an emission and binds the lineage, so the later real run is
-   refused. **181 seconds of reviewer execution were discarded.**
-3. `decode reviewer result: json: unknown field "lens"` — the reviewer returned one key the schema
-   does not allow, and `additionalProperties: false` discarded the whole result. **265 seconds of
-   reviewer execution were discarded.** This is C's own reviewer breaching C's own contract.
-
-The second and third are lineage behaviour, not visible in that project's source. Under
-`MaxCompactCorrectionAttempts = 1`, a reviewer that emits a malformed object has spent one of the few
-executions the design allows.
-
-### What this measurement does not settle
-
-`docs/honesty.md`'s review-cost entry carries the limits on this measurement, as it does on the first.
-Three are worth stating here.
-
-**Every citation above into the measured project is unfalsifiable from this repository.** The commit
-hashes, the constants, the quoted Go comments and prompt strings, the regex, the per-lens byte figures
-and the two durations are all relative to a checkout no reader confined here can open.
-
-**No reviewer result was ever admitted**, across three attempts. So this compares what each system
-sends a reviewer, how many it selects, and how many corrections it permits — and compares **nothing**
-about what either finds or how it grades. Only the measurement above does that, between two Estigia
-agents.
-
-**No artifact of this measurement is retained here.** The classifier output, the consent prompt, the
-lens byte counts and the two durations were read from a binary's stdout against clones since deleted.
-
-Nothing here timed the two systems end to end.
-
-## What the comparison is between
-
-The operator ruled, 2026-08-31: compare layer against layer, and estimate whatever exists on one
-side and not the other. Never compare the totals — Estigia carries a task-flow layer (claims,
-workflow states, PR delivery) with no counterpart there, so a single per-issue
-ratio between the two divides two different systems.
-
-Citations into the comparison project's own checkout are unfalsifiable from this repository, the
-limit `docs/honesty.md` already states of the figures above.
+The layers compared, one against one, per the operator's 2026-08-31 ruling to compare layer against
+layer and never totals (Estigia carries a task-flow layer with no counterpart there):
 
 | layer | here (Estigia) | there (C) | comparable |
 |---|---|---|---|
-| lens | 0 / 1 / 4 across low/medium/high (`RiskLevel::lenses` in `src/transport/tier.rs`) | 0 / 1 / 4 across low/medium/high (`internal/reviewtransaction/risk.go:132-142`, cross-checked at `internal/cli/review_start_contract.go:394-409`) | yes — a role on both sides, at the same counts |
-| refuter | one, sealed, holds no `Read`, writes nothing (`src/harness/roles.rs`) | one, part of a role vocabulary closed at three (`internal/reviewerprovider/contract.go:12-16`) | yes — a role on both sides |
-| targeted validator | one, sealed, read-only, holds no `Read`, writes nothing (`src/harness/roles.rs`'s `RESERVED_VALIDATOR`); required of a correction beside the tier's lenses | one, part of the same closed vocabulary (`internal/reviewerprovider/contract.go:12-16`), the terminal event of a correction | yes — a role on both sides; here it adds to a correction's panel where there it replaces it |
-| blind judges | none at any tier, since `RiskLevel::judges` was removed; they ran 1 / 2 / 2 across low/medium/high before it, and Judgment Day is the opt-in | installed as agent markdown, which a skill launches, with no reviewer role and nothing in its Go that runs one | no — nothing in its Go runs one |
+| lens | 0 / 1 / 4 across low/medium/high (`RiskLevel::lenses` in `src/transport/tier.rs`) | 0 / 1 / 4 (`internal/reviewtransaction/risk.go`) | yes |
+| refuter | one, sealed, no `Read`, writes nothing (`src/harness/roles.rs`) | one, in a role vocabulary closed at three | yes |
+| targeted validator | one, sealed, read-only (`RESERVED_VALIDATOR`); required of a correction beside the lenses | one, the terminal event of a correction | yes; here it adds to a correction's panel, there it replaces it |
+| blind judges | none at any tier; Judgment Day is the opt-in | agent markdown a skill launches; nothing in its Go runs one | no |
 
-The comparison project's reviewer role vocabulary is closed at three — lens, refuter,
-targeted-validator (`internal/reviewerprovider/contract.go:12-16`) — so there is no role a judge
-could be dispatched under. Its `jd-judge-a` and `jd-judge-b` are agent markdown it installs:
-measured 2026-09-10 at `a537c63e`, `jd-judge` appears on 39 non-test lines of Go source across ten
-files — its model tables and TUI pickers, its SDD asset writers, its uninstall list, and
-`internal/components/sdd/boundedreview.go:189`, which rewrites a section of the markdown file. The
-one counter that ever measured a judge is decoded so an old file still parses and then discarded:
-`LegacyJudgeCount` is declared at `internal/reviewtransaction/transaction.go:96` (still there at
-`v4.0.0`), and the assignment carries only `persistedCounters`, which has no field for it.
-
-Neither of the two figures the campaign has been treating as a judge target is a judge figure.
-~40,000 tokens per reviewer is this document's own four-bytes-per-token conversion of ~158,000
-prompt bytes — what one **lens** is handed, under *What each side sends a reviewer* above. 181
-seconds and 265 seconds are the two **lens** executions destroyed under *Three refusals* above; no
-result was admitted from either. A judge-versus-judge figure does not exist on either side, and none
-can be produced from the comparison project's source.
-
-The blind judges are reported beside the layer comparison rather than folded into it, and they are no longer part of ordinary review at all. Before it, `RiskLevel::judges` licensed
-1 / 2 / 2 across low/medium/high, a licence and not a release requirement since the verdict became computed
-(`release_ci` reads the computed verdict and no judge's word), whereas the comparison project closed a
-passive review with no reviewer at all. That layer was removed: ordinary review is the lenses,
-the refuter and the validator on both sides, and Judgment Day, which replaces the lens review for its
-target and "carries no delivery authority" in the comparison project, quoted under *Where the rule
-lives, and where it is not routed* above, is the one place judges exist. A typical
-`medium` review was measured at about 450,000 tokens with two judges and roughly a third of that without them; the
-figure is an estimate and no run here reproduced it. A total that folds the judges in compares a
-stack that ran this layer against one whose Go never does, and none is left to fold in.
-
-`docs/honesty.md`'s review-cost entry records what this leaves unmeasured.
+A typical `medium` review was estimated at about 450,000 tokens with two judges and roughly a third of
+that without them; no run reproduced the figure. Neither ~40,000 tokens per reviewer nor the 181 and
+265 seconds of reviewer execution that project discarded on malformed output is a judge figure: the
+first is one lens's prompt converted at four bytes per token and the others are lens executions.
+No judge-versus-judge figure exists on either side.
 
 ## What a tool answer costs
 
-The second half: four tool answers — `publish_review`/`republish_review`,
-`record_review_finding`, `record_review_verdict` (retired since; the rows below are
-kept as measured) — carried fields nobody but a rare caller acts on,
-on every ordinary call. This measures what that cost and what moved.
+Four tool answers carried fields nobody but a rare caller acts on, on every ordinary call. The fields
+moved to `review_read` (`SCRIPT review-read --issue <n> --view transaction [--epoch <id>]`), which
+answers the topology, the repair lineage, the publication lane's note, workflows and count, and the
+autoclose verdict with its mandatory follow-up. All of it is also recorded on the `published` marker
+that `review_read` reads back, so nothing a caller acts on was removed.
 
-**Method.** Two ways, both used below and named per row. *Reconstructed* means the exact JSON shape
-the pre-edit and post-edit source builds, assembled in a throwaway `python3 -c` script with
-representative field values (realistic-length hex identities and prose) and measured with
-`json.dumps(obj, separators=(',', ':'))` — byte-identical in output shape to `serde_json::to_string`'s
-own compact, no-whitespace serialisation, so the count is exact for the structure and representative
-for the text. *Measured* means the number came from a real `cargo test -- --nocapture` run of the
-named test against the actual code in this change, reading the figure from a temporary `eprintln!`
-placed beside the ceiling assertion and removed again — the shipped test asserts the ceiling only,
-so the temporary print is what made the figure visible and the assertion is what keeps it honest. Neither method used a worktree or a scratch file outside this checkout: the
-reconstruction is a `python3 -c` inline computation (no file written anywhere), and the measured
-figures came from tests already in the tree.
+**Method.** *Reconstructed* means the exact JSON the pre-edit and post-edit source builds, assembled
+in an inline `python3 -c` computation with representative field values and sized with
+`json.dumps(obj, separators=(',', ':'))`, which is byte-identical in shape to `serde_json::to_string`.
+*Measured* means a real `cargo test -- --nocapture` of the named test against the code, read from a
+temporary `eprintln!` beside the ceiling assertion. The two agree where they overlap: 616
+reconstructed against 610 measured for the same first-publication shape.
 
 | Scenario | Method | Before (bytes) | After (bytes) | What moved |
 |---|---|---:|---:|---|
-| `publish_review`, first publication, no inline payload, one lane started | Reconstructed | 1,309 | 616 | topology, lineage (absent on a first publication), lane detail, autoclose |
-| `publish_review`, repair over a parent, `inline` topology with a reason, branch-link autoclose, two lanes started | Reconstructed | 2,089 | 617 | topology + reason, full parent receipt + delta + delta_range, lane note/workflows/count, autoclose verdict, mandatory_follow_up |
-| `publish_review`, first publication, branch-link autoclose — measured on `a_branch_link_publication_keeps_the_follow_up_out_of_its_answer` | Measured | — (the pre-edit shape is not runnable from this tree; see the reconstructed rows above for the same fields) | 610 | same as row 1, plus autoclose + mandatory_follow_up |
-| `record_review_finding`, first write, `suggestion`, every optional absent | Reconstructed | 248 | 144 | `parent`/`origin`/`evidence_class`/`causal_disposition`/`location`/`lens`, each omitted rather than `null` |
-| `record_review_finding`, replay, `severe`, every optional present — measured on `a_replay_of_a_recorded_finding_answers_from_the_marker_even_when_the_diff_cannot_be_read` | Measured | — | 213 | nothing moved for this row (every field here has a value); the ceiling guards against regrowth |
-| `record_review_verdict`, `accepted`, long basis + never-ran evidence | Reconstructed | 853 | 518 | `basis` and `never_ran_evidence` text, replaced by `basis_bytes`/`never_ran_evidence_bytes` |
-| `record_review_verdict`, `accepted`, never-ran evidence and no basis — measured on the retired verdict's never-ran test | Measured | — | 593 | `never_ran_evidence` text |
+| `publish_review`, first publication, no inline payload, one lane started | Reconstructed | 1,309 | 616 | topology, lineage, lane detail, autoclose |
+| `publish_review`, repair over a parent, `inline` topology with a reason, branch-link autoclose, two lanes | Reconstructed | 2,089 | 617 | topology and reason, parent receipt, delta, lane detail, autoclose verdict, follow-up |
+| `publish_review`, first publication, branch-link autoclose, on `a_branch_link_publication_keeps_the_follow_up_out_of_its_answer` | Measured | — | 610 | as row 1 |
+| `record_review_finding`, first write, `suggestion`, every optional absent | Reconstructed | 248 | 144 | `parent`, `origin`, `evidence_class`, `causal_disposition`, `location`, `lens`, omitted rather than `null` |
+| `record_review_finding`, replay, `severe`, every optional present, on `a_replay_of_a_recorded_finding_answers_from_the_marker_even_when_the_diff_cannot_be_read` | Measured | — | 213 | nothing; the ceiling guards regrowth |
+| `record_review_verdict` (retired), `accepted`, long basis and never-ran evidence | Reconstructed | 853 | 518 | the free text, replaced by byte counts |
 
-The reconstructed and measured rows agree closely where they overlap — 616 reconstructed against 610
-measured for the same first-publication shape — which is what makes the reconstructed method
-trustworthy for the shapes this tree cannot currently run both sides of (the pre-edit code no longer
-exists in this checkout to execute against).
-
-**What did not move.** `publish_review`/`republish_review` keep `ok`, `issue`, `pr`, `url`,
+**What did not move.** `publish_review` and `republish_review` keep `ok`, `issue`, `pr`, `url`,
 `created`, `draft`, `epoch`, `head`, `base`, `digest`, `payload_digest`, `payload_bytes`,
 `publication_lane` (the state word only) and `next`, plus `payload` when `inline_payload` was asked.
-`record_review_finding` keeps every field that has a value. `record_review_verdict`, while it
-existed, kept `basis_given`/`classification` and the outcome/identity fields and answered the two
-free-text fields as byte counts.
+`record_review_finding` keeps every field that has a value.
 
-**Where the removed detail lives now.** The new read tool `review_read` (`SCRIPT review-read --issue
-<n> --view transaction [--epoch <id>]`) answers the topology, the repair lineage, the
-publication lane's note/workflows/count and the autoclose verdict with its mandatory follow-up, for
-the latest publication or a named epoch — see `skill/bindings/github.md`'s own row. No field a
-caller acts on was removed; it was relocated to a call that costs nothing when nobody needs it.
-Every one of these fields is also recorded on the `published` marker itself (the durable record in
-the local store that a later run reads), which is what `review_read` reads
-back from — it does not hold a second copy of the fact.
-
-**Guarded against regrowth.** `publish_review`'s own answer stays under 900 bytes on the
-branch-link fixture (measured 610), `record_review_finding`'s replay answer stays under 260 bytes on
-the full-optional-field fixture (measured 213) — the retired verdict's 650-byte ceiling went with
-its test — each ceiling carries measured headroom over the
-real figure, not a production limit; a future field added to one of these answers is expected to
-raise the ceiling deliberately, not slip under a stale ceiling with no test to catch it.
+**Guarded against regrowth.** `publish_review`'s answer stays under 900 bytes on the branch-link
+fixture (measured 610) and `record_review_finding`'s replay answer under 260 on the full-optional
+fixture (measured 213). Each ceiling carries headroom over the real figure and is no production
+limit; a field added to either answer is expected to raise the ceiling deliberately.
 
 ### What the tool menu itself costs
 
-The consolidation, measured 2026-10-09. Every host that loads the schemas up front pays
-this on every session, whether or not a tool is ever called, so the advertisement is the one answer
-whose cost is paid by not acting. The figure is the compact `serde_json::to_string` of the `result`
-object a real `estigia mcp` process answers `tools/list` with, newlines normalised to `\n`, so it is
-the exact bytes a client receives for the table.
+Every host that loads schemas up front pays this on every session whether or not a tool is called.
+The figure is the compact `serde_json::to_string` of the `result` object a real `estigia mcp` answers
+`tools/list` with, which is the exact bytes a client receives.
 
 | | Advertised names | `tools/list` result (bytes) |
 |---|---:|---:|
-| Before — 48 acting tools plus 3 `NOT_EXPOSED` refusal schemas | 51 | 75,913 |
-| After — the consolidated table, `NOT_EXPOSED` no longer advertised | 32 | 55,381 |
-| Later — descriptions trimmed, from 56,133 at that head | 32 | 44,325 |
-| Issue #5, `TOOLS` at 33 — shared argument text, no refusal-code lists, no `lens` argument; context unreadable | 33 | 42,643 |
-| Issue #69, `review_tier` gains `raise`, `raise_reason` and `focus_reason` (ceiling set to the measured size) | 33 | 43,055 |
-| Issue #69, `publish_review` and `republish_review` take the same four arguments (ceiling set to the measured size) | 33 | 44,277 |
-| `send_message` and `list_sessions` join, answered from the local store (ceiling set to the measured size) | 35 | 45,266 |
-| `list_sessions` gains bounded discovery: seven optional selectors and paging arguments (ceiling set to the measured size) | 35 | 46,744 |
-| Ten core tools carry `_meta` and every tool takes `compact`; descriptions trimmed to pay for `compact` (ceiling 48,117 raised to 48,497) | 36 | 48,496 |
+| Before consolidation: 48 acting tools plus 3 `NOT_EXPOSED` refusal schemas | 51 | 75,913 |
+| Consolidated table, `NOT_EXPOSED` no longer advertised | 32 | 55,381 |
+| Descriptions trimmed, from 56,133 at that head | 32 | 44,325 |
+| Shared argument text, no refusal-code lists, no `lens` argument | 33 | 42,643 |
+| `review_tier` gains `raise`, `raise_reason`, `focus_reason`; `publish_review` and `republish_review` take the same | 33 | 44,277 |
+| `send_message` and `list_sessions` join, the latter with bounded discovery | 35 | 46,744 |
+| `task` `evidence`, then `create` `repo` and the `flush` window wording | 35 | 47,044 |
+| Ten core tools carry `_meta` (+380) and every tool takes `compact` (+1,015, paid for by trimming) | 36 | 48,496 |
+| `release` `spend` fields, then `ready_pr`, `review_stages`, `run_checks` and `deliver` join | — | 51,747 |
 
-Nineteen names left the surface and 20,532 bytes went with them. The four capture-only recorders, the
-retired aggregate verdict and the three `NOT_EXPOSED` names were removed outright; `reclaim`,
-`list_identities`, `review_tier_for_repair`, `expected_target`, `base_movement`, `review_findings`,
-`review_transaction`, `computed_verdict`, `review_payload_membership`, `inspect_candidate`,
-`spend_summary`, `publication_lane` and `repair_rounds` were absorbed by a surviving name, each
-reached through a parameter or a `view` rather than a schema of its own. `NOT_EXPOSED` still declares
-`reclaim` for the seam test, but it is a declaration and not a schema, so it is not advertised. The
-measurement is reproducible: `estigia mcp` answering `tools/list` on the built binary, with the
-`result` object serialised compactly.
+Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
+capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the
+rest were absorbed by a surviving name reached through a parameter or a `view`. `TOOLS_LIST_CEILING` in
+`src/harness/mcp/tests.rs` bounds the list, and each growth above was a reviewed raise by exactly the
+measured difference. It is the largest list a process can answer, the unreadable-context one.
 
-The trim touched the descriptions only: names, argument names, types, enums, minimums and
-`required` lists are unchanged. The table had drifted to 56,133 bytes by then because nothing bounded
-it, and `TOOLS_LIST_CEILING` in `src/harness/mcp/tests.rs` now does, so growth past the registered
-ceiling fails without a reviewed edit to that constant. What the trim removed was text that did not help an agent
-call a tool: where a field moved to, and a measurement of the payload threshold. That measurement
-stays here: answers carrying 73,272 and 145,756 payload bytes were refused by the MCP surface and
-one carrying 36,288 was not, so the threshold sits inside the ordinary range, which is why
-`inline_payload` defaults to false.
-
-Issue #5 made the list depend on the process's `GateContext`, which is fixed for the process, so
-`listChanged` stays false. Where `Workflow` is `assisted` the list omits every `TRACKER_WRITERS` tool,
-which that workflow refuses; under any other readable workflow it omits `ASSISTED_ONLY`; a context that
-cannot be read, or whose workflow is unknown, lists all 40 (33 when this was measured). A hidden name still dispatches and refuses
-with its own typed reason.
+The list depends on the process's `GateContext`, fixed for the process, so `listChanged` stays false.
+Where `Workflow` is `assisted` the list omits every `TRACKER_WRITERS` tool; under any other readable
+workflow it omits `ASSISTED_ONLY`; an unreadable context or an unknown workflow lists all. A hidden
+name still dispatches and refuses with its own typed reason.
 
 | `tools/list` result, issue #5 | Names | Bytes |
 |---|---:|---:|
-| Before — every context | 33 | 44,318 |
-| After — context unreadable (every tool) | 33 | 42,643 |
-| After — autonomous | 31 | 40,901 |
-| After — assisted | 13 | 14,380 |
+| Before, every context | 33 | 44,318 |
+| After, context unreadable (every tool) | 33 | 42,643 |
+| After, autonomous | 31 | 40,901 |
+| After, assisted | 13 | 14,380 |
 
-`TOOLS_LIST_CEILING` is the unreadable-context figure, the largest list a process can answer. Three
-changes made the rest of the difference: the receipt arguments (`epoch`, `pr`, `head`, `base`,
-`digest`), `run_id` and `issue` each carry one short description defined once; the
-`collect_review_input` and `launch_review_input` descriptions no longer list refusal codes, since each
-refusal names itself; and `record_review_finding` no longer advertises `lens`, which exists only to be
-refused. A caller that still sends `lens` through the tool is told it does not take it; the transport
-still refuses it `recorded-by-capture-only`.
-
-The `task` tool's `evidence` argument — the shape a task whose work is not a commit is closed by —
-moved the unreadable-context list from **46,744** to **46,996** bytes, and `TOOLS_LIST_CEILING` was
-raised by exactly that difference, from 46,800 to 46,996. The argument and its description are what
-a caller needs to close such a task, so the ceiling moved rather than the meaning being trimmed.
-
-The `create` tool's `repo` argument and the `flush` description now say that the destination's git
-operation window decides, not the caller's — the behaviour a cross-repository filing changed to. That
-moved the list from **46,996** to **47,044** bytes, and `TOOLS_LIST_CEILING` was raised by exactly
-that difference: a caller filing elsewhere needs to know whose schedule it is held to.
-
-The delivery tools (`ALWAYS_LOADED` in `src/harness/mcp/tools.rs`; ten when this was measured, eleven now) carry
-`"_meta": {"anthropic/alwaysLoad": true}`, which Claude Code reads to load a tool's schema at the start
-of a session instead of spending one to three `ToolSearch` turns on it before the first `claim`; other
-clients ignore the key. The ten `_meta` objects add 380 bytes, and `TOOLS_LIST_CEILING` was raised by
-exactly that, from **48,117** to **48,497**. Every tool also takes `compact`, which adds
-`"compact":{"type":"boolean"}` to the 35 schemas that did not declare it (1,015 bytes); descriptions
-were trimmed by that much rather than the ceiling moved. With `compact: true` an answer omits `build`,
-and `review_status` drops from `next.arguments` the fields `receipt` already holds, so the receipt is
-named once. Without it every answer is byte-identical to before.
-
-`release`'s `spend` description names the fields a record needs and says that the receipt fields
-default to the held review transaction, which moved the list from **48,497** to **48,597** bytes.
-`TOOLS_LIST_CEILING` was raised by exactly that difference. In the lever bench (*The cost and time
-levers against the baseline*), 16 of 18 publishing runs spent a `ToolSearch` turn on `record_spend`
-or `review_read` only to learn those fields or the receipt, and 6 had a first `release` refused
-`missing-argument` for want of the receipt. One turn there costs about 50,000 tokens of context;
-the hundred bytes are paid once per session.
-
-`ready_pr`, the assisted tool that marks a run's draft ready where `Ready by` is `agent`, moved the
-list from **48,597** to **49,012** bytes, and `TOOLS_LIST_CEILING` was raised by exactly that
-difference. It is listed only where `Claim workflow` is `assisted`, so an autonomous session's menu
-does not carry it; the ceiling measures the whole list, which is the larger of the two. `review_stages`, the
-assisted tool that reads where a ready pull request stands in `External reviewers`, moved it again,
-to **49,701** bytes, and the ceiling followed by exactly that difference.
-
-`run_checks`, which runs the checks a base declares in the background and binds a receipt to the
-reviewed digest, moved the list from **49,701** to **50,588** bytes (887 bytes, measured from the
-change that added it), and `TOOLS_LIST_CEILING` was raised by exactly that difference.
-
-`deliver`, the tail from publication to close in one call, moved the list from **50,588** to **51,747**
-bytes, and `TOOLS_LIST_CEILING` was raised by exactly that difference. It is the eleventh tool
-`ALWAYS_LOADED` names (the 380 bytes above were measured for ten), because a tool whose point is to save
-turns should not cost one to find.
-
-`target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
-paid only by a call that passes `manifest`.
-
-`republish_review` stays a tool of its own although its arguments equal `publish_review`'s. Its
-separate name is the guard on a call that destroys remote history, and a flag on `publish_review`
-would let an ordinary publication reach it by one wrong argument.
+- **Payload threshold.** Answers carrying 73,272 and 145,756 payload bytes were refused by the MCP
+  surface and one carrying 36,288 was not, so the threshold sits inside the ordinary range; that is
+  why `inline_payload` defaults to false.
+- **`ALWAYS_LOADED`** (eleven tools in `src/harness/mcp/tools.rs`) carry
+  `"_meta": {"anthropic/alwaysLoad": true}`, which Claude Code reads to load a schema at session
+  start instead of spending one to three `ToolSearch` turns before the first `claim`. In the lever
+  bench below, 16 of 18 publishing runs spent a `ToolSearch` turn on `record_spend` or `review_read`
+  to learn the receipt fields, and 6 had a first `release` refused `missing-argument`; one turn costs
+  about 50,000 tokens of context and the hundred bytes are paid once.
+- **`compact: true`** omits `build` from an answer and drops from `review_status`'s `next.arguments`
+  the fields `receipt` already holds. Without it every answer is byte-identical to before.
+- **`target`** answers the brief form by default, so the manifest, about 100 bytes per tracked file,
+  is paid only by a call that passes `manifest`.
+- **`republish_review`** stays a tool of its own although its arguments equal `publish_review`'s: its
+  name is the guard on a call that destroys remote history.
 
 ## Waiting for a reviewer instead of polling
 
-`collect_review_input` used to answer `capture-running` while a launched reviewer was
-still working, so a run waiting on a lens polled it — one full-context turn per poll. It now takes
-an optional `wait_seconds` and blocks up to that many seconds, capped at 900 and never past the
-point the job would be abandoned, for the job to finish before refusing.
+`collect_review_input` used to answer `capture-running` while a launched reviewer worked, so a run
+waiting on a lens polled it, one full-context turn per poll. It now takes `wait_seconds`, blocking up
+to that many seconds, capped at 900 and never past the point the job would be abandoned.
 
-**Method.** The same corpus read `scripts/measure-transcripts.py` makes: every
-`mcp__estigia__collect_review_input` tool call in the Claude transcripts under
-`~/.claude-personal/projects`, paired with the `tool_result` that answers it. Measured 2026-10-09.
+Measured 2026-10-09 over every `mcp__estigia__collect_review_input` call in the Claude transcripts
+under `~/.claude-personal/projects`, paired with its `tool_result`, the corpus
+`scripts/measure-transcripts.py` reads:
 
 | | sessions reaching the tool | `collect_review_input` calls | answered `capture-running` |
 |---|---:|---:|---:|
-| Before, corpus | 1 | 16 | 1 |
+| Before | 1 | 16 | 1 |
 | After | — | — | 0 by construction |
 
-The corpus under-counts this shape badly: `launch_review_input` and `collect_review_input` were
-introduced on 2026-10-07, and one session in the whole corpus uses them. The one `capture-running`
-it holds is a real poll that `wait_seconds` removes; it is not the forced `Stop` turns the corpus
-holds, most of which are not review polls.
-
-**The after is by construction, not observed.** With `wait_seconds` at or above the job's remaining
-runtime the call returns the recorded answer and never answers `capture-running`, and a job past its
-deadline is still killed and refused `reviewer-deadline` with nothing recorded. Named tests drive
-both acceptance paths —
-`a_bounded_wait_records_the_answer_once_the_reviewer_finishes` (the job finishes inside the wait and
-is recorded) and `a_bounded_wait_that_elapses_is_refused_capture_running_and_writes_nothing` (still
-running, nothing recorded) — and `docs/honesty.md` records that no post-change session exists in the
-corpus to measure the after.
+The after is by construction: with `wait_seconds` at or above the job's remaining runtime the call
+returns the recorded answer, and a job past its deadline is still killed and refused
+`reviewer-deadline` with nothing recorded.
+`a_bounded_wait_records_the_answer_once_the_reviewer_finishes` and
+`a_bounded_wait_that_elapses_is_refused_capture_running_and_writes_nothing` drive both paths.
 
 ## The orchestrator's own phase is recorded, not measured
 
-`review_read` with `view: spend` and `phase: orchestrator` answers whatever `record_spend` was asked to record for that
-phase — the delivering run's own report of its context, tokens and time, exactly like every other
-phase that view already answers. Nothing here re-derives it from a transcript or an agent
-harness completion report; it carries exactly the limit `docs/honesty.md` already states —
-*"`record_spend` is a declaration, not a measurement"* — because Estigia has no channel into the
-harness that ran the orchestrator either, the same as it has none into any subagent's. The delivery
-step now records one `record_spend` for `orchestrator` and one for each delegated phase against the
-issue's review transaction, before the transition to `done` — `skill/SKILL.md`'s developer step 6
-states this inside the delivery sentence; `tests/honesty.rs` pins that sentence's release clauses,
-not this one, so the spend duty is held by prose alone.
+`review_read` with `view: spend` and `phase: orchestrator` answers whatever `record_spend` was asked to
+record for that phase: the delivering run's own report of its context, tokens and time. Nothing
+re-derives it from a transcript, because Estigia has no channel into the harness that ran the
+orchestrator, as it has none into any subagent. The delivery step records one `record_spend` for
+`orchestrator` and one per delegated phase before the transition to `done`; `skill/SKILL.md`'s
+developer step 6 states this inside the delivery sentence, and no test pins that clause.
 
 ## The reviewer prompt order buys no cache hits, and is not shipped
 
-It was proposed to move the role template to the end of the prompt, so that the receipt, the
-criteria and the diff — the same bytes for every lens — would lead it and could share a
-prompt-cache prefix, where today `build` in `src/reviewer/prompt.rs` places the role's own template
-first and every lens therefore prefixes the shared bytes differently. Measured 2026-10-09 against
-a real review target; the reorder is **not shipped**, because the shared bytes are never
-cache-read in any position.
-
-**Method.** Four calls to `claude -p --model claude-sonnet-4-5 --output-format json`, reading the
-`usage.cache_read_input_tokens` and `usage.cache_creation_input_tokens` its JSON reports. The
-prompts are the bytes `build` produces for a real lens over that target (68,164 bytes) — sent as
-they stand, then byte-identical again, then with the role's template moved to the end (68,170
-bytes) — and, last, an unrelated two-word prompt that shares none of the reviewed bytes.
+Moving the role template to the end of the prompt, so the shared receipt, criteria and diff lead and
+share a prompt-cache prefix, was measured on 2026-10-09 and **not shipped**: the shared bytes are
+never cache-read in any position. Four `claude -p --model claude-sonnet-4-5 --output-format json`
+calls, reading `usage.cache_read_input_tokens` and `usage.cache_creation_input_tokens`, over the bytes
+`build` in `src/reviewer/prompt.rs` produces for a real lens (68,164 bytes):
 
 | call | prompt | bytes | cache read | cache created |
 |---|---|---:|---:|---:|
@@ -714,352 +224,83 @@ bytes) — and, last, an unrelated two-word prompt that shares none of the revie
 | 3 | the same prompt, role moved last | 68,170 | 18,289 | 52,770 |
 | 4 | an unrelated two-word prompt | — | 18,289 | 32,665 |
 
-**What the numbers say.** The read-back is **18,289** on three calls that share nothing but the
-binary — the byte-identical repeat, the reordered prompt, and an unrelated two-word prompt — and
-**0** on the one cold call. The last of those shares none of the reviewed bytes, so 18,289 is the
-CLI's own invariant prefix and not any of them. The receipt, the criteria and the diff all travel in
-the user message, and no call ever cache-reads it: the byte-identical second call would have read
-that message had it been cacheable, and it read exactly the 18,289 the unrelated prompt read. The
-role's template sits in that same uncached user message whether it leads or trails, so its position
-cannot share what was never shared.
-
-**What this does not settle.** One CLI, one model and one machine on one day, so the figure is a
-property of that reviewer and not of every reviewer. At the time of this measurement the CLI
-`launch_review_input` starts discarded its own usage report, so the prompt above was driven directly
-through the CLI rather than through a recorded launch; the launch now preserves that report (see
-*Preserving the reviewer CLI's own usage* below), and no measurement reads it yet. And the four
-lenses run concurrently, so a prefix the CLI did cache would not be
-reused by a lens that started before the first returned — the saving would need them serialised,
-which the issue puts out of scope.
+The read-back is 18,289 on three calls that share nothing but the binary, including the unrelated one,
+so it is the CLI's own invariant prefix and not any reviewed byte. The user message that carries the
+receipt, criteria and diff is never cache-read, so the role's position in it cannot share what was
+never shared. Concurrent lenses would also not reuse a prefix the first had not yet returned, and
+serialising them is out of scope.
 
 ## Preserving the reviewer CLI's own usage
 
-A review that runs through a CLI reports what it cost, and until this change Estigia threw that
-away: `parse_result` in `src/reviewer/adapters.rs` read the `result` text and the error fields out of
-the CLI's JSON and dropped the `usage` object beside them. The counters are now preserved, and
-preserved *separately* from the admitted answer.
-
-**Where it lives.** The runner writes the counters into the job's own directory as `usage.json`,
-beside `result.json` and never inside it. The artifact is:
+`parse_result` in `src/reviewer/adapters.rs` used to drop the CLI's `usage` object. The runner now
+writes the counters into the job's directory as `usage.json`, beside `result.json` and never inside
+it, so a counter can never contaminate what a reviewer is admitted to have said:
 
 ```json
 {"format":1,"provider":"claude","counters":{"cache_creation_input_tokens":0,"cache_read_input_tokens":250,"input_tokens":100,"output_tokens":20}}
 ```
 
-`provider` names the adapter's provider (`claude`); `counters` carries only the counters the CLI
-reported, under the CLI's own names. A counter the CLI did not report is **absent** from the object,
-never `0` — an unobserved counter is unknown, and a zero would be read as a measurement. A `usage`
-object that is absent, or present and malformed (not an object, or a counter that is not a whole
-number), preserves nothing: no file is written, and the review succeeds or fails exactly as it did
-before.
-
-**Reading it back.** `estigia::reviewer::job::read_usage(dir)` answers the counters a finished job
-preserved. `None` is the **unknown** state, and it has two causes that are deliberately not
-distinguished: the CLI reported no usage, or the counters could not be stored. An artifact that
-exists but is not JSON, is another format, names no provider, holds no counters or carries a counter
-that is not a whole number is an `Err` — corrupt rather than unknown. An empty counter set is
-refused the same way, because the writer never emits one.
-
-**A failed usage write is not the job's outcome.** The answer is the outcome whatever happens to the
-artifact: a usage write that fails is reported on the runner's standard error (the `runner.err` the
-detached spawner already captures) and leaves the counters unknown, rather than turning a review that
-succeeded into a refusal. Auxiliary work must never conceal or overwrite a command's answer, and a
-missing `usage.json` is therefore read as unknown, never as zero.
-
-**Why separately.** The admitted answer's bytes are byte-identical whether or not the CLI reported
-usage, and `result.json` is byte-identical with and without it. That is the point of the separation:
-a counter can never contaminate what a reviewer is admitted to have said, and a change to what is
-counted cannot move a verdict.
-
-**Which providers report what.** Only the Claude adapter's `--output-format json` result carries a
-`usage` object, and it is the four counters above. The Codex adapter takes its answer from the
-`--output-last-message` file, and its standard output carries no usage object at all, so it
-preserves nothing; the relay runs no CLI in this process and reports none either. No counter is
-invented for an adapter that does not report one.
-
-**What this does not do.** The totals `scripts/measure-transcripts.py` prints do not fold this in:
-they are read from Claude Code's own `.jsonl` transcripts, not from a job's `usage.json`, and
-nothing in the script reaches this artifact. A preserved artifact is not a measurement until
-something reads it; `read_usage` is the reader, and no measurement calls it yet.
+- A counter the CLI did not report is **absent**, never `0`: unobserved is unknown. A `usage` object
+  that is absent or malformed preserves nothing, and the review succeeds or fails as before.
+- `estigia::reviewer::job::read_usage(dir)` answers the counters; `None` is the unknown state, from
+  either no report or a failed store. An artifact that exists but is not JSON, is another format,
+  names no provider, holds no counters, or carries a non-whole-number counter is an `Err`: corrupt
+  rather than unknown.
+- A failed usage write is reported on the runner's standard error and leaves the counters unknown; it
+  never turns a successful review into a refusal.
+- Only the Claude adapter's `--output-format json` result carries `usage`. The Codex adapter's
+  answer comes from `--output-last-message`, whose standard output carries none, and the relay runs
+  no CLI in this process, so neither preserves anything.
+- `scripts/measure-transcripts.py` reads Claude Code's `.jsonl` transcripts, not `usage.json`, and
+  `read_usage` has no measurement caller yet.
 
 ## Re-measuring after a change
 
-The baseline (2026-09-24, 15 transcripts, recorded in the issue body) measured orchestrator
-context by phase, forced `Stop` turns and per-issue input tokens from Claude Code's own `.jsonl`
-transcripts. `scripts/measure-transcripts.py` repeats that measurement: `python3
-scripts/measure-transcripts.py --projects ~/.claude-personal/projects` (the default), reading every
-transcript it can reach and reporting a JSON object and a readable table, per repository and
-overall — session count, input tokens by context (orchestrator / developer / reviewers / analyst,
-taken from the `agentType` each subagent's sibling `.meta.json` records), forced-`Stop` turns (a `system` record
-whose `stop_hook_summary` names `estigia` among its hook errors, and the next assistant turn's
-context — the same detection the baseline scripts in `~/estigia-baseline/` used, adapted rather
-than reimplemented from first principles), per-issue input tokens where a transcript names an
-issue, and each repository's most recent session time.
+`scripts/measure-transcripts.py` (`python3 scripts/measure-transcripts.py --projects
+~/.claude-personal/projects`, the default) repeats the 2026-09-24 baseline, which measured
+orchestrator context by phase, forced `Stop` turns and per-issue input tokens from Claude Code's
+`.jsonl` transcripts. It reads every transcript it can reach and reports a JSON object and a readable
+table, per repository and overall:
 
-It also reports the four usage classes — `input`, `cache_read`, `cache_creation` and `output` —
-separately, per context, from each record's own counters. The mapping is `CLAUDE_USAGE_KEYS` in the
-script and is this CLI's; a provider whose cached counters already sit inside its input total needs
-its own. A class no measured record carried is `null` and never `0`, and a record missing any of the
-four is counted in `usage.records_missing_a_counter`, so the classes read as a floor rather than as
-complete. They change nothing outside themselves: against the base script, on the same corpus, the
-two agree byte for byte on `session_count`, `context_input_tokens`, the forced-`Stop` figures and
-`per_issue_input_tokens` (measured 2026-10-18: 179 sessions, 90,563 usage records, none of them
-missing a counter). `tests/usage_accounting.rs` pins the classes against a hand-written fixture,
-including the unknown and the missing-counter cases the live corpus does not exercise, and pins the
-readable table that names them.
+- session count, and input tokens by context (orchestrator, developer, reviewers, analyst), taken from
+  the `agentType` each subagent's sibling `.meta.json` records;
+- forced-`Stop` turns, a `system` record whose `stop_hook_summary` names `estigia` among its hook
+  errors, with the next assistant turn's context;
+- per-issue input tokens where a transcript names an issue, and each repository's most recent session.
 
-The JSON also carries what a methodology comparison needs beside tokens; the readable table does
-not, and is byte-identical to the one before. `turn_profile` counts, per context, the model turns
-(distinct assistant message identities), the model the API answered with (`served_models`, the
-record's `message.model`), the model the CLI asked for (`requested_models`, `requestedModel`), the
-effort, and the tool calls (distinct `tool_use` identities, so a retried fragment's call is counted
-once). `usage_by_model` splits the four classes by the model that answered, which is what a
-tariff-computed cost multiplies. `sessions` lists each session with its dominant issue, its
-`wall_clock_seconds` — first timestamped record to last, subagent transcripts included, and `null`
-when any of those stamps carries no offset — and the subagents it launched. A field a record does not carry is counted under `unknown`, never inferred.
-Against the base script on a frozen copy of this machine's corpus (2026-10-23: 206 sessions, 87,020
-usage records), every field the base script reports is byte-identical, table included.
-`tests/usage_accounting.rs` pins the new fields against the same fixture.
+The four usage classes, `input`, `cache_read`, `cache_creation` and `output`, are reported separately
+per context from each record's own counters (`CLAUDE_USAGE_KEYS` in the script). A class no record
+carried is `null` and never `0`, and `usage.records_missing_a_counter` counts records lacking any of
+the four, so the classes read as a floor. Against the base script on the same corpus the two agree
+byte for byte on `session_count`, `context_input_tokens`, the forced-`Stop` figures and
+`per_issue_input_tokens` (2026-10-18: 179 sessions, 90,563 usage records, none missing a counter).
 
-**Run on this machine, against this checkout, after the change landed and delivery sessions closed
-against it.** The condition the baseline's acceptance item 6 waited on is now met: the corpus under
-`~/.claude-personal/projects` holds delivery sessions whose own transcripts name a build carrying
-those slices. The recent estigia transcripts carry build commits
-`a327302d5bf5c4bdb99524d55dfb5ede726bd768` (2026-10-01),
-`23f86174685383b3d7fee080bccf8c7f9b2ad225` (2026-10-02),
-`cdf3c243cf52e0b2469394943df271745a458875` (2026-10-04) and
-`fc0ed0a93f32ca315f44174a3d9499c84cceb1af` (2026-10-04, the build installed on this machine), and
-`git merge-base --is-ancestor 14f4390e4c1418ed57a97bc9502cb342f6b53de5 <commit>` answers true for
-each. The corpus is no longer only older than the change, so the re-read below is the post-change one
-the acceptance item asked for.
+The JSON also carries, and the readable table does not: `turn_profile` per context (model turns by
+distinct assistant message identity, `served_models` from `message.model`, `requested_models` from
+`requestedModel`, effort, tool calls by distinct `tool_use` identity); `usage_by_model`, the four
+classes split by the answering model; and `sessions`, each with its dominant issue,
+`wall_clock_seconds` (first timestamped record to last, subagents included, `null` when a stamp has no
+offset) and the subagents it launched. A field a record does not carry is counted under `unknown`,
+never inferred. Against the base script on a frozen copy of the corpus (2026-10-23: 206 sessions,
+87,020 usage records) every field the base reports is byte-identical, table included.
+`tests/usage_accounting.rs` pins the classes and the new fields against a hand-written fixture,
+including the unknown and missing-counter cases the live corpus does not exercise, and pins the
+readable table.
 
-The script itself is exercised now — its own readable-table output as it stood on 2026-10-04, on
-the corpus as it stood then, is below (`--projects ~/.claude-personal/projects`, the default; full
-JSON is reproducible with the same command, no `--json` needed to see it — it prints after the
-table). That capture predates the class lines above: a run now prints a `usage classes` block after
-the per-context lines, and a `records missing a counter` line under it when any record lacked one.
-Every other line is unchanged. The session counts name the repositories the original 15-transcript
-baseline already drew from and several the corpus has since grown; this is the same live corpus,
-re-read by the adapted script rather than a fresh one. The blocks for repositories outside this
-project are omitted, and so is the `overall` block, which summed them.
+## The FLOW workflow against its baseline
 
-```
-== estigia ==
-sessions: 28
-  orchestrator        750924008 input tokens
-  developer           163699882 input tokens
-  analyst              82380724 input tokens
-  general-purpose      80567277 input tokens
-  review-blind         37705968 input tokens
-  implementer          37271515 input tokens
-  fork                 12216553 input tokens
-  Explore               4105428 input tokens
-  review-lens           2967927 input tokens
-  review-blind-sealed      2708363 input tokens
-forced Stop turns: 39 (median context 183231)
-per-issue input tokens:
-  issue 3: 25634554 input tokens
-  issue 439: 37226722 input tokens
-  issue 482: 14279325 input tokens
-  issue 490: 1974546 input tokens
-  issue 621: 15741024 input tokens
-  issue 623: 10230620 input tokens
-  issue 626: 17246095 input tokens
-  issue 629: 64061143 input tokens
-  issue 637: 111099846 input tokens
-  issue 639: 78847376 input tokens
-  issue 652: 21216361 input tokens
-  issue 656: 5910025 input tokens
-  issue 659: 10854166 input tokens
-  issue 675: 135884073 input tokens
-  issue 679: 70825585 input tokens
-  issue 684: 10160932 input tokens
-  issue 685: 47055986 input tokens
-  issue 698: 23457733 input tokens
-  issue 705: 26203780 input tokens
-  issue 707: 18488193 input tokens
-most recent session: 1791170379.327
+FLOW replaced the seven ODD steps in `skill/SKILL.md`. Three scenarios were run under frozen
+conditions: S1, a one-file fix plus its test; S2, a two-unit change; S3, a no-change outcome that
+closes with evidence and no pull request. Each was a fresh issue handed to `/flow dev <n>`, headless,
+with no human input, in a scratch `HOME` against a private seed repository byte-identical to
+`7bf02ee9`, `claude-opus-5-5` at `medium`, only the `estigia` MCP server. Acceptance is checked by the
+operator's script against the merged commit or the issue, not by the run's own report. A run that
+stops to ask counts as a failure. Cost is the CLI's `total_cost_usd`, its own tariff arithmetic and
+not a bill, and it excludes the lenses. Tokens, turns and tool calls come from the run's transcript
+through `scripts/measure-transcripts.py`; active seconds run from the first stream event to the last
+assistant turn.
 
-== leteo ==
-sessions: 3
-  developer           110024272 input tokens
-  orchestrator         98176158 input tokens
-  general-purpose      44833932 input tokens
-  review-blind         13626038 input tokens
-  analyst               6188884 input tokens
-  review-blind-sealed       311575 input tokens
-  review-lens             221073 input tokens
-  review-reliability        34008 input tokens
-  review-readback           32149 input tokens
-  review-readability        31639 input tokens
-  review-risk             31178 input tokens
-forced Stop turns: 5 (median context 225696)
-per-issue input tokens:
-  issue 124: 64555620 input tokens
-  issue 125: 1533678 input tokens
-  issue 128: 32086860 input tokens
-most recent session: 1791172401.976
-
-== worktree-estigia-issue-482-overhead-part-two-opencode-f2fa1b ==
-sessions: 1
-  orchestrator        133305448 input tokens
-forced Stop turns: 0 (median context None)
-most recent session: 1790259258.5040534
-
-== worktree-estigia-issue-496-macos-build-install-opencode-f2fa1b ==
-sessions: 2
-  orchestrator          8265225 input tokens
-forced Stop turns: 0 (median context None)
-most recent session: 1790289692.8350403
-
-```
-
-**The corpus-wide comparison against the baseline is omitted.** The baseline's 15 transcripts were
-drawn mostly from a repository outside this project, and the figures that compared against them —
-session count, forced-`Stop` turns and their median context, the orchestrator's share of input
-tokens — summed every repository in the corpus. They are left out for the same reason as that
-repository's block. The rows above are this project's own; the worktree rows are its delivering
-sessions, attributed under their own label because a worktree is a sibling directory under `~/repo`
-and `repo_of` takes the text after the `-repo-` boundary.
-
-## What the Judgment Day policy once quoted, and what the skill costs every activation
-
-Measurements and history were taken out of `skill/` so that an agent does not pay for them on
-each activation. The Judgment Day measurements below were in `skill/policies/judgment-day.md`
-and are kept here as they were stated.
-
-- **The payload against the checkout, one receipt, the brief held constant.** Withholding the
-  checkout entirely cost 26.5% fewer tokens and 84% fewer tool calls, with no loss of finding
-  count. Handing the checkout over unqualified was measured too, and the judge searches. Neither is
-  the policy, because a third measurement ruled the first out: twice on this repository a real
-  defect has lived in text the diff never showed. A change removing three paths from `skill::FILES`
-  and adding them to no retirement list rested on two doc comments; `RETIRED` appears zero times in
-  that publication's payload, and so does the sentence the judge quoted. A change making the payload
-  opt-in left two shipped policy documents still instructing the orchestrator to hand judges a key
-  the answer no longer carries, and both judges of that panel found it independently, outside the
-  diff both times. On one publication under the named-exception shape a judge left the payload
-  exactly once, to count the entries behind a number the change moved.
-- **Sealed against unsealed, one observation and not a study.** On one change's final panel, the
-  sealed judge detected that the payload it was handed had been abridged and correctly withheld
-  every claim about the elided regions, while the unsealed judge re-derived fourteen citations and
-  found a stale contract sentence outside the diff. The panel reached the out-of-payload defect; the
-  sealed judge did not, and was not meant to. This is not a controlled comparison: the two rounds it
-  rests on reviewed different changes of different sizes. Per judge, 173,453 and 177,059 tokens over
-  685 and 755 seconds became 121,973 and 145,840 over 457 and 535, on briefs of the same shape. What
-  is controlled is the sealing measurement above, and what that one costs is the two defects named.
-
-### The always-loaded set, before and after
-
-Bytes are LF-normalised UTF-8, as `tests/instruction_ceiling.rs` counts them; the ceiling for each
-edited file is now its measured size, so the registry row is the "after" column.
-
-| File | Before | After |
-|---|---:|---:|
-| `skill/SKILL.md` | 31,965 | 31,578 |
-| `skill/bindings/github.md` | 28,141 | 28,128 |
-| `skill/bindings/github/delivery.md` | 38,331 | 37,708 |
-| `skill/bindings/github/operations.md` | 50,330 | 50,290 |
-| `skill/bindings/github/refusals.md` | 52,252 | 52,232 |
-| `skill/policies/blind-judges.md` | 42,419 | 41,760 |
-| `skill/policies/judgment-day.md` | 18,400 | 16,041 |
-| `skill/protocols/rdd.md` | 8,809 | 8,282 |
-| `skill/references/repository-delivery.md` | 21,612 | 21,040 |
-| `skill/references/runtime-notes.md` | 18,578 | 18,434 |
-| `SKILL.md` plus `bindings/github.md`, loaded on every GitHub activation | 60,106 | 59,706 |
-| All shipped `skill/**/*.md` | 430,776 | 425,432 |
-
-The saving on the always-loaded pair is 400 bytes, about 100 tokens at the four-bytes-per-token ratio
-this document assumes: most of what was removed lived in policies and companions that load only when
-a review or a delivery reaches them. The old registry summed to 430,747, not the 430,776 the files
-measured, because a ceiling is an upper bound and a stale one below its file is not a refusal.
-
-
-### The always-loaded pair, a second trim
-
-Issue #4. Same counting as above, measured from `bd8f161`. No rule changed: each removed instruction is
-either stated by its owner elsewhere in the skill or history that moved to `references/safety-incidents.md`.
-
-| File | Before | After |
-|---|---:|---:|
-| `skill/SKILL.md` | 31,564 | 29,995 |
-| `skill/bindings/github.md` | 28,128 | 17,674 |
-| `SKILL.md` plus `bindings/github.md`, loaded on every GitHub activation | 59,692 | 47,669 |
-| `skill/bindings/github/operations-guarantees.md` | 44,396 | 34,237 |
-| `skill/references/safety-incidents.md`, which received the history | 11,662 | 16,227 |
-| All shipped `skill/**/*.md` | 425,666 | 407,474 |
-
-The operations table no longer repeats the flags the MCP schema carries, `operations-guarantees.md` no
-longer has a Command column, and the tool names the skill sends an agent to are the ones
-`tools/list` advertises: `no_shipped_skill_file_names_an_operation_no_tool_performs` fails on a retired
-name outside the one absorption map in `bindings/github.md`. That test keeps no list of retired names: it takes
-every name in operation position from the text, in `_` and `-` spellings, fenced blocks included, and resolves it
-against `TOOLS`, `NOT_EXPOSED`, `NOT_RUN` and the CLI subcommands. Operation position is a name after `SCRIPT`,
-after "call", before `with` and a `--flag`, or in the first cell of a table headed `Operation` (backticked or
-bare), except a row the agent performs by hand, a segment led by `with` or `its`, and the field
-`last_activity`. A name left over is reported as absorbed when the map's left-hand side lists it. A second test
-holds the map to the code: none of its left-hand names is a tool, and the call each answers with exists. A new
-absorption needs only a line in the map.
-
-### The always-loaded pair, a third trim
-
-Same counting as above, measured from `c68eac09`. No rule changed meaning: the analyst's
-steps, its two Decision Gates rows and its Output Contract bullet moved to `references/analyst.md`,
-which the References table loads when the role is analyst or the run is the combined
-analyst-developer; the eight rarer Decision Gates rows (assisted, no tracker, unreadable tracker,
-failed routing read, a renewal that answers "stop", a failed renewal read, an abandoned holder, work
-to put down) moved to `references/decision-gates.md`, behind one row in the main table that names
-them. Four restatements of `references/repository-delivery.md` and the delivery binding became links.
-
-| File | Before | After |
-|---|---:|---:|
-| `skill/SKILL.md` | 31,575 | 25,528 |
-| `skill/bindings/github.md` | 17,989 | 17,989 |
-| `SKILL.md` plus `bindings/github.md`, loaded on every GitHub activation | 49,564 | 43,517 |
-| `skill/references/analyst.md`, new, loaded for the analyst and the combined role | 0 | 3,183 |
-| `skill/references/decision-gates.md`, new, loaded when a rare row applies | 0 | 4,069 |
-| All shipped `skill/**/*.md` | 426,047 | 427,285 |
-
-The always-loaded pair is 6,047 bytes lighter, about 1,500 tokens at the four-bytes-per-token ratio
-this document assumes, and a developer run no longer pays for the analyst's half. The shipped total
-grew by 1,238 bytes, the two new files' headings and the pointers that load them: this moves bytes
-off the path every run reads, it does not remove them. A combined run (bare `flow`) loads
-`analyst.md` as well and so reads `SKILL.md` plus 3,183 bytes, still less than before by 2,864.
-`skill/references/runtime-notes.md` grew by 33 bytes to link the moved assisted row.
-
-## The FLOW baseline: the current workflow, measured before FLOW lands
-
-This is arm A's baseline from the FLOW baseline issue: the workflow as shipped, with the ODD steps and the RDD review,
-measured under conditions frozen on the issue before the first run (revision 1, then revision 2 once
-the pilot had exposed two harness faults). The FLOW validation issue reruns the same scenarios on the build carrying
-FLOW, and only that pairing can show an effect. This section is the *before*, not a comparison.
-
-**Conditions.** Estigia `0.1.1 (7fa8b68ebd)` as the hook and MCP server, with the skill installed at
-that build. Claude Code `2.1.309`, headless, `--model claude-opus-5-5` at effort `medium`, with the
-operator's `claude-personal` profile and only the `estigia` MCP server. A fresh scratch `HOME` per run,
-so no run touched this repository's store or tracker. The seed is a private scratch repository whose
-tree is byte-identical to `7bf02ee9`, `.github/` included, with Actions disabled. `main` is reset
-before every run, and the operator configuration is as `estigia config list` reported it (model
-routing, delivery and transitions `auto`, publication lane `off`). Each scenario is a fresh issue
-handed to `/flow dev <n>`, with no human input inside a run. A run that stops to ask counts as a
-failure.
-
-**Scenarios.** S1, a one-file fix plus its test (`--projects` naming a missing directory exits 2).
-S2, a two-unit change (a `--since` filter and its documentation). S3, a no-change outcome: an
-investigation that closes with evidence and no pull request. Acceptance is checked by the
-operator's script after each run, against the merged commit or the issue, not by the run's own
-report.
-
-| run | accepted | active s | CLI cost USD | input | cache read | cache creation | output | turns | tool calls | subagents | lenses | lens input | lens output | task rows |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| A-S1-c1 | yes | 532 | 1.43 | 80 | 2,740,665 | 76,578 | 13,299 | 40 | 43 | 0 | 4 | 22,530 | 46 | 0 |
-| A-S1-c2 | yes | 726 | 1.34 | 72 | 2,422,552 | 76,477 | 12,107 | 36 | 40 | 0 | 4 | 20,333 | 268 | 0 |
-| A-S1-c3 | yes | 495 | 1.23 | 66 | 2,186,819 | 71,362 | 10,896 | 33 | 35 | 0 | 4 | 22,970 | 56 | 0 |
-| A-S2-c1 | yes | 856 | 1.71 | 86 | 3,353,735 | 86,295 | 17,483 | 43 | 50 | 0 | 4 | 28,610 | 1,027 | 2 |
-| A-S2-c2 | yes | 553 | 1.32 | 56 | 2,031,978 | 78,690 | 14,204 | 28 | 36 | 0 | 4 | 28,262 | 1,645 | 0 |
-| A-S2-c3 | yes | 561 | 1.52 | 76 | 2,860,689 | 80,849 | 15,280 | 38 | 44 | 0 | 4 | 28,790 | 1,306 | 1 |
-| A-S3-c1 | yes | 98 | 0.92 | 40 | 868,463 | 85,357 | 8,645 | 20 | 24 | 1 | 0 | — | — | 0 |
-| A-S3-c2 | yes | 71 | 0.59 | 26 | 660,090 | 46,413 | 4,190 | 13 | 15 | 0 | 0 | — | — | 0 |
-| A-S3-c3 | yes | 83 | 0.56 | 22 | 542,926 | 44,482 | 4,909 | 11 | 14 | 0 | 0 | — | — | 0 |
+### Baseline, arm A (`estigia 0.1.1 (7fa8b68ebd)`)
 
 | scenario | runs | accepted | median active s | median CLI cost USD | cost per accepted task USD | median turns | median tool calls |
 |---|---|---|---|---|---|---|---|
@@ -1067,83 +308,14 @@ report.
 | S2 | 3 | 3 | 561 | 1.52 | 1.52 | 38 | 44 |
 | S3 | 3 | 3 | 83 | 0.59 | 0.69 | 13 | 15 |
 
-Every run delivered and none failed or timed out. Interventions, retries of a run and regressions
-were all zero. Regressions were checked at each merged commit by `tests/usage_accounting.rs`, which
-is the suite covering the one script all three scenarios change. Reviewer jobs
-were never relaunched. **Cost per accepted task** is the CLI-computed cost of all attempts divided by
-accepted tasks: 10.62 USD for 9 accepted tasks over the 9 counted runs.
+Every run was accepted; the 9 counted runs cost 10.62 USD. What it showed about the contract: the ODD
+checklist fired unevenly on S2 (2, 0 and 1 task rows over three runs of one issue); the no-change
+close needed no publication and no lens and cost under half of S1; and every S1 and S2 run was refused
+by the gate at least once before delivering, on `delivery-pr-unidentified` for a merge spelling (all
+six), `closing-keyword-live` on a publication body (four), `unexpected-state` (two), and
+`delivery-pr-repository-option` (one).
 
-How each column is read:
-
-- **Tokens, turns, tool calls and subagents** come from the run's own transcript through
-  `scripts/measure-transcripts.py` (`usage`, `turn_profile`, `subagents_launched`), with every
-  context summed. The served model was `claude-opus-5-5` on every turn, and so was the requested one.
-- **Active seconds** run from the first stream event to the last assistant turn. The transcript's
-  own `wall_clock_seconds` is about 120 s longer, because the profile's `Stop` hook with
-  `--wait-mail` keeps a headless session open after its last turn, and the harness ends it on that
-  idle.
-- **CLI cost** is the `total_cost_usd` Claude Code reports for the session: computed by the CLI at its
-  own tariffs, not billed. It does not include the lenses.
-- **Lenses** are `launch_review_input`'s detached `sonnet` reviewers. Their counters come from each
-  job's `usage.json`, and their cost is not computed here.
-- **Task rows** are the rows `task` recorded in the run's scratch store.
-
-What the baseline shows about the current contract, as observations rather than effects:
-
-- The ODD checklist rule fired unevenly on the one two-unit scenario: S2 recorded 2, 0 and 1 rows
-  over three runs of the same issue.
-- S3's no-change close needed no publication and no lens, and cost under half of S1.
-- Every S1 and S2 run was refused at least once by the gate before it delivered, and S3 never was.
-  Read from the run's own stream: `delivery-pr-unidentified` on a merge spelling, in all six;
-  `closing-keyword-live` on a publication body, in four; `unexpected-state`, in two; and
-  `delivery-pr-repository-option`, in one. Each refusal is a turn spent learning a spelling the
-  contract could have stated.
-
-The pilot's two calibration runs are excluded from the table, and the reason for each is recorded on
-the baseline issue (revision 2). One distorted the suite through an exported `GIT_CONFIG_GLOBAL`. The other used a
-seed without `.github/`. Their CLI-computed cost, 4.72 USD, is part of what the baseline spent but
-not of what it measures. The limits — one runtime, one model, n = 3, uncontrolled cache — are in
-[`honesty-review-tier.md`](honesty-review-tier.md).
-
-**What FLOW changed in the always-loaded contract.** Replacing the seven ODD steps with FLOW moved
-`skill/SKILL.md` from 31,159 to 31,064 bytes, 95 fewer; `bindings/github.md` is unchanged. Two of
-those changes answer what the baseline observed: the checklist is tied to the work's span rather than
-to a count of steps, and *Deliver* now carries the two spellings the gate refused in every S1 and S2
-run, which the runs never read in `bindings/github/delivery.md`. To make room, the *Direct Work
-Delegation* paragraph that describes what the gate records about delegated writes was shortened to
-its rule. Whether any of this saves a turn is for the validation rerun to measure, not for this
-paragraph to claim.
-
-## FLOW against the baseline
-
-The validation rerun is the FLOW validation issue. It reran the baseline's frozen scenarios on
-`estigia 0.1.1 (fdef71b93a)`, the build that carries FLOW. That build was installed with `cargo
-install` and synced into every root, and the readback after sync showed `#### FLOW` present and the
-ODD block gone. Everything else was held as in the baseline: seed, scratch `HOME`, `claude-personal`,
-`claude-opus-5-5` at `medium`, the estigia-only MCP set and the acceptance script. The design,
-including the arms and the pass criteria, was recorded on the issue before the first run.
-
-| run | accepted | active s | CLI cost USD | turns | tool calls | output | subagents | lenses | lens output | task rows | gate refusals |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| F-S1-c1 | yes | 498 | 1.23 | 36 | 38 | 12,063 | 0 | 4 | 403 | 0 | `unexpected-state` |
-| F-S1-c2 | yes | 500 | 1.10 | 28 | 32 | 10,838 | 0 | 4 | 420 | 0 | `unexpected-state` ×2 |
-| F-S1-c3 | no † | 231 | 0.93 | 22 | 22 | 8,037 | 0 | 0 | — | 0 | — |
-| F-S1-c3r | yes | 644 | 0.98 | 24 | 28 | 9,877 | 0 | 4 | 311 | 0 | `unexpected-state` |
-| F-S2-c1 | yes | 605 | 1.30 | 31 | 35 | 13,336 | 0 | 4 | 1,719 | 0 | `unexpected-state` |
-| F-S2-c2 | yes | 539 | 1.39 | 31 | 36 | 14,376 | 0 | 4 | 1,485 | 0 | `unexpected-state` |
-| F-S2-c3 | yes | 549 | 1.33 | 31 | 33 | 13,350 | 0 | 4 | 1,655 | 0 | `unexpected-state` |
-| F-S3-c1 | yes | 86 | 0.61 | 13 | 15 | 5,141 | 0 | 0 | — | 0 | — |
-| F-S3-c2 | yes | 125 | 0.90 | 17 | 20 | 9,279 | 1 | 0 | — | 0 | — |
-| F-S3-c3 | no † | 63 | 0.91 | 20 | 20 | 8,061 | 1 | 0 | — | 0 | — |
-| F-S3-c3r | yes | 91 | 0.56 | 11 | 13 | 4,243 | 0 | 0 | — | 0 | — |
-
-† **Cut by the harness, not failed by the run.** The harness ended a headless session 120 s after
-an assistant turn with no tool call. F-S1-c3 had ended its turn waiting for a backgrounded
-`cargo test`. F-S3-c3 had ended its turn waiting for a background analyst handoff, deferring its
-close evidence and release until that answer came; the answer arrived at 104 s, and no further turn
-followed before the cut. The harness was corrected to idle-cut only after 300 s with no background
-task pending. Each cut run was then replaced once, as the frozen design allows, and both replacements
-were accepted. Both cut runs are reported, and their cost is counted.
+### FLOW, `estigia 0.1.1 (fdef71b93a)`
 
 | scenario | arm A median cost | FLOW median cost | Δ cost | A median active s | FLOW median active s | Δ time | A / FLOW median turns | A / FLOW cost per accepted task |
 |---|---|---|---|---|---|---|---|---|
@@ -1151,159 +323,57 @@ were accepted. Both cut runs are reported, and their cost is counted.
 | S2 | 1.52 | 1.33 | **−13 %** | 561 | 549 | −2 % | 38 / 31 | 1.52 / 1.34 |
 | S3 | 0.59 | 0.61 | +3 % | 83 | 91 | +10 % | 13 / 13 | 0.69 / 0.99 |
 
-Medians are over the three counted runs per scenario: the two replacements stand in for the runs
-the harness cut. **Cost per accepted task** divides the cost of every attempt, cut runs included,
-by accepted tasks. That is why S1 and S3 come out worse on that column: under FLOW, each paid for
-one attempt the harness wasted.
+Medians are over three counted runs per scenario. Two runs (F-S1-c3 and F-S3-c3) were cut by the
+harness, which ended a headless session 120 s after an assistant turn with no tool call while the run
+waited on a background task; the harness was corrected to idle-cut only after 300 s with no background
+task pending, each cut run was replaced once as the frozen design allows, both replacements were
+accepted, and the cut runs' cost is counted. That is why the cost-per-accepted-task column is worse on
+S1 and S3.
 
-What changed, read from the runs:
+- **Delivery refusals disappeared.** Six of six publishing runs in arm A were refused on a merge
+  spelling or closing keyword; none of six under FLOW, because *Deliver* now states both spellings.
+  One `unexpected-state` per publishing run remained, which arm A had in two of six; its cause was not
+  isolated.
+- **No checklist on one-publication work**: 0 task rows on every FLOW run, as the span rule asks, and
+  S2 still met acceptance three times of three.
+- **Turns fell 18 to 22 % on the publishing scenarios; time did not move**, because active time is
+  `cargo` and four lenses, which FLOW changes neither of.
+- **The programme's targets (−40 % cost, −30 % time) were not met**: −13 to −18 % cost and −2 to −6 %
+  time where a publication happens, nothing measurable on S3.
+- **Arm B**, `Model routing` unset so the lenses ran on the CLI default instead of `sonnet`, was
+  accepted six of six. The orchestrator's cost barely moved (median 1.19 against 1.10 on S1); the
+  lenses' output rose (2,689 against 403 tokens on S1) and median active time went from 500 to 766 s
+  on S1 and from 549 to 797 s on S2. The lenses' model is recorded only when a row names one.
+- **Arm C**, Claude Code with no MCP, hooks or skill, cost about a third of FLOW and took about 60 %
+  of its active time (S1 median 0.31 USD, 291 s, 2 of 3 accepted; S2 0.47 USD, 357 s, 3 of 3; S3
+  0.21 USD, 52 s, 2 of 3). Its guarantees are not equivalent: no claim, no gate, no independent
+  review. One run ended its turn waiting for the suite with nothing committed; another, told to change
+  nothing if the behaviour was right, fixed two neighbouring crashes and merged them unreviewed into
+  `main`. These figures measure the price of the claim, the review and the continuation; they do not
+  argue it should not be paid.
+- **Retired**: the seven ODD steps, which FLOW's 9 of 9 acceptance lost no guarantee by. Kept: the
+  *References* row loading `protocols/rdd.md`, the file itself, the ODD and RDD attribution in
+  `docs/parity.md`, and the retired `Review protocol` row's migration message in
+  `src/config/settings.rs`, because no figure here argues against any of them.
 
-- **Gate refusals at delivery disappeared.** In arm A, every S1 and S2 run was refused on a merge
-  spelling or a closing keyword before it delivered: six of six. Under FLOW, none of the six were.
-  This is the change *Deliver* made by stating both spellings. What remained in FLOW is one
-  `unexpected-state` per publishing run, which arm A had too, in two of six runs. Its cause was not
-  isolated here.
-- **No checklist on one-publication work.** Arm A recorded 2, 0 and 1 task rows on the same two-unit
-  issue; FLOW recorded 0 on every run, as the span rule asks. S2 still met acceptance three times out
-  of three.
-- **Turns fell 18–22 % on the publishing scenarios. Time did not move.** Most of a run's active time
-  is `cargo` and the four lenses, and FLOW changes neither.
-- **The targets were not met.** The programme's −40 % cost and −30 % time were hypotheses. The
-  measured effect is −13 to −18 % cost and −2 to −6 % time where a publication happens, and nothing
-  measurable on the no-change scenario.
+### The cost and time levers (`estigia 0.1.1 (5bb61940a3)`)
 
-### Routing (arm B)
+Four changes made against the anatomy of the FLOW runs: `release` closes in one call; `publish_review`
+can start the review and `collect_review_input` can record a computed verdict; the delivery tools are
+always loaded and every tool accepts `compact`; each tracker fact is read once per call. Arms were
+interleaved run by run (G, T, D) so none ran on a cache another had left hours before:
 
-Arm B reran S1 and S2 under FLOW with `Model routing` set to `unset` for `claude-code`. The lenses
-then ran on the CLI's default model instead of `sonnet`, and the row was restored afterwards and read
-back byte-identical.
+- **G**: the build with the installation's defaults on `claude-opus-5-5`.
+- **T**: G with `CLAUDE_CODE_PROMPT_CACHE_TTL=5m` in the session's environment, an operator setting
+  documented by Claude Code and not Estigia configuration. Opus 5.5 writes the one-hour cache at twice
+  the input price and the five-minute cache at the input price.
+- **D**: G with the orchestrator on `claude-sonnet-5-5`, an experiment on quality that nothing adopts.
 
-| run | accepted | active s | CLI cost USD | turns | lenses | lens output |
-|---|---|---|---|---|---|---|
-| B-S1-c1 | yes | 766 | 1.30 | 36 | 6 | 3,966 |
-| B-S1-c2 | yes | 601 | 1.17 | 32 | 4 | 2,689 |
-| B-S1-c3 | yes | 1,055 | 1.19 | 32 | 4 | 2,643 |
-| B-S2-c1 | yes | 585 | 1.37 | 34 | 4 | 5,203 |
-| B-S2-c2 | yes | 797 | 1.43 | 32 | 4 | 5,635 |
-| B-S2-c3 | yes | 1,108 | 1.29 | 29 | 4 | 4,157 |
+A fourth arm, setting the profile's unrelated skills to `skillOverrides: "off"`, was dropped after a
+one-turn probe: the listing shrank from 18,396 to 599 bytes but the first turn's context went from
+33,770 to 33,939 tokens, so the arm would have measured nothing.
 
-The two `c3` runs ran nine hours after the other four, because the git operation window closed
-between them; the harness, the build and the unset row were the same.
-
-Six of six runs were accepted. The orchestrator's cost barely moves with routing — median 1.19 against
-FLOW's 1.10 on S1, 1.37 against 1.33 on S2 — as it should: the orchestrator runs on the same model
-either way. What moves is the lenses. Without the `sonnet` row their median output was 2,689 tokens
-on S1 against FLOW's 403, and 5,203 on S2 against 1,655, and the median active time went from 500
-to 766 s on S1 and from 549 to 797 s on S2. B-S1-c2 was also refused once at delivery, on
-`delivery-pr-unidentified`, before it merged. The lenses'
-model is recorded in each job's manifest only when the row names one, so under `unset` it is
-**unknown**, not inferred; their cost is not computed. B-S1-c1 also started two extra lens jobs.
-
-### The native reference (arm C)
-
-Arm C ran Claude Code with `--setting-sources ""`, no MCP and no skill, so there were no hooks and no
-Estigia. The prompt asked it to fix the issue test-first, publish, merge and close. Its guarantees
-are **not** equivalent: there was no claim, no gate, no independent review, and no receipt binding a
-verdict to the merged bytes.
-
-| scenario | runs | accepted | median active s | median CLI cost USD | cost per accepted task USD |
-|---|---|---|---|---|---|
-| S1 | 3 | 2 | 291 | 0.31 | 0.45 |
-| S2 | 3 | 3 | 357 | 0.47 | 0.47 |
-| S3 | 3 | 2 | 52 | 0.21 | 0.46 |
-
-On S1 and S2, the native agent cost about a third of FLOW and took about 60 % of its active time. It failed
-twice, each time in a way Estigia exists to stop. C-S1-c3 ended its turn "waiting for the full suite
-before I commit" and the session exited with nothing committed: a headless run has no continuation
-once the turn ends. C-S3-c3 was asked to change nothing if the behaviour was already right. It
-confirmed the behaviour was right, then fixed two neighbouring crashes and merged them unreviewed
-into `main`. That gap is the price of the claim, the review and the continuation, and these figures
-measure that price; they do not argue that it should not be paid.
-
-### What was retired, and what was kept
-
-| residual item | decision | why |
-|---|---|---|
-| The seven ODD steps in `skill/SKILL.md` | retired by the FLOW contract change | FLOW met acceptance 9 of 9, once the harness's two cuts were replaced, and lost no guarantee: every claim, verdict, lens and merge topology check still ran |
-| The *References* row loading `protocols/rdd.md` on every review | **kept** | moving that load is an attention change, and nothing here measured it |
-| `protocols/rdd.md` as a file | **kept** | it is *Verify*'s reference, and no figure here argues for folding it |
-| ODD and RDD attribution in `docs/parity.md` | **kept** | it is history and licensing, not instruction |
-| The retired `Review protocol` row's migration message in `src/config/settings.rs` | **kept** | it serves installations that still carry the row |
-
-Nothing beyond the contract change itself is retired. The rerun shows FLOW doing the same work in
-fewer turns and with no delivery refusals, but it does not show any of the remaining items costing
-anything.
-
-## The cost and time levers against the baseline
-
-This rerun measures four changes. They were made after the FLOW validation, against the anatomy of
-its runs:
-
-- `release` closes in one call;
-- `publish_review` can start the review, and `collect_review_input` can record a computed verdict;
-- the ten delivery tools are always loaded, and every tool accepts `compact`;
-- each tracker fact is read once per call.
-
-The build was `estigia 0.1.1 (5bb61940a3)`, installed and synced into every root. Everything else
-was held as in *FLOW against the baseline*: seed, scratch `HOME`, `claude-personal`, the estigia-only
-MCP set, the acceptance script, and the 300 s idle cut that is aware of background tasks. The arms
-were interleaved run by run, G, T, D, so that no arm ran on a cache another arm had left behind for
-hours.
-
-- **G**: the build, with the installation's defaults on `claude-opus-5-5`.
-- **T**: G with `CLAUDE_CODE_PROMPT_CACHE_TTL=5m` in the session's environment. Claude Code's
-  *Prompt caching* page documents this as an operator setting, not Estigia configuration. Opus 5.5
-  writes the one-hour cache at twice the input price and the five-minute cache at the input price.
-- **D**: G with the orchestrator on `claude-sonnet-5-5`. This is an experiment on quality, and
-  nothing here adopts it.
-
-A fourth arm planned the profile's unrelated skills set to `skillOverrides: "off"`. It was dropped
-after a one-turn probe. The setting shrank the skill listing from 18,396 to 599 bytes, but the first
-turn's context went from 33,770 to 33,939 tokens. The listing that setting removes is not the part
-that reaches the model, so the arm would have measured nothing.
-
-| run | accepted | active s | CLI cost USD | turns | tool calls | output | lenses | lens findings | gate refusals |
-|---|---|---|---|---|---|---|---|---|---|
-| G-S1-c1 | yes | 516 | 1.07 | 24 | 25 | 8,679 | 4 | 1 | — |
-| G-S1-c2 | yes | 635 | 1.02 | 27 | 27 | 10,993 | 4 | 1 | — |
-| G-S1-c3 | yes | 540 | 0.95 | 26 | 27 | 8,867 | 4 | 1 | — |
-| G-S2-c1 | yes | 677 | 1.01 | 22 | 22 | 10,263 | 4 | 3 | — |
-| G-S2-c2 | yes | 561 | 1.06 | 24 | 26 | 11,057 | 4 | 2 | — |
-| G-S2-c3 | yes | 882 | 1.07 | 25 | 25 | 10,995 | 4 | 2 | — |
-| G-S3-c1 | yes | 72 | 0.45 | 7 | 8 | 3,872 | 0 | — | — |
-| G-S3-c2 | yes | 74 | 0.50 | 11 | 12 | 3,668 | 0 | — | — |
-| G-S3-c3 | no † | 70 | 0.94 | 19 | 20 | 10,184 | 0 | — | — |
-| G-S3-c3r | yes | 92 | 0.52 | 10 | 11 | 4,752 | 0 | — | — |
-| T-S1-c1 | yes | 514 | 0.77 | 23 | 22 | 8,052 | 4 | 0 | — |
-| T-S1-c2 | yes | 501 | 0.83 | 24 | 24 | 8,966 | 4 | 0 | `delivery-pr-unidentified` |
-| T-S1-c3 | yes | 511 | 0.84 | 25 | 24 | 8,880 | 4 | 0 | — |
-| T-S2-c1 | yes | 510 | 0.87 | 20 | 23 | 9,937 | 4 | 1 | — |
-| T-S2-c2 | yes | 519 | 0.90 | 21 | 24 | 10,639 | 4 | 3 | — |
-| T-S2-c3 | yes | 554 | 1.07 | 28 | 29 | 12,831 | 4 | 2 | — |
-| T-S3-c1 | yes | 87 | 0.52 | 13 | 13 | 4,411 | 0 | — | — |
-| T-S3-c2 | yes | 91 | 0.46 | 10 | 11 | 3,665 | 0 | — | — |
-| T-S3-c3 | yes | 78 | 0.51 | 13 | 14 | 4,207 | 0 | — | — |
-| D-S1-c1 | yes | 621 | 0.42 | 19 | 20 | 5,747 | 4 | 0 | — |
-| D-S1-c2 | yes | 221 | 0.29 | 13 | 14 | 4,754 | 4 | 0 | — |
-| D-S1-c3 | yes | 240 | 0.37 | 20 | 21 | 6,804 | 4 | 0 | `delivery-pr-unidentified` |
-| D-S2-c1 | yes | 232 | 0.45 | 20 | 23 | 8,217 | 4 | 2 | — |
-| D-S2-c2 | yes | 431 | 0.40 | 17 | 17 | 6,900 | 4 | 2 | — |
-| D-S2-c3 | yes | 219 | 0.41 | 18 | 19 | 6,823 | 4 | 3 | — |
-| D-S3-c1 | yes | 60 | 0.23 | 9 | 10 | 3,340 | 0 | — | — |
-| D-S3-c2 | yes | 56 | 0.22 | 8 | 9 | 2,895 | 0 | — | — |
-| D-S3-c3 | yes | 67 | 0.22 | 8 | 9 | 3,115 | 0 | — | — |
-
-† **Cut by the harness, in the same way it cut F-S3-c3.** The run delegated an out-of-scope finding
-to a background analyst and ended its turn with "Waiting for the analyst handoff to report back
-before closing". The handoff answered, refused, because the run had given the analyst a run id the
-store does not issue. No further turn followed, and the session idled out. The run was replaced
-once, as the frozen design allows. Its cost is counted.
-
-Arm A is the baseline and arm A′ is FLOW, both from the sections above. Medians are over the three
-counted runs. Cost per accepted task divides every attempt's cost, cut runs included, by accepted
-tasks.
-
-| scenario | arm | median cost | Δ vs A | Δ vs A′ | median active s | Δ vs A | Δ vs A′ | median turns | cost per accepted task |
+| scenario | arm | median cost | Δ vs A | Δ vs FLOW | median active s | Δ vs A | Δ vs FLOW | median turns | cost per accepted task |
 |---|---|---|---|---|---|---|---|---|---|
 | S1 | G | 1.02 | −24 % | −7 % | 540 | +2 % | +8 % | 26 | 1.01 |
 | S1 | T | 0.83 | **−38 %** | −24 % | 511 | −4 % | +2 % | 24 | 0.82 |
@@ -1315,71 +385,38 @@ tasks.
 | S3 | T | 0.51 | −13 % | −16 % | 87 | +5 % | −4 % | 13 | 0.49 |
 | S3 | D | 0.22 | −62 % | −63 % | 60 | −28 % | −34 % | 8 | 0.22 |
 
-Over all three scenarios, the cost per accepted task was:
+Over all three scenarios the cost per accepted task was 1.18 USD for A, 1.25 for FLOW (+6 %), 0.96 for
+G (−19 %), 0.75 for T (−36 %) and 0.33 for D (−72 %). One G-S3 run was cut by the same harness
+condition (a background analyst handoff the run had given a run id the store does not issue) and
+replaced once, its cost counted.
 
-| arm | cost per accepted task USD | Δ vs A |
-|---|---|---|
-| A | 1.18 | — |
-| A′ | 1.25 | +6 % |
-| G | 0.96 | −19 % |
-| T | 0.75 | −36 % |
-| D | 0.33 | −72 % |
+Which lever moved what, read from each run's stream:
 
-### Which lever moved what
+- **Estigia's own calls fell by a fifth.** Median time inside Estigia tools on a publishing run went
+  from 103 to 107 s under FLOW to 84 to 85 s under G, and turns from 28 to 31 down to 24 to 26,
+  because the close, the review start and the verdict no longer take a turn each.
+- **Cache reads and output fell; the first turn grew.** Against FLOW on S1, G read 1.61 M cached tokens
+  against 1.78 M and wrote 8.9k output tokens against 10.8k. The always-loaded schemas raised the
+  first turn's context from 44.6k to 50.0k tokens, paid once per session.
+- **Time did not fall, because `cargo` decides it.** The `cargo test` median on S2 was 431 s under G
+  against 261 s under FLOW; two of three G-S2 runs ran the full suite three times where the repository
+  asks for one.
+- **The five-minute cache cut the price, not the tokens.** T wrote more to the cache (72k against 58k
+  cache-creation tokens on S1) because a lapsed cache is written again, at half the price: −19 %
+  against G on S1 and −15 % on S2, nothing on S3.
+- **D was cheap and fast by doing less.** The Sonnet orchestrator ran the full suite before publishing
+  in 2 of 6 publishing runs; every Opus run in every arm ran it at least once.
 
-Read from each run's stream: tokens by class, the first turn's context, and wall time per tool kind.
-
-- **Estigia's own calls fell by a fifth.** The median time inside Estigia tools on a publishing run
-  went from 103–107 s under FLOW to 84–85 s under G. Turns fell from 28–31 to 24–26, because the
-  close, the review start and the verdict no longer each take a turn of their own.
-- **Cache reads and output fell, and the first turn grew.** Against FLOW on S1, G read 1.61 M cached
-  tokens against 1.78 M, and wrote 8.9k output tokens against 10.8k. The always-loaded tool schemas
-  raised the first turn's context from 44.6k to 50.0k tokens. That cost is paid once per session,
-  and the turns it saves outweigh it.
-- **Time did not fall, because `cargo` decides it.** The `cargo test` median on S2 was 431 s under
-  G, against 261 s under FLOW. Two of the three G-S2 runs ran the full suite three times where one
-  run is what the repository asks before publishing. That variance is the model's, not the levers'.
-  It is also why G is slower than FLOW on S1 and S2 while spending less.
-- **The five-minute cache cut the price, not the tokens.** T wrote more to the cache than G, 72k
-  against 58k cache-creation tokens on S1, because a cache that lapses is written again. Each write
-  costs half as much, so the net was −19 % against G on S1 and −15 % on S2. On S3 the five-minute
-  cache bought nothing, and the run is too short for either cache to lapse.
-- **D was cheap and fast by doing less.** The Sonnet orchestrator ran the full suite before
-  publishing in 2 of its 6 publishing runs. Every Opus run in every arm ran it at least once. Its
-  time is mostly the suite it skipped, and its cost is the cheaper model plus fewer turns.
-
-### Against the pass criteria
-
-The criteria were recorded before the first run.
-
-| criterion | G | T | D |
-|---|---|---|---|
-| every run accepted | 9 of 9, after one harness cut was replaced | 9 of 9 | 9 of 9 |
-| no delivery refusal | met | **not met**: one `delivery-pr-unidentified` | **not met**: one `delivery-pr-unidentified` |
-| lens findings no more severe than FLOW's | **not met**: two `warning` findings, FLOW's worst was `suggestion` | met | met |
-| every claim, verdict and merge topology check ran | met | met | met, but the repository's full-suite rule was skipped in 4 of 6 publishing runs |
-| −40 % cost against A | no: −19 % per accepted task | no: −36 % per accepted task, −38 % and −41 % on the publishing medians | yes |
-| −30 % active time against A | no | no | yes |
-
-The refusals were:
-
-- **T-S1-c2** chained `git fetch … && gh pr merge`. That is the spelling FLOW's *Deliver* step names
-  as refused.
-- **D-S1-c3** posted close evidence in a heredoc that named the merge command.
-
-Both refusals were recovered on the next turn, and neither has anything to do with the cache's
-lifetime or the levers. The two `warning` findings in G are test gaps of the same kind the other
-arms' lenses classified `suggestion`: an invalid `--since` value and a subagent-only timestamp left
-untested. Nothing blocked, and the verdicts were `approved`.
-
-**No arm meets both targets with every criterion met.** The four levers cut the cost per accepted
-task by 19 % and left time where `cargo` puts it. Adding the five-minute cache reaches −36 %, and
-−40 % on the S2 median. D reaches both targets by not running what the repository asks to be run,
-and that is the quality the targets were bound not to lose. Nothing here recommends T or D: T missed
-a frozen criterion, and D is out of scope by design. `docs/configuration.md` is unchanged.
-
-What remains is the time. A publishing run's active time is still about half `cargo test`, and
-nothing Estigia sends changes how often the model runs the suite.
+Against the criteria recorded before the first run: every run was accepted in every arm. T and D each
+had one `delivery-pr-unidentified` refusal (T chained `git fetch … && gh pr merge`; D posted close
+evidence in a heredoc that named the merge command), both recovered on the next turn and unrelated to
+the cache or the levers. G's lenses filed two `warning` findings where FLOW's worst was `suggestion`
+(untested invalid `--since` value and subagent-only timestamp), and nothing blocked. D skipped the
+repository's full-suite rule in 4 of 6 publishing runs. **No arm meets both targets with every
+criterion met.** The levers cut cost per accepted task by 19 % and left time where `cargo` puts it;
+the five-minute cache reaches −36 %, and −40 % on the S2 median; D reaches both targets by not running
+what the repository asks to be run. Nothing here recommends T or D. A publishing run's active time is
+still about half `cargo test`, and nothing Estigia sends changes how often the model runs the suite.
 
 ## `deliver` against the baseline: arms H, I and J
 
@@ -1398,6 +435,63 @@ consulted. The empty-rollup fix passes it at once, and J is the arm that measure
 J took the agent from 36 to 17 turns on S1 and from 38 to 18 on S2. All 6 of 6 runs were accepted on
 the first attempt, and the worst lens finding class was `suggestion`. **The cost target of −40 % is
 met on both scenarios; the time target of −30 % is not.** The time is the agent's own `cargo test`
-reruns, which ranged from 222 to 533 s per run and swamp a 12 % to 16 % difference in either direction;
-nothing `deliver` sends changes how often the model runs the suite. The limits of this measurement are
-in [`honesty-review-tier.md`](honesty-review-tier.md).
+reruns, which ranged from 222 to 533 s per run and swamp a 12 % to 16 % difference in either
+direction; nothing `deliver` sends changes how often the model runs the suite.
+
+## What these measurements do not establish
+
+A later arm inherits every limit of the ones before it.
+
+- **The tool-answer shrink is reconstructed for most rows.** Only the *after* side can be measured
+  directly, because the pre-edit code no longer exists to run, so every *before* figure and the repair
+  scenario are reconstructed. The 616 against 610 agreement is the evidence the reconstruction is
+  trustworthy, not a substitute for having run the old code.
+- **The transcript corpus is compared corpus to corpus.** `scripts/measure-transcripts.py` aggregates
+  the whole growing corpus against the 2026-09-24 baseline, and nothing in it separates a post-change
+  session from a pre-change one.
+- **The usage classes are one CLI's counters.** The mapping is Claude Code's own keys; Codex, Pi,
+  OpenCode, native reviewers and auxiliary requests are not read, and a provider whose cached counters
+  sit inside its input total needs a mapping that does not exist. The unknown-class and missing-counter
+  branches are exercised only by the synthetic, Claude-shaped fixture in `tests/usage_accounting.rs`,
+  not by live data. The parity with the base script covers fields the classes do not reach.
+- **A session's span, turns and models are what its transcript says, not what was billed.**
+  `wall_clock_seconds` counts idle time and is not time to a verified delivery unless the session ended
+  there; `served_models` and `requested_models` are not billing records; a retry recorded under a new
+  identity counts again.
+- **The FLOW baseline is three runs of three scenarios on one runtime and proves no effect.** Claude
+  Code `2.1.309`, `claude-opus-5-5` at `medium`, one scratch repository. n = 3 supports a description,
+  not significance. Prompt-cache state was recorded and not controlled, the lenses' cost is not
+  computed, and the three scenarios all touch one Python script, so nothing follows for a change in
+  `src/`, a resumed run, or a review that rejects. The pilot's two calibration runs (4.72 USD) are
+  excluded.
+- **The FLOW comparison inherits those limits and adds four.** The two arms ran hours apart on one
+  cache; the harness's idle cut changed between them (120 s to 300 s, background-task aware), so
+  arm-A runs never met the corrected harness, though active seconds do not move with it; arm B's
+  lenses ran on a model nobody recorded; and arm C's reduced guarantees make its cost a reference, not
+  a target. Gate refusals are counted from the run's own stream, so a code a run met but never printed
+  would be missed.
+- **The lever arms are n = 3, and their time figures track `cargo`.** Interleaving spreads cache state
+  without controlling it. Arm T's environment was inherited by the MCP server that launches the
+  lenses, so the saving may not be the orchestrator's alone. A run's active time moves with how often
+  the model chose to run the full suite (once to three times on one scenario), and a difference
+  between arms is within that spread. Whether a run ran the suite is read from its shell commands by
+  pattern, so a wrapper the pattern does not name would be missed.
+- **The `deliver` arms** ran S1 and S2 only for J, so S3 has no `deliver` figure. Active time moved
+  from +16 % to −12 % while suite reruns spread from 222 to 533 s, so the time result proves no
+  direction. "Accepted on the first attempt" is the acceptance script's reading of 6 runs.
+- **The panel measurements** compare two briefs inside this repository and the grading of one change;
+  they are a description, not a rate. The tokens, tool uses and durations are the harness's completion
+  report for each judge, with no retained transcript, and the target was a merged pull request, not a
+  review transaction in this repository's sense.
+- **Every citation into the other project is unfalsifiable from here.** Its commit hashes, constants,
+  quoted Go, regex, per-lens byte counts and durations are relative to a checkout a reader confined to
+  this repository cannot open. No reviewer result was ever admitted from it across three attempts, so
+  the comparison covers what each system sends a reviewer, how many it selects and how many corrections
+  it permits, and says nothing about what either finds or how it grades. Nothing timed the two systems
+  end to end, and no artifact of the measurement is retained.
+- **The orchestrator's phase is a declaration.** `record_spend` reports what the run said, as stated in
+  [`honesty.md`](honesty.md), and the corpus holds no post-change session to measure the polling
+  removal against.
+
+What else the review tier, the lens and the finding do not establish is in
+[`honesty-review-tier.md`](honesty-review-tier.md).
