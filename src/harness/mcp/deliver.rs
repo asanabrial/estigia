@@ -17,6 +17,9 @@ use crate::harness::{Action, CommitTarget, Decision, GateContext, RunsIn, Sensit
 use crate::transport::claim::ReviewTransaction;
 use crate::transport::{self, Failure, How, Output};
 
+const CONFLICT_LINES: usize = 8;
+const DATE_CHARS: usize = 10;
+const SHA_CHARS: usize = 12;
 const MAX_WAIT_SECONDS: u64 = 50;
 const DEFAULT_WAIT_SECONDS: u64 = 20;
 const EMPTY_ROLLUP_WINDOW_SECONDS: u64 = 600;
@@ -49,7 +52,7 @@ pub(super) trait Hands {
     fn worktree(&self) -> Option<String>;
     fn settings(&self) -> Settings;
     fn release_stamp(&self, receipt: &ReviewTransaction) -> Result<Option<String>, Value>;
-    fn lane(&self, receipt: &ReviewTransaction) -> (Value, bool);
+    fn lane(&self, receipt: &ReviewTransaction) -> Value;
     fn checks_receipt(&self, receipt: &ReviewTransaction) -> Result<Option<Value>, Value>;
     fn scratch(&self) -> PathBuf;
     fn now(&self) -> u64;
@@ -76,10 +79,6 @@ enum Position {
     Delivered,
 }
 
-struct Lane {
-    value: Value,
-}
-
 struct Merged {
     sha: String,
     parents: Vec<String>,
@@ -93,14 +92,18 @@ pub(super) enum Rollup {
     Empty,
 }
 
-fn stop(step: &str, reason: &str, detail: Value) -> Halt {
+fn stop_answer(step: &str, reason: &str, detail: Value) -> Value {
     let mut stopped = json!({"step": step, "reason": reason});
     if let Value::Object(extra) = detail {
         for (key, value) in extra {
             stopped[key.as_str()] = value;
         }
     }
-    Halt::Stopped(json!({"ok": true, "delivered": false, "stopped": stopped}))
+    json!({"ok": true, "delivered": false, "stopped": stopped})
+}
+
+fn stop(step: &str, reason: &str, detail: Value) -> Halt {
+    Halt::Stopped(stop_answer(step, reason, detail))
 }
 
 fn refused(step: &str, refusal: Value) -> Halt {
@@ -376,7 +379,7 @@ impl<H: Hands> Deliver<'_, H> {
         Ok(())
     }
 
-    fn release(&mut self, receipt: &ReviewTransaction) -> Step<Lane> {
+    fn release(&mut self, receipt: &ReviewTransaction) -> Step<Value> {
         let stamp = self
             .hands
             .release_stamp(receipt)
@@ -393,8 +396,7 @@ impl<H: Hands> Deliver<'_, H> {
                 self.released_at = self.hands.now();
             }
         }
-        let (value, _) = self.hands.lane(receipt);
-        Ok(Lane { value })
+        Ok(self.hands.lane(receipt))
     }
 
     fn read_pr(&self, step: &str, receipt: &ReviewTransaction, fields: &str) -> Step<Value> {
@@ -412,15 +414,15 @@ impl<H: Hands> Deliver<'_, H> {
         })
     }
 
-    fn ci(&mut self, receipt: &ReviewTransaction, lane: &Lane) -> Step<(Value, Value)> {
-        let state = lane.value["state"].as_str().unwrap_or_default();
+    fn ci(&mut self, receipt: &ReviewTransaction, lane: &Value) -> Step<(Value, Value)> {
+        let state = lane["state"].as_str().unwrap_or_default();
         let cannot_run = matches!(state, "disabled" | "never-ran");
         if cannot_run && self.request.appendix.is_none() {
             return Err(stop(
                 "ci",
                 "appendix-required",
                 json!({
-                    "lane": lane.value,
+                    "lane": lane,
                     "detail": "no CI can run here: pass `appendix_file` with the local suite \
                                command and its result",
                 }),
@@ -436,7 +438,7 @@ impl<H: Hands> Deliver<'_, H> {
                 ));
             }
             if cannot_run {
-                let summary = json!({"lane": lane.value, "rollup": "not consulted"});
+                let summary = json!({"lane": lane, "rollup": "not consulted"});
                 return Ok((view, summary));
             }
             match classify(&view["statusCheckRollup"]) {
@@ -445,7 +447,7 @@ impl<H: Hands> Deliver<'_, H> {
                 }
                 Rollup::Green(checks) => {
                     let summary = json!({
-                        "lane": lane.value,
+                        "lane": lane,
                         "rollup": checks,
                         "merge_state": view["mergeStateStatus"],
                     });
@@ -455,7 +457,7 @@ impl<H: Hands> Deliver<'_, H> {
                     self.wait("ci", "checks-running", None)?;
                 }
                 Rollup::Empty if state == "not-consulted" => {
-                    let summary = json!({"lane": lane.value, "rollup": "none"});
+                    let summary = json!({"lane": lane, "rollup": "none"});
                     return Ok((view, summary));
                 }
                 Rollup::Empty => {
@@ -511,7 +513,7 @@ impl<H: Hands> Deliver<'_, H> {
             json!({
                 "tip": tip,
                 "reviewed_base": receipt.base,
-                "detail": merge.stdout.lines().take(8).collect::<Vec<_>>().join("\n"),
+                "detail": merge.stdout.lines().take(CONFLICT_LINES).collect::<Vec<_>>().join("\n"),
             }),
         ))
     }
@@ -524,11 +526,16 @@ impl<H: Hands> Deliver<'_, H> {
         )?;
         let mut moved = Vec::new();
         for line in changed.lines() {
-            let (status, path) = line.split_once('\t').unwrap_or_default();
-            if !matches!(path.rsplit('/').next(), Some("Cargo.toml" | "package.json")) {
+            let fields: Vec<&str> = line.split('\t').collect();
+            let (Some(status), Some(old), Some(new)) =
+                (fields.first(), fields.get(1), fields.last())
+            else {
                 continue;
-            }
-            let at = |revision: &str| {
+            };
+            let at = |revision: &str, path: &str| {
+                if !matches!(path.rsplit('/').next(), Some("Cargo.toml" | "package.json")) {
+                    return Ok(None);
+                }
                 let spec = format!("{revision}:{path}");
                 let shown = self.hands.exec(&["git", "show", &spec], How::tolerated());
                 let read = match &shown {
@@ -537,18 +544,18 @@ impl<H: Hands> Deliver<'_, H> {
                 };
                 read.map_err(|()| stop("version", "version-unreadable", json!({"path": path})))
             };
-            let before = if status == "A" {
+            let before = if status.starts_with('A') {
                 None
             } else {
-                at(&receipt.base)?
+                at(&receipt.base, old)?
             };
-            let after = if status == "D" {
+            let after = if status.starts_with('D') {
                 None
             } else {
-                at(&receipt.head)?
+                at(&receipt.head, new)?
             };
             if before != after {
-                moved.push(json!({"path": path, "from": before, "to": after}));
+                moved.push(json!({"path": new, "from": before, "to": after}));
             }
         }
         if moved.is_empty() {
@@ -788,7 +795,7 @@ impl<H: Hands> Deliver<'_, H> {
             language: self.hands.settings().summary_language,
             date: session::stamp_of(self.hands.now())
                 .chars()
-                .take(10)
+                .take(DATE_CHARS)
                 .collect(),
         }
     }
@@ -894,7 +901,7 @@ fn join_strings(values: &[Value]) -> String {
 
 fn summary(facts: &Facts) -> String {
     let verdict = facts.verdict["outcome"].as_str().unwrap_or("approved");
-    let sha: String = facts.merge_sha.chars().take(12).collect();
+    let sha: String = facts.merge_sha.chars().take(SHA_CHARS).collect();
     match facts.language.as_str() {
         "Español" => format!(
             "Entregado #{} mediante el PR #{} en el commit de fusión {sha}, con veredicto calculado {verdict}.",
@@ -1090,10 +1097,9 @@ impl Hands for Live<'_> {
             .map_err(|failure| failure.envelope())
     }
 
-    fn lane(&self, receipt: &ReviewTransaction) -> (Value, bool) {
-        let (lane, next) = self
-            .pinned(|| transport::claim::ci_outlook(&self.transport, &receipt.head, receipt.pr));
-        (lane, next == "merge")
+    fn lane(&self, receipt: &ReviewTransaction) -> Value {
+        self.pinned(|| transport::claim::ci_outlook(&self.transport, &receipt.head, receipt.pr))
+            .0
     }
 
     fn checks_receipt(&self, receipt: &ReviewTransaction) -> Result<Option<Value>, Value> {
@@ -1143,13 +1149,11 @@ pub(super) fn deliver(
         Some(path) => match std::fs::read_to_string(path) {
             Ok(text) => Some(text),
             Err(error) => {
-                let Halt::Stopped(answer) = stop(
+                let answer = stop_answer(
                     "appendix",
                     "appendix-unreadable",
                     json!({"detail": format!("{path}: {error}")}),
-                ) else {
-                    unreachable!("stop builds a stopped answer");
-                };
+                );
                 return Ok(result_of(answer, compact));
             }
         },

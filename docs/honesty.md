@@ -2034,7 +2034,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 41,597 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 41,803 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -10413,7 +10413,9 @@ does not:
 - **A merge queue or an approval rule hands back.** A merge command that answers and leaves the pull
   request unmerged reads `merge-unconfirmed`, one GitHub refuses reads `merge-refused`; neither is
   told apart from the other causes, and the queue's configured method is not proven to keep a merge
-  commit before the attempt.
+  commit before the attempt. A merge whose read-back never answers reads `merge-unknown`, not either
+  of those: it may have landed, and the next call re-reads it. A merge test or a changed manifest
+  that cannot be read reads `base-unreadable` or `version-unreadable`, never as advanced or unchanged.
 - **Only two manifests are read for a version.** `[package] version` in a changed `Cargo.toml` and
   `"version"` in a changed `package.json`; a `pyproject.toml`, a workspace-inherited version whose
   root file did not change, and any other manifest move without a hand-back.
