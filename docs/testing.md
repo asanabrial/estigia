@@ -174,8 +174,9 @@ None of those skips when `node` is missing; all fail and say so, since a skip sp
 defect this repository has filed against itself. Others *ask* for an interpreter and tolerate its
 absence — `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer` spawns `node` to check the
 plugin parses, and several fixtures spawn `sh` — so the honest line is that one hundred and eleven
-tests require `node`, four of them `tar` too, and one requires `bash`, and nothing else does.
-`doctor` asks for none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not
+tests require `node`, four of them `tar` too, and one requires `bash`, and nothing else does except `sh`: the checks tests in
+`src/transport/claim/tests/checks.rs` declare their commands as `sh -c`, so they need `sh` on the path
+and a declared check that cannot start does not pass them. `doctor` asks for none. The `bash` one, `nothing_bash_executes_is_blanked_as_data`, fails, not
 skips, without it.
 
 Four in [`tests/npm.rs`](../tests/npm.rs) drive the npm installer, `npm/bin/estigia.js`, on Unix only
@@ -189,7 +190,8 @@ One more interpreter joined that list with the transcript accounting: the nine t
 [`tests/usage_accounting.rs`](../tests/usage_accounting.rs) run the measurement script under
 `python3`, the interpreter that script is written in, and they are `#[cfg(unix)]` because `python3`
 is not the name Windows ships. They fail, never skip, without it, so the honest line is that one
-test requires `bash`, nine require `python3` on Unix, and nothing else does; all of those read a
+test requires `bash`, nine require `python3` on Unix, and nothing else does but the `sh` the checks tests
+spawn; all of those read a
 missing interpreter as a broken build rather than an unbuilt fixture.
 
 ## Why `cargo doc` is on the list

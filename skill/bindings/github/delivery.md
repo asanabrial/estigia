@@ -317,10 +317,13 @@ answering `stopped` with the `step`, a `reason` and `review_status`'s `next`. Th
 context), `authorisation` (`Merge by` is not `agent`, or `Delivery authorisation` is not `auto`),
 `ci` (`ci-red`; `head-moved`; `ci-absent`, no check ten minutes after the release; `appendix-required`),
 `base` (`base-advanced`: the base moved and does not merge clean; `base-unreadable`: the merge test
-itself failed), `version` (`version-changed`, so *Version tags* applies, a rename included;
+itself failed; `base-fetch-failed`: the base could not be fetched), `version` (`version-changed`, so *Version tags* applies, a rename included;
 `version-unreadable`: a changed manifest could not be read), `merge` (the gate's refusal, GitHub's, or
-a queue or approval rule that left it unmerged; `merge-unknown`: no read-back answered, so the next
-call re-reads and never re-merges) and `close`. A step that has to wait answers `pending` with `ask_after`
+a queue or approval rule that left it unmerged; `merge-not-covered`: no claim of this run covers the merge;
+`merge-unreadable`: merged, with no merge commit named; `merge-unknown`: no read-back answered, so the next
+call re-reads and never re-merges), `close` (`evidence-unwritable`: the evidence file could not be written)
+and `appendix` (`appendix-unreadable`: `appendix_file` could not be read). At any step that reads the pull
+request, `pull-request-unreadable` hands back the read that failed. A step that has to wait answers `pending` with `ask_after`
 instead of blocking past 50 s. It reads the pull request's whole rollup as the required set, whatever the lane says (a
 `not-consulted` lane is no evidence CI does not run), though on that lane an empty rollup passes at once
 rather than waiting; only where the lane reads `disabled` or

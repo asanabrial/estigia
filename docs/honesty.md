@@ -2034,7 +2034,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 41,803 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 42,206 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -7331,7 +7331,8 @@ pointer that leaves it names the document it points at.
 - **One row is read by nobody.** `Delivery preset` stores nothing of its own and only writes the
   rows it stands for, so nothing reads it at run time. `State names` is read by `assist`, `ready_pr`
   and `review_stages`, which move a Linear issue to the state it maps. `Corrections after ready` and `Ready by` are read by `draft_pr` and
-  `ready_pr`, and `External reviewers` and `Merge by` by `review_stages`, all through
+  `ready_pr`, `External reviewers` by `review_stages`, and `Merge by` by `review_stages` and by `deliver`, which hands
+  back at `authorisation` when it is not `agent`, all through
   `Context::layered`. `READ_BY_NOBODY` in `tests/honesty.rs` lists `Delivery preset` and fails when it
   is read and not taken off the list.
   - **`review_stages` reads, and decides nothing.** Its answer is a reading of the pull request at the
