@@ -190,7 +190,8 @@ started), `seconds` and `tail`, the last 2,000 bytes of its combined stdout and 
 carrying `run-id`, `digest` (the target digest), `commands` (a SHA-256 over the declared checks in order,
 each field length-prefixed), `passed`, and `results`, one `name=exit:seconds` entry per check with `none`
 for an exit that was not a code. The tails are in the answer and never in the marker. A timed-out job
-records nothing.
+records nothing. The target is derived again when a finished job is about to be recorded; a tree that
+changed or went dirty during the run records nothing and refuses `checks-target-moved`.
 
 **The gate.** `record_computed_verdict`, before it records `approved`, and `release_ci`, through the
 recomputation that clears a receipt, require a trusted `checks-receipt` for exactly the receipt's digest

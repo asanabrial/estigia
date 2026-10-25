@@ -376,8 +376,33 @@ fn a_dirty_tree_is_refused_before_anything_runs() {
         &never,
     )
     .expect_err("a dirty tree is not a target");
-    assert!(!matches!(failure, Failure::Read(_)), "{}", failure.detail());
+    assert_eq!(reason(failure), "dirty-review-target");
     assert_eq!(recorded_receipts(), 0);
+}
+
+#[test]
+fn a_tree_edited_while_the_job_ran_records_nothing_and_is_refused_moved() {
+    crate::transport::store::forget_scratch_store();
+    let (_root, context, receipt) = checked_change(Some(&declaration_for(&[(
+        "edits",
+        "echo edited >> notes.md",
+    )])));
+    let comments = timeline_of(&receipt);
+
+    let failure = ask(
+        &context,
+        &comments,
+        &request(30, &receipt.base),
+        &on_a_thread,
+    )
+    .expect_err("a result for a moved tree was recorded");
+    assert_eq!(reason(failure), "checks-target-moved");
+    assert_eq!(recorded_receipts(), 0);
+    let jobs = super::super::capture::jobs_dir().expect("the jobs directory");
+    assert!(
+        std::fs::read_dir(jobs).map_or(true, |mut left| left.next().is_none()),
+        "the job's result outlived the refusal"
+    );
 }
 
 #[test]

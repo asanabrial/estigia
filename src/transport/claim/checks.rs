@@ -171,7 +171,21 @@ fn finished_answer(
     })
 }
 
+fn target_moved(digest: &str) -> Failure {
+    Failure::Stop(serde_json::json!({
+        "ok": false,
+        "reason": "checks-target-moved",
+        "digest": digest,
+        "action": "nothing was recorded: the checkout changed while the checks ran, so the result \
+                   is not for these bytes; commit or restore it, publish again, and call \
+                   `run_checks` for the new target",
+    }))
+}
+
+#[allow(clippy::too_many_arguments)]
 fn collected(
+    context: &Context,
+    base: &str,
     ledger: &Ledger,
     request: &RunChecks<'_>,
     dir: &Path,
@@ -210,6 +224,18 @@ fn collected(
             "action": "the job ran past its deadline and its process group was killed; nothing \
                        was recorded, so `run_checks` starts the checks afresh",
         }));
+    }
+    let now = target::clean_target(context, base, request.worktree);
+    if now
+        .as_ref()
+        .map(|target| target.get("digest").and_then(serde_json::Value::as_str))
+        .ok()
+        .flatten()
+        != Some(digest)
+    {
+        check_job::discard_result(dir)?;
+        let _ = std::fs::remove_dir_all(dir);
+        return Err(target_moved(digest));
     }
     let passed = outcome.passed(declared);
     record(ledger, request, digest, commands, passed, &outcome.runs)?;
@@ -295,6 +321,8 @@ pub(super) fn run_checks_with(
         match status {
             JobStatus::Finished(outcome) => {
                 return collected(
+                    context,
+                    base,
                     &ledger,
                     request,
                     &dir,

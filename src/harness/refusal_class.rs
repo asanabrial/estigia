@@ -84,6 +84,7 @@ const STALE: &[&str] = &[
     "assisted-claim-stale",
     "base-moved-during-creation",
     "capture-result-stale",
+    "checks-target-moved",
     "claim-metadata-mismatch",
     "claim-operation-conflict",
     "claim-operation-expired",
