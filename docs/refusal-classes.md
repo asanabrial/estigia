@@ -75,9 +75,13 @@ replay advice that goes with it (`Refusal::classed`), and a refusal whose outcom
   `reviewer-inspect-unreadable`: the checkout could not be read for an inspection, so the candidate is
   uninspected rather than failed. Also `capture-running` and `capture-runner-lost`: the reviewer's answer
   has not been given yet, or its process ended without giving one, which is not a verdict on the review.
+  `checks-runner-lost` is the same for a declared-checks job: its process ended without a result, so
+  nothing was decided and nothing was recorded;
 
 **`stale`** — something the run held has moved:
 
+- `checks-target-moved`: the checkout changed while a declared-checks job ran, so its result is for
+  bytes nobody is reviewing and nothing is recorded;
 - `capture-result-stale`: the receipt a reviewer was launched against is no longer the one
   `review_status` offers, so its answer is for bytes nobody is reviewing;
 - every `*-operation-conflict`, `*-metadata-mismatch`, `*-operation-no-longer-current` and
@@ -131,6 +135,12 @@ or broke a rule it can be told. That includes:
   repository the gate does not read), `delivery-pr-mismatch`,
   `complete-review-transaction-missing`, `complete-review-transaction-not-selected`: the command or the
   checkout is not one a receipt can be selected for;
+- `checks-receipt-missing` and `checks-failed`: the base declares checks and the timeline holds no
+  passing `checks-receipt` for the receipt's digest and the declared commands. The timeline was read
+  and the rule says no; a receipt for other bytes is a receipt that was never there for these.
+  `checks-declaration-malformed` (a `[[check]]` table that could not run as written) and
+  `checks-base-unknown` (`run_checks` with no published base to bind to) are `refused` for the same
+  reason;
 - `merge-without-ci-release`: the local store holds no `ci-release` for the exact receipt being
   merged, so no verdict was checked for those bytes;
 - `inspect-parent-missing`: the publication named for an inspection was published with no recorded

@@ -2030,7 +2030,7 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 17,892 | file on disk |
+  | `skill/bindings/github.md` | 17,989 | file on disk |
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
@@ -10301,6 +10301,30 @@ history is kept; the coordinates are not.
   - **No pipe-buffer size was measured.** The 1 MiB test exceeds any common buffer; the figure is not
     this machine's.
   - **The zombie is not asserted.** `wait` follows the kill, but no test inspects the process table.
+
+- **A declared-checks receipt binds the tracked bytes and the commands, and nothing else.**
+  `run_checks` keys its receipt on the clean-target digest `publish_review` binds and on a SHA-256 of
+  the declared commands ([`generated-files.md`](generated-files.md#declared-checks)). What that does
+  not measure:
+  - **Inputs outside the digest are not in the key.** A gitignored file, an installed toolchain, an
+    environment variable or the network can change a check's result without changing either digest, so
+    the same receipt can stand for a run that would now fail, and a failed one stands for bytes that
+    might now pass. A receipt that failed is never rerun for the same digest; a new publication is the
+    way to ask again.
+  - **The checks run on the published head, not on the merge result CI tests.** A base that moved
+    since the publication is not in what ran.
+  - **Host MCP timeouts are not measured.** The wait is capped at 50 seconds and each call returns
+    inside it on this server's own clock, on the reading that some hosts give up on a call near 60
+    seconds. No host was run to confirm where its limit is, and a host with a shorter one can still
+    abandon a call that is waiting.
+  - **A timed-out job records nothing.** It is not a verdict on the change, so the next call runs the
+    checks afresh, and a check that always overruns 30 minutes never yields a receipt.
+  - **The runner's cause of death is not read back.** A job that ended without a result is
+    `checks-runner-lost` with whatever its stderr log held; nothing distinguishes a crash from a kill.
+  - **The unit tests run the runner on a thread, and the detaching launch is not crossed for this job.**
+    The `__check-job` pipe test, Unix only, runs the subcommand directly. The launch that detaches it
+    is the one `__review-job` uses, crossed by `tests/pipe/review_job.rs` for that subcommand alone;
+    nothing starts `__check-job` through it, and nothing exercises the Windows flags.
 
 ## Which hook commands are Estigia's
 

@@ -97,6 +97,13 @@ pub enum Command {
         dir: std::path::PathBuf,
     },
 
+    /// Run one detached check job: read its manifest, run each declared check, write its result.
+    #[command(name = "__check-job", hide = true)]
+    CheckJob {
+        /// The job directory the launch prepared.
+        dir: std::path::PathBuf,
+    },
+
     /// Open the setup screen: agents on the left, that agent's settings on the right.
     Tui,
 

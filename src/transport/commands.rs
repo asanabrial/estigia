@@ -53,6 +53,7 @@ pub const SCRIPTED: &[&str] = &[
     "spend",
     "spend-summary",
     "release-ci",
+    "run-checks",
     "unassign",
     "changelog-notes",
     "check-closing-keywords",

@@ -178,6 +178,8 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             crate::reviewer::job::run(dir, &crate::reviewer::select_adapter)
         }
 
+        Command::CheckJob { dir } => crate::transport::check_job::run(dir),
+
         Command::Tui => {
             require_terminal(Resolution::run(
                 "estigia setup --all   # or estigia setup <agent>",
