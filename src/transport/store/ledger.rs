@@ -71,6 +71,17 @@ fn read_facts(context: &Context, issue: u64) -> Result<Facts, Failure> {
 
 #[cfg(test)]
 thread_local! {
+    static OPENS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// How many times this test thread has opened a ledger.
+#[cfg(test)]
+pub(crate) fn ledger_opens() -> u64 {
+    OPENS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+thread_local! {
     static SCRATCH: tempfile::TempDir = tempfile::tempdir().expect("a scratch store directory");
 }
 
@@ -228,6 +239,8 @@ impl Ledger {
         issue: u64,
         now: &str,
     ) -> Result<Self, Failure> {
+        #[cfg(test)]
+        OPENS.with(|opens| opens.set(opens.get() + 1));
         if crate::transport::outbox::is_provisional(issue) {
             return Self::open_provisional(path, context, issue, now);
         }

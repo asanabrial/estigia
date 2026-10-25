@@ -1702,12 +1702,36 @@ pub fn transition(
     from: Option<&str>,
     now: &str,
 ) -> Result<serde_json::Value, Failure> {
-    if !STATES.contains(&to) {
-        return Err(Failure::Read(format!(
-            "`{to}` is not a workflow state the local store can hold, so nothing was written"
-        )));
+    require_state(to)?;
+    transition_on(
+        context,
+        &super::store::Ledger::open(context, issue, now)?,
+        issue,
+        to,
+        from,
+        now,
+    )
+}
+
+/// Refuses a state the local store cannot hold, before anything is read.
+pub(crate) fn require_state(to: &str) -> Result<(), Failure> {
+    if STATES.contains(&to) {
+        return Ok(());
     }
-    let ledger = super::store::Ledger::open(context, issue, now)?;
+    Err(Failure::Read(format!(
+        "`{to}` is not a workflow state the local store can hold, so nothing was written"
+    )))
+}
+
+/// [`transition`] against a ledger this call already opened.
+pub(crate) fn transition_on(
+    context: &Context,
+    ledger: &super::store::Ledger,
+    issue: u64,
+    to: &str,
+    from: Option<&str>,
+    now: &str,
+) -> Result<serde_json::Value, Failure> {
     let delivery = if to == "done" {
         super::claim::verified_delivery(context, &ledger.timeline()?)?
     } else {
@@ -1734,7 +1758,7 @@ pub fn transition(
         }
         return Ok(deferred);
     }
-    let mut result = project_state(context, &ledger, issue, to, from)?;
+    let mut result = project_state(context, ledger, issue, to, from)?;
     if let Some(delivery) = delivery {
         result["delivery"] = delivery;
     }

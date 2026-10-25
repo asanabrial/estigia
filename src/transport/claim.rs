@@ -6725,12 +6725,9 @@ fn require_known_spend_receipt(
 /// Reads, without writing, that a spend record names a receipt this issue
 /// published. A release that carries several runs this over all of them, after
 /// [`validate_spend`], before it records one.
-pub(crate) fn check_spend_receipt(
-    context: &Context,
-    spend: &SpendReview<'_>,
-) -> Result<(), Failure> {
+pub(crate) fn check_spend_receipt(ledger: &Ledger, spend: &SpendReview<'_>) -> Result<(), Failure> {
     let receipt = review_receipt(spend.epoch, spend.pr, spend.head, spend.base, spend.digest)?;
-    require_known_spend_receipt(&timeline(context, spend.issue, spend.now)?, &receipt)
+    require_known_spend_receipt(&ledger.timeline()?, &receipt)
 }
 
 /// Records one measurement of what a phase cost against a publication
@@ -6753,8 +6750,22 @@ pub fn record_spend(
     context: &Context,
     spend: &SpendReview<'_>,
 ) -> Result<serde_json::Value, Failure> {
-    let operation_id = require_operation_id(Some(spend.operation_id))?;
+    require_operation_id(Some(spend.operation_id))?;
     validate_spend(spend)?;
+    record_spend_on(
+        context,
+        &Ledger::open(context, spend.issue, spend.now)?,
+        spend,
+    )
+}
+
+/// [`record_spend`] against a ledger this call already opened.
+pub(crate) fn record_spend_on(
+    context: &Context,
+    ledger: &Ledger,
+    spend: &SpendReview<'_>,
+) -> Result<serde_json::Value, Failure> {
+    let operation_id = require_operation_id(Some(spend.operation_id))?;
     let conditions = spend.conditions.trim();
     let receipt = review_receipt(spend.epoch, spend.pr, spend.head, spend.base, spend.digest)?;
     let pr_field = spend.pr.to_string();
@@ -6772,7 +6783,6 @@ pub fn record_spend(
         ("digest", spend.digest),
         ("conditions", conditions),
     ];
-    let ledger = Ledger::open(context, spend.issue, spend.now)?;
     let comments = ledger.timeline()?;
     reject_operation_kind_conflict(&comments, &operation_id, &["spend"])?;
     // Diverges from `record_review_finding`'s `require_recorded_receipt`: a
@@ -6805,7 +6815,7 @@ pub fn record_spend(
 
     verify_held(
         context,
-        &ledger,
+        ledger,
         spend.issue,
         spend.run_id,
         "review",
@@ -11288,13 +11298,27 @@ fn is_dead_self_operation(
 ///   before the checks below would answer something narrower for the same
 ///   fact — a wrong kind, or a metadata mismatch.
 pub fn claim(context: &Context, what: &Acquisition<'_>) -> Result<serde_json::Value, Failure> {
-    let operation_id = require_operation_id(Some(what.operation_id))?;
-    require_horizon(what.horizon, None)?;
+    claim_checks(what)?;
+    claim_on(context, &Ledger::open(context, what.issue, what.now)?, what)
+}
 
-    let ledger = Ledger::open(context, what.issue, what.now)?;
+/// What [`claim`] refuses before it reads anything.
+pub(crate) fn claim_checks(what: &Acquisition<'_>) -> Result<(), Failure> {
+    require_operation_id(Some(what.operation_id))?;
+    require_horizon(what.horizon, None)?;
+    Ok(())
+}
+
+/// [`claim`] against a ledger this call already opened, after [`claim_checks`].
+pub(crate) fn claim_on(
+    context: &Context,
+    ledger: &Ledger,
+    what: &Acquisition<'_>,
+) -> Result<serde_json::Value, Failure> {
+    let operation_id = require_operation_id(Some(what.operation_id))?;
     let mut known = Known::default();
     if !super::outbox::is_provisional(what.issue) {
-        known.projection = Some(require_explainable_projection(context, &ledger, what)?);
+        known.projection = Some(require_explainable_projection(context, ledger, what)?);
     }
     let decided = ledger.transact(|tx| {
         let comments = tx.timeline()?;
@@ -11427,7 +11451,7 @@ pub fn claim(context: &Context, what: &Acquisition<'_>) -> Result<serde_json::Va
     // and the issue page showed nothing — no assignee, and whatever `dev:` label
     // the previous holder left behind — so this side answered `ok` at the point
     // the transport was still working.
-    let deferred = project_ownership(context, what.issue, event, what.now, &ledger, known)?;
+    let deferred = project_ownership(context, what.issue, event, what.now, ledger, known)?;
 
     answer["issue"] = serde_json::json!(what.issue);
     mark_deferred(&mut answer, deferred);
@@ -11656,11 +11680,11 @@ fn epoch_of(event: &ownership::Event) -> String {
 /// itself writes anything, so a takeover between the discovery and the write
 /// cannot leave a half-closed delivery behind the refusal. Reads only; every
 /// other refusal stays [`plan_release`]'s.
-pub(crate) fn check_release_epoch(context: &Context, what: &Departure<'_>) -> Result<(), Failure> {
+pub(crate) fn check_release_epoch(ledger: &Ledger, what: &Departure<'_>) -> Result<(), Failure> {
     let Some(requested) = what.target_operation else {
         return Ok(());
     };
-    let comments = timeline(context, what.issue, what.now)?;
+    let comments = ledger.timeline()?;
     let ownership = holding(&comments, what.now);
     let Some(mine) = ownership
         .live
@@ -11726,8 +11750,17 @@ pub struct Departure<'a> {
 /// moving it backwards, and deciding where it should go instead is somebody
 /// else's call.
 pub fn unassign(context: &Context, what: &Departure<'_>) -> Result<serde_json::Value, Failure> {
+    require_operation_id(Some(what.operation_id))?;
+    unassign_on(context, &Ledger::open(context, what.issue, what.now)?, what)
+}
+
+/// [`unassign`] against a ledger this call already opened.
+pub(crate) fn unassign_on(
+    context: &Context,
+    ledger: &Ledger,
+    what: &Departure<'_>,
+) -> Result<serde_json::Value, Failure> {
     let operation_id = require_operation_id(Some(what.operation_id))?;
-    let ledger = Ledger::open(context, what.issue, what.now)?;
     // The `dev:` labels are a projection, read only to name a successor whose
     // marker declared no runtime. The ownership they are read beside is not.
     let projected = if super::outbox::is_provisional(what.issue) {
@@ -11885,7 +11918,7 @@ pub fn unassign(context: &Context, what: &Departure<'_>) -> Result<serde_json::V
         what.issue,
         after.event.clone(),
         what.now,
-        &ledger,
+        ledger,
         Known::default(),
     )?;
 
