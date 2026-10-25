@@ -30,9 +30,11 @@ operator has in their fingers would break every habit at once for two saved char
 The bare form takes no role word and is the combined analyst-developer, routing to which issue; the
 Decision Gates table in `SKILL.md` owns that order, and this file does not restate it.
 
-`flow <issue-number>` is a form with no role word, and it exists only where the repository's
-`Claim workflow` row is `assisted`: a refusal that names the `Claim workflow` row — a tracker write refused under `assisted`, or `assist`
-refused outside it — is how a runtime learns which mode it is in. The assisted row in [decision gates](decision-gates.md) owns the
+`flow <issue>` and `flow dev <issue>` (`developer` alike), `<issue>` a number or a tracker key, mean
+the same thing where the repository's `Claim workflow` row is `assisted`: the assisted row, before any
+developer step and with no claim first. A run reads that row (`estigia config list`) before it claims,
+and a refusal that names it — a tracker write refused under `assisted`, or `assist` refused outside
+it — says the same. The assisted row in [decision gates](decision-gates.md) owns the
 path (`assist`, work in its worktree, `draft_pr`, report the URL, stop); it needs no claim and no
 heartbeat, so the team-mechanics, identity and renewal sections below do not apply to it.
 
