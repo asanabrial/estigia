@@ -1269,7 +1269,7 @@ fn run_tool_asking(
         flags.push(key);
     }
 
-    if matches!(tool.operation, "draft-pr" | "ready-pr") {
+    if matches!(tool.operation, "draft-pr" | "ready-pr" | "review-stages") {
         let (Some(branch), Some(worktree), true) = (&run.branch, &run.worktree, run.assisted)
         else {
             return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
@@ -1286,8 +1286,17 @@ fn run_tool_asking(
         };
         flags.push("--branch".to_owned());
         flags.push(branch.clone());
-        flags.push("--worktree".to_owned());
-        flags.push(worktree.display().to_string());
+        if matches!(tool.operation, "draft-pr" | "ready-pr") {
+            flags.push("--worktree".to_owned());
+            flags.push(worktree.display().to_string());
+        }
+        if let (true, Some(issue)) = (
+            matches!(tool.operation, "ready-pr" | "review-stages"),
+            &run.issue,
+        ) {
+            flags.push("--issue".to_owned());
+            flags.push(issue.to_string());
+        }
     }
 
     if let Some(named) = worktree_to_name(tool, &flags, &run) {

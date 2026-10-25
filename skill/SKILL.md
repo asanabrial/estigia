@@ -169,7 +169,7 @@ into this file. Each owns its subject once, so a rule that changes is changed in
 | [github operations](bindings/github/operations.md) | An operation's full guarantee is needed beyond the operations table's headline: claim and its two routes, publishing a review target, recording a finding, a verdict, a refutation or a disposition, or deriving a tier. |
 | [github operations guarantees](bindings/github/operations-guarantees.md) | An operation's guarantee beyond its command is needed — what it does past the obvious, and the refusals only it raises. |
 | [github refusals](bindings/github/refusals.md) | A github-binding operation refused and the answer's own `action` is not self-explanatory, so the code's meaning and remedy are needed. |
-| [linear binding](bindings/linear.md) | The `Tracker` row names `linear`: the issue is read and nothing is written, under assisted work only. |
+| [linear binding](bindings/linear.md) | The `Tracker` row names `linear`: the issue is read and only a `State names` state written, under assisted work |
 | [runtime notes](references/runtime-notes.md) | Invocation sigils, delegation, read-only enforcement, independent-context acquisition, agent-team lifetime, or a runtime's honest limits are in question. |
 | [analyst issue template](assets/analyst-issue-template.md) | Filling a new finding's body. It owns the heading order, the fixed first heading, alert syntax, and attribution. |
 | [blind judges](policies/blind-judges.md) | `review_status` stops as escalated, a correction is owed, or a rule about how a lens's findings are settled or what reopens review is disputed. |

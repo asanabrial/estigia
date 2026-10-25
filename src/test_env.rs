@@ -465,6 +465,26 @@ pub(crate) fn with_logging_gh<T>(
     )
 }
 
+/// [`with_logging_gh`] and [`with_counting_gh`] at once, for a call whose
+/// second read must answer differently and whose writes are asserted on.
+pub(crate) fn with_counting_logging_gh<T>(
+    directory: &Path,
+    answers: &str,
+    counts: &Path,
+    log: &Path,
+    body: impl FnOnce() -> T,
+) -> T {
+    with_scripted_gh_window(
+        directory,
+        answers,
+        &[
+            ("ESTIGIA_FAKE_COUNT", counts.as_os_str().to_owned()),
+            ("ESTIGIA_FAKE_LOG", log.as_os_str().to_owned()),
+        ],
+        body,
+    )
+}
+
 /// [`with_logging_gh`] with the fake's label store pointed at `labels`, so a
 /// read after an `issue edit` answers what the edit did rather than the script.
 pub(crate) fn with_labelled_logging_gh<T>(

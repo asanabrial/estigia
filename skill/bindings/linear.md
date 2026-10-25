@@ -1,13 +1,15 @@
-# Binding: Linear (read-only)
+# Binding: Linear
 
-How this workflow reads an issue whose tracker is Linear, and what it deliberately never does.
+How this workflow reads an issue whose tracker is Linear, the one thing it may write there, and what
+it deliberately never does.
 `SKILL.md` describes WHAT happens; this file is the only place that says HOW. Read it when the
 operator configuration names `linear` as the tracker.
 
-## Read-only, and only under assisted work
+## Read, and a mapped state moved, only under assisted work
 
-`Tracker linear <team-key>` names Linear as the tracker. Estigia **reads** and never writes: no
-claim, no state transition, no comment, no label, no assignment. That is why it is admitted only
+`Tracker linear <team-key>` names Linear as the tracker. Estigia **reads**, and writes nothing but an
+issue's workflow state where the repository's `State names` row maps one (*Moving a mapped state*
+below): no claim, no comment, no label, no assignment. That is why it is admitted only
 under `Claim workflow: assisted` — autonomous work needs an atomic claim Linear cannot provide, so
 `Tracker linear` with `Claim workflow autonomous` is refused by `config set`, by `doctor`, and at run
 start, each naming this reason.
@@ -22,10 +24,11 @@ query EstigiaIssue($id: String!) { issue(id: $id) { title description state { ty
 
 `issue(id:)` accepts the shorthand identifier, so the key the operator typed resolves without a
 second lookup. Title and description are what the run works from; the state's type is read only to
-refuse an issue that is `completed` or `canceled` (`issue-not-open`), and is never moved. A key is
+refuse an issue that is `completed` or `canceled` (`issue-not-open`). A key is
 upper-cased, so its two spellings are one issue, and its team (the text before the last `-`)
 must be the configured `<team-key>` (`linear-team-mismatch`). The query is a constant in
-`src/transport/linear.rs`; the set of operations this source can send is one, and it is a query.
+`src/transport/linear.rs`, beside the two operations *Moving a mapped state* sends; no other
+operation is composed.
 
 The issue identity is a string on this path — the branch name carries the key, so Linear's own
 GitHub integration links the draft pull request, which is that integration acting and not Estigia.
@@ -33,15 +36,28 @@ GitHub integration links the draft pull request, which is that integration actin
 ## The credential
 
 The API key is read from the environment variable `LINEAR_API_KEY`, never from a configuration file
-somebody could commit. It should be read-only where Linear allows it. A missing or rejected
+somebody could commit. It should be read-only where Linear allows it, unless `State names` maps a
+state, which needs write access to issues. A missing or rejected
 credential, an unknown key, a finished issue, or an unreachable API stops the run before any
 repository write, and the refusal names which it was.
 
-## What the states are not
+## Moving a mapped state
 
-Assisted work does not move Linear's workflow states (Backlog/Todo, In Progress, Ready for Review,
-Ready for Release), and reads only the state's type, to refuse a finished issue. People move every
-state; nothing here does.
+With `State names` at `none` — the default — no state is moved and people move every one. Where it
+maps a state, as `in-progress=In Progress, review=In Review, done=Done` does, the issue follows the run:
+`assist` moves it to the `in-progress` name once the checkout exists, `ready_pr` to the `review` name
+once the pull request reads back ready, and `review_stages` to the `done` name when it reads the
+pull request merged. Each move reads the issue's state and its team's states
+(`query EstigiaStates`), sends one `mutation EstigiaMove` (`issueUpdate` with the state's id) and reads
+the state back. An issue already there is not moved again (`moved: false`).
+
+The move is reported under `linear_state` beside the tool's own answer, never folded into it: the
+checkout, the ready pull request or the merge happened whatever Linear answered. Its refusals are
+`linear-state-unknown` (the team has no state of that name; nothing is sent), `linear-move-refused`
+(Linear did not accept the mutation — a read-only credential is the common cause) and
+`linear-move-not-read-back` (it reads back as another state); the last two are an unknown world, so a
+run reads the issue before claiming it moved. The credential needs write access to issues for this;
+with `State names` at `none` a read-only one is enough.
 
 ## The refusals this source gives
 
@@ -63,11 +79,12 @@ only a numbering tracker performs (every such operation is refused for Linear be
 
 ## The operations this binding does not perform
 
-Linear is read-only here, so every operation that would write the tracker is **unsupported** rather
-than mapped: `ensure_states`, `create`, `list_state`, `claim`, `reclaim`, `verify_claim`,
+Apart from a mapped state, Linear is not written, so every operation that would write the tracker is
+**unsupported** rather than mapped: `ensure_states`, `create`, `list_state`, `claim`, `reclaim`, `verify_claim`,
 `heartbeat`, `transition`, `comment`, `unassign`, `publish_review`,
 `republish_review`, `handoff_review`, `review_finding`, `review_computed_verdict`, `review_disposition`, and `release_ci`. An assisted run performs none of
-them — the team coordinates the work, and Estigia reads the issue and writes nothing.
+them — the team coordinates the work, and Estigia reads the issue and writes nothing but a mapped
+state.
 
 ## The repository host stays GitHub
 

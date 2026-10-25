@@ -62,6 +62,40 @@ impl Endpoint {
         }
     }
 
+    fn in_turn(answers: &[&str]) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a local port");
+        let port = listener.local_addr().expect("an address").port();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let seen = Arc::clone(&requests);
+        let answers: Vec<String> = answers.iter().map(|body| (*body).to_owned()).collect();
+        let thread = std::thread::spawn(move || {
+            for (turn, stream) in listener.incoming().enumerate() {
+                let Ok(mut stream) = stream else { break };
+                let Some(request) = read_request(&mut stream) else {
+                    continue;
+                };
+                seen.lock().expect("the request log").push(request);
+                let body = answers
+                    .get(turn)
+                    .or_else(|| answers.last())
+                    .cloned()
+                    .unwrap_or_default();
+                let response = format!(
+                    "HTTP/1.1 200\r\nContent-Type: application/json\r\n\
+                     Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+        Self {
+            url: format!("http://127.0.0.1:{port}/graphql"),
+            requests,
+            _thread: thread,
+        }
+    }
+
     fn sent(&self) -> Vec<String> {
         self.requests.lock().expect("the request log").clone()
     }
@@ -409,5 +443,125 @@ fn a_not_found_error_with_no_data_is_an_unknown_key_naming_it() {
         a_detail(&failure).contains("ENG-123"),
         "{}",
         a_detail(&failure)
+    );
+}
+
+fn states_in(current: &str) -> String {
+    serde_json::json!({ "data": { "issue": {
+        "id": "uuid-123",
+        "state": { "name": current },
+        "team": { "states": { "nodes": [
+            { "id": "s-todo", "name": "Todo" },
+            { "id": "s-doing", "name": "In Progress" },
+            { "id": "s-review", "name": "In Review" },
+            { "id": "s-done", "name": "Done" },
+        ]}},
+    }}})
+    .to_string()
+}
+
+const ACCEPTED: &str = "{\"data\":{\"issueUpdate\":{\"success\":true}}}";
+
+fn moved(
+    endpoint: &Endpoint,
+    target: &str,
+) -> Result<serde_json::Value, crate::transport::Failure> {
+    with_linear_env(Some("lin_api_test"), &endpoint.url, || {
+        super::move_issue(&Identity::Key("ENG-123".to_owned()), target)
+    })
+}
+
+#[test]
+fn a_mapped_state_is_moved_with_one_mutation_and_read_back() {
+    let endpoint = Endpoint::in_turn(&[&states_in("Todo"), ACCEPTED, &states_in("In Progress")]);
+    let answer = moved(&endpoint, "in progress").expect("moved");
+    assert_eq!(answer["moved"], true);
+    assert_eq!(answer["from"], "Todo");
+    assert_eq!(answer["state"], "In Progress");
+    let sent = endpoint.sent();
+    let mutations: Vec<&String> = sent
+        .iter()
+        .filter(|body| body.contains("mutation"))
+        .collect();
+    assert_eq!(mutations.len(), 1, "{sent:?}");
+    assert!(mutations[0].contains("s-doing") && mutations[0].contains("uuid-123"));
+}
+
+#[test]
+fn an_issue_already_in_the_state_is_not_moved() {
+    let endpoint = Endpoint::in_turn(&[&states_in("In Review")]);
+    let answer = moved(&endpoint, "In Review").expect("already there");
+    assert_eq!(answer["moved"], false);
+    assert!(!endpoint.sent().iter().any(|body| body.contains("mutation")));
+}
+
+#[test]
+fn a_state_the_team_does_not_have_is_named_and_nothing_is_moved() {
+    let endpoint = Endpoint::in_turn(&[&states_in("Todo")]);
+    let failure = moved(&endpoint, "QA").expect_err("no such state");
+    assert_eq!(a_reason(&failure), "linear-state-unknown");
+    assert!(!endpoint.sent().iter().any(|body| body.contains("mutation")));
+}
+
+#[test]
+fn a_move_that_does_not_read_back_is_not_reported_moved() {
+    let endpoint = Endpoint::in_turn(&[&states_in("Todo"), ACCEPTED, &states_in("Todo")]);
+    let failure = moved(&endpoint, "Done").expect_err("the read-back disagrees");
+    assert_eq!(a_reason(&failure), "linear-move-not-read-back");
+}
+
+#[test]
+fn a_refused_move_is_named_as_refused() {
+    let endpoint = Endpoint::in_turn(&[
+        &states_in("Todo"),
+        "{\"data\":{\"issueUpdate\":null},\"errors\":[{\"message\":\"forbidden\"}]}",
+    ]);
+    let failure = moved(&endpoint, "Done").expect_err("Linear refused it");
+    assert_eq!(a_reason(&failure), "linear-move-refused");
+}
+
+#[test]
+fn follow_state_moves_only_a_mapped_state_of_a_linear_issue() {
+    let names = vec![("review".to_owned(), "In Review".to_owned())];
+    let answer = serde_json::json!({ "ok": true });
+    let unmapped = super::follow_state(
+        &names,
+        Some(&Identity::Key("ENG-123".to_owned())),
+        "done",
+        answer.clone(),
+    );
+    assert_eq!(unmapped, answer, "a state nobody mapped moved something");
+    let github = super::follow_state(&names, Some(&Identity::Number(7)), "review", answer.clone());
+    assert_eq!(github, answer, "a GitHub issue was sent to Linear");
+
+    let endpoint =
+        Endpoint::in_turn(&[&states_in("In Progress"), ACCEPTED, &states_in("In Review")]);
+    let followed = with_linear_env(Some("lin_api_test"), &endpoint.url, || {
+        super::follow_state(
+            &names,
+            Some(&Identity::Key("ENG-123".to_owned())),
+            "review",
+            answer.clone(),
+        )
+    });
+    assert_eq!(followed["ok"], true);
+    assert_eq!(followed["linear_state"]["state"], "In Review");
+
+    let failing = Endpoint::in_turn(&[
+        &states_in("In Progress"),
+        ACCEPTED,
+        &states_in("In Progress"),
+    ]);
+    let reported = with_linear_env(Some("lin_api_test"), &failing.url, || {
+        super::follow_state(
+            &names,
+            Some(&Identity::Key("ENG-123".to_owned())),
+            "review",
+            answer.clone(),
+        )
+    });
+    assert_eq!(
+        reported["linear_state"]["reason"], "linear-move-not-read-back",
+        "a move that failed was not reported beside the answer"
     );
 }

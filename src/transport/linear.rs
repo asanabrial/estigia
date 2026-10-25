@@ -1,12 +1,12 @@
-//! The read-only Linear source.
+//! The Linear source.
 //!
 //! Linear holds an issue's title and description behind a GraphQL API. Under
 //! `Workflow: assisted` Estigia reads those two fields and the issue's state
-//! type, and nothing else: no mutation is ever composed or sent, the state is
-//! read to refuse a finished issue and never moved, and the credential comes
-//! from the environment rather than from any file somebody could commit. The
-//! query is a constant in this module, so the set of operations this source
-//! can send is one, and it is a query.
+//! type, and refuses a finished issue. It writes one thing, and only where the
+//! repository's `State names` row maps a state: the issue's workflow state,
+//! through [`MOVE_MUTATION`], read back afterwards. The credential comes from
+//! the environment rather than from any file somebody could commit, and every
+//! operation this source can send is a constant in this module.
 //!
 //! `curl` performs the request. The crate's transport has one process boundary
 //! ([`super::run`]) and no TLS of its own; rather than grow a second, the read
@@ -29,9 +29,17 @@ pub const ENDPOINT_VAR: &str = "ESTIGIA_LINEAR_URL";
 /// Where Linear's API lives when nothing overrides it.
 pub const DEFAULT_ENDPOINT: &str = "https://api.linear.app/graphql";
 
-/// The one operation this source sends. A query, never a mutation.
+/// The query that reads an issue to work.
 pub const QUERY: &str =
     "query EstigiaIssue($id: String!) { issue(id: $id) { title description state { type } } }";
+
+/// The query that reads an issue's state and the states its team offers.
+pub const STATES_QUERY: &str = "query EstigiaStates($id: String!) { issue(id: $id) { id state { \
+                                name } team { states { nodes { id name } } } } }";
+
+/// The one mutation this source sends: the issue's workflow state.
+pub const MOVE_MUTATION: &str = "mutation EstigiaMove($id: String!, $stateId: String!) { \
+                                 issueUpdate(id: $id, input: { stateId: $stateId }) { success } }";
 
 /// One issue's title and description, as Linear spells them.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +57,172 @@ pub struct Issue {
 /// API — and happens before any repository write, because the caller is the
 /// assisted path that reads the issue before it creates a checkout.
 pub fn read_issue(identity: &Identity) -> Result<Issue, Failure> {
+    let body = serde_json::json!({
+        "query": QUERY,
+        "variables": { "id": identity.to_string() },
+    })
+    .to_string();
+    parse(&post(&body)?, identity)
+}
+
+/// Moves one issue to the state its team names `target`, and reads it back.
+///
+/// Answers `moved: false` when the issue is already there. A state the team
+/// does not have, a mutation Linear refuses and a read-back that disagrees are
+/// each a stop naming which, and the last is `world: unknown`.
+pub fn move_issue(identity: &Identity, target: &str) -> Result<serde_json::Value, Failure> {
+    let States {
+        id,
+        current: from,
+        offered: states,
+    } = read_states(identity)?;
+    if from.eq_ignore_ascii_case(target) {
+        return Ok(serde_json::json!({ "ok": true, "moved": false, "state": from }));
+    }
+    let Some((state_id, _)) = states
+        .iter()
+        .find(|(_, name)| name.eq_ignore_ascii_case(target))
+    else {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "linear-state-unknown",
+            "detail": format!("issue {identity}'s team has no state named {target:?}"),
+            "states": states.iter().map(|(_, name)| name).collect::<Vec<_>>(),
+            "action": "set `State names` to names this team has; nothing was moved",
+        })));
+    };
+    let body = serde_json::json!({
+        "query": MOVE_MUTATION,
+        "variables": { "id": id, "stateId": state_id },
+    })
+    .to_string();
+    let answer: serde_json::Value = serde_json::from_str(&post(&body)?).map_err(|error| {
+        unreachable_api(&Failure::Read(format!(
+            "Linear returned unparseable JSON: {error}"
+        )))
+    })?;
+    let accepted = answer
+        .get("data")
+        .and_then(|data| data.get("issueUpdate"))
+        .and_then(|update| update.get("success"))
+        .and_then(serde_json::Value::as_bool)
+        == Some(true);
+    if !accepted {
+        let messages: Vec<&str> = graphql_errors(&answer)
+            .into_iter()
+            .map(error_message)
+            .collect();
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "linear-move-refused",
+            "world": "unknown",
+            "detail": format!(
+                "Linear did not accept moving {identity} to {target:?}: {}",
+                messages.join("; ")
+            ),
+            "action": "read the issue in Linear before moving it again; a credential that \
+                       can only read cannot move it",
+        })));
+    }
+    let now = read_states(identity)?.current;
+    if !now.eq_ignore_ascii_case(target) {
+        return Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "linear-move-not-read-back",
+            "world": "unknown",
+            "detail": format!(
+                "{identity} was moved to {target:?} and reads back as {now:?}"
+            ),
+            "action": "read the issue in Linear; do not report it moved",
+        })));
+    }
+    Ok(serde_json::json!({ "ok": true, "moved": true, "from": from, "state": now }))
+}
+
+struct States {
+    id: String,
+    current: String,
+    offered: Vec<(String, String)>,
+}
+
+fn read_states(identity: &Identity) -> Result<States, Failure> {
+    let body = serde_json::json!({
+        "query": STATES_QUERY,
+        "variables": { "id": identity.to_string() },
+    })
+    .to_string();
+    let value: serde_json::Value = serde_json::from_str(&post(&body)?).map_err(|error| {
+        unreachable_api(&Failure::Read(format!(
+            "Linear returned unparseable JSON: {error}"
+        )))
+    })?;
+    let issue = value
+        .get("data")
+        .and_then(|data| data.get("issue"))
+        .filter(|issue| !issue.is_null());
+    let Some(issue) = issue else {
+        if graphql_errors(&value)
+            .into_iter()
+            .any(is_authentication_error)
+        {
+            return Err(credential_rejected());
+        }
+        return Err(issue_unknown(identity));
+    };
+    let text = |value: Option<&serde_json::Value>| {
+        value
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let states = issue
+        .get("team")
+        .and_then(|team| team.get("states"))
+        .and_then(|states| states.get("nodes"))
+        .and_then(serde_json::Value::as_array)
+        .map(|nodes| {
+            nodes
+                .iter()
+                .map(|node| (text(node.get("id")), text(node.get("name"))))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(States {
+        id: text(issue.get("id")),
+        current: text(issue.get("state").and_then(|state| state.get("name"))),
+        offered: states,
+    })
+}
+
+/// `answer` with the Linear issue moved to the state `State names` maps
+/// `state` to, under `linear_state`; unchanged where nothing is mapped or the
+/// issue is not a Linear key. A move that fails is reported there, never
+/// folded into the answer's own `ok`.
+pub fn follow_state(
+    names: &[(String, String)],
+    identity: Option<&Identity>,
+    state: &str,
+    mut answer: serde_json::Value,
+) -> serde_json::Value {
+    let Some(identity @ Identity::Key(_)) = identity else {
+        return answer;
+    };
+    let Some((_, target)) = names.iter().find(|(mapped, _)| mapped == state) else {
+        return answer;
+    };
+    let moved = match move_issue(identity, target) {
+        Ok(moved) => moved,
+        Err(failure) => failure.envelope(),
+    };
+    if let Some(object) = answer.as_object_mut() {
+        object.insert("linear_state".to_owned(), moved);
+    }
+    answer
+}
+
+/// Sends one staged request and answers the body of a 2xx, or the stop that
+/// names why there is none.
+fn post(body: &str) -> Result<String, Failure> {
     let credential = std::env::var(CREDENTIAL_VAR).unwrap_or_default();
     if credential.trim().is_empty() {
         return Err(Failure::Stop(serde_json::json!({
@@ -89,13 +263,7 @@ pub fn read_issue(identity: &Identity) -> Result<Issue, Failure> {
         })));
     }
 
-    let body = serde_json::json!({
-        "query": QUERY,
-        "variables": { "id": identity.to_string() },
-    })
-    .to_string();
-
-    let staged = Staged::write(&endpoint, &credential, &body).map_err(|error| {
+    let staged = Staged::write(&endpoint, &credential, body).map_err(|error| {
         Failure::Write(format!("the Linear request could not be staged: {error}"))
     })?;
     let arguments = curl_arguments(&staged.config, &staged.body);
@@ -106,7 +274,7 @@ pub fn read_issue(identity: &Identity) -> Result<Issue, Failure> {
 
     let (status, text) = split_status(&answer.stdout);
     match status {
-        Some(200..=299) => parse(&text, identity),
+        Some(200..=299) => Ok(text),
         Some(401 | 403) => Err(credential_rejected()),
         Some(_) | None if reports_authentication(&text) => Err(credential_rejected()),
         Some(_) | None => Err(unreachable_api(&Failure::Read(format!(
