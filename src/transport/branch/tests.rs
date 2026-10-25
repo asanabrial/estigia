@@ -1923,3 +1923,102 @@ fn assist_refuses_issue_number_zero() {
     assert_eq!(reason(failure), "malformed-argument");
     assert!(!trees.exists(), "a worktree directory was made");
 }
+
+fn sibling_checkout(
+    repo: &std::path::Path,
+    root: &std::path::Path,
+    branch: &str,
+    owner: &str,
+) -> std::path::PathBuf {
+    shell(repo, &["branch", branch, "HEAD"]);
+    let checkout = root.join(branch);
+    crate::transport::run_os(
+        &[
+            std::ffi::OsString::from("git"),
+            std::ffi::OsString::from("worktree"),
+            std::ffi::OsString::from("add"),
+            std::ffi::OsString::from("--"),
+            checkout.as_os_str().to_owned(),
+            std::ffi::OsString::from(branch),
+        ],
+        Some(repo),
+        crate::transport::How::write(),
+    )
+    .expect("the sibling is registered");
+    let marker = super::ownership_path(&checkout).expect("the marker path");
+    std::fs::write(
+        marker,
+        serde_json::json!({ "run_id": owner, "branch": branch }).to_string(),
+    )
+    .expect("the ownership marker");
+    checkout
+}
+
+#[test]
+fn an_earlier_slice_this_run_delivered_is_put_down_beside_the_pointer() {
+    let (root, repo, checkout, head) = delivered_checkout();
+    let earlier = sibling_checkout(&repo, root.path(), "slice-one", "run-a");
+    let foreign = sibling_checkout(&repo, root.path(), "slice-two", "run-b");
+    let dirty = sibling_checkout(&repo, root.path(), "slice-three", "run-a");
+    std::fs::write(dirty.join("scratch.txt"), "not committed\n").expect("scratch content");
+
+    let branches = [
+        "slice-one".to_owned(),
+        "slice-two".to_owned(),
+        "slice-three".to_owned(),
+        "work".to_owned(),
+    ];
+    let retired = super::retire_sibling_checkouts(
+        &retire_context(&repo),
+        "run-a",
+        &branches,
+        &checkout,
+        &head,
+    )
+    .expect("the registry is read");
+
+    assert!(!earlier.exists(), "the delivered slice stayed: {retired:?}");
+    assert!(foreign.exists(), "another run's checkout was removed");
+    assert!(dirty.exists(), "a checkout carrying work was removed");
+    assert!(checkout.exists(), "the pointer's checkout is not a sibling");
+    assert_eq!(retired.len(), 2, "{retired:?}");
+    let slice = retired
+        .iter()
+        .find(|r| r.branch.as_deref() == Some("slice-one"))
+        .expect("the delivered slice is reported");
+    assert!(slice.worktree_removed && slice.branch_deleted, "{slice:?}");
+    let kept = retired
+        .iter()
+        .find(|r| r.branch.as_deref() == Some("slice-three"))
+        .expect("the dirty slice is reported");
+    assert!(!kept.worktree_removed, "{kept:?}");
+}
+
+#[test]
+fn a_slice_whose_head_the_delivery_does_not_contain_is_kept() {
+    let (root, repo, checkout, head) = delivered_checkout();
+    let ahead = sibling_checkout(&repo, root.path(), "slice-ahead", "run-a");
+    std::fs::write(ahead.join("more.txt"), "more\n").expect("content");
+    shell(&ahead, &["add", "more.txt"]);
+    shell(&ahead, &["commit", "--quiet", "-m", "more"]);
+
+    let retired = super::retire_sibling_checkouts(
+        &retire_context(&repo),
+        "run-a",
+        &["slice-ahead".to_owned()],
+        &checkout,
+        &head,
+    )
+    .expect("the registry is read");
+    assert!(
+        ahead.exists(),
+        "a slice the delivery does not contain was removed"
+    );
+    assert!(
+        retired[0]
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("not contained")),
+        "{retired:?}"
+    );
+}

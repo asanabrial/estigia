@@ -12000,6 +12000,24 @@ fn put_down_checkout(
                     .collect::<Vec<_>>()
             });
             let mut answer = super::branch::retire_checkout(context, worktree, &own.head).to_json();
+            answer["sibling_checkouts"] = match super::branch::retire_sibling_checkouts(
+                context,
+                run_id,
+                &branches,
+                worktree,
+                &own.delivering_sha,
+            ) {
+                Ok(siblings) => serde_json::Value::Array(
+                    siblings
+                        .iter()
+                        .map(super::branch::Retired::to_json)
+                        .collect(),
+                ),
+                Err(failure) => serde_json::json!({
+                    "outcome": "kept",
+                    "detail": format!("the registered checkouts could not be read: {}", failure.detail()),
+                }),
+            };
             if let Some(remote) = remote {
                 answer["remote_branches"] = serde_json::Value::Array(remote);
             }
