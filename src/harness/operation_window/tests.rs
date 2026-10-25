@@ -33,6 +33,7 @@ fn context(root: &Path, window: GitOperationWindow) -> GateContext {
         boundaries: Vec::new(),
         operation_window: window,
         issue_requirement: crate::config::IssueRequirement::Off,
+        decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
     }
 }

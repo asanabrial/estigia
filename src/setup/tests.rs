@@ -2638,7 +2638,8 @@ fn every_matcher_names_tools_the_gate_can_classify() {
             );
             if action == crate::harness::Action::Untouched {
                 assert!(
-                    crate::harness::hook::is_prelaunch_tool(Some(adapter.slug), name),
+                    crate::harness::hook::is_prelaunch_tool(Some(adapter.slug), name)
+                        || crate::harness::decision_mode::QUESTION_TOOLS.contains(&name),
                     "{} wakes the hook for `{name}`, but neither the repository classifier nor \
                      the dedicated prelaunch gate owns it",
                     adapter.slug
@@ -6671,7 +6672,10 @@ fn every_tool_a_matcher_wakes_for_is_one_the_classifier_judges() {
     for (agent, name) in &woken {
         assert!(
             judged.contains(&name.to_ascii_lowercase())
-                || crate::harness::hook::is_prelaunch_tool(Some(agent), name),
+                || crate::harness::hook::is_prelaunch_tool(Some(agent), name)
+                || crate::harness::decision_mode::QUESTION_TOOLS
+                    .iter()
+                    .any(|tool| tool.eq_ignore_ascii_case(name)),
             "{agent}'s matcher wakes the hook for {name:?}, but neither the repository classifier \
              nor a dedicated prelaunch gate owns it — the hook fires, answers `Untouched`, and the \
              call goes through while every report says it is gated"

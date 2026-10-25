@@ -20,6 +20,7 @@ fn context(root: &Path, repo: &Path) -> GateContext {
         state_root: root.join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
         window: Duration::from_secs(120),
         tracker: crate::config::Tracker::Github { repo: None },

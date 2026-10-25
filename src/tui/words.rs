@@ -406,6 +406,12 @@ pub const SPANISH: &[(&str, &str)] = &[
         "`reading`, or `measuring`",
         "`reading`, o `measuring`",
     ),
+    ("Decision mode", "Modo de decisión"),
+    (
+        "whether a run puts a question to the person, or applies the recommended answer itself and reports every decision when the turn ends",
+        "si una ejecución pregunta a la persona, o aplica ella misma la respuesta recomendada e informa de cada decisión al terminar el turno",
+    ),
+    ("`ask`, or `auto`", "`ask`, o `auto`"),
     ("Publication lane", "Carril de publicación"),
     (
         "whether an accepted verdict consults the publication lane for this head",

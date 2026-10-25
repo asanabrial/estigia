@@ -215,4 +215,15 @@ pub(super) const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (repo_dir, issue, runtime)
     );
     ",
+    "
+    CREATE TABLE taken_decisions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        question TEXT NOT NULL,
+        decision TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        reported_at INTEGER
+    );
+    CREATE INDEX taken_decisions_unreported ON taken_decisions (run_id) WHERE reported_at IS NULL;
+    ",
 ];

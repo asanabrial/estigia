@@ -501,7 +501,7 @@ What that costs is in `UNIMPLEMENTED`: no resources, no prompts, no sampling, no
 
 ## Configuration
 
-Twenty-nine typed settings, in [`docs/configuration.md`](docs/configuration.md), grouped by theme —
+Thirty typed settings, in [`docs/configuration.md`](docs/configuration.md), grouped by theme —
 Authority, Repository & tracker, Delivery, Gate limits, Review & change, Agent runtime, This machine — and
 shown in that one order by `estigia config list`, the setup screen and the reference alike. Each row
 says its scope: whose answer it is, whether this agent's, this repository's, every checkout's or this

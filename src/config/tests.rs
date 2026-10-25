@@ -101,6 +101,7 @@ fn every_variant() -> Vec<Setting> {
             | Setting::Integration
             | Setting::Window
             | Setting::GitOperationWindow
+            | Setting::DecisionMode
             | Setting::Evidence
             | Setting::PublicationLane
             | Setting::ReviewBudget
@@ -176,6 +177,7 @@ fn every_setting_is_in_the_table() {
         Setting::Integration,
         Setting::Window,
         Setting::GitOperationWindow,
+        Setting::DecisionMode,
         Setting::Evidence,
         Setting::PublicationLane,
         Setting::ReviewBudget,
@@ -296,6 +298,11 @@ fn a_closed_list_offers_every_value_its_type_can_hold() {
                 setting,
             )),
             Setting::Evidence => Some(rendered(Evidence::all(), |c, v| c.evidence = v, setting)),
+            Setting::DecisionMode => Some(rendered(
+                crate::config::DecisionMode::all(),
+                |c, v| c.decision_mode = v,
+                setting,
+            )),
             Setting::PublicationLane => Some(rendered(
                 PublicationLane::all(),
                 |c, v| c.publication_lane = v,
@@ -639,6 +646,7 @@ fn a_rendered_table_reads_back_identically() {
         evidence: Evidence::Measuring,
         publication_lane: crate::config::PublicationLane::Off,
         issue_requirement: crate::config::IssueRequirement::Ask,
+        decision_mode: crate::config::DecisionMode::Ask,
         workflow: crate::config::Workflow::Autonomous,
         state_names: Vec::new(),
         self_review: None,
@@ -2198,6 +2206,7 @@ fn the_gate_reads_exactly_the_rows_it_decides_from() {
             Setting::Boundaries,
             Setting::Window,
             Setting::GitOperationWindow,
+            Setting::DecisionMode,
             Setting::Evidence,
         ],
         "the rows the gate reads to decide changed without this test being told"

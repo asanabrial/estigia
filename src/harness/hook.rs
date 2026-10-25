@@ -613,6 +613,23 @@ fn with_queue_note(context: &GateContext, mut answer: Value) -> Value {
     answer
 }
 
+pub(crate) fn with_decisions(context: &GateContext, run_id: &str, mut answer: Value) -> Value {
+    if answer.get("decision").is_some() {
+        return answer;
+    }
+    let Some(report) = super::decision_mode::report(&context.state_root, run_id) else {
+        return answer;
+    };
+    if let Some(fields) = answer.as_object_mut() {
+        let message = match fields.get("systemMessage").and_then(Value::as_str) {
+            Some(before) => format!("{before}\n\n{report}"),
+            None => report,
+        };
+        fields.insert("systemMessage".to_owned(), json!(message));
+    }
+    answer
+}
+
 std::thread_local! {
     #[cfg(test)]
     static FLUSH_REQUESTS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
@@ -1179,8 +1196,11 @@ pub fn run_as(
             json!({})
         }
         Event::Stop => {
-            if input.unreadable || input.absent || input.stop_hook_active {
+            if input.unreadable || input.absent {
                 return json!({});
+            }
+            if input.stop_hook_active {
+                return with_decisions(context, &run_id, json!({}));
             }
             let answer = 'stop: {
                 let mut run = session::load(&context.state_root, &run_id);
@@ -1217,7 +1237,7 @@ pub fn run_as(
                     json!({})
                 }
             };
-            with_queue_note(context, answer)
+            with_decisions(context, &run_id, with_queue_note(context, answer))
         }
         Event::PreToolUse => {
             // Before the role road, which decides a call carrying an `agent_type` and
@@ -1234,6 +1254,18 @@ pub fn run_as(
                     &[],
                 );
                 return response_in(dialect, &denied);
+            }
+            if super::decision_mode::QUESTION_TOOLS.contains(&input.tool_name.as_str()) {
+                let Some(decided) = super::decision_mode::refuse(
+                    context,
+                    &run_id,
+                    &input.tool_name,
+                    &input.tool_input,
+                ) else {
+                    return dialect.aside();
+                };
+                note(context, &run_id, &input.tool_name, None, &decided, &[]);
+                return response_in(dialect, &decided);
             }
             // A reserved reviewer is proved before either role or repository
             // classification. `agent_type` names the caller; only the nested
@@ -1710,6 +1742,7 @@ mod tests {
             state_root: root.path().join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -1773,6 +1806,7 @@ mod tests {
             state_root: root.path().join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -1896,6 +1930,7 @@ mod tests {
             state_root: root.path().join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -1942,6 +1977,7 @@ mod tests {
             state_root: root.path().join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -2007,6 +2043,7 @@ mod tests {
             state_root: root.path().join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -2037,6 +2074,7 @@ mod tests {
             state_root: root.path().join("quiet"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             ..context
         };
@@ -2076,6 +2114,7 @@ mod tests {
             state_root: root.path().join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -2131,6 +2170,7 @@ mod tests {
             state_root: root.join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -2834,6 +2874,7 @@ mod tests {
             state_root: root.path().join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -2883,6 +2924,7 @@ mod tests {
             state_root: state_root.clone(),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -2981,6 +3023,7 @@ mod tests {
             state_root: root.join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -3199,6 +3242,7 @@ mod tests {
             state_root: root.path().join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -3291,6 +3335,7 @@ mod tests {
             state_root: state_root.clone(),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -3464,6 +3509,7 @@ mod tests {
             state_root: state_root.clone(),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -3662,6 +3708,7 @@ mod tests {
             state_root: std::path::PathBuf::from("estigia-no-state-here"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
@@ -4005,6 +4052,7 @@ mod tests {
             state_root: root.path().join("state"),
             operation_window: Default::default(),
             issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
             workflow: Some(crate::config::Workflow::Autonomous),
             window: super::super::RENEWAL_WINDOW,
             tracker: crate::config::Tracker::Github { repo: None },
