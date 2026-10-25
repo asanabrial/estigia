@@ -654,419 +654,215 @@ pointer that leaves it names the document it points at.
 
 ## The suite, its fixtures and the retired port
 
-- **Three debug-only overrides keep the suite off production waits and double work, and a
-  `--release` build compiles all three out.** `ESTIGIA_UNSAFE_SKIP_FSYNC` (read under
-  `cfg(debug_assertions)` in `src/paths.rs`'s `fsync_skipped`) turns `sync_durably`/`sync_parent`
-  into no-ops for test binaries and for the child `tests/pipe.rs` spawns; in-process lib tests arm
-  the same skip through `set_fsync_skip_for_tests` (default on when `cfg!(test)`).
-  `ESTIGIA_TEST_READBACK_NO_WAIT` (read under `cfg(debug_assertions)` in
-  `src/transport/claim.rs`'s `readback_wait_is_disabled`) makes `publish_with` call
-  `publish_with_sleep` with a no-op instead of `thread::sleep`, so the spawned binary never pays
-  the 2+4+…+18 = 90 s publication read-back. `ESTIGIA_TEST_SKIP_PREVIEW` (read under
-  `cfg(debug_assertions)` in `src/setup/mod.rs`'s `preview_skipped`) skips setup's internal
-  dry-run preview of a real mutation — the preview's result is discarded on success, so every
-  green `setup()` the suite performs would otherwise run twice; in-process lib tests start with
-  that skip on and a fixture that must exercise the preview arms `with_preview` instead. What
-  the first two leave unexercised by default: the real `sync_all`/`sync_directory` calls on
-  ordinary fixture writes, and the real wall-clock read-back window. Both are still driven on
-  purpose — `with_real_fsync` in `src/paths.rs` clears the skip on its own thread and runs
-  `the_real_fsync_paths_run_when_the_debug_skip_is_off`;
+- **Three debug-only overrides keep the suite off production waits and double work, and a `--release`
+  build compiles all three out.** `ESTIGIA_UNSAFE_SKIP_FSYNC` (`src/paths.rs`'s `fsync_skipped`) turns
+  `sync_durably`/`sync_parent` into no-ops; in-process tests arm it through
+  `set_fsync_skip_for_tests`. `ESTIGIA_TEST_READBACK_NO_WAIT` (`readback_wait_is_disabled` in
+  `src/transport/claim.rs`) makes `publish_with` skip the 2+4+…+18 = 90 s read-back sleeps.
+  `ESTIGIA_TEST_SKIP_PREVIEW` (`preview_skipped` in `src/setup/mod.rs`) skips setup's dry-run preview;
+  a fixture exercising it arms `with_preview`. Each is read under `cfg(debug_assertions)`.
+  `with_real_fsync` drives `the_real_fsync_paths_run_when_the_debug_skip_is_off`;
   `the_debug_only_overrides_are_compiled_out_of_release` asserts all three env reads sit under
-   `cfg(debug_assertions)` and not under `cfg(test)` alone; two lib tests pin
-  `PUBLISH_READBACK_ATTEMPTS` and `PUBLISH_READBACK_RETRY_BASE_SECS` to the production constants.
-  A release build contains none of the overrides: the same source-text assertion is what proves
-  no switch is honoured there. What is *not* measured is a full end-to-end publish that waits the
-  real ninety seconds under load — only that the schedule constants and the sleep call itself
-  remain, and that no override can reach a `--release` binary.
-  `cargo test --release` (what `release.yml` ran until #135) compiles: `set_fsync_skip_for_tests`,
-  `with_preview` and `with_real_fsync` are `cfg(test)` helpers whose bodies degrade to a no-op or a
-  plain call of `body` when `debug_assertions` is off, so the release suite runs with real fsyncs and
-  the real preview — the overrides stay absent, and the fsync-skip assertion in
-  `the_real_fsync_paths_run_when_the_debug_skip_is_off` is debug-only.
+  `cfg(debug_assertions)` and not `cfg(test)` alone; two lib tests pin `PUBLISH_READBACK_ATTEMPTS` and
+  `PUBLISH_READBACK_RETRY_BASE_SECS` to the production constants. Not measured: a full publish that
+  waits the real ninety seconds under load. `cargo test --release` runs with real fsyncs and the real
+  preview, and the fsync-skip assertion is debug-only.
 
-- **Tests execute the generated plugin and *require* `node`; the count is not crossed, and the measured
-  number is recorded in the entry above.** `the_plugin_hands_the_gate_the_directory_the_call_runs_in`
-  writes the plugin `setup` would install,
-  drives **both host generations** — OpenCode 1's `tool.execute.before` hook with a stand-in shell,
-  OpenCode 2's `setup` registering an `execute.before` hook with a stand-in `Bun.$` — and reads back
-  the payload and the directory the gate would have been launched in on each. Its sibling
-  `the_plugin_hands_the_gate_the_directory_every_write_lands_in` drives the same two paths once per
-  write-shaped tool in `GATED`, with OpenCode 1's `file_path` and OpenCode 2's `path`, asserting the
-  target path survives in the payload — a tool added to
-  the list without evidence of where its call lands is a test failure, not a silent fallback. The
-  third, `the_loop_plugin_continues_while_estigia_says_there_is_work`, drives the optional loop
-  plugin through a stubbed OpenCode 2 context and proves its exits: a turn that ends with a live
-  `estigia goal` answer enqueues the same prompt again, a turn that ends with no live claim but
-  claimable work does too, a turn that ends with no claimable work but a discharged condition to act
-  on does too — and its preamble says to discharge it — a turn that ends with none of the three does
-  not, a queue or completion count Estigia could not report does not, a run reaches its `--max`
-  completed-issue cap and stops, every stopping exit keeps the goal with the reason it ended, the
-  turn after a stop does nothing, and the plugin offers the `/flow-status` command that reports the stored
-  goal and that reason. A turn whose claim Estigia could not confirm, or whose `estigia goal` answer
-  could not be read, is **not** a stopping exit: it is retried up to a bounded number of attempts —
-  on the plugin's own wait timer — continues on a later confirmed read, and stops only once those
-  attempts are spent, with a resumable notice whose reason says the read was retried rather than
-  unconfirmed on a second read. The `wait` test
-  (`the_loop_plugin_waits_on_held_or_pending_work_and_asks_again`) proves that by observing the wait
-  and the later continuation, not by asserting how many times the reader was called, and the
-  decision's own unit test proves the same retry in `cli::loop_stop::decide`. All
-  ask for an interpreter because the artefact
-  is JavaScript: the plugin is the fourth copy of the gated-tool rule and the only one in another
-  language, and every other test of it asserts on its **source text**. One of those reads for the
-  loader shape itself — `the_plugin_declares_the_default_definition_opencode_two_loads` holds the
-  default definition's `id` and `setup`, because OpenCode 2 refuses the module before any hook can
-  run. Text is what let the
-  working-directory defect stand — the source plainly said
-  `const cwd = worktree ?? directory ?? process.cwd()` and plainly forwarded `output?.args`, and both
-  sentences were true of a plugin handing the gate the wrong directory. They do not skip when `node`
-  is absent; they fail and name what is missing, and all workflows install `node` rather than
-  relying on the runner image having it.
+- **Tests execute the generated plugin and *require* `node`; the count is not crossed.** Three tests
+  drive it. `the_plugin_hands_the_gate_the_directory_the_call_runs_in` covers both host generations
+  (OpenCode 1's `tool.execute.before` with a stand-in shell, OpenCode 2's `execute.before` with a
+  stand-in `Bun.$`); `the_plugin_hands_the_gate_the_directory_every_write_lands_in` does it once per
+  write-shaped tool in `GATED`, so a tool added without evidence of where it lands is a failure; and
+  `the_loop_plugin_continues_while_estigia_says_there_is_work` drives the optional loop plugin through a
+  stubbed OpenCode 2 context: a turn ending with a live goal, claimable work or a discharged condition
+  enqueues the prompt again, one with none of them or with an unreportable count does not, `--max`
+  stops a run, every stopping exit keeps the goal with its reason, and `/flow-status` reports it. A
+  turn whose claim or `estigia goal` answer could not be read is retried up to a bounded number of
+  attempts on the plugin's wait timer and stops only once they are spent
+  (`the_loop_plugin_waits_on_held_or_pending_work_and_asks_again`, `cli::loop_stop::decide`).
+  `the_plugin_declares_the_default_definition_opencode_two_loads` holds the loader shape. They fail,
+  naming what is missing, when `node` is absent. Source-text assertions let the working-directory
+  defect stand, which is why these execute the plugin.
 
-  **And what the loop plugin's one-reaction rule does not establish.** The test drives several stubbed
-  instances against one shared store and one event, so it proves that an instance acts only on its own
-  location's events and that the goal is re-read before the enqueue; it does not measure a real host
-  delivering one event to N instances, or that `event.location.directory` and `ctx.location.directory`
-  are spelled identically there (a mismatch would make the loop never react, which is a stop the
-  operator would have to notice). Storage has no compare-and-set, so the re-read narrows the stop race
-  and does not close it: a stop written between the re-read and the enqueue still lets one prompt
-  through. **Parked prompts are not drained.** `ctx.session` does not expose `session.inbox.cancel`
-  (OpenCode 2.0.16: `SessionDomain` picks `create|get|switchAgent|switchModel|prompt|generate|command|
-  synthetic|interrupt|update|move|wait|context`), so a loop prompt already queued when a stop lands is
-  still delivered once; the agent then works one more turn, and the loop asks again at its end and
-  stops. Whether `session.synthetic` with `resume: false` really schedules nothing is read from the
-  protocol description, not measured. A repository mismatch is judged from the pointer's recorded
-  `repo_dir`/`worktree`; a pointer written before either was recorded is answered as before.
+  **What the loop plugin's tests do not establish.** They drive stubbed instances against one store and
+  one event, so they prove an instance acts only on its own location's events and re-reads the goal
+  before the enqueue; not a real host delivering one event to N instances, nor that
+  `event.location.directory` and `ctx.location.directory` are spelled identically (a mismatch would make
+  the loop never react). Storage has no compare-and-set, so a stop written between the re-read and the
+  enqueue still lets one prompt through. **Parked prompts are not drained:** `ctx.session` does not
+  expose `session.inbox.cancel` (OpenCode 2.0.16), so a queued loop prompt is delivered once after a
+  stop. That `session.synthetic` with `resume: false` schedules nothing is read from the protocol
+  description. `last` and the per-location watch record say only what an instance that was called
+  observed: a never-called plugin, a host that never fires `session.execution.succeeded`, or an event
+  during a stream disconnection (volatile) leaves no record, so "no turn end observed" is not "no turn
+  ended". Resubscription is driven by a stubbed stream; why the 2026-09-30 session produced no reaction
+  is not established.
 
-  **And what the loop plugin's record cannot prove.** `last` and the per-location watch record
-  say what an instance that was called observed; a plugin that is never called at all, a host that
-  never fires `session.execution.succeeded`, or an event delivered while the stream was down (the
-  protocol describes it as volatile, and events during disconnection are missed) leaves no record, so
-  "no turn end observed" is not "no turn ended". An event from a location no instance owns is recorded
-  by nobody, and one from another location is deliberately not recorded by the instances that ignore
-  it, because storage has no compare-and-set and their write could overwrite the owner's. The
-  resubscription is driven in the test by a stubbed stream that throws or ends once; a real host's
-  failure modes are not measured. Why the 2026-09-30 session produced no reaction is still
-  not established: the record exists so the next one can be explained.
+  **A child session.** Running children are a map in the plugin's memory, so a child started before a
+  restart is unknown and its parent continues immediately; a child whose end is never observed holds its
+  parent only until the wait timer fires, then costs one continuation per interval. That OpenCode 2.0.26
+  emits `session.created` with `parentID` and four `session.execution.*` events with only the session
+  id, and that `ctx.session` cannot list children, is read from the installed binary. A parent whose
+  turn ends between the child's end event and its own decision waits for the timer or the next turn end.
 
-  **And what the loop plugin's wait on a child session does not establish.** The set of running
-  children is a map in the plugin's memory, filled from the events the plugin saw, so a child that
-  started before OpenCode restarted or the plugin reloaded is unknown, and its parent falls back to the
-  immediate continuation described above until the child's next start is seen. A child whose end is
-  never observed (the stream was down, the event is volatile) holds its parent only until the wait
-  timer fires, then costs one continuation per interval. The test drives a stubbed `ctx.session.get` and
-  stubbed events; that OpenCode 2.0.26 emits `session.created` with `parentID`, and the four
-  `session.execution.*` events with only the session id, and that `ctx.session` has no way to list
-  children, is read from the installed binary, not measured in a live host. Whether a `Task` subagent
-  runs as a child session whose own execution events reach the plugin is part of that reading. A parent
-  whose turn ends after the child's end event but before the parent's decision finishes is held by a
-  record already removed and waits for the timer or the next turn end.
+  **Event names and rendering are read, not seen.** `session.execution.succeeded` is read from the
+  installed `@opencode/schema` types; that `ctx.session.prompt` delivered the prompt or that the agent
+  did any work is not measured. The loop's only evidence is the tracker's answer when it asks, so a
+  session repeating a prompt and writing nothing looks like progress. That OpenCode 2.0.20 shows a
+  synthetic message's `description`, not its `text`, and keeps newlines, was read from the binary's
+  renderers, not a live TUI. A continuation on `claimable` (`list-state`'s count of unassigned
+  `review`/`ready` issues) does not prove the agent claims one. `dischargeable` counts blocked items
+  whose *recorded* clause holds, so it proves what the marker says, not that the marker is the real
+  condition; a malformed clause or an unreadable issue is reported as not holding (`unparsed`/`unread`),
+  so a loop can stop with a discharged condition nobody counted. The `--max` count is enumerated from
+  closed `status:done` issues mentioning the run, each proved by `delivery_close` (the merge-parent
+  proof `verify-claim` uses), so a squash or rebase delivery is a **floor**: not counted, and the cap can
+  run past it. [`what-it-writes.md`](what-it-writes.md) states the install half.
 
-  **And what the loop plugin's own test does not establish.** It drives the plugin against a stubbed
-  context, so it proves the plugin's *reading* of `estigia goal` and nothing about a running host:
-  that OpenCode actually fires `session.execution.succeeded` — the event name is read out of the
-  installed `@opencode/schema` types, not measured from a host — that `ctx.session.prompt` delivered
-  the enqueued prompt, or that the agent did any work between two turns. The loop's only evidence is
-  the tracker's answer at the moment it asks, so a session that repeats a prompt and writes nothing
-  looks exactly like one making progress. **The notice rendering is read, not seen.** That OpenCode 2.0.20 shows a
-  synthetic message's `description` and not its `text`, and keeps newlines in a non-shell message, was
-  read from the installed binary's `Cu` and `Lr` renderers (`F()` returns `message.description`, and `Lr`
-  puts it in a flex-grow `text` node), not observed in a live TUI; the same holds for the generic goal
-  plugin. Completion is not a value the agent supplies, but "not
-  done" is the tracker's answer and never a measurement that work happened. The continuation on a
-  claimable reading is no stronger: `claimable` is `list-state`'s count of unassigned issues in the
-  `review` and `ready` states, read over the tracker, and nothing here proves the agent claims one,
-  that the count is stable between that read and the claim, or that a claimed issue is work at all
-  rather than an issue nobody picked up. The continuation on a discharged condition is weaker in the
-  same direction, and in one of its own: `dischargeable` counts blocked items whose *recorded* clause
-  holds, so it proves what the marker says and never that the marker is the real condition — an item
-  blocked on a person's decision, or one whose clause was written narrower or wider than the wait it
-  stands for, is work this count cannot see, and a clause that is wrong makes an item look
-  dischargeable that nothing else releases. It under-reports in one direction deliberately: a clause
-  that is not well formed, or whose named issue could not be read, is reported as one that does not
-  hold and carried beside `unparsed`/`unread`, so a typo or an unreadable issue makes an item look
-  *undischargeable* — a loop can stop with a discharged condition nobody counted, and nothing here
-  proves which of the two happened. The completion count `--max` compares against is no
-  stronger in the other direction: it is enumerated from the tracker — the closed, `status:done`
-  issues that mention the run — and each candidate is proved by `delivery_close`, the same
-  merge-parent proof `verify-claim` uses, narrowed here to the publication this run made, so a
-  squash or rebase delivery, whose topology that proof
-  refuses, is a **floor**: an issue delivered that way is not counted, and the cap can run past it.
-  `docs/what-it-writes.md` states the install half.
+  **The wait sees counts, not liveness.** With `held + pending > 0` the loop waits on a timer. `held` is
+  every open `in-progress` or `review` issue the run could not claim, not "held by a live run": a stale
+  unreclaimed claim, a review item this run requested, this run's own earlier `in-progress` issue and an
+  item a person parked there all count. A holder that never finishes keeps the loop waiting until
+  `/flow-loop stop` or a pending `estigia goal stop-after`; `--max` bounds it only by completed issues.
+  `pending` is as good as the clause: a clause naming an issue that never reaches its state keeps the
+  item pending, an unreadable one counts as pending, and a malformed one is `unconditioned` and left for a
+  person. `open` is counted before the 200-item cut and `count` after, so a review queue past the
+  ceiling over-counts `held`; each blocked-queue count reads at most the 200 items `list-state`
+  returns. The timer lives in the plugin's process: an evicted location or reloaded plugin re-arms only
+  when its location boots again and the storage scan lands, so a location nothing boots keeps a goal
+  saying it waits with a `next` in the past. The re-arm is tested against a stubbed `storage.scan` that
+  never pages; tests use the driver's fake clock.
 
-  **The wait sees counts, not liveness.** With `held + pending > 0` the loop waits on a
-  timer instead of stopping, and it cannot tell a wait that will end from one that will not. `held`
-  is every open issue in `in-progress` or `review` the run could not claim, not "held by a live run
-  other than this one": telling a live holder from a stale claim needs a claim-timeline read per
-  issue, and the goal would then cost a comment read per held item every interval, so the faithful
-  read was traded for a bounded one. The approximation errs toward waiting. A claim gone stale that
-  nobody has reclaimed, a review item excluded because this run requested its review, and this
-  run's own earlier issue left `in-progress` after a claim that ended all count as held; so does an
-  item a person has parked in either state. A holder that never finishes keeps the loop waiting until
-  the operator runs `/flow-loop stop`, or until a pending `estigia goal stop-after` request ends it at
-  the next tick; nothing bounds the wait in time otherwise, and `--max` bounds it only by
-  completed issues. `pending` is as good as the clause: a clause naming an issue that will never reach
-  its state keeps the item pending for good, and an item whose clause could not be read counts as
-  pending, while one whose clause is not well formed counts as `unconditioned` and is left for a
-  person, even beside a clause that is well formed. `open` is counted before the 200-item cut and
-  `count` after it, so a review queue past the ceiling over-counts `held`, and the loop may wait on
-  work it could claim. Each of the blocked queue's counts reads at most the 200 items `list-state` returns by default, so
-  a longer queue under-counts. A tracker that changes state between two ticks is seen only at the
-  next one, up to the interval late, and the timer is in the plugin's process: a location
-  evicted or a plugin reloaded loses its timer and re-arms it only when that location boots again
-  and its storage scan lands, so a location nothing boots again keeps a goal saying it waits, with a
-  `next` in the past, until a turn end or `/flow-loop stop`. The re-arm is tested against a stubbed
-  `storage.scan` that never pages, not against a host; no test restarts one. The tests drive the timer with the driver's own fake clock, not a real
-  five-minute wait.
+  **The generic `/goal` proves nothing about the work, and this is not Estigia evidence.** The `Goal
+  loop plugin` row writes `goal-loop.js`, whose `/goal` completes when a model answers `MET` about the
+  transcript: never read from the tracker, never reaching the gate, `verify-claim` or `estigia goal
+  complete`, and holding no Estigia path (asserted from its source). Not measured: that
+  `ctx.session.generate` is on a real host's plugin context (read from the 2.0.20 binary and the 2.0.16
+  pick list), its return shape (`{ text }` and `{ data: { text } }` are both read), that its context is
+  the whole transcript, and that a judgement request does not perturb the session. A self-paced `/loop`
+  has no cap unless `--max` is given.
 
-  **The generic `/goal` proves nothing about the work, and this is not Estigia evidence.** The `Goal loop plugin` row writes `goal-loop.js`, whose `/goal` completes when a model
-  answers `MET` to a question about the transcript. That is a judgement, not an adjudication: it is
-  not read from the tracker, not measured against the repository, and it may be wrong in either
-  direction, so a goal can stop `met` on work that is not done and continue on work that is. It never
-  reaches the gate, `verify-claim` or `estigia goal complete`, and no test or document here treats it
-  as delivery evidence. The plugin holds no Estigia path and runs no command, which is asserted from
-  its source and is the reason it cannot be mistaken for one. What is **not measured**: that
-  `ctx.session.generate` is on the plugin context of a real host (it is read from the 2.0.20 binary's
-  session service and its HTTP schema, and from the 2.0.16 `SessionDomain` pick list quoted above,
-  not called from a plugin), what shape it returns there (`{ text }` or `{ data: { text } }` are both
-  read, neither observed), that its context is the whole transcript rather than a compacted one,
-  and that a judgement request made between two turns does not itself perturb the session. A
-  self-paced `/loop` has no cap unless `--max` is given, so a prompt that never ends the session's
-  work repeats until `/loop stop`. The tests drive it against a stubbed context, with the driver's
-  own timer clock, not a host.
+  **The Codex loop was measured against a mock model, not a real one.** On codex-cli 0.159.2 with the
+  row `on`, `hooks/list` showed the gate, `SessionStart` and `Stop` trusted; against a stand-in model API
+  and a stand-in `gh` whose ready queue held two issues, then one, then none, `Stop` blocked twice with
+  the preamble naming `Run id codex-…` and `$flow dev`, and allowed the third time. Not measured: any
+  real model's response, a long loop (one growing turn with no cap of Codex's own, ended only by an
+  interrupt), whether Codex compacts such a turn, and how a real Codex surfaces an allowed stop's
+  `systemMessage`.
 
-  **The Codex loop was measured against a mock model, not a real one.** On codex-cli
-  0.159.2, in a temporary `CODEX_HOME` written by `estigia setup codex` with the row `on`, `hooks/list`
-  showed the gate, `SessionStart` and `Stop` all trusted; a local server standing in for the model API
-  answered `codex exec`, and Estigia's own `Stop` ran against a stand-in `gh` whose ready queue held
-  two issues, then one, then none. The model's input carried `Run id codex-…` from `SessionStart`;
-  `Stop` blocked twice, each time with the preamble naming that id and `$flow dev` as the next user
-  message, and the third `Stop` allowed and completed. That is the whole of what was observed. Not
-  measured: any real model's response to the continuation, so whether it claims an issue, releases
-  it, or does anything with `$flow dev`; a long loop, which is one turn that only grows, with no cap
-  of Codex's own, so an operator who leaves a tracker that keeps reporting claimable work in place has
-  a loop only an interrupt ends; whether Codex compacts such a turn; and how a real Codex surfaces
-  the `systemMessage` of an allowed stop (the source turns it into a warning entry and the hook
-  reported `Completed`, but no rendering of it was seen).
+  **A `$flow dev` inside a continuation does not load the skill.** With the skill under
+  `CODEX_HOME/skills/flow`, a first prompt of `$flow dev` added the skill body once and `/flow dev` and
+  `flow dev` added nothing; across two continuations the count stayed one, since Codex reads mentions
+  from the input a turn starts with. A loop whose operator did not open with `$flow` is left with the
+  text, the `flow` entry in the skill list and a model that may or may not read `SKILL.md`; that case was
+  not run against a real model.
 
-  **A `$flow dev` inside a continuation does not load the skill.** Measured: with the skill
-  installed under `CODEX_HOME/skills/flow`, a first prompt of `$flow dev` added the skill body to the
-  model's input once and `/flow dev` and `flow dev` added nothing; across the two continuations the
-  count stayed one. Codex reads mentions from the input a turn starts with, and a hook's reason
-  continues that turn. So a loop whose operator opened the session with `$flow` has the skill in its
-  context, and one whose operator did not is left with the text `$flow dev`, the `flow` entry in the
-  skill list Codex puts in every request, and a model that may or may not read `SKILL.md` on its
-  own; the second case was not run against a real model. The `$` sigil itself is read off the
-  mention syntax in the tests of `core/src/plugins/mentions_tests.rs` (a skill mention written `$calendar`) and
-  the measurement, because the constant is defined in a crate the probe's source subset does not hold.
+  **What the Codex loop does not port.** `--wait` (a `Stop` hook answers and exits, so a held or pending
+  queue ends the turn with a message), `--max` (nothing counts delivered issues; the preamble omits the
+  cap), per-session operator text, and `/flow-status` (there is no stored goal to print). Each `Stop`
+  runs the four queue reads `estigia goal` runs, and a second set when the first was not confirmed,
+  inside a 180 s timeout, so a slow tracker adds that latency to every turn end and one slower than the
+  timeout ends the loop. `owned` recognises exactly the three commands setup writes, while
+  `strip_hooks` on uninstall drops any handler whose command merely contains an Estigia event name, so a
+  foreign Codex hook spelled that way would lose its entry and keep its trust table.
 
-  **What the Codex loop does not port.** `--wait`: a `Stop` hook answers and exits, so it cannot
-  schedule a re-ask, and a queue that is only held or pending ends the turn with a message rather
-  than waiting. `--max`: nothing counts delivered issues on this path, and the preamble omits the
-  cap. Per-session operator text: Codex has no command to carry it, so the operator's first prompt
-  is the text. `/flow-status`: `estigia goal --session-id <id> --runtime codex` answers, and
-  there is no stored goal to print, so a stop is a message at the end of a turn and nothing
-  else keeps it. Each `Stop` also runs the four queue reads `estigia goal` runs, and a second set
-  when the first was not confirmed, inside a 180 s timeout, so a slow tracker adds that latency to
-  every turn end and one slower than the timeout ends the loop. `owned` recognises exactly the
-  three commands setup writes, while `strip_hooks` on uninstall still drops any handler whose command
-  merely contains an Estigia event name, so a foreign Codex hook spelled that way would lose its
-  entry and keep its trust table on uninstall.
+  **An older `node` test skips.** `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer` spawns
+  `node --input-type=module --check` and, when `node` is absent, prints a line and returns: a pass that
+  measured nothing, the same shape as the skip filed against the push-guard fixtures.
 
-  **It is not the first test to reach for `node`, and the older one skips.**
-  `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer` already spawns
-  `node --input-type=module --check` to prove the generated plugin parses, and when `node` is absent
-  it prints a line and returns — a pass that measured nothing, one screen from the sentence above
-  saying a skip spelled as a pass is a defect. It is left as it is here rather than quietly changed
-  alongside an unrelated fix, and it is the same shape as the skip already filed against this
-  repository's own push-guard fixtures.
+- **`estigia goal complete` re-reads the receipt and the lane; it proves nothing about the work.** It
+  reads, at call time, that the run's receipt is the newest complete publication on its pull request,
+  that the verdict recomputed from the finding ledger is `approved` and equal to the recorded marker (a
+  `low` receipt does not need that), and that the head's lane is not red and finished — or,
+  independently, that the tracker calls the issue closed. The stored verdict carries no lane state. It
+  cannot see the work: findings are reviewers' declarations never re-checked, the receipt proves which
+  bytes were published not that they were right, a closed issue is the tracker's word, and the merge
+  and the claim's honesty are outside it. Any other shape answers `complete: false`; an unreadable
+  tracker answer or lane is `unread`/`unreadable`, never `complete`. The verb writes nothing.
 
-- **`estigia goal complete` re-reads the receipt and the lane; it proves nothing about the work.**
-  The adjudication is a fresh read, at call time, of three facts on the timeline: that the run's
-  receipt is the newest complete publication on its own pull request, that the verdict recomputed from its finding ledger clears it — `approved`, and equal to the
-  recorded marker, which a `low` receipt does not need — and that
-  its head's lane is one the gate would clear — not red, and finished — or, independently of all
-  three, that the tracker calls the issue
-  closed. It reads the same markers every other reader reads, so the stored verdict carries no lane
-  state: the lane this verb's answer rests on is the one it reads at call time, and one that was green when
-  the verdict was asked is not the same answer as one that turned red afterwards. What it cannot see
-  is the work: the findings the verdict is computed from are reviewers' declarations
-  Estigia stores and never re-checks, the receipt proves which bytes were published rather than that
-  they were right, a closed issue is the tracker's own word, and the merge and the honesty of the
-  run's claim are outside all of it. Every other shape answers `complete: false` — no publication,
-  no clearing verdict, or a lane that is red or unfinished — and a tracker answer or lane that could
-  not be read is reported as `unread` or `unreadable`, never as `complete`. The verb writes
-  nothing.
-
-- **The transport is ported, and the Python is not shipped.** issue-flow's `gh` and `git` calls used
-  to run as a Python script this crate installed, so every machine carried a second implementation of
-  every decision the gate makes — running beside the first and able to disagree with it. It did:
-  about which comments name a claim, about when a takeover's evidence is bound, about whether a
-  branch is linked to its issue. Each of those was found by putting one input through both.
-  The operations are answered in this process now; the script is in `RETIRED`, so a `sync` takes it
-  off a machine that has it — and the directory it lived in goes with it — and nothing on `doctor`'s
-  list asks for an interpreter.
-
-  **The Python is gone from the tree, and so is the recording of it.**
-  `skill/scripts/github.py` and the 2.364-line suite its authors wrote for it were deleted when this
-  repository stopped depending on an interpreter. The hundred and eleven crossings that replayed
-  against `tests/transport/oracle.json` — 228 recorded answers — went with them, in the change that
-  renamed the installed skill directory to `flow`. Both numbers are now facts about deleted files.
-
-  **Why the recording could not be kept.** A crossing's key was a fingerprint of its *whole
-  question*, and the question carried the installed layout: the skill directory's name in every
-  fixture path, and the directive block that names it. So the corpus did not only record the
-  transport's answers — it froze the shape of the installation they were recorded on. Renaming that
-  directory asked one crossing something the corpus had never been asked, and the only way to extend
-  a corpus is to run the reference implementation, which no longer exists and is not coming back.
-  Measured before deciding: with the directory renamed and nothing else touched, one crossing of a
-  hundred and eleven answered `no recorded answer`; with the contract's *prose* rewritten and the
-  directory left alone, all hundred and eleven passed. The corpus never froze the contract. It froze
-  the directory's name.
-
-  **What that cost, plainly.** The port's agreement with the retired implementation is no longer
-  asserted anywhere. Every defect those crossings found is still fixed, and most are still held by a
-  unit test written beside the fix — the entries below name them one at a time. What is gone is the
-  *mechanism* that found them: putting one input through two implementations and requiring one
-  answer. There is one implementation now, and nothing left that can disagree with it. A regression
-  in the port is a regression nothing here will notice unless a unit test happens to name it.
-
-  Two guards in `tests/honesty.rs` went with the corpus, because both policed it and neither had
-  anything left to measure once it was gone: `the_oracles_corpora_still_reach_past_the_easy_half`,
-  which read the crossings' alphabets to check they still reached the characters where two runtimes
-  stop agreeing, and `no_test_decides_for_itself_what_an_undescribed_comment_means`, which counted
-  how many crossings decoded a comment through the port's own reader.
-
-  **Nothing here has been tested against a live tracker**: no check in this suite reaches the
-  network.
+- **The transport is ported, and the Python is not shipped.** The `gh`/`git` operations are answered
+  in-process; the script is in `RETIRED`, so a `sync` removes it and its directory, and nothing on
+  `doctor`'s list asks for an interpreter. `skill/scripts/github.py`, its suite and the
+  `tests/transport/oracle.json` corpus of recorded answers are deleted: a crossing's key fingerprinted
+  the whole question, including the installed skill directory's name, so the corpus froze the
+  installation's shape and could not be extended once the reference implementation was gone. **The cost:**
+  the port's agreement with the retired implementation is no longer asserted anywhere. Every defect the
+  crossings found is still fixed and most are held by a unit test beside the fix, but a regression in
+  the port is one nothing here will notice unless a unit test names it. **Nothing here has been tested
+  against a live tracker**: no check in this suite reaches the network.
 
 - **The scripted-`gh` fixtures no longer share the process environment, and one trap replaces
-  another.** They used to put their fake `gh` ahead of the real one on the process `PATH` and set
-  `ESTIGIA_FAKE_ANSWERS` beside it, all under `src/test_env.rs`'s one `ENVIRONMENT` lock — so the
-  ~300 fixtures that need a scripted `gh` ran one at a time, and `cargo test` spent its wall-clock
-  waiting on that lock rather than working (the lib suite was 199 s over 2,733 tests).
-  The fake and its answers now travel through `crate::transport::with_process_override`, a
-  thread-local the process-spawning seam reads, and each fixture resolves and answers its own `gh`
-  without touching the process environment. `scripted_gh` also caches its directory per test binary
-  rather than building a fresh executable per call, and that cache — not the lock — is what the
-  remaining wall-clock was: macOS validates a new executable on first run, and hundreds of fresh
-  copies under concurrency serialised on that. Measured on one machine, the lib suite fell from 199 s
-  to 38 s, and the sum of every target's test execution from 241 s to 74 s. What is not measured is
-  the trap the thread-local introduces: a fixture whose own spawned threads call the transport does
-  not inherit the override, and nothing makes that fail loudly — it reaches the real `gh` instead.
-  Two such fixtures exist and name `with_scripted_gh_across_threads`, which keeps the old
-  process-wide lock; a third written the wrong way would fail on a machine with no `gh` on `PATH` and
-  could pass against a live tracker on one that has it, and no guard here would name it.
-- **Four flakes under load: three traced and fixed, one not reproduced.**
-  `transport::draft` staged every draft body at one name per branch, and the module's tests all
-  draft `issue-12` in one process, so a test could read or delete another's staged file; it failed
-  14 of 20 runs of `cargo test --lib transport::draft` and the staging name now carries a
-  per-call counter (0 of 30 afterwards). The `reviewer::tests` fake-CLI cases failed 2 of 25 runs
-  at load average 25 to 35: the fake exited 0 without reading standard input, and when it won the
-  race the prompt write was a broken pipe that the reviewer rightly reads as a launch failure;
-  `with_fake_clis` now points the fakes at the null device so they drain their input (0 of 60
-  afterwards). `cli::tests::a_repository_that_tightens_is_not_broken_for_doctor` ran the real
-  `gh auth status` twice and compared the two answers; it failed 1 of 40 runs with `gh` broken
-  only the first time. Not measured: why that real `gh` call failed once (timeout or network, not
-  distinguished) and `pipe` `part_09`'s
-  `launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_real_mcp_server`,
-  which did not fail in 30 runs alone or 15 runs of the whole module at load average 11 to 25, so
-  its report in the issue has no cause and no fix. Issue #63 later reproduced it under thirty busy
-  loops and fixed it, in the #63 entry after the #30 one.
-
-  Deterministic tests replaced the measurements. The staging name is built by
-  `staged_name`, and a test holds two drafts of one branch to distinct names whose cleanups do not
-  touch each other. `with_fake_clis`'s null-device default is pinned directly, with the caller's
-  choice and `ESTIGIA_FAKE_EXIT_WITHOUT_READING` as the two ways to opt out; the early-exit launch
-  failure is held by a prompt larger than a pipe buffer, since a small one can be written before
-  the fake exits. The doctor's `gh` row is no longer left out of that test: `bounded::run` resolves
-  a program through the same process override the transport reads, on the calling thread before
-  the worker starts, so the test answers `gh auth status` from a scripted `gh`. Only `bounded::run`
-  honours the override; `bounded::run_process`, which the model listing calls, still spawns the
+  another.** The fake `gh` and its answers travel through `crate::transport::with_process_override`, a
+  thread-local the process-spawning seam reads, and `scripted_gh` caches its directory per test binary.
+  Not measured: a fixture whose own spawned threads call the transport does not inherit the override and
+  reaches the real `gh`, with nothing failing loudly. Two such fixtures name
+  `with_scripted_gh_across_threads`, which keeps the process-wide lock; a third written the wrong way
+  would fail on a machine with no `gh` and could pass against a live tracker on one that has it. Only
+  `bounded::run` honours the override; `bounded::run_process`, which the model listing calls, spawns the
   program named.
 
-  Running `cargo test --lib transport::claim::tests::capture::` 20 times in parallel failed 2
-  times, in two different tests, both with the review runner reported as stopped before it started
-  while its `result.json` was already written: `await_started` looked for the marker, then asked
-  whether the runner's thread had finished, and a runner that finished between the two looks was
-  reported as dead (0 of 30 runs failed afterwards). It re-reads the marker after the thread is found
-  finished, and a test makes
-  the finish happen between the two looks. The failure reported earlier,
-  `a_count_read_that_fails_after_the_findings_landed_reports_the_write`, panicked in the same
-  `launch` and is read as this race, not reproduced by name.
+- **Load flakes still without a cause.** `cli::tests::a_repository_that_tightens_is_not_broken_for_doctor`
+  once failed with the real `gh auth status` broken the first of two calls (timeout or network, not
+  distinguished); the test now answers it from a scripted `gh`. The review-runner race in
+  `transport::claim::tests::capture::` (`await_started` reporting a finished runner dead) is re-read
+  after the thread finishes and held by a test that makes the finish happen between the two looks;
+  `a_count_read_that_fails_after_the_findings_landed_reports_the_write` panicked in the same `launch` and
+  is read as this race, not reproduced by name. `with_fake_clis` points fakes at the null device, with
+  the caller's choice and `ESTIGIA_FAKE_EXIT_WITHOUT_READING` as the two opt-outs.
 
 ## Review targets, panels and the lane that runs them
 
-- **Estigia can prove what it launched, not who answered.** `publish_review` mechanically freezes a
-  coherent clean draft receipt over epoch, PR, head, base and manifest digest, and the binary
-  launches each lens, the refuter and the validator itself through `launch_review_input` and `collect_review_input`. What that
-  launch establishes, from the code and not from anything the agent says: the adapter is the first
-  installed `claude` or `codex` CLI (`reviewer::select_adapter`); the arguments are the fixed set in
-  `src/reviewer/adapters.rs`, with no tools, plus `--model` only when `Model routing` names one for
-  `reviewer`; for a lens and the refuter the diff handed over hashes to the receipt's published
-  payload digest, or the launch is refused as `reviewer-payload-mismatch` before any process starts;
-  and the instructions are the template embedded in the binary, not a file on the machine.
+- **Estigia can prove what it launched, not who answered.** `publish_review` freezes a coherent clean
+  draft receipt over epoch, PR, head, base and manifest digest, and the binary launches each lens, the
+  refuter and the validator through `launch_review_input` and `collect_review_input`. From the code, not
+  the agent: the adapter is the first installed `claude` or `codex` CLI (`reviewer::select_adapter`);
+  the arguments are the fixed set in `src/reviewer/adapters.rs`, with no tools, plus `--model` only when
+  `Model routing` names one for `reviewer`; for a lens and the refuter the diff hashes to the receipt's
+  payload digest or the launch is refused `reviewer-payload-mismatch`; the instructions are the template
+  embedded in the binary.
 
-  **What it does not establish.** Which model or account actually answered: the binary passes
-  `--model` and reads back JSON, and a CLI that ignores or remaps the flag, falls back to another
-  model, or runs on a different account than the operator believes is indistinguishable from one
-  that honoured it. Nothing in the answer is signed. Two limits on the list above: the validator's
-  diff is `parent.head..head`, which no published digest covers, so the digest it is held against is
-  the rebuilt payload's own and the check cannot fail; and only the `claude` arguments carry
-  `--no-session-persistence`, while `codex_args` passes no session-persistence flag, so "no session
-  persisted" holds for `claude` alone. Nor does the timeline carry the adapter, the
-  arguments or the template: a lens report and its findings record the role label, the receipt and
-  the launching run, so a reader of the tracker cannot tell afterwards which CLI produced them.
-  A reviewer that is out of quota, not logged in or missing is refused as `reviewer-unavailable`
-  (an authentication refusal names the `HOME` and config-dir value the child was launched with, since
-  the host's environment, not the operator's shell, decides it),
-  `reviewer-exited-nonzero` or `reviewer-cli-missing` and records nothing, so `release_ci` keeps
-  refusing the receipt, because nothing else can record the missing lens report: a hand
-  `record_lens_report`, `record_refutation` or `record_validator_result` is refused
-  `recorded-by-capture-only`, as is a hand `record_review_finding` naming a `lens`
-  (`tests/pipe/part_09.rs`,
-  `a_quota_failure_on_a_lens_records_nothing_and_leaves_release_ci_refused`); that is a refusal to
-  admit an absent answer, not evidence that a present one was independent.
+  **What it does not establish.** Which model or account answered: a CLI that ignores or remaps
+  `--model`, falls back, or runs on another account is indistinguishable, and nothing is signed. The
+  validator's diff is `parent.head..head`, which no published digest covers, so its check cannot fail;
+  only the `claude` arguments carry `--no-session-persistence`, so "no session persisted" holds for
+  `claude` alone. The timeline records the role label, receipt and launching run, not the adapter,
+  arguments or template. A reviewer that is out of quota, not logged in or missing is refused
+  `reviewer-unavailable` (an authentication refusal names the `HOME` and config-dir value the child got),
+  `reviewer-exited-nonzero` or `reviewer-cli-missing` and records nothing, so `release_ci` keeps refusing
+  the receipt: a hand `record_lens_report`, `record_refutation` or `record_validator_result`, or a hand
+  `record_review_finding` naming a `lens`, is refused `recorded-by-capture-only`
+  (`a_quota_failure_on_a_lens_records_nothing_and_leaves_release_ci_refused` in `tests/pipe/part_09.rs`).
+  That refuses an absent answer; it is not evidence a present one was independent.
 
-  **Reviewer identity is still a label.** What identifies the reviewer whose output was admitted is
-  the role label (`review-risk`, `review-readability`, and so on) and the run that launched it.
-  The label is Estigia's own name for the slot, not a property of whoever answered: two lenses
-  answered by the same model on the same account carry two labels, and the binary cannot show that
-  they are two reviewers. The launching run is the claim holder, which is the same run that may have
-  written the change, so distinctness from the author rests on the process boundary of one launch,
-  not on an identity the tracker can check. Closing this would need the adapter, the requested
-  model and the CLI's reported model recorded on the lens report, and an answer signed by something
-  other than the process that asked; neither exists.
+  **Reviewer identity is still a label.** The role label is Estigia's name for the slot, not a property
+  of whoever answered: two lenses answered by one model on one account carry two labels. The launching
+  run is the claim holder, who may have written the change, so distinctness from the author rests on the
+  process boundary of one launch. Closing it needs the adapter, requested and reported model recorded on
+  the lens report and an answer signed by something other than the process that asked; neither exists.
 
-  `handoff_review` still records the exact receipt before releasing one ownership epoch, and
-  `review_computed_verdict` records the verdict computed from the receipt's ledger, naming the run
-  that recorded it. A computed verdict of any outcome, recorded by a run that is neither the
-  publisher nor a requester, resolves the handoff so the publisher can resume, read per pull request
-  against that pull request's own latest receipt; only `approved` permits delivery. `release_ci`
-  recomputes the verdict over the newest receipt on the receipt's own pull request, checks it
-  against the marker, and checks the current draft PR and a re-derived clean target before marking
-  ready. A Judgment Day judge is not launched by the binary and keeps the older limit: Estigia
-  cannot observe that the host launched it, kept it blind or kept two judges concurrent.
+  `handoff_review` records the exact receipt before releasing one ownership epoch, and
+  `review_computed_verdict` records the verdict computed from the receipt's ledger. A computed verdict of
+  any outcome recorded by a run that is neither publisher nor requester resolves the handoff, read per
+  pull request against its latest receipt; only `approved` permits delivery. `release_ci` recomputes the
+  verdict over the newest receipt on the receipt's own pull request, checks it against the marker, and
+  checks the current draft PR and a re-derived clean target before marking ready. A Judgment Day judge is
+  not launched by the binary: Estigia cannot observe that the host launched it, kept it blind or kept two
+  judges concurrent.
 
-  Nothing credits a reviewer by name any more — the retired `review_verdict` did, and
-  its `self_attested` flag is gone with it — so the distinctness rule survives only where a handoff
-  is resolved, where an approval supersedes an escalation, where a retired rejected verdict
-  refuses, and where a refutation is recorded — the four `docs/parity.md` names. The refutation rule
-  compares the caller-supplied `refuter` label against the recorded publisher and requester run ids,
-  never the recording `run_id`. **Decision:** the check is left comparing the label
-  rather than bound to `run_id`, because the run that records a refutation is the claim holder
-  writing on a distinct refuter's behalf, so a `run_id` comparison would refuse the publisher's claim
-  holder for a refutation it did not adjudicate; `docs/parity.md` is corrected instead to state what
-  the check can see — it stops an author only while the label it supplies is honest. Estigia asks for
-  the lens reports and the findings because an unrecorded review is one nobody can audit, not
-  because it can check them.
+  The distinctness rule survives only where a handoff is resolved, where an approval supersedes an
+  escalation, where a retired rejected verdict refuses, and where a refutation is recorded (the four
+  [`parity.md`](parity.md) names). The refutation rule compares the caller-supplied `refuter` label
+  against the recorded publisher and requester run ids, never the recording `run_id`. **Decision:** left
+  as a label comparison, because the recording run is the claim holder writing on a distinct refuter's
+  behalf, so a `run_id` comparison would refuse the publisher's holder for a refutation it did not
+  adjudicate; it stops an author only while the label is honest. Estigia asks for lens reports and
+  findings because an unrecorded review is one nobody can audit, not because it can check them.
 
   **An abandoned pull request's handoff keeps excluding its publisher from later pull requests.**
-  `review_eligibility` reduces the timeline alone — `all_publications` carries no
-  pull-request state — so telling an abandoned pull request from an open one needs a tracker read the
-  pure function does not have. The exclusion is kept rather than narrowed to closed pull requests:
-  the handoff's discharge is a distinct run's recorded judgement, not the passage of time, and a
-  publisher that could escape it by abandoning a pull request would be choosing its own reviewer.
-  `an_abandoned_pull_requests_handoff_still_excludes_its_publisher` holds it.
+  `review_eligibility` reduces the timeline alone, which carries no pull-request state. The exclusion is
+  kept: the handoff's discharge is a distinct run's recorded judgement, not time, and a publisher that
+  could escape by abandoning a pull request would be choosing its own reviewer. Held by
+  `an_abandoned_pull_requests_handoff_still_excludes_its_publisher`.
 
   None of it proves an independent context existed or establishes lens count, concurrency,
   independence, blindness, same-finding identity or composition — nothing checks that the run
@@ -1082,168 +878,89 @@ pointer that leaves it names the document it points at.
   produced is recorded separately, and the *verdict* it reduces to is computed from it, not chosen.
   The entry below says what that record does and does not carry.
 
-- **Judgment Day's rules are stated, not enforced.** Ordinary review licenses no judges,
-  and `skill/policies/judgment-day.md` states v4's Judgment Day contract, less its artifact references (Estigia keeps no store) — explicit request only,
-  never alongside a lens review, no refuter, and no receipt or gate effect, with its findings
-  reported to the operator and filed as issues, and then the rest: only a severe finding every judge
-  reports is fixed and a lone judge's is a suspect, the operator is asked before round one, at most
-  two fix rounds and two scoped re-judgments, `APPROVED` and `ESCALATED` as the only verdicts,
-  contradiction escalating to a person, and one final `JUDGMENT:` line. Nothing counts those rounds
-  (`repair_rounds` reads publications, and a Judgment Day has none), nothing checks that a fix
-  touched only the confirmed IDs, and nothing reads the final line. The fix role is the `developer`
-  definition or the orchestrator's own writer, so the correction is an ordinary claimed write and
-  Estigia installs no `jd-fix-agent`. Nothing refuses a judge's
-  finding recorded with `record_review_finding`, and one recorded against a receipt enters its ledger
-  like a lens's and can reject the computed verdict. Nothing refuses a run that convenes Judgment Day
-  over a target it is also reviewing with lenses, or that launches `review-refuter` beside it, and
-  nothing observes that the operator asked. `review-blind` and `review-blind-sealed` stay installed and
-  inert. `judge_workspaces` still takes a publication's receipt identity to scope its directories, so
-  a Judgment Day over a target nobody published has to choose its directories by hand under the same
-  isolation rule. `tests/no_judges_in_ordinary_review.rs` holds the rest of `skill/` and the rendered
-  contract to "ordinary review acquires no judge" by reading sentences, and it fails closed: any
-  sentence naming a judge and an acquiring verb (run, spawn, use, require, need, add, dispatch,
-  acquire, launch, convene, license) fails unless its exact text is in the `ALLOWED` list with a
-  reason, negations and Judgment Day sentences included. A second test fails when a listed sentence no
-  longer occurs, so the list cannot go stale and widen. What remains: a verb outside that list
-  (start, invoke, call, get, have and the like), a judge and its verb split across two sentences, and
-  a text that names the definitions (`review-blind`) with no judge word all say anything they like;
-  the Judgment Day policy file and the judge definitions are not scanned at all; and
-  an `ALLOWED` reason is a reviewer's claim. Passive voice is caught, because the check reads a judge
-  word and a listed verb in one sentence whatever the grammar.
+- **Judgment Day's rules are stated, not enforced.** Ordinary review licenses no judges.
+  `skill/policies/judgment-day.md` states the contract: explicit request only, never alongside a lens
+  review, no refuter, no receipt or gate effect, findings reported to the operator and filed as issues,
+  only a severe finding every judge reports fixed, the operator asked before round one, at most two fix
+  rounds and two scoped re-judgments, `APPROVED`/`ESCALATED` as the only verdicts and one final
+  `JUDGMENT:` line. Nothing counts those rounds (`repair_rounds` reads publications, and a Judgment Day
+  has none), checks that a fix touched only the confirmed IDs, or reads the final line. The fix role is
+  the `developer` definition or the orchestrator's own writer, so a correction is an ordinary claimed
+  write. A judge's finding recorded with `record_review_finding` enters the ledger like a lens's and can
+  reject the computed verdict. Nothing refuses a run that convenes Judgment Day over a target it also
+  reviews with lenses, or launches `review-refuter` beside it, or observes that the operator asked.
+  `review-blind` and `review-blind-sealed` stay installed and inert. `judge_workspaces` scopes its
+  directories to a publication's receipt identity, so a Judgment Day over an unpublished target chooses
+  them by hand. `tests/no_judges_in_ordinary_review.rs` holds the rest of `skill/` and the rendered
+  contract to "ordinary review acquires no judge" by reading sentences and fails closed: a sentence
+  naming a judge and an acquiring verb (run, spawn, use, require, need, add, dispatch, acquire, launch,
+  convene, license) fails unless its exact text is in `ALLOWED` with a reason, and a second test fails
+  when a listed sentence no longer occurs. Passive voice is caught. What remains: a verb outside the
+  list (start, invoke, call, get, have), a judge and verb split across two sentences, a text naming the
+  definitions (`review-blind`) with no judge word, the Judgment Day policy file and judge definitions
+  (not scanned), and an `ALLOWED` reason, which is a reviewer's claim.
 
-- **`judge_workspaces` hands out directories and proves nothing about where a judge wrote.** The
-  operation reads the run's `Worktree location`, mints one **bare working directory** per judge
-  outside the checkout the claim covers, creates each and reads it back before answering, and
-  refuses rather than returning a short list when it cannot make one for every judge. The
-  directories are bare — not git checkouts of the reviewed head — so a `reading` judge has nothing
-  to build and a `measuring` judge gains no tree the repository did not configure. Estigia still
-  cannot see whether a judge stayed in the directory it was handed, whether the orchestrator handed
-  it to a judge at all, or whether two judges shared a scratch path its caller never passed through
-  the operation — the same limit the entry above states for panel isolation, narrowed by the one
-  case this operation removes: that no judge was offered a distinct directory at all.
+- **`judge_workspaces` hands out directories and proves nothing about where a judge wrote.** It reads
+  the run's `Worktree location`, mints one **bare working directory** per judge outside the claimed
+  checkout, reads each back, and refuses rather than returning a short list. The directories are not git
+  checkouts, so a `reading` judge has nothing to build. Estigia cannot see whether a judge stayed in its
+  directory, whether the orchestrator handed it over, or whether two judges shared a scratch path its
+  caller never passed through the operation; only the case where no judge was offered a distinct
+  directory is removed.
 
 - **The review-target payload is bounded, and handing it is still an instruction.** `publish_review`
   materialises per-path unified hunks against the receipt's recorded base, once per epoch, and binds
   `payload-digest` on the published marker. The answer carries `payload_bytes` and `payload_digest`
-  unconditionally and the payload text only when `--inline-payload` asks for it — the default
-  answer omits it (before a fix the text was unconditional).
-  Overflow of `REVIEW_PAYLOAD_CEILING` (262,144 bytes) refuses `review-payload-too-large` before any
-  remote write; the payload is never truncated whether it is asked for or not. Measured on this
-  change against `origin/main` while the work was still uncommitted: **31,795 bytes**.
-  That is the size of one typical publication of this repository, not a search of `src/` (97,217
-  lines at the analysis's `main`). Estigia still cannot prove the orchestrator asked for those
-  bytes at all, nor that it handed them to a judge — the same honesty as the entry above.
-  [judgment day](../skill/policies/judgment-day.md) now asks for the payload first and names the
-  checkout as an exception for claims the diff does not show, which is prose nothing here enforces.
-  And what refused the read-back at one real publication's size was never `REVIEW_PAYLOAD_CEILING`: that
-  publication was 145,756 bytes, comfortably under the 262,144 above, which is why it materialised
-  at all. It was the host's own result cap. **Reconstructed, not measured**, and marked so because
-  this document's subject is that distinction: the cap counts the whole JSON answer, so the diff
-  arrives with every newline and quote escaped and every receipt field beside it, which is the
-  only account anyone has offered of how 145,756 bytes of payload became the 151,889 characters
-  that were refused. Nobody measured the 6,133-character difference. What is certain is the
-  narrower half: the payload alone is under the ceiling, so the ceiling did not refuse it. Estigia
-  implements no answer-size cap, so opting in avoids paying for bytes nobody asked for and there is
-  no ceiling here to raise. **What the omitted text costs is that `payload_digest` is checkable only
-  by somebody who can rebuild the bytes, and the recipe is in no document a caller reads.** It is
-  `git diff --no-color --no-ext-diff --no-textconv --no-renames --unified=3 <base> <head>` under
-  `pinned_diff_args`' five `-c` settings, run inside the fresh, empty `GIT_DIR` `isolated_diff_env`
-  builds — sharing only the repository's own object store — with the child's environment replaced
-  rather than layered: `ISOLATED_ENV_ESSENTIAL` plus `LC_ALL=C` survive the clearing, which is what
-  carries `GIT_DIFF_OPTS`'s removal along with it rather than needing its own `env_remove`, and
-  `isolated_diff_env` then supplies eight of its own — `GIT_DIR`, `GIT_OBJECT_DIRECTORY`,
+  always and the text only when `--inline-payload` asks. Overflow of `REVIEW_PAYLOAD_CEILING` (262,144
+  bytes) refuses `review-payload-too-large` before any remote write; the payload is never truncated.
+  Estigia cannot prove the orchestrator asked for those bytes or handed them to a judge; the judgment-day
+  policy asks for the payload first, which is prose nothing enforces. One real publication of 145,756
+  bytes was refused by the host's own result cap at 151,889 characters, not by this ceiling
+  (**reconstructed, not measured**: the cap counts the whole escaped JSON answer; the 6,133-character
+  difference was never measured). Estigia implements no answer-size cap.
+  **`payload_digest` is checkable only by somebody who can rebuild the bytes, and the recipe is in no
+  document a caller reads.** It is `git diff --no-color --no-ext-diff --no-textconv --no-renames
+  --unified=3 <base> <head>` under `pinned_diff_args`' five `-c` settings, run inside the fresh, empty
+  `GIT_DIR` `isolated_diff_env` builds (sharing only the repository's object store), the child's
+  environment replaced rather than layered: `ISOLATED_ENV_ESSENTIAL` plus `LC_ALL=C` survive, and
+  `isolated_diff_env` supplies eight of its own: `GIT_DIR`, `GIT_OBJECT_DIRECTORY`,
   `GIT_CONFIG_NOSYSTEM`, `GIT_CONFIG_SYSTEM`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_COUNT`,
-  `GIT_ATTR_NOSYSTEM` and `LANG`. The two `NOSYSTEM` ones are load-bearing and a recipe that omits
-  them is not this recipe: they are what stands between the isolated diff and a real system-wide
-  install's own `gitconfig` and `gitattributes`, which the entry below measures as non-empty on this
-  machine.
-  **That recipe is now sufficient for the gap this sentence used to name**: `diff.algorithm`,
-  `diff.interHunkContext` and `diff.indentHeuristic` are still not pinned by a `-c` flag, but the
-  isolated `GIT_DIR`'s own config carries none of the three and no system, global or local config
-  reaches it either, so a rebuilder gets git's own compiled default for each regardless of what
-  their machine or this repository's own config sets. What is not closed is a different git version,
-  which is the one residual `payload-rebuild-mismatch` below still names for the operation itself.
-  This recipe carries one the operation does not: a person following it chooses the ends by hand and
-  can diff the wrong pair, where the operation takes its ends from the marker as object ids and
-  cannot. A **Rust**
-  consumer has a way out that a reader of these documents does not: `review_payload` is `pub`, so
-  `estigia::transport::target::review_payload` returns both the bytes and the digest; only
-  `pinned_diff_args` and `review_payload_bounded` are `pub(crate)`. Two judges recorded the
-  documentation gap independently, and two more corrected an earlier draft of this
-  entry that called the whole recipe `pub(crate)`. Nothing crosses this sentence against the code.
+  `GIT_ATTR_NOSYSTEM` and `LANG`. The two `NOSYSTEM` ones are load-bearing. `diff.algorithm`,
+  `diff.interHunkContext` and `diff.indentHeuristic` are unpinned but the isolated config carries none,
+  so a rebuilder gets git's compiled default; a different git version is the residual
+  `payload-rebuild-mismatch` names. A person following the recipe chooses the ends by hand and can diff
+  the wrong pair; the operation takes object ids from the marker. A **Rust** consumer can call
+  `estigia::transport::target::review_payload` (`pub`; `pinned_diff_args` and
+  `review_payload_bounded` are `pub(crate)`). Nothing crosses this sentence against the code.
 
-  **The transport itself gained a caller of that recipe, and the instability just
-  described is exactly why it refuses rather than compares.** `review_payload_membership` reads a
-  candidate reviewer-facing text from a path, recomputes the payload the same way `publish_review`
-  did, and reconciles the recomputed digest against the marker's own recorded `payload-digest`
-  **before** asking anything about the candidate. That closes the checking gap for exactly this
-  comparison — a caller no longer has to be "somebody who can rebuild the bytes" by hand — but it
-  does not make the rebuild infallible: the rebuild runs isolated now, so a digest that disagrees no
-  longer comes from an ambient `.gitattributes`, `core.attributesFile` or unpinned `diff.*` setting —
-  but a different git version can still disagree, since both ends are object ids the operation takes
-  from the marker rather than resolves itself. It answers `payload-rebuild-mismatch` with no line
-  reported rather than guessing which. A `payload-digest`
-  recorded before this field existed, or resolved only through an inherited lineage parent with no
-  marker of its own, answers `payload-digest-unavailable` instead of crossing against nothing. Only
-  once the digests agree does it test candidate lines against the payload, and only for
-  membership — never completeness, so a candidate that legitimately withholds whole files to fit a
-  sealed reviewer's limit is still accepted. **What that membership does not check is order,
-  multiplicity or file boundaries**: the set it searches is built once over the whole
-  payload, so a candidate assembled entirely from real lines can still misrepresent the change — a
-  `-` line shown after the `+` that replaced it, one real line repeated, or a line from one file's
-  hunk placed under another's `diff --git` header — and still answer `ok: true`.
+  `review_payload_membership` reads a candidate reviewer-facing text from a path, recomputes the payload
+  as `publish_review` did, and reconciles the digest against the marker's `payload-digest` **before**
+  asking about the candidate. A disagreement (a different git version, since both ends are object ids from
+  the marker) answers `payload-rebuild-mismatch` with no line reported; a marker with no recorded digest,
+  or one resolved only through an inherited lineage parent, answers `payload-digest-unavailable`. Only
+  then does it test candidate lines for membership, never completeness. **It does not check order,
+  multiplicity or file boundaries**: a `-` line shown after the `+` that replaced it, one real line
+  repeated, or a line moved under another file's `diff --git` header still answers `ok: true`.
   `claim::tests::review_payload_membership_accepts_reordered_duplicated_and_cross_spliced_real_lines`
-  constructs all three from the fixture's own payload bytes and pins each answer. A caller reading
-  `ok: true` has bought "every line was published somewhere", not "this text is a faithful
-  rendering of the change"; its own sealed judge recorded the limit as
-  `membership-is-blind-to-order-multiplicity-and-file-boundaries` against receipt
-  `354d9150b81c34211dcf8bd7e1fe73f3`, and a later change discloses it rather than leaving it
-  implied.
+  pins all three. `ok: true` buys "every line was published somewhere", not "this text is a faithful
+  rendering of the change".
 
-- **A sealed reviewer holds a copy, and nobody holding it can check it.** The entry above
-  says `payload_digest` is checkable only by somebody who can rebuild the bytes, and that the recipe
-  is a `git diff`. A sealed reviewer — a sealed lens, or Judgment Day's sealed judge — is not that somebody: its grant is one tool, a web search
-  (`src/setup/mod.rs` renders it), so it has no filesystem read and no shell and could not run
-  the recipe with the receipt in front of it. Judgment Day's unsealed judge gets a shell only where `Evidence
-  standard` is `measuring`. So what a sealed reviewer reviews is the copy the orchestrating context
-  re-emitted into a launch prompt, and a prompt is not a thing Estigia sees: no operation here takes
-  one. An abridgement, a re-wrap or a dropped hunk yields a reviewer reviewing something adjacent to the
-  change and reporting on it in the register of a verdict, with every identifier — epoch, receipt,
-  digest — correct.
-
-  **This is a third limit, not either of the two already recorded.** The entry above asks whether the
-  orchestrator fetched those bytes and handed them on at all. The sealed-grant entry below, and the
-  lens entry near the end of this document, ask whether a reviewer stayed inside what it was handed.
-  This one asks whether what it was handed was the change.
-
-  **It has happened, and what caught it was the reader.** `skill/policies/judgment-day.md` records
-  that on one final panel the sealed judge detected that the payload it was handed had been
-  abridged and withheld every claim about the elided regions. Nothing in this crate observed it,
-  then or now.
-
-  **And again, in the panel that reviewed this entry.** Re-emitting this change's own payload into a
-  sealed lens, the orchestrator gave the row registering `skill/bindings/github/delivery.md` the
-  wrong count: `30_174` became `39_121` — a well-formed line, a real file, a number not its own.
-  The brief's epoch, pull request, head, base and both digests were correct; only the bytes were
-  not, and the lens held no tool that could compare them. The launch was withdrawn because the
-  orchestrator re-read what it had written, which is no mechanism.
-
-  **What bounds it, and where the ported design stands.** Three defences are held: an oversize payload
-  is refused rather than truncated, and a finding naming any receipt but this one is refused — so a
-  reviewer's answer is bound to the candidate's identity though never to its bytes. The third admits a
-  structured location against the change: `finding-location-outside-the-change` for any severe finding
-  disposed `introduced` or `worsened`, whoever recorded it, and a path check besides for a
-  lens. A finding's evidence prose is admitted too. **The project this design is ported from
-  computes no digest over the patch bytes it delivers either**, read at revision `a537c63e`:
-  `internal/cli/review_lens_context.go` composes the reviewer's prompt in Go and the string `sha256`
-  does not occur in it, while the transport that does digest a diff carries the note that
-  "Provider-managed native-Git reviewers never receive this payload"
-  (`internal/reviewtransaction/frozen_candidate_context.go:23`); it binds content-addressed tree
-  identity and refuses a finding whose "location is outside the frozen candidate"
-  (`internal/reviewtransaction/artifact_admission.go:398`) instead. So this is a residual that
-  project accepts rather than a divergence from it — with one difference that is ours, and it runs
-  the wrong way: there a program composes the bytes and hands them to the reviewer, and here a model
-  does.
+- **A sealed reviewer holds a copy, and nobody holding it can check it.** A sealed lens, or Judgment
+  Day's sealed judge, has one tool, a web search (`src/setup/mod.rs` renders it), so it cannot run the
+  recipe; an unsealed judge gets a shell only where `Evidence standard` is `measuring`. What a sealed
+  reviewer reviews is the copy the orchestrating context re-emitted into a launch prompt, which Estigia
+  never sees: an abridgement, re-wrap or dropped hunk yields a review of something adjacent, in the
+  register of a verdict, with every identifier correct. This is a third limit, besides whether the
+  orchestrator handed the bytes on at all and whether a reviewer stayed inside what it was handed. It
+  has happened: `skill/policies/judgment-day.md` records a sealed judge detecting an abridged payload,
+  and in one panel the orchestrator re-emitted a row's count `30_174` as `39_121`, a well-formed line
+  the lens held no tool to compare; the launch was withdrawn only because the orchestrator re-read it.
+  **What bounds it:** an oversize payload is refused rather than truncated; a finding naming any receipt
+  but this one is refused; and a structured location is admitted against the change
+  (`finding-location-outside-the-change` for a severe finding disposed `introduced` or `worsened`, plus a
+  path check for a lens). So an answer is bound to the candidate's identity, never to its bytes. The
+  project this design is ported from computes no digest over the patch bytes it delivers either (read at
+  `a537c63e`); there a program composes the bytes and here a model does.
 
 - **A Judgment Day judge's starting context is enumerable only for what Estigia writes.** The reserved
   `review-blind` definition carries the review contract — the finding classes, the rule that decides
@@ -1268,778 +985,352 @@ pointer that leaves it names the document it points at.
   no field that suppresses CLAUDE.md or skills. OpenCode `Task` has none either. Host assembly is a
   named limit, not a cleared gap.
 
-
 - **A lens report records that the binary admitted a lens's answer, not who gave it.**
-  `record_lens_report` stores that a role finished against a receipt, written by the run holding
-  the `review` claim on the lens's behalf, because a sealed lens holds no tools to write it. The
-  computed verdict refuses `approved` without a report for every role the tier licenses, so an
-  unreported lens cannot be approved by omission, and a hand
-  `record_lens_report` is refused `recorded-by-capture-only` (slice S5b), so a report
-  exists only where the binary ran the lens. What remains unproven is who answered, as the launch
-  entry above says. `release_ci` now depends on this: a
-  `low` receipt licenses no lens and releases with no review event at all, as v4 does, on the
-  structural readback alone, and at `medium` the focus is read from the reports themselves, so a
-  single wrong report is indistinguishable from a right one until a second disagrees with it.
+  `record_lens_report` stores that a role finished against a receipt, written by the run holding the
+  `review` claim, because a sealed lens holds no tools. The computed verdict refuses `approved` without
+  a report for every role the tier licenses, and a hand `record_lens_report` is refused
+  `recorded-by-capture-only`. A `low` receipt licenses no lens and releases on the structural readback
+  alone; at `medium` the focus is read from the reports themselves, so a single wrong report is
+  indistinguishable from a right one until a second disagrees.
 
 - **A `review-verdict` marker releases nothing, and the one thing it can still do is refuse.**
-  `release_ci` and `goal_completion` read the computed
-  verdict alone. What a recorded marker means is decided once,
-  fail-closed. An `accepted` one releases nothing. A `rejected` one from a distinct reviewer refuses
-  release on its exact receipt at **every** tier, including a `low` receipt whose recomputed ledger
-  is clean and a receipt whose computed marker agrees with an `approved` recomputation, as
-  `legacy-verdict-rejected` unless the rejecting reviewer's severe finding against the receipt
-  declares `insufficient`, which refuses as `rejected-on-insufficient-evidence`, because the marker
-  binds those bytes and a recorded objection must not read as less than it said. The cost is that a
-  receipt a reviewer rejected cannot be cleared by recomputation even when the finding it rested on
-  was later refuted; a republish is a new receipt
-  and starts without it. Three readers read the marker beside the computed one: `repair_rounds`
-  reads a rejected one as a receipt that stands rejected, so a republish over it is a correction, and
-  an `accepted` parent as approved, so a republish over it is a new candidate, the
-  `approved-republish-without-cause` gate treats an accepted parent as one a finding must answer, and a distinct
-  verdict still resolves the handoff it was recorded against. Beside them the computed marker is read the same way: a recorded marker of any outcome
-  from a run that is neither the publisher nor a requester resolves a handoff; `rejected` and
-  `escalated` markers stand a receipt rejected; an `approved` parent is the acceptance a new
-  candidate is measured from. Where a receipt carries both kinds, the computed marker
-  decides the parent's acceptance and either kind resolves a handoff. None of this can be told from a
-  forged marker by Estigia — they are comments, readable by anyone who can write one.
-  **Decision, with the judges themselves removed from ordinary review:**
-  the both-judges-confirm rule is retired. A lens's severe finding is settled by the ledger, so one
-  lens's `deterministic` finding rejects the receipt without a second reading, and a sibling that
-  disagrees cannot veto it. What that costs is the adversarial check a second judge's confirmation
-  was: nothing now requires a second reading of a finding before it blocks, and only a refutation
-  batch can drop an `inferential` one.
-  The marker can no longer be written: `record_review_verdict` refuses every call as
-  `review-verdict-retired`, so the markers a timeline carries are the ones earlier releases wrote.
-  Its arguments are declared untyped strings — `issue` and `pr` included — so a zero or non-numeric
-  one is answered `review-verdict-retired` rather than refused by argument validation before the
-  retired tool sees it, and every argument a call supplies is named — in `ignored` when it decided
-  nothing, in `receipt` when it completes one — so a non-numeric `issue` or `pr` is named rather
-  than dropped. A refused call returns before any pointer effect is applied, so a pipe assertion that the
-  pointer stays byte-identical passes whatever effect the tool is registered with;
-  `the_retired_verdict_tool_leaves_the_pointer_alone` reads the registration itself and is the guard
-  that holds it.
-  A timeline that mixes a computed approval with an aggregate rejection of the same receipt is read
-  the same way by every reader of a receipt's standing: it stands rejected, as release already refuses
-  it. The direction is more permissive for the republish gate: it no longer refuses the republish
-  (`approved-republish-without-cause`) of a receipt that release refuses (`legacy-verdict-rejected`),
-  which ended a deadlock where neither could be cleared without the other. A rejection is read from
-  any aggregate marker while release reads only a distinct reviewer's, so an old marker written by a
-  forbidden run can make a receipt stand rejected, and so turn a republish over it into a correction,
-  for a receipt release still accepts.
-  The terminal receipt follows the same rule: an `approved` receipt is recorded by
-  `record_computed_verdict`, not by a verdict, so an approval is final against `escalate_review` and a
-  distinct run's approval supersedes an escalation. A receipt is a record in the local store that
-  only a run holding the review claim writes through the tools, and nothing stops somebody with the
-  store from writing one: what refuses the publisher approving its own escalation away is the rule
-  that a receipt credited to a run the review forbade supersedes nothing.
+  `release_ci` and `goal_completion` read the computed verdict alone. An `accepted` marker releases
+  nothing. A `rejected` one from a distinct reviewer refuses release on its exact receipt at **every**
+  tier as `legacy-verdict-rejected`, or `rejected-on-insufficient-evidence` when the rejecting
+  reviewer's severe finding declares `insufficient`, because the marker binds those bytes. The cost: a
+  receipt a reviewer rejected cannot be cleared by recomputation even when the finding was later
+  refuted; a republish is a new receipt. `repair_rounds` reads a rejected marker as a receipt that
+  stands rejected (a republish over it is a correction) and an `accepted` parent as approved; the
+  `approved-republish-without-cause` gate treats an accepted parent as one a finding must answer; a
+  distinct verdict still resolves the handoff it was recorded against; a computed marker of any outcome
+  from a run that is neither publisher nor requester resolves a handoff, `rejected`/`escalated` stand a
+  receipt rejected, an `approved` parent is the acceptance a new candidate is measured from, and where a
+  receipt carries both kinds the computed marker decides acceptance. Estigia cannot tell any of this from
+  a forged marker: they are comments. **Decision:** the both-judges-confirm rule is retired. A lens's
+  `deterministic` finding rejects the receipt without a second reading, and only a refutation batch can
+  drop an `inferential` one. `record_review_verdict` refuses every call as `review-verdict-retired`; its
+  arguments are untyped strings, so a zero or non-numeric `issue` or `pr` is answered with that code and
+  every supplied argument is named (`ignored` or `receipt`). A refused call returns before any pointer
+  effect, so `the_retired_verdict_tool_leaves_the_pointer_alone` reads the registration itself. A
+  timeline mixing a computed approval with an aggregate rejection stands rejected for every reader, and
+  the republish gate no longer refuses what release refuses (ending a deadlock), but an old marker
+  written by a forbidden run can make a receipt stand rejected, and so a republish a correction, for a
+  receipt release still accepts. An `approved` receipt is recorded by `record_computed_verdict`, so an
+  approval is final against `escalate_review` and a distinct run's approval supersedes an escalation; a
+  receipt credited to a run the review forbade supersedes nothing. A receipt is a store record only a
+  run holding the review claim writes through the tools; nothing stops somebody with the store.
 
-- **`Merge strategy` accepted only the topology delivery implements, and is now retired.** The settings table used to take `squash` and `rebase` while `closing_merge` only recognised a
-  two-parent merge commit, so a configured non-default strategy merged successfully and then failed
-  the close with a generic claim-verification refusal. The setter then refused those two with
-  `merge-strategy-unimplemented`, and a delivered SHA that is not a two-parent merge under
-  `merge commit` refuses `delivery-topology-mismatch` naming the strategy. The row was later retired
-  outright: the enum's `Squash`/`Rebase` variants are gone, `closing_merge` hard-codes the merge
-  commit, an installed row still loads and changes nothing, and `config set` refuses a new write with
-  `merge-strategy-retired`.
+- **`Merge strategy` is retired.** The row once took `squash` and `rebase` while `closing_merge`
+  recognised only a two-parent merge commit. The variants are gone, `closing_merge` hard-codes the merge
+  commit, an installed row loads and changes nothing, `config set` refuses a new write with
+  `merge-strategy-retired`, and a delivered SHA that is not a two-parent merge refuses
+  `delivery-topology-mismatch`.
 
-- **`Publication lane: off` skips the check-run read and says so.** A
-  repository whose CI is disabled or unbillable had no posture short of per-verdict
-  never-ran evidence. With the row off, `record_computed_verdict` (then `record_review_verdict`) does not call the
-  check-runs API for an approval, the advisory `publication_lane` answers
-  `not-consulted`, and the verdict marker carries `classification: not-consulted`.
-  What the row is still for has narrowed: a repository whose Actions cannot run
-  is now answered mechanically — `publication_lane` reports `disabled` for
-  `enabled: false` or for every workflow `disabled_manually`, and `never-ran` for
-  empty-steps runs — so `off` is no longer the posture for that case, and an
-  unreadable `actions/permissions` is a failed read rather than a clearance. What the
-  row still does that the read does not: skip a lane that *could* run, including a red
-  or `cancelled` one, and skip a read this token cannot make. With the row off nothing
-  is checked; a `cancelled` conclusion is not reclassified as clearance by the read
-  either, because the read speaks only where a head has no check runs at all. The
-  disabled-workflow dispatch path (`HTTP 422` → `Absent`) is unchanged.
+- **`Publication lane: off` skips the check-run read and says so.** With the row off,
+  `record_computed_verdict` does not call the check-runs API for an approval, `publication_lane`
+  answers `not-consulted`, and the marker carries `classification: not-consulted`. A repository whose
+  Actions cannot run is answered mechanically (`disabled` for `enabled: false` or every workflow
+  `disabled_manually`; `never-ran` for empty-steps runs; an unreadable `actions/permissions` is a failed
+  read), so `off` is for skipping a lane that *could* run, including red or `cancelled`, and a read this
+  token cannot make. The `disabled` read proves only those two cases: any other workflow state leaves
+  `absent`, a workflow outside `.github/workflows/` is dropped before the predicate, and the read is asked
+  only where the head has no check runs. No fixture poses a non-active state other than
+  `disabled_manually`, so that limit describes the predicate, not a measured outcome.
 
-- **The `disabled` read proves only the two cases the ruling names.**
-  `publication_lane` answers `disabled` when `actions/permissions` reported
-  `enabled: false` or every workflow under `.github/workflows/` is
-  `disabled_manually`, and nothing wider. A workflow in any other state leaves the
-  answer `absent` — the predicate does not decide what another state means, and
-  widening it past the ruling's words would be this crate inventing a rule. A
-  dynamic workflow whose path sits outside `.github/workflows/` is dropped before the
-  predicate sees it, so it has no effect either way: with every kept workflow
-  `disabled_manually` the answer stays `disabled`, and with none kept it is `absent`.
-  The read is asked only where the head has no check runs, so a run that executed and
-  failed, or was cancelled, is classified red and never reaches it. An Actions surface
-  that does not answer is a failed read that clears nothing. No fixture poses a workflow
-  in a non-active state other than `disabled_manually`, so that first limit is a
-  statement about the predicate rather than a measured outcome.
+- **A proof that says nothing is refused, and the list of what counts as nothing is a floor.** One
+  predicate, `says_nothing`, decides a finding's `id`-excluded `evidence` and `impact` and the
+  `--never-ran-evidence-file`, matching the trimmed lowercased value against `SAYS_NOTHING_WORDS`;
+  `claim::tests::every_says_nothing_word_earns_its_place` iterates the list. Filler is unbounded, so the
+  list is `TooTight` on purpose and its `Population` says so; `tests/guards.rs` fingerprints it and
+  reopens the claim when it changes. It errs the other way too: `none`, `same` and `unchanged` are
+  refused as an `impact`, and a `suggestion` with no impact needs a round trip
+  (`cosmetic only; no user-visible impact`). It deliberately does not refuse on length, so `nothing was
+  executed` survives. A finding's `id` keeps the plain blank check, but it is the key
+  `record_refutation` groups by, so two findings recorded as `id: "-"` collapse into one identity: a
+  recorded gap. The checks run before the tracker read, so a replay of a marker written before the
+  predicate existed, carrying filler, is refused rather than read back.
 
-- **A proof that says nothing is refused now, and the list of what counts as nothing is a floor.**
-  `record_review_verdict` (since retired) refused a `basis` that was empty or whitespace-only and accepted `n/a`,
-  `TODO`, `pass` and `placeholder` — the same gap wearing a word, recorded as a verdict's stated
-  grounds. A finding's `evidence` and `impact` were required to be present and never examined
-  further. Since 2026-09-07 one predicate, `says_nothing`, decides those three, matching the
-  trimmed and lowercased value against a fixed list; it was later widened to a fourth, the
-  `--never-ran-evidence-file` that stands in for a lane that never ran, which took `n/a` as its
-  evidence for the same reason. The list lives in one place, `SAYS_NOTHING_WORDS`, and
-  `claim::tests::every_says_nothing_word_earns_its_place` iterates it rather than retyping it, so a
-  word added there is exercised without a second copy to drift. The match is exact equality over
-  distinct strings, so removing any one leaves that one word uncaught and nothing else changed.
-  **The list is `TooTight` on purpose and its `Population` says so.** Filler is unbounded; a word
-  nobody has thought of is admitted, and this repository has been here before — a
-  refusal was fixed with a remembered set and the same defect recurred four times, which is why the set is
-  declared rather than presented as complete. `tests/guards.rs` fingerprints the list and reopens
-  the claim when it changes. It errs the other way too, and the
-  `Population` records what this entry did not: `none`, `same` and `unchanged` are answers a
-  caller can mean for a finding's `impact`, and they are refused. **What it deliberately does not
-  do is refuse on length.** The contract states that measuring nothing is a legitimate basis when
-  it says so plainly, so `nothing was executed` must survive — and it does, asserted directly
-  against the predicate and carried through the real MCP call end to end. That carve-out was asked
-  for the retired verdict's `basis` and never for a finding's `impact`, which the same predicate decides: a
-  `suggestion`'s honest impact can legitimately be that there is none, and the workaround is a
-  round trip (`cosmetic only; no user-visible impact`). The widening left that asymmetry as it stood — the
-  `Population` states the two-sided nature rather than the behaviour changing — and records it here
-  so it is argued rather than re-derived. A finding's `id` keeps
-  the plain blank check: an identifier is not a declaration, and a filler word there is a naming
-  problem rather than an empty claim. What that carve-out does **not** do is ask whether `id` has
-  an integrity requirement of its own — `id` is the collation key `record_refutation` groups
-  by, so two findings recorded as `id: "-"` collapse into one identity — and the widening left that as a
-  recorded gap rather than inventing an identifier rule. The checks run before the tracker read by
-  design, so a replay of a marker written before this predicate existed, carrying filler, is
-  refused rather than read back; the safety half holds, nothing double-counts, and recovery is
-  cheap because `basis` and `evidence` are outside the operation key. This closes one of the two
-  remaining rows of the
-  nine-decision comparison against the source project, which answers this one with a schema regex.
-  The other is the risk classifier's `reasons`, and this entry had that wrong until it was
-  measured: they are crossed against the level `classify_risk` returned, and the answer is refused
-  when the two disagree. What was missing was narrower, and the entry below closes it: nothing had
-  ever made that refusal fire, and a test now does.
+- **The tier's cross-check cannot fire through the real path, and that is measured.**
+  `review_tier_answer` derives the level from the diff through `classify_risk` and from the published
+  reasons through `risk_level_from_reasons` and refuses when they disagree. Both turn on the same event
+  (every candidate reason carries a signal; the fallback's single reason mirrors the remaining arms), so
+  two independent derivations agree. In the tree: `explained_matches_level` extracted so a test can hand
+  it a pair the real path does not produce, a fourteen-shape enumeration asserting agreement (with a
+  count assertion so the list cannot shrink silently, and it cannot speak for a shape outside the
+  fourteen), and a test pinning the pair it must accept. **Not in the tree:** a sweep of 1,008 single-stat
+  and 96 two-stat combinations (written, run, deleted), and the guard's own wiring: every new test calls
+  `explained_matches_level` or the derivations directly and none calls `review_tier_answer`, so deleting
+  the single line that invokes it leaves those tests green (the end-to-end `review_tier` tests do
+  redden). `passive_and_configuration` is the one shared helper production, `classify` and `agree` call.
+  The `Population` declares `FailClosed`. `only_passive` already implies `touches_configuration` is
+  false, so that term of the `Low` arm excludes nothing; not a defect.
 
-- **The tier's cross-check cannot fire, and that is now measured rather than assumed.**
-  `review_tier_answer` derives the level twice — once from the diff through `classify_risk`, once
-  from the published reasons through `risk_level_from_reasons` — and refuses the answer when the
-  two disagree. The refusal shipped with the feature on 2026-09-01, and the issue filed against it
-  claimed no such check existed; that claim was wrong and is corrected on the issue. What
-  was true is narrower: the message occurred **once** in the whole tree, at the production site,
-  so nothing had ever made the guard refuse. **It still cannot, through the real path.** Both
-  derivations turn on the same event — every candidate reason carries a signal, so a non-empty
-  candidate list is exactly `classify_risk`'s `has_signal || touches_hot_path`, and both read
-  `hot_path_risk_signals`; when no candidate exists the fallback returns exactly one reason whose
-  arms mirror the remaining arms one-for-one, and its loop completes on precisely the per-stat
-  condition `only_passive` tests. Two contexts derived that independently and agreed. **What is in
-  the tree**: `explained_matches_level` extracted so a test can hand it a pair the real path does
-  not produce, one test asserting it refuses that pair, and a fourteen-shape enumeration asserting
-  the two derivations agree on each of them, which reddens on an edit that desyncs the derivations
-  on one of those fourteen and cannot speak for a shape outside them; a count assertion beside it
-  keeps the fourteen from shrinking silently, since the disagreement check alone would pass over
-  an empty list. Deleting the refusal's body reddens the first, and a third test pins the pair it
-  must accept. **What is not in the tree**: a brute-force sweep of 1,008 single-stat and 96
-  two-stat combinations reporting zero disagreements. It was written, run and deleted, so that
-  count is a report of a run whose code no longer exists, and the fourteen shapes are what a later
-  reader can re-run. **Nor is the guard's own wiring**: every new test calls
-  `explained_matches_level` or the derivations directly and nothing calls `review_tier_answer`, so
-  deleting the single line that invokes it leaves the whole suite green. That is the informative
-  mutation here — the one that stays green — and the extraction moved coverage onto the body while
-  leaving the seam where it was. **Nor was the composition that feeds the two derivations**: it stood
-  in three places — production, `classify` and the `agree` helper — so an edit to how
-  production composed those inputs desynced the enumeration and reddened nothing in it. It did
-  redden the suite: the tests that drive `review_tier` end to end do, so the cross-check runs on a
-  real answer and refuses. Two seats raised the copy across two panels and a third showed the suite
-  catches what the enumeration does not; it was recorded rather than repaired, because the fix is
-  one shared helper and not another check. That helper was later extracted —
-  `passive_and_configuration`, which takes `active_content` and returns the pair — and production,
-  `classify` and `agree` all call it now. The `Population` declares `FailClosed` and states the
-  boundary as it is: no input reaching the cross-check through `review_tier_answer` is known to
-  exist. **A redundancy found on the way and left alone**: `only_passive` being true already
-  implies `touches_configuration` is false, since a configuration path cannot satisfy
-  `is_passive_content_candidate_stat`, so that term of the `Low` arm excludes nothing. It is not a
-  defect and this change does not touch it.
+- **Seven reserved reviewers are launched by the binary and installed by nothing, and the gate's refusal
+  of a hand launch is by name, not by finding a file.** `launch_review_input` launches every sealed lens,
+  the refuter and the validator from templates embedded with `include_str!`, with `--tools ""`, so setup
+  installs only `review-blind` and `review-blind-sealed` (Judgment Day's judges, opt-in) and retracts an
+  earlier build's `review-lens`, `review-risk`, `review-readability`, `review-reliability`,
+  `review-readback`, `review-refuter` and `review-validator` under the reviewer's own rule,
+  `reviewer_is_ours` (a current or historical rendering, or the recorded digest), not `RETIRED_AGENTS`,
+  which would delete an operator-edited copy. An owned, unedited copy is deleted and forgotten; an edited
+  one is kept, reported `Kept` and relinquished; a path with no record is never touched. The same
+  function runs under `uninstall`. Tests: `setup_retracts_*`, `setup_keeps_*`, `setup_leaves_*`,
+  `uninstall_*binary_launched*` in `src/setup/tests.rs`. The names stay in `RESERVED_REVIEWERS`, and the
+  gate refuses a `Task` launch of one as `reviewer-launched-by-the-binary` after the project walk,
+  whatever sits in the user tree; the refusal names `launch_review_input` and no setup command. Nothing
+  constrains OpenCode, whose lens `Task` contexts are not reserved names. The `reviewer` routing key's
+  effort half and the `judge` key outside Judgment Day are declarations nothing in the binary reads
+  ([`configuration.md`](configuration.md)).
 
-- **Seven reserved reviewers are launched by the binary and installed by nothing, and the gate's
-  refusal of a hand launch is by name, not by finding a file.**
-  `launch_review_input` launches every sealed lens, the refuter and the validator from templates
-  embedded with `include_str!`, with `--tools ""`, and never reads `~/.claude/agents`, so setup stopped
-  installing `review-lens`, `review-risk`, `review-readability`, `review-reliability`,
-  `review-readback`, `review-refuter` and `review-validator`; it installs `review-blind` and
-  `review-blind-sealed`, Judgment Day's judges, and still opt-in. The rule an earlier build's copy is
-  retracted under is the reviewer's own, `reviewer_is_ours` — a current or historical rendering, or the
-  recorded digest — not `RETIRED_AGENTS`, which retracts by ownership record alone and would delete a
-  copy the operator edited. An owned, unedited copy is deleted and forgotten; an edited one is kept,
-  reported `Kept` and relinquished; a path with no record is never touched. The same function runs under
-  `uninstall`. The three cases and the historical ledger are tests (`src/setup/tests.rs`,
-  `setup_retracts_*`, `setup_keeps_*`, `setup_leaves_*`, `uninstall_*binary_launched*`), and each guard
-  was mutated: dropping the install filter, the retire loop, the content check, the ownership check and
-  the forget each reddens at least one of them.
-  **What this does not do.** The names stay in `RESERVED_REVIEWERS` so a project definition cannot
-  stand in for one, and the gate refuses a `Task` launch of one as `reviewer-launched-by-the-binary`
-  after the project walk — whatever sits in the user tree, so an edited copy kept on disk is not a
-  hand path either. The refusal names `launch_review_input` and no setup command, because running
-  `estigia setup --all` would not restore anything. Nothing here constrains OpenCode, whose lens `Task`
-  contexts are not reserved names. An edited copy that setup kept and relinquished is the operator's file
-  from then on and is never offered again. The `reviewer` routing key's effort half and the `judge` key
-  outside Judgment Day are declarations nothing in the binary reads; `docs/configuration.md` says so.
-
-- **`review_tier` allocates the source project's `0`/`1`/`4` lenses, and what differs is named.**
-  `high` runs `review-risk`, `review-readback`, `review-readability` and `review-reliability`;
-  `medium` runs the one lens its `focus` argument names, `reliability` by default. Resilience is
-  filled by `review-readback`, a question re-derived here rather than ported, and no evidence was
-  produced that the source project's own resilience question has a subject in this crate. The
-  readability override for large pure documentation is **not implemented**: the source project's
-  `DominantLens` is declared no longer derived and nothing in its tree assigns it, so there is no
-  behaviour to port, and large pure documentation is `low` here with no lens. `review-lens` is
-  still launched, because the delta-lens repair round needs it, and sits in no tier's allocation,
-  so this allocation retired no reserved reviewer. Seven installs were retired
-  afterwards: see the entry on the binary-launched reviewers above.
-  What the tier reads is a boundary rather than a size: the changed-path count at zero, the
-  per-path authored line count at zero, and the budget `SCAN_BYTE_BUDGET` in bytes, a change over
-  which reads `high`. The counts are held by `the_tiers_license_zero_one_and_four_lenses` and
-  `the_lens_count_stated_beside_review_tier_is_the_one_the_tier_derives`.
-
-- **The tier's boundary claim is not crossed by any test.** The module doc in
-  `src/transport/tier.rs` is a doc comment, and `source_text::code_of` strips every comment before a
-  test reads a Rust source, so no test can reach it; the shipped strings in
-  `src/harness/mcp/tools.rs` and `skill/bindings/github/operations.md` are read by an agent rather
-  than by a test. The falsifiable absolute was removed rather than adding a fifth guard, so
-  what remains is a boundary claim — three boundaries the code does read — and nothing falsifiable
-  by a change's magnitude. The behaviour is held by
-  `the_tiers_license_zero_one_and_four_lenses` and its companions, not by this prose.
+- **`review_tier` allocates the source project's `0`/`1`/`4` lenses, and what differs is named.** `high`
+  runs `review-risk`, `review-readback`, `review-readability` and `review-reliability`; `medium` runs the
+  one lens its `focus` names, `reliability` by default. Resilience is filled by `review-readback`, a
+  question re-derived here. The readability override for large pure documentation is **not implemented**
+  (the source's `DominantLens` is declared no longer derived), so large pure documentation is `low` with
+  no lens. `review-lens` is still launched for the delta-lens repair round and sits in no tier. The tier
+  reads boundaries, not size: the changed-path count at zero, the per-path authored line count at zero,
+  and `SCAN_BYTE_BUDGET` in bytes, over which reads `high`. Held by
+  `the_tiers_license_zero_one_and_four_lenses` and
+  `the_lens_count_stated_beside_review_tier_is_the_one_the_tier_derives`. The tier's boundary claim in the
+  `src/transport/tier.rs` module doc is not crossed by any test, since `source_text::code_of` strips
+  comments; the falsifiable absolute was removed.
 
 ## Findings, grants and locations
 
-- **A structured finding is a legible claim, not a checked one.** `record_review_finding` refuses
-  a class outside `severe`/`warning`/`suggestion`, a finding missing its identity, evidence or
-  impact or supplying filler for either of the last two, a severe finding whose declared
-  `evidence_class` or `causal_disposition` is absent or outside its vocabulary, a receipt that is
-  not the current one, and — across a repair — a parent identity the parent receipt never recorded
-  or a new severe finding that states no origin. The computed verdict reads the ledger those gates keep honest; the aggregate
-  verdict that once refused `rejected` without a `severe` finding is retired.
+- **A structured finding is a legible claim, not a checked one.** `record_review_finding` refuses a
+  class outside `severe`/`warning`/`suggestion`, a finding missing its identity, evidence or impact or
+  supplying filler for either of the last two, a severe finding whose `evidence_class` or
+  `causal_disposition` is absent or outside its vocabulary, a receipt that is not the current one, and —
+  across a repair — a parent identity the parent receipt never recorded or a new severe finding stating
+  no origin. The computed verdict reads the ledger those gates keep honest.
 
-  The receipt-currency clause in that sentence was **false when it was first written**, and it is
-  recorded here rather than quietly corrected. The operation validated the receipt's shape and never
-  asked whether it named the publication under review; four reviewers found the mismatch and two
-  drove it through the real surface, recording severe findings against a superseded epoch and against
-  one no publication ever had. Three costs followed, and the third is the one worth remembering: the
-  verdict's refusal named `record_review_finding` as the way out, which is a command that had already
-  succeeded. A false sentence in this document produced a dead-end refusal loop in the product.
+  Every one is a check on **shape and reference**. Nothing here can check that a `severe` finding is
+  severe, that a `suggestion` is not a defect in disguise, that the evidence reproduces, that the impact
+  is real, or that a repair `introduced` what its reviewer says. A reviewer that classifies every
+  preference as `severe` clears the rule as a careful one does. The two severe declarations are checked
+  for presence and vocabulary alone, so a severe finding declaring `insufficient` and `unknown` has
+  satisfied the gate while saying neither (though the guard refuses a `rejected` verdict whose severe
+  finding declares `insufficient`).
 
-  Every one of those is a check on **shape and reference**. Nothing here can check that a `severe`
-  finding is severe, that a `suggestion` is not a defect in disguise, that the stated evidence
-  reproduces, that the impact is real, or that a repair `introduced` what its reviewer says it did. A
-  reviewer that classifies every preference as `severe` clears the rule exactly as a reviewer that
-  reads carefully does; what changed is that the claim is now written down where somebody can argue
-  with it, not that anybody did. The declaration gate added for severe findings narrows nothing here:
-  the two words are checked for presence and vocabulary alone, so a severe finding that declares
-  `insufficient` and `unknown` has satisfied the gate while saying neither — though a `rejected`
-  verdict no longer rests on it: the guard refuses one whose severe finding declares `insufficient`,
-  and Estigia still cannot check the finding's content.
+  Narrower limits:
 
-  Four narrower limits, each worth stating because the words invite the opposite reading. The
-  first two shipped with the mechanism; the third was added after reviewers found it, and the
-  lead-in still said *two* until they found that as well. The fourth is the origin vocabulary
-  gap measured on epoch `3ac4a576aa80ec96bc42ce4283e94f93`:
-
-  - **A finding identity is a spelling, not a comparison.** Two markers carrying the same `id`
-    string name one finding. Estigia does not compare evidence, locations or behaviour, so two
-    lenses that describe one defect differently record two findings, and two that reuse one
-    identity for different defects are indistinguishable to it. Nothing computes agreement from
-    identities any more — the judges whose agreement that spelling stood for are gone.
-    The policy asks reviewers to derive the identity from the affected behaviour and location;
-    nothing measures whether they did.
+  - **A finding identity is a spelling, not a comparison.** Two markers with the same `id` name one
+    finding; two lenses describing one defect differently record two. Nothing computes agreement from
+    identities. The policy asks reviewers to derive the identity from the affected behaviour and
+    location; nothing measures whether they did.
   - **The fix-delta digest names a repair; it does not scope a review.** A publication over an earlier
-    one records the whole parent receipt and a digest covering both ends, derived from the timeline
-    rather than supplied by the run being reviewed — that half is real, and a caller cannot name a
-    parent it prefers. Two kinds of role receive the diff between those heads: the targeted validator, whose
-    payload `src/transport/claim/capture.rs` builds from `delta_parent` and
-    `review_payload_declared_at`, and — now — every tier lens on a correction whose
-    recorded range is honest (`delta-range` present, no `delta-range-reason`, not a recovered
-    successor, same pull request), which is handed `parent-head..head` with that payload's digest.
-    A lens on a correction whose range is not honest, on a marker written before `delta-range`
-    existed, and on a first publication is still handed the whole `base..head` target
-    (`review_payload`), and so is the refuter. Each of those fallbacks, and each of the four
-    conditions `lens_reads_delta` joins, is held by a capture test that fails when its condition is
-    removed. When the recorded parent head cannot be resolved, the capture does not fall back to
-    the whole target: the lens panel is sized from the same range, so the refusal is `read-failed`
-    and no lens is launched, as it is for the validator. What stays unscoped: the lens is handed the delta, it
-    is not prevented from reading more, and Estigia cannot tell what a lens did with what it was
-    handed; a lens finding is still checked against `base..head`, not against the delta, so a finding
-    on an unchanged-by-the-delta path of the target is admitted. `parent_head..head` is a pair of SHAs a reviewer can act on **when it is
-    honest** — after a rebase it is not, and `publish_with` now shares
-    `repair_range` with `review_tier_for_repair` (`src/transport/tier.rs`) to record, on the marker
-    and the answer, whether `parent-head..head` was honest for this publication (`delta-range`) or
-    why it was not (`delta-range-reason`, the same `history-rewritten`/`empty-repair-range`/`base-advanced`/`merged-range` words).
-    Whether a reviewer actually reads that field, or the narrower range at all, is unmeasured, and the
-    acceptance criterion about delta-scoped judgement is met by the *record*, not by an enforcement.
+    one records the whole parent receipt and a digest covering both ends, derived from the timeline.
+    The targeted validator (payload built in `src/transport/claim/capture.rs` from `delta_parent` and
+    `review_payload_declared_at`) and every tier lens on a correction whose recorded range is honest
+    (`delta-range` present, no `delta-range-reason`, not a recovered successor, same pull request) get
+    `parent-head..head` with that payload's digest; a lens on a dishonest range, a marker written before
+    `delta-range` existed, or a first publication gets the whole `base..head` (`review_payload`), as does
+    the refuter. Each fallback and each of the four conditions `lens_reads_delta` joins is held by a
+    capture test that fails when the condition is removed. When the parent head cannot be resolved the
+    capture refuses `read-failed` and launches no lens. A lens handed the delta is not prevented from
+    reading more, and a lens finding is checked against `base..head`, not the delta. `publish_with`
+    shares `repair_range` with `review_tier_for_repair` to record whether the range was honest
+    (`delta-range`) or why not (`delta-range-reason`: `history-rewritten`, `empty-repair-range`,
+    `base-advanced`, `merged-range`). Whether a reviewer reads that field is unmeasured: the criterion is
+    met by the *record*, not an enforcement.
   - **A lineage is silently absent when the parent publication came from another account.**
-    `latest_publication` keeps only comments `viewerDidAuthor` vouches for, because a marker this
-    identity did not write is one anybody could have forged. `republish_review` turns that into a
-    refusal (`published-transaction-missing`); `publish_review` does not, so an ordinary continuation
-    after a cross-account reclaim publishes as a **first** publication and neither lineage rule
-    applies to its findings. The direction is permissive rather than a wrong delivery, and it is the
-    same account filter this document records for `republish_review` further down, under the entry about leasing against a receipt published from a different account — but the consequence for the
-    parent ledger is new and is stated here rather than left to be rediscovered.
+    `latest_publication` keeps only comments `viewerDidAuthor` vouches for. `republish_review` refuses
+    (`published-transaction-missing`); `publish_review` does not, so a continuation after a cross-account
+    reclaim publishes as a **first** publication and neither lineage rule applies to its findings:
+    permissive rather than a wrong delivery.
   - **`introduced` and `exposed` do not cover a severe defect that was always present, always
-    reachable, and simply missed.** Against a repair publication a reviewer finding one has no
-    honest origin word: `--parent` names nothing the parent receipt recorded, both origin words
-    are false, recording it as a warning means `rejected` is refused, and recording nothing
-    leaves a real defect unable to block. Measured on epoch `3ac4a576aa80ec96bc42ce4283e94f93`
-    by one of five judges; it did not reach 3-of-5 quorum. Widening the vocabulary is left to
-    its own issue.
+    reachable, and simply missed.** Against a repair publication such a reviewer has no honest origin
+    word: `--parent` names nothing recorded, both origin words are false, a warning means `rejected` is
+    refused, and recording nothing leaves a real defect unable to block. Measured on epoch
+    `3ac4a576aa80ec96bc42ce4283e94f93` by one of five judges (no quorum). Widening the vocabulary is its
+    own issue.
 
-  **Judge isolation is unproved, and what is checkable about it moved.** Judges run only as
-  Judgment Day now, so this entry now concerns that opt-in method. The role gate is fed the
-  *embedded* reviewer definition rather than whatever is on disk, rendered with the effective
-  `Evidence standard`, and `the_shipped_blind_reviewer_gets_the_grant_its_standard_decides` pins the
-  shape for both standards: `Write`, `Edit`, `Agent` and `Task` denied under either, `Bash` following
-  the row. So under `reading` the question of two judges writing over each other cannot arise, and
-  under `measuring` it arises by design and the isolation rule is what answers it.
-
-  The sentence that used to stand here — that a mutation-standard repository **forces** a panel under
-  some other subagent type, because a judge that measures needs tools the reserved role refuses — was
-  true and is a defect since closed. It is gone rather than softened: leaving it would tell a
-  reader to do the exact thing the entry below now says not to. What remains true is that a panel this
-  harness cannot place in the role is invisible both to the reserved-role prelaunch check and to that
-  gate. Nothing here records how many such judges ran,
+  **Judge isolation is unproved.** Judges run only as Judgment Day. The role gate is fed the *embedded*
+  reviewer definition rendered with the effective `Evidence standard`, and
+  `the_shipped_blind_reviewer_gets_the_grant_its_standard_decides` pins both standards: `Write`, `Edit`,
+  `Agent` and `Task` denied under either, `Bash` following the row. Under `reading` two judges cannot
+  write over each other; under `measuring` they can by design and the isolation rule answers it. A panel
+  this harness cannot place in the role is invisible both to the reserved-role prelaunch check and to
+  that gate. Nothing here records how many such judges ran,
   whether two of them shared a working directory, or what they wrote into it. The isolation rule in
   `skill/policies/judgment-day.md` is prose an orchestrator follows or does not, on the same footing as
   panel size and blindness above.
 
-- **A non-severe finding is informational, and nothing about delivery waits on it.** Warnings outnumbered severe findings roughly eight to one across eighteen delivered
-  changes and built `record_disposition` so the author's decision — `acted-on`, `filed` or
-  `declined` — was written down once, with `release_ci` refusing `disposition-missing` until every
-  `warning` and `suggestion` on the receipt had an answer. That gate was retired after `gentle-ai`
-  v3.7.0 (`internal/reviewtransaction/advisory_disposition.go`, read at `e2cb2bf2`), which states the
-  direction this port now follows: a `WARNING` or a `SUGGESTION` is `informational`, "requires no
-  action of any kind", and is "never a reason to re-run review on this candidate". `record_disposition`
-  remains, but recording is optional and may answer a subset of the receipt's findings; a finding left
-  unrecorded is delivered as informational by its class alone. What the recorder checks is **shape**:
-  the id names a finding this exact receipt recorded, no identity whose every recording is `severe`
-  is named — one recorded at two classes is answered for its non-severe recording, and its severe
-  recording stays with the verdict — a `filed` entry carries an issue number, and a reason is neither
-  empty nor filler. Nothing checks that an `acted-on` repair happened, that a `filed` number names an
-  issue that exists or carries the finding, or that a `declined` reason is the real one.
-
-  The answer is deliberately the **author's own**, so the record is auditable rather than
-  independent: `record_disposition` requires no distinct context, unlike a verdict or a refutation,
-  and the run answering for the change may be the run that published it. Estigia cannot see whether
-  the record was made at all, and it no longer asks: the decision a warning once forced is now the
-  author's to make silently, to file, or to decline, exactly as `gentle-ai` leaves it.
-
-- **The disposition ratio was never re-derived, and the gate it measured is retired.** The pre-change
-  measurement, taken on 2026-09-07 from the tracker timelines of the 18 most recently closed issues
-  carrying `issue-flow: published` markers, counting the three marker kinds: **30 `severe` findings,
-  232 `warning` findings, 69 publications and 14 rejected verdicts**, with **44 of the 69
-  publications on changes no reviewer ever rejected**. The gate it was aimed at was retired before
-  any post-change figure was taken, so the four counts stand as the pre-change reading and the
-  "share of publications spent on changes no reviewer rejected" figure is now owed to whatever
-  re-measures repair rounds under the informational rule, not to this entry.
+- **A non-severe finding is informational, and nothing about delivery waits on it.** The
+  `disposition-missing` gate is retired, following `gentle-ai` v3.7.0
+  (`internal/reviewtransaction/advisory_disposition.go`, read at `e2cb2bf2`): a `WARNING` or
+  `SUGGESTION` "requires no action of any kind". `record_disposition` remains but is optional and may
+  answer a subset; an unrecorded finding is delivered as informational by class alone. The recorder
+  checks **shape**: the id names a finding this exact receipt recorded, no identity whose every recording
+  is `severe` is named (one recorded at two classes is answered for its non-severe recording), a `filed`
+  entry carries an issue number, and a reason is neither empty nor filler. Nothing checks that an
+  `acted-on` repair happened, that a `filed` number names a real issue, or that a `declined` reason is
+  real. The answer is the **author's own** and requires no distinct context, so the record is auditable,
+  not independent. The pre-change disposition ratio (18 closed issues: 30 `severe`, 232 `warning`, 69
+  publications, 14 rejected verdicts) was never re-derived; the "share of publications spent on changes
+  no reviewer rejected" figure is owed to whatever re-measures repair rounds under the informational rule.
 
 - **A sealed reviewer's grant is enforced by this gate, and what the gate reads is never the file on
   disk.** `render_reviewer_agent` takes a `Seal` orthogonal to `Evidence standard`, and
   `reserved_reviewer` (`src/harness/roles.rs`) answers which of nine reserved names carries which
-  seal — two of them installed, the judges, and seven launched by `launch_review_input`; `reserved_reviewer_row` answers the same name's seal and its own template
-  together — added when the lens, and later four more sealed lenses, joined carrying their own
-  templates, so a door that renders a reference definition asks the row for its own body rather than
-  reaching for the judge's by habit. Both doors ask the row form and render with its answer —
-  `src/cli/mod.rs` and `src/harness/hook.rs` — so a sealed judge is gated by the embedded
-  template rather than by whatever `tools:` line its installed file happens to hold.
-  `a_tampered_sealed_definition_does_not_widen_what_its_doors_allow` is what proves that rather than
-  assuming it: it installs the sealed definition, rewrites its grant on disk to `Read, Grep, Glob,
-  Bash`, and requires both doors to keep refusing `Read`. Removing the sealed name from
-  `reserved_reviewer` turns that test red and nothing else in the suite notices, which is why the
-  test exists.
-  `Seal::Sealed` is constructed seven times, in `RESERVED_REVIEWERS`
-  (`src/harness/roles.rs`) — once for `review-blind-sealed`, once each for the five sealed
-  lenses, and once for the refuter, `review-refuter`; `setup`'s install loop only destructures each row back out of that
-  list (`src/setup/mod.rs`) and hands it to the renderer, one write per row, so
-  a shipped `review-blind-sealed` rendering **is** sealed. What this gate still cannot decide is which
-  definition a panel actually launched — that is the composition entry below.
-  **The sealed arm's rendering was measured rather than assumed, on Claude Code, on 2026-09-02, and
-  it changed as a result.** Before this change it rendered `tools: none`. Seven one-shot Claude
-  Code sub-agent definitions were launched, each asking only what its own `tools:` line contained.
-  `none` and `TodoWrite` were refused at the launch boundary itself, both with the same cause —
-  *"unrecognized [none]"* and *"unrecognized [TodoWrite]"* — the host never spawned the sub-agent at
-  all. `ReportFindings` and `ListAgents` were refused too, for a different cause, *"not available to
-  subagents"*: real Claude Code tool names, withheld from a sub-agent rather than unrecognized.
-  `[]` launched holding zero tools, and is rejected as a rendering for a reason this gate's own
-  reading of the file gives independent of any host: `tools_line` (`src/harness/roles.rs`)
-  reads a genuinely empty list as `None`, which its own comment calls *"no policy at all, every
-  tool permitted"* — writing `[]` into the sealed arm would invert what
-  "sealed" means the moment this gate reads the installed file, not merely fail to launch.
-  `ToolSearch` also launched holding zero tools and is rejected for a second reason: its documented
-  function is fetching other tools' schemas, and a fetched schema is *"callable exactly like any
-  tool defined at the top of the prompt,"* so a seal must not rest on a tool whose job is acquiring
-  more tools. `WebSearch` launched holding exactly that one tool and no filesystem reach — the only
-  spelling of the seven that both launches and denies a repository read. **It is what the sealed arm
-  renders now** (`src/setup/mod.rs`), and sealed no longer means inert: the judge cannot
-  read this repository, but the one tool it holds reaches the public internet, and
-  `src/harness/roles.rs` already names `WebSearch` among the tools this gate's own matcher
-  never sees, so that reach is exactly as unenforced by this gate as the rest of the grant is.
-  Nothing here measured any host but Claude Code.
-  **Four things are unmeasured**, matching the shape the entry above admits for `reading` and
-  `measuring`. Whether the host itself refuses a call the grant does not name is the same
-  unmeasured obedience already recorded for a model or effort field. Under every adapter whose
-  matcher this repository writes, `Read`, `Grep` and `Glob` do not wake this gate at all
-  (`src/setup/render.rs` names `Bash` and not those three, the same reach
-  `src/harness/roles.rs` states in its own words); two adapters are written with no matcher,
-  and what those hosts send is not established here. The reserved-role
-  prelaunch check that would refuse a project-local file re-claiming `review-blind` and widening a
-  sealed grant back open (`skill/policies/judgment-day.md`) is Claude-only, so a sealed reviewer
-  run through any other adapter has no such check at all. And a sealed judge acting only on what its
-  launch handed it is a paragraph `render_reviewer_agent` writes into the definition, not a proof —
-  nothing here can tell a sealed judge that followed it from one that did not.
+  seal — two of them installed, the judges, and seven launched by `launch_review_input`;
+  `reserved_reviewer_row` answers the same name's seal and its own template together. Both doors
+  (`src/cli/mod.rs` and `src/harness/hook.rs`) render with the row's answer, so a sealed judge is gated
+  by the embedded template rather than whatever `tools:` line its installed file holds.
+  `a_tampered_sealed_definition_does_not_widen_what_its_doors_allow` installs the sealed definition,
+  rewrites its grant on disk to `Read, Grep, Glob, Bash`, and requires both doors to keep refusing
+  `Read`; removing the sealed name from `reserved_reviewer` turns only that test red. `Seal::Sealed` is
+  constructed seven times in `RESERVED_REVIEWERS` (`review-blind-sealed`, five sealed lenses, the
+  refuter `review-refuter`), and `setup`'s install loop only destructures each row and hands it to the
+  renderer, so a shipped `review-blind-sealed` rendering **is** sealed. Which definition a panel actually
+  launched is the composition entry above.
+  **The sealed arm's rendering was measured on Claude Code on 2026-09-02, and it changed as a
+  result.** Seven one-shot sub-agent definitions were launched, each with only its own `tools:` line:
+  `none` and `TodoWrite` were refused at launch (*"unrecognized"*), `ReportFindings` and `ListAgents`
+  as *"not available to subagents"*; `[]` and `ToolSearch` launched with zero tools but `[]` is read by
+  `tools_line` (`src/harness/roles.rs`) as `None`, "no policy at all, every tool permitted", which would
+  invert "sealed", and `ToolSearch`'s job is fetching other tools' schemas; `WebSearch` launched holding
+  exactly one tool and no filesystem reach. **It is what the sealed arm renders** (`src/setup/mod.rs`):
+  sealed is not inert, since that one tool reaches the public internet, which `src/harness/roles.rs`
+  names among the tools this gate's matcher never sees. Nothing here measured any host but Claude Code.
+  **Four things are unmeasured.** Whether the host itself refuses a call the grant does not name. Under
+  every adapter whose matcher this repository writes, `Read`, `Grep` and `Glob` do not wake this gate
+  (`src/setup/render.rs` names `Bash` and not those three); two adapters are written with no matcher and
+  what those hosts send is not established. The prelaunch check refusing a project-local file
+  re-claiming `review-blind` (`skill/policies/judgment-day.md`) is Claude-only. And a sealed judge acting
+  only on what its launch handed it is a paragraph `render_reviewer_agent` writes, not a proof.
+
 - **`reviewer_is_static` keeps the plain cross product `Evidence::all()` × every seal
-  `RESERVED_REVIEWERS` carries; no reachability predicate narrows it, and that is a decision, not
-  an oversight.** The entry above
-  now shows the sealed arm reachable and installed — `Seal::Sealed` enforced by this gate and a
-  shipped rendering sealed — so the old argument for excluding it from acceptance no longer applies.
-  Three grounds against excluding it anyway, in this order. A reachability predicate would couple
-  this acceptance check to the settings table rather than to the renderer, and would have to be edited
-  again the day the axis becomes reachable. The widening is capability-bounded: the sealed arm
-  names one tool, `WebSearch`, that cannot become a repository read, so admitting it cannot
-  widen what a judge may do past that one bounded reach — the failure a canonical check exists
-  to prevent is a judge with
-  *more* reach than that, not a judge that can search the public web. And refusing the bytes here
-  would refuse a strictly safer definition an operator hand-wrote, for bytes this binary's own
-  renderer produces.
-  **What this does not claim:** the grounds above do not depend on the sealed grant being
-  enforced — the entry above shows it is. They say only that accepting the bytes is right, and only
-  at this byte-acceptance point. `setup`'s own `validate_reviewer_definition`
-  (`src/setup/mod.rs`) is a separate, path-based check: a loop of two passes, one per installed
-  `RESERVED_REVIEWERS` row, that refuses a definition declaring `review-blind-sealed` for reclaiming
-  that reserved name outside Estigia's canonical path — by path, not by these bytes.
-  **The path check stays, and that was measured rather than read.** With a
-  sealed rendering placed over an owned `~/.claude/agents/review-blind.md`, the `review-blind` pass
-  accepts and the `review-blind-sealed` pass refuses `reviewer-definition-unowned`, so `setup`
-  aborts before writing — the loop propagates the first refusal, so the rows after it never run.
-  **Read, not measured:** the comparison is against the canonical path that reserved name expects,
-  and fires whether or not a file already sits there; refusing is the declared-name arm doing the
-  job that stops a foreign body reserving a reserved name from a filename nobody would look at.
-  **What it costs:** an operator who puts a strictly safer definition at the unsealed path is locked
-  out of `setup` and `sync` for that home until they move the file. The refusal names the file, the
-  reserved name and the way out — `move <path> aside before setup`.
+  `RESERVED_REVIEWERS` carries; no reachability predicate narrows it, and that is a decision.** A
+  predicate would couple this acceptance check to the settings table rather than the renderer; the
+  sealed arm names one tool, `WebSearch`, that cannot become a repository read, so admitting it cannot
+  widen what a judge may do past that bounded reach; and refusing the bytes would refuse a strictly
+  safer definition an operator hand-wrote for bytes this binary's renderer produces. This holds only at
+  the byte-acceptance point. `setup`'s own `validate_reviewer_definition` (`src/setup/mod.rs`) is a
+  separate, path-based check: a loop of two passes, one per installed `RESERVED_REVIEWERS` row, that
+  refuses a definition declaring `review-blind-sealed` for reclaiming that reserved name outside
+  Estigia's canonical path. Measured: with a sealed rendering over an owned
+  `~/.claude/agents/review-blind.md`, the `review-blind` pass accepts and the `review-blind-sealed` pass
+  refuses `reviewer-definition-unowned`, so `setup` aborts before writing. **The cost:** an operator who
+  puts a strictly safer definition at the unsealed path is locked out of `setup` and `sync` until they
+  `move <path> aside before setup`, which the refusal names.
+
 - **A location checks consistency with the diff, not causation.** `record_review_finding` refuses a
-  severe finding whose `causal_disposition` is `introduced` or `worsened` and carries no `location`.
-  A malformed value — one that does not parse as `path:line` or `path:start-end`, with a
-  repository-relative path — is refused whenever a location is given at all, under any class or
-  disposition. Whether it falls inside a changed hunk of `base..head` is checked only where a
-  location is owed: `severe` with `introduced` or `worsened`. A location inside a hunk proves only
-  that the diff touched that line; it does not prove the finding is true, that the reviewer read the
-  right hunk, or that `introduced` rather than `worsened` is the honest word. The check refuses the
-  **impossible** — a claim the diff could not possibly support — and is silent on everything merely
-  wrong, the same narrowing the five limits above state for `evidence_class` and `causal_disposition`
-  themselves.
+  severe finding whose `causal_disposition` is `introduced` or `worsened` and carries no `location`. A
+  value that does not parse as `path:line` or `path:start-end` with a repository-relative path is
+  refused under any class or disposition. Hunk membership is checked only where a location is owed
+  (`severe` with `introduced` or `worsened`) and proves only that the diff touched that line; the check
+  refuses the **impossible** and is silent on everything merely wrong. `warning` and `suggestion` never
+  owe a location, but a malformed one is still refused. `pre-existing` and `base-only` are unverified by
+  construction: a `pre-existing` finding may name a line the change never touched, because refusing it
+  would reward withholding the coordinate.
 
-  **The predicate is containment, not overlap: every line of the claimed span must be a changed
-  line, not merely one of them.** Before this, a claimed range settled if *any* one of its lines fell
-  in *any* one changed hunk — `changed.rs:1-10` against a hunk of `5..=5` settled, nine of those ten
-  lines never touched by the change being blamed. Containment refuses that: a range now settles only
-  when one hunk's range contains the whole claimed range, `range.start() <= claimed.start() &&
-  claimed.end() <= range.end()`. This was measured before it was built, over every `review-finding`
-  marker the tracker held at the time: 885 recorded, 122 carrying a `location` at all, 14 in the
-  gated class (`severe` with `introduced` or `worsened`), 5 of those 14 carrying a span. 2 of the 5
-  would fail containment — `src/transport/claim.rs`'s two spans, both on PR 209, each
-  with exactly one unchanged line inside it, line 5274, sitting in the gap between the new-side hunks
-  `5259,15` and `5275`. What containment refuses that overlap did not is narrower than "wrong" and
-  narrower than the old "impossible" too: a citation that is otherwise correct but includes one line
-  the diff never touched — a one-line slip in an otherwise honest span — which is why the refusal
-  names the first unchanged line inside the claimed span rather than only saying the location is
-  outside the change.
+  **The predicate is containment, not overlap:** a range settles only when one hunk's range contains the
+  whole claimed range (`range.start() <= claimed.start() && claimed.end() <= range.end()`), and the
+  refusal names the first unchanged line inside the span. Measured over the tracker's 885 recorded
+  `review-finding` markers, 14 were in the gated class and 5 carried a span; 2 would fail containment
+  (both on PR 209, one unchanged line each).
 
-  **The equivalence between "every line of the claimed span is changed" and "one hunk's range
-  contains the whole span" holds only because `changed_new_side_lines` runs `git diff --unified=0
-  --no-renames --inter-hunk-context=0`** (`--inter-hunk-context=0` explained further down), so the
-  new-side ranges are **ascending** and pairwise separated by at least one unchanged line — no two
-  ranges the predicate ever sees can touch or overlap. That precondition is probed, not proved: four
-  fixture shapes over one throwaway repository, chosen for their deletions because a pure deletion
-  emits `+c,0` and `new_side_range` drops it, the only route by which two surviving ranges might end
-  up adjacent.
+  **The equivalence between "every line of the span is changed" and "one hunk contains the span" holds
+  only because `changed_new_side_lines` runs `git diff --unified=0 --no-renames
+  --inter-hunk-context=0`**, so new-side ranges are ascending and separated by at least one unchanged
+  line. That precondition is probed, not proved: four fixture shapes over one throwaway repository
+  (modify 2/delete 3/keep 4/modify 5 gives `2` `4`; modify 2/keep 3/delete 4/modify 5 gives `2` `4`;
+  delete 2-3/modify 4 gives `2`; modify 2/keep 3/modify 4 gives `2` `4`), never `2` `3`, because changes
+  contiguous in the old file are one hunk. Four shapes is not a proof. Ranges split where this probe
+  found them whole make the predicate too strict (the safe direction); ranges **fused** make it too
+  permissive. Four pins prevent the second: `--inter-hunk-context=0` on this invocation's list rather
+  than `pinned_diff_args` (that helper is shared with the human-read review-target payload),
+  `GIT_DIFF_OPTS` removed from the child in `super::run` (git applies it after argv, so no flag can win;
+  measured `-u3` widening `@@ -5 +5 @@` to `@@ -2,7 +2,7 @@`), `--no-ext-diff` and `--no-textconv`
+  (a textconv driver makes the `@@` numbers stop referring to source lines). With
+  `diff.interHunkContext=5` a head changing lines 3 and 7 renders one hunk, so a location on line 5
+  would settle without the flag.
 
-  | shape | new-side ranges |
-  |---|---|
-  | modify 2, delete 3, keep 4, modify 5 | `2` `4` |
-  | modify 2, keep 3, delete 4, modify 5 | `2` `4` |
-  | delete 2-3, modify 4 | `2` |
-  | modify 2, keep 3, modify 4 | `2` `4` |
+  **A path the diff touched but that carries no new-side hunk settles by having been touched at all** (a
+  pure deletion, deleted file, binary or mode-only change): an empty range vector settles by the exact
+  `diff --git a/<path> b/<path>` header having appeared; no header settles nothing.
 
-  Never `2` `3`. The third shape carries the reason: changes contiguous in the **old** file are
-  emitted as one hunk, deletions included, so a deletion cannot separate two ranges without being
-  fused into one of them. Four shapes is not a proof over every diff `git` can emit, and the
-  equivalence fails in **both** directions rather than one; the **too strict** direction is the safe
-  one. Ranges split where this probe found them whole would make the predicate too strict — refusing
-  a span the diff fully changed — and the repair is a walk over the union of `ranges`, which
-  `first_unchanged_line` already implements one range at a time. Two ranges **fused** into one would
-  make it too permissive, the direction that is not safe: a span the wider range contains, with
-  untouched lines inside it, would settle. The `diff.interHunkContext`/`GIT_DIFF_OPTS` entry
-  further down measures exactly that second case, on a head changing lines 3 and 7 that
-  `diff.interHunkContext=5` renders as one hunk.
-  Four things prevent it and all four are load-bearing here, not only for that entry's own claim:
-  `--inter-hunk-context=0` on this invocation's argument list rather than in `pinned_diff_args`
-  (`src/transport/claim.rs`), `GIT_DIFF_OPTS` removed from the child (`src/transport/mod.rs`),
-  `--no-ext-diff` pinned (`src/transport/mod.rs`), and `--no-textconv` pinned beside it
-  (`src/transport/mod.rs`) — a `gitattributes` textconv driver makes `git diff` diff converted
-  text, so the `@@` new-side numbers stop referring to source lines at all.
+  The pathspec is `:(literal)<path>`, not `<path>` after `--`, because pathspec magic like `:!x` selects
+  every other path. `:(literal)` still prefix-matches directories (measured on git 2.55), so only hunks
+  under a header naming **exactly** `path` are kept. `parse_finding_location` refuses any path containing
+  a colon, which also rejects `path:line:col`.
 
-  **A path the diff touched but that carries no new-side hunk settles by having been touched at
-  all.** A pure deletion, a deleted file, a binary change and a mode-only change all add nothing on
-  the new side, so before this was corrected the range vector `changed_new_side_lines` returned was
-  empty for exactly two different situations: a path the diff never mentions, and a path it mentions
-  but changed only by removing something. Both refused a location alike, and the second case had no
-  honest way through — `introduced`/`worsened` demand a location, and a deletion-only defect has no
-  line a hunk ever added to name. The fix is a second signal alongside the range vector: whether the
-  diff's `diff --git a/<path> b/<path>` header for that exact path was seen at all. A range settles
-  the ordinary way; an empty vector settles by that header having appeared; no header settles nothing,
-  which keeps a path the diff never touched refused exactly as before.
+  **Renames.** With one path in the pathspec, filtering runs before rename detection, so a file renamed
+  and edited shows as a deletion of the old path and an addition of the new (measured on git 2.55; the
+  cause is pathspec ordering, not `diff.renames`). A location naming the **old** path is accepted for
+  any line (the deletion-only carve-out) and one naming the **new** path for any line in the file. Both
+  are what asking `git diff` for one un-renamed path gives back. `--no-renames` makes this hold by flag.
 
-  `pre-existing` and `base-only` are unverified by construction, and deliberately so. Outside the diff
-  is the defect for `introduced` and exactly where a `pre-existing` one belongs, so the hunk-membership
-  check runs only for the two dispositions `base..head` can settle. A `pre-existing` finding may name a
-  line the change never touched and is recorded as given. The first implementation ran that check under
-  every disposition and was corrected before publication: it refused the reviewer who volunteered the
-  coordinate showing a defect predates these bytes, leaving omission as the only way to record the
-  finding — a gate rewarding the withholding of evidence. The malformed-location refusal is not scoped
-  this way, because a location that does not parse is malformed under every disposition. Three surfaces
-  once stated the narrower rule as though it covered the malformed half too — `skill/bindings/github.md`,
-  this entry two paragraphs up in an earlier revision, and the MCP tool schema — and were corrected to
-  say only the malformed half is universal.
+  **The diff is read locally**, from `context.repo_dir`. A checkout missing the objects for `base` or
+  `head` meets a failed read naming both revisions and the path (`super::run`'s detail is truncated to
+  the first three arguments, so `changed_new_side_lines` adds them back). No test drives the missing-
+  objects shape, only a directory holding no repository.
 
-  `warning` and `suggestion` never owe a location and never have one checked against a hunk, but a
-  malformed one supplied anyway is still refused: only the hunk-membership half is `severe`-and-owed
-  only, not the parse.
+  **The header pin covers all four of git's prefix variables.** `pinned_diff_args` pins
+  `diff.mnemonicPrefix=false`, `diff.noprefix=false`, `core.quotePath=false`, `diff.srcPrefix=a/` and
+  `diff.dstPrefix=b/`: a repository with only `diff.srcPrefix` set rendered `diff --git x/<path>
+  b/<path>`, `touched` stayed `false` and a correct location was refused
+  `finding-location-outside-the-change`. `--default-prefix` is not used because it needs git ≥ 2.41 and an
+  older git would silently ignore the unrecognised `-c` keys.
 
-  The pathspec `changed_new_side_lines` hands `git` is `:(literal)<path>`, not `<path>` after `--`:
-  `--` stops option parsing but not pathspec magic, so a location beginning with `:` would otherwise be
-  read as a magic signature — `:!x` selects every *other* path, turning a refusal into one that
-  consults the whole diff. `:(literal)` alone does not close every gap a pathspec opens, though:
-  directory-prefix matching and wildcard matching are not the magic that flag disables, measured
-  directly against git 2.55 — `git diff -- ':(literal)src'` still matches every file under `src/`.
-  What closes that gap is that only hunks under a `diff --git a/<path> b/<path>` header naming
-  **exactly** `path` are kept; a bare directory or a glob carries no such header and settles nothing.
-  `parse_finding_location` separately refuses any path containing a colon, which closes the leading-
-  magic-signature case before a location ever reaches `git` at all, and also refuses the `path:line:col`
-  shape `rg -n`/`clippy` emit, which a naive last-colon split would otherwise misread as a path.
+- **A verdict's basis is a declaration, not a check.** `basis` is optional on the retired verdict
+  operation, stored as sent, never re-run. A rejection rests on a recorded `severe` finding, not on
+  `basis`. An accepted verdict with zero findings and no `basis` is well-formed: a `reading` judge has no
+  commands to name, and Estigia cannot tell that from a `measuring` judge that skipped stating one. What
+  changed is that "measured and said so" versus "said nothing" is a field on the timeline.
 
-  Whether the check follows a rename is exactly what `git diff --unified=0 <base> <head> -- <path>`
-  does with rename detection unable to fire, and that was measured rather than assumed: a file renamed
-  and edited in the same commit, diffed against one path with `:(literal)`, shows as a deletion of the
-  old path with an empty new-side range and an addition of the new path whose new-side range is the
-  whole file — confirmed on git 2.55 both with and without this call's pathspec fix, since `:(literal)`
-  changes what the argument matches and not how many paths it names. The cause is **not**
-  `diff.renames` — that setting has defaulted to `true` for `git diff` since Git 2.9, and naming
-  both the old and the new path in one pathspec on this same repository does show the rename. What
-  defeats detection is that pathspec filtering is applied before rename detection runs, so
-  restricting to one path removes the rename's other half from the pool entirely — the reason
-  `--follow` exists for single-file history. The *outcome* this entry states is right; an earlier
-  revision's *cause* was not, and it was load-bearing: it implied the invariant survives widening the
-  pathspec, which is exactly when rename detection re-engages. A location naming the **old** path after
-  a rename is **accepted for any line**, not because that line survives the rename but because the old
-  path's only hunk adds nothing on the new side — exactly the deletion-only carve-out two paragraphs up,
-  settling by the header having been seen at all. A location naming the **new** path is accepted for
-  *any* line in the file, not only the one the reviewer actually meant, because a pure addition's
-  new-side range is the full line count. Neither behaviour is special-cased; both are exactly what
-  asking `git diff` for one un-renamed path, plus the deletion carve-out, already gives back, stated
-  here rather than left for the next reader to discover by re-running it. `--no-renames` was later added
-  to the invocation itself, which does not change any of the above — pathspec filtering already ran
-  ahead of rename detection without it — but makes the invariant hold by the flag rather than by git's
-  evaluation order alone, the reason `--follow` exists as a *distinct* flag at all.
+- **`record_spend` is a declaration, not a measurement.** Estigia cannot see a subagent's token count,
+  wall-clock seconds, or how many contexts produced a figure. `input`, `tokens`, `seconds` and `contexts`
+  are supplied numbers stored and read back; nothing confirms them, a run that under-reports is
+  undetectable, and `conditions` is free text trusted the way `basis` is. The orchestrating run's own
+  consumption is the sharpest gap, since a context cannot read its own count; the hand-measured cost table
+  says its task-flow layer is not instrumented and its total is low by an unmeasured amount. `input` and
+  `tokens` stay separate fields because dividing one by the other would look like a measurement while
+  resting on the same unverified declaration twice.
 
-  **The diff is read locally**, from `context.repo_dir` — a precondition `record_review_finding` did
-  not carry before this check existed. A caller whose checkout never fetched the objects for `base` or
-  `head` meets a failed read naming the two revisions and the path, rather than a bare exit code: the
-  detail `super::run` returns is truncated to the first three arguments — `git -c
-  diff.mnemonicPrefix=false`, not the revisions or `--unified=0` that follow much later in the pinned
-  argument list — so `changed_new_side_lines` rewrites the error to add back what it was asked to read.
-  An earlier revision of this entry named the truncated arguments as `git diff --unified=0`, true only
-  before `pinned_diff_args` grew the `-c` flags below; a reader repairing this path off that sentence
-  would have been told the truncation swallows the revisions when it actually swallows the pinning
-  flags. No test drives the failed-read branch directly against a repository missing the objects, only
-  against a directory holding no repository at all — cheaper to construct and enough to prove the
-  message names what it could not read; the object-missing shape answers `git` the same way and was not
-  additionally measured.
-
-  **A header pin covering two of git's four prefix variables still let the check refuse a well-formed
-  location.** `pinned_diff_args` pinned `diff.mnemonicPrefix=false`, `diff.noprefix=false` and
-  `core.quotePath=false`, but git has *four* variables deciding the `diff --git` header's prefix, and
-  `diff.srcPrefix`/`diff.dstPrefix` are independent of the two pinned — git's own `--default-prefix`
-  documentation names all four together. A repository with only `diff.srcPrefix` set renders `diff --git
-  x/<path> b/<path>`, which never matches the `diff --git a/<path> b/<path>` header
-  `changed_new_side_lines` builds, so `touched` stayed `false` and every owed location was refused
-  `finding-location-outside-the-change` — with an action telling the reviewer to correct a location that
-  was already correct. `-c diff.srcPrefix=a/ -c diff.dstPrefix=b/` closes it, added to `pinned_diff_args`
-  rather than the newer `git diff --default-prefix` flag: this crate pins no minimum git version, and
-  `--default-prefix` needs git ≥ 2.41, where an older git would silently ignore the unrecognised `-c`
-  keys instead of refusing to start.
-
-  **`diff.interHunkContext` and `GIT_DIFF_OPTS` both widen what the check reads as touched, and only one
-  of them can be stopped with a flag.** `diff.interHunkContext` fuses two hunks that sit near each other
-  into one wider hunk; on a fixture whose head changes lines 3 and 7 of a ten-line file, a repository
-  configured with `diff.interHunkContext=5` renders one `@@ -3,5 +3,5 @@` hunk instead of two, so a
-  location on line 5 — which neither edit touched — would settle. `--inter-hunk-context=0` on the
-  invocation's own argument list defeats the config, and it sits there rather than in
-  `pinned_diff_args`: `target.rs` shares that helper for the review-target payload it renders for a
-  human to read, and that payload wants git's ordinary hunk fusing rather than one line per hunk.
-  `GIT_DIFF_OPTS` is different in kind, not degree: `super::run` inherits the parent process's
-  environment wholesale — no `env_clear`, no `env_remove`, before this fix — and git's builtin diff
-  machinery applies `GIT_DIFF_OPTS` *after* the command line, so it overrides `--unified=0` regardless of
-  what other flags are present. Measured directly: `GIT_DIFF_OPTS=-u3` widened a one-line change's hunk
-  from `@@ -5 +5 @@` to `@@ -2,7 +2,7 @@`, and on the two-edit fixture above, `GIT_DIFF_OPTS=-u3` together
-  with `diff.interHunkContext` fused the *whole ten-line file* into one hunk even with
-  `--inter-hunk-context=0` on the command line. No flag on the invocation can win against an environment
-  variable git's own code reads after parsing argv, so the only fix that holds is removing the variable
-  from the child's environment before it starts — done unconditionally in `super::run` for every
-  invocation this crate makes, since no command here wants a user's ambient diff options and a
-  non-`diff` command does not read the variable at all.
-- **A verdict's basis is a declaration, not a check.** Measured before this existed:
-  `record_review_verdict` (since retired) carried nine arguments, eight of them identity and the ninth a two-value
-  outcome, and no field held what the reviewer actually did; `Evidence standard` decided the reserved role's
-  grant and which discipline paragraph filled `{{DISCIPLINE}}` — never what a judge holding that
-  grant was asked to report — and the transport never referenced `Evidence` at all. `basis` is now optional on the same operation, plumbed the way `evidence` and
-  `impact` already are on a finding: Estigia stores whatever string a caller sends, reads it back
-  unedited, and never re-runs a command it names, opens a build log, or diffs a suite's output against
-  it. A rejection still rests on a recorded `severe` finding, not on `basis` — the field can name the
-  mutation behind that finding, but nothing here parses it to confirm one exists. An accepted verdict
-  with zero findings and no `basis` is a well-formed record: a `reading` standard never grants a shell,
-  so such a judge has no commands to name — only what it read, what it did not check, and the plain
-  fact that it ran none, which the requirement asks it to state and which nothing here enforces — and
-  Estigia cannot tell that case apart from a `measuring` judge that skipped stating one. What changed
-  is that the distinction between "measured and said so" and "said nothing" is now a field on the
-  timeline rather than nowhere at all — a reader
-  still has to trust that the string is honest, the same trust every other free-text field on a review
-  marker already asks for.
-- **`record_spend` is a declaration, not a measurement, the same standing as the retired verdict's `basis`.**
-  Estigia cannot see a subagent's token count, its wall-clock seconds, or how many contexts produced
-  a figure — it has no channel into the harness that ran them. `input`, `tokens`, `seconds` and
-  `contexts` are numbers a caller supplies and Estigia stores and reads back; nothing here reaches
-  into a transcript, a billing API, or a harness log to confirm any of them. A run that under-reports —
-  by a slip, or by omission — is not detectable: there is no second source to cross it against, and no
-  refusal here checks a figure against anything but zero. `conditions` carries the same standing:
-  free text naming what a measurement varied, trusted the way `basis` is, and nothing here confirms a
-  caller who wrote `"sealed"` actually ran sealed. The orchestrating run's own consumption is the
-  sharpest gap: it can estimate what it spent coordinating an issue, never measure itself precisely,
-  because the count of its own context is not a number a context can read from inside itself the way
-  it can read a subagent's completion report. The hand-measured cost table says so in its own
-  words — *"The task-flow layer's cost is not in this table at all ... none of it is instrumented"* —
-  and states the total it publishes as low by an unmeasured amount. So the number that closes it
-  will be **declared, not proved**, the same way every other
-  free-text field a review marker carries already is. That is this instrument's shape, not a defect
-  discovered after the fact: `input` and `tokens` are kept as two separate fields precisely because a
-  number computed by dividing one by the other would look like a measurement while resting on exactly
-  this same unverified declaration twice.
 - **The crossing test proves presence, not consistency.** The requirement has one home,
-  `skill::VERDICT_BASIS_REQUIREMENT`. Three of the seven surfaces carrying it are rendered from those
-  bytes — both reviewer-definition arms and the OpenCode review block. The other four state it
-  by hand, because the shipped policy, the MCP tool schema, the contract's developer step and the
-  GitHub operations companion's `Recording a verdict` section are authored text rather than
-  renderings. One test, `the_verdict_basis_requirement_reaches_every_generated_launch_text`, crosses
-  all seven and reddens when a carrier stops containing the words; two of the hand-authored four are
-  checked against the region that must carry it — the developer step's single line, the operations
-  companion's own section — rather than against the whole file. The number of carriers checked that
-  way is prose, here and in `CHANGELOG.md`, and nothing derives or crosses it.
+  `skill::VERDICT_BASIS_REQUIREMENT`. Three of seven surfaces carrying it are rendered from those bytes
+  (both reviewer-definition arms and the OpenCode review block); four are hand-authored (the policy, the
+  MCP tool schema, the contract's developer step, the operations companion's `Recording a verdict`
+  section). `the_verdict_basis_requirement_reaches_every_generated_launch_text` crosses all seven; two of
+  the four are checked against the region that must carry it. The count of carriers checked that way is
+  prose, here and in `CHANGELOG.md`, and nothing crosses it. `str::contains` does not catch a surface that
+  keeps the requirement and contradicts it elsewhere (which has produced real defects, including two
+  inside crossed carriers) nor one that discusses `basis` without being a carrier.
+  `the_stale_prose_rule_and_its_carve_out_reach_both_carriers` asserts within sections (`Review contract`
+  in the definition, `What a finding is` in the policy); the `skill/SKILL.md` paraphrase is deliberately
+  uncrossed.
 
-  Two things it does not do. It does not catch a surface that keeps the requirement and contradicts
-  it somewhere else — containment, not consistency, is what `str::contains` measures — and it does
-  not reach a surface that discusses `basis` without being a carrier at all. Both have produced real
-  defects, in consecutive rounds on one issue. First, three surfaces told a caller to omit `basis`
-  when nothing was measured, the opposite of the requirement's own second sentence, and shipped green
-  because the test then crossed three carriers and none of those three was among them. Then, with all
-  six crossed, two blind judges reviewing publication epoch `33240e7be3b4eb73ae121b0b8ef4e2ae` found
-  three more surfaces still saying the opposite, and the sweep that followed found a fourth in the
-  runtime refusal a caller receives. Two of those four — the policy document and the binding row — sat
-  inside crossed carriers and passed anyway, each contradicting a requirement the same file states
-  nearby: a few lines above in the policy document, 48 lines above in the binding row. Widening the
-  crossing closed instances of this; it closed neither shape.
+- **Evidence standard: reading carries the basis paragraph.** Both arms of `render_reviewer_agent`
+  append `VERDICT_BASIS_REQUIREMENT`. An existing `reading` install is upgraded by `setup` because its
+  previous bytes are on the historical ledger or the record holds the digest of what this build wrote at
+  that path; launch refuses `reviewer-canonical-unavailable` until that setup. A `reading` judge has no
+  commands to name, only the fact it ran none, which the requirement accepts as a basis.
 
-  The second crossing test of the same shape now asserts within sections rather than whole files:
-  `the_stale_prose_rule_and_its_carve_out_reach_both_carriers` checks both constants inside the
-  classification section of each carrier (`Review contract` in the definition, `What a finding is`
-  in the policy), so a relocation out of the section reddens naming the carrier — proved by
-  relocation plus all four deletion mutations. What it shares with the first test's limit is
-  consistency: a carrier keeping both sentences and contradicting them nearby still passes, and the
-  `skill/SKILL.md` paraphrase stays deliberately uncrossed, carrying neither constant's bytes.
-
-- **Evidence standard: reading now carries the basis paragraph.** Both arms of
-  `render_reviewer_agent` append `VERDICT_BASIS_REQUIREMENT`. An existing `reading` install is
-  upgraded by `setup` because that body's previous bytes are on the historical ledger, or because
-  the record holds the digest of what this build itself wrote at that exact path — the
-  fix described below. Launch still refuses `reviewer-canonical-unavailable` until that setup.
-  The remaining limit is that a `reading` judge has no commands to name, only the fact that it ran
-  none — which the requirement's second sentence already accepts as a legitimate basis.
-
-- **A frozen-body ledger cannot be a definitive fix, and the same refusal recurred four times on one
-  machine before the cause was named.** An earlier fix (closed 2026-08-29, `74cc50b`) gave `setup` a list of every body this
-  binary or an earlier one could render for `review-blind` — `REVIEWER_TEMPLATE_BEFORE_*` in
-  `src/setup/mod.rs` — and accepted an installed reviewer matching any entry as ours-older rather
-  than an operator's edit. It explicitly rejected a digest for this: *"Digests on the skill tree do
-  not exist for records written before they did, and the reviewer has never had one. A byte ledger
-  of known Estigia bodies is what identifies the installs that already exist."* That is true and
-  incomplete. A digest cannot identify an install that predates it — nothing was ever recorded for
-  those bytes, so the ledger stays the only thing that can name them. It is not a reason to choose
-  the ledger *instead of* a digest, because the ledger has a structural cost the digest does not:
-  every template edit needs a human to freeze the previous body **before** it ships, and
-  the two "no frozen body joins the historical ledger" notes in
-  `the_default_rendering_is_the_bytes_already_installed` (`src/setup/tests.rs`) record this
-  repository's own decision not to do that for an
-  in-flight repair round, because nobody expected those bytes to reach a real disk. `--allow-source-build`
-  is the flag that makes that expectation false — it installs whatever the working checkout holds,
-  published or not — and the identical refusal recurred four times on one machine
-  (`review-blind.md.aside-20260829`, `.bak-3edc7a52`, `.presync-20260902`, and the occurrence that
-  prompted the later fix), each time on a body the ledger could never have held because it was
-  never committed.
-
-  The later fix keeps the ledger — for the bootstrap case it named, a record written before digests
-  existed has none, and the ledger is still the only thing that identifies that install as ours —
-  and adds a digest of what `write_reviewer_definition` itself last wrote at the reviewer's exact
-  path (`src/skill/record.rs`'s `written_outside` / `note_written_outside`, sharing the map
-  `written` / `note_written` already keeps for the skill root). An absent digest is not read as a
-  match; it falls straight through to the ledger, unchanged. This is what makes every *future*
-  install self-identifying without another manual freeze: the two mechanisms answer different
-  questions — the ledger answers *is this one of the bodies Estigia ever shipped*, the digest
-  answers *did anyone touch this since Estigia last wrote it* — and only their disjunction covers
-  both an old install predating digests and a same-run install whose template moved before
-  publishing. What is **not** now self-healing: the ledger itself still needs a human to freeze a
-  body once it *is* published and superseded, if the intent is for `reviewer_is_ours` to keep
-  matching it independent of a digest (a machine that skips straight from one published template to
-  a later one without ever running `setup` in between has no digest for the middle state and falls
-  back on the ledger exactly as before). And a second gap the original proposal carried unfixed until
-  now: every `REVIEWER_TEMPLATE_BEFORE_*` body is a `review-blind` rendering, and
-  `historical_reviewer_renderings` rendered it under `Seal::Unsealed` and that one name alone, so
-  `review-blind-sealed.md` from any earlier binary matched nothing — observed in the same session
-  that opened this fix: clearing `review-blind.md` produced the identical refusal on
-  `review-blind-sealed.md` on the very next run. `historical_reviewer_renderings` now renders every
-  frozen template across every `(name, seal)` pair `RESERVED_REVIEWERS` carries, which is a strict
-  superset of the old enumeration — checked by reading every push the old function made rather than
-  assumed, since the four forms `{render, without_basis} × {Reading, Measuring}` for
-  `(review-blind, Unsealed)` is what a uniform enumeration over both forms and every reserved name
-  already contains.
-
-  **What the digest does not reach.** `reviewer_is_static_for_seal` — what gates a *running* judge
-  launch (`src/harness/roles.rs`) — is unchanged on purpose: a body accepted here for its
-  digest alone is not a current rendering, and launch still requires one. The single-writer
-  condition this rests on is unenforced, not architectural: only `InstructionFile::ClaudeCode` gets
-  an `agents_root` today (`src/setup/mod.rs`, matched exhaustively so a new instruction variant
-  fails to compile until it is named `None` on purpose), and exactly one adapter declares that
-  variant, so one skill root's record is the only one ever asked about a given reviewer path. If a
-  second adapter ever gains an `agents_root` sharing that directory under a *different* skill root,
-  a digest recorded under one root is invisible to the other — this was checked against the code
-  rather than assumed, and nothing here would catch that condition changing.
-
-  **Measured against the real installation, not only the sandbox.** The suite's own coverage is
-  sandboxed `setup()` calls in `src/setup/tests.rs`; because the earlier fix passed every one of its unit-level
-  criteria and then failed four times on a real machine, this change was also crossed against the
-  live profile on 2026-09-05, and the counterfactual was run rather than assumed. `review-lens` was
-  chosen as the subject because it is the case no ledger entry can ever cover: every frozen body is a
-  `review-blind` rendering. A binary built with the lens template edited installed that in-flight
-  body and recorded its digest; `setup --all --allow-source-build` was then run twice against the
-  identical bytes on disk. The unfixed `main` build (`9ae384d55`) exited 1 with
-  `reviewer-definition-changed` and the world-action naming the file; the fixed build exited 0 and
-  upgraded the file in place. Separately, the first fixed-build `setup` on that machine reported
-  `changed 0 file(s)` and still recorded all seven outside digests where there had been none, which
-  is the `Change::Unchanged` path doing the bootstrapping — without recording on an unchanged write,
-  an installation that never moves would never acquire a digest at all.
-
-  What that crossing does **not** establish: it was one machine, one adapter and one reserved name,
-  and it says nothing about an installation whose record predates digests and whose body is already
-  stranded. Such a body is not rescued retroactively — it has no recorded digest and joins no ledger,
-  so it still meets `reviewer-definition-changed` and still needs the world-action once. The fix is
-  forward-looking by construction.
+- **A frozen-body ledger cannot be a definitive fix.** `setup` identifies an installed reviewer as
+  ours-older by the ledger of every body this or an earlier binary could render for `review-blind`
+  (`REVIEWER_TEMPLATE_BEFORE_*` in `src/setup/mod.rs`); a digest cannot identify an install that predates
+  it. The ledger needs a human to freeze each previous body **before** it ships (an author who never freezes one leaves nothing a test can see); `--allow-source-build`
+  installs unpublished bytes, and the same refusal recurred four times on one machine. So `setup` also
+  records a digest of what `write_reviewer_definition` last wrote at the reviewer's exact path
+  (`written_outside` / `note_written_outside` in `src/skill/record.rs`); an absent digest falls through to
+  the ledger. The ledger answers *is this one of the bodies Estigia ever shipped*, the digest *did anyone
+  touch this since Estigia last wrote it*. Not self-healing: a published, superseded body still needs
+  freezing, and a machine skipping from one published template to a later without running `setup` has no
+  digest for the middle state. `historical_reviewer_renderings` renders every frozen template across every
+  `(name, seal)` pair `RESERVED_REVIEWERS` carries (previously only `review-blind` unsealed, so
+  `review-blind-sealed.md` from an earlier binary matched nothing).
+  `reviewer_is_static_for_seal` (what gates a *running* judge launch, `src/harness/roles.rs`) is
+  unchanged on purpose: a body accepted for its digest alone is not a current rendering. The single-writer
+  condition is unenforced: only `InstructionFile::ClaudeCode` gets an `agents_root` today (matched
+  exhaustively in `src/setup/mod.rs`), so one skill root's record is the only one asked; a second adapter
+  sharing that directory under a different skill root would be invisible to it. Measured on one real
+  machine, one adapter and one name (`review-lens`, on 2026-09-05): the unfixed build exited 1 with
+  `reviewer-definition-changed` and the fixed build exited 0, and the first fixed-build `setup` reported
+  `changed 0 file(s)` yet recorded all seven digests (the `Change::Unchanged` path bootstraps). A body
+  already stranded with no recorded digest and in no ledger is not rescued retroactively and still meets
+  `reviewer-definition-changed` once.
 
 ## The control surface and what it records
 
