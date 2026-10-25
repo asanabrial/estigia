@@ -2596,8 +2596,9 @@ fn every_tool_sends_flags_the_transport_accepts() {
             | "review-validator-result"
             | "review-computed-verdict"
             | "spend" => &["--operation-id"],
-            "draft-pr" | "ready-pr" => &["--branch", "--worktree"],
-            "review-stages" => &["--branch"],
+            "draft-pr" => &["--branch", "--worktree"],
+            "ready-pr" => &["--branch", "--worktree", "--issue"],
+            "review-stages" => &["--branch", "--issue"],
             _ => &[],
         };
 

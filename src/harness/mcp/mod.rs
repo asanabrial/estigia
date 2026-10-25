@@ -1290,6 +1290,13 @@ fn run_tool_asking(
             flags.push("--worktree".to_owned());
             flags.push(worktree.display().to_string());
         }
+        if let (true, Some(issue)) = (
+            matches!(tool.operation, "ready-pr" | "review-stages"),
+            &run.issue,
+        ) {
+            flags.push("--issue".to_owned());
+            flags.push(issue.to_string());
+        }
     }
 
     if let Some(named) = worktree_to_name(tool, &flags, &run) {

@@ -141,6 +141,8 @@ const STALE: &[&str] = &[
 const UNKNOWN: &[&str] = &[
     "ambiguous-write",
     "handoff-row-unwritten",
+    "linear-move-not-read-back",
+    "linear-move-refused",
     "push-guard-not-read-back",
     "push-guard-removal-not-read-back",
     "repository-readback-missing",
@@ -311,6 +313,7 @@ const REFUSED: &[&str] = &[
     "linear-is-per-repository",
     "linear-issue-unknown",
     "linear-needs-assisted",
+    "linear-state-unknown",
     "linear-team-mismatch",
     "loop-not-writable",
     "malformed-argument",

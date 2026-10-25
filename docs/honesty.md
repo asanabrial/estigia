@@ -7315,14 +7315,12 @@ pointer that leaves it names the document it points at.
   `the_stop_hook_with_an_empty_queue_answers_as_before`; a queued claim's owner and runtime label
   are projected from the store, not from the payload, measured by
   `a_queued_claim_projects_the_assignee_and_runtime_label_from_the_store`.
-- **One row is read by nobody yet.** `Delivery preset` stores nothing of its own and only writes the
-  rows it stands for, so nothing reads it at run time; `State names` is typed, validated and saved and
-  no tool acts on it yet. `Corrections after ready` and `Ready by` are read by `draft_pr` and
+- **One row is read by nobody.** `Delivery preset` stores nothing of its own and only writes the
+  rows it stands for, so nothing reads it at run time. `State names` is read by `assist`, `ready_pr`
+  and `review_stages`, which move a Linear issue to the state it maps. `Corrections after ready` and `Ready by` are read by `draft_pr` and
   `ready_pr`, and `External reviewers` and `Merge by` by `review_stages`, all through
   `Context::layered`. `READ_BY_NOBODY` in `tests/honesty.rs` lists `Delivery preset` and fails when it
-  is read and not taken off the list; `State names` is missing from it only because the crossing reads
-  a label occurring anywhere in the skill's prose as a reader, and the phrase heads a section of the
-  GitHub binding about something else.
+  is read and not taken off the list.
   - **`review_stages` reads, and decides nothing.** Its answer is a reading of the pull request at the
     moment of the call; nothing is recorded, so a run that does not ask again acts on a stale one.
     A check stage's comments are its author's **unresolved review threads**: a comment the author
@@ -10073,16 +10071,21 @@ pointer that leaves it names the document it points at.
   and this change does not touch it — so this narrows the close proof to the part it can actually
   read.
 
-- **A read-only Linear source reads an issue and writes nothing, and its transport is `curl`.**
+- **A Linear source reads an issue, writes nothing but a mapped state, and its transport is `curl`.**
   `Tracker linear <team-key>` is admitted only under `Workflow: assisted`, and the row
   that admits it is answered in a repository's own file: `config set` refuses the value without
   `--repo` (machine-wide), `config edit` refuses it, `config set --repo` refuses it where the
   repository's `Claim workflow` is not assisted, `config set Workflow autonomous --repo` refuses it where
   the repository's `Tracker` is already Linear, and `doctor` and run start refuse it. `assist` reads
   the issue's title and description with one GraphQL query (`src/transport/linear.rs`'s `QUERY`),
-  which is a constant, so the set of operations the source can send is one and it is a query —
-  `src/transport/linear/tests.rs` runs the read against a fake endpoint and answers any body
-  containing `mutation` with a failure, so a source that sent one would not read an issue at all.
+  which is a constant, and the read runs against a fake endpoint in `src/transport/linear/tests.rs`
+  that answers any body containing `mutation` with a failure, so a read that sent one would not read
+  an issue at all. The source can send two more constants, `STATES_QUERY` and `MOVE_MUTATION`, and
+  only through `move_issue`, which `follow_state` calls only for a state the repository's
+  `State names` row maps and only for a Linear key — `follow_state_moves_only_a_mapped_state_of_a_linear_issue`
+  holds both, and that a GitHub issue is never sent to Linear. A move is read back and reported
+  under `linear_state` beside the tool's answer; it is never retried, and a run that ignores a
+  failed one leaves Linear behind the work, which nothing here notices afterwards.
   The credential is read from `LINEAR_API_KEY` and staged in a directory only its owner can enter,
   created non-recursively at a mode of 0700 (a directory already present at that path is refused
   rather than reused), with the file narrowed to its owner (0600); this is the `unix` behaviour, and

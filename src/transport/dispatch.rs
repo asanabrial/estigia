@@ -1556,23 +1556,32 @@ fn run_operation(
             },
             context.get("worktree location"),
         ),
-        "assist" => super::branch::assist(
-            context,
-            &super::branch::Start {
-                issue: identity()?,
-                branch: f.need("branch", operation)?,
-                base: f.need("base", operation)?,
-                run_id: run_id()?,
-                worktree_root: f.get("worktree-root"),
-                repo_name: &super::closing::repo_identity(context)?.1,
-                expect_state: "in-progress",
-                link: false,
-                now,
-            },
-            // The operator's own `Worktree location`, which the flag overrides
-            // and does not replace.
-            context.get("worktree location"),
-        ),
+        "assist" => {
+            let issue = identity()?;
+            let started = super::branch::assist(
+                context,
+                &super::branch::Start {
+                    issue: issue.clone(),
+                    branch: f.need("branch", operation)?,
+                    base: f.need("base", operation)?,
+                    run_id: run_id()?,
+                    worktree_root: f.get("worktree-root"),
+                    repo_name: &super::closing::repo_identity(context)?.1,
+                    expect_state: "in-progress",
+                    link: false,
+                    now,
+                },
+                // The operator's own `Worktree location`, which the flag overrides
+                // and does not replace.
+                context.get("worktree location"),
+            )?;
+            Ok(super::linear::follow_state(
+                &context.layered().state_names,
+                Some(&issue),
+                "in-progress",
+                started,
+            ))
+        }
         "flush" => {
             if f.on("read-only") {
                 super::outbox::flush::status(context)
@@ -1594,7 +1603,7 @@ fn run_operation(
         ),
         "review-stages" => {
             let layered = context.layered();
-            super::stages::review_stages(
+            let read = super::stages::review_stages(
                 context,
                 &super::stages::Stages {
                     branch: f.need("branch", operation)?,
@@ -1603,16 +1612,36 @@ fn run_operation(
                     merge_by: layered.merge_by(),
                     request: f.on("request-review"),
                 },
-            )
+            )?;
+            if read.get("position").and_then(serde_json::Value::as_str) == Some("merged") {
+                let issue = f.get("issue").map(|_| identity()).transpose()?;
+                return Ok(super::linear::follow_state(
+                    &layered.state_names,
+                    issue.as_ref(),
+                    "done",
+                    read,
+                ));
+            }
+            Ok(read)
         }
-        "ready-pr" => super::draft::mark_ready(
-            context,
-            &super::draft::Ready {
-                branch: f.need("branch", operation)?,
-                worktree: Path::new(f.need("worktree", operation)?),
-                ready_by: context.layered().ready_by(),
-            },
-        ),
+        "ready-pr" => {
+            let layered = context.layered();
+            let ready = super::draft::mark_ready(
+                context,
+                &super::draft::Ready {
+                    branch: f.need("branch", operation)?,
+                    worktree: Path::new(f.need("worktree", operation)?),
+                    ready_by: layered.ready_by(),
+                },
+            )?;
+            let issue = f.get("issue").map(|_| identity()).transpose()?;
+            Ok(super::linear::follow_state(
+                &layered.state_names,
+                issue.as_ref(),
+                "review",
+                ready,
+            ))
+        }
         _ => Err(Failure::ConfigDefect(serde_json::json!({
             "ok": false,
             "reason": "unknown-operation",

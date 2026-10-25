@@ -834,7 +834,8 @@ impl Setting {
             }
             (Self::Tracker, "github") => "issues live in GitHub, reached through `gh`",
             (Self::Tracker, "linear ENG") => {
-                "issues live in Linear, read-only and only under assisted work; the team key \
+                "issues live in Linear, read and only moved through `State names`, under assisted \
+                 work; the team key \
                  (`ENG`) names the project"
             }
             (Self::RepositoryHost, "github") => {
