@@ -316,6 +316,39 @@ impl PublicationLane {
     }
 }
 
+/// Whether a run puts a question to the person or decides it itself.
+///
+/// Read by the gate: under `Auto` a question tool is refused and the run records
+/// each decision with `record_decision`, which the `Stop` hook reports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecisionMode {
+    /// The default: a run may ask the person.
+    Ask,
+    /// A run asks nothing, applies the recommended choice and records it.
+    Auto,
+}
+
+impl DecisionMode {
+    /// The value as written in the table.
+    pub fn as_value(self) -> &'static str {
+        match self {
+            Self::Ask => "ask",
+            Self::Auto => "auto",
+        }
+    }
+
+    /// Every answer, under an exhaustive match.
+    pub fn all() -> Vec<Self> {
+        let every = vec![Self::Ask, Self::Auto];
+        for mode in &every {
+            match mode {
+                Self::Ask | Self::Auto => {}
+            }
+        }
+        every
+    }
+}
+
 /// What a run holding no claim may do to a checkout that has a tracker.
 ///
 /// Repository-only: it is read from the repository's own file and nowhere else.
@@ -903,6 +936,8 @@ pub struct Config {
     pub evidence: Evidence,
     /// Whether accepted verdicts consult the publication lane.
     pub publication_lane: PublicationLane,
+    /// Whether a run asks the person or decides and reports.
+    pub decision_mode: DecisionMode,
     /// What a run holding no claim may write in a checkout that has a tracker.
     pub issue_requirement: IssueRequirement,
     /// Who witnesses a claim in this repository.
@@ -1024,6 +1059,7 @@ impl Default for Config {
             // so installing this release changes nobody's guidance — the row
             // exists to let an operator move it, not to move it for them.
             publication_lane: PublicationLane::On,
+            decision_mode: DecisionMode::Ask,
             issue_requirement: IssueRequirement::Ask,
             workflow: Workflow::Autonomous,
             state_names: Vec::new(),

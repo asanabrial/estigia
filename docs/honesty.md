@@ -4130,7 +4130,7 @@ pointer that leaves it names the document it points at.
     **And under the default row the reserved reviewer is never recorded at all**, which is the case
     that governs every installation nobody has changed. Its whole grant is `Read, Grep, Glob`, and
     none of those three is in the matcher the hook is woken for —
-    `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task` — so no call it is permitted to make
+    `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion` — so no call it is permitted to make
     ever reaches the record, and every call that would reach it is outside the grant and refused
     before it. A judge measured both directions through the built binary: under `reading`, a
     `review-blind` context calling `Bash` is denied and no pointer is written at all; under
@@ -4574,8 +4574,8 @@ pointer that leaves it names the document it points at.
   - **The sweep's remote deletion bypasses the push guard, and that is a bypass.** `estigia prune
     --confirm` runs `git push --no-verify --delete` for each head, because the guard refuses a push
     no live claim authorises and the sweep runs from a checkout that holds none — a guarded
-    repository could otherwise never be swept. A deletion is not work entering the flow, and the
-    operator's `--confirm` is the authorisation, but `--no-verify` is the same rail the guard's own
+    repository could otherwise never be swept. A deletion is not work entering the flow, and `--confirm` is the authorisation — passed
+    by the operator or, since the contract makes finished cleanup the run's to execute, by an agent — but `--no-verify` is the same rail the guard's own
     script names, so anything that can run `estigia prune` can delete a remote head without a claim.
     The listing before the deletion, and the rule that a live claim's head or a checkout with
     unpublished commits is never marked, are what bound it.
@@ -5612,6 +5612,15 @@ pointer that leaves it names the document it points at.
 
 ## The gate's reach across the agents
 
+- **`Decision mode: auto` is enforced on Claude Code alone.** The gate refuses `AskUserQuestion`,
+  the one question tool its matcher is woken for, and records the recommended answer from the
+  payload. Codex, OpenCode and Pi register no question tool with the gate, so on them `auto` is the
+  contract's sentence and nothing more — and on every agent a question asked in prose rather than
+  through the tool is not seen at all. "Recommended" is the option the agent itself labelled
+  `(Recommended)`, or its first option: the gate reads which answer the agent ranked first and does
+  not judge it. Measured by `src/harness/decision_mode/tests.rs`; turning the refusal off reddens
+  two of its six tests.
+
 - **The harness gates named populations, not every write.** The editing tools each agent ships, the
   git spellings that change the tree, the irreversible steps, and — since 2026-08-01 — the shell
   constructs that visibly write a file: a redirect, a `sed -i`, an interpreter handed code, and the
@@ -6355,7 +6364,7 @@ pointer that leaves it names the document it points at.
   `tool.execute.before` never sees a call made by a subagent at all. So the second door closes
   nothing today: it is open for a caller that names a sub-agent, and there is not one yet. Where the
   question *is* asked, it sees exactly what the matcher wakes the hook for —
-  `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task` for Claude Code. `Agent` and `Task` first
+  `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion` for Claude Code. `Agent` and `Task` first
   take the dedicated reserved-reviewer prelaunch path rather than repository classification. A tool outside that set is
   never offered to it. Measured against the list this crate itself cites as the case it exists for,
   a published `builder` sub-agent declaring `Read, Write, Edit, Glob, Grep, Bash`: three of the six are tools the
@@ -7340,7 +7349,7 @@ pointer that leaves it names the document it points at.
     `src/transport/stages/tests.rs` against a fake `gh`, including that no review is requested while
     the cubic check is pending.
 - **No other setting is read by nobody.**
-  An operator sets twenty-nine rows and `config list` reports all of them. Measured: `context.get` is
+  An operator sets thirty rows and `config list` reports all of them. Measured: `context.get` is
   called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location`, `Review budget` (for the review forecast line) and `Git operation window`. The gate reads
   `Irreversible commands`, and the payload's prose names the rest of the acted-on rows. That once
   left `Delivery authorisation`, `Transition authorisation`, `Delivery route`, `Merge strategy`,
@@ -10084,56 +10093,55 @@ pointer that leaves it names the document it points at.
   and this change does not touch it — so this narrows the close proof to the part it can actually
   read.
 
-- **A Linear source reads an issue, writes nothing but a mapped state, and its transport is `curl`.**
+- **A Linear source reads an issue, writes nothing but a mapped state, and its transport is the
+  `linear` CLI.**
   `Tracker linear <team-key>` is admitted only under `Workflow: assisted`, and the row
   that admits it is answered in a repository's own file: `config set` refuses the value without
   `--repo` (machine-wide), `config edit` refuses it, `config set --repo` refuses it where the
   repository's `Claim workflow` is not assisted, `config set Workflow autonomous --repo` refuses it where
   the repository's `Tracker` is already Linear, and `doctor` and run start refuse it. `assist` reads
   the issue's title and description with one GraphQL query (`src/transport/linear.rs`'s `QUERY`),
-  which is a constant, and the read runs against a fake endpoint in `src/transport/linear/tests.rs`
-  that answers any body containing `mutation` with a failure, so a read that sent one would not read
-  an issue at all. The source can send two more constants, `STATES_QUERY` and `MOVE_MUTATION`, and
-  only through `move_issue`, which `follow_state` calls only for a state the repository's
-  `State names` row maps and only for a Linear key — `follow_state_moves_only_a_mapped_state_of_a_linear_issue`
-  holds both, and that a GitHub issue is never sent to Linear. A move is read back and reported
-  under `linear_state` beside the tool's answer; it is never retried, and a run that ignores a
-  failed one leaves Linear behind the work, which nothing here notices afterwards.
-  The credential is read from `LINEAR_API_KEY` and staged in a directory only its owner can enter,
-  created non-recursively at a mode of 0700 (a directory already present at that path is refused
-  rather than reused), with the file narrowed to its owner (0600); this is the `unix` behaviour, and
-  on a platform without Unix permissions the per-user temporary directory is the protection instead.
-  The credential is not passed on the command line, where any process on the machine could read it,
-  and it is never written to a configuration file somebody could commit. The request body is staged
-  too, and only its path travels on the argument list, because curl's own configuration parser eats
-  a backslash and a Windows path written there would not open. `curl` runs with `-q`, so the
-  operator's own `curlrc` cannot redirect the request or add a header, and with a connect and total
-  timeout, so a stalled server answers `linear-unreachable` rather than hanging the run. The endpoint
-  override (`ESTIGIA_LINEAR_URL`) is a test seam: it is honoured under `cfg(test)` or
-  `debug_assertions`, so the suite can drive a fake endpoint in either profile, and a shipped binary
-  reads the constant. A credential or endpoint carrying a character the curl configuration cannot
-  hold is refused (`linear-credential-malformed`) rather than interpolated into it, and `assist`
-  refuses an issue argument that is not an identity at all
+  which is a constant; `a_read_spawns_linear_api_with_the_query_and_sends_no_mutation` holds the
+  exact argument list a read spawns, and that it is the only call. The source can send two more
+  constants, `STATES_QUERY` and `MOVE_MUTATION`, and only through `move_issue`, which `follow_state`
+  calls only for a state the repository's `State names` row maps and only for a Linear key —
+  `follow_state_moves_only_a_mapped_state_of_a_linear_issue` holds both, and that a GitHub issue is
+  never sent to Linear. A move is read back and reported under `linear_state` beside the tool's
+  answer; it is never retried, and a run that ignores a failed one leaves Linear behind the work,
+  which nothing here notices afterwards.
+  Every operation is spawned as `linear api --variables-json <variables> <operation>` through the
+  crate's one process boundary, with a 30-second deadline. The CLI holds the credential — the login
+  `linear auth login` stored, or `LINEAR_API_KEY`, which it reads first — so Estigia never reads,
+  stages or passes the key, and only the operation and its variables (an issue key, an issue id and
+  a state id) travel on the argument list. A failed request is classified from Linear's `errors`
+  JSON, which the CLI prints on stdout for some answers (an unknown issue) and on stderr for others
+  (a validation error); a CLI with no credential answers `linear-credential-missing`, a program not
+  on `PATH` `linear-cli-missing`, and a failure carrying no JSON `linear-unreachable` naming what the
+  CLI printed. `assist` refuses an issue argument that is not an identity at all
   (`assist-issue-does-not-match-the-tracker`).
 
-  What this does **not** do: it does not write Linear (no state, comment, label or assignment), it
-  reads a workflow state's *type* only to refuse a `completed` or `canceled` issue and never moves
-  one, and it does not prove a Linear personal API key can be scoped read-only — the operator's own
-  credential decides that. It reads through `curl` rather than a TLS client of the crate's own, so a
-  machine without `curl` cannot read Linear at all, and the refusal names `linear-unreachable`
-  rather than telling a missing `curl` apart from a refused connection; a 2xx that is not Linear's
-  JSON answers `linear-unreachable` too, so it is not mistaken for a bare read failure. A key the
+  What this does **not** do: it writes Linear only to move a mapped state — never a comment, label
+  or assignment — and it does not prove a Linear credential can be scoped read-only; the operator's
+  own credential decides that. It depends on the `linear` CLI's own behaviour, measured against
+  version 1.10.0: the `api` subcommand, `--variables-json`, exit status 1 on a failed request, and
+  the wording `No API key configured`, which is matched as text. A later CLI that changes any of
+  these breaks the read, and a changed no-credential message would be reported as
+  `linear-unreachable` rather than as a missing credential. The workspace is the CLI's choice — its
+  default workspace, or `LINEAR_API_KEY`'s — and Estigia runs it from its own working directory, so a
+  repository's `.linear.toml` is not guaranteed to be the one read. Only the two reads were run
+  against the live API; the move was not, and is measured only against the stand-in. A key the
   credential cannot see and a key that names nothing both answer `linear-issue-unknown`, so the two
-  are not told apart. Authentication reported inside a GraphQL `errors` array (on a 200 or a 400)
-  is **matched heuristically** — an entry whose `extensions.type` or message mentions
-  "authentication", or whose message mentions an "api key" — and so is a "not found" error
-  (`extensions.type` or message, checked after the authentication match), which answers
-  `linear-issue-unknown`, because the exact shapes Linear uses were not measured against the live
-  API; any other `errors` with no `data` answers `linear-unreachable` naming the message, and an
-  authentication or not-found error worded otherwise would be reported that way too. `assist` refuses a key whose team (the text before its last `-`, compared
-  without regard to case) is not the configured `<team-key>` (`linear-team-mismatch`), and reads a
-  key as upper case. And nothing here crosses the Linear client against a second implementation: the
-  fake endpoint is a local server the test owns, and it measures only what the one query sends.
+  are not told apart. Authentication reported inside a GraphQL `errors` array is **matched
+  heuristically** — an entry whose `extensions.type` or message mentions "authentication", or whose
+  message mentions an "api key" — and so is a "not found" error (`extensions.type` or message,
+  checked after the authentication match), which answers `linear-issue-unknown`; any other `errors`
+  with no `data` answers `linear-unreachable` naming the message, and an authentication or not-found
+  error worded otherwise would be reported that way too. `assist` refuses a key whose team (the text
+  before its last `-`, compared without regard to case) is not the configured `<team-key>`
+  (`linear-team-mismatch`), and reads a key as upper case. And nothing here crosses the Linear
+  client against a second implementation: the stand-in `linear` is the `fake_process` example, and
+  it measures only the argument lists the source spawns and how it reads the answers scripted for
+  them.
 
   **The unclaimed-write refusal and the Unclaimed write policy hold under a repository whose own file
   sets `Tracker linear` with `Workflow: assisted`, as they do under GitHub.** Both used to stand down there, because each asked

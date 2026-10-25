@@ -11,9 +11,9 @@ use std::time::Duration;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 
 use super::{
-    Authority, Config, DEFAULT_ASK_TIMEOUT, Evidence, GitOperationWindow, IssueRequirement,
-    Language, LoopPlugin, Profile, PublicationLane, RepoRef, RepositoryHost, ReviewBudget, Tracker,
-    Workflow, WorktreeRoot, delivery,
+    Authority, Config, DEFAULT_ASK_TIMEOUT, DecisionMode, Evidence, GitOperationWindow,
+    IssueRequirement, Language, LoopPlugin, Profile, PublicationLane, RepoRef, RepositoryHost,
+    ReviewBudget, Tracker, Workflow, WorktreeRoot, delivery,
 };
 use crate::setup::AgentAdapter;
 
@@ -40,6 +40,8 @@ pub enum Setting {
     Window,
     /// The daily range commits, pushes, and branch creation may run in.
     GitOperationWindow,
+    /// Whether a run asks the person, or decides and reports what it decided.
+    DecisionMode,
     /// What a verdict here has to be backed by, and so what a reviewer may do.
     Evidence,
     /// Whether accepted verdicts consult the publication lane.
@@ -123,6 +125,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting::Boundaries,
     Setting::Window,
     Setting::GitOperationWindow,
+    Setting::DecisionMode,
     // Review & change.
     Setting::Evidence,
     Setting::PublicationLane,
@@ -319,6 +322,7 @@ pub const EVERYWHERE_SETTINGS: &[Setting] = &[
     Setting::Boundaries,
     Setting::Window,
     Setting::GitOperationWindow,
+    Setting::DecisionMode,
     Setting::Evidence,
     Setting::PublicationLane,
     Setting::ReviewBudget,
@@ -368,6 +372,7 @@ pub const OPTIONS_SETTINGS: &[Setting] = &[
     Setting::Boundaries,
     Setting::Window,
     Setting::GitOperationWindow,
+    Setting::DecisionMode,
     Setting::Evidence,
     Setting::PublicationLane,
     Setting::ReviewBudget,
@@ -446,6 +451,7 @@ impl Setting {
             | Self::CorrectionsPerLineage
             | Self::Window
             | Self::GitOperationWindow
+            | Self::DecisionMode
             | Self::Worktree
             | Self::Tracker
             | Self::RepositoryHost
@@ -496,7 +502,9 @@ impl Setting {
             | Self::ExternalReviewers
             | Self::CorrectionsAfterReady
             | Self::MergeBy => Group::Delivery,
-            Self::Boundaries | Self::Window | Self::GitOperationWindow => Group::GateLimits,
+            Self::Boundaries | Self::Window | Self::GitOperationWindow | Self::DecisionMode => {
+                Group::GateLimits
+            }
             Self::Evidence
             | Self::PublicationLane
             | Self::ReviewBudget
@@ -545,6 +553,7 @@ impl Setting {
             | Self::Boundaries
             | Self::Window
             | Self::GitOperationWindow
+            | Self::DecisionMode
             | Self::Integration
             | Self::IssueRequirement
             | Self::Workflow => true,
@@ -595,6 +604,10 @@ impl Setting {
             Self::Window => "how long a routine write may ride on the last verification",
             Self::GitOperationWindow => {
                 "the daily range commits, pushes, and branch creation may run in"
+            }
+            Self::DecisionMode => {
+                "whether a run puts a question to the person, or applies the recommended answer \
+                 itself and reports every decision when the turn ends"
             }
             Self::Evidence => {
                 "what a verdict here has to be backed by, and so what a reviewer may do"
@@ -687,6 +700,7 @@ impl Setting {
                 "enabled 22:00-06:00 inverted",
                 "enabled mon-fri 08:00-17:00 inverted",
             ]),
+            Self::DecisionMode => Answers::all(&["ask", "auto"]),
             Self::Evidence => Answers::all(&["reading", "measuring"]),
             Self::PublicationLane => Answers::all(&["on", "off"]),
             Self::ReviewBudget => Answers::some(&["none", "150000"]),
@@ -731,6 +745,7 @@ impl Setting {
             Self::Integration => "Integration mode",
             Self::Window => "Renewal window",
             Self::GitOperationWindow => "Git operation window",
+            Self::DecisionMode => "Decision mode",
             Self::Evidence => "Evidence standard",
             Self::PublicationLane => "Publication lane",
             Self::ReviewBudget => "Review budget",
@@ -860,6 +875,11 @@ impl Setting {
                 "that daily range, on those weekdays when named, in this machine's local time names \
                  when commits, pushes, and branch creation may run — `inverted` names when they \
                  may not instead"
+            }
+            (Self::DecisionMode, "ask") => "a run may put a question to the person",
+            (Self::DecisionMode, "auto") => {
+                "a question tool is refused; the run applies the recommended answer, records it \
+                 with `record_decision`, and the turn ends by listing every decision taken"
             }
             (Self::Evidence, "reading") => {
                 "a finding here is established by reading the change, so a reviewer needs no shell"
@@ -1020,6 +1040,7 @@ impl Setting {
             Self::GitOperationWindow => {
                 "`disabled`, `enabled 09:00-17:00`, `enabled 22:00-06:00 inverted`, or `enabled mon-fri 08:00-17:00 inverted`"
             }
+            Self::DecisionMode => "`ask`, or `auto`",
             Self::Evidence => "`reading`, or `measuring`",
             Self::PublicationLane => "`on`, or `off`",
             Self::IssueRequirement => "`ask`, `off`, or `required`",
@@ -1261,6 +1282,13 @@ impl Setting {
                     _ => return Err(self.reject(value)),
                 }
             }
+            Self::DecisionMode => {
+                config.decision_mode = match lower(value).trim() {
+                    "ask" => DecisionMode::Ask,
+                    "auto" => DecisionMode::Auto,
+                    _ => return Err(self.reject(value)),
+                }
+            }
             Self::PublicationLane => {
                 config.publication_lane = match lower(value).as_str() {
                     "on" => PublicationLane::On,
@@ -1371,6 +1399,7 @@ impl Setting {
             }
             Self::GitOperationWindow => config.git_operation_window.as_value(),
             Self::Evidence => config.evidence.as_value().to_owned(),
+            Self::DecisionMode => config.decision_mode.as_value().to_owned(),
             Self::PublicationLane => config.publication_lane.as_value().to_owned(),
             Self::IssueRequirement => config.issue_requirement.as_value().to_owned(),
             Self::Workflow => config.workflow.as_value().to_owned(),

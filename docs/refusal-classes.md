@@ -149,8 +149,9 @@ or broke a rule it can be told. That includes:
 
 Judgement calls that could have gone the other way:
 
-- `linear-credential-missing`, `-malformed` and `-rejected` are `refused`: they are the operator's
-  configuration saying no, not the tracker being unreadable. `linear-unreachable` is `unavailable`.
+- `linear-cli-missing`, `linear-credential-missing` and `linear-credential-rejected` are `refused`:
+  they are the operator's setup saying no, not the tracker being unreadable. `linear-unreachable` is
+  `unavailable`.
 - `worktree-ownership-unproven`, `branch-locked-by-another-run` and `worktree-owned-by-another-run`
   are `refused`: they are a rule about who may use a directory, answered after a successful read.
 - `issue-not-open` is `refused`: the issue is not one to work, which is the rule and not a moved

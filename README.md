@@ -287,7 +287,7 @@ An agent does this through the MCP tools instead — you will not type these oft
 minted from the agent's session and reported by `SessionStart`, so the agent already has it. It is
 asked for rather than guessed, because a claim recorded under the wrong run id is a claim the gate
 will never match, and being asked beats being silently wrong. `release` also puts down the isolated
-checkout this run created — and the local branch checked out there — once the tracker recognises the
+checkout this run created — every slice's, not only the last — and the local branch checked out there, once the tracker recognises the
 delivery and nothing unpublished remains; what it kept, and why, is named in its answer. It deletes
 every remote head the run recorded starting, too, because the branch `start_branch` linked is not
 always the branch published and GitHub's own auto-delete removes only the latter. `estigia prune`
@@ -501,7 +501,7 @@ What that costs is in `UNIMPLEMENTED`: no resources, no prompts, no sampling, no
 
 ## Configuration
 
-Twenty-nine typed settings, in [`docs/configuration.md`](docs/configuration.md), grouped by theme —
+Thirty typed settings, in [`docs/configuration.md`](docs/configuration.md), grouped by theme —
 Authority, Repository & tracker, Delivery, Gate limits, Review & change, Agent runtime, This machine — and
 shown in that one order by `estigia config list`, the setup screen and the reference alike. Each row
 says its scope: whose answer it is, whether this agent's, this repository's, every checkout's or this

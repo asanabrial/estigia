@@ -1,6 +1,6 @@
 # Configuration
 
-Twenty-nine typed settings, read from one table. Reading it produces a valid configuration or a refusal
+Thirty typed settings, read from one table. Reading it produces a valid configuration or a refusal
 that names what may be written instead — there is no third outcome where a misspelled value is
 quietly ignored.
 
@@ -11,7 +11,7 @@ cannot check, and [`review-cost.md`](review-cost.md) measures the one row that o
 the code has, and every value the picker offers is a value named here. A setting that grew a value
 and did not grow a row fails the suite.
 
-Twenty-nine settings, all typed. Reading the table produces a valid configuration or a refusal that
+Thirty settings, all typed. Reading the table produces a valid configuration or a refusal that
 names what may be written instead — never a value guessed at and discovered halfway through a
 checkout.
 
@@ -25,7 +25,7 @@ estigia config set "Integration mode" trunk
 | Authorisation posture | `balanced` (both authorisations `auto`), `cautious` (both authorisations `ask`), or `custom` when the two are a mix. Default `balanced`. Naming a profile writes the two rows below it that can ask, `Delivery authorisation` and `Transition authorisation`, and stores nothing of its own, so an explicit one written after it wins | Authority | agent |
 | Delivery authorisation | `auto`, `ask`, or `ask` with a duration such as `ask 30m` | Authority | agent |
 | Transition authorisation | `auto`, `ask`, or `ask` with a duration such as `ask 30m` | Authority | agent |
-| Tracker | `github`, `github <owner>/<name>`, or `linear <team-key>` — where issues live and claims are adjudicated. `linear` is **read-only** — save the workflow states `State names` maps, which follow the run — and admitted only under `Claim workflow: assisted`; under autonomous work it is refused, and it is set only in a repository's own file (`config set Tracker "linear <team-key>" --repo`): machine-wide and per-agent forms are refused (`linear-is-per-repository`), as is `config set Workflow autonomous --repo` while the repository's `Tracker` is `linear` (`autonomous-needs-github-tracker`). `estigia roles --issue` takes a number or a key. And `assist` refuses an issue whose shape does not match the tracker (`assist-issue-does-not-match-the-tracker`) | Repository & tracker | everywhere |
+| Tracker | `github`, `github <owner>/<name>`, or `linear <team-key>` — where issues live and claims are adjudicated. `linear` is **read-only** — save the workflow states `State names` maps, which follow the run — is read through the `linear` CLI, which holds the credential, and is admitted only under `Claim workflow: assisted`; under autonomous work it is refused, and it is set only in a repository's own file (`config set Tracker "linear <team-key>" --repo`): machine-wide and per-agent forms are refused (`linear-is-per-repository`), as is `config set Workflow autonomous --repo` while the repository's `Tracker` is `linear` (`autonomous-needs-github-tracker`). `estigia roles --issue` takes a number or a key. And `assist` refuses an issue whose shape does not match the tracker (`assist-issue-does-not-match-the-tracker`) | Repository & tracker | everywhere |
 | Repository host | `github`, or `github <owner>/<name>` — where the code lives and publications are verified (pull requests, tags, receipt-bound review). Defaults to GitHub matching the tracker when that tracker is GitHub, so an installation that only sets `Tracker` keeps one place to configure | Repository & tracker | everywhere |
 | Unclaimed write policy | `ask`, `off`, or `required`. Default `ask`. **Answered only by a repository's own file** (`<repo>/.git/estigia/estigia.local.md`, found from any directory inside the checkout) — there is no machine-wide or per-agent value, so `config set` refuses it without `--repo` and a row for it in the contract is read by nobody. It governs a run that holds **no claim**, in a checkout with a tracker and an installed contract. `required` refuses its repository writes (a file edit or write, and the `git commit`, branch and worktree fragments the gate already classifies as writes) with `issue-required`, naming `claim` and `create`. `ask` puts a repository write it can place inside the checkout to the person where the host can ask — Claude Code's `PreToolUse` `ask`, and Pi's `ctx.ui.confirm` in its terminal UI — and refuses it with the same code everywhere else; a write it **cannot place** inside or outside the checkout without running it — inline interpreter code, a utility naming its destination as an argument, a redirect it cannot resolve — is allowed rather than asked for, and a checkout it may have dirtied is named at the next session start. `off` is today's behaviour. A checkout with no installed contract, reads, writes outside the checkout, and a run that holds a claim are unaffected under every value | Repository & tracker | repository |
 | Integration mode | `branch`, or `trunk` | Repository & tracker | everywhere |
@@ -41,6 +41,7 @@ estigia config set "Integration mode" trunk
 | Irreversible commands | `none`, or commands separated by commas — the options page suggests `git push --force`, `gh release create`, `gh repo delete` and `npm publish`, one at a time; a longer list is typed | Gate limits | everywhere |
 | Renewal window | `default`, or a shorter duration such as `30s` or `1m` | Gate limits | everywhere |
 | Git operation window | `disabled`, or `enabled [days] HH:MM-HH:MM` with an optional ` inverted`, such as `enabled 09:00-17:00`, `enabled 22:00-06:00 inverted`, `enabled mon-fri 08:00-17:00 inverted` or `enabled sat,sun 10:00-14:00` — one daily range in this machine's local time, optionally on a set of weekdays (`mon` to `sun`, ranges such as `mon-fri`, commas, case-insensitive; a range may wrap the week, as `fri-mon` does; a repeated or empty day is invalid); no day set means every day; a start later than the end crosses midnight and the part after midnight belongs to the day the range started on; equal endpoints are invalid; half-open `[start, end)`; `inverted` permits exactly the rest of the week | Gate limits | everywhere |
+| Decision mode | `ask` or `auto`. Default `ask`: a run may put a question to the person. `auto`: a question tool is refused, the run applies the recommended answer, and the turn ends by listing every question and the decision taken — see *Decision mode* below. | Gate limits | everywhere |
 | Evidence standard | `reading`, or `measuring` | Review & change | everywhere |
 | Publication lane | `on` or `off`. Default `on`: accepted verdicts are gated on the head's check runs. `off` skips the check-run read and records `classification: not-consulted`. A `cancelled` conclusion still refuses when the gate is on. | Review & change | everywhere |
 | Review budget | `none`, or a token count such as `150000`. Default `150000`, per review context — an inherited comparison target, not a number derived from the distribution below. Twenty-eight judge contexts measured across five issues, when ordinary review still acquired judges (that has since ended), read from harness completion reports, bracket it rather than produce it: minimum 96,073, median 127,025, maximum 182,136 tokens, with 18% over 150,000. **Advisory, and reported rather than enforced**: nothing here refuses a panel that runs over it, and `record_spend` is recorded, not verified, so an under-report is undetectable. `none` switches it off. `review_tier`'s `forecast` line multiplies it by the lenses the tier licenses and states the product; the forecast is a statement, not a limit. See [`docs/honesty.md`](honesty.md) for what the number cannot count | Review & change | everywhere |
@@ -80,6 +81,17 @@ and nobody is asked first: before launching a lens the run says the one-line `fo
 `review_tier` answers — the tier, the lens count and the expected spend, the `Review budget` figure
 times the lenses the tier licenses. If no reviewer is available, the run records a durable
 exact-receipt handoff and releases ownership.
+
+`Decision mode` `auto` is for a run nobody is watching. Claude Code's `AskUserQuestion` is refused
+with `question-decided-here`, and the refusal names the answer to apply: for each question, the
+options whose label says `(Recommended)`, or the first option when none does. The gate records each
+question and its answer for the run in the local store's `taken_decisions` table, and the next `Stop`
+answer that blocks nothing lists them in `systemMessage` — the line Claude Code shows the person —
+and marks them reported, so each decision is shown once. A `Stop` that continues the session (the
+loop) shows nothing and leaves the decisions for the next one. Under `ask` the gate stands aside for
+the question tool, as it did before it was woken for it. `auto` widens nothing else: `Delivery
+authorisation` and `Transition authorisation` keep their own `ask`. Only Claude Code's question tool
+is enforced — [`honesty.md`](honesty.md) says what the other agents get.
 
 `Git operation window` denies `git commit`, every ordinary `git push`, plain and porcelain
 `git branch` creation — the copy spelling included — `git checkout -b/-B/--orphan`,
@@ -306,9 +318,9 @@ rest of the crate asks, not another list:
   written follows `Claim workflow`, which is why an installation carrying only `Claim workflow assisted`
   reads as the `assisted` preset rather than as `autonomous` rows under an assisted claim.
 
-Nine rows reach `GateContext`, seven of them **Everywhere**: `Tracker`, `Repository host`, `Integration mode`,
-`Renewal window`, `Git operation window`, `Evidence standard` and `Irreversible commands`; the eighth and
-ninth are `Unclaimed write policy` and `Claim workflow`. Eight of those feed the gate's
+Ten rows reach `GateContext`, eight of them **Everywhere**: `Tracker`, `Repository host`, `Integration mode`,
+`Renewal window`, `Git operation window`, `Decision mode`, `Evidence standard` and `Irreversible commands`; the ninth and
+tenth are `Unclaimed write policy` and `Claim workflow`. Nine of those feed the gate's
 own allow/deny decision — `Claim workflow` only for the pointer an `assisted` run left; `Repository host` is carried so MCP publication tools can bind to it
 rather than so `decide` branches on it, and `Claim workflow` is also read where the tool server
 runs a tool and where `estigia goal` counts work. Every other repository-scoped row, `Repair
