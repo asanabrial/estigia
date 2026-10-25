@@ -2030,7 +2030,7 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 17,806 | file on disk |
+  | `skill/bindings/github.md` | 17,849 | file on disk |
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
@@ -7315,13 +7315,14 @@ pointer that leaves it names the document it points at.
   `the_stop_hook_with_an_empty_queue_answers_as_before`; a queued claim's owner and runtime label
   are projected from the store, not from the payload, measured by
   `a_queued_claim_projects_the_assignee_and_runtime_label_from_the_store`.
-- **Seven rows are read by nobody yet.** `Delivery preset`, `State names`, `Self review`, `Ready by`,
-  `External reviewers`, `Corrections after ready` and `Merge by` are typed, validated against each other
-  and saved, and no tool, gate decision or sentence an agent is given acts on them: the behaviour they
-  name is not built yet. `READ_BY_NOBODY` in `tests/honesty.rs` lists five of them and fails
-  when one is read and not taken off the list; `State names` and `Ready by` are missing from it only
-  because the crossing reads a label occurring anywhere in the skill's prose as a reader, and both
-  phrases occur in sentences about something else. Until then setting one changes what `config list`
+- **Four rows are read by nobody yet.** `Delivery preset`, `State names`, `External reviewers` and
+  `Merge by` are typed, validated against each other and saved, and no tool, gate decision or sentence
+  an agent is given acts on them: the behaviour they name is not built yet. `Corrections after ready`
+  and `Ready by` are read by `draft_pr` and `ready_pr` through `Context::layered`, and `Self review` is
+  named to the agent beside `ready_pr`. `READ_BY_NOBODY` in `tests/honesty.rs` lists three of the
+  four and fails when one is read and not taken off the list; `State names` is missing from it only
+  because the crossing reads a label occurring anywhere in the skill's prose as a reader, and the
+  phrase heads a section of the GitHub binding about something else. Until then setting one changes what `config list`
   says and nothing a run does.
 - **No other setting is read by nobody.**
   An operator sets twenty-nine rows and `config list` reports all of them. Measured: `context.get` is
@@ -8391,9 +8392,18 @@ pointer that leaves it names the document it points at.
     - **The pointer is read, not the issue.** The branch comes from the run pointer, and the call
       checks that the checkout has it checked out; it does not check that the branch is the one named
       for the issue, because Estigia cannot tell that the person named it (see below).
-    - **An open pull request that is ready for review is refused, never converted**, and a draft
-      that already exists is reused as it stands: its title and body are not replaced by the new ones,
-      and the result says so with `"title_and_body_applied": false`.
+    - **An open pull request that is ready for review is handled as `Corrections after ready` says**:
+      refused and never converted under `refuse`, the `assisted` value; asked back to draft and read
+      back before the push under `redraft`; pushed to as it stands under `push-ready`. Under
+      `push-ready` the push reaches a pull request people may be reviewing, and its CI and its
+      reviewers see the new head at once — which is the point of the value, and also why it is not
+      the `assisted` default. A draft that already exists is reused as it stands: its title and body
+      are not replaced by the new ones, and the result says so with `"title_and_body_applied": false`.
+  - **`ready_pr` marks ready what was pushed, not what was reviewed.** It checks `Ready by` and that
+    the pull request's head is the checkout's, and reads the result back. It cannot see whether the
+    run reviewed its own change first: under assisted work no receipt binds a review to bytes, so
+    `Self review` is an instruction the run follows, not a gate. Measured by the `ready_*` tests in
+    `src/transport/draft/tests.rs`, against a fake `gh`.
     - **A failed read-back is not a failed push.** Whether the read-back disagrees or `gh pr view`
       itself errors, it answers in the `committed` world: the push
       landed and a pull request may exist, so none is reported and the same call reuses an open draft.

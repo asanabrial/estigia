@@ -10126,23 +10126,39 @@ fn the_screen_saves_a_changed_preset_as_one_write() {
     Setting::DeliveryPreset
         .apply(&mut edited, "autonomous")
         .expect("autonomous");
-    let rows: Vec<(Setting, String)> = crate::config::SETTINGS
-        .iter()
-        .filter(|setting| {
-            setting.scope() == crate::config::Scope::Repository
-                && **setting != Setting::DeliveryPreset
-                && setting.value_of(&edited) != setting.value_of(&installed)
-        })
-        .map(|setting| (*setting, setting.value_of(&edited)))
-        .collect();
-    super::repository_write(&rows, repo.path(), &options)
-        .expect("the rows a preset changes are saved together");
+    super::spread_repository_rows(&installed, &edited, repo.path(), &options)
+        .expect("the rows a preset changes are saved together, never one by one");
     let written = repository_file(repo.path());
     assert!(
         written.contains("| Claim workflow | autonomous |"),
         "{written}"
     );
     assert!(written.contains("| Merge by | agent |"), "{written}");
+    assert!(!written.contains("Delivery preset"), "{written}");
+}
+
+#[test]
+fn doctor_refuses_a_repository_file_holding_delivery_rows_that_cannot_both_hold() {
+    let (repo, _home, options) = delivery_rig();
+    let skill_root = tempfile::tempdir().expect("a skill root");
+    std::fs::write(
+        skill_root.path().join(crate::skill::CONTRACT),
+        crate::skill::CONTRACT_CONTENTS,
+    )
+    .expect("a contract");
+    super::repository_set(Setting::DeliveryPreset, "team", repo.path(), &options).expect("team");
+    assert_eq!(
+        crate::harness::doctor::delivery_conflict_in_force(Some(skill_root.path()), repo.path()),
+        None
+    );
+    let path = crate::skill::repository_config_path(repo.path());
+    let edited =
+        repository_file(repo.path()).replace("| Merge by | person |", "| Merge by | agent |");
+    std::fs::write(&path, edited).expect("a hand edit");
+    let refusal =
+        crate::harness::doctor::delivery_conflict_in_force(Some(skill_root.path()), repo.path())
+            .expect("doctor reads the repository file's delivery rows");
+    assert_eq!(refusal.code, "assisted-merge-is-the-persons");
 }
 
 #[test]

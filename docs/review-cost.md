@@ -626,6 +626,11 @@ or `review_read` only to learn those fields or the receipt, and 6 had a first `r
 `missing-argument` for want of the receipt. One turn there costs about 50,000 tokens of context;
 the hundred bytes are paid once per session.
 
+`ready_pr`, the assisted tool that marks a run's draft ready where `Ready by` is `agent`, moved the
+list from **48,597** to **49,012** bytes, and `TOOLS_LIST_CEILING` was raised by exactly that
+difference. It is listed only where `Claim workflow` is `assisted`, so an autonomous session's menu
+does not carry it; the ceiling measures the whole list, which is the larger of the two.
+
 `target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
 paid only by a call that passes `manifest`.
 
