@@ -14,6 +14,7 @@ use crate::harness::population::{Disposition, Population};
 use crate::outcome::Refusal;
 
 mod capture;
+mod checks;
 mod close;
 mod computed;
 mod recover;
@@ -31,6 +32,7 @@ pub use capture::{
 pub(crate) fn failure_refusal(failure: &Failure) -> Refusal {
     capture::refusal_of(failure)
 }
+pub use checks::{RunChecks, run_checks};
 pub(crate) use close::verified_delivery;
 pub use recover::{RecoverReview, host_repo_of, recover_review};
 pub use status::review_status;

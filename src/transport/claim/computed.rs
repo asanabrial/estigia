@@ -693,7 +693,9 @@ pub(super) fn require_computed_clearance(
                 "keep the PR draft; record the computed verdict with `record_computed_verdict`",
             ))
         }
-        ComputedOutcome::Approved => Ok(()),
+        ComputedOutcome::Approved => {
+            super::checks::require_receipt(context, comments, receipt, worktree)
+        }
     }
 }
 
@@ -1031,6 +1033,7 @@ pub fn record_computed_verdict(
     let mut never_ran_evidence: Option<String> = None;
     let mut lane_classification: Option<&'static str> = None;
     if computed.outcome == ComputedOutcome::Approved {
+        super::checks::require_receipt(context, &comments, &receipt, request.worktree)?;
         match require_cleared_publication_lane(
             context,
             request.pr,

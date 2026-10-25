@@ -751,7 +751,7 @@ pub(super) fn prepare_with(
     })
 }
 
-fn jobs_dir() -> Result<std::path::PathBuf, Failure> {
+pub(super) fn jobs_dir() -> Result<std::path::PathBuf, Failure> {
     Ok(store_path()?.with_file_name("jobs"))
 }
 

@@ -13,6 +13,8 @@ pub const DECLARATION_FILE: &str = "estigia.generated.toml";
 
 const DEADLINE: Duration = Duration::from_secs(300);
 
+pub mod checks;
+
 #[cfg(test)]
 mod tests;
 
@@ -61,7 +63,7 @@ fn malformed(detail: impl Into<String>) -> Failure {
     }))
 }
 
-fn relative(label: &str, value: &str) -> Result<(), Failure> {
+pub(crate) fn relative(label: &str, value: &str) -> Result<(), String> {
     let clean = !value.is_empty()
         && !value.contains('\\')
         && !value.chars().any(char::is_control)
@@ -71,47 +73,53 @@ fn relative(label: &str, value: &str) -> Result<(), Failure> {
     if clean {
         Ok(())
     } else {
-        Err(malformed(format!(
+        Err(format!(
             "`{label}` must be a plain repository-relative path, got `{value}`"
-        )))
+        ))
     }
 }
 
-fn string_of(table: &toml_edit::Table, key: &str) -> Result<Option<String>, Failure> {
+pub(crate) fn string_of(table: &toml_edit::Table, key: &str) -> Result<Option<String>, String> {
     match table.get(key) {
         None => Ok(None),
         Some(item) => item
             .as_str()
             .map(|text| Some(text.to_owned()))
-            .ok_or_else(|| malformed(format!("`{key}` must be a string"))),
+            .ok_or_else(|| format!("`{key}` must be a string")),
     }
 }
 
-fn declaration_of(table: &toml_edit::Table) -> Result<Declaration, Failure> {
+pub(crate) fn argv_of(table: &toml_edit::Table) -> Result<Vec<String>, String> {
+    const SHAPE: &str = "`command` must be an array of strings";
+    let command: Vec<String> = table
+        .get("command")
+        .and_then(toml_edit::Item::as_array)
+        .ok_or_else(|| SHAPE.to_owned())?
+        .iter()
+        .map(|argument| argument.as_str().map(str::to_owned))
+        .collect::<Option<_>>()
+        .ok_or_else(|| SHAPE.to_owned())?;
+    if command.first().is_none_or(String::is_empty) {
+        return Err("`command` must start with a program name".to_owned());
+    }
+    Ok(command)
+}
+
+fn declaration_of(table: &toml_edit::Table) -> Result<Declaration, String> {
     if let Some(unknown) = table
         .iter()
         .map(|(key, _)| key)
         .find(|key| !["path", "command", "cwd"].contains(key))
     {
-        return Err(malformed(format!("`{unknown}` is not a known key")));
+        return Err(format!("`{unknown}` is not a known key"));
     }
-    let path = string_of(table, "path")?.ok_or_else(|| malformed("a declaration needs `path`"))?;
+    let path = string_of(table, "path")?.ok_or("a declaration needs `path`")?;
     relative("path", &path)?;
     let cwd = string_of(table, "cwd")?;
     if let Some(cwd) = &cwd {
         relative("cwd", cwd)?;
     }
-    let command: Vec<String> = table
-        .get("command")
-        .and_then(toml_edit::Item::as_array)
-        .ok_or_else(|| malformed("`command` must be an array of strings"))?
-        .iter()
-        .map(|argument| argument.as_str().map(str::to_owned))
-        .collect::<Option<_>>()
-        .ok_or_else(|| malformed("`command` must be an array of strings"))?;
-    if command.first().is_none_or(String::is_empty) {
-        return Err(malformed("`command` must start with a program name"));
-    }
+    let command = argv_of(table)?;
     Ok(Declaration { path, command, cwd })
 }
 
@@ -123,7 +131,7 @@ pub fn parse(text: &str) -> Result<Vec<Declaration>, Failure> {
     if let Some(unknown) = document
         .iter()
         .map(|(key, _)| key)
-        .find(|key| *key != "generated")
+        .find(|key| !["generated", "check"].contains(key))
     {
         return Err(malformed(format!("`{unknown}` is not a known table")));
     }
@@ -135,7 +143,7 @@ pub fn parse(text: &str) -> Result<Vec<Declaration>, Failure> {
         .ok_or_else(|| malformed("`generated` must be an array of tables, `[[generated]]`"))?;
     let mut declared: Vec<Declaration> = Vec::new();
     for table in tables {
-        let one = declaration_of(table)?;
+        let one = declaration_of(table).map_err(malformed)?;
         if declared.iter().any(|seen| seen.path == one.path) {
             return Err(malformed(format!("`{}` is declared twice", one.path)));
         }
@@ -144,11 +152,11 @@ pub fn parse(text: &str) -> Result<Vec<Declaration>, Failure> {
     Ok(declared)
 }
 
-fn declared_with(
+pub(crate) fn declaration_text(
     repo: &Path,
     base: &str,
     envs: &[(&str, &str)],
-) -> Result<Vec<Declaration>, Failure> {
+) -> Result<Option<String>, Failure> {
     if !is_object_id(base) {
         return Err(Failure::Read("the base is not an object id".to_owned()));
     }
@@ -166,7 +174,7 @@ fn declared_with(
         envs,
     )?;
     if listed.stdout.trim().is_empty() {
-        return Ok(Vec::new());
+        return Ok(None);
     }
     let spec = format!("{base}:{DECLARATION_FILE}");
     let content = run_with_isolated_env(
@@ -175,10 +183,18 @@ fn declared_with(
         How::read(),
         envs,
     )?;
-    parse(&content.stdout)
+    Ok(Some(content.stdout))
 }
 
-fn borrowed(envs: &[(String, String)]) -> Vec<(&str, &str)> {
+fn declared_with(
+    repo: &Path,
+    base: &str,
+    envs: &[(&str, &str)],
+) -> Result<Vec<Declaration>, Failure> {
+    declaration_text(repo, base, envs)?.map_or_else(|| Ok(Vec::new()), |text| parse(&text))
+}
+
+pub(crate) fn borrowed(envs: &[(String, String)]) -> Vec<(&str, &str)> {
     envs.iter()
         .map(|(key, value)| (key.as_str(), value.as_str()))
         .collect()

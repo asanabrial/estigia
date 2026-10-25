@@ -5228,7 +5228,13 @@ const READ_TOOLS: &[&str] = &[
     "target",
 ];
 
-const LOCAL_WRITER_TOOLS: &[&str] = &["judge_workspaces", "blocked_until", "task", "send_message"];
+const LOCAL_WRITER_TOOLS: &[&str] = &[
+    "judge_workspaces",
+    "blocked_until",
+    "task",
+    "send_message",
+    "run_checks",
+];
 
 #[test]
 fn every_tool_is_a_tracker_writer_an_assisted_only_a_local_writer_or_a_read_and_never_two() {
@@ -5867,7 +5873,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 49_701;
+const TOOLS_LIST_CEILING: usize = 50_588;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
