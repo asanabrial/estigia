@@ -53,7 +53,7 @@ file.
 - [Test counts and mutation claims in a receipt](#test-counts-and-mutation-claims-in-a-receipt)
 - [Citations, and the coordinates that rot](#citations-and-the-coordinates-that-rot)
 
-The last run, **The review tier, the lens and the finding** — 1,214 lines on its own — has its own
+The last run, **The review tier, the lens and the finding** has its own
 document: [`honesty-review-tier.md`](honesty-review-tier.md). It stays last in the order and nothing
 follows it. Within it, "the entry above" and "the entry below" reach the neighbouring entry, and a
 pointer that leaves it names the document it points at.
@@ -63,285 +63,127 @@ pointer that leaves it names the document it points at.
 - **A `setup` test has answered red once and green every other time over identical bytes, and the
   mechanism is unknown.**
   `setup::tests::setup_accepts_an_in_flight_body_no_ledger_entry_will_ever_cover` failed in one full
-  `cargo test` at head `eff9e09c` (Windows, 2026-09-07) with the second `setup(...)` call's `.expect`
-  reading *setup refused a body it had itself written and recorded, though it matches no known
-  rendering* — one red in eight full runs, green isolated and green on six more. Two later Windows
-  observations share the shape. On 2026-09-07,
-  `setup_upgrades_an_install_still_carrying_the_pre_never_severe_reviewer` failed once with `Acceso
-  denegado (os error 5)` writing a temp file and passed four immediate retries, while an unnamed test
-  in a full run of the same day read `1461 passed; 1 failed` and went green on the two full runs
-  after it. On 2026-09-10, `a_body_matching_neither_the_recorded_digest_nor_any_rendering_is_refused`
-  failed once (`1471 passed; 1 failed`), green isolated and green on the next full run. The only
-  error captured is a Windows temp-file write, not a comparison, so the population is the sandboxed
-  reviewer-definition fixture.
+  `cargo test` on Windows (2026-09-07), the second `setup(...)` call refusing a body it had itself
+  written; two later Windows runs failed once each in the same reviewer-definition fixture, the one
+  captured error being an access-denied temp-file write. Measured on darwin over twenty consecutive
+  full runs of identical bytes: 20/20 green. The rate is **not established** — twenty runs come back
+  all-green about 7% of the time at a true rate of 1 in 8, and the loop says nothing about Windows.
+  The assertion names the reviewer the loop was on and carries the refusal. The sandbox's OS temporary
+  tree (an indexer, scanner or cleanup racing a fresh directory) is the hypothesis, offered as one.
 
-  **Measured at this head — darwin, macOS 26.5.1, rustc 1.98.1, 2026-09-27T08:49Z to 09:06Z — twenty
-  consecutive full `cargo test` runs over identical bytes: 20/20 green, every log kept, no run
-  discarded.** Twenty is 2.5× the original 1-in-8 sample; if the true rate were 1/8, a loop this long
-  still comes back all-green about 7% of the time. The rate is therefore **not established**: the
-  loop bounds how often a darwin full run failed in one window of twenty, and says nothing about
-  whether the Windows rate was one in eight, far lower, or gone. The assertion now names which
-  reviewer the loop was on when it fires, and carries the refusal the run got.
+- **The run-id shape cannot tell a dashed runtime from a suffix that carried one.** A dashed suffix
+  such as `codex-01k4-9f2a` is refused and a non-string `run_id` is malformed in every tool. An id whose
+  last-dash suffix *is* the minted shape is admitted: `session::run_id_shape("codex-01k4-9f2a1234")`
+  answers `Named { runtime: "codex-01k4" }`, as it would if `codex-01k4` were a real runtime word.
+  Nothing holds the runtime words an operator's hosts use, so no predicate over the text can separate
+  the two. Labels minted from text the old checks admitted are permanent and left alone.
 
-  **Read and ruled out, so the next reader does not spend the same look:** the process environment —
-  not merely absent from `src/setup/tests.rs`, since `Environment::resolve` reads no inherited
-  variable at all when `SetupOptions.home_dir` is explicit, which `sandbox()` always sets; every test
-  injection in the setup/reviewer path, each thread-local or armed per destination path, with no path
-  shared between sandboxes; and a torn read of the reviewer body or the digest ledger, both staged
-  and renamed into place so a reader sees the old file or the new one. What remains is the OS
-  temporary tree the sandboxes live in, and the captured access-denied temp-file write is consistent
-  with a transient there — an indexer, a scanner, or a cleanup racing a fresh temporary directory —
-  rather than with two tests sharing data. That is a hypothesis, offered as one: no run has
-  reproduced the failure under observation.
-
-- **The run-id shape cannot tell a dashed runtime from a suffix that carried one.** The doors the earlier rounds left are closed — a dashed suffix such as `codex-01k4-9f2a` is refused, a
-  non-string `run_id` is a malformed call in every tool that takes one, and `create`'s declared
-  runtime must be a runtime component — and one residual survives by construction. An id whose
-  last-dash suffix *is* the minted shape is admitted: measured at this head,
-  `session::run_id_shape("codex-01k4-9f2a1234")` answers `Named { runtime: "codex-01k4" }`, exactly
-  as it would if `codex-01k4` were a real runtime word and `9f2a1234` the session suffix. Nothing
-  holds the runtime words an operator's hosts actually use, so no predicate over the text alone can
-  separate the two, and `run_id_shape`'s split produces the runtime the gate uses; `runtime_of` is
-  retained for its own tests and as the record of the retired rule, with no production caller. Labels
-  already minted from text the old checks admitted are permanent and left alone: this repairs what is
-  written next, not the residue.
-
-- **Only Codex's hook derives its own runtime word.** `hook::run_as` used to derive
-  `claude-…` for every agent, so a Codex run claiming as `codex-…` was invisible to its own gate.
-  `session::AGENT_RUNTIMES` now maps `codex` to `codex`; every other agent that registers a
-  `PreToolUse` hook (Cursor) still derives `claude-…`
-  and so disagrees with `estigia goal --runtime <its own word>` the same way. That was left alone
-  on purpose, so each agent's identity moves only with its own evidence. Codex also registers no
-  `SessionStart` hook from Estigia, so nothing tells a Codex run its id; whether the run can read
-  its own session id to mint one that matches is not measured here.
+- **Only Codex's hook derives its own runtime word.** `session::AGENT_RUNTIMES` maps `codex` to
+  `codex`; every other agent that registers a `PreToolUse` hook (Cursor) derives `claude-…`, so it
+  disagrees with `estigia goal --runtime <its own word>`. Codex registers no `SessionStart` hook from
+  Estigia, so nothing tells a Codex run its id; whether the run can read its own session id is not
+  measured.
 
 - **A decision append that waits past five seconds on the store is dropped, counted, and not
-  retried.** Issue #29: `every_decision_survives_the_ledger_passing_its_cap_while_runs_are_writing`
-  failed in 3 of 13 and 1 of 10 full release runs on Linux arm64. Measured with a debug build, eight
-  writers on a fresh store and thirty busy loops on ten cores: 24 of 100 runs lost decisions (2 to
-  10 of 160 in the runs read in full), and every error captured was `database is locked` after 5.3 s to 10.6 s — the
-  `APPEND_WAIT` bound expiring on the open (`create its version table`, `begin a migration`) or on the
-  insert, not a rotation. The product behaves as `record` documents — best effort, a failed append
-  counted for `doctor` — so the test, which assumed the bound never expires, was the wrong side and
-  now waits ten minutes. What is not closed: on a machine starved that far a real decision is lost the
-  same way, and the count `doctor` reports is the only trace. No bound was raised, because a longer
-  wait puts the same stall on the gate's critical path.
+  retried.** `every_decision_survives_the_ledger_passing_its_cap_while_runs_are_writing` failed on
+  Linux arm64 under load (24 of 100 runs lost decisions with eight writers and thirty busy loops;
+  every captured error was `database is locked` after 5.3 s to 10.6 s, the `APPEND_WAIT` bound
+  expiring). The product behaves as `record` documents — best effort, a failed append counted for
+  `doctor` — so the test, which assumed the bound never expires, now waits ten minutes. Open: on a
+  machine starved that far a real decision is lost the same way and the `doctor` count is the only
+  trace; no bound was raised, because a longer wait puts the stall on the gate's critical path. The
+  same message on Windows (`could not create its version table: database is locked`) is
+  **unexplained**: 4,800 raw opens and 300 rounds each of 32 and 8 concurrent `Store::open` gave none
+  on macOS. Every open-path error ends `(sqlite <extended code>, after <n> ms)`.
 
-  The same message was reported on Windows (`the local store could not create its version table:
-  database is locked`) and is **unexplained**. Ruled out on macOS: a busy handler the
-  autocommit `CREATE TABLE IF NOT EXISTS meta` bypasses (SQLite 3.53.2 calls it; 4,800 raw opens and
-  300 rounds each of 32 and 8 concurrent `Store::open` gave no version-table failure, the slowest open
-  220 ms against the 5000 ms `BUSY_WAIT`). Not measurable here: Windows. Every open-path error now
-  ends `(sqlite <extended code>, after <n> ms)`, the milliseconds counted from the start of
-  `Store::open_waiting`, so the next occurrence says whether the wait expired or SQLite gave up at once.
+- **A staged body path that survives a crash is named by process id and counter, so a recycled process
+  id can land on a leftover.** `paths::scratch_file` adds a per-process counter so two threads never
+  share a path; the crash-recycle case is not measured.
 
-- **Two threads of one process staged the same body file, and the later rename failed.** Issue
-  #30: `a_readback_that_settles_elsewhere_says_the_head_moved` failed in 1 of 13 full release
-  runs on Linux arm64. Measured with a debug build running `transport::claim` at `--test-threads=64`:
-  at least four failures in about 45 runs, each answering `write-failed` where the test expects
-  `publication-readback-disagrees`; the one whose envelope was captured said `the body could not be
-  staged: No such file or directory (os error 2)`, and one run failed
-  `a_push_whose_readback_disagrees_leaves_a_republishable_lease_target` with it.
-  Both publish over pull request 7, and `paths::scratch_file` named the staged body by process id
-  and caller name alone, so the two shared `issue-flow-<pid>-pr-edit-7.md` and the staging temporary
-  beside it; one `rename` found the file the other had already moved. `scratch_file` now adds a
-  counter, so no two calls in a process share a path. Not measured: a staging path that survives a
-  crash is still named by process id and counter, so a recycled process id can land on a leftover.
-
-- **Three more load flakes: one traced to a fixture variable, one to a timing bound, one not
-  reproduced.** Issue #63. `harness::tests::no_compound_or_redirected_merge_earns_the_integration_exemption`
-  failed once with `gh api … returned nothing`. It never failed in 200 runs alone under thirty busy
-  loops, which fits the cause: `with_fake_clis` sets `ESTIGIA_FAKE_EXIT_WITHOUT_READING` on the
-  whole process, the stand-in `gh` exits 0 with no output when it sees it, and a scripted-`gh` test on
-  another thread inherited it for as long as that window was open. A red test holds the variable
-  and asks a scripted `gh` for a comment list: it read `None` before the change. The transport's test
-  override now removes the seven reviewer-launch variables from a child unless the fixture sets one itself.
-  `launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_real_mcp_server` failed
-  6 of 20 runs alone under the same load, `a launch waited for the two second reviewer` at 1.9 s to
-  3.6 s: the launch bound was shorter than the cost of starting an MCP server under load, so the
-  test, not the product, was wrong. The stand-in reviewer now waits for a file the test writes, the
-  launch is held to not having read the prompt, and the wait is bounded at thirty seconds. `tests/pipe/review_job.rs`
-  `a_detached_runner_returns_before_a_slow_reviewer_finishes_and_leaves_its_answer` held the same
-  kind of bound, `1500 ms` against a two second reviewer, and now uses the same release file: the
-  launch is held to leaving the job `Running`. With the launch made to join the runner the test
-  fails in 33 s on `the launch waited for the reviewer, which was still held back`, `left:
-  Finished(…)`, `right: Running`. Not closed: the reviewer's own thirty second wait for the file
-  is the bound on a launch that waits, so that failure is slow rather than instant. It passed 100 of 100 loaded runs; the old bound was not
-  seen to fail under load, so that run shows no regression, not a measured improvement.
+- **Load flakes with no cause found.**
   `transport::claim::tests::two_runs_claiming_one_issue_at_once_leave_exactly_one_winner_decided_by_the_store`
-  (`read-failed`, expected `lost-claim-race`) did not fail in 200 runs alone under the same load, so
-  it has no cause here; the store's five second busy wait is the suspect and is unmeasured.
+  (`read-failed`, expected `lost-claim-race`) did not fail in 200 runs alone under thirty busy loops;
+  the store's five second busy wait is the suspect and is unmeasured. The stand-in reviewer in the
+  launch tests waits for a release file bounded at thirty seconds, so a launch that wrongly joins its
+  runner fails slowly, not instantly.
 
 ## Comments, instructions and the build
 
 - **The instruction-surface ceiling counts bytes, not whether the prose agrees with the gate.**
-  `tests/instruction_ceiling.rs` refuses a `skill/*.md` file whose measured size is above its
-  registered ceiling, and any unexcepted line above 2,000 bytes. The registry is an upper bound,
-  not an exact figure: a stale count below the file is no longer a refusal, so the number moves only
-  when growth outruns it. It cannot see conditional routing, so it does not bound the always-loaded
-  set an activation actually pays — that set depends on the tracker. It does not read the prose for
-  meaning, and it does not prove a sentence agrees with `src/harness/`. Raising an entry is
-  deliberate and review-visible; the failure names `tests/instruction_ceiling.rs`.
+  `tests/instruction_ceiling.rs` refuses a `skill/*.md` file above its registered ceiling, and any
+  unexcepted line above 2,000 bytes. The registry is an upper bound: a stale count below the file is
+  not a refusal. It cannot see conditional routing, so it does not bound the always-loaded set an
+  activation pays, and it does not prove a sentence agrees with `src/harness/`.
 
-- **The shipped skill no longer carries its own provenance, so the why of a rule is here and nowhere
-  an agent loads.** Rationale, history and incident narrative were moved out of `skill/` so
-  that an activation does not pay for it. None of it changes a rule; each passage is kept here as
-  it was, minus the sentence it sat in:
-  - *Why the digest and not the SHA* (`skill/protocols/rdd.md`). A commit SHA says what was
-    committed, not what was in the tree: a file made executable, a file replaced by a symlink, or an
-    uncommitted change in the worktree all ship without moving the SHA. `target` treats mode as part
-    of the identity and hashes a symlink as its link text, which is what mode `120000` stores. Two
-    runs can therefore share a head SHA and deliver different bytes; the digest cannot be shared that
-    way, which is the whole reason for taking one.
-  - *Branch collision.* Relying on git's `worktree add` refusal to catch two runs on one branch does
-    not hold: the check is a read followed by a write with no lock between them, and the review
-    probe produced two successful concurrent worktrees for one branch on Git
-    2.55.0.windows.3. The 2026-07-24 incident (two runs deriving one directory; the loser writing its
-    model, its migration and its tests into the winner's checkout mid-build) is what a lost race
-    costs, and is the ledger entry I05 in `skill/references/safety-incidents.md`. The same issue
-    fixed the order inside `start-branch`: the local reservation precedes the first GitHub mutation,
-    where it used to create a server-side branch and a sidebar link and then stop on the local
-    check, leaving remote state advertising work no checkout was made for.
-  - *Scratch isolation.* Measured live on a five-judge panel that shared one scratch directory: one
-    judge's script was overwritten by another's under the same generic name and then executed inside
-    a third judge's checkout, and a fourth read the implementing run's planning notes through a file
-    it had not written. Nothing in the delivery target was damaged and every judge re-verified its
-    own tree, but two verdicts were no longer independent readings and one had to be discounted. A
-    rule that binds the checkout and says nothing about the scratch has a hole the exact size of the
-    panel; `skill/policies/judgment-day.md` and `skill/references/repository-delivery.md` both state
-    the rule that closes it.
-  - *Delivery history.* The publication lane's check runs do not populate the pull request merge box
-    (measured on one pull request, run `33027439851`); only a `pull_request` event does. The workflow carries
-    `merge_group:` so a merge-queue entry runs the same suite after ready, and whether
-    that run satisfies required contexts is a live-repository measurement, not something Estigia
-    asserts from documentation. Delivery merges with a merge commit on that path, and
-    the `Merge strategy` row was retired. GitHub as the default repository host,
-    separate from the tracker row, is tracked separately.
-  - *The closing-keyword opening.* Seen live on 2026-07-25 in a pull request: knowing the rule was not
-    enough, because `Fixes #<n>` is the muscle-memory opening of a PR body. The first line read,
-    in this shape, `Fixes #<n> (link only — closing keywords are not used per project workflow; state is
-    moved via the tracker)`; the parenthetical states the rule and the sentence breaks it. That is
-    why the skill supplies the exact `Refs #<n>` wording.
-  - *Review target halves.* Seen live (another repository's #70): the approved lineage covered 12 workspace
-    paths while the pull request delivered 15, and 35 of 65 final hunks carried no authority at
-    all, while every artefact looked exactly like a reviewed delivery. That is why the diagnostic
-    target is derived once and compared with what a reviewer is given.
-  - *Launch-prompt restatement.* Nothing mechanical detects a brief that overrides the reviewer definition's classification
-    rule, which leaves what a judge does with one unmeasured.
-  - *Filing is not repair.* A filed finding is not a faster repair: three issues on this repository
-  are three filings by three runs across five days over two overlapping counts,
-    all still `priority:low` and unrepaired.
-  - *Approved republish.* The gate refuses an undeclared republish over an approved
-    receipt before it costs anything, and that refusal is
-    `approved-republish-without-cause` and is not counted as a round. The cost it guards
-    against, measured on one issue, was roughly 550,000 tokens a round. On one publication nine
-    findings were recorded and none was severe; the ledger computed `approved`; the findings were
-    carried into the next change that had to touch the same files, and one round was paid instead of
-    two.
-  - *Memory contention.* The rule to mention a machine-heavy phase and to rerun alone before
-    interpreting a contention death follows a live incident in which a parallel A/B evaluation
-    exhausted memory while another measurement ran; the sequential rerun passed (ledger entry X10).
-  - *Review tier.* The tier does not port the source project's own six-path review-authority
-    self-reference, because this repository's review authority is not separable by filename; that
-    was measured against three real deliveries.
+- **The shipped skill does not carry its own provenance; the why of a rule is here.**
+  - *Digest, not SHA* (`skill/protocols/rdd.md`). A SHA says what was committed, not what was in the
+    tree: a mode change, a symlink swap or an uncommitted change ships without moving it. `target`
+    treats mode as identity and hashes a symlink as its link text (mode `120000`).
+  - *Branch collision.* `git worktree add` refusing a second run on one branch is a read then a write
+    with no lock; the review probe produced two concurrent worktrees for one branch on Git
+    2.55.0.windows.3. `start-branch` reserves locally before the first GitHub mutation.
+  - *Scratch isolation.* On a five-judge panel sharing one scratch directory, one judge's script was
+    overwritten and run in another's checkout, so verdicts were no longer independent.
+    `skill/policies/judgment-day.md` and `skill/references/repository-delivery.md` state the rule.
+  - *Delivery.* The publication lane's check runs do not populate the pull request merge box; only a
+    `pull_request` event does. Whether a `merge_group` run satisfies required contexts is a
+    live-repository measurement, not asserted.
+  - *Closing keywords.* `Fixes #<n>` is the muscle-memory opening of a PR body, so the skill supplies
+    the exact `Refs #<n>` wording.
+  - *Review target halves.* Seen live (another repository's #70): the approved lineage covered 12
+    paths while the pull request delivered 15; the diagnostic target is derived once and compared with
+    what a reviewer is given.
+  - *Launch-prompt restatement.* Nothing mechanical detects a brief that overrides the reviewer
+    definition's classification rule; what a judge does with one is unmeasured.
+  - *Approved republish.* An undeclared republish over an approved receipt is refused
+    `approved-republish-without-cause` before it costs anything (about 550,000 tokens a round, measured
+    on one issue) and is not counted as a round.
+  - *Review tier.* The tier does not port the source project's six-path review-authority
+    self-reference, because this repository's review authority is not separable by filename.
 
 - **Nothing measures comment prose in `src/`, and that is the decision.** `AGENTS.md` item 2 — code
-  carries no comments by default — is held by review alone. It briefly had
-  a test: `tests/comment_ceiling.rs` counted comment-bearing lines and refused any rise above a
-  registered `CEILING`. It never read a comment, so the only cure for its refusal was to raise the
-  number, and its sibling turned red on a *warranted* deletion. It was deleted, and the ruling
-  widened: **no test at any level may depend on the text of a comment.** What that costs is a
-  reader's judgement standing alone — prose can accumulate, or say something false, and no run will
-  say so. What it buys is that deleting a comment cannot redden the suite, so a green run is never
-  mistaken for evidence the prose was idle. The lexer survived the test: inverted into
-  `src/source_text.rs`'s `code_of`, it is what a test reading Rust source strips with — the rule
-  `AGENTS.md` item 2 now states, and the only thing standing between a future assertion and a comment
-  that satisfies it. Nothing enforces that rule: it is a shape a reviewer reads, not a check. The
-  first attempt swept `include_str!` and missed `std::fs::read_to_string`; the repair swept
-  fourteen more of those and still missed two, one of them in the single file the pull request named
-  as its one reviewed exception. Two panels, two rejections, the same finding identity both times.
-  That is what an unenforced rule costs, measured rather than supposed.
+  carries no comments by default — is held by review alone. A comment-counting test was deleted
+  because its only cure was raising the number, and the ruling widened: **no test at any level may
+  depend on the text of a comment.** The cost is that prose can accumulate or say something false and
+  no run will say so. A test reading Rust source strips with `src/source_text.rs`'s `code_of`; nothing
+  enforces that, and an earlier sweep that missed `std::fs::read_to_string` was rejected twice.
 
-- **`build.rs` used to derive the transport vocabulary from unstripped source; a follow-up
-  round closed that channel rather than leaving it documented.** `build.rs` reads each
-  `src/transport/*.rs` as text and extracts `TRANSPORT_VOCABULARY` from it — the list `stable_code`
-  answers from, and the list `build.rs`'s own floor is sized against. That floor is the count
-  `refusal-baseline.txt` records (`population 178` over `reasons.len()`), which replaced the loose
-  `>= 115` the refusal guard below folded into itself.
-  A comment writing the shapes `extract_reasons`/`extract_constructed` match, or a comment spelling
-  `"reason":` followed by a non-literal that `assert_reasons_covered` would have aborted the build
-  over, used to reach those readers because the raw file was sliced before anything stripped it. It
-  now strips once at the read, with `source_text::code_of`, before `shipped_part` cuts the inline
-  test module and before every one of `extract_reasons`, `extract_constructed` and
-  `assert_reasons_covered` walks the result, so a comment reaches none of the three. Measured rather
-  than assumed: regenerating `TRANSPORT_VOCABULARY` at the same head with and without the change and
-  diffing the two sorted sets found no difference — 123 entries either way — so no entry in the
-  vocabulary was coming from a comment.
+- **`build.rs` strips comments once, at the read.** It extracts `TRANSPORT_VOCABULARY` from each
+  `src/transport/*.rs` after `source_text::code_of`, before `shipped_part` cuts the test module and
+  before `extract_reasons`, `extract_constructed` and `assert_reasons_covered` walk it. The floor is
+  the count `refusal-baseline.txt` records (`population 178` over `reasons.len()`). Regenerating the
+  vocabulary with and without the change gave the same 123 entries.
 
 - **`build.rs`'s envelope guard is held to the extractor's window by shape, not by a case.**
-  `tests/guards.rs`'s `the_envelope_guard_and_the_extractor_read_one_window` reads `build.rs`'s
-  stripped text: the `Failure::envelope` anchor is spelled once, and both `assert_reasons_covered`
-  and `extract_constructed` take their window from `envelope_window`, the guard testing each
-  `"reason":` position against that window. Nothing under `tests/` compiles the build script's
-  functions, so no test drives a `"reason":` the walk cannot read through the guard — that was measured
-  by writing one into `src/transport/mod.rs`, where the build cleared it at the merge
-  base and aborts on it now. What the shape test can fail on is a second derivation: the guard and
-  the extractor ending their windows in two places is how the hole opened.
+  `the_envelope_guard_and_the_extractor_read_one_window` in `tests/guards.rs` checks that
+  `assert_reasons_covered` and `extract_constructed` both take their window from `envelope_window`.
+  Nothing under `tests/` compiles the build script's functions, so no test drives a `"reason":` the
+  walk cannot read; a second derivation of the window is what the shape test can fail on.
 
-- **Nothing stops a comment from spelling a unicode escape instead of writing the character.**
-  `no_comment_spells_a_character_it_could_just_write` used to walk `src/` and `tests/` and fail if any
-  `//` line contained `\u{`, on the theory that the eight characters spelling an escape are not the
-  escape — and because `cargo doc` publishes a `///` line verbatim, a spelled-out escape there reaches
-  the crate's public documentation rather than the character it names. It was deleted — reading
-  comment text is what the ruling refuses — so this is no longer checked at all. At the time it was
-  deleted, its own comment recorded 113 such lines found across the crate, 21 of them in `///` —
-  history now, not a current measurement, and nothing here re-derives it.
+- **Nothing stops a comment from spelling a unicode escape instead of writing the character.** The
+  test that checked this was deleted with the comment-text ruling; `cargo doc` publishes a `///` line
+  verbatim, so a spelled-out escape there reaches the public documentation.
 
-- **Nothing holds a transport port's clock to saying where it must come from.**
-  `every_clock_the_port_is_handed_says_where_it_must_come_from` used to read every top-level file of
-  `src/transport/` and require, in the twelve lines above each `pub now:` field, the sentence *"never
-  from the run being judged"* — the property that stops a claim's liveness check being satisfied by
-  the clock of the run under judgement. The sentence exists only inside doc comments, nine of them in
-  `src/transport/branch.rs` and `src/transport/claim.rs`, so no code token could ever satisfy it, and
-  the test was deleted. The nine doc comments stay and are still the only statement of the
-  requirement; nothing crosses them against anything. There is no runtime to enforce it against either
-  — nothing in production constructs these structs yet, which is why the check was written against
-  prose in the first place. The day something does, that is the moment to hold the rule in code.
+- **Nothing holds a transport port's clock to saying where it must come from.** The requirement that a
+  `pub now:` clock come "never from the run being judged" exists only in doc comments in
+  `src/transport/branch.rs` and `src/transport/claim.rs`; the test that read it was deleted. Nothing in
+  production constructs these structs yet.
 
-- **`AGENTS.md`'s numeric claims are not crossed, and two measured ones are false.** `tests/honesty.rs`
-  crosses the countable claims in `README.md` and `docs/` — the agent, tool, doctor-check and settings
-  counts — and nothing in `AGENTS.md`, which every agent reads at session start. Two numbers there have
-  drifted. The `tracker_rig` count read *Sixteen tests in `tests/pipe.rs`* while
-  `grep -c "tracker_rig()" tests/pipe.rs` answers 96 at this head — one of them the definition, so 95
-  call sites — and the number was dropped from the sentence rather than re-numbered, because a
-  replacement will be wrong again next month. The `node` count is false the same way: `AGENTS.md` says
-  *three tests require `node` … and nothing else does*, and reading `src/setup/tests.rs` finds
-  **twelve** test functions that panic when `node` is absent — six spawning `Command::new("node")`
-  directly and six through `run_goal_loop_driver` — beside
-  `the_plugin_tells_a_refusal_from_a_gate_that_did_not_answer`, which tolerates its absence. The same
-  three-count opened this document's own node entry further down; that copy was narrowed in this change
-  to state the shape without the number, so the document does not contradict itself, and `AGENTS.md`'s
-  copy is left for the follow-up that corrects it. Extending the count guard to `AGENTS.md` is a
-  follow-up change of its own, and not a one-line
-  one — `documented()` is `README.md` plus `docs/`, and the node count has no exported constant to
-  derive from — so the decision, with this evidence, is recorded here.
+- **`AGENTS.md`'s numeric claims are not crossed.** `tests/honesty.rs` crosses the counts in `README.md`
+  and `docs/`, nothing in `AGENTS.md`, which every agent reads at session start. The `tracker_rig`
+  number was dropped from its sentence rather than re-numbered, and its `node` count (three tests) is
+  false: `src/setup/tests.rs` has twelve test functions that panic when `node` is absent. Extending the
+  guard is a change of its own, since `documented()` is `README.md` plus `docs/` and the node count has
+  no exported constant.
 
-- **No check can hold the `cargo build --bins --examples` instruction.** The failure is silent by
-  construction: a stale `target/debug/estigia` answers exactly as a fresh one does, so no test can tell
-  them apart and none is written to pretend otherwise. The exposure is narrower than the stale file
-  suggests, and that was measured: `cargo test --test pipe` rebuilds the binary itself, because an
-  integration test depends on the package's bin target and `env!("CARGO_BIN_EXE_estigia")` names it, so
-  the pipe tests cannot run against a binary from an earlier commit. What is not held is a reader who
-  follows the pre-run instruction and then probes `target/debug/estigia` **directly** — the `--bins`
-  half is what makes that binary current, and no run can observe the probe. `AGENTS.md` carries the
-  instruction and says what each half builds; the reason none holds it is this entry.
+- **No check can hold the `cargo build --bins --examples` instruction.** A stale `target/debug/estigia`
+  answers exactly as a fresh one. `cargo test --test pipe` rebuilds the binary itself (an integration
+  test depends on the bin target), so the pipe tests cannot run against an earlier commit; what is not
+  held is a reader who probes `target/debug/estigia` directly.
 
-- **The old-reference guard sees only numbers above a ceiling.** `tests/issue_references.rs` fails on
-  a `#N` in the shipped text (`AGENTS.md`, `README.md`, `CHANGELOG.md`, `docs/`, `skill/`
-  and the string literals of `src/` through `source_text::code_of`) when `N` exceeds
-  `PUBLIC_ISSUES_THROUGH`, which is raised by hand when the public tracker passes it. An old reference whose number is at or below that
-  ceiling is indistinguishable from a public one, so it passes; the guard also does not read `tests/`,
-  where a number is often a fixture, or the comments of `src/`.
+- **The old-reference guard sees only numbers above a ceiling.** `tests/issue_references.rs` fails on a
+  `#N` in the shipped text when `N` exceeds `PUBLIC_ISSUES_THROUGH`, raised by hand. An old reference at
+  or below the ceiling passes, and the guard does not read `tests/` or the comments of `src/`.
 
 ## Models, routing and reviewer definitions
 
@@ -419,1016 +261,396 @@ pointer that leaves it names the document it points at.
   never reduces or serializes the configured review; the fallback is separate-session or durable handoff.
   OpenCode process-tree cleanup is likewise not containment proof: the controller bounds how long the
   TUI waits, while process-group and Job Object cleanup remain best-effort OS operations.
+- **The OpenCode review relay is a transport, not a definition and not a measurement.** With the plugin
+  installed, or when no reviewer CLI is installed ([the selection rule](what-it-writes.md)),
+  `launch_review_input` records the relay job and answers `relay: true`; `estigia-review-relay.js`
+  hooks the host's sub-agent tool, asks the binary for the prompt the job holds, and hands the raw
+  output back for admission. It proves nothing about whether the host routed to a distinct context,
+  whether the sub-agent carried the template's tool grant, or whether a model answered. The relay ships
+  no host-routable definition, so a host with no agent to route to launches nothing and the review
+  stays owed. A result for a receipt the review has moved past is refused `capture-result-stale`.
 
-- **The OpenCode review relay is a transport, not a definition and not a measurement.** On an OpenCode
-  run with the plugin installed, or when no reviewer CLI is installed ([the selection rule](what-it-writes.md)),
-  `launch_review_input` records the relay job and answers `relay: true`;
-  the plugin `estigia setup opencode` writes, `estigia-review-relay.js`, hooks the host's sub-agent
-  tool, asks the binary for the prompt the job holds, and hands the reviewer's raw output back for
-  admission. It proves nothing about whether the host routed to a distinct context, whether the
-  sub-agent it launched carried the tool grant the reviewer's template declares, whether that
-  context ran at all, or whether the answer came from a model — the host's own sub-agent tool
-  decides all of that, and Estigia sees only the text it is handed. The relay ships no
-  host-routable reviewer definition: the reserved seven are still launched by the binary from its
-  embedded templates on every other host, and on OpenCode the plugin relays a task the host was
-  already going to make, so a host with no agent to route to launches nothing and the review stays
-  owed. The relay's answer is still bound the way every capture is: the job's receipt is held
-  against the one `review_status` offers at admission, and a result for a receipt the review has
-  moved past is refused `capture-result-stale` with nothing recorded.
+  - **Coverage uses `node` stand-ins; live foreground transport was measured once.** The tests drive
+    the generated plugin with a stand-in whose command objects honour the `<` redirect and have no
+    `.stdin()`; none runs it under Bun, which would make `bun` a second required interpreter in CI. The
+    redirect form and a 200,000-byte answer were read to EOF under Bun 1.3.1 and OpenCode 2.0.28's
+    event shapes were read from its binary. Four native OpenCode foreground reviewers were admitted
+    privately with zero findings against one exact receipt. This measures foreground transport, not
+    approval, acknowledgment handling or background support. A host that changes `result.content` or the
+    `(input, output)` shape leaves the plugin inert or refusing, never admitting a wrong answer.
+  - **A relayed reviewer runs as the built-in `general` sub-agent, with its tool grant.** The answer
+    names `general` and the marker prompt `<!-- estigia:review name=<role> -->`, because setup installs
+    no reviewer agent and a reserved name is refused `Unknown agent`. `general` carries OpenCode's write
+    tools where the CLI's reviewer has none, so the seal is the prompt, a weaker one than the CLI's
+    tool-less reviewer; nothing reads what the sub-agent did with the grant. Inherited repository
+    instructions can require acknowledgments that conflict with JSON-only output, so the binary
+    supplies a job-bound result channel ([what it writes](what-it-writes.md#the-opencode-review-relay-plugin)).
+    `an_opencode_reviewer_can_acknowledge_repository_instructions_before_its_result` drives the generated
+    plugin under Node through real ledger admission; removing the appended channel instruction makes it
+    fail with `reviewer-result-malformed`. No model's compliance is measured. The native completion
+    shape was read from OpenCode 2.0.32 (external source): structured `output.output` carries final
+    text and `content` wraps it for display. `a_relayed_answer_is_admitted_against_the_job_receipt`
+    passes a synthetic native completion through the plugin and admission, and the driver checks
+    recursively collected string values for leaked answer text. Foreground review is supported;
+    background launches are refused, and no correlated private background channel exists.
+  - **ZCode, Cursor and DeepSeek Harness cannot relay.** `src/setup/capabilities.rs` records no
+    agent-definitions surface for any of the three, and only Cursor has a tool-call gate, which fires on
+    tool calls rather than a sub-agent spawn. Delivery from any of them needs a reviewer CLI; without
+    one the call is refused `reviewer-unavailable`, naming the CLI. The verdict is against the surfaces
+    this build has read.
+  - **`handoff_review` remains for a host that can neither start a CLI nor relay.** It records the exact
+    receipt for another run; it runs no reviewer and produces no verdict.
 
-  - **Automated relay coverage uses `node` stand-in shells; live foreground transport was also measured.** The tests
-    drive the generated plugin with a stand-in whose command objects honour the `<` redirect and have no
-    `.stdin()`; none runs it under Bun, because that would make `bun` a second required interpreter in CI.
-    The redirect form and a 200,000-byte answer were read to EOF by a child under Bun 1.3.1 and OpenCode
-    2.0.28's event shapes were read from its binary. Separately, the publishing run directly launched four
-    native OpenCode foreground reviewer contexts through the candidate relay in a temporary workspace
-    profile while delivering the claim-authority correction. All four answers were admitted privately
-    with zero findings against that correction's exact receipt, without Claude or Codex fallback.
-    This measures native foreground transport, not approval of the relay candidate, acknowledgment
-    handling or background support. The global binary and configuration were untouched. A host that
-    changes `result.content` or the `(input, output)` shape leaves the plugin inert or refusing, never
-    admitting a wrong answer.
-
-  - **A relayed reviewer runs as the built-in `general` sub-agent, with its tool grant.** The
-    `relay: true` answer on an OpenCode run carries `launch`, naming `general` and the marker prompt
-    `<!-- estigia:review name=<role> -->`, because `estigia setup opencode` installs no reviewer agent
-    and a host naming a reserved one is refused `Unknown agent`. `general` carries OpenCode's write
-    tools (edit, write, bash), where the CLI's reviewer runs with none, so the relayed reviewer is
-    sealed by the prompt the plugin puts in, not by a tool grant: a weaker seal than the CLI's
-    tool-less reviewer. Nothing here removes the grant or reads what the sub-agent did with it.
-    Its inherited repository instructions can require acknowledgments that conflict with JSON-only
-    output. The binary now supplies an explicit job-bound result channel, described in
-    [what it writes](what-it-writes.md#the-opencode-review-relay-plugin), instead of interpreting
-    arbitrary JSON in prose. `an_opencode_reviewer_can_acknowledge_repository_instructions_before_its_result`
-    drives the generated plugin under Node in a synthetic consumer repository requiring
-    `Get ready for the next battle!`, then passes its captured stdin through real ledger admission.
-    The stand-in reviewer follows the supplied prompt; no model's compliance with conflicting
-    inherited instructions is measured. Separate capture tests reject ambiguous channels and old
-    attempt IDs and admit a fresh attempt on the unchanged receipt after malformed output.
-    Removing the appended channel instruction makes the generated-plugin regression fail with
-    `reviewer-result-malformed`, because its stand-in then emits the required acknowledgment plus
-    bare JSON. Framed-answer tests also hold receipt movement stale and repeated admission to one
-    report; the channel does not substitute a job ID for the publication's identity checks.
-    The native completion shape was read from the installed OpenCode 2.0.32 executable's
-    `SubagentTool.Plugin` and `Tool.execute` code (external source). Its structured `output.output`
-    carries final text; `content` wraps it for display. The generated-plugin fixture now measures
-    that distinction with synthetic text, plus running-child, tool-error and contradictory-metadata
-    refusals. Earlier fixtures used only text parts and missed the wrapper/admission mismatch.
-    Foreground review is supported; background launches are explicitly refused rather than admitting
-    their launch notifications. No correlated private background completion channel is implemented.
-    `a_relayed_answer_is_admitted_against_the_job_receipt` now passes a synthetic native completion
-    through the generated plugin under Node and then real ledger admission, rather than relying on a
-    successful admission stub alone. A separate capture regression abandons a runner-less relay job
-    through collect and relaunches it on the unchanged receipt. Neither test measures a live model.
-    The native completion driver checks actual recursively collected string values for leaked answer
-    text, not a serialized envelope whose escaping can hide it. Leaving the native raw answer and
-    display wrapper intact passed the former check but fails the strengthened check with
-    `review output leaked`. The refusal fixture checks the ordered collect, status and same-receipt
-    foreground relaunch diagnostic for a foreground child that remains running, mismatched identity
-    or status, missing output and tool error, as well as zero admission and suppressed raw output.
-    Removing that recovery diagnostic passed the former assertions but fails the strengthened ones
-    on the missing `collect_review_input` step. Both mutations were restored; runtime behavior is
-    unchanged by these assertion repairs.
-  - **ZCode, Cursor and DeepSeek Harness cannot relay.** The canonical per-runtime table
-    (`src/setup/capabilities.rs`) records no agent-definitions surface for any of the three
-    (`agent_definitions: false`), so none can be routed to a reserved reviewer at all; and only
-    Cursor carries a tool-call gate (`Gate::Settings`), whose hooks fire on tool calls rather than on
-    a sub-agent spawn, so none can intercept a reviewer launch and return its output. Delivery from
-    any of the three therefore needs one of the reviewer CLIs installed, and a machine with neither
-    CLI and no relay is refused `reviewer-unavailable`, naming the CLI to install — never a skip and
-    never a silent absence. What this reading does not establish is whether a future release of any
-    of the three adds a sub-agent interception surface; the verdict is against the surfaces this
-    build has read, and the table is where a change is recorded.
-  - **`handoff_review` remains for a host that can neither start a CLI nor relay.** It records the
-    exact receipt for another run to pick up; it runs no reviewer and produces no verdict, so it is
-    not a substitute for the panel and never a smaller one.
-
-- **A verdict produced where no reviewer definition file is installed still has a tool grant beneath
-  it — the gate renders it from the embedded template, not from that file.** Six of the eight
-  supported adapters have no agent-definitions root at all (`docs/what-it-writes.md`'s adapter table), so there
-  is no file for `Evidence standard` to narrow. That does not leave the reserved reviewer's launch
-  bounded by the prompt and the isolation rule alone: `hook.rs`'s prelaunch check computes the grant
-  by calling `render_reviewer_agent` on the embedded `RESERVED_REVIEWERS` template and the running
-  `Evidence` value directly, never by reading a file back, so the same render happens whether or not
-  `Evidence standard` ever wrote one. What the next entry measures is narrower than "no grant at
-  all": not whether a grant is computed, but whether the host it is computed for is shown to enforce
-  it at runtime, and — for an adapter with no gate mechanism reachable at all — whether the gate ever
-  runs to compute it.
+- **Where no reviewer definition file is installed, the grant is still computed from the embedded
+  template.** Six of the eight adapters have no agent-definitions root. `hook.rs`'s prelaunch check
+  calls `render_reviewer_agent` on the embedded `RESERVED_REVIEWERS` template and the running
+  `Evidence` value, never reading a file back. What is unmeasured is whether the host enforces the grant,
+  and for an adapter with no reachable gate whether the gate ever runs.
 
 - **The grant is a declaration whose enforcement is unmeasured on every adapter, including Claude
-  Code.** The earlier account of it, which once made `Applies::Inert` producible (deleted with the row
-  that needed it), described the grant as "a real second
-  line of defence" on Claude Code; that is not established, here or in the project this crate ports
-  from (re-read at `gentle-ai` `v4.0.0`, `ff77164d`; the first reading, at `a537c63e`, counted sixteen
-  runtimes). The source project carries the same file-based tool-list mechanism on **four of its
-  seventeen** runtimes — its own `featureClaimsByAgent` table
-  (`internal/agents/capabilitymanifest/manifest.go`), cross-checked against every adapter at registry
-  construction, sets `FileSubAgents: true` for Claude Code, Cursor, Kimi and Kiro IDE and for nobody
-  else — and states nowhere, in its prose or in its tests, that any host enforces a declared tool list
-  at runtime. Only one of those four cannot express one: Cursor carries a coarse `readonly` boolean,
-  not a per-tool list. Kimi is not the other exception it looks like — five of the six
-  `kimi/agents/*.yaml` files (`internal/assets/kimi/agents/` holds eleven files) carry their own
-  per-tool `exclude_tools` list (`review-risk.yaml`'s names `kimi_cli.tools.multiagent:Task`,
-  `kimi_cli.tools.shell:Shell`, `kimi_cli.tools.file:WriteFile` and
-  `kimi_cli.tools.file:StrReplaceFile`), so a two-valued `Evidence standard` translates onto Kimi
-  directly — `kimi_cli.tools.shell:Shell` is one of the excluded names. The exception is
-  `gentleman.yaml`, the top-level orchestrator rather than a reviewer role, whose prompt is
-  `../KIMI.md`.
-  `exclude_tools` itself is not shown to do anything: at `v4.0.0` it appears in no Go file at all —
-  the string-presence assertion over rendered YAML that the `a537c63e` reading found
-  (`internal/components/sdd/prompts_test.go:787`) went with the SDD component — so nowhere is it
-  parsed, read back or asserted, and the five `kimi/agents/*.yaml` files that carry it are assets,
-  not code the crate's Go touches at runtime. A
-  different field, Pi's own `tools:` subagent frontmatter, is the one this repository's code and tests
-  do demonstrate something about, and it is narrower than "the host's loader": `ReconcilePiCodeGraph`
-  (`internal/components/communitytool/pi_codegraph_test.go:88`, as read at `a537c63e` and not re-read at `v4.0.0`) is the source project's *own*
-  reconciler, reading a subagent file before Pi itself ever sees it, and a malformed `tools:` line
-  there is reported as a misconfigured child by that reconciler — not observed to reach, or be refused
-  by, Pi's own loader. Neither artifact supports "a malformed `tools:` line breaks the host's loader
-  and refuses the spawn outright"; that sentence is unverified and is removed rather than kept. The
-  honest reading is narrower than "a second line of defence": the grant is
-  a declaration, its runtime enforcement is unmeasured wherever it exists — Claude Code included — and
-  an adapter with no agent-definitions root is missing a declaration, not failing to hold a control
-  that no adapter here is shown to hold.
+  Code.** "A real second line of defence" is not established, here or in the project this crate ports
+  from (`gentle-ai` `v4.0.0`, `ff77164d`), which carries the file-based tool-list mechanism on four of
+  seventeen runtimes and states nowhere that a host enforces a declared list. Cursor carries only a
+  coarse `readonly` boolean; Kimi's `exclude_tools` is not parsed or asserted in that project's Go. The
+  claim that a malformed `tools:` line breaks Pi's loader is unverified and removed. An adapter with no
+  agent-definitions root is missing a declaration, not failing to hold a control no adapter is shown to
+  hold.
 
-- **The profile carries the two authorisations that can ask and no judge row.** A defaulted `Blind judges` was once wanted among the rows a
-  profile would set. `Blind judges` was removed, and the judges were then removed from ordinary
-  review altogether: the review is the lenses `review_tier` licenses, derived from
-  `RiskLevel::lenses` and stated in `skill/policies/blind-judges.md` and linked from
-  `skill/SKILL.md` developer step 5, not selected by an operator row; the two judges
-  survive only as Judgment Day, which an operator asks for. So the `Authorisation posture` row
-  discriminates the two authorisations that can ask and nothing else (`Review delegation: ask` was
-  retired, so that row is no longer one of them), and there is no judge row for it to
-  carry. The reviewed presets are a separate, screen-only choice: choosing one expands into the same
-  `Model routing` cell, and `setup` installs a delegated role only when that cell names it, so
-  `developer` and `analyst` appear only when the operator named them. `analyst` joined all six
-  reviewed presets at each preset's own `judge` tier, crossed by
-  `every_preset_runs_the_analyst_at_its_judge_tier`. What is not measured here: that any host obeys
-  the rendered `model:` line, and that the preset's answer is the one an operator would pick.
+- **The profile carries the two authorisations that can ask and no judge row.** Ordinary review has no
+  judges: it is the lenses `review_tier` licenses, derived from `RiskLevel::lenses` and stated in
+  `skill/policies/blind-judges.md`; the two judges survive only as Judgment Day. The `Authorisation
+  posture` row discriminates the two authorisations that can ask. The reviewed presets are screen-only:
+  choosing one expands into the `Model routing` cell, and `setup` installs a delegated role only when
+  that cell names it. `analyst` is in all six presets at each preset's `judge` tier, crossed by
+  `every_preset_runs_the_analyst_at_its_judge_tier`. Not measured: that any host obeys the rendered
+  `model:` line.
 
 - **An existing installation keeps its rows; a row the table is missing takes the new default, and
-  nothing says so.** `Config::default()` is the balanced posture, but a table is read row by row: an
-  installation carrying the two authorisations as `ask` keeps both of them, while a table
-  whose `Transition authorisation` row is *missing* takes `auto` on the next read — and `setup` rewrites
-  the block whole, so the next `setup` writes that value down. Neither direction is reported. Both
-  are measured on the installed contract by
-  `an_installed_table_keeps_its_rows_and_a_missing_row_takes_the_new_default_on_setup`, and the
-  reading direction alone by
-  `an_existing_table_keeps_its_rows_and_a_missing_row_takes_the_new_default`. What is not measured
-  is the CLI's own `install_planned` layering, which the first test replaces with the config that
-  layering produces.
+  nothing says so.** A table whose `Transition authorisation` row is *missing* takes `auto` on the next
+  read, and `setup` rewrites the block whole, so the value is then written down; neither direction is
+  reported. Measured by `an_installed_table_keeps_its_rows_and_a_missing_row_takes_the_new_default_on_setup`
+  and, for reading alone, `an_existing_table_keeps_its_rows_and_a_missing_row_takes_the_new_default`.
+  The CLI's own `install_planned` layering is not measured.
 
-- **Lens inputs, the refutation batch and the validator are started by `launch_review_input` and recorded by `collect_review_input`; the
-  validator reads a diff the binary rebuilds, not the checkout `inspect_candidate` reads.** `launch_review_input` starts a lens, the `refutation-batch` or
-  `review-validator` that `review_status` offers in a `collect`, and `collect_review_input` is the one
-  caller of `reviewer::settle`, which `launch_recorded` also uses. The collect
-  hands a parsed answer to a recorder callback that answers `Recording`: `Recorded`,
-  `AnswerRejected` or `Refused`. Only an `AnswerRejected` with an unstarted write becomes
-  `reviewer-result-malformed`; the recorder's own statement decides, never a refusal's code or class,
-  because `verify_claim`'s `control-message` and `issue-not-open` are `refused`-class and say nothing
-  about the answer. Every other refusal is returned as it came, with its code, class, outcome and
-  resolution. The folded message keeps the recorder's code and message but not its class or
-  resolution.
+- **`launch_review_input` and `collect_review_input` start and record lens inputs, the refutation batch
+  and the validator; the validator reads a diff the binary rebuilds, not the checkout
+  `inspect_candidate` reads.** `collect_review_input` is the one caller of `reviewer::settle`. The
+  recorder answers `Recording` (`Recorded`, `AnswerRejected` or `Refused`); only an `AnswerRejected`
+  with an unstarted write becomes `reviewer-result-malformed`, never a refusal's code or class. The
+  fourteen codes of `ANSWER_SCOPED` (`src/transport/claim/capture.rs`) are the checks about the
+  answer; `invalid-finding-lens` is not one, and every other failure is `Refused`. A unit test poses
+  all fourteen behind a valid finding and holds the posed set equal to the declared one.
 
-  The lens recorder (`src/transport/claim/capture.rs`) is what decides which refusals say something
-  about the answer: the fourteen codes of `ANSWER_SCOPED`, which are the checks `record_review_finding`
-  makes from the finding's own text, the change and the lineage. `invalid-finding-lens` is not one of
-  them, because the lens is Estigia's own name for the role and never the reviewer's. Every other
-  failure, `verify_claim`'s, `published-transaction-mismatch`, an operation-id conflict, a readback, is
-  `Refused` and is returned to the caller as the failure it was. A unit test poses all fourteen codes
-  behind a valid finding and reads the timeline back empty, and holds the posed set equal to the
-  declared one. A repeated finding `id` is not one of the fourteen: it is a check over the whole answer
-  rather than one finding, and the recorder rejects it as `reviewer-result-malformed` before any write.
-
-  **Atomic is narrower than it sounds.** Every finding is checked before any is written, but the
-  writes are not one transaction. A write that fails after an earlier one landed leaves those findings
-  on the timeline and is reported with world `committed`. Launching again after an abandoned job starts a new
-  reviewer, so it does not resume anything: the findings that landed stay, one the new answer repeats
-  under the same `id` and `class` is read back under the operation id `record_review_finding` mints
-  from the run, the reviewer, the receipt and the finding's `id` and `class`, and every other is added.
-  An answer that repeats an `id` is rejected before any finding is written — the parser refuses one and
-  so does the recorder, as `reviewer-result-malformed`, because a hand-built `RoleResult` never passes
-  through the parser. Those operation ids do not carry the finding's text, so a later answer that gives
-  an `id` a different `class` mints a different id and the earlier finding stays beside it: across
-  answers the ledger can still hold one `id` twice, and that is not measured. A failed finding write is
-  measured by `a_write_that_fails_after_another_landed_is_reported_as_committed`, a failed lens report
-  write after findings landed by
-  `a_lens_report_that_fails_after_a_finding_landed_is_reported_as_committed`, and the two `after_a_write`
-  arms that turn a failed read into a write and a config defect into a committed stop by
+  **Atomic is narrower than it sounds.** Every finding is checked before any is written, but the writes
+  are not one transaction: a write failing after an earlier one landed leaves those findings and
+  reports world `committed`. A relaunch after an abandoned job starts a new reviewer; a finding the new
+  answer repeats under the same `id` and `class` is read back under the same operation id, every other
+  is added. A later answer giving an `id` a different `class` mints a different operation id, so across
+  answers the ledger can hold one `id` twice, which is not measured. Crossed by
+  `a_write_that_fails_after_another_landed_is_reported_as_committed`,
+  `a_lens_report_that_fails_after_a_finding_landed_is_reported_as_committed`,
   `a_read_that_fails_after_a_write_is_reported_as_a_write` and
   `a_config_defect_after_a_write_is_reported_as_committed`. The pre-check does not read
-  `operation-id-kind-conflict`, the replay branch or `verify_claim`, so a kind conflict surfaces as a
-  failed write after earlier writes. `findings_recorded` is the number of findings the capture reads
-  back from the timeline for that lens and receipt, not the count in the answer. `findings` lists
-  those same findings by `id`, `class`, `blocking`, `lens` and `location`, without their text, and
-  `release_ci` answers the receipt's findings in the same shape; the text stays behind `review_read`.
+  `operation-id-kind-conflict`, so that surfaces as a failed write after earlier writes.
+  `findings_recorded` counts what the capture reads back for that lens and receipt; `findings` lists
+  them by `id`, `class`, `blocking`, `lens` and `location` without text, which stays behind `review_read`.
 
-  **A repair is described to the lens.** The criteria handed to the reviewer carry the issue's body and,
-  for a publication with lineage, the parent epoch, the rule that a severe finding new to the repair
-  owes `origin` (`introduced` or `exposed`), and the parent's recorded finding ids. The parent's
-  findings are also passed as the prompt's findings under a heading that names them as the parent's, so
-  a lens reassessing one can cite it in `parent` rather than echo it as new. Without that, a severe
-  answer with no `origin` was rejected as `new-blocker-without-origin` every time and the review stalled
-  on the same `collect`. It is measured by
-  `a_lens_over_a_repair_is_told_so_and_a_severe_answer_with_an_origin_is_recorded`, which also holds
-  that the parent's findings reach the prompt under that heading; the branch where the parent recorded
-  none and an accepted `parent` citation are measured by `a_repair_whose_parent_recorded_nothing_is_told_so`
-  and `a_lens_finding_that_cites_a_recorded_parent_is_recorded`. Whether a reviewer then obeys the
-  instruction is not measured.
+  **A repair is described to the lens.** For a publication with lineage the criteria carry the issue
+  body, the parent epoch, the rule that a new severe finding owes `origin` (`introduced` or `exposed`),
+  and the parent's finding ids, under a heading naming them as the parent's. Measured by
+  `a_lens_over_a_repair_is_told_so_and_a_severe_answer_with_an_origin_is_recorded`,
+  `a_repair_whose_parent_recorded_nothing_is_told_so` and
+  `a_lens_finding_that_cites_a_recorded_parent_is_recorded`. Whether a reviewer obeys is not measured.
 
-  **What the reviewer is handed.** The diff is rebuilt from the receipt the `collect` names and must
-  hash to the `payload-digest` the publication recorded: a marker with none refuses
-  `payload-digest-unavailable` and a mismatch `reviewer-payload-mismatch`, both before the reviewer
-  runs. The criteria are the issue's body, read from GitHub when the capture runs and not from the
-  store, so an edit made since the publication is what the reviewer reads, and an issue with no body
-  is criteria of the empty string. The model is the `reviewer` target of `Model routing`, read from
-  the layered table the transport reads (the contract, `estigia.local.md` and the repository's own
-  rows) and never from an `estigia.<agent>.md` file, so an agent-scoped override is not seen; an entry
-  the tolerant read cannot parse is dropped and the CLI picks its own model. The reviewer is the first
-  `claude`, then `codex`, on `PATH`. A refusal of the launch reaches the caller as a stop under the
-  reviewer's own code, with its resolution as the `action`; its class is the one the table gives the
-  code.
+  **What the reviewer is handed.** The diff is rebuilt from the receipt and must hash to the recorded
+  `payload-digest`: none refuses `payload-digest-unavailable`, a mismatch `reviewer-payload-mismatch`,
+  both before the reviewer runs. The criteria are the issue body read from GitHub when the capture
+  runs, so a later edit is what the reviewer reads. The model is the `reviewer` target of `Model
+  routing` in the layered table, never an `estigia.<agent>.md` file; an unparsable entry is dropped. The
+  reviewer is the first `claude`, then `codex`, on `PATH`; a launch refusal reaches the caller under the
+  reviewer's own code.
 
-  **The refuter is launched, and its distinctness is a context's, not a session's.** For a `refutation-batch` input the binary hands a fresh, tool-free reviewer process the
-  receipt, the rebuilt diff, the issue's body and exactly the finding ids the `collect` lists, and
-  records its answer in one `record_refutation` call credited to `review-refuter`. The distinctness
-  `require_distinct_reviewer` asks of a refuter is that the credited name is neither the publisher nor
-  a requester of a handoff; `review-refuter` is a role label and never a run id, so the capture passes
-  it by construction while the recording run is the publisher. Nothing was changed there: the claim is
-  that the refuter is a separate context, which rests on the launch being a new process that was
-  handed nothing but that input, and not on a separate authoring session, and nothing checks it. A
-  hand call that credits the publisher or a requester is refused `reviewer-not-distinct` exactly as
-  before, measured by `the_capture_credits_the_role_label_while_a_hand_call_naming_the_publisher_is_still_refused`
-  and `a_hand_call_naming_the_requester_of_a_handoff_is_still_refused`. A hand
-  `record_refutation` call is now refused `recorded-by-capture-only` before any of that is read
-  (slice S5b), so a batch under the `review-refuter` label can only be a captured one.
+  **The refuter's distinctness is a context's, not a session's.** For a `refutation-batch` input the
+  binary hands a fresh tool-free reviewer the receipt, the rebuilt diff, the issue body and exactly
+  the offered finding ids, and records the answer in one `record_refutation` call credited to
+  `review-refuter`, a role label never a run id, so `require_distinct_reviewer` passes by construction.
+  The claim rests on the launch being a new process handed only that input, and nothing checks it. A
+  hand call crediting the publisher or a requester is refused `reviewer-not-distinct`
+  (`the_capture_credits_the_role_label_while_a_hand_call_naming_the_publisher_is_still_refused`,
+  `a_hand_call_naming_the_requester_of_a_handoff_is_still_refused`), and a hand `record_refutation` is
+  refused `recorded-by-capture-only`. The answer must name every offered finding once and nothing else,
+  or the whole answer is `reviewer-result-malformed` and nothing is written. The five codes of
+  `REFUTATION_ANSWER_SCOPED` reject it the same way, each posed in a unit test;
+  `refutation-batch-incomplete` is deliberately not one (from the recorder it means a finding was
+  recorded since the `collect`, so it is `Refused`). The batch is one write: no partial case.
+  The ids `review_status` offers and the ids `record_refutation` requires both come from
+  `inferential_population` (every standing inferential severe finding, including one settled as a
+  follow-up), measured by `a_batch_offered_for_a_follow_up_settled_finding_too_is_captured_and_the_review_moves_on`.
+  Not measured: that the refuter read the candidates, and that `refuted` is right — a launched model
+  can drop a true finding. A receipt holds one batch, so a wrong one stands
+  (`refutation-batch-already-recorded`). `launch_and_collect_review_input_run_the_offered_refuter_and_record_the_batch_over_the_real_mcp_server`
+  (Unix) drives it with a stand-in `claude`; no test runs a real reviewer CLI.
 
-  The answer must name every offered finding once and nothing else. A finding named that was not
-  offered, or one offered and left out, rejects the whole answer as `reviewer-result-malformed` before
-  `record_refutation` is called and writes nothing. The five codes of `REFUTATION_ANSWER_SCOPED`
-  (`invalid-refutation-batch`, `invalid-refutation-outcome`, `refutation-batch-duplicate-finding`,
-  `refutation-unknown-finding`, `refutation-includes-deterministic-finding`) are the recorder's own
-  checks of the answer and reject it the same way; the parser already refuses a blank id, a bad
-  outcome and a duplicate, so they are a second line, and each is posed in a unit test.
-  `refutation-batch-incomplete` is deliberately not one of them. The capture raises it against the
-  offered set, where it is the answer's fault. When it comes from the recorder the answer already
-  covered every offered finding, so only a finding recorded since the `collect` can explain it, and
-  the fault is the attempt's: it is `Refused`, under its own code. `reviewer-not-distinct`,
-  `refutation-batch-already-recorded` and every claim, receipt and operation-id code are the attempt's
-  too. The batch is one write, so there is no partial case and `after_a_write` does not apply; a
-  readback failure arrives as world `committed`.
-
-  **One population, two readers.** The ids `review_status` offers in the `refutation-batch` input and
-  the ids `record_refutation` requires a batch to cover come from one function,
-  `inferential_population`: every standing inferential severe finding on the receipt, including one
-  the ledger settles as a follow-up because its `causal_disposition` is `pre-existing` or `base-only`.
-  Offering only the escalated findings once left such a finding out, so the refuter answered what it
-  was offered, the recorder refused `refutation-batch-incomplete` and `review_status` offered the
-  same batch again. Whether the batch is offered at all is still decided by the escalation condition
-  alone. Measured by `a_batch_offered_for_a_follow_up_settled_finding_too_is_captured_and_the_review_moves_on`.
-
-  What is not measured: that the refuter read the candidates rather than guessed, and that an outcome
-  of `refuted`, which drops a finding from the ledger, is right: a launched model can drop a true
-  finding and nothing checks it. A receipt holds one batch, so a wrong one stands and a later
-  capture reads back `refutation-batch-already-recorded`. Over the real MCP server,
-  `launch_and_collect_review_input_run_the_offered_refuter_and_record_the_batch_over_the_real_mcp_server`
-  (Unix only) drives a `collect`, a launch and collect with a stand-in `claude` and the review leaving the
-  `collect`; no test runs a real reviewer CLI.
-
-  **The validator is launched, and what it sees is a diff, a list and a criteria text.** For a `review-validator` input the binary hands a fresh, tool-free reviewer the receipt,
-  the correction's diff over its parent, the parent receipt's severe findings and the issue's body,
-  and records the answer in one `record_validator_result` call. The diff is `review_payload` over
-  `parent.head..head`, the range `inspect_candidate` reads, with the parent taken from the publication's
-  recorded lineage; the whole change is not handed over. When the publication recorded
-  `delta-parent=integrated` — the base advanced, the head contains it and `git merge-tree` merged the
-  parent head and that base without a conflict — the diff, and `inspect_candidate`'s parent side, run
-  from that merged tree to the head instead, and the validator is offered. The capture recomputes the
-  merge, so a recorded flag is never trusted over the repository, but `computed_verdict` reads the
-  flag alone, so a flag whose merge no longer computes leaves the validator owed and refused
-  `validator-delta-carries-upstream` at the capture. The capture refuses the validator when the
-  range is not the correction's own and no such tree separates it — the publication's recorded
-  `delta-range-reason` names a rewritten history, or a base advance or merge that did not integrate
-  cleanly — so a correction whose base moved under it is not validated over upstream work, and
-  `computed_verdict` escalates the same receipt from the same recorded reason instead of offering the
-  validator. A conflicted merge is escalated rather than validated although the budget measures it
-  (`budget-parent=integrated`): the author's resolution is authored lines to charge, and not a diff a
-  validator can attribute to the correction. **Not measured:** the range's honesty is read from the marker's
-  `delta-range-reason`, which an honest range does not carry, so a correction published before that
-  field existed reads exactly like an honest one and is neither refused nor escalated on this ground; a
-  correction published now records `delta-range` when its range is honest and a reason when it is not. The prompt's receipt carries the digest of the very bytes handed to the reviewer,
-  computed from them in the same read, so unlike a lens's `payload-digest` the validator's is
-  self-referential and `reviewer-payload-mismatch` cannot fire for it; the `payload-digest` the
-  publication recorded plays no part and a marker without one does not block the validator. What pins
-  the correction's diff is the two commit ids, which are content addressed, and the isolated diff
-  settings. A validator is handed no
-  `Read`, so a finding whose citation lies outside the correction can be judged only from the diff; the
-  template tells it to say when a citation does not resolve, and nothing checks that it does. A parent
-  that stands rejected with no severe finding is launched with `none` under findings, where the
-  template asks the validator to stop; that state needs a hand-written verdict and was not measured.
-
-  The attempt is never the answer's. The launch reads the timeline and freezes the inconclusive results
-  already recorded for the receipt plus one, using the function the recorder counts with, and mints the
-  operation id from it. A store error writing the `escalated` receipt the result settles is retried
-  once against that same operation id, so a failure that clears leaves the review moving; a second
-  failure is reported with the write's outcome unconfirmed, and the message no longer tells the caller
-  to replay an operation id they cannot see. **Not measured:** the store error the retry answers is not
-  reproducible in the suite, so the retry itself is not measured; `a_second_recording_of_the_same_validator_answer_replays_the_recorded_result`
-  shows a re-recording reads the first result back rather than writing a second, but its escalated-receipt
-  count cannot tell a reuse branch that re-settles from one that returns early — that the branch re-settles
-  is read from `record_validator_result`, not measured. The answer's own shape
-  is checked first with the function the recorder checks
-  with (`validator_shape`), and a refusal there rejects the answer as `reviewer-result-malformed` with
-  nothing written and nothing held; the parser already refuses every shape that check refuses, so it is
-  a second line, posed in a unit test with a blank reason. A conclusive `fail` and an `unavailable`
-  inspection are `Recorded`, never rejected: the first escalates the correction at the limit and stands it rejected below it, and the third
-  `unavailable` escalates it with `validator_inconclusive`. `validator-result-already-recorded`,
-  `validator-attempts-exhausted` and `validator-transaction-not-a-correction` come from the recorder after
-  the reviewer ran and pass through under their own codes. **Open:** `invalid-validator-result` is one
-  code for a bad shape and for an attempt that is not the next one. The capture cannot raise the second
-  itself, but a result recorded by another process between its read and the recorder's would make the
-  recorder raise it, and the capture would return it as `Refused` with the recorder's detail naming the
-  next attempt; the code alone does not say which. That needs two runs holding one claim and is not
-  measured. A validator's `pass` is a launched model's reading of a diff: that it fixed the parent's
-  findings, and broke nothing on the corrected paths, is not checked by anything but that reading.
+  **The validator sees a diff, a list and a criteria text.** For a `review-validator` input the binary
+  hands a fresh tool-free reviewer the receipt, the correction's diff over its parent
+  (`review_payload` over `parent.head..head`, the parent from the recorded lineage), the parent's
+  severe findings and the issue body, and records the answer in one `record_validator_result` call.
+  When the publication recorded `delta-parent=integrated` the diff runs from the merged tree to the
+  head; the capture recomputes the merge, but `computed_verdict` reads the flag alone, so a flag whose
+  merge no longer computes leaves the validator owed and refused `validator-delta-carries-upstream`. A
+  rewritten history, or a base advance that did not integrate cleanly, is escalated by
+  `computed_verdict` from the recorded `delta-range-reason` instead of validated; a conflicted merge is
+  escalated although the budget measures it, since the author's resolution is not a diff a validator
+  can attribute. **Not measured:** a correction published before `delta-range-reason` existed reads
+  like an honest one. The prompt's receipt carries the digest of the very bytes handed over, so
+  `reviewer-payload-mismatch` cannot fire for a validator and a marker without `payload-digest` does
+  not block it; the two content-addressed commit ids and the isolated diff settings pin the diff. A
+  validator is handed no `Read`, so a citation outside the correction can be judged only from the
+  diff, and nothing checks that it says when one does not resolve. A parent standing rejected with no
+  severe finding is launched with `none`; that state needs a hand-written verdict and was not measured.
+  The attempt is frozen at launch (the inconclusive results already recorded plus one) and the
+  operation id minted from it. A store error writing the `escalated` receipt is retried once against
+  the same operation id; the retry is not reproducible in the suite, and
+  `a_second_recording_of_the_same_validator_answer_replays_the_recorded_result` cannot tell a reuse
+  branch that re-settles from one that returns early. The answer's shape is checked with
+  `validator_shape` first (`reviewer-result-malformed`, nothing written). A conclusive `fail` and an
+  `unavailable` inspection are `Recorded`: the first escalates at the limit and rejects below it, the
+  second escalates with `validator_inconclusive`. `validator-result-already-recorded`,
+  `validator-attempts-exhausted` and `validator-transaction-not-a-correction` pass through. **Open:**
+  `invalid-validator-result` is one code for a bad shape and for an attempt that is not the next one; a
+  result recorded by another process between the capture's read and the recorder's would raise the
+  second, and that needs two runs holding one claim and is not measured. A validator's `pass` is a
+  model's reading of a diff.
 
   **The lens focus** a medium change is reviewed under is the receipt's own policy focus, named on the
-  report only when it is not the default, so a recovered lineage's pinned focus does not read as a
-  disagreement with the lens just captured. It is measured by a recovered-lineage fixture and by a
-  default-focus one.
+  report only when not the default; a recovered-lineage and a default-focus fixture measure it.
 
-  The tool is driven over the real MCP server, against a real checkout, a stand-in `gh` and a stand-in
-  `claude` script, by
-  `launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_real_mcp_server` (Unix only): a
-  `collect`, a launch that returns before a two second stand-in has answered, an early collect refused
-  `capture-running`, the collect that records it, the lens leaving the `collect`, the pointer renewed and a
-  second launch refused. The missing-CLI refusal is crossed by a unit test with a selector standing in for
-  `select_adapter`, and not over the wire, because a pipe test cannot make sure no real `claude` sits
-  later on `PATH`. No test runs a real reviewer CLI.
+  The tool is driven over the real MCP server with a real checkout, a stand-in `gh` and a stand-in
+  `claude` by `launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_real_mcp_server`
+  (Unix): a launch returning before a two-second stand-in answers, an early collect refused
+  `capture-running`, the recording collect, and a refused second launch. The missing-CLI refusal is a
+  unit test with a selector standing in for `select_adapter`, because a pipe test cannot ensure no real
+  `claude` sits later on `PATH`.
 
-  `inspect_candidate` takes the parent from the publication's recorded
-  lineage, not from the pull request's history, so a publication recorded without lineage refuses
-  `inspect-parent-missing` even when an earlier one exists on the same pull request, and so does a
-  recovered successor, which is a fresh candidate and not a correction. It is not
-  checked that the parent is on the same pull request. It reads the checkout it is given: with the
-  two commits absent it refuses `reviewer-inspect-transaction-unresolved` rather than fetching them. The
-  tool is driven over the real MCP server against a real checkout and a stand-in `gh` by
-  `inspect_candidate_reads_a_correction_between_two_publications_over_the_real_mcp_server`: a
-  listing, one parent-side object and the first-publication refusal. The other refusal codes are
-  crossed by unit tests only.
+  `inspect_candidate` takes the parent from the recorded lineage, not the pull request's history, so a
+  publication without lineage, or a recovered successor, refuses `inspect-parent-missing`; that the
+  parent is on the same pull request is not checked. It reads the given checkout and refuses
+  `reviewer-inspect-transaction-unresolved` rather than fetching absent commits. Driven over the real
+  MCP server by `inspect_candidate_reads_a_correction_between_two_publications_over_the_real_mcp_server`;
+  the other refusal codes are unit tests only.
 
-- **A reviewer launched through a Windows `.cmd` or `.bat` shim is launched by Rust's standard
-  library, and that path has never run on a Windows host here.** An
-  npm-installed `claude` or `codex` resolves to a shim, and `src/reviewer/run.rs` spawns it with plain
-  `Command::new(program).args(args)`. At the pinned toolchain, 1.98.1, the standard library sends a
-  `.bat` or `.cmd` program through `cmd.exe /e:ON /v:OFF /d /c` with arguments it quotes itself,
-  passes `%` through an escape rather than letting `cmd.exe` expand it, and returns `InvalidInput` for
-  an argument it cannot pass, which `run.rs` reports as `reviewer-launch-failed`; a missing shim is
-  still `NotFound`, so `reviewer-cli-missing`. gentle-ai v4 needs its own
-  `windows_batch_cmdline.go` because Go's `os/exec` does none of this. A port of that file was written,
-  reviewed and closed unmerged: it was a weaker second copy of the standard library's rule,
-  without `/v:OFF` and refusing a `%` the standard library passes. The standard library's own
-  `std::process` documentation at 1.98.1 says the set of characters it cannot escape may change
-  between releases and that launching a batch script this way may be removed, so a toolchain bump
-  can move this path and nothing here would notice. What is **not** measured: that npm's shim
-  forwards each argument intact through `%*`, that the Job Object contains `cmd.exe` and the `node`
-  it starts, and that a reviewer argument survives the round trip at all. The TUI's catalog probe
-  refuses a script launcher because its process tree cannot be bounded
-  ([`configuration.md`](configuration.md)); the reviewer path does not consult that check, so the
-  two diverge on the same launcher. Nothing here
-  runs on Windows while the CI lane is off, and a cross-check for a Windows target stops in
-  `libsqlite3-sys`'s C build on a host without MinGW.
-
-- **The TUI refuses a `.cmd` launcher as uncontainable and the reviewer launches one, and the
-  divergence stands.** `src/tui/models.rs` returns early when
-  `process_tree::launcher_can_be_contained` is false, which on Windows is anything but `.exe` or
-  `.com`; `src/reviewer/run.rs` never asks and attaches a kill-on-close Job Object after the
-  spawn. It stands because the reviewer's cleanup rests on that Job Object, and because a common npm
-  layout puts `claude` and `codex` behind a `.cmd` shim, so refusing there would stop reviewers on
-  those installs. The divergence is the one the entry above names, linked and not restated. What would
-  settle it is a Windows run showing that the Job Object kills `cmd.exe` and the `node` child it
-  starts at the deadline. No such run exists: the CI lane is off. Until one does, neither
-  choice is measured, and the TUI guard stays as it is.
+- **A reviewer launched through a Windows `.cmd` or `.bat` shim is launched by Rust's standard library,
+  and that path has never run on a Windows host here.** `src/reviewer/run.rs` spawns with plain
+  `Command::new(program).args(args)`. At the pinned toolchain (1.98.1) the standard library sends a
+  `.bat`/`.cmd` through `cmd.exe /e:ON /v:OFF /d /c` with its own quoting and returns `InvalidInput` for
+  an argument it cannot pass (`reviewer-launch-failed`); a missing shim is `reviewer-cli-missing`.
+  Its documentation says the set of characters it cannot escape may change between releases, so a
+  toolchain bump can move this path unnoticed. **Not measured:** that npm's shim forwards each argument
+  through `%*`, that the Job Object contains `cmd.exe` and the `node` it starts, and that an argument
+  survives the round trip. The TUI's catalog probe refuses a script launcher because its tree cannot be
+  bounded ([`configuration.md`](configuration.md)) while the reviewer path does not ask and attaches a
+  kill-on-close Job Object after the spawn; the divergence stands because reviewer cleanup rests on that
+  Job Object and refusing would stop reviewers on common npm layouts. A Windows run showing the Job
+  Object kills `cmd.exe` and its `node` child would settle it; none exists while the CI lane is off.
 
 - **A reviewer's answer is read for what its text alone settles, not for what the trees or the ledger
-  settle.** `src/reviewer/result.rs` is not called by any command yet. For a
-  finding `parse` makes every check `record_review_finding` makes from the answer's text: the id and
-  that ids do not repeat, the class, the vocabularies (a blank word is refused), the severe
-  declarations, that a location is present and read by `parse_finding_location`, that `evidence` and
-  `impact` say something, and that no citation in either is a malformed path. The recorder can still
-  refuse an admitted answer on checks that need the trees or the ledger: a citation's path or line
-  existing in base or head, a location inside the diff, a `parent` it recorded, a new severe finding of
-  a repair stating its `origin`, and a refuter answering every candidate. The slice that wires `parse`
-  must treat such a refusal as the reviewer's answer being unusable, not as a recorded result. The
-  recorder has no per-finding text ceiling; `FINDING_TEXT_CEILING` bounds only a later read of the
-  findings. The prompt delimits the diff with its byte count and digest rather than an escape, so a
-  diff that itself contains the closing marker is told apart by those two only if the reviewer reads
-  them, which nothing enforces.
+  settle.** For a finding `parse` makes every check `record_review_finding` makes from the answer's text
+  (id uniqueness, class, vocabularies, severe declarations, a location read by
+  `parse_finding_location`, non-filler `evidence` and `impact`, no malformed citation path). The
+  recorder can still refuse an admitted answer on checks needing the trees or ledger: a citation's path
+  or line in base or head, a location inside the diff, a recorded `parent`, a repair's `origin`, a
+  refuter covering every candidate; such a refusal means the answer is unusable, not recorded. The
+  recorder has no per-finding text ceiling (`FINDING_TEXT_CEILING` bounds only a later read). The
+  prompt delimits the diff with its byte count and digest rather than an escape, so a diff containing
+  the closing marker is told apart only if the reviewer reads those, which nothing enforces.
 
 - **A binary-launched reviewer is isolated by an allow-list on Claude Code and a deny-list on Codex.**
-  `src/reviewer/` is not called by any command yet. `claude` runs with
-  `--tools ""`, `--strict-mcp-config`, no session and no settings sources, so it is given nothing and
-  a tool added in a later release stays off. `codex exec` has no equivalent switch. It runs
-  `--sandbox read-only` with `--disable` for each stable, enabled feature that grants a tool or
-  outside access on codex-cli 0.159.2 — `shell_tool`, `unified_exec`, `unified_exec_tty`,
-  `write_stdin_approval`, `sleep_tool`, `code_mode_host`, `view_image`, `image_generation`, `apps`,
-  `plugins`, `plugin_sharing`, `remote_plugin`, `skill_mcp_dependency_install`, `skill_search`,
-  `tool_suggest`, `browser_use`, `browser_use_external`, `browser_use_full_cdp_access`,
-  `computer_use`, `in_app_browser`, `in_app_local_automation`, `hooks`, `multi_agent` — and with
-  `shell_environment_policy.inherit=none`. **A tool-granting feature a later Codex adds is not denied
-  until it is added to that list**, and a read-only sandbox alone still lets a shell read files and
-  print them as the answer. Nothing measures the list against the installed Codex. Both children get
-  a cleared environment plus a fixed allow-list, matched without regard to case because Windows spells
-  `Path` and `SystemRoot` that way. The list is the tracker transport's own — `PATH`, `PATHEXT`, `COMSPEC`,
-  `SYSTEMDRIVE`, `SYSTEMROOT`, `WINDIR`, `TEMP`, `TMP` and `TMPDIR` — plus the reviewer's: `HOME`, the
-  platform's profile names, locale, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`,
-  `ANTHROPIC_AUTH_TOKEN`, `CODEX_HOME`, `OPENAI_API_KEY` and `OPENAI_BASE_URL`. So `GH_TOKEN` does not
-  reach them. `AWS_*`, `GOOGLE_*` and the Bedrock and Vertex switches are not on it: a reviewer routed
-  through either refuses as unavailable until that is decided. Claude runs with
-  `--output-format json`, not `text`, because `claude -p` is reported to exit 0
-  with an API error as its text. One run of each real CLI, by hand on 2026-10-06, is the whole of the
-  evidence that they accept these arguments: claude 2.1.292 with this argument list answered
-  `{"type":"result","subtype":"success","is_error":false,"result":"ok"}` on exit 0, and codex-cli
-  0.159.2 with this argument list started and failed only on authentication. Nothing re-runs that
-  check, the error-result shape was not seen, and the tests drive a stand-in CLI. Classifying a
-  failure as unavailable is a heuristic over the last 2 KiB of the reviewer's error text after its
-  echoed prompt is removed, so it can still misname a cause; every such code blocks, and none passes
-  or skips.
-- **A reviewer runs detached from the call that started it, and a collect records its answer.** `launch_review_input` writes a job directory under `~/.estigia/jobs/`,
-  records the job against its slot and re-executes this binary as `estigia __review-job <dir>`, detached
-  (a session of its own on Unix); the runner takes an exclusive lock on `<dir>/lock` for its whole life,
-  runs the adapter `select_adapter` returns exactly as the foreground path did (so the deadline, the
-  output caps and the tree kill are the same) and leaves `result.json` atomically, with the provider's
-  own usage counters in `usage.json` beside it when the CLI reported any. It opens no ledger.
-  `collect_review_input` decides what that result means: only the launching run collects, `review_status`
-  is read again and a receipt that moved discards the job as stale, and an answer is admitted by moving
-  the job `running` to `admitting` in one `BEGIN IMMEDIATE` transaction, writing through the unchanged
-  recorders and ending `admitted`. The recorders write under operation ids that are the same on every
-  attempt, and the validator's attempt is frozen at launch, so a job a crash left `admitting` is admitted
-  again without a second result; a unit test crashes the admission after the result landed and counts one
-  result. Liveness is the lock and the file, never the process id: a held lock is running, a result is
-  finished, a free lock with no result is lost. What that does **not** prove. A `lost` job says the
-  runner is gone, not why, and nothing reads `runner.err` for a cause. A runner killed after the
-  reviewer answered and before the rename leaves no result and reads as lost. A runner still alive a
-  minute past its deadline has its process group killed by the collect that finds it, but on Unix only the
-  runner's group: the reviewer CLI the runner started is in a group of its own and is bounded by the
-  runner's deadline, not by that kill; on Windows `taskkill /T /F` is used and was never run. A job whose
-  run died holds its slot until it finishes or is found lost, and a launch from another run then takes
-  the slot over; while the runner is alive that launch is refused `capture-already-running`. A collect
-  whose job was left `admitting` by a crash after the whole answer landed finds `review_status` no longer
-  offering the input and marks the job stale; nothing is lost, and nothing is re-recorded. The unit tests
-  run the runner body on a thread; the real detached spawn is crossed by `tests/pipe/review_job.rs` and by
-  the two `launch_and_collect_review_input_*` pipe tests, Unix only, and nothing exercises the Windows flags
-  (`DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB`) or a breakaway
-  refusal, which returns `review-job-detach-refused` by inspection of the OS error alone. The
-  manifest and the result carry a format version and either side refuses another, because a binary
-  replaced mid-session may be the one that runs the runner. `review_status` reads the job table and
-  each job's lock for every collect input, and a lock probe that finds the lock free takes it for an
-  instant, so a probe landing between the runner creating its lock file and locking it makes that
-  runner refuse to start (read from `take_lock`, never reproduced by a test); and a job whose lock
-  file does not exist yet reads as lost and is named for collection. It does not know which run asked, so a finished job another run
-  launched is named `collect_review_input`, which that run's collect refuses `capture-job-other-run`;
-  a launch from the asking run would take the slot over. A job directory is never removed except its
-  `result.json`, which is deleted after admission, and `usage.json` is left beside it: `~/.estigia/jobs/` grows until a later slice cleans it.
+  `claude` runs with `--tools ""`, `--strict-mcp-config`, no session and no settings sources, so a tool
+  added later stays off. `codex exec` has no equivalent: it runs `--sandbox read-only` with `--disable`
+  for each stable tool-granting feature on codex-cli 0.159.2 (`shell_tool`, `unified_exec`,
+  `unified_exec_tty`, `write_stdin_approval`, `sleep_tool`, `code_mode_host`, `view_image`,
+  `image_generation`, `apps`, `plugins`, `plugin_sharing`, `remote_plugin`,
+  `skill_mcp_dependency_install`, `skill_search`, `tool_suggest`, `browser_use`,
+  `browser_use_external`, `browser_use_full_cdp_access`, `computer_use`, `in_app_browser`,
+  `in_app_local_automation`, `hooks`, `multi_agent`) and `shell_environment_policy.inherit=none`. **A
+  tool-granting feature a later Codex adds is not denied until added to that list**, a read-only sandbox
+  alone still lets a shell read files and print them, and nothing measures the list against the
+  installed Codex. Both children get a cleared environment plus a fixed allow-list matched without
+  regard to case: the transport's `PATH`, `PATHEXT`, `COMSPEC`, `SYSTEMDRIVE`, `SYSTEMROOT`, `WINDIR`,
+  `TEMP`, `TMP`, `TMPDIR` plus `HOME`, the platform's profile names, locale, `CLAUDE_CONFIG_DIR`,
+  `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `CODEX_HOME`, `OPENAI_API_KEY` and
+  `OPENAI_BASE_URL`. `GH_TOKEN` does not reach them; `AWS_*`, `GOOGLE_*` and the Bedrock and Vertex
+  switches are not on it, so a reviewer routed through either refuses as unavailable. Claude runs with
+  `--output-format json` because `claude -p` is reported to exit 0 with an API error as its text. One
+  hand run of each real CLI (2026-10-06; claude 2.1.292 answered success on exit 0, codex-cli 0.159.2
+  started and failed only on authentication) is the whole evidence that they accept these arguments;
+  nothing re-runs it and the tests drive a stand-in. Classifying a failure as unavailable is a heuristic
+  over the last 2 KiB of error text after the echoed prompt is removed, so it can misname a cause; every
+  such code blocks.
+
+- **A reviewer runs detached from the call that started it, and a collect records its answer.**
+  `launch_review_input` writes a job directory under `~/.estigia/jobs/`, records the job against its
+  slot and re-executes `estigia __review-job <dir>` detached; the runner holds an exclusive lock on
+  `<dir>/lock` for its life, runs the adapter `select_adapter` returns and leaves `result.json`
+  atomically (provider usage in `usage.json`). `collect_review_input` is collected only by the
+  launching run; a receipt that moved discards the job as stale; admission moves the job `running` to
+  `admitting` in one `BEGIN IMMEDIATE` transaction and ends `admitted`. Operation ids are the same on
+  every attempt and the validator's attempt is frozen at launch, so a job a crash left `admitting` is
+  admitted again without a second result. Liveness is the lock and the file, never the process id.
+  **Not proven:** a `lost` job says the runner is gone, not why (nothing reads `runner.err`); a runner
+  killed after the answer and before the rename reads as lost; a runner alive a minute past its
+  deadline has its group killed by the collect that finds it, but on Unix only the runner's group —
+  the reviewer CLI is in a group of its own, bounded by the runner's deadline — and on Windows
+  `taskkill /T /F` was never run. A dead run's job holds its slot until it finishes or is found lost;
+  while the runner is alive a launch from another run is refused `capture-already-running`. The unit
+  tests run the runner on a thread; the real detached spawn is crossed by `tests/pipe/review_job.rs`
+  and the two `launch_and_collect_review_input_*` pipe tests (Unix), and nothing exercises the Windows
+  flags or a breakaway refusal (`review-job-detach-refused`). The manifest and result carry a format
+  version either side refuses. A lock probe landing between the runner creating and locking its lock
+  file makes the runner refuse to start (read from `take_lock`, never reproduced), and a job whose lock
+  file does not exist yet reads as lost. `review_status` does not know which run asked, so a finished job
+  another run launched is named for `collect_review_input`, which that run refuses
+  `capture-job-other-run`. A job directory is never removed except `result.json` after admission, so
+  `~/.estigia/jobs/` grows.
 
 ## Node, CI and the actions that run the suite
 
-- **Raising the checkout action did not close this repository's Node 20 exposure — a later change did,
-  four actions and one transitive pair later.** `actions/checkout` moved from `v4` to `v7` because
-  `v4` declares `runs.using: node20` and every run printed *"being forced to run on Node.js 24"*. It
-  was one of **five**, and four of them kept printing that warning for another five weeks. The table
-  below is the measurement as it stood before that change, kept because it is the reading the change was made
-  from; the closing paragraph says what each row is at the delivered head.
+- **Every direct action in both workflows that declares a Node runtime is on `node24`; the workflow
+  guard reads lines, not YAML, and has known blind spots.** `dtolnay/rust-toolchain` and the composite
+  `actions/attest-build-provenance@v3` declare none (shell steps and two pinned `node24` children,
+  read at the commits `v3` names). The guard holds a per-action floor table (`RUNTIME_FLOORS`) and a
+  completeness check (`ACTIONS_WITHOUT_A_NODE_RUNTIME_FLOOR`) refusing any versioned action in either
+  workflow missing from both lists, so an unread action is a red test. Each floor was measured by
+  putting the old major back and seeing the guard redden.
 
-  Every `uses:` line in both workflows, with `runs.using` read from that action's own `action.yml` at
-  the ref the workflow named:
+  **What the guard cannot do.**
+  - It cannot bound a composite's *children*: `@v3`'s pins were read by hand, so a future `@v4` that
+    repinned a `node20` child would not be caught. Closing it means parsing another repository's YAML.
+  - It does not reach a `uses:` that names no `@ref` (a local action, an unpinned `docker://image:tag`,
+    a spelling the line reader does not split). A digest-pinned `docker://` or commit-pinned
+    `foo/bar@<sha>` is parsed and an unlisted one reddens; what stays unbound is a commit pin's major.
+    `dtolnay/rust-toolchain@stable` is caught because it is hand-listed.
+  - The run of legal spellings found so far (flow-style steps, folded values, quoting, key case,
+    indentation, `with:` above `uses:`) were each closed by reading each line's key and value, and
+    **a `steps:` that yields no step is refused, whatever the reason**, as is a `jobs:` whose value is
+    a mapping, so an unreadable spelling is a red with a message rather than a file nobody read. A
+    flow-style step is refused rather than skipped. A setting counts only if it is under the step that
+    reads it: `cache-on-failure` is read from under `with:` with comments stripped, keys and values
+    unquoted and case-folded; `save-if` is read as the action's `save.ts` reads it (saves only when the
+    lowercased input is exactly `true`), leaving a `${{ … }}` alone.
+  - Not run: `cache-on-failure: yes` is refused, and whether GitHub hands the action `yes` or `true`
+    was never read; `lookup-only:`'s effect on saving is not measured and the guard does not read it.
 
-  | Action | Where | `runs.using` before | After |
-  |---|---|---|---|
-  | `actions/checkout@v7` | `ci.yml`, `release.yml` | `node24` — raised earlier | unchanged |
-  | `dtolnay/rust-toolchain@stable` | `ci.yml` | `composite`, shell steps only | unchanged |
-  | `Swatinem/rust-cache@v2` | `ci.yml` | `node24` | unchanged; floor `v2` |
-  | `actions/setup-node` | `ci.yml` (`release.yml` until #135) | **`node20`** at `v4` | `v5`, `node24` |
-  | `actions/upload-artifact` | `release.yml` | **`node20`** at `v4` | `v6`, `node24` |
-  | `actions/download-artifact` | `release.yml` | **`node20`** at `v4` | `v7`, `node24` |
-  | `softprops/action-gh-release` | `release.yml` | **`node20`** at `v2` | `v3`, `node24` |
-  | `actions/attest-build-provenance` | `release.yml` | `composite`; 2 pinned children both `node20` | `v3`; children both `node24` |
-
-  So the warning still appeared, and the argument used to raise the checkout in `release.yml` — that a
-  tag-triggered workflow which will not start publishes nothing and cannot be retried by pushing a
-  fix — still applied to that lane **four times over** — all four direct `node20` actions were in
-  `release.yml` — plus the composite's two. **Closed**: every direct action that declares a Node runtime is on `node24` at the major named — the
-  two direct actions that declare none are `dtolnay/rust-toolchain` and the composite
-  `attest-build-provenance`, which run shell steps and pinned children respectively — and
-  `attest-build-provenance` is at `v3` where the
-  children it pins are `node24` (both read at the exact commits `v3` names). The guard below now
-  reads every action rather than the checkout alone. Every input each raised action received is
-  unchanged: `setup-node` still takes `node-version: '22'`, `upload-artifact` the same `name`, `path`
-  and `if-no-files-found`, `download-artifact` the same `path` and `merge-multiple`, `attest` the
-  same `subject-path`, and `action-gh-release` the same `files` and `fail_on_unmatched_files` — read
-  from each new major's `action.yml`, not assumed.
-
-  `attest-build-provenance@v2` was composite and pinned two actions of its own at commits rather than
-  tags, and both declared `node20` — read from those exact commits, not inferred from a tag:
-  `actions/attest@ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc` and
-  `actions/attest-build-provenance/predicate@1176ef556905f349f669722abf30bce1a6e16e01`. **`@v3` is
-  composite too**, pinning `actions/attest@daf44fb9…` and `.../predicate@864457a5…`, **both
-  `node24`** at those commits. So the transitive pair closed with the one-line bump, which is what
-  this entry's earlier notes first called unreachable and then called the cheapest item.
-
-  What the guard reads now, and what it still cannot: it holds a per-action floor table
-  (`RUNTIME_FLOORS`) with a completeness check (`ACTIONS_WITHOUT_A_NODE_RUNTIME_FLOOR`) that refuses
-  any versioned action in either workflow missing from both lists, so an action nobody read is a red
-  test rather than a silent pass. Each floor was measured by putting the old major back and seeing the
-  guard redden — all five of those actions, including the composite's own `v3 → v2`, plus a `rust-cache`
-  downgrade and an invented unlisted action.
-  It still cannot bound a composite's *children*, because it does not open the composite: `@v3`'s pins
-  are read here by hand, not by the test, so a future `@v4` that repinned a `node20` child would not be
-  caught. That is the same class as the commit-pin blind spot tabulated below — a version a line does
-  not carry — and it is left stated rather than closed, since closing it means parsing another
-  repository's YAML. Nor does it reach a `uses:` that names no `@ref` at all — a local action, an
-  unpinned `docker://image:tag`, or a spelling this line reader does not split — because the check runs
-  only after an action name is parsed. A *digest-pinned* `docker://` reference is not that case: it
-  carries an `@`, so `versioned_action` parses it, it is looked up, and an unlisted one reddens. A
-  *commit pin* is not that case either: `foo/bar@<sha>` parses, is looked up, and an unlisted one
-  reddens; what stays unbound is its major, which is the hole already named above.
-  `dtolnay/rust-toolchain@stable` is caught because it is hand-listed, not because the shape is
-  refused. The two remaining blind spots are not the same one: a composite's unread *children* are a
-  version the guard cannot read, while a `uses:` that names no `@ref` is an *action* it cannot read.
-
-  **The guard's other half did not decide, and that is still true.** Seven rounds of review on the
-  earlier change found defects only in prose, which made a comfortable story: the code was right and
-  only the writing was wrong. The eighth round mutated the workflow instead of reading it, and the
-  story was wrong too. `cache-on-failure: true` was checked by searching the whole file for that text, so three
-  ways of turning the fix off left the suite green — commenting the option out above a `rust-cache`
-  left on its defaults, parking the option on some other step, and deleting the caching step
-  altogether. The checkout half had stripped comments from its first line; the cache half never did,
-  and the two sat eight lines apart in one function. It now reads the block under
-  `Swatinem/rust-cache@` with comments stripped, and all three are red. **A setting is only on if it
-  is under the step that reads it; a guard that searches the file instead checks that somebody typed
-  the words.**
-
-  That same half also carried a borrowed justification. Its comment said the issue had ruled out
-  caching anywhere but `ci.yml`. The issue's out-of-scope line rules out caching *anything other than
-  cargo* — which is exactly what `rust-cache` caches, so it permits what the assertion forbids.
-  Keeping the release lane uncached is this repository's own judgement, and the comment says so now,
-  with the condition under which the line should go. It used to give a mechanism — that the lane
-  builds each target once, so a cache would be written and never read — which is a claim about
-  GitHub's cache scoping that was not measured either.
-
-  **What the guard has been found not to catch.** Every row below was produced by writing the
-  workflow a different legal way and running the guard against it. This is a list of what has been
-  run, not a census: nobody has enumerated the blind spots of a matcher that reads lines, and the
-  count is left off because a count is a claim to have finished looking. The third column is what
-  was *not* run — `lookup-only:`'s effect on the action's saving, not the guard's answer, which is
-  measured and is that it does not read it.
-
-  | Passes but should not | Fails but should not | Not measured |
-  |---|---|---|
-  | a checkout pinned to a **commit** — no version string to floor | a flow-style step, `- { uses: …, with: { … } }` | `cache-on-failure: yes` — refused, and whether GitHub hands the action `yes` or `true` was never read |
-  | a caching step under `if: false`, **wherever a cache is allowed** | | `lookup-only:` — not read, and its effect on saving not measured |
-  | a `uses:` folded onto the next line, **in a third workflow** | | |
-
-  They are not one kind of thing, and an earlier version of this paragraph said they were. Two are
-  about **meaning** a line cannot carry — a commit pin names no version, and `if: false` reads
-  exactly like a step that runs. Two are about **syntax this reader does not handle**, flow style and
-  folded values, and those a YAML parser would close. And two are simply **unread**, which is a third
-  column rather than a hedge inside one of the other two: `yes` sat under *fails but should not*, and
-  whether it should is a question about GitHub's parser that nobody here has asked. The action
-  compares its input against the literal string `true`, so refusing `yes` may well be right.
-
-  **A sixth row was taken off this table as fixed and was not.** It read *the option written under
-  `env:` or in any key but `with:`*. What got measured was a `with:` holding a `NOTE:` that quotes
-  the words — a different thing — and the row was deleted on it. Written as the row says, `env:` then
-  `cache-on-failure: true` under the caching step, the suite stayed green while the option was inert:
-  the action reads the input `INPUT_CACHE-ON-FAILURE`, which only `with:` writes, and its `post-if`
-  looks for `CACHE_ON_FAILURE`. Deleting a row for a run of something adjacent to it is the failure
-  this entry is a record of, committed inside the paragraph describing it. It is closed now, by
-  reading the inputs from under `with:` rather than from the step, and this paragraph is what is left
-  of the row.
-
-  The folded-scalar row carries *in a third workflow* because it does not reproduce where a reader
-  would first try it: written into `ci.yml` or `release.yml` the guard goes red instead, on the floor
-  that says those two lanes must check something out. The row used to be unqualified, and a review
-  ran it in the two files the entry is about and got the opposite column — a row describing a
-  behaviour nobody had reproduced in the place it names.
-
-  That distinction matters because the paragraph that stood here said *"four holes and two false
-  alarms"*, said the left column needed a YAML parser, and said the right one needed a decision. A
-  review then found six more by the method this paragraph prescribes, and none of the three sentences
-  survived them: two of the six were case — `Actions/Checkout@v4` names the action a floor exists to
-  refuse and slipped both floors — one was a different action whose path ends in this one's name, and
-  three were a step title, an `if:` and a `with:` value quoting the word `uses:` beside a version. Not
-  one is a meaning problem, and a parser would have closed none of them; they were comparisons of raw
-  text that never normalised case or found where the key ended. All six are closed, by reading each
-  line's key and value instead of searching it. **A number after a list of limits is the same
-  assertion this whole entry is about** — the edge of what was measured, stated as the edge of what
-  is there.
-
-  The round after that made the point again on the same function. `runs_action` was given three
-  normalisations — the key, the prefix, the case — and its comment said the six were closed by them.
-  Quoting is the fourth axis of the same normalisation and was not looked at, so `uses:
-  "actions/checkout@v7"`, ordinary YAML, stopped being a step: a correct workflow refused *and* a
-  quoted `@v4` waved through a floor in a third lane, which is the case the widening exists for.
-  This document had already recorded a guard of this repository's defeated by a leading quote,
-  twice. Values are unquoted now, and the caching option is read as a key and a value too — searching
-  the step for the literal text refused `cache-on-failure:  true` over a second space, eight lines
-  from the half that had just been taught to read keys.
-
-  **`save-if` was read from its description and not from its code.** The description says *"if
-  `false`, the cache is only restored"*, so the guard refused the literal `false` — and `no`, `off`,
-  `0`, `n`, `nope` and a quoted `"no"` each stopped every run saving while the suite stayed green.
-  The action's `save.ts` does not test for `false`; it saves only when the lowercased input reads
-  exactly `true`. That one line is the whole rule, and reading the prose beside it instead was the
-  same act as inheriting a count: taking the nearest available sentence for the measurement. The
-  guard now asks what the action asks, and leaves a `${{ … }}` alone, because what an expression
-  evaluates to is not in this file.
-
-  **And the fold reached the action and the value, not the key beside them.** `Save-If: false`
-  turned off saving on **every** run — green ones too, which is worse than anything round eight
-  closed — and the suite stayed green, while `Cache-On-Failure: true`, a spelling that works, was
-  refused. GitHub hands an input to an action as `INPUT_<NAME>` upper-cased and its own input map
-  compares without case, so those are the same settings as the lowercase ones. Three rounds running,
-  one normalisation was applied to whatever was being looked at and not to its neighbour: the action
-  name and not the key, the value and not the key, the key's spacing and not its case. Both sides are
-  folded now.
-
-  A step's keys are an unordered mapping too, and `- with:` written above the step's own `uses:` was
-  refused, because the search for `with:` began one line after the step opened.
-
-  **The refusal written for that was wrong in both directions at once.** Refusing every `- {` in a
-  workflow refused a `matrix: include:` entry and a flow mapping used as an item of an input's
-  value — correct files, told they had written a step they had not — while a whole `steps:` written
-  as a flow *sequence*, `steps: [{ uses: Swatinem/rust-cache@v2 }]`, still passed green with the fix
-  off, because it has no `- ` items to refuse. A step is an item of a job's `steps:`, so that is
-  what is read now: items at the shallowest `- ` depth inside a `steps:` block, plus the block
-  written as a sequence. Two more of the same shape went with it — a block step whose `with:` is one
-  flow mapping was refused, and the option written a level *below* `with:` passed, which is the row
-  this entry says it closed surviving one level in.
-
-  **The run of rounds this took is itself the measurement, and the table below is where it is
-  counted.** Each one found another legal spelling; each fix was right and the next spelling was not
-  covered. That is not bad luck, it is what reading YAML a line at a time costs, and the entry has
-  said since the twelfth round that closing the left-hand column properly means parsing rather than
-  reading. Nothing here adds a parser — that is a dependency this issue did not ask for — so what is
-  written instead is the ceiling: this guard reads the block style these two workflows are written
-  in, refuses what it cannot take apart, and the table below records every legal thing it got wrong
-  on the way. This paragraph gave the count as a number for three rounds after the number stopped
-  being right, which is the smaller cousin of the branch that could not count its own commits: the
-  row count is a fact about the table and stays current; a round count is a fact about the future.
-
-  **Four rounds of closing one spelling each, and a newline walked past all four.** `- {`, items in
-  the key's own column, `-  {` with two spaces, `steps: [` — each was measured, each fix was right,
-  and putting the `[` on the line *after* `steps:` was read by none of them: no `- ` items, so
-  nothing to inspect, so nothing refused. A lane checking out with `@v4` and carrying a bare
-  `rust-cache` inside one measured green. A `jobs:` written as a single flow mapping did the same,
-  with no `steps:` line to find at all.
-
-  What is written now is not the fifth spelling. **A `steps:` that yields no step is refused,
-  whatever the reason**, and so is a `jobs:` whose value is a mapping. That is the invariant the
-  four were each an instance of, and it inverts the failure mode: a spelling this reader does not
-  handle is a red with a message rather than a file nobody read. It is the shape the entry should
-  have reached for at the twelfth round, when it first wrote that this needs parsing — refusing what
-  cannot be read is the honest half of that sentence, and it costs no dependency.
-
-  **And the flow-style row was in the wrong column outside the two lanes it had been run in.** It
-  sat under *fails but should not*, which is what happens in `ci.yml` and `release.yml`: the guard
-  reads `- { uses: … }` as no step at all, and the floors that say those two files must have a
-  checkout and a caching step turn the miss into a red. A **third** lane has no such floor, so
-  `- { uses: Swatinem/rust-cache@v2 }` discarded every red run's cache and the suite stayed green —
-  the opposite column, in the case the loop was widened for. The same row shape as the folded scalar
-  one, whose qualifier was added two rounds earlier by a review that ran it somewhere else; this one
-  was never run anywhere else. A step written in flow style is refused rather than skipped, with a
-  message saying the guard cannot read it rather than that it has checked it. Refusing a correct
-  flow-style step is the price, and it is what the row already said.
-
-  **That refusal said *everywhere* and meant one indentation.** A block sequence may begin in its
-  key's own column — `steps:` and then `- uses:` at the same indent is ordinary GitHub Actions
-  style — and the walk that collected a `steps:` block required its items to be *deeper*. At that
-  indentation the block came back empty, so nothing was read and nothing was refused: a third lane
-  could check out with `@v4` **and** carry a bare `rust-cache`, both halves of this change off, with
-  the suite green and no message. The one-column-deeper form was refused correctly, which is why the
-  round that wrote it saw what it expected. The block now ends at the first line that is neither
-  deeper nor an item at the key's own column, and this paragraph is what is left of the word
-  *everywhere*.
-
-  **And the refusal that replaced it matched two literal bytes.** A block sequence item is a dash and
-  any run of spaces, so `-  { uses: … }` counted as an item and was not refused — neither read nor
-  rejected. Measured: `ci.yml` itself checking out with `@v4`, `ci.yml` carrying a bare
-  `rust-cache`, `release.yml` gaining one past the assertion written to stop exactly that, and a
-  third lane with both halves off — all green, at two, three and five spaces, while one space went
-  red. Round twenty-one closed one indentation; this was the same defect at one spacing. An item is
-  read by what it holds now, not by how far the dash is from it.
-
-  The same round's other new rule read a flow mapping only when it closed on the line that opened
-  it. `with: {` with the pairs beneath and the brace on its own line is legal, correct, and was
-  refused — with a message saying a red run's cache was being discarded, which is a diagnosis about
-  the workflow rather than about the reader that stopped.
-
-  **Two rows of that same table, each fixed alone, were never run together.** A `cache-directories:`
-  sequence ends a step early; `- with:` above `uses:` hides the step's opening. Written at once — a
-  `- with:` step whose `with:` holds a sequence — the walk back for the opening landed on the
-  sequence item *inside* the step, and a correctly configured action was reported as discarding its
-  caches. A step's opening is now required to be shallower than everything between it and the line
-  being read.
-
-  Its neighbour `lookup-only:` is in the table above rather than in the code, because what it does
-  to saving is a thing to measure and I have not — which is the difference between an unread input
-  and one whose behaviour was guessed at from the sentence beside it.
-
-  **A branch cannot count its own commits in a document it commits.** The pull request body said
-  *seventeen commits, sixteen corrections, eleven touching the test*. It had been written at the
-  seventeenth and published on top of the eighteenth, so all three numbers were short by one — the
-  same defect as the round before, where the body had been left ten rounds unread and was wrong by
-  nine. The second time it was not staleness: the arithmetic was true when written and the act of
-  publishing it made it false. So the body says no number now. A count of a moving thing, written
-  into that thing, is not a measurement that can hold, and rewriting it more carefully would only
-  have moved when it broke.
-
-  **And the same body halved the exposure it was summarising.** It said *"four `node20` actions
-  remain, two of them transitive"*. This entry says four **direct** `uses:` lines and, in its own
-  words, that the transitive pair *"is not counted in the four above"*: the measurement is six.
-  Somebody scoping the follow-up from the summary rather than the entry would have raised four and
-  left two — which is, to the action, the same harm this entry already records from the round where
-  the list named three and `action-gh-release` was the one missing.
-
-  **This guard has failed correct workflows twenty-three times, each for the same reason.** Every one was
-  found by writing the workflow a different legal way and running it, and every one was a rule
-  asserted from the single form sitting in front of the author:
-
-  | It refused | Because it assumed |
+  | Passes but should not | Fails but should not |
   |---|---|
-  | a `cache-directories:` sequence above the option | a step ends at the first `- ` |
-  | a scheduled labeller or stale sweep | every workflow checks something out |
-  | `actions/checkout@v4` named in a `run:` line | any line naming a version runs it |
-  | a caching step written `- name:` then `uses:` | a step opens on its `uses:` line |
-  | `rust-cache` named in a `run:` line or a step title | any mention of the action is a cache |
-  | a `run: \|` body quoting a `- uses:` line | a block scalar's body is YAML |
-  | `actions/checkout@v10` | `@v1` names one major |
-  | a directory named `shared.yml` | a name ending `.yml` is a file |
-  | a `run: \|-2` body quoting a `- uses:` line | a header's indicators come in one order |
-  | `myorg/tools/actions/checkout@v4` | a name found anywhere in the value is the value |
-  | a step title, `if:` or `with:` quoting `uses:` beside a version | a line holding `uses:` is a step |
-  | a quoted `uses: "actions/checkout@v7"` | a value is written bare |
-  | `cache-on-failure:  true` with a second space | a setting is found by searching for its text |
-  | a quoted key, `- "uses": …` | only values are written in quotes |
-  | `Cache-On-Failure: true` | an input's name is written in the case the docs use |
-  | `- with:` written above the step's own `uses:` | a step's keys come in an order |
-  | `- with:` above `uses:` **and** a sequence inside that `with:` | a step opens at the nearest `- ` above it |
-  | a `matrix: include:` entry written `- { … }` | any `- {` in the file is a step |
-  | a flow mapping as an item of an input's value | the same |
-  | a block step whose `with:` is one flow mapping | an input block always has an empty value |
-  | a `with: {` whose brace closes on a later line | a flow mapping closes where it opens |
-  | `with:` with its flow mapping opening on the next line | a mapping opens beside its key |
-  | a `#` inside a quoted value, in a flow `with:` | a `#` anywhere on a line opens a comment |
+  | a checkout pinned to a **commit** — no version string to floor | a correct step the line reader cannot take apart (flow-style steps, a `steps:` yielding none) is refused, not skipped |
+  | a caching step under `if: false`, wherever a cache is allowed | |
+  | a `uses:` folded onto the next line, **in a third workflow** (in `ci.yml` or `release.yml` the checkout floor turns it red) | |
 
-  The fourth is the sharpest to hit: `- name:` then `uses:` is the form this repository writes every
-  step it names, including the `attest-build-provenance` step at `.github/workflows/release.yml` that this entry
-  argues about further up. Adding a name to the caching step — an ordinary edit — reported that a red
-  run's cache was being discarded when it was not. That sentence used to say *two paragraphs above*,
-  which was nine paragraphs out: a claim about where something sits in this document, made without
-  scrolling to it.
+  This is a list of what has been run, not a census; its count is left off because a count is a claim
+  to have finished looking. The version floor reads every workflow file; the checkout-exists floor is
+  scoped to the two lanes measured to have a checkout. Keeping the release lane uncached is this
+  repository's own judgement, not something the issue ruled.
 
-  **The fifth is the sharpest to have written**, because this table already carried it, under a
-  sentence claiming every row was red-to-green measured. It was not: the fix that closed it for one
-  assertion was written up as covering the loop twenty lines above, and the loop was never run past
-  the workflow that proves it. A correct file passed one half of the function and failed the other
-  half of it. What the sentence was doing is what the whole entry is about — asserting the edge of
-  what was measured — so the sentence is gone and the rows above stand on the runs in the commit
-  that closed each one.
+  The episode behind it cost nine consecutive red `ci` runs on `main` (`31753883982` through
+  `31760121174`); the issue's own first run returns 404, so nine is a floor.
 
-  **And widening the loop was done to one half of the guard.** The version floor was taken from two
-  named files to the whole directory so a lane added later could not slip a `@v4` past it; the cache
-  floor was left reading `ci.yml`. A third workflow copying a bare `rust-cache` discarded its red
-  runs and the suite stayed green — which is exactly the copying the release-lane assertion beside it
-  says it exists to prevent. Both halves read every file now, and the checkout-exists floor is the
-  one thing scoped to the two lanes measured to have a checkout.
+- **The CI toolchain is pinned, and the cost is that this repository stops seeing the newest stable.**
+  `rust-toolchain.toml` names the channel and the `rustfmt`/`clippy` components, and `ci.yml` runs no
+  toolchain action, so rustup resolves that one file for CI and a fresh clone alike. Floating on
+  `@stable` with `-D warnings` once reddened the lane on a line no diff touched (run `32419475997`,
+  `rust-1.98.0`). The crate is tested only against the pinned version, so a lint a later stable adds is
+  invisible until somebody bumps the file. A red lane whose run executed carries `failing_paths` (the
+  source paths its failed-step log names, read from `gh run view <id> --log-failed`, not from
+  annotations, which put every failure at `.github`), `changed_paths` and `outside_diff`;
+  `outside_diff` is absent when either half is unknown.
 
-  **The number this whole change is argued from was inherited, and it was wrong.** Every document
-  here said the episode cost *six* red runs, because the issue said so and named a run range. The
-  run history holds **nine** consecutive failures of `ci` on `main` — `31753883982` through
-  `31760121174`, no green between them — and the run the issue names as the first, `31752296629`,
-  returns 404, so nine is a floor rather than a count. It took until the ninth round for anyone to
-  run the one query that answers it, and the round before that had moved the figure *into* a
-  sentence beginning "Measured on this repository" while deleting a different borrowed number from
-  the same paragraph for being borrowed.
-
-- **The CI toolchain is pinned, and the cost is that this repository stops seeing the newest stable.** The lane floated on `dtolnay/rust-toolchain@stable` with `-D warnings`, so a Rust
-  release that added a lint reddened it on a line no diff touched: run `32419475997`, 2026-08-20,
-  `error: expression can be simplified using Option::unwrap_or()` at `src/cli/tests.rs`,
-  the help URL naming `rust-1.98.0`, while the machine the change was developed on could not see it.
-  Of the three answers the issue named, the pin was chosen. `rust-toolchain.toml` names the channel
-  and the `rustfmt`/`clippy` components, and `ci.yml` runs no toolchain action, so rustup resolves
-  that one file for CI and for a fresh clone alike — `cargo clippy --version` here is the version the
-  lane runs. The cost is the whole of it and it is real: the crate is tested only against the pinned
-  version, so a lint a later stable would add is invisible here until somebody bumps the file, and
-  that is a commit rather than a red lane landing on whoever is mid-delivery. The other two answers
-  were not taken: an advisory job beside a pinned gating job adds a second lane and a warnings drawer
-  that fills up, and leaving it exactly as it was lands the repair after a panel has already run.
-
-  The same issue's third criterion is met in the lane refusal rather than in CI. A red lane whose
-  run genuinely executed now carries `failing_paths` — the source paths its failed-step log names —
-  `changed_paths`, the receipt's diff, and `outside_diff`, so a run can tell a failure outside its
-  change from one inside it without reading the log and comparing paths by eye. The location is read
-  from `gh run view <id> --log-failed`, **not** from the check run's annotations: GitHub annotates a
-  step failure at the workflow directory, and a real failure on this repository's own `ci.yml`
-  returns `path: ".github"`, `message: "Process completed with exit code 101."` — so an
-  annotation-based comparison answers "outside" for every failure, which is the inversion this
-  avoids. `outside_diff` is absent when either half is unknown — the log names no source path, or
-  the diff cannot be read — so the refusal never invents a location from half the evidence.
-
-- **On Windows two Pi assertions about a signalled process are not made.** Issue #11. The suite runs on
-  the `windows-latest` lane and on the Windows release targets. It first reached a Windows runner at run
-  38317428664 with 55 failures, and run 38602449958 left 13; those were settled by two gate fixes (a
-  drive-lettered heredoc target, and a drive-lettered `cd` / `git -C` directory) and by portable
-  fixtures. A process that kills itself on Windows exits 1 and Node reports no signal, so the Pi
-  session-context test expects `exit 1` there, and the Pi loop test's `no_exit_code` case is not run on
-  Windows: a Pi loop that retried a signalled `estigia goal` on Windows would pass.
+- **On Windows two Pi assertions about a signalled process are not made.** A process that kills itself
+  on Windows exits 1 and Node reports no signal, so the Pi session-context test expects `exit 1` there
+  and the Pi loop test's `no_exit_code` case is not run on Windows: a Pi loop that retried a signalled
+  `estigia goal` on Windows would pass.
 
 - **On Windows a POSIX absolute path in a shell line is not read as absolute, so the issue gate asks
-  where it would not on Unix.** Issue #11. `Path::new("/tmp/y").is_absolute()` is false there, and
-  under Git Bash `/tmp` and `/c/…` are msys mounts the gate cannot place without the mount table, so a
-  redirect or heredoc target spelled that way is read as inside the checkout and held under `ask`. That
-  is the safe direction, never a widening, and its cost is extra prompts. The tests that name an
-  outside target build it with `test_env::outside_the_checkout`, a drive-lettered path, so they measure
-  the rule rather than the spelling. The same reading refuses a POSIX `Worktree location`, which is
-  right for a drive-relative path.
+  where it would not on Unix.** `Path::new("/tmp/y").is_absolute()` is false there, and under Git Bash
+  `/tmp` and `/c/…` are mounts the gate cannot place, so such a redirect or heredoc target is read as
+  inside the checkout and held under `ask`: the safe direction, at the cost of extra prompts. Tests
+  naming an outside target use `test_env::outside_the_checkout`. A POSIX `Worktree location` is refused.
 
 - **The interpreter inventory is prose, and nothing derives it from the suite.** `AGENTS.md` states
-  which tests require `node`, `tar`, `bash` and `python3`, and
-  [`testing.md`](testing.md) carries the catalogue those totals are read from. No test counts
-  spawns: a search of `tests/` and `src/` for a reader of any total finds none, and the nearest
-  guard — `no_workflow_needs_only_interpreters_it_sets_up` in `tests/release.rs` — asks that one
-  named test still exists and that both workflows install a runtime, not how many tests spawn one.
-  A driver added or deleted changes the truth of both pages and reddens neither; review is what
-  holds them. **The names, though, are crossed**: `every_test_the_catalogue_names_is_still_a_function`
-  reads the catalogue's backticked identifiers of twelve characters or more that are lowercase
-  letters, digits and `_` only — so `node`, `tar`, `python3` and every file path are left out — walks
-  `src/` and `tests/` with comments stripped, and fails when no function of that name remains.
-  Measured by renaming one entry to a test nobody wrote, which reddens it. It crosses the *name* and
-  not the role: an entry whose test lost its `#[test]` attribute while a same-named helper stayed
-  behind is still green, as is a test that kept its name and changed which interpreter it needs, so
-  the sentence saying how many need `node` can still go wrong with nothing to notice.
+  which tests require `node`, `tar`, `bash` and `python3`, and [`testing.md`](testing.md) carries the
+  catalogue. No test counts spawns; `no_workflow_needs_only_interpreters_it_sets_up` in
+  `tests/release.rs` asks only that one named test exists and that both workflows install a runtime.
+  The names are crossed: `every_test_the_catalogue_names_is_still_a_function` fails when no function of
+  a catalogued name remains, but not the role — a test that lost its `#[test]` or changed which
+  interpreter it needs stays green.
 
 ## The OpenCode plugin, and what it knows about a call
 
 - **What the OpenCode plugin knows about where a call runs, and what it does not.** The gate decides
-  which run a call belongs to by the directory it happens in, and by the identity the host hands it:
-  both host generations carry a session id, and the plugin forwards it as `--session-id`, from which
-  the gate derives the run id through the crate's own `session::run_id` — the same identity the
-  Claude hook mints. OpenCode 1 hands the id to the `tool.execute.before` hook's own input, where
-  `@opencode-ai/plugin`'s published types declare it required; OpenCode 2 carries it in the
-  `execute.before` event. For the directory, OpenCode 1's context supplies
-  `worktree ?? directory ?? process.cwd()`; OpenCode 2 supplies `location.directory`, the working
-  tree the plugin instance serves — measured inside a git worktree, where it is the worktree and
-  `location.project.canonical` is the checkout the worktree came from. The plugin launches the gate
-  from that root and forwards the tool's own arguments verbatim as the payload. A call whose host
-  handed no session id — and no exported run id — keeps the identity-less road below.
+  which run a call belongs to by its directory and the identity the host hands it. Both host
+  generations carry a session id, forwarded as `--session-id`, from which the gate derives the run id
+  through `session::run_id`, the identity the Claude hook mints; a call with no session id and no
+  exported run id keeps the identity-less road. OpenCode 1's directory is
+  `worktree ?? directory ?? process.cwd()`; OpenCode 2's is `location.directory` (measured inside a git
+  worktree: the worktree, with `location.project.canonical` the originating checkout). OpenCode 2's
+  shell tool is `shell` (`{command}`, no `workdir`) where OpenCode 1's is `bash`, and `GATED` carries
+  both; its writes name the target as `path`, an alias `path_argument` already reads.
+  `narrowed_by_the_call` reads the shell road from `harness::SHELL_TOOLS`, not the literal `bash`.
 
-  **OpenCode 2 spells the same evidence differently.** Its shell tool is `shell` where OpenCode 1's
-  is `bash`, and the plugin's `GATED` list carries both; a V2 `shell` input is `{command}` with no
-  `workdir`, so its evidence is the launch directory, exactly as an OpenCode 1 `bash` call without
-  `workdir` already was. A V2 write names its target as `path` — measured: `write` is
-  `{path, content}`, `edit` is `{path, oldString, newString}` — one of the aliases `path_argument`
-  already reads, so V2 writes narrow by target exactly as V1 `file_path` writes do. And
-  `narrowed_by_the_call` reads the shell road from `harness::SHELL_TOOLS` rather than the literal
-  `bash`, so the name a host uses does not decide whether the road is taken.
+  For a **Bash** call `narrowed_by_the_call` reads `workdir`; five write-shaped tools (`edit`, `write`,
+  `multiedit`, `notebookedit`, `update`) carry a target path (`file_path`, `path`, `notebook_path`),
+  read through `path_argument` and clamped like `workdir`: a relative target is resolved against the
+  launch directory, **placed** (spelling collapsed, resolved as far as the filesystem exists, the rest
+  kept lexically, so a not-yet-created module still narrows to `<worktree>/new-mod/src`), and a landing
+  outside the launch checkout and every checkout a pointer already records is discarded.
 
-  For a **Bash** call those arguments carry `workdir`, the directory the command will actually run
-  in, and `narrowed_by_the_call` reads it. Five of the six write-shaped tools in the plugin's
-  `GATED` list — `edit`, `write`, `multiedit`, `notebookedit`, `update` — carry no working
-  directory; they carry the **target path** as a field of their own (`file_path` for OpenCode and
-  Claude Code, `path` or `notebook_path` for the others), which is evidence about where the write
-  lands. `narrowed_by_the_call` reads that too, through the one owner of the aliases
-  (`path_argument`), and clamps the directory containing the target exactly as it clamps
-  `workdir`: a relative target is resolved against the launch directory, the result is placed, and
-  a landing outside the launch checkout and outside every checkout a pointer already records —
-  see below — is discarded. A target under a subdirectory that does not exist yet —
-  `<worktree>/new-mod/src/lib.rs` in a module nothing has created — is still evidence rather than
-  nothing: `placed` resolves as much of the path as the filesystem has and keeps the rest
-  lexically, so the call still narrows to `<worktree>/new-mod/src`. Answering "no evidence" for a
-  target whose directory is not there yet would have left the defect for exactly
-  the case a fresh worktree hits first — the first file written under a new module.
+  **OpenCode's `patch` is not among them, and this gap stays open.** `patch` puts its target in a patch
+  body, like Codex's `apply_patch`; `path_argument` reads only fields, so it answers `None` and the call
+  is adjudicated at the project root through `checkout_root_covering`'s fallback to `launched`: two
+  concurrent isolated runs writing through `patch` still refuse each other. The classifier in
+  `harness::mod` records the same fallback. Nothing drives `patch` with a real patch body:
+  `the_plugin_hands_the_gate_the_directory_every_write_lands_in` and
+  `a_write_tool_call_narrows_by_the_directory_its_target_lands_in` hand it a synthetic `file_path`.
 
-  **The sixth, OpenCode's `patch`, is not among them, and this issue does not close for it.**
-  `patch` puts its target in a patch body rather than in a field of its own — the same shape as
-  Codex's `apply_patch` — and `path_argument` reads only `filepath`/`path`/`notebookpath` as
-  fields, never a body. For a real `patch` payload it answers `None`, `narrowed_by_the_call` has no
-  evidence to clamp, and the call is adjudicated exactly as every write-shaped tool was before this
-  issue: at the project root, through `checkout_root_covering`'s fallback to `launched`. Two
-  concurrent isolated runs writing through OpenCode's `patch` still refuse each other, the same
-  failure this issue exists to close for the other five. The classifier in `harness::mod` already
-  records the same fallback on the harness side — the target becomes the *tool name*, never the
-  control surface, for exactly the two tools that put it in a body — and nothing in either test
-  suite drives `patch` with a real patch-body
-  payload: both `the_plugin_hands_the_gate_the_directory_every_write_lands_in` and
-  `a_write_tool_call_narrows_by_the_directory_its_target_lands_in` hand it a synthetic `file_path`
-  field instead, so what they measure is that the plugin forwards a payload without filtering it,
-  not that `patch` itself narrows. Parsing a patch body to recover the target is new scope; nobody
-  has asked for it, and this entry exists so the gap is named rather than believed closed.
+  **The clamped directory is evidence of which checkout the call belongs to, never `context.repo_dir`
+  by itself.** Role-definition lookup and a repository's configuration read `context.repo_dir` with no
+  upward search. The clamped candidate is matched against every known holding, and when exactly one
+  covers it *and that holder's recorded root is not a strict ancestor of the launch directory*, that
+  root becomes `context.repo_dir` (`checkout_root_covering`, read by `launched_context`). A strict
+  ancestor is dropped because a root climbing above `launched` reaches a directory the call was never
+  adjudicated against; a root equal to or disjoint from the launch directory survives. Held by
+  `checkout_root_covering_never_climbs_above_the_launch_directory`. Without a more specific covering
+  holding the candidate falls back to the launch directory. This mirrors `context_the_payload_names`
+  for the host's own `cwd`.
 
-  **That clamped directory is evidence of which checkout the call belongs to, and it is never
-  `context.repo_dir` by itself.** Role-definition lookup and a repository's own configuration are
-  both read from `context.repo_dir` with no upward search — `roles::definition_for` joins
-  `.claude/agents` onto exactly the directory it is given, and the repository's configuration layer
-  does the same for `.estigia/`. A write to `<worktree>/src/main.rs` is not adjudicated at
-  `<worktree>/src`; the clamped candidate is matched against every known holding, and when exactly
-  one covers it *and that holder's recorded root is not a strict ancestor of the directory this
-  process was launched in*, that root — `<worktree>` — is what becomes `context.repo_dir`
-  (`checkout_root_covering`, read by `launched_context`). The second clause is load-bearing and not
-  redundant with the clamp above it: `narrowed_by_the_call` only promises that the *candidate* lies
-  inside the launch directory or inside a checkout a pointer already records (below),
-  never that a holding covering the candidate does too. A holding's recorded root can be the top of
-  a wider checkout than the one this process was launched in — a package directory in a monorepo,
-  or anywhere a person stands when they type `estigia gate`, both named in `covers`'s own doc — and
-  left unfiltered, resolving back to that root climbed *above* the launch directory, the one
-  direction the clamp exists to refuse: `roles::definition_for` and the repository's own
-  configuration layer both read `context.repo_dir` with no upward search, so a root that climbs
-  above `launched` reaches a directory this call was never adjudicated against. A covered root
-  equal to the launch directory, or disjoint from it — a sibling worktree a pointer already records
-  — both survive the filter; only a **strict ancestor** of the launch directory is dropped. Measured
-  before the filter existed and held by
-  `checkout_root_covering_never_climbs_above_the_launch_directory`: a holding recorded over a
-  checkout root, launched from a package directory below it, resolved a write inside that package
-  back to the checkout root — outside the directory the call was actually launched in. Measured
-  before that correction existed: driving `Edit` against a `file_path` one directory below a
-  checkout root whose `.claude/agents/reader.md` declares a narrower tool list made the declaration
-  invisible — `context.repo_dir` was the file's own directory, `.claude/agents` was not there, and
-  the role refusal that definition earns silently disappeared, the call falling through to an
-  ordinary claim check instead. When no currently-known holding covers the clamped candidate more
-  specifically than the launch directory — including the ordinary case of one checkout with no
-  nested worktree in play at all, where nothing has a pointer covering it yet, and the case a
-  covering holding's own root is a strict ancestor of the launch directory — the candidate is
-  dropped in favour of the launch directory itself, which is the checkout root the process was
-  already going to be judged against. This mirrors, at the write-target evidence this issue adds,
-  the same rule `context_the_payload_names` already applies to the host's own `cwd`: a name that
-  does not resolve to something a live claim covers is not used to relocate the adjudicated
-  checkout.
+  **What `cwd` may and may not do.** `cwd` is the host's key (adapters write it in the hook envelope,
+  not as a model-composed argument). A value naming a checkout a live claim covers is taken as given; a
+  value naming a directory no live claim covers is discarded and the call answered as if it carried no
+  cwd. The name is placed before anyone is asked who covers it, because `holders_of` uses
+  `coverage_depth`, which keeps an unresolvable spelling (`wt-a/../../nope` still starts with `wt-a`).
+  Uncrossed: a `cwd` naming another run's existing worktree is still believed, so an adapter growing a
+  model-composable passthrough cwd would let a write be attributed to the named holder. OpenCode's
+  shell-tool schema has no `cwd` member (read from the installed binary, not held here).
 
-  **What that key may and may not do is the part worth stating plainly.** `cwd` is the host's key: shipped adapters write it in the hook or the host envelope, not as a model-composed tool
-  argument. A value that names a checkout a live claim covers is taken as given — the hook may
-  run from anywhere, and that is why the key exists. A value that names a directory no live
-  claim covers is discarded, and the call is answered the way the identical payload carrying no
-  cwd is answered. Measured on 2026-08-16, before that discard: cwd of C:\Windows, nested
-  tool_input.cwd of .., and a write carrying cwd of C:\Windows were all answered
-  outside with exit zero while the command still ran. That is the same widened-gate shape
-  workdir had, one key over.
+  `workdir` is a tool *argument*, composed by a model on every runtime here, so it may only **narrow to
+  somewhere the gate was already going to look**: a relative value resolves against the launch
+  directory, is placed, and a value landing outside the launch directory and every recorded checkout is
+  discarded. Placing is the comparison itself: comparing with `covers`, written for existing
+  directories, left `wt-a/../../nope` starting with the launch directory and attributed to the holder of
+  a component it climbed through, so a run holding one worktree could borrow another's authority.
 
-  The name is placed before anyone is asked who covers it, because holders_of uses
-  coverage_depth, which keeps an unresolvable spelling: wt-a/../../nope still starts
-  with wt-a. That is the comparison the workdir clamp already left. What remains
-  uncrossed is the other half of the trust: a cwd that names another run's
-  existing worktree is still believed. Nothing in this tree vendors a host schema, so if an adapter grows
-  a passthrough cwd the model can compose, that steering is still a write attributed to the
-  named holder. OpenCode's shell-tool schema has no cwd member — read from the installed
-  binary during a review, not held here.
+  Where two runs hold isolated worktrees inside one base checkout, a write through a tool naming neither
+  a directory nor a target path is covered by both at equal depth and refused
+  `several-runs-hold-this-checkout`. A call carrying the host's session id never reaches this road.
 
-  workdir is a tool
-  *argument*, so whatever composed the call wrote it — a model, on every runtime here. It may
-  therefore only **narrow to somewhere the gate was already going to look**: a relative value is
-  resolved against the directory this process was launched in, the result is **placed** — the
-  spelling collapsed the way this platform collapses it,
-  then resolved as far as the filesystem exists — and a value landing outside the launch directory
-  and outside every checkout a pointer already records (below) is discarded in favour of
-  it. Measured before that clamp existed, with two live pointers and a
-  `git commit` under a claim: `workdir` of `..`, of the parent checkout, and of `C:\Windows` all
-  resolved, were covered by no run, and were answered `outside` with exit **zero** — the command
-  still running where it was going to run, with the gate no longer adjudicating it.
-
-  Placing it is not decoration on the comparison, it is the comparison. The first clamp compared with
-  `covers`, which is written for working directories *that exist* and falls back to the path as
-  written when resolution fails. `..` was then never cancelled, so `wt-a/../../nope` still started
-  with the launch directory, was called inside, and was attributed to the holder of the component it
-  climbed **through** — measured as `allow`, exit zero, under a claim the call had nothing to do
-  with. A run holding one worktree could borrow another's authority by writing one `..`, and that is
-  worse than the escape it replaced: the first reached `outside`, this reached permission. Both were
-  found by review rather than by a test, on the road neither list of spellings covered, because every
-  spelling either list held happened to canonicalise.
-
-  Where two runs hold isolated worktrees inside one base checkout, a write arriving through any tool
-  that names neither a directory nor a target path is covered by both at equal depth and is refused
-  `several-runs-hold-this-checkout` — correctly, on the evidence available. The directory of a named
-  target is read, never inferred: a write tool that sends no target, or a payload whose target lands
-  outside the launch directory and outside every checkout a pointer already records, answers exactly
-  as it did before the target path was read. A call that arrives carrying the host's session id never
-  reaches this road: the plugin forwards it, the gate derives the run id from it, and the answer is
-  the run's own — the two entries below say what that derivation can and cannot establish.
-
-  **The spelling is not crossed against the host, and neither is the resolution base.** `workdir` was
-  read out of OpenCode's own shell-tool schema in the installed binary during review — *"The working
-  directory to run the command in"* — so it is not guessed. But nothing in this tree holds a copy of
-  that schema, and every test supplies the key itself, so if the host renames the argument the suite
-  goes on passing while the fix is inert in production. The same staleness this file records for the
-  model catalogs, with the same absence of a crossing.
-
-  The resolution base is the sharper of the two. A relative `workdir` is resolved here against the
-  directory this process was launched in, which the plugin sets from `worktree ?? directory`.
-  OpenCode resolves it against its tool context's `directory`. Those are two fields of one instance
-  record and they coincide in the ordinary case; started in a subdirectory of the project they do
-  not, and then the shell runs in `<subdir>/x` while the gate adjudicates `<root>/x`. Both lie
-  inside the project, so the clamp still holds and nothing escapes — what is at risk is *which*
-  holder answers, which is the same class of wrong as the defect this entry exists for. Closing it
-  means the plugin forwarding its resolution base rather than only its own working directory, and
-  that is a second owner for the rule; it is recorded rather than done.
+  **The `workdir` spelling is not crossed against the host, and neither is the resolution base.**
+  `workdir` was read from OpenCode's shell-tool schema in the installed binary, but nothing here holds a
+  copy and every test supplies the key itself, so a host rename would leave the suite green and the fix
+  inert. A relative `workdir` is resolved here against the plugin's `worktree ?? directory`, while
+  OpenCode resolves it against its tool context's `directory`; started in a subdirectory these differ,
+  the shell runs in `<subdir>/x` and the gate adjudicates `<root>/x`. Both lie inside the project, so
+  nothing escapes, but *which* holder answers can be wrong. Closing it needs the plugin to forward its
+  resolution base, a second owner for the rule, so it is recorded rather than done.
 
 ## The suite, its fixtures and the retired port
 
