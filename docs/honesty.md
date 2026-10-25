@@ -4574,8 +4574,8 @@ pointer that leaves it names the document it points at.
   - **The sweep's remote deletion bypasses the push guard, and that is a bypass.** `estigia prune
     --confirm` runs `git push --no-verify --delete` for each head, because the guard refuses a push
     no live claim authorises and the sweep runs from a checkout that holds none — a guarded
-    repository could otherwise never be swept. A deletion is not work entering the flow, and the
-    operator's `--confirm` is the authorisation, but `--no-verify` is the same rail the guard's own
+    repository could otherwise never be swept. A deletion is not work entering the flow, and `--confirm` is the authorisation — passed
+    by the operator or, since the contract makes finished cleanup the run's to execute, by an agent — but `--no-verify` is the same rail the guard's own
     script names, so anything that can run `estigia prune` can delete a remote head without a claim.
     The listing before the deletion, and the rule that a live claim's head or a checkout with
     unpublished commits is never marked, are what bound it.

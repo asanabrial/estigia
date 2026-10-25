@@ -2233,6 +2233,81 @@ pub fn retire_checkout(
     worktree: &std::path::Path,
     delivered_head: &str,
 ) -> Retired {
+    let wanted = delivered_head.to_ascii_lowercase();
+    retire_when(context, worktree, |resolved, head| {
+        (head != wanted).then(|| {
+            format!(
+                "{} is at {head}, not at the delivered head {delivered_head}",
+                resolved.display()
+            )
+        })
+    })
+}
+
+/// Puts down every other checkout `run_id` created on one of `branches`, once
+/// the delivery at `delivering_sha` contains its head.
+///
+/// A multi-slice delivery starts one checkout per slice, and the run pointer
+/// names only the last; `pointer` is that one and is never touched here. A
+/// checkout owned by another run, or by none, is not reported; one this run owns
+/// that is dirty, detached or ahead of the delivery is kept and named, exactly
+/// as [`retire_checkout`] keeps its own.
+pub fn retire_sibling_checkouts(
+    context: &Context,
+    run_id: &str,
+    branches: &[String],
+    pointer: &std::path::Path,
+    delivering_sha: &str,
+) -> Result<Vec<Retired>, Failure> {
+    let registered = registered_worktrees(context)?;
+    let skip = canonical_worktree_path(pointer).ok();
+    let mut out = Vec::new();
+    for entry in registered.values() {
+        let Some(branch) = entry.branch.as_deref() else {
+            continue;
+        };
+        if !branches.iter().any(|recorded| recorded == branch) {
+            continue;
+        }
+        if skip.is_some() && canonical_worktree_path(&entry.path).ok() == skip {
+            continue;
+        }
+        match read_ownership(&entry.path) {
+            Ok(Some(record)) if record["run_id"].as_str() == Some(run_id) => {}
+            Ok(_) => continue,
+            Err(failure) => {
+                out.push(Retired {
+                    worktree: entry.path.clone(),
+                    worktree_removed: false,
+                    branch: Some(branch.to_owned()),
+                    branch_deleted: false,
+                    reason: Some(failure.detail()),
+                });
+                continue;
+            }
+        }
+        out.push(retire_when(context, &entry.path, |resolved, head| {
+            match crate::transport::target::is_ancestor(&context.repo_dir, head, delivering_sha) {
+                Ok(true) => None,
+                Ok(false) => Some(format!(
+                    "{} is at {head}, not contained in the delivery {delivering_sha}",
+                    resolved.display()
+                )),
+                Err(failure) => Some(format!(
+                    "whether the delivery contains {head} could not be read: {}",
+                    failure.detail()
+                )),
+            }
+        }));
+    }
+    Ok(out)
+}
+
+fn retire_when(
+    context: &Context,
+    worktree: &std::path::Path,
+    keep: impl Fn(&std::path::Path, &str) -> Option<String>,
+) -> Retired {
     let kept = |worktree: &std::path::Path, branch: Option<String>, reason: String| Retired {
         worktree: worktree.to_path_buf(),
         worktree_removed: false,
@@ -2288,15 +2363,8 @@ pub fn retire_checkout(
             );
         }
     };
-    if head != delivered_head.to_ascii_lowercase() {
-        return kept(
-            &resolved,
-            Some(branch),
-            format!(
-                "{} is at {head}, not at the delivered head {delivered_head}",
-                resolved.display()
-            ),
-        );
+    if let Some(reason) = keep(&resolved, &head) {
+        return kept(&resolved, Some(branch), reason);
     }
     match run(
         &["git", "status", "--porcelain"],

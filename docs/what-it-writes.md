@@ -18,8 +18,8 @@ before. Windows ACLs and ownership are not carried over. The staging lives in `p
 
 **Not only setup writes, and not only uninstall takes back.** A run records the branch it started as
 a `branch` marker in the local store, and `release` — the last step of a delivery — deletes every
-remote head those markers name, reading each one back, then puts down the isolated checkout and its local
-branch. `estigia prune` is the operator-invoked sweep for what no delivery owned: merged or closed
+remote head those markers name, reading each one back, then puts down every isolated checkout those markers name that the run owns and the delivery
+contains, with its local branch. `estigia prune` is the sweep for what no delivery owned: merged or closed
 heads and checkouts, plus [remote-gone orphan checkouts](#explicit-orphan-pruning), kept when a live claim holds them or they carry commits the remote does not
 have, removed only on `--confirm`. The rules, and what each still cannot see, are in the contract's
 delivery reference and [`honesty.md`](honesty.md); this document does not restate them.

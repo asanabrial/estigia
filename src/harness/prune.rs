@@ -1,14 +1,14 @@
-//! The operator-invoked sweep for branches and checkouts no delivery owns.
+//! The sweep for branches and checkouts no delivery owns.
 //!
 //! A delivery removes the remote head it published and the checkout it worked
 //! in. Everything else accumulates: a branch pushed under a name other than the
 //! pull request's, a checkout whose run died or was reclaimed, a pull request
 //! closed without merging, a judge's directory. This module lists what a
-//! delivery no longer owns and deletes it only when the operator confirms.
+//! delivery no longer owns and deletes it only on `--confirm`.
 //!
 //! **No removal until `--confirm`.** Discovery refreshes remote refs and answers a list; nothing here
-//! deletes on its own, because deleting what no claim owns without a person
-//! deciding is a write nobody asked for.
+//! deletes on its own. The listing is the decision: the contract has whoever
+//! reads `sweep` rows pass `--confirm`, operator or run, without asking again.
 //!
 //! **Nothing is dropped from the listing.** A checkout whose branch is neither
 //! merged nor closed can also qualify as a remote-gone orphan. Otherwise it is

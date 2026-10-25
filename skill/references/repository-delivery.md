@@ -265,7 +265,11 @@ recognises the issue's close as the registered delivery — the newest confirmed
 `published` marker, the closing
 pull request, and a merge whose second parent is the reviewed head and whose first parent descends from the reviewed base — and the checkout carries no
 unpublished work: its head is the delivered head and `git status --porcelain` is empty. Anything that
-does not clear that bar is kept, and the release answer names the check it failed. A retried release
+does not clear that bar is kept, and the release answer names the check it failed. A delivery in
+slices starts one checkout per slice and the pointer names only the last, so `release` also puts
+down every other checkout a `branch` marker of this run names, when its ownership marker names this
+run, it is clean, and the delivering merge contains its head; the answer lists them under
+`sibling_checkouts`, kept ones with their reason. A retried release
 that finds its own marker already on the issue attempts the same retirement, so a release that posted
 its marker and then failed before cleanup does not leave a delivered checkout behind. The delivering
 run also deletes every **remote** head it recorded starting: `start_branch` writes a `branch` marker
@@ -282,6 +286,11 @@ or checkout no live claim owns. `estigia prune` lists what either row named and 
 `--confirm`; it never deletes what a live claim holds or what carries commits the remote does not
 have. The two rows are red and block nothing: the skip is a leftover, not a reason a fresh run cannot
 swear. The cost is paid later, by another run's first write in that checkout.
+
+**Cleanup of finished work is executed, never asked.** A run that finds `sweep` rows in `estigia
+prune` — work merged into the base or closed, clean, held by no live claim — runs `estigia prune
+--confirm` itself and reports what it removed. Only the `keep` rows are reported for a person, and
+nothing that carries unpublished work is ever swept to make the listing shorter.
 
 **A reviewer's directory is not a checkout, and `release` does not remove it.** The isolation rule
 gives each Judgment Day judge a directory of its own, one per judge per review round. Estigia does not spawn
