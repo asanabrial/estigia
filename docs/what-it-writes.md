@@ -10,52 +10,47 @@ about the binary itself.
 **A file that is somebody's link, or somebody's mode.** Setup and uninstall replace a configuration
 file by staging a sibling and renaming it over the destination. When the destination is a symlink
 (a dotfiles manager's `settings.json`, `CLAUDE.md`, `opencode.json`, `config.toml`), the sibling is
-staged beside the file the link names and replaces that file, so the link survives and the bytes land
-in the dotfiles copy; a link that names nothing is refused and left as it was. The replacement takes
+staged beside the file the link names and replaces that file, so the link survives; a link that names nothing is refused and left as it was. The replacement takes
 the permission bits of the file it replaces (on Windows, the read-only flag), so a `0600`
-`~/.claude.json` stays `0600`; a file that did not exist is created with the platform default as
-before. Windows ACLs and ownership are not carried over. The staging lives in `paths::replace_bytes_atomically`.
+`~/.claude.json` stays `0600`; a new file gets the platform default. Windows ACLs and ownership are not carried over. The staging lives in `paths::replace_bytes_atomically`.
 
 **Not only setup writes, and not only uninstall takes back.** A run records the branch it started as
-a `branch` marker in the local store, and `release` — the last step of a delivery — deletes every
+a `branch` marker in the local store. `release` — the last step of a delivery — deletes every
 remote head those markers name, reading each one back, then puts down every isolated checkout those markers name that the run owns and the delivery
 contains, with its local branch. `estigia prune` is the sweep for what no delivery owned: merged or closed
 heads and checkouts, plus [remote-gone orphan checkouts](#explicit-orphan-pruning), kept when a live claim holds them or they carry commits the remote does not
 have, removed only on `--confirm`. The rules, and what each still cannot see, are in the contract's
-delivery reference and [`honesty.md`](honesty.md); this document does not restate them.
+delivery reference and [`honesty.md`](honesty.md).
 
 ## Explicit orphan pruning
 
-`estigia prune` retains its existing merged/closed cleanup. An additional eligibility route handles
+`estigia prune` keeps its merged/closed cleanup. One further route handles
 a branch checkout that would otherwise be kept: its configured upstream must be absent after
 `git fetch --prune --all`, its working tree must be clean, and `git rev-list --count <proven-head>
 --not --remotes` must be zero. The upstream identity comes from `branch.<name>.remote` and
-`branch.<name>.merge`, not the local branch name or a presumed `origin`; the configuration remains
-readable when fetching removes a stale tracking ref. Reachability from any refreshed remote-tracking
+`branch.<name>.merge`, not the local branch name or a presumed `origin`. Reachability from any refreshed remote-tracking
 branch suffices, not only the default branch. A configured upstream still present on its actual remote
-is never eligible through this route. The safe fallback for genuinely untracked branches is to keep
-them: absent, incomplete, multiple, invalid, local-only (`remote = .`) or unknown tracking identities
-are not inferred to mean a deleted remote branch.
+is never eligible here. Absent, incomplete, multiple, invalid, local-only (`remote = .`) or unknown tracking identities
+are not inferred to mean a deleted remote branch: the checkout is kept.
 
-The additional route keeps any checkout named by a run pointer, even when its issue is closed. It
-also keeps a checkout named by a session registry entry not explicitly ended; a stale heartbeat is
+The route keeps any checkout named by a run pointer, even when its issue is closed, and any named by a session registry entry not explicitly ended; a stale heartbeat is
 not an ended session. Unreadable pointers, registry reads, remote reads and local Git reads keep the
-candidate and name the reason. This deliberately retains some abandoned checkouts rather than
+candidate and name the reason. This retains some abandoned checkouts rather than
 guessing that their holders died. The remaining observation limits are in
-[`honesty.md`](honesty.md), under “What the prune sweep cannot see”.
+[`honesty.md`](honesty.md), under "What the prune sweep cannot see".
 
-Without `--confirm`, the command only lists candidates and refreshes remote-tracking refs; it removes
-no checkout or branch. Confirmation rereads pointers and the session registry for the new route,
-repeats its Git checks, then rereads ownership and checks branch identity at the retirement boundary.
-The reachability query uses a captured commit id, and that exact id is passed to the existing
-retirement operation's HEAD comparison; a newer HEAD is never substituted for the proven revision.
-Confirmation then uses the existing
-checkout retirement operation: `git worktree remove` without force, followed by local branch
-retirement. It introduces no remote-branch deletion and no session-start deletion. `release` and
-the ordinary `estigia changes` listing are unchanged. These observations are not a repository or
-ownership lock; the remaining race after the final checks is described in `honesty.md`.
+Without `--confirm`, the command lists candidates and refreshes remote-tracking refs; it removes
+nothing. Confirmation rereads pointers and the session registry, repeats the Git checks, then rereads ownership and checks branch identity at the retirement boundary.
+The reachability query uses a captured commit id, and that exact id is passed to the retirement operation's HEAD comparison; a newer HEAD is never substituted for the proven revision.
+Retirement is the existing
+checkout operation: `git worktree remove` without force, then local branch
+retirement. The route deletes no remote branch, and `release` and
+`estigia changes` are unchanged. None of this is a repository or
+ownership lock; the race after the final checks is in `honesty.md`.
 
-**What Estigia writes to GitHub.** Issues and their prose, a person's `comment` prose, labels,
+## What Estigia writes to GitHub, and the five invariants
+
+**What reaches GitHub.** Issues and their prose, a person's `comment` prose, labels,
 open or closed, pull requests and branches — and no `issue-flow` marker anywhere. The markers of the
 claim family (`claim`, `reclaim`, `unassign`, `heartbeat`, `progress`, `blocked`, `branch`) and of
 the review family (`published`, `review-handoff`, finding, lens report, refutation, disposition,
@@ -69,288 +64,227 @@ unchanged. [`honesty.md`](honesty.md) names what recording locally costs.
 Five invariants, and the tests are named after them:
 
 1. **`is_configured` is a query**, separate from `setup`. "Where did I install this?" is the
-   question people actually arrive with.
+   question people arrive with.
 2. **Install says when it is writing over somebody else's file.** Estigia ships upstream's skill
    under upstream's name, so an operator who already runs `issue-flow` has files at those paths.
-   Install writes its own copy over them and reports each as `REPLACE` rather than `update`, and
-   `--dry-run` says so before anything happens. Nothing keeps the old contents: uninstall leaves
-   the file, because it is not Estigia's to remove, so what stands afterwards is Estigia's copy.
+   Install writes its own copy over them and reports each as `REPLACE` rather than `update`;
+   `--dry-run` says so first. Nothing keeps the old contents, and uninstall leaves
+   the file, because it is not Estigia's to remove.
 3. **Uninstall is the exact inverse.** It removes what Estigia **created** and nothing else — not
-   another tool's block, not your own notes, not a file you dropped beside the references, and not a
-   file that was already there when Estigia wrote over it. That last one is the common case, not the
-   corner: Estigia installs upstream's skill under upstream's name, so a directory that already holds
-   `issue-flow` is the *same* directory. Install therefore records what it created, in
-   `<skill>/.estigia/installed.json`, because nothing on disk can tell the two apart afterwards —
-   an overwritten file and a created one both hold Estigia's text. Delete that record and uninstall
+   another tool's block, not your notes, not a file you dropped beside the references, and not a
+   file that was already there when Estigia wrote over it. The last is the common case: a directory that already holds
+   `issue-flow` is the *same* directory, and an overwritten file and a created one both hold Estigia's text. So install records what it created, in
+   `<skill>/.estigia/installed.json`: the paths, and a **digest of what it last wrote** at each.
+   Delete that record and uninstall
    removes nothing, which is the honest reading of no evidence.
 
+   `REPLACE` is a file that was never Estigia's; `OVERWRITE` is Estigia's file with your edit in it
+   (the digest differs), and a machine one release behind still reads `update`, because its record
+   predates digests. On the way out, a file whose contents moved since Estigia wrote them is
+   **kept** and named on its own line; an untouched one goes, and so does every file on a machine
+   whose record predates digests.
+
    Claude Code's `review-blind.md` and `review-blind-sealed.md`
-   live outside the skill tree and use that same path-only ownership record. They are the only
+   live outside the skill tree under
+   the same path-only ownership record. They are the only
    reviewer definitions setup installs: Judgment Day's two judges. The other seven reserved names —
    `review-lens.md`, `review-risk.md`, `review-readability.md`, `review-reliability.md`,
    `review-readback.md`, `review-refuter.md` and `review-validator.md` — are launched by
    `launch_review_input` from templates embedded in the binary, so setup writes none of them and
-   retracts a copy an earlier build wrote (below). Setup recursively parses the
-   user agent tree for the two judges
-   before writing any setup artifact: a
-   second file carrying the reserved YAML identity, an unprovable candidate, an unowned canonical file,
+   retracts a copy an earlier build wrote (below).
+
+   Before writing any setup artifact, setup recursively parses the
+   user agent tree for the two judges. A second file carrying the reserved YAML identity, an unprovable candidate, an unowned canonical file,
    or an owned canonical file whose bytes differ from **every current and previous rendering Estigia can produce** of the
-   embedded definition is preserved and refused. Every rendering, not the embedded bytes themselves:
-    `Evidence standard` decides the unsealed file's tool grant; each sealed file's grant is fixed.
-    The two judge definitions carry the paragraph asking a verdict for its basis — so the embedded copy is a
-   template and the raw template is exactly what a valid install never holds. Those two definitions
-   are Judgment Day's judges, and no tier acquires them.
+   embedded definition is preserved and refused. Every rendering, not the embedded bytes: `Evidence standard` decides the unsealed file's tool grant and
+   each sealed file's grant is fixed.
+    The two judge definitions carry the paragraph asking a verdict for its basis, so the embedded copy is a
+   template and the raw template is exactly what a valid install never holds. They are Judgment Day's judges, and no tier acquires them.
+
    Setup repeats that decision immediately before the reviewer step. A fresh path is recorded as owned
    before its bytes are written, then a complete staged body is linked into place without replacement;
    a file another actor created after either read is preserved, and ownership added by the losing create
-   is removed. An interrupted create remains exactly retryable. Comparison follows established setup
-    text normalization: CRLF versus LF and a missing final newline do not count as an edit; every other
-    textual difference does. An owned canonical file whose bytes match a previous rendering Estigia
-    shipped is ours-older: setup rewrites it to the current rendering rather than refusing. A body matching
-    neither also survives if it is exactly what **this build itself** last wrote
-    at that exact path: every real write of a reviewer definition records a digest of the bytes it left
-    behind, under the same outside-path record `created_outside` already keeps, and a later run
-    compares the file it reads back against that digest before falling through to the rendering ledger.
-    This is what an in-flight `--allow-source-build` install needs and the ledger alone cannot give it —
-    a template that moves again before it is ever published joins no ledger, because nothing publishes
-    an unpublished round — and it is one function, `reviewer_is_ours`, read by both the setup preflight
-    and uninstall's own delete-or-keep choice below, so a body one door accepts cannot be a body the
-    other keeps as foreign. Bytes matching neither the recorded digest nor any current or previous
-    rendering remain an operator edit and are refused. An absent digest — a record written before this
-    existed, or a path this build never wrote to — is not read as a match either way; it falls straight
-    through to the rendering ledger exactly as it did before. `docs/honesty.md` has the fuller account,
-    including why the ledger by itself could never close this and what the digest still does not reach.
-    Fresh
-    and upgrade plans report the resulting `installed.json` ownership mutation exactly once as a skill
+   is removed. An interrupted create is exactly retryable. Comparison ignores CRLF versus LF and a missing final newline; every other
+    difference counts. An owned file matching a previous rendering is ours-older and is rewritten to the current one. A body matching
+    neither survives if it is exactly what **this build** last wrote
+    at that path: every real write of a reviewer definition records a digest of the bytes it left, under the same outside-path record `created_outside` keeps, and a later run
+    compares the file against that digest before the rendering ledger.
+    This is what an in-flight `--allow-source-build` install needs, since a template that moves before it is published joins no ledger. It is one function, `reviewer_is_ours`, read by both the setup preflight
+    and uninstall's delete-or-keep choice, so a body one door accepts cannot be one the
+    other keeps as foreign. Bytes matching neither the digest nor any rendering are an operator edit and are refused; an absent digest falls through to the ledger. `honesty.md` has the fuller account. Fresh
+    and upgrade plans report the `installed.json` mutation once, as a skill
    create or update, matching the real action manifest.
 
-   The seven binary-launched names are taken back by the reviewer's own content-aware road rather
-   than by `RETIRED_AGENTS`, which retracts by ownership record alone and would delete a copy the
-   operator edited. `setup` and `uninstall` both ask `reviewer_is_ours` of an owned copy — a current
-   or previous rendering, or the recorded digest: a match is deleted and forgotten, a mismatch is
+   The seven binary-launched names are taken back by the reviewer's own content-aware road, not by `RETIRED_AGENTS`, which retracts by ownership record alone and would delete an edited copy.
+   `setup` and `uninstall` both ask `reviewer_is_ours` of an owned copy: a match is deleted and forgotten, a mismatch is
    kept, reported as `Kept` and its path relinquished, and a path with no ownership record is never
-   touched and never refused. The preflight does not read these seven, so an edited or unowned copy
+   touched or refused. The preflight does not read these seven, so an edited or unowned copy
    does not block a setup. The names stay reserved for the launch gate: a project definition
-   carrying one is still refused as `reviewer-project-shadow`, and a hand `Task` launch of one is
-   refused as `reviewer-launched-by-the-binary`, whatever the user tree holds.
+   carrying one is refused as `reviewer-project-shadow`, and a hand `Task` launch of one as `reviewer-launched-by-the-binary`, whatever the user tree holds.
 
-   Two more definitions live outside the skill tree under that same record, and their rule is a
-   third one rather than either of the two above. `developer.md` and `analyst.md` are written only
-   where `Model routing` names their role, and the same entry says what the role
-   runs on. `by task` names no role, so it writes neither and retracts an owned one on the next
-   run. A definition already at one of those paths that
+   Two more definitions live outside the skill tree under that record, with a
+   third rule.
+   `developer.md` and `analyst.md` are written only
+   where `Model routing` names their role (the same entry says what the role
+   runs on). `by task` names no role, so it writes neither and retracts an owned one on the next
+   run. A definition at one of those paths that
    Estigia did not create is **refused**, in the preflight and again immediately before the write,
-   rather than overwritten the way a re-rendered reviewer is: `analyst` is a name another harness's
-   orchestrator answers to, so replacing it would take somebody's own file with nothing recorded and
-   nothing to give back. Taking a role out of the routing retracts the file on the next run,
-   which is what makes naming it consent rather than a one-way door. They are not alone in that: a
-   plain `setup` also retracts an owned `sdd-*.md` — a definition the retired protocol wrote —
-   through a retired-names list rather than the install list, so it comes out even though the
-   protocol that wrote it is gone, and drops a retired skill file. A definition that leaves the
-   install lists entirely — `implementer.md`, renamed to `developer.md` — is named in
-   `RETIRED_AGENTS` and retracted by `setup` and `uninstall` on the same ownership gate, so a name
-   no walk of the install lists reaches still comes off a machine that has it. What is particular to
-   these two is that a **configuration entry** and not a retirement list decides it.
+   rather than overwritten:
+   `analyst` is a name another harness's
+   orchestrator answers to, so replacing it would take somebody's file with nothing recorded to give back. Taking a role out of the routing retracts the file on the next run. A plain `setup` also retracts an owned `sdd-*.md` (written by a retired protocol) and a retired skill file through a retired-names list, and a definition that left the
+   install lists entirely — `implementer.md`, renamed `developer.md` — is named in
+   `RETIRED_AGENTS` and retracted by `setup` and `uninstall` on the same ownership gate. What is particular to
+   the two roles is that a **configuration entry**, not a retirement list, decides them.
 
-   Uninstall deletes an owned reviewer whose bytes satisfy the same `reviewer_is_ours` the setup
-   preflight does — a current or previous rendering, or a match against the digest recorded for that
-   exact path — before forgetting it or removing the skill ledger. Sharing the one function is the
-   point: a digest arm added at only one door would let them disagree, accepting a body as ours-older
-   at setup and then keeping the same bytes as somebody's edit at uninstall, orphaning it at the
-   reserved path for the next install to meet as unowned. A
-   failed deletion therefore retains the evidence needed by an exact retry. Bytes that match neither
-   are kept and their path is relinquished. This rule is deliberately specific to the reviewer; it does not broaden
-   or repair the retraction rule for a definition a retired protocol wrote, and the delegated roles'
+   Uninstall deletes an owned reviewer whose bytes satisfy `reviewer_is_ours`, before forgetting it or removing the skill ledger. A
+   failed deletion retains the evidence for an exact retry; bytes
+   matching neither
+   are kept and their path relinquished. The rule is specific to the reviewer: it does not repair the retraction rule for a retired protocol's definition, and the delegated roles'
    refuse-rather-than-replace is a third rule beside both. Configuration writes never touch the file.
 
-   **By name, and by content on the way in — not yet on the way out.** The record used to store the
-   paths an install created and nothing about what it wrote there, so *did you change this, or did an
-   older build write it* had no answer: a file Estigia created and you later edited was rewritten by
-   `sync` on a plain `update` line, the same word a version bump gets. It now stores a **digest of
-   what it last wrote** at each path, which answers exactly that question and nothing else. An
-   install that finds one of its own files changed since says `OVERWRITE`, and a machine merely one
-   release behind still reads as `update`, because its record predates digests and holds none.
-
-   **`OVERWRITE` and `REPLACE` are two words because they are two things**, and they were one for
-   several rounds. `REPLACE` is a file that was never Estigia's; `OVERWRITE` is Estigia's file with
-   your edit in it. Sharing the word meant sharing the sentence under it, and `sync` announced *"1
-   file(s) were already here and are not Estigia's"* about a file `estigia setup` had installed
-   thirty seconds earlier — which sends somebody whose own edit has just been discarded looking for
-   a file that was never there. What you do next differs: one is a stranger's file you may not have
-   known about, the other is work you have lost.
-
-   **And on the way out.** `uninstall` used to take a file you had edited with the rest, named on its
-   own `remove` line like every other and in no way marked as one you had touched — measured: a
-   `bindings/github.md` rewritten whole and an `rdd.md` with a note appended were both taken, each
-   printed among the eighteen. The same digest answers it: a file whose contents have moved since
-   Estigia wrote them is **kept**, and named on its own line so nothing is left silently. An
-   untouched one still goes, and so does every file on a machine whose record predates digests —
-   otherwise the fix would leave whole installations behind, which is the failure it exists to
-   prevent, inverted.
-
-   Two things Estigia created it deliberately leaves, and they are named here because "removes what
-   Estigia created" would otherwise read as *all* of it. A checkout's own rows in
+   Two things Estigia created it deliberately leaves. A checkout's own rows in
    `.git/estigia/` stay: uninstall takes an **agent** out and was never given a repository, so
-   reaching into whichever checkout somebody happened to be standing in is the failure this design
-   refuses — `config forget` is the one command that removes them, and it says which file it
-   removed. Both are measured by `uninstall_leaves_the_checkouts_answers_and_the_list_of_checkouts`.
+   reaching into whichever checkout somebody stands in is what this design
+   refuses; `config forget` is the one command that removes them, and it names the file. Both halves are measured by `uninstall_leaves_the_checkouts_answers_and_the_list_of_checkouts`.
 
-   `~/.estigia/` splits the difference, and the line between the two halves is *live run state*
-   against *what the person keeps*. The run pointers, `state.db` — which holds the decision history,
-   the durable role log, the per-issue workflow history, the session registry and the mailbox — any stand-down record and the stop-after
-   requests hold what and what was last asked: they go with the **last** agent, so `uninstall --all`
+   `~/.estigia/` splits on *live run state*
+   against *what the person keeps*. The run pointers, `state.db` (decision history,
+   durable role log, per-issue workflow history, session registry,
+   mailbox), any stand-down record and the stop-after
+   requests go with the **last** agent, so `uninstall --all`
    with nothing left installed takes them — by name, and an empty directory only, so a file of the
-   operator's own keeps the directory. Taking them at that point is the operator's recorded
-   requirement and it is deliberate; taking them while any agent remains would silently strip a live
-   run of the file its gate reads, which is why a plain reinstall never touches them and `setup` does
-   not either. The machine-wide binary lifecycle evidence under `~/.estigia/lifecycle` belongs to the
-   person rather than to any adapter and is not named by the removal, so it stays with whatever else
-   is there. Both halves are measured by
+   operator's own keeps the directory. Taking them while any agent remains would strip a live
+   run of the file its gate reads, which is why a plain reinstall and `setup` never
+   touch them. The binary lifecycle evidence under `~/.estigia/lifecycle` belongs to the
+   person and stays. Both halves are measured by
    `taking_estigia_out_takes_its_own_state_with_it_and_not_before` and
-   `a_live_run_pointer_survives_a_plain_reinstall`.
+   `a_live_run_pointer_survives_a_plain_reinstall`. The full table is
+   [below](#what-estigia-holds-and-what-each-uninstall-step-leaves).
 
-   `~/.estigia/state.db`, with its `-wal` and `-shm` files, is written at run time and never by
-   `setup`. The workflow state that has no GitHub object to live in is only here: the dedup
-   identity and the `blocked-until` clauses `create` and `blocked_until` record, and the task
-   checklist `task` records, none of which is written to the tracker. The transport creates it: the first dispatched operation that spawns `gh` records its
-   call counts there, the first operation of the claim family that touches an issue imports that
-   issue's history there, and the gate appends every decision and role observation there. `estigia
-   doctor`'s `store` row never creates the file, but `doctor` as a whole can: its `stale-run-pointer`
-   row replays `verify-claim` for every run pointer it finds, and that is an operation that imports.
-   `estigia store import` is the operator's own door into it: it admits every open issue the store
-   does not hold, reading each issue with `gh issue view` and writing only the store.
+   `~/.estigia/state.db`, with its `-wal` and `-shm`, is written at run time and never by
+   `setup`. The workflow state with no GitHub object to live in is only here: the dedup
+   identity and `blocked-until` clauses `create` and `blocked_until` record, and the task
+   checklist `task` records. The transport creates it: the first dispatched operation that spawns `gh` records its
+   call counts there, the first claim-family operation that touches an issue imports that
+   issue's history, and the gate appends every decision and role observation. `estigia
+   doctor`'s `store` row never creates the file, but `doctor` as a whole can, because its `stale-run-pointer`
+   row replays `verify-claim` for every run pointer it finds and that imports.
+   `estigia store import` is the operator's own door: it admits every open issue the store
+   does not hold, reading each with `gh issue view` and writing only the store.
    The write path also snapshots the store with SQLite's `VACUUM INTO` into
-   `~/.estigia/snapshots/`, when the newest snapshot is a day old or older, keeping the newest
-   three; `doctor`'s `store` row reports the newest snapshot's age. A snapshot is a copy for a
+   `~/.estigia/snapshots/` when the newest snapshot is a day old or older, keeping the newest
+   three; `doctor`'s `store` row reports the newest's age. A snapshot is for a
    person to restore by hand, not one Estigia reads back.
-   Removal names it, along with its `-wal` and `-shm`, and the `snapshots/` directory beside it,
-   and takes them with the last agent, wherever that agent was installed: a global install writes one
+   Removal names the store, its `-wal` and `-shm` and `snapshots/`, and takes them with the last agent, wherever that agent was installed: a global install writes one
    file under `~/.estigia/roots/` naming the Claude, XDG and `APPDATA` roots it resolved, so an
    `uninstall` under one `CLAUDE_CONFIG_DIR` still sees an install under another and leaves the
-   store alone. A record that cannot be read keeps the store, and the uninstall report names it. The
-   per-issue workflow history is rebuilt from GitHub on the next touch; the decision history is not,
-   and losing it is the point of the removal — it is the record of what this machine's gate decided,
-   and the operator asked that the last uninstall take everything Estigia wrote. What it holds and
+   store alone. A record that cannot be read keeps the store, and the report names it. The
+   per-issue history is rebuilt from GitHub on the next touch; the decision history is not,
+   and losing it is the point of the removal. What it holds and
    what decides from it is in [`honesty.md`](honesty.md).
 
-   `~/.estigia/jobs/<id>/` is a fifth, written at run time and never by `setup`. A review job's
+   `~/.estigia/jobs/<id>/` is written at run time and never by `setup`. A review job's
    directory holds the manifest, the prompt, the runner's lock and logs, its `result.json`, and a
    `usage.json` carrying the reviewer CLI's own counters when it reported any. A check job, started
-   by `run_checks` through `__check-job`, leaves its directory in the same place with its own
-   manifest, lock, logs and result ([`generated-files.md`](generated-files.md)). Nothing removes either yet: the runner is only added, and
+   by `run_checks` through `__check-job`, leaves a directory with its own
+   manifest, lock, logs and result ([`generated-files.md`](generated-files.md)). Nothing removes either yet;
    [`honesty.md`](honesty.md) says what is not wired.
 
    A third leave is temporary: five adapters share `~/.agents/skills`, so taking one of them out
-   leaves the skill for the agents that remain and it goes with the last of them, a retired agent that is still installed counting as one that
-   remains. The note that
-   accounts for the surviving directory names **only the files no line of the run already named** —
-   not everything still on disk. Naming everything was measured, and it said sixteen files were the
-   operator's where one was, listing `SKILL.md`, the transport and Estigia's own record among them:
-   the sentence that exists to answer *it did not touch my things* both buried its real answer and
-   invited a person to delete a skill two configured agents were reading.
-   `the_skill_left_for_another_agent_is_not_reported_as_the_operator_s` holds both halves, the second
-   being that a file reported `unknown` — no record, so nothing shown to be Estigia's — was reported
-   as the operator's in the same output.
+   leaves the skill for the agents that remain, and it goes with the last of them (a retired agent still installed counts as one that
+   remains). The note accounting for the surviving directory names **only the files no line of the run already named**, not everything still on disk. `the_skill_left_for_another_agent_is_not_reported_as_the_operator_s` holds that, and that a file reported `unknown` — no record, so nothing shown to be Estigia's — is not reported
+   as the operator's.
 4. **Everything Estigia writes into a shared file lives between markers**, and a file that held
    nothing but our block does not survive as an empty husk. There are no backups because there is
-   nothing to restore. A file that carries the block more than once, from a merge or a restored
+   nothing to restore. A file carrying the block more than once, from a merge or a restored
    copy, comes out of `setup` with exactly one, holding the new body, and out of `uninstall` with
    none; text outside the markers is not touched. Markdown comes back byte for byte, and so does JSON: the indentation a file
-   was written with is read off it and used again, so a settings file Estigia went into to add one
-   hook is not handed back reindented.
+   was written with is read off it and used again.
 5. **`--dry-run` reports what the real run does**, checked by a test that runs both and compares.
    It runs every read-only probe the real run does, the lifecycle read included, so a file or state
    the real run would refuse is refused by the dry run too.
 
 ## The optional loop plugin
 
-OpenCode reads plugins, so Estigia can offer continuation there without a hook file, and it offers
-it only when the `Loop plugin` row is `on`. `estigia setup opencode` then writes a second
+OpenCode reads plugins, so Estigia can offer continuation there without a hook file, and only when the `Loop plugin` row is `on`. `estigia setup opencode` then writes a second
 single-file plugin, `flow-loop.js`, beside the gate plugin `estigia-workflow-authority.js` under
 the same `plugins/` directory, marked `estigia:loop`. The row's default is `off`, so a plain
-`estigia setup opencode`, `estigia setup --all`, and `scripts/build-install.sh`'s non-interactive
+`estigia setup opencode`, `estigia setup --all` and `scripts/build-install.sh`'s non-interactive
 install write nothing new — a plugin nobody asked for is a behaviour change to every OpenCode
-install this crate touches. The setting is authoritative in both directions: `on` writes the plugin
-and `off` takes back one Estigia wrote, so running `setup` with the row `off` after it was `on`
-leaves no loop plugin behind. Only OpenCode reads a plugin Estigia writes, so the plugin is written
-only for OpenCode, and the row is offered for OpenCode and for Codex, which continues through hook
-entries instead ([below](#the-same-loop-on-codex)); the write is gated on the effective setting, and
-the path being named is not what decides it.
+install. The setting is authoritative in both directions: `on` writes the plugin
+and `off` takes back one Estigia wrote.
+Only OpenCode reads a plugin Estigia writes, so the plugin is written
+only for OpenCode; the row is offered for OpenCode and for Codex, which continues through hook
+entries ([below](#the-same-loop-on-codex)). The write is gated on the effective setting, not on the path being named.
 
-The loop plugin continues a session while the run still holds its issue, or — once the run's own
+The plugin continues a session while the run still holds its issue, or — once the run's own
 issue is done and released — while another issue is claimable by it, or while a `blocked` item's
 recorded exit condition already holds and only the discharge stands between it and a claim. It
-decides that by asking a read-only verb, `estigia goal`, which answers whether this session's run
-holds a live claim, on which issue, and, when it holds none, how many issues it could claim and how
-many it could discharge, and what is held or pending. **A live claim is continued with the held
-text alone** (issue #3): the same sentence the Claude and Codex `Stop` hooks hand back, naming the issue
-and the run, with no preamble and no `/flow dev` — the session already holds that context, and
-repeating the objective every turn only grew it. The preamble and the objective go out once, at
+decides by asking the read-only verb `estigia goal`, which answers whether this session's run
+holds a live claim, on which issue, and, when it holds none, how many issues it could claim and discharge, and what is held or pending. **A live claim is continued with the held
+text alone**: the sentence the Claude and Codex `Stop` hooks hand back, naming the issue
+and the run, with no preamble and no `/flow dev`, because the session already holds that context. The preamble and the objective go out once, at
 `/flow-loop`, and again whenever the run holds no live claim and the loop continues on claimable or
 dischargeable work. A live answer that names no issue stops the loop. Completion is not a value the
-agent supplies: the plugin reads no `<promise>` and takes no done input. **The objective defaults
-to `/flow dev`**: `/flow-loop` with no text, or with only flags, stores and enqueues
+agent supplies: the plugin reads no `<promise>` and takes no done input.
+
+**The objective defaults
+to `/flow dev`.** `/flow-loop` with no text, or with only flags, stores and enqueues
 `/flow dev`; text whose first word is `/flow` or `flow` is used as given; any other text is
 prefixed with `/flow`, so `/flow-loop only Alicante and Murcia` enqueues `/flow only Alicante and
-Murcia`, a bare `flow`: the combined analyst-developer, which takes the held issue, then an
+Murcia`. A bare `flow` is the combined analyst-developer, which takes the held issue, then an
 unassigned `review`, then an unassigned `ready`, then an `analysis` item to specify, and triages the
 text only when every queue is empty. A leading role word (`dev`,
 `triage`, `analyst`, `developer`) picks that role instead of routing, and working one issue needs
 `dev <n>`, because a bare number is read as conditions or domain rules. The first word is
-matched whole, so `flowchart x` is prefixed, and `stop` is still the command that
-ends the loop. The stored goal holds the prefixed text, which is what each re-enqueue sends and what
-`/flow-status` prints. Its exits are that verb's
-answer and an optional `--max <n>`, which counts **issues that reached `done` under this run** rather
-than turns: the plugin asks `estigia goal --completed`, and that count is enumerated from the tracker
+matched whole, so `flowchart x` is prefixed, and `stop` ends the loop. The stored goal holds the prefixed text, which is what each re-enqueue sends and `/flow-status` prints.
+
+The exits are the verb's
+answer and an optional `--max <n>`, which counts **issues that reached `done` under this run**, not turns: the plugin asks `estigia goal --completed`, enumerated from the tracker
 — the closed, `status:done` issues the run's own delivery closed, proved one by one the way
-`verify-claim` proves a close — never inferred by the plugin and never kept locally. An answer that
-could not be read, a queue count Estigia could not report, or a completion count Estigia could not
-report, stops the loop rather than
-continuing it, and so does a claim answer Estigia could not confirm — an unknown result is not
+`verify-claim` proves a close — never inferred by the plugin or kept locally. An answer that
+could not be read, a queue or completion count Estigia could not
+report, and a claim answer Estigia could not confirm all stop the loop: an unknown result is not
 clearance, and claimable work does not make it one. **A stop keeps the goal.** The plugin records the
-reason and the moment on the goal it holds, and a stopped goal is terminal: the next turn of the
-session does nothing rather than starting the loop again, so a wait on a person is a stop to
-re-invoke deliberately and not a poll — a wait on another run or on a condition is the exception
-below. `/flow-status` reports the stored objective, the run id, and the
+reason and the moment on the goal, and a stopped goal is terminal: the next turn does nothing rather than starting the loop again, so a wait on a person is a stop to
+re-invoke deliberately, not a poll (a wait on another run or on a condition is the exception
+below). `/flow-status` reports the stored objective, the run id and the
 reason the loop stopped, beside the live answer.
 
 **A reaction leaves a record, and a failure is a stop.** Every turn end the owning instance reacts to
 writes `last: { at, outcome }` into the stored goal, with `outcome` one of `enqueued`,
-`stopped: <why>` or `failed: <why>`. An exception thrown while reacting is recorded as a stop naming
-the error, exactly as an unreadable answer is, so the goal never keeps claiming to run after the
-plugin failed. Only the instance whose location is the goal's `directory` writes `last`: any other instance
-writes nothing, so it cannot overwrite what the owner recorded and one turn end still yields one
+`stopped: <why>` or `failed: <why>`; an exception while reacting is recorded as a stop naming
+the error. Only the instance whose location is the goal's `directory` writes `last`, so one turn end yields one
 record. What an instance observes that belongs to no session goal — a
-turn end with no session id, and an event stream that ended or threw — is written to
-its own key, `estigia:loop-watch:<location directory>`, as `{ at, outcome }` with `outcome` beginning
-`ignored:`, `failed:` or `interrupted:`. The watcher subscribes again one second after the stream
-ends or throws, and stops only when the plugin is torn down. `/flow-status` prints the goal's `last` (or says
-that no turn end has been observed yet) and that per-location observation; it no longer says the loop
-has not stopped, only that no stop is recorded.
+turn end with no session id, and an event stream that ended or threw — goes to
+its own key, `estigia:loop-watch:<location directory>`, as `{ at, outcome }` beginning
+`ignored:`, `failed:` or `interrupted:`; the watcher subscribes again one second after the stream
+ends or throws. `/flow-status` prints the goal's `last` (or says
+no turn end has been observed yet) and that observation.
 
 **One reaction per event, in the repository the goal was made in.** OpenCode loads a plugin once
 per location and delivers every event to every instance, so an instance acts only on a session
-whose goal was asked in its own location, and never reads the event's `location` at all: OpenCode
+whose goal was asked in its own location, and never reads the event's `location`: OpenCode
 2.0.20 sends `session.execution.succeeded` without one, and a task worked in its own worktree
 raises events located there while the goal was asked in the base checkout. The goal records the
-`directory` `/flow-loop` asked in, and every later `estigia goal` runs there, never in the event's
-location. `estigia goal` itself answers a run's pointer only from a checkout of the repository the
-claim was made in — from any other it says `unreadable`, which the plugin treats as a claim it could
+`directory` `/flow-loop` asked in, and every later `estigia goal` runs there. `estigia goal` answers a run's pointer only from a checkout of the repository the
+claim was made in; from any other it says `unreadable`, which the plugin treats as a claim it could
 not confirm. An answer that could not be read, or whose standing is `unread` or `unreadable`, is
-retried on the loop's own wait timer, up to a bounded number of attempts; a later confirmed read
-continues the loop, and only once those attempts are spent does it stop — with a resumable notice
-whose reason says the read was retried. The goal is read again right before a prompt is
-enqueued, and an operator stop that arrives while a decision is in flight is held until that decision finishes, so no prompt is enqueued and no timer armed after it. Continuation
-prompts go through `session.prompt` with `delivery: "queue"`; an ordinary stop and `/flow-status`
-are admitted
-through `session.synthetic` with `resume: false`, so they are visible in the session and schedule no
-model turn that could re-arm the loop, while the stop an exhausted retry reaches is sent with
-`resume: true`, so the agent gets a turn in which to see it rather than a notice that schedules
-none. OpenCode 2.0.20's notice renderer shows a synthetic
-message's `description` and never its `text`, so every message is sent with its full content as
-`description` (prefixed `Estigia loop: ` unless it already begins `Estigia`) and again as `text`;
-that renderer has no truncation and collapses whitespace only for shell and subagent messages, so a
-multi-line report keeps its newlines. `/flow-loop stop` records an operator stop — at once when nothing is deciding, and otherwise when the decision in flight finishes, with an immediate "stopping as soon as the decision in flight finishes" reply; a request is satisfied by that one stop and never outlives it, so it cannot stop a later `/flow-loop` — and `/flow-loop` on a
+retried on the loop's own wait timer up to a bounded number of attempts; a later confirmed read
+continues the loop, and once the attempts are spent it stops with a resumable notice
+saying the read was retried. The goal is read again right before a prompt is
+enqueued, and an operator stop that arrives while a decision is in flight is held until that decision finishes, so no prompt is enqueued and no timer armed after it.
+
+Continuation
+prompts go through `session.prompt` with `delivery: "queue"`. An ordinary stop and `/flow-status`
+go through `session.synthetic` with `resume: false`, visible in the session and scheduling no
+model turn that could re-arm the loop; the stop an exhausted retry reaches is sent with
+`resume: true`, so the agent gets a turn in which to see it. OpenCode 2.0.20's notice renderer shows a synthetic
+message's `description` and never its `text`, so every message carries its full content as
+`description` (prefixed `Estigia loop: ` unless it already begins `Estigia`) and as `text`;
+the renderer collapses whitespace only for shell and subagent messages, so a
+multi-line report keeps its newlines. `/flow-loop stop` records an operator stop — at once when nothing is deciding, otherwise when the decision in flight finishes, with an immediate "stopping as soon as the decision in flight finishes" reply; a request is satisfied by that one stop and never outlives it. A
+`/flow-loop` on a
 session whose goal is still running enqueues nothing and says so. The same verb is the run's own goal
 surface: `estigia goal progress
 <note>` and `estigia goal blocked <reason>` record activity that renews its claim, and `estigia goal
@@ -359,94 +293,82 @@ complete` adjudicates, read-only, whether delivery evidence proves the goal comp
 
 **The agent can ask the loop to stop after its current task.** `estigia goal stop-after
 [--reason <text>]` records the request on a file of its own beside `runs/` under `~/.estigia/`,
-rather than on the run pointer — `release` forgets the pointer and the loop reads the request only
-after the claim is released, so a flag on the pointer would be gone before the loop could act on
-it. The next `estigia goal` carries it as `stop_after`, and when the run is not live the plugin
+not on the run pointer: `release` forgets the pointer and the loop reads the request only
+after the claim is released. The next `estigia goal` carries it as `stop_after`, and when the run is not live the plugin
 stops with the request as the reason instead of enqueueing or waiting; while the run holds a live
-claim the request changes nothing and the loop continues. The stop consumes it, and `estigia goal
-stop-after --clear` takes one back, so a later `/flow-loop` starts without it; a fresh `/flow-loop`
-also clears a request an earlier loop left behind, so it never stops on a stale one. `/flow-status`
+claim the request changes nothing. The stop consumes it, `estigia goal
+stop-after --clear` takes one back, and a fresh `/flow-loop`
+clears one an earlier loop left behind. `/flow-status`
 prints a pending request beside the tracker answer.
 
 **One clause is what makes a blocked item dischargeable**, and the plugin never reads prose for it.
 A blocked issue records one clause per `blocked_until` call (or per `<issue>=<state>` pair of
-`create`'s `blocked_until`), in the local store and nowhere on GitHub; a body that still carries a
-`<!-- issue-flow: blocked-until issue=<n> state=<s> -->` marker has it imported on first touch, so
-an issue filed before this change stays resumable. The clause holds when the local store puts issue `<n>` in state `<s>`, and an item counts as
-dischargeable only when every clause it recorded holds now. A clause that is not well formed, or
+`create`'s `blocked_until`), in the local store and nowhere on GitHub; a body still carrying a
+`<!-- issue-flow: blocked-until issue=<n> state=<s> -->` marker has it imported on first touch. The clause holds when the local store puts issue `<n>` in state `<s>`, and an item is dischargeable only when every clause it recorded holds now. A clause that is not well formed, or
 whose named issue the store has never admitted, is reported as one that does not hold — never
 dropped, because an unevaluated condition is not a satisfied one — and the item carries `unparsed`
-or `unread` so the typo or the unreadable issue stays visible instead of looking like a wait with no
-clause. An item with no clause at all — a human adjudication, a condition nobody wrote down — counts
+or `unread` so the typo or unreadable issue stays visible. An item with no clause at all — a human adjudication, a condition nobody wrote down — counts
 nothing and keeps its own surfacing. `list-state --state blocked` reads the clauses from the store
-and answers `dischargeable` beside a per-item `conditions` list, which is one store read per blocked
-item and no GitHub read at all; `estigia goal` reports the count, and
+and answers `dischargeable` beside a per-item `conditions` list: one store read per blocked
+item and no GitHub read. `estigia goal` reports the count;
 [`honesty.md`](honesty.md) says what it does not establish.
 
 **Work that is held or pending is waited on, not stopped on.** When the run holds nothing and
 `claimable + dischargeable` is zero, `estigia goal --json` still says whether the queue can open by
-itself: `held` counts open issues in `in-progress` or `review` that this run could not claim,
-`pending` counts `blocked` items that recorded at least one well-formed clause that does not all hold
-yet, and `unconditioned` counts `blocked` items that recorded no clause, or one that is not well
-formed — a person's to settle. `unadmitted` counts open issues the local store has never admitted,
-which `list-state` reports under `unadmitted` and no state; nothing places them but an explicit
-`transition`, and no `status:` label is read. Each is a number, or `null` when the read behind it failed, and an
-unread count is never zero. With `held + pending + unadmitted > 0` the plugin does not stop, and its wait names the unadmitted
-count and says to admit each issue with an explicit `transition`: it records
-`waiting: <counts>` as the goal's `last.outcome` and `waiting: { since, next, on }` on the goal, and
-re-asks `estigia goal` when a timer fires, every `--wait=<minutes>` minutes (default 5, fixed, no
-backoff; `/flow-loop <objective> --wait=10`). The interval is whole minutes from 1 to 1440, and a value
-outside that — `--wait=0`, `--wait=30s`, `--wait=0.5` — is refused with the reason and the loop does
-not start, rather than being clamped. Each tick makes the same decision a turn end makes: it enqueues
-the continuation prompt once claimable or dischargeable work appears, keeps waiting while something is
-held or pending, and stops as before when nothing can open, naming the `unconditioned` count when
+itself. `held` counts open issues in `in-progress` or `review` that this run could not claim;
+`pending` counts `blocked` items with at least one well-formed clause that does not all hold
+yet;
+`unconditioned` counts `blocked` items with no clause, or one not well
+formed — a person's to settle; `unadmitted` counts open issues the local store has never admitted,
+which `list-state` reports under `unadmitted` and no state (only an explicit
+`transition` places them; no `status:` label is read). Each is a number, or `null` when the read behind it failed, and an
+unread count is never zero. With `held + pending + unadmitted > 0` the plugin does not stop: its wait names the unadmitted
+count and says to admit each issue with an explicit `transition`, records
+`waiting: <counts>` as `last.outcome` and `waiting: { since, next, on }` on the goal, and
+re-asks `estigia goal` every `--wait=<minutes>` minutes (default 5, fixed, no
+backoff). The interval is whole minutes from 1 to 1440; `--wait=0`, `--wait=30s` and `--wait=0.5` are refused with the reason and the loop does
+not start, rather than being clamped. Each tick makes the decision a turn end makes: it enqueues
+the continuation once claimable or dischargeable work appears, keeps waiting while something is
+held or pending, and stops when nothing can open, naming the `unconditioned` count when
 there is one. An unconfirmed read waits the same way, its attempt count carried in the goal's
-`retries` beside `waiting`, so the bound survives the reboot the timer's own re-arm answers.
-**A wait costs one tracker read per interval and no model turn:** while waiting the
+`retries` beside `waiting`, so the bound survives a reboot. **A wait costs one tracker read per interval and no model turn:** while waiting the
 plugin calls neither `session.prompt` nor `session.synthetic`, because anything posted into the
 session enters the next turn's context; the wait is written only to the goal in plugin storage, where
-`/flow-status` prints what it waits on, since when, the interval and the time of the next re-ask.
+`/flow-status` prints what it waits on, since when, the interval and the next re-ask.
 
-There is at most one timer per session. Only the instance whose location is the goal's `directory`
-arms or runs it, so the per-location instances of one server never hold two; a turn end located anywhere
-else is answered by that same instance and by no other. The timer is cleared on
-any stop, on `/flow-loop stop`, when work is enqueued, and when the plugin is torn down. OpenCode evicts idle
-locations and reboots them, and hot-reloads a plugin whose file changed, and a waiting session is
-idle by definition; teardown clears the timer, so on setup the plugin scans its storage for goals
+There is at most one timer per session, armed and run only by the instance whose location is the goal's `directory`. It is cleared on
+any stop, on `/flow-loop stop`, when work is enqueued, and on
+teardown. OpenCode evicts idle
+locations, reboots them and hot-reloads a changed plugin, so on setup the plugin scans its storage for goals
 under `estigia:loop:` that are running, carry `waiting`, and whose `directory` is its own location,
-and arms each for the time left until `waiting.next` (at once if that is past or unreadable). A scan
-that fails is recorded as `failed: could not re-arm waiting loops (...)` under the location's watch
+and arms each for the time left until `waiting.next` (at once if past or unreadable). A failed scan
+is recorded as `failed: could not re-arm waiting loops (...)` under the location's watch
 key. A turn end and a
 tick share one in-flight decision per session: whichever arrives second while the first is reading
-does nothing, so the two enqueue once. `held` is read from `list-state`, which now also answers
+does nothing, so the two enqueue once. `held` is read from `list-state`, which answers
 `open` for `review` and `in-progress` (every non-pull-request issue in the state, assigned or not) and
-`pending` and `unconditioned` beside `dischargeable` for `blocked`; one `estigia goal` therefore
-reads four queues, and the blocked queue's per-item body and label reads are shared by all three
+`pending` and `unconditioned` beside `dischargeable` for `blocked`; one `estigia goal` reads four queues, and the blocked queue's per-item reads are shared by all three
 blocked counts. What the wait cannot see is in [`honesty.md`](honesty.md).
 
 **A running child session is waited on, not re-prompted over.** A turn can end only because the
-session delegated work to a child session (a `Task` subagent) and has nothing to do until it reports;
-continuing at once would spend a model call every turn end to learn that the child still runs. The
-plugin therefore also listens to `session.created` and to `session.execution.started`, `succeeded`,
+session delegated work to a child session (a `Task` subagent); continuing at once would spend a model call every turn end to learn the child still runs. The
+plugin listens to `session.created` and to `session.execution.started`, `succeeded`,
 `failed` and `interrupted`, and keeps in memory which sessions it has seen start with a parent. A
 session counts as a child when it has no loop goal of its own and a parent is known, from the
 `parentID` of a `session.created` it saw or else from `ctx.session.get`; a lookup that throws leaves it
-unknown, never an error out of the hook. When a turn ends and the decision would otherwise enqueue the
-continuation, a running child of that session turns it into a wait: `waiting: N child session(s) still
-running: <ids>` as `last.outcome` and `waiting.on`, on the same timer and with the same
-no-model-turn cost as above. When a child ends, however it ends, and no other child of that parent is
-still running, the plugin decides for the parent once, provided the parent's goal is running, belongs
-to this instance's location and is waiting — a parent still inside its turn is not continued twice.
+unknown, never an error out of the hook. When a turn ends and the decision would enqueue the
+continuation, a running child turns it into a wait: `waiting: N child session(s) still
+running: <ids>` as `last.outcome` and `waiting.on`, on the same timer and at the same
+no-model-turn cost. When a child ends, however it ends, and no other child of that parent still runs, the plugin decides for the parent once, provided the parent's goal is running, belongs
+to this location and is waiting — a parent still inside its turn is not continued twice.
 The wait timer is the backstop: a tick continues the parent even if a child is still recorded, so a
-child whose end was never observed costs one continuation per interval and cannot strand the loop. The
-ownership rule is unchanged and an event's `location` is still never read.
+child whose end was never observed costs one continuation per interval and cannot strand the loop.
 
-A plain `estigia setup opencode --uninstall` removes every plugin Estigia wrote, as it removes everything Estigia
-wrote — a plugin left behind that shells out to an uninstalled binary would be a dangling file, not
-an uninstall. Uninstall reads the loop plugin's path rather than the setting: a file an earlier
+A plain `estigia setup opencode --uninstall` removes every plugin Estigia
+wrote — a plugin left behind that shells out to an uninstalled binary would be a dangling file. Uninstall reads the loop plugin's path rather than the setting, so a file an earlier
 install wrote is taken back even when the row is `off` again. A file carrying no `estigia:loop`
-marker is neither replaced nor removed, exactly as the gate plugin's own marker already decides, so
-`off` leaves a foreign `flow-loop.js` where it is rather than overwriting it. What the loop does
+marker is neither replaced nor removed, so
+`off` leaves a foreign `flow-loop.js` where it is. What the loop does
 not prove is in [`honesty.md`](honesty.md).
 
 ## The same loop on Codex
@@ -529,50 +451,45 @@ Claude Code reads custom slash commands and runs a `Stop` hook that can keep a t
 writes two slash commands under `$CLAUDE_CONFIG_DIR/commands/` — `flow-loop.md` and
 `flow-status.md`, each carrying `<!-- estigia:loop-command -->` — and registers the `Stop` entry as
 `"<estigia>" hook stop --agent claude-code --dialect claude-code` with a 180 s timeout, while
-`SessionStart` and `SessionEnd` stay exactly as they were. With it `off` nothing is written and an
+`SessionStart` and `SessionEnd` stay as they were. With it `off` nothing is written and an
 Estigia-owned command is taken back; a command Estigia did not write is neither replaced nor removed,
 and a plain uninstall removes them.
 
-On every install, whatever that row says, `estigia setup claude-code` also writes one more slash
-command, `estigia-changes.md` in the same directory, carrying the same marker. It is a prompt that
-asks Claude Code to run `estigia changes` and show the output unchanged, and not to act on it. It
-follows the same ownership rule: a file Estigia did not write is neither replaced nor removed, and a
-plain uninstall takes back one it did.
+On every install, whatever the row says, `estigia setup claude-code` also writes `estigia-changes.md` in the same directory, with the same marker and ownership rule: a prompt asking Claude Code to run `estigia changes` and show the output unchanged, not to act on it.
 
 - `/flow-loop [objective] [--max n]` stores the loop for the session's run
-  (`estigia goal start`), applying the same objective rule OpenCode's plugin does — no text is
+  (`estigia goal start`), applying the objective rule OpenCode's plugin does — no text is
   `/flow dev`, text already naming `/flow` is used as given, anything else is prefixed — and records
-  the cap. Only a numeric `--max` is split out; one whose value will not parse is left in the
-  objective rather than eating the word that followed it. Then it works the objective.
+  the cap. Only a numeric `--max` is split out; one whose value will not parse stays in the
+  objective. Then it works the objective.
 - `/flow-status` runs `estigia goal` and reports the objective, the run id, the last outcome and, when
-  the loop has ended, why (`estigia goal` answers all of these beside the tracker line).
+  the loop has ended, why.
 - `/flow-loop stop` records the portable `estigia goal stop-after` request, the same one the agent
-  itself can make, so ending the loop needs no Claude-only mechanism. It is honoured at the next turn
+  can make, honoured at the next turn
   end.
 
 **What the `Stop` hook decides.** While a stored loop is running, the hook continues the turn with the
 next `/flow` prompt — the preamble from `harness::loop_text` and the `Slash` invocation, the same
 shared decision Codex's hook uses — or, while the run holds a live claim, with the held text alone
-(`harness::hook::stop_block`) — whenever `estigia goal` says the run is live or another issue is
-claimable or dischargeable; it honours a pending `stop-after`; it stops at the stored `--max`, counted
-by `estigia goal --completed` as issues that reached `done` under the run; it lets the turn end and
+(`harness::hook::stop_block`), whenever `estigia goal` says the run is live or another issue is
+claimable or dischargeable. It honours a pending `stop-after`; stops at the stored `--max`, counted
+by `estigia goal --completed`; lets the turn end and
 says what the queue waits on when only held or pending work is left, since a `Stop` hook cannot wait;
-and an answer it cannot confirm is retried, with a pause between attempts, up to the same bound
-before the loop stops — that stop is not terminal, so a later turn reads again, and its record says
+and retries an answer it cannot confirm, with a pause, up to the same bound
+before the loop stops — a stop that is not terminal, so a later turn reads again, and whose record says
 the read was retried. It
 records the last outcome and the stop on the stored goal, and the request behind a `stop-after` stop is
 consumed only once that record has reached disk, so a goal that could not be written leaves the
-request for the next turn instead of losing the stop; a fresh `/flow-loop` clears any request a
+request for the next turn. A fresh `/flow-loop` clears any request a
 previous loop left. A stopped goal is terminal for the loop, not for the gate: the next turn gets the
-ordinary claim-holding answer rather than starting the loop again. It stands aside on an unreadable
-payload and on a transcript that names an unanswered background launch, exactly as the ordinary Claude
-`Stop` does. It does **not** honour `stop_hook_active` while a loop is running: Claude Code sets it on
-every `Stop` after the first in a turn, so honouring it would end a loop after one continuation, as it
-would for Codex. With no loop stored, the hook is the ordinary claim-holding one, byte for byte.
+ordinary claim-holding answer. The hook stands aside on an unreadable
+payload and on a transcript naming an unanswered background launch, as the ordinary `Stop` does. It does **not** honour `stop_hook_active` while a loop is running, for the reason it is
+not honoured for Codex. With no loop stored, the hook is the ordinary claim-holding one, byte for byte.
 
 That ordinary `Stop` also stands aside for a run waiting on a person: one whose pointer records the
 state `blocked`, or whose newest receipt on the held issue in the local store is `escalated` (a
-publication recorded after it ends the wait). It reads the store alone, never the tracker, and a store
+later
+publication ends the wait). It reads the store alone, never the tracker, and a store
 it cannot read exempts nothing. The loop's own `Stop` and Codex's keep their answers.
 
 ## The Claude Code mail waiter
@@ -734,131 +651,114 @@ the relay does not prove is in [`honesty.md`](honesty.md).
 
 ## The Pi gate extension
 
-Every `~/.pi/agent` below is Pi's agent directory: `$PI_CODING_AGENT_DIR` when that is set to an absolute path
-(or one starting with `~`), `~/.pi/agent` otherwise. `estigia setup pi` writes nine things: the fenced directive into `~/.pi/agent/AGENTS.md`, the skill
-into the shared `~/.agents/skills` tree, Estigia's server into `~/.pi/agent/mcp.json` under
-`mcpServers` (`command`, `args: ["mcp"]`, an `exposure` and, on a Pi that defers, a `description`; see below), and four
-extensions: `~/.pi/agent/extensions/estigia-workflow-authority.ts`, marked `estigia:workflow-authority`
-like OpenCode's plugin, the review relay and the subagent runner, both described in the sections after the loop extensions, and the look extension, `~/.pi/agent/extensions/estigia-look.ts`, marked `estigia:look`; the two prompt templates,
-described after the extension; and the theme `~/.pi/agent/themes/estigia.json`. The look and the theme are
-[`The Pi look and theme`](#the-pi-look-and-theme). Where `Model routing` names
-`developer` or `analyst`, setup also writes `~/.pi/agent/agents/developer.md` and `analyst.md`, under
-the ownership record every delegated definition shares (see the agent-definitions section below). Pi loads the extension through its own TypeScript loader with no build step;
-the file is plain JavaScript, which is also valid TypeScript, so the tests load the same bytes under
+Every `~/.pi/agent` below is Pi's agent directory: `$PI_CODING_AGENT_DIR` when set to an absolute path
+(or one starting with `~`), `~/.pi/agent` otherwise. `estigia setup pi` writes nine things: the fenced directive into `AGENTS.md`; the skill
+into the shared `~/.agents/skills` tree; Estigia's server into `mcp.json` under
+`mcpServers` (`command`, `args: ["mcp"]`, an `exposure` and, on a Pi that defers, a `description`; see below); four
+extensions in `extensions/` —
+`estigia-workflow-authority.ts` (marked `estigia:workflow-authority`, like OpenCode's plugin), the review relay, the subagent runner, and `estigia-look.ts` (marked `estigia:look`); the two prompt templates; and the theme `themes/estigia.json` (see [the look and theme](#the-pi-look-and-theme)).
+Where `Model routing` names
+`developer` or `analyst`, setup also writes `agents/developer.md` and `analyst.md`, under
+the ownership record every delegated definition shares. Pi loads an extension through its own TypeScript loader with no build step;
+the file is plain JavaScript, also valid TypeScript, so the tests load the same bytes under
 `node`.
 
 The extension decides nothing. On Pi's `tool_call` event it runs
-`estigia gate <tool> --input - --session-id <id> --runtime pi` in `ctx.cwd`, with the tool's input as JSON on the child's standard input, with the session id
-from `ctx.sessionManager.getSessionId()`, and the same three outcomes OpenCode's plugin has: exit `0`
-lets the call through, exit `1` or `2` returns `{ block: true, reason }` with the binary's standard
-error as the reason, and a binary that is gone, a timeout or a signal — no exit code at all — logs
-`went out unchecked` and lets the call through, because a hook that breaks does not deny. With a UI
-the same sentence is also shown through `ctx.ui.notify(text, "error")`, because the person is the one
-who most needs to know a write was not checked; the outcome does not change. The call is asynchronous
-and bounded at thirty seconds: a binary that has not answered by then is killed and counts as having
-given no answer, never as a refusal, so a hung binary cannot freeze Pi. The call reads at most eight
-mebibytes from the binary; an answer larger than that is not a timeout and is not waved through: the
-call is blocked with a reason saying the gate's answer was larger than the extension can read.
+`estigia gate <tool> --input - --session-id <id> --runtime pi` in `ctx.cwd`, the tool's input as JSON on the child's standard input
+and the session id
+from `ctx.sessionManager.getSessionId()`, with the three outcomes OpenCode's plugin has: exit `0`
+lets the call through; exit `1` or `2` returns `{ block: true, reason }` with the binary's standard
+error as the reason; a binary that is gone, a timeout or a signal — no exit code — logs
+`went out unchecked` (with a UI, also `ctx.ui.notify(text, "error")`) and lets the call through, because a hook that breaks does not deny. The call is asynchronous
+and bounded at thirty seconds: a binary that has not answered by then is killed and counts as no answer, never a refusal.
+It reads at most eight
+mebibytes; a larger answer is blocked, with a reason saying so, not waved
+through. A numeric exit code it does not recognise is blocked too, with a reason naming `estigia
+setup pi`, which rewrites the extension. A call with no session id goes to the gate without
+`--session-id`.
 
 Pi decides what it loads from its own files, and those are control surface: `~/.pi/agent/settings.json`,
-`~/.pi/agent/mcp.json`, the project's `.pi/settings.json`, `.pi/mcp.json` and `.pi/extensions/`, as well
-as `~/.pi/agent/extensions/`. When `PI_CODING_AGENT_DIR` is set in the gate's own environment, the same files
+`~/.pi/agent/mcp.json`, the project's `.pi/settings.json`, `.pi/mcp.json` and `.pi/extensions/`, and
+`~/.pi/agent/extensions/`. When `PI_CODING_AGENT_DIR` is set in the gate's own environment, the same files
 under that directory, and its `AGENTS.md`, `AGENTS.override.md`, `agents/` and `prompts/`, are control surface too. A write to any of them is a boundary, because an `extensions` exclusion
 or a project `mcp.json` override unloads the gate or the tool server from the next session. `estigia
 doctor`'s `pi-config` row reads them and reports such an entry; it never rewrites one. What it cannot
 tell is in [`honesty.md`](honesty.md).
 
-Which calls reach the binary is decided by name and then by shape. `edit`, `write` and `bash` go
-under their own names. Any other tool whose input has a string `command` is sent as `bash`, with its
-input unchanged: gentle-shell's `bash_background` and `monitor` and Pi's `powershell` among them. A
-tool whose input has a string `path` and a string `content` is sent as `write`, and one with a string
+Which calls reach the binary is decided by name, then by shape. `edit`, `write` and `bash` go
+under their own names. Any other tool whose input has a string `command` is sent as `bash`, input unchanged (`bash_background`, `monitor` and Pi's `powershell` among them); one with a string `path` and a string `content` as `write`; one with a string
 `path` and an `edits` array as `edit`. Only those exact keys are read, so a custom tool that names its
 command or path differently is not gated. The binary classifies by the name it is given, so the
-extension names the class and keeps the tool's real name for its own messages and the refusal card;
-the text the binary prints says `bash` or `write`. `powershell` is gated as `bash` on purpose: the
-shell classifier reads POSIX shell, so a PowerShell cmdlet that writes (`Set-Content`, `Out-File`,
+extension names the class and keeps the real tool name for its own messages. `powershell` is gated as `bash` on purpose: the
+shell classifier reads POSIX shell, so a cmdlet that writes (`Set-Content`, `Out-File`,
 `Remove-Item`) is not recognised as a write, while a `git` or `gh` command line, a redirect and
-`powershell -Command` nested inside are read as they are in `bash`. Gating it as `bash` therefore
-checks the claim for what the classifier can see and nothing more; leaving it out would check
-nothing (see `docs/honesty.md`). A numeric
-exit code it does not recognise is not that case: the binary did answer, in a way this extension cannot
-read, so the call is blocked with a reason saying so and naming `estigia setup pi`, which rewrites the
-extension. A call with no session id goes to the gate without `--session-id`, as OpenCode's does.
+a nested `powershell -Command` are read as in `bash`. That checks the claim for what the classifier can see and nothing more; leaving it out would check
+nothing (see `docs/honesty.md`).
 
-Both gate plugins hand the input on standard input, never as an argument: `--input -` tells the binary
-to read the JSON from there, up to 32 MiB, and refuse anything unreadable or not JSON as it refuses a
-malformed `--input`. An argument larger than the operating system's limit would fail to start the binary
-and read as "did not answer"; standard input has no such limit. Pi's extension writes it with
-`child.stdin.end` on the `execFile` child and ignores a write error, so a binary that exits first does not
-crash the host; OpenCode's plugins redirect a `Buffer` into Bun's shell (`< ${stdin}`). A plugin written by
-this version needs the binary installed with it, which `setup` always arranges; an older binary reads `-`
-as the JSON, refuses with exit `1`, and so blocks the call.
+Both gate plugins hand the input on standard input, never as an argument: `--input -` reads the JSON from there, up to 32 MiB, and refuses anything unreadable or not JSON as it refuses a
+malformed `--input`. An argument larger than the OS limit would fail to start the binary
+and read as "did not answer". Pi's extension writes it with
+`child.stdin.end` and ignores a write error, so a binary that exits first does not
+crash the host; OpenCode's plugins redirect a `Buffer` into Bun's shell (`< ${stdin}`). An older binary reads `-`
+as the JSON, refuses with exit `1`, and so blocks the call;
+`setup` always installs the binary with the plugin.
 
-A fourth code, `4`, is a question for the person. The extension adds `--can-ask` to the gate call only
-when `ctx.mode === "tui"` and the call has a session id; `ctx.hasUI` is not enough, because Pi sets it
-in `rpc` mode too, where a client answers dialogs programmatically. The binary honours the flag for
-`--runtime pi` alone: a decision that would be asked then exits `4` with the question, in the words of
-a refusal, on standard error; without the flag every such decision stays a refusal, exit `1`, so an
-extension written before this flag never receives `4`. On `4` the extension shows
+A fourth code, `4`, is a question for the person. The extension adds `--can-ask` only
+when `ctx.mode === "tui"` and the call has a session id (`ctx.hasUI` is not enough: Pi sets it
+in `rpc` mode too, where a client answers dialogs programmatically). The binary honours the flag for
+`--runtime pi` alone: a decision that would be asked then exits `4` with the question on standard error; without the flag every such decision stays a refusal, exit `1`. On `4` the extension shows
 `ctx.ui.confirm("Estigia", <the binary's text>)` and lets the call through only on an explicit yes. A
 decline, a cancelled dialog, a `confirm` that throws, and a `4` it did not ask for all return
 `{ block: true, reason }` with the binary's text.
 
-Pi has no subagents of its own: the extensions that add them start a child `pi` process, or run a child
-session inside Pi's own process. The gate extension links a child to its parent in two ways. A session
-whose header names a `parentSession` is a child of that session, in this process or another, and
+Pi has no subagents of its own: the extensions that add them start a child `pi` process or run a child
+session inside Pi's process. The gate extension links a child to its parent in two ways. A session
+whose header names a `parentSession` is a child of that session, and
 the gate call carries `--parent-session-id <the parent's session id>`: the id exported as
-`ESTIGIA_PI_PARENT_SESSION` when there is one that is not the child's own, and otherwise the `id` in the
+`ESTIGIA_PI_PARENT_SESSION` when there is one that is not the child's own, otherwise the `id` in the
 parent's session file, or failing that the id in its file name. A session with no such header falls back
 to the pid: the extension exports `ESTIGIA_PI_PARENT_SESSION` (its session id) and `ESTIGIA_PI_PARENT_PID`
 (its process id) into `process.env` on `session_start` and on every `tool_call` of a session that is not a
-child, so a switched session re-exports and a child `pi` spawned afterwards inherits both, and a process
+child, so a switched session re-exports and a child `pi` spawned afterwards inherits both; a process
 whose id differs from the exported pid and whose session id differs from the exported session adds
-`--parent-session-id <exported id>`. The binary then decides the child as the run derived from that id,
-the parent's, exactly as a Claude Code subagent is. A child never exports anything, and the exporting
+`--parent-session-id <exported id>`. The binary then decides the child as the run derived from the
+parent's id,
+as it does a Claude Code subagent. A child never exports anything, and the exporting
 process never names its own session as a parent.
 
 `estigia doctor`'s `pi-subagents` row names the Pi subagent runners it can see, from a `packages` entry
 of the user or project `settings.json` or an extension in either `extensions/` directory whose name
 says subagent, and says whether their children load the gate. A runner that starts children with
 `--no-extensions`, or runs them inside Pi's process, or whose source cannot be read, is reported like a
-skipped check with `WARNING` and its name; it installs and rewrites nothing. What it cannot tell is in
-[`honesty.md`](honesty.md). Estigia's own runner (see *The Pi subagent runner extension* below) is named in the same row: alone,
-as installed, or beside any other runner it found, in which case the row says a delegation can reach
+skipped check with `WARNING` and its name; the row installs and rewrites nothing. What it cannot tell is in
+[`honesty.md`](honesty.md). Estigia's own runner is named in the same row, alone or beside another runner it found, in which case the row says a delegation can reach
 either. `estigia setup pi` says the same in a note when it finds another runner while installing its
-own; it does not refuse and does not skip the install.
+own; it neither refuses nor
+skips the install.
 
-The same file also draws two things for the person, and neither decides anything. When `ctx.hasUI`
-is true it keeps a status line, key `estigia-claim`, through `ctx.ui.setStatus`: on `session_start`,
-`tool_result` and `agent_settled` it runs `estigia goal --json --session-id <id> --runtime pi` in
-`ctx.cwd` asynchronously with a five-second bound and shows the `issue`, `state` and, when the claim
-is not live, the `standing` that answer carries; an answer with no issue clears the line, and an
-answer that did not arrive, did not parse or lacks `issue` shows `estigia: claim unknown`, never the
-previous claim. A child process asks about the exported root session, the run its gate calls are
-decided as. When the gate refuses, the extension still returns `{ block: true, reason }` and, with a
-UI, also appends a session entry `estigia-refusal` through `pi.appendEntry`, which a renderer
-registered with `pi.registerEntryRenderer` draws as a heading naming the tool followed by the
-reason, the binary's standard error unchanged and only wrapped to the width: each line carries a `▎`
-bar in the error tone and is painted on `toolErrorBg`. It is an entry and not
-a `pi.sendMessage` message because Pi converts every custom message to a user message for the model
-whatever its `display` flag says, which would put the reason in front of the model a second time.
+The same file draws for the person, and decides nothing. With `ctx.hasUI`
+it keeps a status line, key `estigia-claim`: on `session_start`,
+`tool_result` and `agent_settled` it runs `estigia goal --json --session-id <id> --runtime pi` (five-second bound) and shows the `issue`, `state` and, when the claim
+is not live, the `standing`; an answer with no issue clears the line, and one that did not arrive, did not parse or lacks `issue` shows `estigia: claim unknown`, never the
+previous claim. A child asks about the exported root session. When the gate refuses, the extension returns `{ block: true, reason }` and, with a
+UI, also appends a session entry `estigia-refusal` (`pi.appendEntry`)
+that a registered renderer
+draws as the tool name and the binary's standard error, wrapped. It is an entry, not
+a `pi.sendMessage` message, because Pi converts every custom message to a user message for the model, which would put the reason in front of the model a second time.
 
 Pi has no `SessionStart` hook, so the extension carries the same context through `estigia session`.
-On `before_agent_start` it runs `estigia session start --session-id <id> --runtime pi` in `ctx.cwd`
-asynchronously with a five-second bound, and sets `systemPromptOptions.sections.estigia` to the
+On `before_agent_start` it runs `estigia session start --session-id <id> --runtime pi` (five-second
+bound) and sets `systemPromptOptions.sections.estigia` to the
 binary's text, which Pi renders as an `<estigia>` section appended to the prompt; it returns nothing,
-so it never replaces the prompt the way a returned `systemPrompt` does. The text is
+so it never replaces the prompt. The text is
 `harness::hook::session_start_text`, which wraps `session_start_response`, the function the Claude
 Code hook uses, so the run id, what the run holds, the `Issue requirement` note, the build note (absent in a repository that does not hold the
 build's commit, `docs/honesty.md`) and the
-queue note are one text for both apart from the queue count. It asks on every run rather than caching: the answer depends on a
-claim made since the last turn and costs one local process, and a section that changed is what Pi
-persists as a patch, so a compaction keeps the current one. The queue note in this section states that GitHub writes are queued without counting them: a changed section
-rewrites the leading prompt for most providers, and a count that grew with every queued write would do that
-on every turn while nothing else had changed. A binary that does not answer, answers
-with a code, a signal or nothing, or is past the bound, gives a section reading `Estigia: session
-context unknown (<why>)`, never an empty one and never the last text. A child process asks about the
-exported root session, like the status line.
+queue note are one text for both apart from the queue count. The queue note says GitHub writes are queued without
+counting them: a growing count would rewrite the leading prompt on every turn. It asks on every run rather than caching, since the answer depends on a
+claim made since the last turn and costs one local process. A binary that does not answer, answers
+with a code or signal, or is past the bound, gives a section reading `Estigia: session
+context unknown (<why>)`, never an empty one and never the last text.
 
 `session_start` records its `reason` and the id in the first line of `previousSessionFile`, and
 forwards both as `--reason` and `--previous-session-id`. When the reason is `fork` or `new`, this
@@ -866,17 +766,14 @@ session holds nothing and the previous session's run holds issue #N, the text ad
 and naming `estigia release --run-id <previous run>`, after which this session can claim the issue. The
 claim is never moved. On `session_shutdown` the extension runs `estigia session end --session-id <id>
 --runtime pi --reason <reason>` once per session and reason; the binary forgets the run's pointer unless
-the reason is `new`, `resume`, `fork` or `reload`, because a session that was only replaced may be
-resumed, and a reload keeps the same session id. A child process never ends the session it was started
-under.
-
-While the root session is idle the extension also polls the mailbox every 10 seconds and wakes the session with
+the reason is `new`, `resume`, `fork` or `reload`, because a replaced session may be
+resumed and a reload keeps the session id. A child never ends the session it was started
+under. While the root session is idle the extension also polls the mailbox every 10 seconds and wakes the session with
 `pi.sendMessage`; [`sessions.md`](sessions.md#waking-an-idle-pi-session) has the order and what it refuses.
 
-Pi's own argument names need no translation. Its `write` takes `path` and `content`, its `edit` takes
-`path` and an `edits` list, and its `bash` takes `command`; `harness::path_argument` and the shell
-reader already accept `path` and `command`, so the rule for what a write targets stays in the binary
-and the extension passes `event.input` through unchanged. The run id the gate derives is
+Pi's argument names need no translation: its `write` takes `path` and `content`, its `edit` takes
+`path` and an `edits` list, and its `bash` takes `command`, all of which `harness::path_argument` and the shell
+reader already accept, so the extension passes `event.input` through unchanged. The run id the gate derives is
 `session::run_id("pi", <session id>)`: `pi-`, the first eight alphanumeric characters of Pi's UUIDv7
 session id, then eight hex digits of its FNV-1a hash.
 
@@ -891,97 +788,69 @@ version `pi --version` reports on `PATH` when `setup` or `sync` runs (or the gui
 | not found, or a version that does not parse | `direct` | The conservative value every Pi can use |
 
 The `description` is `Estigia workflow authority: claim an issue, record tasks and reviews, transition
-state, release`. Pi uses it to list the server and to rank `tool_search` results, and none of that
-applies to a `direct` server, so that entry carries none. `estigia setup pi --dry-run` prints a `note:`
+state, release`. `estigia setup pi --dry-run` prints a `note:`
 naming the exposure it would write and the version reading behind it. Estigia owns the entry and
-rewrites it whole on every setup, so an entry from an older setup is migrated on the next run, an
-`exposure` an operator edited into it is put back, a Pi upgraded to 1.2.0 gets `deferred` on the next
-setup, and a second run with the same Pi changes nothing. `estigia doctor`'s `pi-config` row names the
-exposure it finds in the user `mcp.json` and the Pi version, and says so when a Pi at 1.2.0 or later
-still carries `direct`; that is a warning inside an otherwise fine row, not a break. Every other
+rewrites it whole on every setup, so an older entry is migrated, an
+`exposure` an operator edited in is put back, a Pi upgraded to 1.2.0 gets `deferred`, and a second run with the same Pi changes nothing. `estigia doctor`'s `pi-config` row names the
+exposure it finds in the user `mcp.json` and the Pi version, and warns (inside an otherwise
+fine row) when a Pi at 1.2.0 or later
+still carries `direct`. Every other
 adapter's entry is unchanged.
 
-The same extension registers one command, `/estigia-doctor`, with `pi.registerCommand`. It runs
-`estigia doctor` in `ctx.cwd` asynchronously with a sixty-second bound and shows what the binary
-printed, unchanged except that trailing newlines are dropped; standard error follows standard output
-when the binary wrote to both, so a refusal line is not lost. With a UI the text is appended as a
-session entry `estigia-doctor` through `pi.appendEntry` and drawn by a renderer registered with
-`pi.registerEntryRenderer`, wrapped to the width and framed like the refusal card: a `▎` bar in the
-border tone on `toolPendingBg` when the binary answered, and in the error tone on `toolErrorBg` when
-it did not; it is an entry and not a
-`pi.sendMessage` message for the reason the refusal card is, so the report never reaches the model. A
-Pi without `appendEntry` gets the whole text through `ctx.ui.notify` instead. Without a UI the
-report goes to standard output. A binary that is gone, a timeout, a signal, an output larger than the
+The extension registers two commands that run the binary
+and show what it printed, unchanged except that trailing newlines are dropped: `/estigia-doctor` (`estigia doctor`, sixty-second bound) and
+`/estigia-changes` (`estigia changes`). With a UI the text is appended as a
+session entry (`estigia-doctor`) through `pi.appendEntry`, so the report never reaches the model; a Pi without `appendEntry` gets it through `ctx.ui.notify`, and without a UI it goes to standard output. A binary that is gone, a timeout, a signal, an output larger than the
 extension can read, or an exit with nothing printed is never shown as a report: the text reads
-`estigia doctor did not answer (<why>)` and is drawn as an error. A second command,
-`/estigia-changes`, does the same with `estigia changes` and draws the same entry; it reads the
-listing and decides nothing. The command decides nothing and
-changes nothing; the report is the binary's.
-
-The extension also keeps a widget, `estigia-changes`, through `ctx.ui.setWidget`, refreshed at
-session start and after each settled turn. It runs `estigia changes --json` in `ctx.cwd` with a
-twenty-second bound and counts the entries: `uncommitted work in N checkouts`, with `, M unreadable`
-when git could not be read in some, and `N checkouts unreadable` when that is all there is, each
-followed by `/estigia-changes`. A repository with nothing uncommitted and nothing unreadable clears
-the widget. A binary that is gone, a timeout, a signal or output that is not the listing shows
-`uncommitted work unknown`, never a count. Without a UI, or on a Pi whose `ctx.ui` has no
-`setWidget`, nothing is run. The widget counts and decides nothing.
+`estigia doctor did not answer (<why>)` and is drawn as an error. Neither command decides or changes anything. A widget, `estigia-changes`, is refreshed at
+session start and after each settled turn from `estigia changes --json` (twenty-second bound): `uncommitted work in N checkouts`, with `, M unreadable`
+when git could not be read in some; nothing uncommitted and nothing unreadable clears
+it, and a failed or unparseable read
+shows
+`uncommitted work unknown`, never a count. Without a UI, or without `setWidget`, nothing is run.
 
 Setup also writes two prompt templates into `~/.pi/agent/prompts/`: `claim.md` and `review-status.md`,
-each a markdown file with a `description` and an `argument-hint` in its frontmatter and a body of
-one instruction that names the Estigia MCP operation to call (`claim`, with the issue number given as
+each a markdown file with a `description` and an `argument-hint` in its frontmatter and a one-instruction body naming the Estigia MCP operation to call (`claim`, with the issue number as
 the template's argument and the run id Estigia reported at session start; `review_status` for the
-issue). They carry no rule of their own. Each holds the comment `<!-- estigia:pi-prompt -->`, which is
-the ownership marker: setup writes a template that is absent or carries it, a second setup changes
+issue). They carry no rule of their own. Each holds the comment `<!-- estigia:pi-prompt -->`, the ownership marker: setup writes a template that is absent or carries it, a second setup changes
 nothing, uninstall removes exactly the templates that carry it, and a `claim.md` somebody else wrote
-is neither replaced nor removed. Setup writes them on every install, not under the `Loop plugin`
-setting, because they are not part of the loop. There is no `flow` template: Pi already registers
-`/skill:flow` for the skill setup installs. Pi reads templates from the top of the directory only and
+is neither replaced nor removed. They are written on every install, not under the `Loop plugin`
+setting. There is no `flow` template: Pi already registers
+`/skill:flow` for the installed skill. Pi reads templates from the top of the directory only and
 expands `$ARGUMENTS` itself; run `/reload` in an open session after setup. A prompt template tells the
 run what to do, so `~/.pi/agent/prompts/` and the project's `.pi/prompts/` are control surface like
-Claude Code's `commands/` directory, and `prompts/` is added to the files watched under a relocated
+Claude Code's `commands/`, and `prompts/` is added to the files watched under a relocated
 `PI_CODING_AGENT_DIR`. `doctor` does not read them: it reads what unloads the gate, and a missing
 template unloads nothing.
 
 A plain `estigia uninstall pi` removes the directive block, Estigia's `mcpServers` entry, the four
-extensions, the two prompt templates, the look and the theme, and leaves every other server and every other line of `AGENTS.md`. An extension at that path
-carrying no marker is neither replaced nor removed, and `status` then reports the gate off. `--scope=workspace`
+extensions, the two prompt templates, the look and the theme, and leaves every other server and every other line of `AGENTS.md`. An extension carrying no marker is neither replaced nor removed, and `status` then reports the gate off. `--scope=workspace`
 refuses Pi. What none of this proves — chiefly that Pi acts on the returned `block` — is in
 [`honesty.md`](honesty.md).
 
 ## The Pi look and theme
 
-`estigia setup pi` writes two artefacts that draw and decide nothing.
+`estigia setup pi` writes two artefacts that draw and decide nothing, on every install.
 
-`~/.pi/agent/themes/estigia.json` is a Pi theme named `estigia`, appearance `dark`, in the palette of
-the project banner: a night background, an azure accent, cyan code and azure links, gold headings and
-borders, olive success, ember error and amber warning. It carries all 51 color tokens Pi's schema
-requires and no token outside the set Pi accepts, and every value is either a literal color or a
-variable the file defines. Pi's schema rejects an unknown top-level key and an unknown color token, so
+`~/.pi/agent/themes/estigia.json` is a Pi theme named `estigia` (appearance `dark`, the project banner's palette) carrying all 51 color tokens Pi's schema
+requires and none outside the set Pi accepts. Pi's schema rejects an unknown top-level key or color token, so
 the file cannot hold a marker: **it is Estigia's while its bytes are the embedded theme.** Setup
-writes an absent theme or one that is byte-identical, uninstall removes only a byte-identical one, and
-a theme somebody edited is neither replaced nor removed.
+writes an absent or byte-identical theme, uninstall removes only a byte-identical one, and
+an edited theme is neither replaced nor removed. Neither artefact touches `~/.pi/agent/settings.json`, which is control surface:
+the person selects the theme with `/settings` → Theme or `pi --use-theme estigia`, and the run that
+writes it says so in a note.
 
 `~/.pi/agent/extensions/estigia-look.ts` is a display-only extension marked `estigia:look`, with the
-same ownership rule as every other extension. It registers one command, `/estigia-look on|off`, and on
-`session_start` installs a startup header through `ctx.ui.setHeader` and a footer through
-`ctx.ui.setFooter`. The header draws the wordmark, the tagline `Light. Local. Agentic.` and the
-abbreviated working directory, branch and model: the wordmark alone below 24 columns, the wordmark and
-the subtitle `AI harness` from 24, the tagline, the directory and the branch from 40, the model from
-60, and the rule from 40. The
-footer's first line carries `estigia`, the claim read from the `estigia-claim` status, the git branch
-from `footerData.getGitBranch()`, the model and thinking level, the context percentage and the session
-cost; its second line carries the statuses other extensions published, so installing the look never
-hides one. As the terminal narrows the line gives segments up in a fixed order — cost, then model,
-then branch, then context — and the claim is never dropped. In any mode but `tui`, or on a host whose
-`ctx.ui` has no `setHeader` or `setFooter`, nothing is installed. `/estigia-look off` puts Pi's own
-header and footer back; the choice lasts the session and is written nowhere. The extension registers
+ownership rule of every other extension. On `session_start` it installs a startup header (`ctx.ui.setHeader`: the wordmark, the tagline `Light. Local. Agentic.` and the
+abbreviated working directory, branch and model, dropping parts as the width narrows) and
+a footer (`ctx.ui.setFooter`:
+`estigia`, the claim read from the `estigia-claim` status, the branch, the model and thinking level, the context percentage and the session
+cost, then the statuses other extensions published, so the look never
+hides one; as the terminal narrows it gives up cost, model,
+branch, then context, and never the claim). In any mode but `tui`, or on a host whose
+`ctx.ui` has no `setHeader` or `setFooter`, nothing is installed. `/estigia-look on|off` puts Pi's own
+header and footer back for the session and writes nothing. The extension registers
 no tool, sends no message, appends no entry, runs no process and imports nothing but `node:fs`.
-
-Both are written on every install, like the gate plugin and unlike the loop plugin. Neither touches
-`~/.pi/agent/settings.json`, which is control surface: the theme is selected by the person with
-`/settings` → Theme or `pi --use-theme estigia`, and the run that writes it says so in a note.
-`PI_CODING_AGENT_DIR` moves both with the rest of the agent directory.
 
 ## The Pi loop extension
 
@@ -1088,11 +957,11 @@ prove is in [`honesty.md`](honesty.md).
 ## The Pi subagent runner extension
 
 `estigia setup pi` also writes `~/.pi/agent/extensions/estigia-agents.ts`, marked `estigia:agents`,
-**ungated** and written on every install, like the review relay beside it. `--dry-run` reports it,
+**ungated** and written on every install. `--dry-run` reports it,
 `estigia uninstall pi` removes it, and a file carrying no `estigia:agents` marker is neither replaced nor
-removed. The file is plain JavaScript, which is also valid TypeScript.
+removed.
 
-It registers one tool, `estigia_subagent` (`agent`, `task`, optional `label`), and the command
+It registers one tool, `estigia_subagent` (`agent`, `task`, optional `label`, `background`), and the command
 `/estigia-agents`. The tool reads `<agent dir>/agents/<agent>.md`, the definition setup writes for
 `developer` and `analyst`, and starts `pi --mode rpc --session-dir <temporary directory>` with that
 definition's `model` and `tools` when it names them and its body as `--append-system-prompt`, in its own
@@ -1101,7 +970,7 @@ process group, **inheriting the environment unchanged**. The gate extension has 
 binary decides every write the child makes as the parent's run. The runner decides nothing about authority;
 it spawns, relays and draws. Two checks come before any work is sent:
 
-- the tool is refused, and nothing is spawned, when the gate extension has not exported
+- the tool is refused, and nothing spawned, when the gate extension has not exported
   `ESTIGIA_PI_PARENT_SESSION`, because the child could not be linked to a claim;
 - the child is asked for its commands (`get_commands`) and must list `estigia-doctor`, a command only the
   gate extension registers. A child that does not is stopped before it receives the prompt, and the tool
@@ -1110,64 +979,44 @@ it spawns, relays and draws. Two checks come before any work is sent:
 The tool's answer is the child's last assistant text once `agent_settled` arrives. A dialog the child asks
 for is cancelled, since a child in RPC mode has nobody to ask.
 
-The **card** is drawn with `ctx.ui.setWidget("estigia-agents", …)` when the session has a UI: one row per
-running child, then the three most recent finished ones for sixty seconds, each `label (agent) model
-tokens tok $cost elapsed activity`. The model is from `get_state`; tokens and cost are the sum of the
-`usage` on each finished assistant message plus the one in flight; the activity is the last tool. A tool
-that ends in error shows its result text, which is the binary's refusal for a gated write, on following
-lines unchanged. Rows are redrawn once a second while anything is shown, and the widget is cleared when
-nothing is. Drawing makes no model call.
-
-`/estigia-agents` lists the card, `/estigia-agents stop <id>` stops one child and `/estigia-agents stop
-all` asks for confirmation when there is a UI. A stop sends `SIGTERM` to the child's process group and
-`SIGKILL` three seconds later; the tool then answers that the child was stopped. Aborting the tool call
-stops it the same way.
-
-The **view** is `/estigia-agents` with no argument when the session has a UI, and the shortcut
-`ctrl+alt+a`: a `ui.custom` overlay listing running children first, then finished ones, then the tasks
-kept from earlier in the session's history, with the selected child's transcript below. The transcript
-is what the runner already read from the child's events: the task, each tool started, each result or
-refusal, each assistant message and each follow-up sent, the last two hundred lines. Keys: up/down or
-`k`/`j` select, `s` stops the selected child, `x` stops every running child after a confirmation, `f`
-asks for a follow-up and sends it to the selected running child as an RPC `steer`, `q` or escape closes.
-The view is redrawn once a second while open and calls no model.
+With a UI the runner draws a card (`ctx.ui.setWidget("estigia-agents", …)`: one row per
+running child
+and the three most recent finished ones for sixty seconds, with model, tokens, cost, elapsed time and the last tool; a tool
+that ends in error shows its result text, which is the binary's refusal for a gated write, unchanged) and a view (`/estigia-agents` with no argument, or `ctrl+alt+a`: running,
+finished and earlier children with the selected child's transcript, and keys to select, stop, stop
+all after a confirmation, and send a follow-up as an RPC `steer`). Both are redrawn once a second while shown and make no model call. `/estigia-agents stop <id>` and `stop all` (confirmed when there is a UI) send `SIGTERM` to the child's process group and
+`SIGKILL` three seconds later, and aborting
+the tool call stops it the same way; the tool then answers that the child was stopped.
 
 **History.** When a child finishes, fails or is stopped, the runner appends one `estigia-agent` entry
 with `pi.appendEntry`: id, agent, label, status, model, tokens, cost, times, the task and the answer
 (first 4000 characters). Pi keeps such entries in the session and never sends them to the model; the
 runner calls no other method that could on this path (`sendUserMessage`; `sendMessage` is used only by
 the child messages below). On `session_start` the runner reads them back from
-`ctx.sessionManager.getEntries()` so a resumed session lists them in the view, with the task and answer as
-the transcript.
+`ctx.sessionManager.getEntries()` so a resumed session lists them in the view.
 
-**Parent and child messages.** Three more tools, none of which touches the gate or a claim; a delivered
+**Parent and child messages.** Three more tools, none touching the gate or a claim; a delivered
 message is text for the model and never a permission decision.
 
 - `estigia_subagent_message` (`id`, `text`), on the parent: sends the text to a running child as an RPC
-  `steer`, through the same writer the view's `f` uses. A finished or unknown child is a tool error.
+  `steer`. A finished or unknown child is a tool error.
 - `estigia_parent_message` (`kind`: `notification` or `query`, `text`), on the child. It is registered
-  only in a process the runner spawned, which the runner opens an IPC channel to at spawn
-  (`stdio: [pipe, pipe, ignore, ipc]`, so `process.send` exists in the child; this needs the `pi` command to
-  be a Node program). A `notification` returns once it is sent. A `query` carries a request id and blocks
+  only in a process the runner spawned, to which it opens an IPC channel at spawn
+  (`stdio: [pipe, pipe, ignore, ipc]`, so `process.send` exists in the child; the `pi` command must be a Node program). A `notification` returns once sent. A `query` carries a request id and blocks
   that tool call until the parent answers, for at most 120 seconds, then the tool is an error; the error
   also arrives if the channel closes first.
 - `estigia_subagent_reply` (`id`, `request_id`, `text`), on the parent: answers a pending query, and the
-  child's `estigia_parent_message` result is the text. An unknown or already-answered request, or a child
-  that has finished, is a tool error.
+  child's `estigia_parent_message` result is the text. An unknown or already-answered request, or a finished child, is a tool error.
 
 **Background.** `estigia_subagent` takes `background` (boolean, default false). Foreground, the tool blocks
-the parent's turn until the child settles, so the parent model cannot call anything else meanwhile: it can
-neither steer the child nor answer it. With `background: true` the tool returns at once with the subagent
+the parent's turn until the child settles, so the parent can
+neither steer nor answer it. With `background: true` the tool returns at once with the subagent
 id and label, and when the child settles its final answer, or its failure, reaches the parent as a
 `sendMessage` follow-up with `triggerTurn: true`, so an idle parent is woken. Steering and replying
-therefore need `background: true`, and the tool descriptions say so. A query from a child whose parent is
-blocked on it in the foreground fails in the child at once, with a message saying the parent is waiting
-and the question belongs in the final answer; it is not relayed. A notification from a foreground child is
-still queued for after the call returns.
-
-The parent receives a notification or a query as `pi.sendMessage` with `deliverAs: "followUp"` and
-`triggerTurn: true`, the same call the loop uses: Pi queues it for the next turn boundary of a busy session
-and starts a turn in an idle one. A query's message names the child id and the request id so the model
+therefore need `background: true`. A query from a child whose parent is
+blocked on it in the foreground fails in the child at once, saying the question belongs in the final answer; it is not relayed. A notification from a foreground child is
+queued for after the call returns. The parent receives a notification or a query as `pi.sendMessage` with `deliverAs: "followUp"` and
+`triggerTurn: true`, the call the loop uses; a query's message names the child id and the request id so the model
 can call the reply tool.
 
 ## What setup writes into Codex's configuration
@@ -1220,8 +1069,8 @@ trust entry holds the hook's current hash and the hook is not disabled.
 ## Which runtimes Estigia adapts, and on what evidence
 
 An adapter is a claim that Estigia can stand in front of a runtime, and the claim rests on evidence
-read from that runtime rather than on a wish. A runtime is admitted when both of these can be
-verified from what the runtime itself ships — its published configuration reference, its own source,
+read from that runtime. A runtime is admitted when both of these can be
+verified from what it ships — its published configuration reference, its own source,
 or its documented file layout:
 
 - **an instruction file the host loads into every session**, where the short directive goes; and
@@ -1241,54 +1090,46 @@ nothing. `docs/honesty.md` says what that table does and does not establish.
 **One managed block per runtime, and the same pointer in each.** The directive is the only block
 `setup` fences in an adapter's instruction file, between `BEGIN ESTIGIA WORKFLOW AUTHORITY` and
 `END ESTIGIA WORKFLOW AUTHORITY`. A second `setup`, or a first one over a block an earlier build
-wrote, replaces the span in place and keeps what the operator wrote around it; it never appends a
-second block. It carries the three rules and names the skill, and it does not restate the FLOW contract
-or the review rules: those are in the skill the block names, so a runtime reads them where the tokens
-are paid for when they are needed. The binary-launched review (`launch_review_input` and
+wrote, replaces the span in place and keeps what the operator wrote around it. It carries the three rules and names the skill, and does not restate the FLOW contract
+or the review rules, which are in the skill the block names. The binary-launched review (`launch_review_input` and
 `collect_review_input`, through a `claude` or `codex` CLI on the machine) depends on that CLI and not
-on the runtime, so the skill describes it for every adapter and nothing is stripped per runtime.
-Wording that is only true of a review relay is held by `Capabilities::review_relay`, `true` for
+on the runtime, so the skill describes it for every adapter. Wording true only of a review relay is held by `Capabilities::review_relay`, `true` for
 OpenCode and Pi, whose relays are built, and a test fails when a runtime without one is rendered a
 relay marker (`relay`, `review transport`, `--input`) in its directive or in a review section.
 [`parity.md`](parity.md) says how this differs from gentle-ai v4's per-runtime block.
 
-Three things follow, and they are the shape of the rule rather than three separate judgements:
+Three things follow:
 
 1. **A listed adapter does not promise a gate.** It promises the skill and the directive where the
-   root resolves, and the hook where the runtime can refuse: the tables below give the root each row
-   resolves and whether it has an agent-definitions surface, and `estigia status`'s `harness` line
-   gives whether its gate is wired. A row with no agent-definitions surface and no refusing event is
+   root resolves, and the hook where the runtime can refuse: the tables below give each row's root and whether it has an agent-definitions surface, and `estigia status`'s `harness` line
+   gives whether its gate is wired. A row with neither an agent-definitions surface nor a refusing event is
    still adapted, for the workflow text it carries.
-2. **An unadapted runtime gets nothing.** Estigia is not in front of it, installs no file for it, and
-   has no branch to protect. There is no refusal line to read because there is no run for one to fire
-   in; the only refusal is `setup`'s own, and it names the agents it knows when asked for a slug it
-   does not. Nothing here invents a command: adding a runtime is a change to the table and its
-   evidence, which is not something a user runs.
+2. **An unadapted runtime gets nothing.** Estigia installs no file for it and
+   has no branch to protect;
+   the only refusal is `setup`'s own, which names the agents it knows when asked for a slug it
+   does not. Adding a runtime is a change to the table and its
+   evidence, not something a user runs.
 3. **Admission is per runtime and never inherited.** A second adapter sharing another's instruction
    file or skill root is a decision its own row records; nothing is admitted by resembling a row
    already here.
 
 A request for `command-code` gets the answer any runtime gets: it is
 admitted when its instruction file and its skill discovery are verified from what it ships. Neither
-has been, so it is not on the table, and the rule rather than the asking decides when it is. Counts
-that read the table from prose drift, and the ones known to are left to the work that
-owns those sentences.
+has been, so it is not on the table.
 
 ## Where each root resolves, and what governs it
 
 Every adapter's files sit under one resolved home directory — `HOME`, or `USERPROFILE` when `HOME`
-is unset, with `HOMEDRIVE`+`HOMEPATH` and the OS's own user-directories lookup as further fallbacks,
+is unset, with `HOMEDRIVE`+`HOMEPATH` and the OS's user-directories lookup as further fallbacks,
 in that order. Some variables name a root of their own instead — `XDG_CONFIG_HOME`, `APPDATA` on
 Windows only, `CLAUDE_CONFIG_DIR` for Claude Code, and `DSH_HOME` for DeepSeek Harness — each with
-its own home-relative fallback when that variable is absent or not absolute.
-Which adapters those are is in the table below rather than counted here, so that adding
-one does not leave a number behind to go stale.
+its own home-relative fallback when the variable is absent or not absolute.
 
-The `Root` column below is where an adapter's *instructions* resolve, not the whole of what it
+The `Root` column is where an adapter's *instructions* resolve, not all it
 resolves under: Claude Code, Codex and DeepSeek Harness have a skill root of their own —
 `$CLAUDE_CONFIG_DIR/skills` (falling back to `~/.claude/skills`), `~/.codex/skills` and
 `~/.dsh/skills` — and every other row also writes the shared skill tree at the Agent-neutral row's
-own root, `~/.agents/skills/<flow>`, governed the same way that row's `Root` column already says.
+own root, `~/.agents/skills/<flow>`, governed as that row's `Root` column says.
 
 | Adapter | Root | Governed by |
 |---|---|---|
@@ -1316,79 +1157,60 @@ one of them. `config set` and `config edit` without `--agent` refuse such a row
 (`setting-needs-an-agent`) and write nothing, and the answer to a `config set` names the file it
 wrote. `estigia doctor` reports a non-default agent-scoped row in a shared `SKILL.md` on the `contract`
 row of each agent with no file of its own, and names `config set --agent <slug> <setting> <default>`
-without `--contract`: that writes `estigia.<slug>.md` and leaves the shared table, which every other
-agent on the root reads, untouched. `config set --agent <slug> --contract` on such a row is refused
+without `--contract`: that writes `estigia.<slug>.md` and leaves the shared table untouched. `config set --agent <slug> --contract` on such a row is refused
 (`contract-is-shared`) and writes nothing. Adapters with a skill directory of
 their own (Claude Code, Codex, DeepSeek Harness) keep these rows in their own `SKILL.md`, which
 `--agent <slug>` writes without `--contract`.
 
 `APPDATA`, `XDG_CONFIG_HOME`, `CLAUDE_CONFIG_DIR` and `DSH_HOME` are read only when the caller left
-the home to the process environment — a caller that names its own home explicitly and names none of
-these gets all of them under that home too, with no separate variable to move along with it — and a
-caller that names one of `APPDATA`, `XDG_CONFIG_HOME` or `CLAUDE_CONFIG_DIR` explicitly gets what it
+the home to the process environment — a caller that names its own home explicitly and none of
+these gets all of them under that home too — and a
+caller that names `APPDATA`, `XDG_CONFIG_HOME` or `CLAUDE_CONFIG_DIR` explicitly gets what it
 named, contained or not, **when what it named is absolute**: a relative or empty override falls
-through to the same home-relative fallback an absent variable gets. That is the override this rule
-leaves alone; `DSH_HOME` has no explicit override.
+through, silently, to the same home-relative fallback an absent variable gets. `DSH_HOME` has no explicit override. A `CLAUDE_CONFIG_DIR` read from the environment that is not absolute is dropped with a note naming
+it; a relative `APPDATA`, `XDG_CONFIG_HOME` or `DSH_HOME` is dropped in
+silence.
 
-A `CLAUDE_CONFIG_DIR` read from the environment that is not absolute is dropped with a note naming
-it, in the shape the out-of-home notes below already have — the drop is no longer silent.
-`APPDATA`, `XDG_CONFIG_HOME` and `DSH_HOME` are unchanged and still drop a relative value in
-silence. An explicit override that is not absolute falls through silently in every case, because it
-is the caller's own value rather than one this run read from the environment.
+A value `APPDATA`, `XDG_CONFIG_HOME` or `DSH_HOME` holds is used only when it
+**resolves under that same resolved home**; `CLAUDE_CONFIG_DIR` is exempt (below). The comparison is against whatever this run resolved the home to — `paths::home_dir()` prefers `HOME` over
+`USERPROFILE` on every platform, with no `cfg(windows)` gate — not literally `%USERPROFILE%`. On the ordinary machine, `HOME` unset and
+`%APPDATA%` at `%USERPROFILE%\AppData\Roaming`, the two agree, the check does not
+fire, and the path is the one it always was. Git Bash is that machine too: it sets `HOME=/c/Users/<user>`, MSYS hands a
+native child `C:\Users\<user>`, and the two agree.
 
-And a value `APPDATA`, `XDG_CONFIG_HOME` or `DSH_HOME` holds is used only when it
-**resolves under that same resolved home** — `CLAUDE_CONFIG_DIR` is exempt from this check, and a
-later paragraph in this section says why. That is not literally `%USERPROFILE%`: `paths::home_dir()` prefers `HOME` over
-`USERPROFILE`, on every platform, with no `cfg(windows)` gate, so the comparison is against whatever
-this run actually resolved to — one of the four sources listed at the top of this section, not one of
-the first two. On the ordinary machine — `HOME` unset, so the resolved home is `%USERPROFILE%`, and
-`%APPDATA%` sitting at `%USERPROFILE%\AppData\Roaming` under it — the two agree, the check does not
-fire, the value is kept and the path is the one it always was.
-
-It fires wherever they do not agree, and `HOME` being unset is not on its own enough to keep them
-together. The case this covers is a home redirected to a sandbox while `APPDATA` still names
-the real profile. A home exported to some other absolute path for an unrelated reason, with
-`APPDATA` never moved to follow, is the same shape. So is an `%APPDATA%` genuinely relocated by
-folder redirection — a roaming profile on a share — where `HOME` is unset and the check fires
-anyway, because it is `%APPDATA%` rather than the home that moved. `docs/honesty.md`'s entry on
-it enumerates those cells and what the substitution costs each of them. There the home-relative fallback is used instead of the real `%APPDATA%`,
+It fires wherever they disagree, and `HOME` being unset does not by itself keep them
+together: a home redirected to a sandbox while `APPDATA` still names
+the real profile; a home exported elsewhere for an unrelated reason with
+`APPDATA` never moved; an `%APPDATA%` relocated by
+folder redirection, such as a roaming profile on a share, where it is `%APPDATA%` rather than the home that moved. `docs/honesty.md`
+enumerates those cells and what the substitution costs each. The home-relative fallback is used instead of the real `%APPDATA%`,
 and the substitution is named as a note in the per-adapter report rather than refusing the run. The
-note goes to the adapter the substitution moved, not to every line: an adapter resolving under no
-root that variable governs has nothing to report, and says nothing. `sync` with no adapter named
+note goes to the adapter the substitution moved; an adapter resolving under no
+root that variable governs says nothing. `sync` with no adapter named
 reports only the adapters it finds
-installed, and it looks for them under the substituted root, so the one adapter the substitution
-moved is the one it can stop finding. The note no longer goes with it: `sync` reads the substitution
-independently of any target, prints the notes no target already reports beside the run, and carries
+installed, looking under the substituted root, so the adapter the substitution
+moved is the one it can stop finding. `sync` reads the substitution
+independently of any target, prints the notes no target already reports, and carries
 them in the `no agent has Estigia installed` refusal when the substitution is why the list came back
-empty. What remains is that the adapter itself is still not operated on, because `is_present` reads
-the substituted root; `docs/honesty.md`'s entry on it holds that and what the substitution
-costs when `HOME` was not, in fact, a sandbox.
+empty. What remains is that the adapter itself is not operated on, because `is_present` reads
+the substituted root; `docs/honesty.md` holds that and what the substitution
+costs when `HOME` was not in fact a sandbox.
 
-Git Bash is **not** that machine, though it is the first candidate that comes to mind: it sets
-`HOME=/c/Users/<user>`, and MSYS hands a native child `C:\Users\<user>`, so the resolved home is the
-profile and the two agree — the value is kept, the path is the one it always was, and no note
-prints.
-
-Before that, an isolated `HOME`/`USERPROFILE` left these two roots resolving against the *real*
-machine while every other root moved with the sandbox.
-
-The containment rule above does **not** apply to `CLAUDE_CONFIG_DIR`. It names the whole Claude
-Code configuration rather than a root sitting beside the home, and Claude Code reads it wherever it
-points, inside the home or not. A value dropped for being outside the home would land the gate
-registration under `~/.claude`, exactly where that session does not read it.
+The containment rule does **not** apply to `CLAUDE_CONFIG_DIR`. It names the whole Claude
+Code configuration rather than a root beside the home, and Claude Code reads it wherever it
+points. A value dropped for being outside the home would land the gate
+registration under `~/.claude`, where that session does not read it.
 
 ## The scope an install is rooted at
 
 An install is machine-wide by default. `setup`, `sync` and `uninstall` each take `--scope` —
 `global`, the default, or `workspace` — and, with `workspace`, `--workspace <path>`, the checkout the
-install belongs to. The global scope is every root in the section above. The workspace scope writes
-the same install into one checkout, so it travels with the repository rather than staying on the
-machine that happened to run `setup`.
+install belongs to. The global scope is every root above. The workspace scope writes
+the same install into one checkout, so it travels with the repository.
 
 A workspace install does **not** reuse the global roots moved under the workspace, because each
-runtime reads its project-level files somewhere of its own choosing. The destination each adapter
-gets, and the runtime's own reference it was read from, are the table below. A path a runtime does not
-read reports success and configures nothing — the same rule the global rows answer to.
+runtime reads its project-level files somewhere of its own choosing. The destinations, from each runtime's own reference, are below; a path a runtime does not
+read reports success and configures nothing.
 
 | Adapter | Skill root | Instruction file | Gate | MCP | Agent definitions |
 |---|---|---|---|---|---|
@@ -1403,68 +1225,56 @@ Code's `.claude` directory and MCP setup, OpenCode's Agent Skills page, Codex's 
 with AGENTS.md* and configuration pages, and Cursor's hooks and rules pages.
 
 **ZCode, DeepSeek Harness and Pi get no workspace install.** Where each reads a project-level file has
-not been verified, so `--scope=workspace` refuses them by name rather than writing a path they may not
-read. They remain adapted globally.
+not been verified, so `--scope=workspace` refuses them by name. They remain adapted globally.
 
 In a workspace the runtimes that read `AGENTS.md` — Agent-neutral, Codex, OpenCode and Cursor — land
-on **one instruction file** and **one skill root**, `.agents/skills`. That is what each runtime reads
-in a checkout, so there is one file for the four of them to read and one directory for the directive
-in it to name. What that file carries is still **one adapter's** directive: the fenced block names a
+on **one instruction file** and **one skill root**, `.agents/skills`. What that file carries is still **one adapter's** directive: the fenced block names a
 skill path and a per-agent override file, `Fence::upsert` replaces the block wholesale, and the
 runtime installed last is the one named — the path is the shared root either way, while the override
-file the block names belongs to whichever wrote it. The shared directive and the shared skill
-therefore go with the **last** recorded adapter, not the first: uninstalling one of several leaves
-both for its siblings, and an uninstall of an adapter the record does not name does nothing at all —
-as in the global scope, where a per-adapter instruction file makes that automatic. Uninstalling the
-last of them is what leaves the checkout clean.
+file belongs to whichever wrote it. The shared directive and skill
+therefore go with the **last** recorded adapter: uninstalling one of several leaves
+both for its siblings, and an uninstall of an adapter the record does not name does nothing at all, as in the global scope, where a per-adapter instruction file makes that automatic. Uninstalling the
+last leaves the checkout clean.
 [`honesty.md`](honesty.md) records what that leaves unmeasured.
 
-OpenCode's gate is a plugin rather than a hook file — the `Gate` cell above — and when the
-`Loop plugin` setting is on its optional loop plugin lands beside it under the same
-`.opencode/plugins/`. Pi's is a sibling file in `~/.pi/agent/extensions/`, described under
+OpenCode's gate is a plugin rather than a hook file, and when the
+`Loop plugin` setting is on its optional loop plugin lands beside it under `.opencode/plugins/`. Pi's is a sibling file in `~/.pi/agent/extensions/`, described under
 [The Pi loop extension](#the-pi-loop-extension) and
 [The Pi goal and loop extension](#the-pi-goal-and-loop-extension).
 
 Three names that would do nothing are refused rather than ignored. `--scope=workspace` with no
 `--workspace` refuses, because the alternative is writing to the machine's home under a flag that asked
-for a checkout. `--workspace` with the default global scope refuses for the same reason in the other
-direction: the path was named and nothing would read it. And `--companion <name>` with a workspace
-refuses: a companion installs nothing into a checkout, so that path would be read by nothing either.
+for a checkout. `--workspace` with the default global scope refuses, because the path was named and nothing would read it. And `--companion <name>` with a workspace
+refuses: a companion installs nothing into a checkout.
 
 A global install is recorded too, under `<home>/.estigia/roots/`: the configuration roots it resolved,
-dropped when no adapter is left under them. It is what lets an `uninstall` under one Claude profile
+dropped when no adapter is left under them. It lets an `uninstall` under one Claude profile
 see an install under another.
 
-The scope is **recorded** as well as named. A workspace install writes one file under
+A workspace install is **recorded** as well as named. It writes one file under
 `<home>/.estigia/workspaces/`, naming the checkout and the adapters installed in it, and drops it when
-the last of them leaves. That record is not an adapter file — it sits beside the run pointers, where
-Estigia's own machine-side state already is. It is what lets a machine-wide `uninstall` know a checkout
-still reads the shared state, which it could not discover from the machine's roots alone, and what
-tells a shared instruction file apart from a second install — so uninstalling an adapter that was never
-installed leaves a sibling's skill and directive alone, as the global scope does by having an
-instruction file per adapter.
+the last leaves. That record sits beside the run pointers, where
+Estigia's machine-side state already is. It lets a machine-wide `uninstall` know a checkout
+still reads the shared state, which the machine's roots alone cannot show, and tells a shared instruction file apart from a second install, so uninstalling an adapter that was never
+installed leaves a sibling's skill and directive alone.
 
 An uninstall reads the same scope and workspace it is given, so a workspace install is taken back with
 `--scope=workspace --workspace <path>`. A global uninstall does not reach into a checkout, and a
-workspace uninstall does not reach into the machine; naming the wrong one removes nothing rather than
-removing the other install. The record is keyed by the checkout's own path, so a checkout that was
-moved or renamed is one the record no longer names: uninstalling it removes the adapter's own files
+workspace uninstall does not reach into the machine; naming the wrong one removes nothing. The record is keyed by the checkout's own path, so a moved or renamed checkout is one the record no longer names: uninstalling it removes the adapter's own files
 and leaves the shared directive and skill where they were. [`honesty.md`](honesty.md) qualifies that
 along with what a record that cannot be read does.
 
 ## Which adapters have a routable agent-definitions surface
 
-`Model routing` still takes an answer everywhere — it declares models as well as installing the two
-role definitions — and the definitions themselves are written only where an adapter has a
+`Model routing` takes an answer everywhere — it declares models as well as installing the two
+role definitions — and the definitions are written only where an adapter has a
 sub-agent-definition surface, the rows below. Its `by task` value declares no model and names no
-role, so it installs nothing anywhere; it is still a value every adapter's contract records. `Evidence standard` is read by the gate
-itself on every adapter, agent-definitions root or none, so it always takes an answer.
+role, so it installs nothing anywhere. `Evidence standard` is read by the gate
+itself on every adapter, so it always takes an answer.
 `AgentAdapter::agent_definitions_root` names that directory, matched over the instruction-file enum
-rather than `adapter.slug`, so an adapter added later has to answer `None` on purpose rather than get
-one silently. That sentence is about the adapter only because adapters and instruction variants stand
+rather than `adapter.slug`, so an adapter added later has to answer `None` on purpose. Adapters and instruction variants stand
 one-to-one: a test beside the per-adapter matrix in `src/setup/tests.rs` asserts the table's
-instruction files are distinct, so a second adapter reusing a variant reddens it, naming both,
-rather than borrowing the variant's answer. Each host is written its own dialect — Claude Code's
+instruction files are distinct, so a second adapter reusing a variant reddens it, naming both. Each host is written its own dialect — Claude Code's
 comma-separated `tools:` line, OpenCode's `permission:` map, Pi's `name`/`description`/`tools`/`model` frontmatter — and the two installed judges remain Claude-only while the two delegated roles are installed for all three.
 
 | Adapter | Agent-definitions root |
@@ -1486,18 +1296,15 @@ comma-separated `tools:` line, OpenCode's `permission:` map, Pi's `name`/`descri
 
 Three of the eight supported adapters have a surface. The eleven rows reading a bare "none" — the
 other five supported adapters and all six retired ones — have not been checked
-against a schema at all — that ground is simply unclaimed, distinct from OpenCode's, whose surface
-was verified from OpenCode's own documentation rather than assumed, and from Pi's, which is read from
+against a schema at all; that ground is simply unclaimed, distinct from OpenCode's, whose surface
+was verified from OpenCode's own documentation, and from Pi's, which is read from
 the example subagent extension and not from Pi's core (see [`honesty.md`](honesty.md)).
 
-Claude Code's row above is where `setup` writes the reviewer definition, and OpenCode's and Pi's are
-where it writes the two delegated workers; `harness::roles::definition_for` is where the gate reads the
-reviewer definition back, and until the `$CLAUDE_CONFIG_DIR/agents` root was added it read only the home-relative fallback, never
-`$CLAUDE_CONFIG_DIR/agents` itself. Added now, beside the home root rather than instead of it — the
-same asymmetry the paragraph above states for `APPDATA` and `XDG_CONFIG_HOME` not applying to this
-variable. `docs/honesty.md`'s entry on `CLAUDE_CONFIG_DIR` carries the full account, including
-`authorize_review_blind_launch`'s canonical-reviewer proof and the control-surface fragments, which
-had the same gap.
+Claude Code's row is where `setup` writes the reviewer definition, and OpenCode's and Pi's are
+where it writes the two delegated workers. `harness::roles::definition_for` is where the gate reads the
+reviewer definition back, at the home-relative `~/.claude/agents` and beside it at
+`$CLAUDE_CONFIG_DIR/agents`; `docs/honesty.md`'s entry on `CLAUDE_CONFIG_DIR` carries the full account, including
+`authorize_review_blind_launch`'s canonical-reviewer proof and the control-surface fragments.
 
 ## Which runtime word each agent's hook derives
 
@@ -1620,10 +1427,7 @@ only the capture writes them. Both kinds leave their working directory under `~/
 
 ## The gate, the hooks and the loop plugins
 
-The contract under `skill/` is text an agent may read and may ignore, which meant "perjury detected
-mechanically" was aspirational: nothing stopped a run from writing without a claim, or from
-delivering on a verdict bound to a SHA that no longer existed. The harness closes the first of those,
-and binds the second without re-checking it at the moment of delivery; [`honesty.md`](honesty.md) says
+The contract under `skill/` is text an agent may read and may ignore. The harness stops a run writing without a claim, and binds a verdict to a SHA without re-checking it at the moment of delivery; [`honesty.md`](honesty.md) says
 exactly where that line falls.
 
 ```
@@ -1724,9 +1528,7 @@ it does not.
 
 The moment a run swears — `estigia claim 12` — every repository write it makes is measured against
 that claim, and every irreversible boundary re-verifies it against the store. That is where the value
-is. Incident I07 in the skill's own ledger is not "an agent wrote without claiming"; it is a run that
-**lost a claim race by five seconds, was told 33 seconds later, and worked another 48 minutes**
-because nothing in its loop read the claim again. That run had sworn. The gate kills that case.
+is. The failure to refuse is not only an agent writing without claiming but a run that lost a claim race and kept working because nothing in its loop read the claim again (the skill's incident I07); the gate ends that case.
 
 A routine write, and the Claude Code `Stop` hook, may ride on an answer from inside a two-minute
 renewal window — the cadence `SKILL.md` already asks for. **An irreversible boundary never does**:
@@ -1767,7 +1569,7 @@ that additional route and its conservative ownership checks.
 | `screen`, `repositories/` | the setup screen's language, the list of checkouts | no: the person's, not any agent's |
 | `lifecycle/` | machine-wide binary provenance records, see [`lifecycle.md`](lifecycle.md) | no |
 | `jobs/` | one directory per review job and per check job: manifest, prompt, lock, logs, `result.json`, `usage.json` | no |
-| `snapshots/` | up to three daily copies of the store, for a person to restore by hand | no |
+| `snapshots/` | up to three daily copies of the store, for a person to restore by hand | yes, with the store, when it is taken |
 
 Whatever the last column says no to stays until a person removes the directory, and
 `<checkout>/.git/estigia/` stays until `estigia config forget` runs in that checkout.
