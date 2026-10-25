@@ -580,7 +580,7 @@ one carrying 36,288 was not, so the threshold sits inside the ordinary range, wh
 Issue #5 made the list depend on the process's `GateContext`, which is fixed for the process, so
 `listChanged` stays false. Where `Workflow` is `assisted` the list omits every `TRACKER_WRITERS` tool,
 which that workflow refuses; under any other readable workflow it omits `ASSISTED_ONLY`; a context that
-cannot be read, or whose workflow is unknown, lists all 33. A hidden name still dispatches and refuses
+cannot be read, or whose workflow is unknown, lists all 40 (33 when this was measured). A hidden name still dispatches and refuses
 with its own typed reason.
 
 | `tools/list` result, issue #5 | Names | Bytes |
@@ -608,7 +608,7 @@ operation window decides, not the caller's — the behaviour a cross-repository 
 moved the list from **46,996** to **47,044** bytes, and `TOOLS_LIST_CEILING` was raised by exactly
 that difference: a caller filing elsewhere needs to know whose schedule it is held to.
 
-The ten delivery tools (`ALWAYS_LOADED` in `src/harness/mcp/tools.rs`) carry
+The delivery tools (`ALWAYS_LOADED` in `src/harness/mcp/tools.rs`; ten when this was measured, eleven now) carry
 `"_meta": {"anthropic/alwaysLoad": true}`, which Claude Code reads to load a tool's schema at the start
 of a session instead of spending one to three `ToolSearch` turns on it before the first `claim`; other
 clients ignore the key. The ten `_meta` objects add 380 bytes, and `TOOLS_LIST_CEILING` was raised by
@@ -632,6 +632,10 @@ difference. It is listed only where `Claim workflow` is `assisted`, so an autono
 does not carry it; the ceiling measures the whole list, which is the larger of the two. `review_stages`, the
 assisted tool that reads where a ready pull request stands in `External reviewers`, moved it again,
 to **49,701** bytes, and the ceiling followed by exactly that difference.
+
+`run_checks`, which runs the checks a base declares in the background and binds a receipt to the
+reviewed digest, moved the list from **49,701** to **50,588** bytes (887 bytes, measured from the
+change that added it), and `TOOLS_LIST_CEILING` was raised by exactly that difference.
 
 `deliver`, the tail from publication to close in one call, moved the list from **50,588** to **51,747**
 bytes, and `TOOLS_LIST_CEILING` was raised by exactly that difference. It is the eleventh tool
@@ -1376,3 +1380,24 @@ a frozen criterion, and D is out of scope by design. `docs/configuration.md` is 
 
 What remains is the time. A publishing run's active time is still about half `cargo test`, and
 nothing Estigia sends changes how often the model runs the suite.
+
+## `deliver` against the baseline: arms H, I and J
+
+Three further arms measured the same scenarios against arm A (S1 to S3, three runs each, opus, default
+settings, against the `flow-bench` repository). The figures are medians.
+
+| Arm | Build | What it is | Cost against A | Active time against A |
+|---|---|---|---|---|
+| H | `6006c6af` | the levers, before `deliver` | −43 %, −36 %, −15 % (S1, S2, S3) | −19 %, −17 %, −2 % |
+| I | `3fa8c9b6` | `deliver` | not a gain on S1 and S2 | slower: 596 s and 673 s |
+| J | `1ecf4f44` | `deliver` with the empty-rollup fix (S1 and S2) | −46 %, −42 % | +16 % (532 to 619 s), −12 % (561 to 492 s) |
+
+I was slow because `deliver` waited on a pull request rollup that was empty on a lane where no CI is
+consulted. The empty-rollup fix passes it at once, and J is the arm that measures that.
+
+J took the agent from 36 to 17 turns on S1 and from 38 to 18 on S2. All 6 of 6 runs were accepted on
+the first attempt, and the worst lens finding class was `suggestion`. **The cost target of −40 % is
+met on both scenarios; the time target of −30 % is not.** The time is the agent's own `cargo test`
+reruns, which ranged from 222 to 533 s per run and swamp a 12 % to 16 % difference in either direction;
+nothing `deliver` sends changes how often the model runs the suite. The limits of this measurement are
+in [`honesty-review-tier.md`](honesty-review-tier.md).

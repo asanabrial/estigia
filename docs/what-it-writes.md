@@ -235,8 +235,9 @@ Five invariants, and the tests are named after them:
 
    `~/.estigia/jobs/<id>/` is a fifth, written at run time and never by `setup`. A review job's
    directory holds the manifest, the prompt, the runner's lock and logs, its `result.json`, and a
-   `usage.json` carrying the reviewer CLI's own counters when it reported any, and
-   nothing removes it yet: the runner is only added, and
+   `usage.json` carrying the reviewer CLI's own counters when it reported any. A check job, started
+   by `run_checks` through `__check-job`, leaves its directory in the same place with its own
+   manifest, lock, logs and result ([`generated-files.md`](generated-files.md)). Nothing removes either yet: the runner is only added, and
    [`honesty.md`](honesty.md) says what is not wired.
 
    A third leave is temporary: five adapters share `~/.agents/skills`, so taking one of them out

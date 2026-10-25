@@ -135,8 +135,8 @@ or broke a rule it can be told. That includes:
   repository the gate does not read), `delivery-pr-mismatch`,
   `complete-review-transaction-missing`, `complete-review-transaction-not-selected`: the command or the
   checkout is not one a receipt can be selected for;
-- `checks-receipt-missing` and `checks-failed`: the base declares checks and the timeline holds no
-  passing `checks-receipt` for the receipt's digest and the declared commands. The timeline was read
+- `checks-receipt-missing` and `checks-failed`: the base declares checks and the issue's local ledger holds no
+  passing `checks-receipt` for the receipt's digest and the declared commands. The ledger was read
   and the rule says no; a receipt for other bytes is a receipt that was never there for these.
   `checks-declaration-malformed` (a `[[check]]` table that could not run as written) and
   `checks-base-unknown` (`run_checks` with no published base to bind to) are `refused` for the same

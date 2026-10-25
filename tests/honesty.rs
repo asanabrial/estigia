@@ -4576,6 +4576,10 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
         "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
     ),
     (
+        "appendix-unreadable",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
         "base-advanced",
         "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
     ),
@@ -4583,6 +4587,10 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
         "base-only",
         "a `--causal-disposition` vocabulary value (`FINDING_CAUSAL_DISPOSITIONS`), a distinct \
          symbol family this change does not take",
+    ),
+    (
+        "base-fetch-failed",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
     ),
     (
         "base-unreadable",
@@ -4669,6 +4677,10 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
         "a publication lineage field on `publish_review`'s marker \u{2014} the deferred 'tool names' class",
     ),
     (
+        "evidence-unwritable",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
         "evidence-unproven",
         "a `ReclaimDiscard::as_str` condition a refusal carries, a distinct symbol family from the \
          refusal codes",
@@ -4723,6 +4735,14 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
          refusal codes",
     ),
     (
+        "merge-not-covered",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
+        "merge-unreadable",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
         "merge-unknown",
         "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
     ),
@@ -4770,6 +4790,10 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
     (
         "pre-push",
         "the name of the git hook Estigia installs, not a refusal code",
+    ),
+    (
+        "pull-request-unreadable",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
     ),
     (
         "refutation-batch",

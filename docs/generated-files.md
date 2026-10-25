@@ -1,11 +1,13 @@
-# Generated files, verified by reproduction
+# Generated files and declared checks
 
 A lockfile or a generated client is too long to read and cheap to regenerate. Estigia can check such a
 file by running the command that makes it, instead of reading its hunks. This document says how a
-repository declares one, which commit that declaration is read from, and what the check answers.
+repository declares one, which commit that declaration is read from, and what the check answers. It
+also covers the other thing a repository declares, `[[check]]` commands: how `run_checks` runs them
+in the background and binds a receipt to the reviewed digest, and how the verdict gate reads it.
 
 Two places read the declaration. The review payload shows a declared path as a manifest line instead
-of its hunks, and `review_computed_verdict` refuses to record `approved` unless each such path
+of its hunks, and `record_computed_verdict` refuses to record `approved` unless each such path
 regenerates byte-identically. The two ship together: a manifest without the gate would let content
 skip review. `review_read` with `view: verdict` also carries the result as `generated_files`; it
 executes nothing unless the caller passes `reproduce: true`, because the command is repository code
@@ -117,7 +119,7 @@ is not to be reviewed by reading.
 
 ## The approval gate
 
-When `review_computed_verdict` would record `approved`, and after the publication lane has cleared, it
+When `record_computed_verdict` would record `approved`, and after the publication lane has cleared, it
 runs the reproduction above for the receipt's `base..head`. It records `approved` only when every
 manifest path is `match`. A `mismatch` refuses `generated-reproduction-mismatch`, an `unavailable` path
 refuses `generated-reproduction-unavailable`, and the refusal names each failing path with its outcome.

@@ -81,6 +81,13 @@
   - Whether a run ran the full suite is read from its shell commands by pattern. A suite run through
     a wrapper the pattern does not name would be missed.
 
+- **The `deliver` arms are n = 3 on two or three scenarios, and their time figures are the agent's
+  `cargo` reruns.** *`deliver` against the baseline* in `docs/review-cost.md` inherits every limit of
+  the lever arms. Arm J ran S1 and S2 only, so S3 has no `deliver` figure. Active time moved from
+  +16 % to −12 % across the two scenarios while a run's own suite reruns spread from 222 to 533 s, so
+  the time result is within that spread and proves no direction. The cost figures are the CLI's own
+  tariff arithmetic. "Accepted on the first attempt" is the acceptance script's reading of 6 runs.
+
 - **A `never-ran` verdict is recorded evidence, not verified evidence.** Read through `record_computed_verdict`: it approves under a publication lane whose failing
   runs report `steps: []` on every job only when the caller supplies `--never-ran-evidence-file`,
   and it stores that file's content in the marker verbatim — on the same footing as a finding's
