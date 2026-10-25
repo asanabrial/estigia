@@ -19285,6 +19285,7 @@ fn a_payload_rebuild_over_a_manifest_matches_the_recorded_digest() {
 }
 
 mod capture;
+mod checks;
 mod status;
 
 fn budget_world(declared: bool) -> (tempfile::TempDir, Context, String, String, String) {

@@ -33,6 +33,9 @@ A file that is not valid TOML, has a key other than these, repeats a `path`, giv
 or gives a `path` or `cwd` that is absolute, contains `..` or contains a control character is refused as
 `generated-declaration-malformed`. It is never read as an empty declaration.
 
+The file may also hold `[[check]]` tables, which this section does not read and
+[Declared checks](#declared-checks) does; any other top-level table is refused.
+
 ## Lockfiles nobody declared
 
 A lockfile that `estigia.generated.toml` does not declare reaches every reviewer in full. `estigia doctor`
@@ -142,3 +145,59 @@ receipt's base, added or modified as a regular file, and not a deletion or mode 
   reviewer who opens a generated file through `inspect` can still anchor a finding on it.
 
 [`honesty.md`](honesty.md) says what this trades away.
+
+## Declared checks
+
+The same file can declare the checks a change must pass. A repository that declares none behaves as it
+always did; one that does cannot clear a verdict without a passing result for the exact bytes reviewed.
+
+```toml
+[[check]]
+name = "unit-tests"
+command = ["cargo", "test"]
+cwd = "."
+```
+
+- `name` is required, unique, and lowercase `a-z0-9` groups joined by `-`.
+- `command` is an argv list, never a shell string, and must name a program.
+- `cwd` is optional and follows the rules `[[generated]]` gives its own.
+
+A file that is not valid TOML, has a key other than these, repeats a `name`, gives an empty `command`
+or a bad `cwd` is refused as `checks-declaration-malformed`, never read as no checks. An absent file or
+one with no `[[check]]` table declares none. The declaration is read from the **base** commit only, as
+[above](#only-the-base-declares), so a change cannot rewrite the checks it must pass.
+
+**The tool.** `run_checks` (`issue`, `run_id`, optional `wait_seconds`) verifies the live `review` claim,
+derives the clean target of the run's checkout against the base its published receipt names, and refuses
+a dirty tree. It never runs a check inside the call: it starts the hidden `estigia __check-job <dir>`
+detached (the same lock, liveness and detaching `__review-job` uses, and the same
+`review-job-detach-refused` where the platform refuses), then waits up to `wait_seconds`, never more than
+50, so no call outlasts the 60 seconds some hosts allow. In order:
+
+1. Nothing declared: `{"ok": true, "declared": false}`, and nothing is recorded.
+2. A `checks-receipt` already stands for this target digest and these commands: the answer is that
+   receipt with `cached: true`, and nothing runs.
+3. A job for the same digests is running: it is waited on, then answered `state: "running"` with `job` and
+   `ask_after`.
+4. Otherwise the job is launched and waited on.
+
+The job runs each check in `<checkout>/<cwd>`, sequentially in declaration order, a failing check not
+stopping the rest, under a 30 minute deadline for the whole job after which its process group is killed
+and the answer is `timed-out`. Each check records its `name`, `exit` (`null` when killed or never
+started), `seconds` and `tail`, the last 2,000 bytes of its combined stdout and stderr.
+
+**The receipt.** A finished job is recorded as a `checks-receipt` marker in the issue's local ledger,
+carrying `run-id`, `digest` (the target digest), `commands` (a SHA-256 over the declared checks in order,
+each field length-prefixed), `passed`, and `results`, one `name=exit:seconds` entry per check with `none`
+for an exit that was not a code. The tails are in the answer and never in the marker. A timed-out job
+records nothing.
+
+**The gate.** `record_computed_verdict`, before it records `approved`, and `release_ci`, through the
+recomputation that clears a receipt, require a trusted `checks-receipt` for exactly the receipt's digest
+and the base's current commands whenever the base declares checks. None recorded, or one for other bytes
+or other commands, refuses `checks-receipt-missing`; one recorded with `passed=false` refuses
+`checks-failed`. A `rejected`, `escalated` or `incomplete` computation is refused under its own name first.
+
+**What is cached.** A receipt, passing or failing, answers every later call for the same digest and
+commands without running anything. A new publication has a new digest and asks again.
+[`honesty.md`](honesty.md) says what the key leaves out.

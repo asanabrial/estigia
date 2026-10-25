@@ -166,6 +166,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `review_read` | `SCRIPT review-read` |
 | `target` | `SCRIPT target` |
 | `release_ci` | `SCRIPT release-ci` — see *Recording a computed verdict* in github/operations.md |
+| `run_checks` | `SCRIPT run-checks` — see *Running declared checks* in github/operations.md |
 | `review_tier` | `SCRIPT review-tier` — see *Deriving the review tier* in github/operations.md |
 | `check closing keywords` | `SCRIPT check-closing-keywords` |
 | `unassign` | `SCRIPT unassign` — see *Releasing an issue* in github/operations.md |

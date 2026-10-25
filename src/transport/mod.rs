@@ -45,6 +45,7 @@ use std::time::Duration;
 pub mod board;
 pub mod branch;
 pub mod changelog;
+pub(crate) mod check_job;
 pub mod claim;
 pub mod closing;
 pub mod commands;

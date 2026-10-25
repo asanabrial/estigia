@@ -3893,7 +3893,7 @@ fn every_command_the_parser_has_is_one_the_json_guard_poses() {
     for command in Cli::command().get_subcommands() {
         if matches!(
             command.get_name(),
-            "mcp" | "hook" | "__record-install" | "__review-job"
+            "mcp" | "hook" | "__record-install" | "__review-job" | "__check-job"
         ) {
             continue;
         }

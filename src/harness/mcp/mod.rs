@@ -355,7 +355,12 @@ fn call(
 fn worktree_to_name(tool: &tools::Tool, flags: &[String], run: &session::Run) -> Option<String> {
     if !matches!(
         tool.operation,
-        "publish-review" | "republish-review" | "release-ci" | "unassign" | "collect-review-input"
+        "publish-review"
+            | "republish-review"
+            | "release-ci"
+            | "unassign"
+            | "collect-review-input"
+            | "run-checks"
     ) {
         return None;
     }
@@ -1297,6 +1302,13 @@ fn run_tool_asking(
             flags.push("--issue".to_owned());
             flags.push(issue.to_string());
         }
+    }
+
+    if tool.operation == "run-checks"
+        && let Some(transaction) = &run.review_transaction
+    {
+        flags.push("--base".to_owned());
+        flags.push(transaction.base.clone());
     }
 
     if let Some(named) = worktree_to_name(tool, &flags, &run) {

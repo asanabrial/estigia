@@ -1504,6 +1504,28 @@ fn run_operation(
                 }))),
             }
         }
+        "run-checks" => super::claim::run_checks(
+            context,
+            &super::claim::RunChecks {
+                issue: issue()?,
+                run_id: run_id()?,
+                base: f.get("base"),
+                worktree: f.path("worktree"),
+                wait_seconds: match f.get("wait-seconds") {
+                    Some(text) => text.trim().parse::<u64>().map_err(|_| {
+                        Failure::ConfigDefect(serde_json::json!({
+                            "ok": false,
+                            "reason": "malformed-argument",
+                            "operation": operation,
+                            "argument": "--wait-seconds",
+                            "value": text,
+                        }))
+                    })?,
+                    None => 0,
+                },
+                now,
+            },
+        ),
         "release-ci" => super::claim::release_ci(
             context,
             &super::claim::CiRelease {

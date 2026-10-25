@@ -459,6 +459,19 @@ fn every_flag_a_tool_sends_is_one_the_dispatcher_reads() {
              direction of the one operation that has to be safe",
         ),
         (
+            "run-checks",
+            "base",
+            "filled by the harness from the base the run pointer's published receipt names, so \
+             the checks are bound to the target that was published and a caller cannot pick \
+             another",
+        ),
+        (
+            "run-checks",
+            "worktree",
+            "filled by the harness from the run pointer: it names the directory the declared \
+             commands run in, and one a caller could aim would run them anywhere",
+        ),
+        (
             "collect-review-input",
             "worktree",
             "filled by the harness from the run pointer, and read only by `--record-verdict`, \
