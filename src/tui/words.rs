@@ -478,6 +478,15 @@ pub const SPANISH: &[(&str, &str)] = &[
         "fixed while `Claim workflow` is `autonomous`: choose `team` or `assisted` in `Delivery preset` to change it",
         "fija mientras `Claim workflow` sea `autonomous`: elige `team` o `assisted` en `Delivery preset` para cambiarla",
     ),
+    ("+ add a stage", "+ añadir una etapa"),
+    ("⏎ edit", "⏎ editar"),
+    ("space advisory or blocking", "espacio consultiva o bloqueante"),
+    ("d delete", "d borrar"),
+    ("K J reorder", "K J reordenar"),
+    (
+        "one stage: check:<check name>, check:<check name>@<login>, review:<login>, review:<org>/<team> or review:any, optionally ending in :advisory",
+        "una etapa: check:<check name>, check:<check name>@<login>, review:<login>, review:<org>/<team> o review:any, que puede terminar en :advisory",
+    ),
     ("Review budget", "Presupuesto de revisión"),
     (
         "the per-context token figure a review is reported against, and nothing more",

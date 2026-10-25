@@ -3845,12 +3845,9 @@ fn every_setting_is_read_by_the_gate_the_transport_or_the_prose() {
         }
     }
 
-    // Rows nothing reads today, declared with the reason each is still here.
-    // Shorter only, never longer: a new setting nothing acts on fails.
-    //
-    // Empty since the last row here, `Delivery route`, was retired
-    // rather than read, so every row left in `SETTINGS` is acted on by the gate,
-    // the transport, or a sentence an agent is given.
+    // Rows nothing reads today. Shorter only, never longer: a new setting nothing
+    // acts on fails. `Delivery preset` stores nothing and only writes the rows
+    // it stands for, so there is nothing at run time for anything to read.
     const READ_BY_NOBODY: &[&str] = &["Delivery preset"];
 
     let mut unread: Vec<&str> = Vec::new();

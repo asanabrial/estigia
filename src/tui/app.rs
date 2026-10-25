@@ -409,6 +409,9 @@ pub struct App {
     catalogs_failed: std::collections::BTreeSet<&'static str>,
     /// The model target whose custom ID is being edited.
     model_edit: Option<&'static str>,
+    /// The `External reviewers` stage being typed: its place in the list, which
+    /// is one past the end for a new one.
+    stage_edit: Option<usize>,
     /// Which row the cursor is on, on the detail page.
     pub selected: usize,
     /// Which row the cursor is on, on the options page.
@@ -499,6 +502,7 @@ impl App {
             model_catalogs: std::collections::BTreeMap::new(),
             catalogs_failed: std::collections::BTreeSet::new(),
             model_edit: None,
+            stage_edit: None,
             selected: 0,
             options_at: 0,
             reviewing: false,
@@ -544,6 +548,7 @@ impl App {
             model_catalogs: std::collections::BTreeMap::new(),
             catalogs_failed: std::collections::BTreeSet::new(),
             model_edit: None,
+            stage_edit: None,
             selected: 0,
             options_at: 0,
             reviewing: false,
@@ -1575,7 +1580,118 @@ impl App {
                 .map(|entry| self.model_entry_label(entry))
                 .collect();
         }
+        if self.stage_list_at_cursor() {
+            let mut entries: Vec<String> = self
+                .stages()
+                .iter()
+                .map(|stage| crate::config::render_stages(std::slice::from_ref(stage)))
+                .collect();
+            entries.push(t!(self.tongue, "+ add a stage").to_owned());
+            return entries;
+        }
         self.picker_entries()
+    }
+
+    /// Whether the row under the cursor is edited as a list of stages.
+    pub fn stage_list_at_cursor(&self) -> bool {
+        self.setting_at_cursor() == Some(Setting::ExternalReviewers)
+    }
+
+    fn stages(&self) -> Vec<crate::config::ReviewStage> {
+        self.shown_config(Setting::ExternalReviewers)
+            .external_reviewers
+            .clone()
+    }
+
+    fn write_stages(&mut self, stages: &[crate::config::ReviewStage]) {
+        let value = crate::config::render_stages(stages);
+        match self.set(Setting::ExternalReviewers, &value) {
+            Ok(()) => self.message = None,
+            Err(refusal) => self.message = Some(format!("{refusal}")),
+        }
+    }
+
+    fn in_stage_list(&mut self, key: Key) -> Action {
+        let mut stages = self.stages();
+        let count = stages.len() + 1;
+        let at = self.pick.min(count - 1);
+        match key {
+            Key::Up | Key::Char('k') => self.pick = (at + count - 1) % count,
+            Key::Down | Key::Char('j') => self.pick = (at + 1) % count,
+            Key::Esc | Key::Char('q') => self.focus = Focus::List,
+            Key::Enter => {
+                self.draft = stages
+                    .get(at)
+                    .map(|stage| crate::config::render_stages(std::slice::from_ref(stage)))
+                    .unwrap_or_default();
+                self.stage_edit = Some(at);
+                self.focus = Focus::Editing;
+            }
+            Key::Char(' ') if at < stages.len() => {
+                stages[at].blocking = !stages[at].blocking;
+                self.write_stages(&stages);
+            }
+            Key::Char('d') | Key::Backspace if at < stages.len() => {
+                stages.remove(at);
+                self.write_stages(&stages);
+                self.pick = at.min(stages.len());
+            }
+            Key::Char('K') if at > 0 && at < stages.len() => {
+                stages.swap(at, at - 1);
+                self.write_stages(&stages);
+                self.pick = at - 1;
+            }
+            Key::Char('J') if at + 1 < stages.len() => {
+                stages.swap(at, at + 1);
+                self.write_stages(&stages);
+                self.pick = at + 1;
+            }
+            _ => {}
+        }
+        Action::None
+    }
+
+    fn in_stage_editor(&mut self, key: Key, at: usize) -> Action {
+        match key {
+            Key::Char(character) => self.draft.push(character),
+            Key::Backspace => {
+                self.draft.pop();
+            }
+            Key::Esc => {
+                self.stage_edit = None;
+                self.focus = Focus::Picking;
+                self.draft.clear();
+                self.message = None;
+            }
+            Key::Enter => {
+                let parsed = crate::config::parse_stages(&self.draft)
+                    .filter(|parsed| parsed.len() == 1)
+                    .and_then(|mut parsed| parsed.pop());
+                let Some(stage) = parsed else {
+                    self.message = Some(
+                        t!(
+                            self.tongue,
+                            "one stage: check:<check name>, check:<check name>@<login>, review:<login>, review:<org>/<team> or review:any, optionally ending in :advisory"
+                        )
+                        .to_owned(),
+                    );
+                    return Action::None;
+                };
+                let mut stages = self.stages();
+                if at < stages.len() {
+                    stages[at] = stage;
+                } else {
+                    stages.push(stage);
+                }
+                self.write_stages(&stages);
+                self.stage_edit = None;
+                self.focus = Focus::Picking;
+                self.draft.clear();
+                self.pick = at;
+            }
+            _ => {}
+        }
+        Action::None
     }
 
     /// Feeds a host-derived advisory model list back into the pure state.
@@ -2248,6 +2364,9 @@ impl App {
         if let Some(target) = self.model_target_at_cursor() {
             return self.in_model_picker(target.name, key);
         }
+        if self.stage_list_at_cursor() {
+            return self.in_stage_list(key);
+        }
         let entries = self.picker();
         if entries.is_empty() {
             self.focus = Focus::List;
@@ -2416,6 +2535,9 @@ impl App {
     fn in_editor(&mut self, key: Key) -> Action {
         if let Some(edit) = self.model_edit {
             return self.in_model_editor(key, edit);
+        }
+        if let Some(at) = self.stage_edit {
+            return self.in_stage_editor(key, at);
         }
         match key {
             Key::Char(character) => self.draft.push(character),

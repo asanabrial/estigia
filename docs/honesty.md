@@ -7328,8 +7328,13 @@ pointer that leaves it names the document it points at.
     addressing it counts as addressed. For `any` and `org/team` a review from any account other than
     the author, a `[bot]` or a check stage's author satisfies the stage — team membership is not read.
     An approval completes a review stage whichever commit it was given on, as GitHub keeps it unless
-    the repository dismisses stale approvals. Measured by `src/transport/stages/tests.rs` against a
-    fake `gh`, including that no review is requested while the cubic check is pending.
+    the repository dismisses stale approvals. A list GitHub answers with a next page — more than a
+    hundred threads, reviews, requests or check runs — refuses the reading rather than deciding
+    from the first page. A blocking check that is not reported on the head holds the stages behind it
+    and says it was never reported, because a check that has not started yet and a stage name that
+    matches no check look the same from here; an advisory check never holds them. Measured by
+    `src/transport/stages/tests.rs` against a fake `gh`, including that no review is requested while
+    the cubic check is pending.
 - **No other setting is read by nobody.**
   An operator sets twenty-nine rows and `config list` reports all of them. Measured: `context.get` is
   called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location`, `Review budget` (for the review forecast line) and `Git operation window`. The gate reads

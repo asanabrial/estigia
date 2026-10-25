@@ -2716,6 +2716,16 @@ fn keys_for(app: &App) -> Vec<String> {
                 t!(app.tongue, "⌫ delete").to_owned(),
             ];
         }
+        Focus::Picking if app.stage_list_at_cursor() => {
+            return vec![
+                t!(app.tongue, "↑↓ move").to_owned(),
+                t!(app.tongue, "⏎ edit").to_owned(),
+                t!(app.tongue, "space advisory or blocking").to_owned(),
+                t!(app.tongue, "d delete").to_owned(),
+                t!(app.tongue, "K J reorder").to_owned(),
+                t!(app.tongue, "Esc back").to_owned(),
+            ];
+        }
         Focus::Picking => {
             let mut keys = vec![
                 t!(app.tongue, "↑↓ move").to_owned(),

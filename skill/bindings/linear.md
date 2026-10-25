@@ -55,7 +55,8 @@ The move is reported under `linear_state` beside the tool's own answer, never fo
 checkout, the ready pull request or the merge happened whatever Linear answered. Its refusals are
 `linear-state-unknown` (the team has no state of that name; nothing is sent), `linear-move-refused`
 (Linear did not accept the mutation — a read-only credential is the common cause) and
-`linear-move-not-read-back` (it reads back as another state); the last two are an unknown world, so a
+`linear-move-unconfirmed` (the mutation was sent and no answer could be read) and
+`linear-move-not-read-back` (it reads back as another state); the last three are an unknown world, so a
 run reads the issue before claiming it moved. The credential needs write access to issues for this;
 with `State names` at `none` a read-only one is enough.
 

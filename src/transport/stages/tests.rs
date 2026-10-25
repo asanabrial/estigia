@@ -40,8 +40,9 @@ impl Pr {
     }
 
     fn review(mut self, login: &str, state: &str) -> Self {
-        self.reviews
-            .push(serde_json::json!({ "author": { "login": login }, "state": state }));
+        self.reviews.push(serde_json::json!({
+            "author": { "login": login }, "state": state, "body": "Please split this function.",
+        }));
         self
     }
 
@@ -73,11 +74,11 @@ impl Pr {
             "url": "https://example.invalid/pull/7",
             "mergeCommit": if self.state == "MERGED" { serde_json::json!({ "oid": "m1" }) } else { serde_json::Value::Null },
             "author": { "login": "alexis" },
-            "reviewRequests": { "nodes": self.requested },
-            "latestReviews": { "nodes": self.reviews },
-            "reviewThreads": { "nodes": self.threads },
+            "reviewRequests": { "pageInfo": { "hasNextPage": false }, "nodes": self.requested },
+            "latestReviews": { "pageInfo": { "hasNextPage": false }, "nodes": self.reviews },
+            "reviewThreads": { "pageInfo": { "hasNextPage": false }, "nodes": self.threads },
             "commits": { "nodes": [{ "commit": { "oid": "abc", "statusCheckRollup": {
-                "contexts": { "nodes": self.checks },
+                "contexts": { "pageInfo": { "hasNextPage": false }, "nodes": self.checks },
             }}}]},
         })
     }
@@ -186,10 +187,7 @@ fn advisory_comments_are_reported_and_do_not_hold_the_next_stage() {
         .review("octocat", "APPROVED");
     let answer = at(&pr, "check:cubic@cubic-dev-ai[bot]:advisory, review:any");
     assert_eq!(named(&answer), "awaiting-merge", "{answer}");
-    assert_eq!(
-        answer["advisory_comments"].as_array().map(Vec::len),
-        Some(1)
-    );
+    assert_eq!(answer["advisory"].as_array().map(Vec::len), Some(1));
 }
 
 #[test]
@@ -362,4 +360,103 @@ fn without_a_pull_request_the_answer_says_to_publish() {
     })
     .expect("a reading");
     assert_eq!(answer["position"], "unpublished");
+}
+
+#[test]
+fn a_check_never_reported_says_so_rather_than_that_it_is_running() {
+    let answer = at(&Pr::open(), TEAM);
+    assert_eq!(named(&answer), "check-pending");
+    assert_eq!(answer["reported"], false);
+    assert!(
+        answer["next"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("does not run"),
+        "{answer}"
+    );
+    let running = at(&Pr::open().check("cubic", "IN_PROGRESS", None), TEAM);
+    assert_eq!(running["reported"], true);
+}
+
+#[test]
+fn an_advisory_check_still_running_does_not_hold_the_next_stage() {
+    let pr = Pr::open()
+        .check("cubic", "IN_PROGRESS", None)
+        .review("octocat", "APPROVED");
+    let answer = at(&pr, "check:cubic@cubic-dev-ai[bot]:advisory, review:any");
+    assert_eq!(named(&answer), "awaiting-merge", "{answer}");
+    assert_eq!(answer["advisory"][0]["complete"], false);
+}
+
+#[test]
+fn requested_changes_without_a_thread_carry_the_reviews_own_words() {
+    let pr = Pr::open()
+        .check("cubic", "COMPLETED", Some("SUCCESS"))
+        .review("octocat", "CHANGES_REQUESTED");
+    let answer = at(&pr, TEAM);
+    assert_eq!(named(&answer), "comments-to-address");
+    assert_eq!(answer["comments"][0]["review"], "CHANGES_REQUESTED");
+    assert_eq!(answer["comments"][0]["body"], "Please split this function.");
+}
+
+#[test]
+fn a_list_github_answered_in_part_is_refused_not_read_as_the_whole() {
+    let (root, context) = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = root.path().join("gh.log");
+    let mut truncated = Pr::open()
+        .check("cubic", "COMPLETED", Some("SUCCESS"))
+        .json();
+    truncated["reviewThreads"]["pageInfo"]["hasNextPage"] = serde_json::json!(true);
+    let entries = crate::test_env::answers(&[
+        serde_json::json!({ "matches": "pr list", "stdout": r#"[{"number":7}]"# }),
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": r#"{"owner":{"login":"example"},"name":"repo"}"#,
+        }),
+        serde_json::json!({
+            "matches": "api graphql",
+            "stdout": serde_json::json!({ "data": { "repository": { "pullRequest": truncated } } })
+                .to_string(),
+        }),
+    ]);
+    let failure = crate::test_env::with_logging_gh(bin.path(), &entries, &log, || {
+        call(&context, TEAM, false)
+    })
+    .expect_err("a first page of threads was read as all of them");
+    assert!(
+        failure.detail().contains("review threads"),
+        "{}",
+        failure.detail()
+    );
+}
+
+#[test]
+fn a_request_whose_read_back_cannot_be_read_is_an_unknown_world() {
+    let (root, context) = rig();
+    let bin = crate::test_env::scripted_gh();
+    let log = root.path().join("gh.log");
+    let counts = root.path().join("gh.counts");
+    let done = Pr::open().check("cubic", "COMPLETED", Some("SUCCESS"));
+    let entries = crate::test_env::answers(&[
+        serde_json::json!({ "matches": "pr list", "stdout": r#"[{"number":7}]"# }),
+        serde_json::json!({
+            "matches": "repo view",
+            "stdout": r#"{"owner":{"login":"example"},"name":"repo"}"#,
+        }),
+        serde_json::json!({ "matches": "pr edit", "stdout": "" }),
+        serde_json::json!({ "matches": "api graphql", "nth": 1, "stdout": graphql(&done) }),
+        serde_json::json!({ "matches": "api graphql", "stderr": "gh: timeout", "status": 1 }),
+    ]);
+    let failure =
+        crate::test_env::with_counting_logging_gh(bin.path(), &entries, &counts, &log, || {
+            call(
+                &context,
+                "check:cubic@cubic-dev-ai[bot], review:octocat",
+                true,
+            )
+        })
+        .expect_err("an unreadable read-back was reported as a plain read failure or a success");
+    assert_eq!(failure.envelope()["reason"], "review-request-not-read-back");
+    assert_eq!(failure.envelope()["world"], "unknown");
 }

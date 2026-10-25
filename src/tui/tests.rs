@@ -8440,3 +8440,72 @@ fn the_delivery_preset_fills_its_rows_on_the_screen_and_a_fixed_row_says_why() {
     assert_eq!(app.shown_value(Setting::DeliveryPreset), "custom");
     assert_eq!(app.shown_value(Setting::MergeBy), "person");
 }
+
+#[test]
+fn external_reviewers_are_edited_as_a_list_of_stages() {
+    let mut app = App::one_table(None, Config::default());
+    app.set(Setting::DeliveryPreset, "team").expect("team");
+    walk_to(&mut app, Setting::ExternalReviewers);
+    let typed = |app: &mut App, text: &str| {
+        for character in text.chars() {
+            app.press(Key::Char(character));
+        }
+        app.press(Key::Enter);
+    };
+
+    app.press(Key::Enter);
+    assert_eq!(app.focus, Focus::Picking, "the row did not open its list");
+    assert_eq!(app.picker(), vec!["+ add a stage".to_owned()]);
+    app.press(Key::Enter);
+    assert_eq!(app.focus, Focus::Editing);
+    typed(&mut app, "check:cubic@cubic-dev-ai[bot]");
+    assert_eq!(
+        app.focus,
+        Focus::Picking,
+        "a stage typed did not land in the list"
+    );
+    app.press(Key::Down);
+    app.press(Key::Enter);
+    typed(&mut app, "review:any");
+    assert_eq!(
+        app.shown_value(Setting::ExternalReviewers),
+        "check:cubic@cubic-dev-ai[bot], review:any"
+    );
+    let painted = rows(&app, 110, 60).join("\n");
+    assert!(painted.contains("K J reorder"), "{painted}");
+
+    app.press(Key::Char('K'));
+    assert_eq!(
+        app.shown_value(Setting::ExternalReviewers),
+        "review:any, check:cubic@cubic-dev-ai[bot]"
+    );
+    app.press(Key::Char(' '));
+    assert_eq!(
+        app.shown_value(Setting::ExternalReviewers),
+        "review:any:advisory, check:cubic@cubic-dev-ai[bot]"
+    );
+    app.press(Key::Char('d'));
+    assert_eq!(
+        app.shown_value(Setting::ExternalReviewers),
+        "check:cubic@cubic-dev-ai[bot]"
+    );
+
+    app.press(Key::Down);
+    app.press(Key::Enter);
+    typed(&mut app, "review:two words");
+    assert_eq!(
+        app.focus,
+        Focus::Editing,
+        "a stage that does not parse was taken"
+    );
+    assert!(
+        app.message.is_some(),
+        "nothing said why the stage was refused"
+    );
+    app.press(Key::Esc);
+    assert_eq!(app.focus, Focus::Picking);
+    assert_eq!(
+        app.shown_value(Setting::ExternalReviewers),
+        "check:cubic@cubic-dev-ai[bot]"
+    );
+}
