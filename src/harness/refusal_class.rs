@@ -358,6 +358,7 @@ const REFUSED: &[&str] = &[
     "push-hook-carries-your-lines",
     "push-hook-not-writable",
     "qualifying-review-verdict-missing",
+    "question-decided-here",
     "read-only-tracker-admits-only-assisted",
     "ready-is-the-persons",
     "ready-pr-head-not-published",

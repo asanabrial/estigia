@@ -588,6 +588,17 @@ you chose for each delegated context.
 
 ";
 
+/// What `Decision mode: auto` asks of the run, written only when it is in force.
+pub const DECISION_MODE_AUTO: &str = "\
+`Decision mode` is `auto` here: ask the person nothing, in prose or with a question tool. At each \
+choice apply the most advisable answer and carry on; offer it through `AskUserQuestion` with that \
+answer marked `(Recommended)`, where the host has the tool, and the gate refuses the question, \
+records the answer and shows the person every question and decision when the turn ends. Where it \
+has none, list each question and the decision taken in your final message. The authorisation rows \
+still decide delivery and transitions.
+
+";
+
 /// The lines that send the agent to the documents this configuration selects.
 ///
 /// A setting the agent cannot act on is a setting that does nothing. `Tracker`
@@ -662,6 +673,10 @@ pub fn selected_documents(config: &Config) -> String {
 
 ",
         );
+    }
+
+    if config.decision_mode == crate::config::DecisionMode::Auto {
+        lines.push_str(DECISION_MODE_AUTO);
     }
 
     if config.models.by_task {
@@ -3323,6 +3338,21 @@ mod tests {
             !configuration_body(&Config::default()).contains("Where `Model routing` names a model"),
             "a contract with no routing explains routing anyway"
         );
+    }
+
+    #[test]
+    fn decision_mode_auto_reaches_the_agent_and_ask_says_nothing() {
+        let mut auto = Config::default();
+        crate::config::Setting::DecisionMode
+            .apply(&mut auto, "auto")
+            .expect("auto parses");
+        assert_eq!(
+            configuration_body(&auto)
+                .matches(crate::skill::DECISION_MODE_AUTO)
+                .count(),
+            1
+        );
+        assert!(!configuration_body(&Config::default()).contains(crate::skill::DECISION_MODE_AUTO));
     }
 
     #[test]

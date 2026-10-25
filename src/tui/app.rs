@@ -301,6 +301,7 @@ pub(super) const TUI_SETTINGS: &[Setting] = &[
     Setting::Boundaries,
     Setting::Window,
     Setting::GitOperationWindow,
+    Setting::DecisionMode,
     Setting::Evidence,
     Setting::PublicationLane,
     Setting::ReviewBudget,

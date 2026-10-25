@@ -4130,7 +4130,7 @@ pointer that leaves it names the document it points at.
     **And under the default row the reserved reviewer is never recorded at all**, which is the case
     that governs every installation nobody has changed. Its whole grant is `Read, Grep, Glob`, and
     none of those three is in the matcher the hook is woken for —
-    `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task` — so no call it is permitted to make
+    `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion` — so no call it is permitted to make
     ever reaches the record, and every call that would reach it is outside the grant and refused
     before it. A judge measured both directions through the built binary: under `reading`, a
     `review-blind` context calling `Bash` is denied and no pointer is written at all; under
@@ -5612,6 +5612,15 @@ pointer that leaves it names the document it points at.
 
 ## The gate's reach across the agents
 
+- **`Decision mode: auto` is enforced on Claude Code alone.** The gate refuses `AskUserQuestion`,
+  the one question tool its matcher is woken for, and records the recommended answer from the
+  payload. Codex, OpenCode and Pi register no question tool with the gate, so on them `auto` is the
+  contract's sentence and nothing more — and on every agent a question asked in prose rather than
+  through the tool is not seen at all. "Recommended" is the option the agent itself labelled
+  `(Recommended)`, or its first option: the gate reads which answer the agent ranked first and does
+  not judge it. Measured by `src/harness/decision_mode/tests.rs`; turning the refusal off reddens
+  two of its six tests.
+
 - **The harness gates named populations, not every write.** The editing tools each agent ships, the
   git spellings that change the tree, the irreversible steps, and — since 2026-08-01 — the shell
   constructs that visibly write a file: a redirect, a `sed -i`, an interpreter handed code, and the
@@ -6355,7 +6364,7 @@ pointer that leaves it names the document it points at.
   `tool.execute.before` never sees a call made by a subagent at all. So the second door closes
   nothing today: it is open for a caller that names a sub-agent, and there is not one yet. Where the
   question *is* asked, it sees exactly what the matcher wakes the hook for —
-  `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task` for Claude Code. `Agent` and `Task` first
+  `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion` for Claude Code. `Agent` and `Task` first
   take the dedicated reserved-reviewer prelaunch path rather than repository classification. A tool outside that set is
   never offered to it. Measured against the list this crate itself cites as the case it exists for,
   a published `builder` sub-agent declaring `Read, Write, Edit, Glob, Grep, Bash`: three of the six are tools the
@@ -7340,7 +7349,7 @@ pointer that leaves it names the document it points at.
     `src/transport/stages/tests.rs` against a fake `gh`, including that no review is requested while
     the cubic check is pending.
 - **No other setting is read by nobody.**
-  An operator sets twenty-nine rows and `config list` reports all of them. Measured: `context.get` is
+  An operator sets thirty rows and `config list` reports all of them. Measured: `context.get` is
   called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location`, `Review budget` (for the review forecast line) and `Git operation window`. The gate reads
   `Irreversible commands`, and the payload's prose names the rest of the acted-on rows. That once
   left `Delivery authorisation`, `Transition authorisation`, `Delivery route`, `Merge strategy`,

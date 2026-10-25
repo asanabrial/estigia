@@ -156,7 +156,10 @@ impl AgentAdapter {
                 // agent writes through it, and the two must not disagree.
                 // `Agent` and legacy `Task` are not repository writes; they wake
                 // the dedicated Claude prelaunch check for the reserved reviewer.
-                matcher: Some("Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task"),
+                // `AskUserQuestion` is read only under `Decision mode: auto`.
+                matcher: Some(
+                    "Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion",
+                ),
                 dialect: Dialect::ClaudeCode,
                 envelope: Envelope::Settings,
                 // The only one; see the field's note on why it is declared.

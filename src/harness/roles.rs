@@ -20,7 +20,7 @@
 //! # How far it reaches, which is less than the sentence above
 //!
 //! This runs inside `PreToolUse`, so it is offered exactly the tools the gate's
-//! matcher wakes the hook for — `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task`
+//! matcher wakes the hook for — `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion`
 //! for Claude Code — and a call to anything else never arrives here to be
 //! judged. So what it can refuse is a tool **in the matcher and not in the
 //! list**, and the `builder` cited above is the measurement: of its six declared

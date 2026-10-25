@@ -5082,6 +5082,7 @@ fn gate_context(cwd: &str) -> Result<harness::GateContext, Refusal> {
     Ok(harness::GateContext {
         integration: installed.integration,
         issue_requirement: installed.issue_requirement,
+        decision_mode: installed.decision_mode,
         workflow: effective_workflow(unreadable, installed.workflow),
         // The repository's own schedule over the contract, failing closed on
         // an enabled value that does not parse. Read off `installed` so the

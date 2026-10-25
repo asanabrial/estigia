@@ -18,6 +18,7 @@ fn context(root: &Path) -> GateContext {
         state_root: root.join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
         window: RENEWAL_WINDOW,
         tracker: crate::config::Tracker::Github { repo: None },

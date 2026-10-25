@@ -41,6 +41,7 @@ use population::{Disposition, Population};
 
 pub mod assisted;
 pub mod changes;
+pub mod decision_mode;
 pub mod doctor;
 pub mod guard;
 pub(crate) mod handoff;
@@ -3097,6 +3098,8 @@ pub struct GateContext {
     pub operation_window: crate::config::GitOperationWindow,
     /// What a run holding no claim may write here. Read from the repository's own file only.
     pub issue_requirement: crate::config::IssueRequirement,
+    /// Whether a question tool is put to the person or refused and decided here.
+    pub decision_mode: crate::config::DecisionMode,
     /// Who witnesses a claim here. Read from the repository's own file only; `None` when
     /// the contract could not be read, which is not a value any row holds.
     pub workflow: Option<crate::config::Workflow>,

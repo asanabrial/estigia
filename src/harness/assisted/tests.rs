@@ -72,6 +72,7 @@ fn new_rig() -> Rig {
         state_root: root.path().join("state"),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(Workflow::Assisted),
         window: Duration::ZERO,
         tracker: crate::config::Tracker::Github { repo: None },

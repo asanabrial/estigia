@@ -62,6 +62,7 @@ fn inventory() -> Vec<Refusal> {
             )),
         ),
         crate::harness::unclaimed::not_claimed(false),
+        crate::harness::decision_mode::refusal(&[], true),
         crate::harness::issue_creation::refusal(Some("gh issue create"))
             .expect("a line that files an issue is refused"),
         // The role gate's only refusal, by its real constructor.
@@ -3080,6 +3081,7 @@ fn every_setting_the_gate_reads_is_one_that_cannot_vary_by_agent() {
         // per-agent answer to it would be written, read back, and never
         // consulted by the one gate that acts on it.
         Setting::Evidence,
+        Setting::DecisionMode,
     ] {
         assert!(
             EVERYWHERE_SETTINGS.contains(&setting),
@@ -3100,7 +3102,7 @@ fn every_setting_the_gate_reads_is_one_that_cannot_vary_by_agent() {
     let end = body.find("\n}\n").unwrap_or(body.len());
     assert_eq!(
         body[..end].matches("installed.").count(),
-        9,
+        10,
         "the gate reads a different number of settings than this test names, \
          and every one of them has to be repository-wide"
     );
@@ -8371,6 +8373,7 @@ fn release_context(
         state_root: state_root.to_path_buf(),
         operation_window: Default::default(),
         issue_requirement: crate::config::IssueRequirement::Off,
+        decision_mode: crate::config::DecisionMode::Ask,
         workflow: Some(crate::config::Workflow::Autonomous),
         window: std::time::Duration::from_secs(120),
         tracker: crate::config::Tracker::Github { repo: None },

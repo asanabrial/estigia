@@ -22,6 +22,7 @@ mod records;
 mod schema;
 mod sessions;
 mod snapshot;
+mod taken_decisions;
 
 #[cfg(test)]
 mod tests;
@@ -42,6 +43,7 @@ pub(crate) use outbox::{OutboxKind, OutboxRow, OutboxState};
 pub(crate) use records::{Recorded, TaskChange, TaskRow};
 pub(crate) use sessions::{SessionRow, SessionSeen};
 pub(crate) use snapshot::{age_in_words, snapshot_age, snapshots_dir};
+pub(crate) use taken_decisions::TakenDecision;
 
 const BUSY_WAIT: Duration = Duration::from_millis(5000);
 
