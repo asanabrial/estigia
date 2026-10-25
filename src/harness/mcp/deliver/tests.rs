@@ -928,6 +928,24 @@ fn a_lane_reading_not_consulted_still_reads_the_rollup_and_hands_back_red_ci() {
 }
 
 #[test]
+fn an_empty_rollup_on_a_lane_not_consulted_delivers_without_waiting() {
+    let world = world("b.txt", "two\n");
+    let mut held = fake(&world);
+    held.lane = (json!({"state": "not-consulted"}), true);
+    let mut script = green_script(&world);
+    script[0] = pr_view(&world, json!([]));
+    let ran = drive(&held, &script, &request());
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+
+    let ran = drive(&fake(&world), &script, &request());
+    assert_eq!(
+        ran.answer["pending"]["reason"], "checks-not-started",
+        "{}",
+        ran.answer
+    );
+}
+
+#[test]
 fn a_merge_whose_every_readback_fails_is_unknown_not_refused() {
     let world = world("b.txt", "two\n");
     let held = fake(&world);

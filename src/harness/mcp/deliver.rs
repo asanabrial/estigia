@@ -454,6 +454,10 @@ impl<H: Hands> Deliver<'_, H> {
                 Rollup::Pending(_) => {
                     self.wait("ci", "checks-running", None)?;
                 }
+                Rollup::Empty if state == "not-consulted" => {
+                    let summary = json!({"lane": lane.value, "rollup": "none"});
+                    return Ok((view, summary));
+                }
                 Rollup::Empty => {
                     if self.hands.now() > self.released_at + EMPTY_ROLLUP_WINDOW_SECONDS {
                         return Err(stop(
