@@ -1050,10 +1050,10 @@ fn run_operation(
                 // anything moves, and the transition's own refusals follow it.
                 match f.get("transition-to") {
                     Some(to) => {
-                        super::commands::require_state(to)?;
                         super::claim::claim_checks(&acquisition)?;
                         let ledger = super::store::Ledger::open(context, issue, now)?;
                         let answer = super::claim::claim_on(context, &ledger, &acquisition)?;
+                        super::commands::require_state(to)?;
                         let moved =
                             super::commands::transition_on(context, &ledger, issue, to, None, now)?;
                         Ok(merged_step(answer, "transition", moved))
