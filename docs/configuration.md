@@ -44,36 +44,31 @@ estigia config set "Integration mode" trunk
 | Decision mode | `ask` or `auto`. Default `ask`: a run may put a question to the person. `auto`: a question tool is refused, the run applies the recommended answer, and the turn ends by listing every question and the decision taken — see *Decision mode* below. | Gate limits | everywhere |
 | Evidence standard | `reading`, or `measuring` | Review & change | everywhere |
 | Publication lane | `on` or `off`. Default `on`: accepted verdicts are gated on the head's check runs. `off` skips the check-run read and records `classification: not-consulted`. A `cancelled` conclusion still refuses when the gate is on. `deliver` reads the pull request's whole rollup whatever the lane says, since a `not-consulted` lane is no evidence that CI does not run: red and running checks still stop or wait it, but on that lane an empty rollup passes at once instead of waiting for a check to appear. Only a lane that reads `disabled` or `never-ran` skips the rollup. | Review & change | everywhere |
-| Review budget | `none`, or a token count such as `150000`. Default `150000`, per review context — an inherited comparison target, not a number derived from the distribution below. Twenty-eight judge contexts measured across five issues, when ordinary review still acquired judges (that has since ended), read from harness completion reports, bracket it rather than produce it: minimum 96,073, median 127,025, maximum 182,136 tokens, with 18% over 150,000. **Advisory, and reported rather than enforced**: nothing here refuses a panel that runs over it, and `record_spend` is recorded, not verified, so an under-report is undetectable. `none` switches it off. `review_tier`'s `forecast` line multiplies it by the lenses the tier licenses and states the product; the forecast is a statement, not a limit. See [`docs/honesty.md`](honesty.md) for what the number cannot count | Review & change | everywhere |
+| Review budget | `none`, or a token count such as `150000`. Default `150000`, per review context — an inherited comparison target, not a derived number. **Advisory, and reported rather than enforced**: nothing here refuses a panel that runs over it, and `record_spend` is recorded, not verified, so an under-report is undetectable. `none` switches it off. `review_tier`'s `forecast` line multiplies it by the lenses the tier licenses and states the product; the forecast is a statement, not a limit. See [`docs/honesty.md`](honesty.md) for what the number cannot count | Review & change | everywhere |
 | Change size | a number of lines, such as `800` | Review & change | everywhere |
 | Corrections per lineage | a positive whole number. Default `3`: a review lineage — an original candidate and its repairs on one pull request — may publish that many corrections after a rejection. A publication past it is refused as `correction-already-spent` before anything is pushed, `review_status` and `repair_rounds` report it as `correction_limit`, and a rejected correction with corrections remaining, one the targeted validator failed included, is due another rather than escalated; once the limit is spent, `escalate_review` is the exit and a person's `recover` continues. `1` is the limit gentle-ai v4 enforces (see [`docs/parity.md`](parity.md)). The size budget and the reviewed-path scope are unchanged, and the budget stays cumulative across corrections. `0`, a negative number and a non-integer are refused | Review & change | everywhere |
 | Model routing | `unset`, `by task`, or one cell holding two lists separated by `;`. The first is comma-separated `key=model` pairs, as in `orchestrate=fable, apply=sonnet`; the second, after the `;`, is comma-separated `key=effort` pairs, as in `apply=low`. `by task` is the whole cell and names no route: the shape of the work decides the model and the effort, and the launching agent records what it chose (see [`docs/honesty.md`](honesty.md)). A cell mixing `by task` with pairs is refused rather than merged. A key is a role (`developer`, `analyst`, `reviewer`, `refuter`, `validator`, `judge`), `apply`, or `orchestrate`. The retired phase keys — `explore`, `propose`, `spec`, `design`, `tasks` — are dropped by the tolerant read and named in a report, and the strict read refuses the cell. A model ID may use any catalog spelling, or `inherit`, but no comma, semicolon, pipe, or line break. An effort is `low`, `medium`, `high`, `xhigh` or `max`. Naming a role is what installs its definition and removing the entry retracts it, where the host reads sub-agent definitions (Claude Code, OpenCode, and Pi's `~/.pi/agent/agents/`); `judge` installs nothing and is a declaration read only by the orchestrator, under Judgment Day, when it launches a judge; `reviewer` installs nothing and names the model `launch_review_input` runs a sealed reviewer on, lenses included, and the refuter and the validator unless they name their own: `refuter` and `validator` install nothing, take the same model grammar, and fall back to `reviewer` when absent (`inherit` on any of the three, or no entry where there is nothing to fall back to, leaves the CLI's own choice; the transport reads the layered table and not an `estigia.<agent>.md` file, which `docs/honesty.md` records), and its effort half is read by nothing. A role named with no model of its own runs on the inherited model at the effort beside it. The rest is a declaration the agent reads: the one model Estigia itself launches is the `reviewer` run `launch_review_input` starts | Agent runtime | agent |
-| Loop plugin | `on` or `off`. Default `off`: `setup` writes `flow-loop.js` beside the gate plugin only when the row is `on`, and takes back one Estigia wrote when it is `off`. Its commands are `/flow-loop` and `/flow-status`, so it never shadows the generic `/goal` and `/loop`. `/flow-loop` with no text runs `/flow dev`, and text whose first word is not `/flow` or `flow` is prefixed with `/flow`, which routes itself. A leading role word (`dev`, `triage`, `analyst`, `developer`) picks that role instead of routing, and working one issue needs `dev <n>`, because a bare number is read as conditions or domain rules. The plugin continues a session while `estigia goal` says the run is live, or — its own issue done and released — while another issue is claimable or a `blocked` item's recorded exit condition already holds. `--max <n>` caps the loop at `n` issues that reached `done` under the run, counted from the tracker rather than turns. Codex gets the same loop as a `Stop` and a `SessionStart` entry in `hooks.json`, each trusted in `config.toml`, when the row is `on` for Codex, and takes them back when it is `off`; the continuation is `$flow dev`, and `--wait`, `--max`, per-session text and `/flow-status` are not ported (`docs/what-it-writes.md`). Claude Code gets the same loop as two slash commands (`flow-loop.md` and `flow-status.md` under its `commands/` directory) and a `Stop` entry naming `--agent claude-code`, when the row is `on` for it; the continuation is `/flow dev`, the cap is counted the same way, and `/flow-loop stop` records the portable `stop-after` request (`docs/what-it-writes.md`). Pi gets the same loop as one owned extension, `estigia-loop.ts` beside its gate extension, which registers `/flow-loop` and `/flow-status` itself and continues the session on Pi's `agent_settled` event; its goal is held in memory, so a restarted Pi forgets it (`docs/what-it-writes.md`). An agent's page on the setup screen offers the row for OpenCode, Pi, Codex and Claude Code and no other agent | Agent runtime | agent |
-| Goal loop plugin | `on` or `off`. Default `off`: `setup` writes `goal-loop.js` beside the gate plugin only when the row is `on`, and takes back one Estigia wrote when it is `off`. It offers the generic `/goal <condition>` and `/loop [interval] <prompt>` and is independent of `Loop plugin`: the file names no Estigia path and runs no Estigia command, and a `/goal` completes when a model judges the transcript, which is never Estigia evidence. Pi gets the same pair as one owned extension, `estigia-goal-loop.ts` beside its gate extension, which judges through Pi's model registry and keeps its state in memory (`docs/what-it-writes.md`). Only OpenCode and Pi read a plugin or extension Estigia writes, so the row is offered for those two and no other agent | Agent runtime | agent |
+| Loop plugin | `on` or `off`. Default `off`: `setup` writes `flow-loop.js` beside the gate plugin only when the row is `on`, and takes back one Estigia wrote when it is `off`. Its commands are `/flow-loop` and `/flow-status`, so it never shadows the generic `/goal` and `/loop`. `/flow-loop` with no text runs `/flow dev`, and text whose first word is not `/flow` or `flow` is prefixed with `/flow`, which routes itself. A leading role word (`dev`, `triage`, `analyst`, `developer`) picks that role instead of routing, and working one issue needs `dev <n>`, because a bare number is read as conditions or domain rules. The plugin continues a session while `estigia goal` says the run is live, or — its own issue done and released — while another issue is claimable or a `blocked` item's recorded exit condition already holds. `--max <n>` caps the loop at `n` issues that reached `done` under the run, counted from the tracker rather than turns. Codex, Claude Code and Pi get the same loop through their own mechanisms when the row is `on` for them and lose it when it is `off`; what each writes, and what each does not port, is in [what it writes](what-it-writes.md#the-optional-loop-plugin). An agent's page on the setup screen offers the row for OpenCode, Pi, Codex and Claude Code and no other agent | Agent runtime | agent |
+| Goal loop plugin | `on` or `off`. Default `off`: `setup` writes `goal-loop.js` beside the gate plugin only when the row is `on`, and takes back one Estigia wrote when it is `off`. It offers the generic `/goal <condition>` and `/loop [interval] <prompt>` and is independent of `Loop plugin`: the file names no Estigia path and runs no Estigia command, and a `/goal` completes when a model judges the transcript, which is never Estigia evidence. Pi gets the same pair as one owned extension, `estigia-goal-loop.ts` (see [what it writes](what-it-writes.md#the-pi-goal-and-loop-extension)). Only OpenCode and Pi read a plugin or extension Estigia writes, so the row is offered for those two and no other agent | Agent runtime | agent |
 | Summary language | a plain language name | This machine | machine |
 | Issue body language | a plain language name | This machine | machine |
 
-Every one of them, and every one spelled the way `estigia config list` spells it. This table
-used to show nine, and one of the nine was `Task body language` — a **legacy alias**, kept so an
-older contract still parses, for a row now called `Summary language`. There is a second language
-row beside it, `Issue body language`, and the alias's own note says why the two must not be
-confused: reading one as the other *would move an operator's answer onto a row that decides
-something different, and leave the row it actually decided sitting at the default*. A reader who
-set what this table named got exactly that.
+Every one of them is spelled the way `estigia config list` spells it. `Task body language` is a **legacy alias**, kept so an
+older contract still parses, for `Summary language`; it is not
+`Issue body language`, and reading one as the other would move an operator's answer onto a row that decides
+something different.
 
-`Repair ceiling` is retired and is not a row any more: it was instruction rather than enforcement. The
-count of corrections a lineage may spend is `Corrections per lineage`, enforced at publication as
-`correction-already-spent`. An installed row
-still loads, changes nothing, and is reported as `repair-ceiling-retired` in the shared table, an agent
-file, `estigia.local.md` and a repository's file alike; `config set` refuses it, and `setup` leaves it
-out of the shared table it rewrites. Four more rows were retired because each had exactly
-one answer, which is now hard-coded: `Delivery route` was `direct`, so delivery is direct; `Merge
-strategy` was `merge commit`, so delivery merges with a merge commit; `Review protocol` was
-`receipt-driven`, so every verdict is bound to a digest over the complete intended target and
-`protocols/rdd.md` installs with the contract; and `Review delegation` was `auto`, so a run acquires
-its reviewers without asking. Each installed row still loads and changes nothing, and `config set`
-refuses a new write with `delivery-route-retired`, `merge-strategy-retired`,
-`review-protocol-retired` or `review-delegation-retired`.
+Retired rows are not rows any more, and an installed one still loads, changes nothing, and is reported
+as `<row>-retired` in the shared table, an agent file, `estigia.local.md` and a repository's file alike;
+`config set` refuses a new write, and `setup` leaves it out of the shared table it rewrites.
+`Repair ceiling` was instruction rather than enforcement (`repair-ceiling-retired`); the count of corrections a lineage may spend is `Corrections per lineage`, enforced at publication as
+`correction-already-spent`. Four rows each had exactly
+one answer, now hard-coded: `Delivery route` (`direct`; `delivery-route-retired`), `Merge
+strategy` (`merge commit`; `merge-strategy-retired`),
+`Review protocol` (`receipt-driven`, so every verdict is bound to a digest over the complete intended target and
+`protocols/rdd.md` installs with the contract; `review-protocol-retired`) and `Review delegation` (`auto`, so a run acquires
+its reviewers without asking;
+`review-delegation-retired`).
 
 Review permission is no longer a row: a run acquires a distinct reviewer unconditionally. The
 binary still launches a lens, refuter or validator only when the run calls `launch_review_input`,
@@ -164,42 +159,32 @@ says it too and never keeps the session from stopping.
 Ordinary review licenses lenses only — none at `low`, one at `medium`, four at `high` — and
 [blind judges](../skill/policies/blind-judges.md) states it. Judges exist only as Judgment Day, gentle-ai v4's opt-in
 ([judgment day](../skill/policies/judgment-day.md)). Every Claude Code setup
-installs two inert definitions: `~/.claude/agents/review-blind.md` and
-`~/.claude/agents/review-blind-sealed.md`, rendered from one template with a different `Seal`. They are
+installs two inert definitions, `~/.claude/agents/review-blind.md` and
+`~/.claude/agents/review-blind-sealed.md`, rendered from one template with a different `Seal`; they
+are
 Judgment Day's judges, and this composition never launches either. The other seven reserved
 names — the five sealed lenses `review-lens`, `review-risk`, `review-readability`, `review-reliability`
 and `review-readback`, the refuter `review-refuter` and the validator `review-validator` — are not
-installed: `launch_review_input` launches each from a template embedded in the binary with no tools and
-never reads `~/.claude/agents`, so there is no hand path for them and setup retracts an owned,
-unedited copy an earlier build wrote (an edited copy is kept, an unowned one left alone).
-The two judge files say `model:
+installed: `launch_review_input` launches each from a template embedded in the binary with no tools,
+there is no hand path for them, and setup retracts an owned,
+unedited copy an earlier build wrote ([what it writes](what-it-writes.md#the-reviewer-and-role-definitions-setup-installs-and-the-ones-it-never-does)
+has the rule and the launch-time proof). The two judge files say `model:
 inherit` and are inert unless
 the launch prompt names the immutable target — a head, a diff or a commit range — and criteria. `review-blind`'s tool grant is
 `Evidence standard`'s answer; `review-blind-sealed`'s is fixed to one tool, a web search, and
 `skill/policies/judgment-day.md` states what that seal does and does not buy. The orchestrator
 supplies `Model routing`'s
 effective `judge` assignment only when it launches Judgment Day, which is never a tier's allocation.
+
 A lens's severe finding is settled by the ledger at every tier, in this order: a missing `evidence_class` or `causal_disposition`, `insufficient` evidence or an `unknown` cause escalates; a `pre-existing` or `base-only` cause is a follow-up that blocks nothing; `deterministic` is open and rejects; `inferential` follows its refuter (`refuted` drops it, `corroborated` or `inconclusive` keep it, no result escalates). Dissent,
 warnings and suggestions survive. Estigia records only one computed exact-receipt verdict and
 cannot prove lens count, concurrency, independence, blindness or same-finding identity. `config set` and `config edit` write configuration only; changing
 these rows never rewrites either external definition — including `Evidence standard`, which decides
 `review-blind`'s tool grant and, under `measuring`, its basis paragraph. **The gate takes the new row at once; the file on disk keeps the old grant until `estigia setup` or
 `estigia sync` next writes it**, so until then the host offers the previous grant while the gate
-enforces the new one. The narrowing direction fails closed at the gate; the widening direction is refused only by the host’s stale `tools:` line, if it enforces one. Nothing reports either, and
+enforces the new one. The narrowing direction fails closed at the gate; the widening direction is refused only by the host's
+stale `tools:` line, if it enforces one. Nothing reports either, and
 `docs/honesty.md` records it as open.
-
-Every reserved role holds its own operator-owned user
-file. Claude's generated `PreToolUse` matcher wakes for `Agent` and legacy `Task` launches and, before
-repository classification, checks the launched name's exact target for recursive project collisions
-from the launch cwd through the first
-`.git` repository root, using parsed YAML frontmatter, then proves the canonical user text is the only
-user-scoped definition carrying that identity. Setup performs that same recursive user-tree uniqueness
-preflight before writing, repeats it at the external reviewer boundary, and creates a fresh canonical
-file without replacing a path another actor created meanwhile. Unreadable or duplicate candidates and
-a missing, unreadable or changed canonical copy fail closed. This exception does not change project-
-first precedence for ordinary agents and does not add OpenCode launch enforcement. A refused launch
-contributes no reviewer; use a separate session or durable handoff rather than reducing or serializing the
-configured review.
 
 ### What the listing says about where a value came from
 
@@ -233,10 +218,8 @@ configuration block is preferred over one without, and among those, a root holdi
 adapter order decides, which puts the shared neutral root first.
 
 The second half of that rule exists because `setup --all` writes the configuration block into every
-root, so the first half cannot tell two installed roots apart; the selection then fell to the order
-and took a root that held none of the operator's values, and the gate adjudicated at defaults while
-the agent read the operator's table. Preferring "a configuration that differs from the defaults"
-does not separate them either — setup writes real values into the neutral root's block as well.
+root, so the first half cannot tell two installed roots apart; preferring "a configuration that differs from the defaults"
+does not either, since setup writes real values into the neutral root's block as well.
 
 Two roots can still legitimately hold different tables; `setup` preserves each rather than flattening
 them. What must not stay silent is the gate deciding by rows an agent never reads, so `estigia doctor`
@@ -249,8 +232,7 @@ rest of the crate asks, not another list:
   `Model routing`, `Loop plugin`, `Goal loop plugin`. These are *meant* to differ by agent;
   `config set --agent <slug> …` is how you set one; `config set` and `config edit` without
   `--agent` refuse these rows with `setting-needs-an-agent`, naming `--agent <slug>` and the
-  installed agents that read the row, and write nothing (a bare set used to land in whichever
-  contract discovery picked, which every agent without a file of its own then read).
+  installed agents that read the row, and write nothing.
   `--contract`, valid only with `--agent`, writes that agent's contract table instead of its own
   file. On a shared root an agent-scoped row is refused with `contract-is-shared` and nothing is
   written, because that `SKILL.md` is read by every agent there without a file of its own; the refusal
@@ -262,8 +244,7 @@ rest of the crate asks, not another list:
   refuse a retired slug with `agent-retired`, naming `estigia uninstall <slug>`. On a shared skill root that answer lands in
   `estigia.<slug>.md` beside the contract, and the paragraph above the contract's own table names
   that file and the order — `estigia.local.md`, then `estigia.<slug>.md`, then the table — because
-  the table is where an agent decides, and a pointer only in the agent's instruction file left an
-  OpenCode orchestrator applying Claude's `judge=opus`. Two of them — the authorisations — also have
+  the table is where an agent decides. Two of them — the authorisations — also have
   a repository half that can only **tighten**, below; that does not move their scope, so a
   repository tightening one is never a divergence here. Named on the row, and the row stays `ok`:
   calling a machine broken for a supported configuration names a fault with no way out of it.
@@ -280,13 +261,6 @@ rest of the crate asks, not another list:
   contract. A person writes in one language across every checkout they have, so there is nothing for
   one agent to answer differently — `config set --agent <slug>` refuses a machine row the way it
   refuses a repository one, and says which command holds it instead.
-
-  It did not always. The plain form wrote a machine row into the canonical contract and nowhere
-  else, and the per-agent form accepted one it could not hold: the per-agent file is rendered and
-  read through the agent scope, so the row was dropped and the command exited on its own read-back,
-  blaming a local override that need not exist. Two roots could then answer one machine-wide
-  question differently with no command that made them agree, and the `canonical` row reported it
-  with no way out to offer. That was measured and fixed.
 
 - **Repository** — `Unclaimed write policy`, `Claim workflow` and the other rows of the *Delivery* group, each
   answered by a repository's own file and by nothing else. The contract carries no row for any of them,
@@ -326,45 +300,25 @@ rather than so `decide` branches on it, and `Claim workflow` is also read where 
 runs a tool and where `estigia goal` counts work. Every other repository-scoped row, `Repair
 ceiling` included, is read by an agent or by the transport and never by the gate's own decision.
 
-That split used to decide how a write to `<repo>/.git/estigia/estigia.local.md` — the file `--repo`
-writes into, below — was adjudicated: which row a write named. It no longer does on the write-tool
-road. **Every write to this file through a write tool is a boundary, whichever row it names, and a
-shell write to it gets the same answer a shell write to any other control-surface file gets** — and
-that holds even when `REPOSITORY_SHELL` matches first: `git commit -m wip && printf x >>
-.git/estigia/estigia.local.md` answers `Boundary`, because `REPOSITORY_SHELL`'s own arm now asks the
-same control-surface and repository-configuration question `shell::writes_a_file`'s arm already asked,
-before it answers. That shadow is closed.
-Six attempts tried
-to gate the row instead of the file, each one closing the escape a blind panel found in the one
-before it, and the last two escapes were the same shape as each other: a payload that named no
-guarded row at all could still move where `crate::config::rows` reads the boundary between one row
-and the next — a deleted line break merging two rows into one, or a fence marker assembled from
-fragments that were each, read alone, an ordinary line. `crate::config::rows` reads a **region**,
-not a payload, and an anchored write can move that region's boundary with text that names no row —
-which no per-payload reading can see, because it is a property of the *document* an edit produces,
-not of the edit itself. `docs/honesty.md` carries all six attempts, the payload each one died on, and
-why the seventh answer is to stop asking the question at all rather than to ask it a seventh way.
+**Every write to `<repo>/.git/estigia/estigia.local.md` — the file `--repo`
+writes into, below — through a write tool is a boundary, whichever row it names, and a
+shell write to it gets the answer a shell write to any other control-surface file gets**, even when `REPOSITORY_SHELL` matches first: `git commit -m wip && printf x >>
+.git/estigia/estigia.local.md` answers `Boundary`, because `REPOSITORY_SHELL`'s own arm asks the
+same control-surface and repository-configuration question `shell::writes_a_file`'s arm asks, before it answers. The gate does not read the row, because
+`crate::config::rows` reads a **region**,
+and an anchored write can move that region's boundary with text that names no row; no per-payload reading can see that. `docs/honesty.md` carries the six
+attempts to gate the row instead of the file and
+why none of them held.
 
 The control surface is still asked **first**, unconditionally, so a path that happens to be on both
 (`~/.estigia/estigia.local.md`, which matches the control surface's `.estigia/` fragment and this
 file's own name both) answers through that branch rather than this one — both answer `Boundary`
 today, so the ordering no longer changes the result, but it is still the branch that is asked.
 
-A shell write to this file was never offered a per-row reading either — a shell line has no named
-field a row can be read out of, only text that was typed — so `printf …
-> .git/estigia/estigia.local.md` already got the same answer a shell write to any other
-control-surface file gets. What changed is that the write-tool road now agrees with it on every
-payload it is asked about, including a row the gate never consults, rather than only on a guarded row and the
-fail-closed default. A shell line `REPOSITORY_SHELL` matches first used to be decided before either
-question was asked at all — so the two roads diverged there; `REPOSITORY_SHELL`'s own arm
-now asks the same question before it answers, and that shape is closed.
-
-The cost, stated plainly rather than argued away: a row nothing in the gate reads to decide what it
-enforces — `Review budget` is one — and an edit that touches only that row now costs one tracker
-read on every write, the same as `Tracker` or `Evidence standard` does. That is not what acceptance
-criterion 3 asked for, read strictly, and this document says so rather than qualifying the criterion
-until it appears to be met. `estigia config set --repo` writes this same file directly, without
-going through a gated tool, and is unaffected by any of this.
+The cost: a row nothing in the gate reads to decide what it
+enforces — `Review budget` is one — now costs one tracker
+read on every write when an edit touches only that row, the same as `Tracker` or `Evidence standard` does. `estigia config set --repo` writes this same file directly, without
+going through a gated tool, and is unaffected.
 
 Rows that differ by design are named in both branches, not only in the quiet one.
 
@@ -637,20 +591,11 @@ found from **any directory inside the checkout or its worktrees**, not only its 
 from the working directory to the nearest `.git` (a directory, or a readable `gitdir:` file of a worktree or
 submodule; a dangling symlink, an empty file or any other file is not a checkout and the walk goes on above it)
 without spawning git, so a session in `apps/engine` reads the rows of the repository it is inside. A directory
-inside no checkout has no repository layer, and a submodule answers for itself. Working from a subdirectory used
-to read nothing at all, so a repository's own `Git operation window` and every other repository row silently
-gave way to the contract's. The linked-worktree part was a bug: a worktree's `.git` is a file, the path was built by joining onto it, and the same
-repository answered `squash` in the checkout and `merge commit` in its own worktree while `--repo`
-inside the worktree refused outright. `estigia config repos` lists the repositories that answer for
+inside no checkout has no repository layer, and a submodule answers for itself. `estigia config repos` lists the repositories that answer for
 themselves, and `estigia config forget` takes one repository's rows away again.
 
-A write to that file through a write tool is not adjudicated as an ordinary write, and it is a
-blanket boundary — see [*Which root the gate decides in*](#which-root-the-gate-decides-in) above for
-the full account: every such write re-reads the tracker rather than riding the renewal window,
-whichever row it names, including one the gate itself never consults. A
-shell write to it gets the same answer a shell write to any other control-surface file gets, and that
-answer no longer changes when `REPOSITORY_SHELL` matches the same line first — closed
-above.
+A write to that file through a write tool is a blanket boundary, not an ordinary write — see [*Which root the gate decides in*](#which-root-the-gate-decides-in): every such write re-reads the tracker rather than riding the renewal window,
+whichever row it names.
 
 **A repository may tighten the two authorisations.**
 
