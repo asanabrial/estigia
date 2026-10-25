@@ -1119,6 +1119,13 @@ impl Context {
         }
     }
 
+    /// The whole configuration in force here, the repository's own rows
+    /// included, which [`Self::config`] does not carry: a repository-scoped row
+    /// is never rendered into a contract table.
+    pub fn layered(&self) -> crate::config::Config {
+        crate::skill::installed_config_in_keeping_what_parses(&self.skill_dir, &self.repo_dir).0
+    }
+
     /// One configured value, by the label the table uses.
     ///
     /// A **prefix** match on the lowercased label, first row wins — which is the

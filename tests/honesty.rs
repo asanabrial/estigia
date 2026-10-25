@@ -3851,13 +3851,7 @@ fn every_setting_is_read_by_the_gate_the_transport_or_the_prose() {
     // Empty since the last row here, `Delivery route`, was retired
     // rather than read, so every row left in `SETTINGS` is acted on by the gate,
     // the transport, or a sentence an agent is given.
-    const READ_BY_NOBODY: &[&str] = &[
-        "Delivery preset",
-        "Self review",
-        "External reviewers",
-        "Corrections after ready",
-        "Merge by",
-    ];
+    const READ_BY_NOBODY: &[&str] = &["Delivery preset", "External reviewers", "Merge by"];
 
     let mut unread: Vec<&str> = Vec::new();
     for setting in estigia::config::SETTINGS {

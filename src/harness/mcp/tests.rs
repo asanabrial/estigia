@@ -1454,6 +1454,7 @@ fn publication_tools_bind_to_the_repository_host_and_the_rest_to_the_tracker() {
         "republish_review",
         "release_ci",
         "draft_pr",
+        "ready_pr",
         "judge_workspaces",
     ];
     for tool in TOOLS {
@@ -2594,7 +2595,7 @@ fn every_tool_sends_flags_the_transport_accepts() {
             | "review-validator-result"
             | "review-computed-verdict"
             | "spend" => &["--operation-id"],
-            "draft-pr" => &["--branch", "--worktree"],
+            "draft-pr" | "ready-pr" => &["--branch", "--worktree"],
             _ => &[],
         };
 
@@ -5833,7 +5834,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 48_597;
+const TOOLS_LIST_CEILING: usize = 49_012;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {

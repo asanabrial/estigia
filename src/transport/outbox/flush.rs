@@ -31,6 +31,7 @@ const WRITES_TO_GITHUB: &[&str] = &[
     "republish-review",
     "release-ci",
     "draft-pr",
+    "ready-pr",
     "handoff",
 ];
 
