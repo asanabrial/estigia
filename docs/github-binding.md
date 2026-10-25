@@ -73,3 +73,37 @@ refused earlier, as `delivery-topology-mismatch`. An issue with no confirmed rec
 state other than `done`. The check reads GitHub, so it also runs when the tracker is closed to writes: a merge it
 cannot read refuses the `done` rather than recording it unverified. The same check serves the CLI and the
 `transition` tool, because both reach one transport operation.
+
+## Why the transport is in this process, and why the server is hand-written
+
+`src/transport/` is the transport, and it is the only one. It began as `skill/scripts/github.py`,
+shipped inside the payload because `bindings/github.md` routed every reversible operation through
+it — a payload without it was a binding whose first command did not exist. The binding now names
+Estigia's own tools, the operations are answered in this process, and the script is deleted: no
+`.py` file in the tree, no Python on any path, nothing in CI that installs one.
+
+*No interpreter at all* is what this used to say, and it stopped being true when one test began
+**executing** the OpenCode plugin this crate generates rather than reading its source. That plugin is
+JavaScript; a gate written in a second language and never run is a copy of a rule nothing crosses. So
+`node` is on the verification list in [`AGENTS.md`](../AGENTS.md), both workflows install it rather
+than trusting the runner image to, and [`testing.md`](testing.md) says which tests need it.
+
+The MCP server is hand-written rather than built on `rmcp`. The same binary answers a `PreToolUse`
+hook on **every edit**, so a `tokio` runtime spun up per process is a cost paid thousands of times to
+move a few lines of JSON across a pipe. Keeping the crate synchronous is what keeps the gate cheap.
+What that costs is in `UNIMPLEMENTED`: no resources, no prompts, no sampling, no elicitation beyond
+`send_message`'s one question, no notifications beyond `initialized`, and one request at a time. A name
+the contract requires and no tool performs is declared in `NOT_EXPOSED` with the reason and the
+section of `bindings/` that carries it; it is not advertised, so the surface never offers a call
+nothing answers, and a seam test holds the two lists together: an operation that is neither exposed
+nor declared fails the build. The operations the tools absorbed keep their capability under the
+surviving name: `claim` performs `reclaim` through `takeover`, `list_state` answers identities through
+`identities`, `review_status` carries the publication lane and the correction count, `review_read`
+reads what six tools used to, `review_tier` narrows a repair's range, and `target` classifies base
+movement.
+
+One crate. Five on day one would split boundaries before any of them had earned the split; a boundary
+gets split out when it has earned the seat. The container image is the exception to "one binary on a
+developer's machine": the [`Dockerfile`](../Dockerfile) builds one from the pinned toolchain, carrying
+the server alone — `estigia mcp` over stdio, with no `git` and no `gh`, so a tool that reaches the
+tracker refuses inside it — for a directory that inspects a server by running one in a container.
