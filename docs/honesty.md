@@ -2034,7 +2034,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 41,525 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 41,597 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -10405,6 +10405,8 @@ does not:
 - **An empty rollup waits ten minutes from the `ci-release` marker.** A repository whose pull-request
   run starts later reads `ci-absent`; one with Actions on and no workflow answers `pending` for the
   whole window before it does. The window is a constant, not a measurement of any host.
+  On a `not-consulted` lane an empty rollup passes at once, so a repository whose lane is off but
+  whose CI does run can merge before its first check appears, as `release_ci` already allows there.
 - **The 50 s bound is on what `deliver` waits for, not on what it calls.** A `gh` or `git` call that
   hangs, or a slow `release_ci` clean-target read, is not cut off by `wait_seconds`, and a host that
   times a tool call out below that is not known to the server. No host's timeout was measured.

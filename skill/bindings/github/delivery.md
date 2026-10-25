@@ -320,7 +320,8 @@ context), `authorisation` (`Merge by` is not `agent`, or `Delivery authorisation
 changed, so *Version tags* applies), `merge` (the gate's refusal, GitHub's, or a queue or approval
 rule that left it unmerged) and `close`. A step that has to wait answers `pending` with `ask_after`
 instead of blocking past 50 s. It reads the pull request's whole rollup as the required set, whatever the lane says (a
-`not-consulted` lane is no evidence CI does not run); only where the lane reads `disabled` or
+`not-consulted` lane is no evidence CI does not run), though on that lane an empty rollup passes at once
+rather than waiting; only where the lane reads `disabled` or
 `never-ran`, when no CI can run, does it skip the rollup and need `appendix_file` with the local suite command and
 result, which is appended to the generated evidence.
 
