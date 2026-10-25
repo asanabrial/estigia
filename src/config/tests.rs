@@ -1308,7 +1308,7 @@ fn direct_work_delegation_delegates_a_writer_for_a_reason_and_not_for_a_file_cou
         "| One batch of reads or lookups | At most 3 calls and about 10k tokens stays inline, even when it prepares a write | More than about 5 sequential lookups delegates one explorer with a ~2k-token handoff |\n",
         "| Broad research or context compression | - | Delegate broad research or context compression |\n",
         "| Writing | A small understood change stays inline whatever its file count | Delegate one writer only for a named reason: independent units that can proceed in parallel, or the parent's context limit |\n",
-        "Past about 150k tokens of parent context, hand the next unit to a fresh worker. Pass a worker the spec verbatim, by reference, never paraphrased. A worker's check of its own work gets one correction batch for all of its blockers, a recheck limited to those blockers, and then it stops and asks.\n",
+        "A delegated context that must name a run is handed this run's id verbatim, never one composed for it. No turn ends waiting on a background delegation: a headless session takes no further turn, so wait for it in the foreground or do without its answer. Past about 150k tokens of parent context, hand the next unit to a fresh worker. Pass a worker the spec verbatim, by reference, never paraphrased. A worker's check of its own work gets one correction batch for all of its blockers, a recheck limited to those blockers, and then it stops and asks.\n",
         "The topology actually used is recorded at publication, not merely required here: `publish_review`/`republish_review` take `--topology` and `--topology-reason` and record them on the marker, and nothing refuses a declaration. See the binding contract for the exact mechanics and what it cannot prove.\n",
         "The writing row's reasons are **stated, not adjudicated**: nothing refuses a write that ignores them. The gate only names, at `SessionStart`, a target this run's own context wrote after a delegated one had run this session — a floor, not a count.\n",
         "Tests, builds, installs, and native review actions may each use a fresh per-action worker without changing the route. Child workers do not gain orchestration authority.\n",
@@ -1331,9 +1331,12 @@ fn the_developer_definition_carries_the_spec_and_correction_rules() {
         "one correction batch for all the blockers",
         "limited to those blockers",
         "then stop and ask",
+        "is the one your launch names; never compose one",
     ] {
         assert!(flat.contains(needle), "developer.md lost: {needle}");
     }
+    let analyst = include_str!("../../skill/agents/analyst.md");
+    assert!(analyst.contains("is the one your launch names; never compose one"));
 }
 
 #[test]

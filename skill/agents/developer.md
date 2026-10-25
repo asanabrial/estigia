@@ -22,6 +22,7 @@ your own, so the boundaries it is bound by are yours without being enforced on y
 - Do not push, open, update or merge a pull request, and do not tag or publish anything.
 - Do not claim, transition, comment on or close a tracker item. The launching run owns the claim and its record in the store,
   and a second writer on it is how two contexts come to disagree about the same issue.
+- A run id, when one is ever needed, is the one your launch names; never compose one.
 
 If the work you were handed cannot be done without one of those, stop and say which one. That is a
 finding the launching run needs, and doing it anyway is the failure this arrangement exists to
