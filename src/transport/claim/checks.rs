@@ -92,6 +92,31 @@ fn summaries(results: &str) -> Vec<serde_json::Value> {
         .collect()
 }
 
+/// The checks receipt recorded for exactly this digest and the base's current
+/// commands, as the close evidence reports it; `None` when the base declares
+/// none or no receipt was recorded.
+pub fn recorded_summary(
+    context: &Context,
+    issue: u64,
+    receipt: &super::ReviewTransaction,
+    worktree: Option<&Path>,
+) -> Result<Option<serde_json::Value>, Failure> {
+    let checks = declared_at(worktree.unwrap_or(&context.repo_dir), &receipt.base)?;
+    if checks.is_empty() {
+        return Ok(None);
+    }
+    let commands = commands_digest(&checks);
+    let comments = Ledger::read_timeline_of(context, issue)?;
+    Ok(
+        receipt_of(&comments, &receipt.digest, &commands).map(|recorded| {
+            serde_json::json!({
+                "passed": recorded.passed,
+                "checks": summaries(&recorded.results),
+            })
+        }),
+    )
+}
+
 pub(super) fn patience_for(wait_seconds: u64) -> Duration {
     Duration::from_secs(wait_seconds.min(MAX_WAIT_SECONDS))
 }

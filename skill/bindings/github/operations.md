@@ -582,3 +582,17 @@ write landed is not a refusal: the answer carries `close_incomplete` (`step`, `f
 landed and the claim is still held: repeat with the same `spend` (it replays), and without
 `evidence_file` once `evidence` landed. Call it from `review`; after `done` a new spend is
 `unexpected-state`.
+
+## Delivering in one call
+
+`deliver` is the tool that runs the tail of a publication that needs no judgement: the computed
+verdict, `release_ci` when no `ci-release` marker names the receipt, the CI read, the merge, the
+topology readback and the close, each through the operation that owns it. The merge goes through the
+decision the `gh pr merge` boundary makes. It answers `delivered`; `pending` with `ask_after`, after
+`wait_seconds` (1 to 50, default 20) of waiting inside the call; or `stopped` with the `step`, a
+`reason` and `review_status`'s `next` when there is one. A stop writes nothing past its step, and a
+second call resumes from the store without repeating a landed write. `spend` is `release`'s;
+`appendix_file` is the agent's text appended to the generated evidence, required where no CI can
+run. The steps and what each hands back are in *CI, merge and delivery* in delivery.md; a stop after
+the merge landed carries `merged` and, from the release, `close_incomplete`, which is repeated as
+*Releasing an issue* says.

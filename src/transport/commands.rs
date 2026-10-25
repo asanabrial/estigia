@@ -81,16 +81,12 @@ pub const SCRIPTED: &[&str] = &[
 /// verdict is not something a script produces.
 pub(super) const NOT_SCRIPTED: &[(&str, &str)] = &[
     (
-        "merge",
-        "irreversible remote write — the agent runs it after verifying SHAs",
-    ),
-    (
         "publish_version",
         "irreversible remote write — annotated tags are never moved",
     ),
     (
         "close",
-        "kept with merge/publish_version so delivery stays one prose-owned sequence",
+        "kept with publish_version so a manual delivery stays one prose-owned sequence; `deliver` runs it in the same call as the merge",
     ),
     (
         "review_status/ci_status",

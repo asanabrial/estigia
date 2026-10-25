@@ -633,6 +633,11 @@ does not carry it; the ceiling measures the whole list, which is the larger of t
 assisted tool that reads where a ready pull request stands in `External reviewers`, moved it again,
 to **49,701** bytes, and the ceiling followed by exactly that difference.
 
+`deliver`, the tail from publication to close in one call, moved the list from **50,588** to **51,747**
+bytes, and `TOOLS_LIST_CEILING` was raised by exactly that difference. It is the eleventh tool
+`ALWAYS_LOADED` names (the 380 bytes above were measured for ten), because a tool whose point is to save
+turns should not cost one to find.
+
 `target` answers the brief form by default, so the manifest, about 100 bytes per tracked file, is
 paid only by a call that passes `manifest`.
 

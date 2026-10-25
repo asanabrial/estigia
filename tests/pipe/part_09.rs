@@ -4398,3 +4398,105 @@ fn a_claim_moves_the_issue_to_the_state_it_names() {
         "the merged claim recorded a state other than the one it moved to: {pointer}"
     );
 }
+
+/// `deliver` is a tool the real server lists, takes through `run_tool`, and hands back from at the
+/// receipt after its first step, the claim check, passed over the wire.
+#[cfg(unix)]
+#[test]
+fn deliver_hands_back_at_the_receipt_over_the_real_mcp_server() {
+    use std::io::Write;
+
+    let rig = tracker_rig();
+    let (home, repo, bin) = (rig.home.path(), rig.repo.path(), rig.bin.path());
+    std::fs::create_dir_all(repo.join("src")).expect("a source directory");
+    commit_a_changed_line(repo, "src/foo.rs");
+    let run_id = "claude-abcd1234";
+    let claim = estigia::transport::markers::render(
+        "claim",
+        &[
+            ("run-id", run_id),
+            ("runtime", "claude"),
+            ("horizon", "2099-01-01T00:00Z"),
+            ("op-id", &"a".repeat(32)),
+        ],
+    )
+    .expect("a protocol marker");
+    let answers = serde_json::to_string(&serde_json::json!([{
+        "matches": "issue view",
+        "stdout": serde_json::json!({
+            "state": "OPEN",
+            "assignees": [],
+            "labels": [{"name": "status:review"}],
+            "body": "The change keeps its one line.",
+            "comments": [{
+                "id": "IC_claim",
+                "createdAt": "2026-08-14T09:00:00Z",
+                "viewerDidAuthor": true,
+                "includesCreatedEdit": false,
+                "body": claim,
+            }],
+        }).to_string(),
+        "status": 0,
+    }]))
+    .expect("the fake tracker script serialises");
+
+    let runs = home.join(".estigia").join("runs");
+    let mut run = estigia::harness::session::Run::new(run_id.to_owned());
+    run.issue = Some(estigia::identity::Identity::Number(12));
+    run.state = Some("review".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    assert!(estigia::harness::session::store(&runs, &run).expect("the pointer is writable"));
+
+    let respond = |tool: &str, arguments: serde_json::Value| -> serde_json::Value {
+        let request = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": tool, "arguments": arguments }
+        })
+        .to_string();
+        let mut child = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the MCP server runs");
+        writeln!(child.stdin.take().expect("stdin is piped"), "{request}")
+            .expect("the request is written");
+        let output = child.wait_with_output().expect("the MCP server exits");
+        serde_json::from_slice(&output.stdout).expect("the MCP response is JSON")
+    };
+
+    let unknown = respond("never_called", serde_json::json!({}));
+    assert!(
+        unknown["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("deliver"),
+        "the server does not name `deliver` among its tools: {unknown}"
+    );
+
+    let handed_back = respond(
+        "deliver",
+        serde_json::json!({"issue": 12, "run_id": run_id, "wait_seconds": 1}),
+    );
+    assert_ne!(handed_back["result"]["isError"], true, "{handed_back}");
+    let text = handed_back["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    let answer: serde_json::Value = serde_json::from_str(text).expect("the answer is JSON");
+    assert_eq!(answer["delivered"], false, "{answer}");
+    assert_eq!(answer["stopped"]["step"], "receipt", "{answer}");
+    assert_eq!(answer["stopped"]["reason"], "receipt-missing", "{answer}");
+
+    let too_long = respond(
+        "deliver",
+        serde_json::json!({"issue": 12, "run_id": run_id, "wait_seconds": 51}),
+    );
+    assert!(
+        too_long["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("wait_seconds"),
+        "{too_long}"
+    );
+}

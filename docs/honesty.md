@@ -2030,11 +2030,11 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 17,989 | file on disk |
+  | `skill/bindings/github.md` | 18,354 | file on disk |
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 39,751 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 41,525 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -7361,7 +7361,10 @@ pointer that leaves it names the document it points at.
   declares is empty.
 
   The two authorisations are closed: `SKILL.md` now says, in the steps where a state moves and where
-  a change is delivered, that doing it unasked needs the row's permission. `Model routing` is closed
+  a change is delivered, that doing it unasked needs the row's permission. `Delivery authorisation` is
+  also read in code now: `deliver` hands back `authorisation` unless it is `auto`, and so does `Merge by`
+  unless it is `agent`, both through `Context::layered`. A merge made by hand through the shell is still
+  held only by the prose, so the row stops no run that never calls `deliver`. `Model routing` is closed
   too, and by a narrower claim than the row's name suggests: `setup` reads it for the
   `model:` and `effort:` lines of the definitions it writes, and the managed block of the **installed**
   `SKILL.md` now carries a sentence telling the agent to honour the row. It is generated rather than
@@ -10382,6 +10385,42 @@ tests that script each lane reading and the one that scripts a failed read. What
 - **No end-to-end release against a lane that is off.** The `release_ci` payload is asserted through the pipe only
   for an unreadable lane; the off, `disabled` and `never-ran` branches are asserted on the function that builds the
   answer, not on the whole operation.
+
+## What `deliver` does not see
+
+`deliver` runs the steps from the computed verdict to the close and hands back at the first that needs
+a decision. What this measures is `src/harness/mcp/deliver/tests.rs`: the sequence against a scripted
+set of tool answers and a scripted `gh`, over a real `git` repository with a bare origin, covering the
+happy path, each hand-back, a resume that repeats no write, and a merge whose answer was lost. What it
+does not:
+
+- **The live tools and the gate are not driven end to end.** The tests script what `record_computed_verdict`,
+  `release_ci`, `release` and the merge decision answer. One pipe test drives the real MCP server up to
+  the receipt hand-back; nothing runs the whole tail against the real store and the real gate, so the
+  seam between the two is asserted by reading it, not by a run.
+- **The required set is the pull request's whole rollup.** The host's required names and the
+  repository's own lanes are not resolved as *CI, merge and delivery* describes for a run by hand: a
+  failing check nobody requires hands back `ci-red`, and a required check that never reported is not
+  noticed while the rest are green.
+- **An empty rollup waits ten minutes from the `ci-release` marker.** A repository whose pull-request
+  run starts later reads `ci-absent`; one with Actions on and no workflow answers `pending` for the
+  whole window before it does. The window is a constant, not a measurement of any host.
+- **The 50 s bound is on what `deliver` waits for, not on what it calls.** A `gh` or `git` call that
+  hangs, or a slow `release_ci` clean-target read, is not cut off by `wait_seconds`, and a host that
+  times a tool call out below that is not known to the server. No host's timeout was measured.
+- **A merge queue or an approval rule hands back.** A merge command that answers and leaves the pull
+  request unmerged reads `merge-unconfirmed`, one GitHub refuses reads `merge-refused`; neither is
+  told apart from the other causes, and the queue's configured method is not proven to keep a merge
+  commit before the attempt.
+- **Only two manifests are read for a version.** `[package] version` in a changed `Cargo.toml` and
+  `"version"` in a changed `package.json`; a `pyproject.toml`, a workspace-inherited version whose
+  root file did not change, and any other manifest move without a hand-back.
+- **The lens roles in the evidence follow the tier and focus recorded on the receipt**, not each
+  lens's report, so a narrow repair reviewed by the delta lens alone is named by its tier's roles.
+- **The summary line has two languages.** `English` and `Español` have a sentence; any other
+  `Summary language` is written in English.
+- **The GitHub issue is closed after the release.** A failure of that last close leaves the issue
+  `done` and released but open, and the answer says so as `delivery_incomplete`.
 
 ## What `estigia changes` does not do
 

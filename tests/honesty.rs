@@ -4572,6 +4572,14 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
          change does not take",
     ),
     (
+        "appendix-required",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
+        "base-advanced",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
         "base-only",
         "a `--causal-disposition` vocabulary value (`FINDING_CAUSAL_DISPOSITIONS`), a distinct \
          symbol family this change does not take",
@@ -4604,6 +4612,18 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
     (
         "budget-refrozen",
         "a correction-budget field on `publish_review`'s marker \u{2014} the deferred 'tool names' class",
+    ),
+    (
+        "ci-absent",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
+        "ci-red",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
+    ),
+    (
+        "ci-release",
+        "a protocol marker kind (`markers::parse`), beside the refusal codes rather than one of them",
     ),
     (
         "claude-3edc7a52",
@@ -4666,6 +4686,10 @@ const NOT_A_REFUSAL_CODE: &[(&str, &str)] = &[
     (
         "hash-object",
         "a git subcommand, not a symbol this crate owns",
+    ),
+    (
+        "head-moved",
+        "a `deliver` hand-back reason: the answer's `stopped.reason`, not a refusal",
     ),
     (
         "lane-count",

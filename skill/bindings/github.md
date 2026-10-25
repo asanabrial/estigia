@@ -49,10 +49,12 @@ landed) mean read again and never treat the answer as a state; `stale` (a receip
 moved) means re-read before deciding; `refused` (the rule says no) means stop, because repeating the
 command repeats the answer. Each refusal names its class.
 
-**What is deliberately NOT scripted**: `merge`, `publish_version`, `close`, and the interpretation of
-`review_status` / `ci_status`. Those write irreversibly to the remote or require a verdict, and a
-defect in a script must not be able to merge, tag or close anything. The agent performs them itself,
-by the prose in `github/delivery.md`, after verifying SHAs.
+**What is deliberately NOT scripted**: `publish_version`, `close` as a separate act, and the
+interpretation of `review_status` / `ci_status`. Those write irreversibly to the remote or require a
+verdict, and a defect in a script must not be able to tag or close anything. The agent performs them
+itself, by the prose in `github/delivery.md`, after verifying SHAs. `merge` has no operation of its
+own: `deliver` performs it through the decision the `gh pr merge` boundary makes, and hands back
+where a judgement is needed.
 
 **Where `gh` cannot be installed**, the REST API with a token does everything below at the cost of
 longer invocations; the installer checks for `gh` and tells you rather than fetching it.
@@ -166,6 +168,7 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | `review_read` | `SCRIPT review-read` |
 | `target` | `SCRIPT target` |
 | `release_ci` | `SCRIPT release-ci` — see *Recording a computed verdict* in github/operations.md |
+| `deliver` | the `deliver` tool, which calls the operations above and the merge gate rather than one `SCRIPT` operation — see *Delivering in one call* in github/operations.md |
 | `run_checks` | `SCRIPT run-checks` — see *Running declared checks* in github/operations.md |
 | `review_tier` | `SCRIPT review-tier` — see *Deriving the review tier* in github/operations.md |
 | `check closing keywords` | `SCRIPT check-closing-keywords` |
@@ -176,8 +179,8 @@ Every ownership write uses a lowercase 32-hex `--operation-id`, reused unchanged
 | review stages | `SCRIPT review-stages` |
 | `changelog-notes` | `SCRIPT changelog-notes --version <x.y.z> --file <changelog> [--out <f>]` |
 
-Not scripted, performed by the agent after verifying SHAs (`github/delivery.md`): `ci_status`, `merge`,
-`publish_version`, `close`. The review verdict is computed from the finding ledger and recorded by
+Not scripted, performed by the agent after verifying SHAs (`github/delivery.md`): `ci_status`,
+`publish_version`, `close`; `merge` by hand, or by `deliver`. The review verdict is computed from the finding ledger and recorded by
 `review_computed_verdict`; `last_activity` is the issue's timeline in the local store.
 
 ### Operations no tool exposes

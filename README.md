@@ -15,7 +15,7 @@
   <a href="https://github.com/asanabrial/estigia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/asanabrial/estigia/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" /></a>
   <a href="https://www.rust-lang.org"><img alt="Rust 1.97+" src="https://img.shields.io/badge/rust-1.97%2B-orange.svg" /></a>
-  <a href="#the-tools"><img alt="MCP: 39 tools" src="https://img.shields.io/badge/MCP-39%20tools-purple.svg" /></a>
+  <a href="#the-tools"><img alt="MCP: 40 tools" src="https://img.shields.io/badge/MCP-40%20tools-purple.svg" /></a>
   <a href="#install"><img alt="Linux, macOS, Windows" src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg" /></a>
   <a href="https://glama.ai/mcp/servers/asanabrial/estigia"><img alt="Glama MCP server" src="https://glama.ai/mcp/servers/asanabrial/estigia/badges/score.svg" /></a>
 </p>
@@ -327,7 +327,7 @@ git
        └─ refuses a push no live claim authorises, whoever typed it
 ```
 
-Two halves, and both are needed. The **tools** are how an agent does workflow work at all — thirty-nine
+Two halves, and both are needed. The **tools** are how an agent does workflow work at all — forty
 operations with schemas, instead of composing `gh` by hand and hoping. A name the contract requires
 and no tool performs is declared with the reason it is not exposed rather than advertised, so the
 surface never offers a call nothing answers. The one force-push the
@@ -433,12 +433,12 @@ being wrong costs a refused write, never a damaged issue. A test enforces that s
 
 ## The tools
 
-Thirty-nine operations, table-driven. Thirty-seven each map to one the contract requires the binding to provide;
-`send_message` and `list_sessions` are answered from the local store and are not binding operations.
+Forty operations, table-driven. Thirty-seven each map to one the contract requires the binding to provide;
+`send_message` and `list_sessions` are answered from the local store, and `deliver` composes the others and the merge gate; none of the three is a binding operation.
 `tools/list` carries a schema and a `readOnlyHint`, so an agent can tell a read from a write without
-reading this source. The ten delivery tools (`claim`, `start_branch`, `publish_review`,
-`launch_review_input`, `collect_review_input`, `record_computed_verdict`, `release_ci`, `release`,
-`transition`, `review_status`) carry `_meta["anthropic/alwaysLoad"]`, so a host that defers MCP tools loads
+reading this source. The eleven delivery tools (`claim`, `start_branch`, `publish_review`,
+`launch_review_input`, `collect_review_input`, `record_computed_verdict`, `release_ci`, `deliver`,
+`release`, `transition`, `review_status`) carry `_meta["anthropic/alwaysLoad"]`, so a host that defers MCP tools loads
 them at the start; every tool takes `compact`, which drops `build` from the answer
 ([`docs/review-cost.md`](docs/review-cost.md#what-the-tool-menu-itself-costs)):
 
@@ -481,10 +481,11 @@ WRITE  record_computed_verdict (issue, run_id, epoch, pr, head, base, digest)
 WRITE  escalate_review  (issue, run_id, epoch, pr, head, base, digest, escalated_to, reason)
 WRITE  record_spend     (issue, run_id, phase, epoch, pr, head, base, digest, conditions, input, tokens, seconds, contexts)
 WRITE  release_ci       (issue, run_id, epoch, pr, head, base, digest)
+WRITE  deliver          (issue, run_id[, wait_seconds, spend, appendix_file])   # the tail from publication to close in one call; hands back at the first step that needs a decision, answers `pending` with `ask_after` where it must wait
 WRITE  run_checks       (issue, run_id[, wait_seconds])   # runs the checks the base declares, detached; records a receipt for the published digest in the local store
 ```
 
-Thirty-nine tools. The contract names seventeen operations every binding must map. The operations the
+Forty tools. The contract names seventeen operations every binding must map. The operations the
 tools absorbed keep their capability under the surviving name: `claim` performs `reclaim` through
 `takeover`, `list_state` answers identities through `identities`, `review_status` carries the
 publication lane and the correction count, `review_read` reads what six tools used to, `review_tier`

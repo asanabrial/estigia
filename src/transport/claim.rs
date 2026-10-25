@@ -32,7 +32,7 @@ pub use capture::{
 pub(crate) fn failure_refusal(failure: &Failure) -> Refusal {
     capture::refusal_of(failure)
 }
-pub use checks::{RunChecks, run_checks};
+pub use checks::{RunChecks, recorded_summary as checks_receipt_summary, run_checks};
 pub(crate) use close::verified_delivery;
 pub use recover::{RecoverReview, host_repo_of, recover_review};
 pub use status::review_status;
@@ -10096,22 +10096,45 @@ fn record_ci_release(
     ledger.append(&body, release.now)
 }
 
-/// Whether a trusted `ci-release` marker names exactly this receipt.
-pub(crate) fn ci_released(comments: &[ownership::Comment], receipt: &ReviewTransaction) -> bool {
+/// The trusted `ci-release` marker's comment that names exactly this receipt.
+fn ci_release_comment<'a>(
+    comments: &'a [ownership::Comment],
+    receipt: &ReviewTransaction,
+) -> Option<&'a ownership::Comment> {
     let pr = receipt.pr.to_string();
     comments
         .iter()
         .filter(|comment| comment.viewer_did_author && !comment.includes_created_edit)
-        .flat_map(|comment| super::markers::parse(&comment.body))
-        .any(|marker| {
-            let is = |key: &str, value: &str| marker.get(key).map(String::as_str) == Some(value);
-            is("kind", "ci-release")
-                && is("epoch", &receipt.epoch)
-                && is("pr", &pr)
-                && is("head", &receipt.head)
-                && is("base", &receipt.base)
-                && is("digest", &receipt.digest)
+        .find(|comment| {
+            super::markers::parse(&comment.body).iter().any(|marker| {
+                let is =
+                    |key: &str, value: &str| marker.get(key).map(String::as_str) == Some(value);
+                is("kind", "ci-release")
+                    && is("epoch", &receipt.epoch)
+                    && is("pr", &pr)
+                    && is("head", &receipt.head)
+                    && is("base", &receipt.base)
+                    && is("digest", &receipt.digest)
+            })
         })
+}
+
+/// Whether a trusted `ci-release` marker names exactly this receipt.
+pub(crate) fn ci_released(comments: &[ownership::Comment], receipt: &ReviewTransaction) -> bool {
+    ci_release_comment(comments, receipt).is_some()
+}
+
+/// When the store recorded the CI release for exactly this receipt, or `None`
+/// when it did not.
+pub fn ci_release_stamp(
+    context: &Context,
+    issue: u64,
+    receipt: &ReviewTransaction,
+) -> Result<Option<String>, Failure> {
+    Ok(
+        ci_release_comment(&Ledger::read_timeline_of(context, issue)?, receipt)
+            .map(|comment| comment.created_at.clone()),
+    )
 }
 
 /// Whether the local store records a CI release for exactly this receipt,
@@ -10131,7 +10154,11 @@ pub fn ci_release_recorded(
 /// publication lane read for the head, and the step that follows it. `merge`
 /// only where the lane says no CI can run; `ci_status` for every other
 /// reading, an unreadable one included.
-fn ci_outlook(context: &Context, head: &str, pr: u64) -> (serde_json::Value, &'static str) {
+pub(crate) fn ci_outlook(
+    context: &Context,
+    head: &str,
+    pr: u64,
+) -> (serde_json::Value, &'static str) {
     match publication_lane(context, head, Some(pr)) {
         Ok(lane) => {
             let next = next_after_release(&lane);
