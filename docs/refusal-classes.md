@@ -185,3 +185,40 @@ Judgement calls that could have gone the other way:
 
 A code that appears in the table cannot be moved without moving its tests: the class is part of the
 contract an orchestrator reads.
+
+## The ratchet, and what it was started from
+
+A message may name a command only when running it discharges the block; naming a dead end is worse
+than naming nothing. Every refusal carries a typed code, what happened to the world, whether a replay
+is safe, and a resolution. The resolution is either a runnable invocation — checked against the real
+parser by `every_command_a_rejection_names_parses` — or a reason from a closed vocabulary saying why
+no command can honestly exist: `operator-knowledge`, `world-action`, `human-authority`.
+
+```
+$ estigia setup
+estigia: setup needs to know which agent to configure (agent-not-named)
+  run: estigia setup --all   # or one of: agents, claude-code, codex, opencode, pi, cursor, zcode, deepseek-harness
+```
+
+Measured against issue-flow on 2026-07-31: **87** rejection sites, **zero** naming an executable
+continuation. Starting at zero is the only moment a ratchet can start.
+
+## The exit codes, and why there are four
+
+`1` the command refused, `2` the world may have changed and this process cannot tell, `3` the
+invocation could not be read. The fourth, `3`, is apart from `1` because the difference is the whole
+reason the hooks read a status at all. A refusal is a decision — the world said no — and every script
+this crate writes propagates it, which is what blocks a push. A usage error is not a decision, and
+propagating it blocks a push for a reason the person typing it cannot act on. It was measured: a
+`pre-push` hook left from a build whose `hook` took one more flag exited `1`, and `git push` came back
+`error: unexpected argument --from-a-newer-build` with the push refused. The README's table said
+**three** for as long as the fourth existed, which is the drift `AGENTS.md` forbids;
+`every_exit_code_the_readme_lists_is_one_this_binary_has` crosses the table against the enum now.
+
+The harness translates the transport's own five codes into that taxonomy rather than collapsing them.
+`1` the control surface was read and answered stop — do not replay. `2` the operator's configuration
+is wrong — the one with a command that fixes it. `3` the control surface answered **nothing** — retry
+the read, and never treat it as a stand-down or as clearance. `4` and `5` a write may have landed and
+nobody saw — go and look. The distinctions live in the refusal, where they can be read. issue-flow's
+`5` meant both "nothing was written" and "something was written and I do not know what"; reporting the
+nearest named state is a lie told with confidence.

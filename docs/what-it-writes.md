@@ -1513,3 +1513,260 @@ skill's `<runtime>-<session-prefix>` rule derive the same string only when the t
 | none: Pi's extension calls `estigia gate --runtime pi` itself and registers no hook | `pi` |
 | no `--agent` (settings written by an older build) | `claude` |
 | every other adapter | `claude`, unchanged — see [`honesty.md`](honesty.md) |
+
+## What setup installs besides the skill, and what the host's permission mode does not change
+
+`setup` installs three core things: the skill an agent reads, a short directive in that agent's
+always-loaded instruction file, and the lifecycle hooks that make the authority mechanical rather than
+advisory. `--skill-only` stops before the directive. Estigia knows eight agents; the hooks go into
+every one with an event able to refuse — five of them, in a gate that reads five dialects, three only for retired hosts.
+
+A host's automatic permission mode approves the host's own prompts. It does not approve Estigia's
+decisions: a refusal stays a refusal and a question stays a question under Claude Code's
+`bypassPermissions` and `auto`, OpenCode's `--auto` and Codex's `never` approval policy, because the
+gate answers before the host's permission layer is asked and nothing in the gate reads the mode.
+Tests hold the hook and plugin answers equal with and without the mode, and `estigia doctor` prints the
+mode each of Claude Code, Codex, OpenCode and Pi is configured with. What was run live, and what was
+not, is in [`honesty.md`](honesty.md).
+
+The setup screen (`estigia tui`) is the one path that needs a person, and it ends by printing the
+commands that reproduce the same result without it:
+
+```
+the same result without the questions:
+  estigia setup claude-code
+  estigia config set "Model routing" "developer=inherit" --agent claude-code
+```
+
+Whoever does this again — on another machine, in a script, in a container image — needs the spelling
+that does not ask questions, and the run that just worked is the only honest place to learn it. Those
+commands produce a byte-identical result to the one the questions produced, and a test runs both to
+check that they do.
+
+`status` reports two things separately, because *the agent was told about Estigia* and *Estigia can
+stop it* are different answers, and somebody looking at a run that wrote without a claim needs the
+second one. The tools half can be permanently unavailable: an adapter with no verified place to
+register a server prints `tools off` and the reason, where one that is merely not registered yet
+prints the command that fixes it:
+
+```
+claude-code    configured
+               harness: gate on, tools on
+codex          configured
+               harness: gate off, tools on
+```
+
+## The reviewer and role definitions setup installs, and the ones it never does
+
+Every Claude Code setup installs two stable inert reviewer definitions: `review-blind` and
+`review-blind-sealed`, one template rendered twice, which are Judgment Day's two judges and nothing
+else. The two judge definitions carry `model: inherit` and a paragraph asking a verdict to say what it
+rests on. `Evidence standard` decides the unsealed grant — read-only under `reading`, a shell and
+nothing else added under `measuring` — the sealed grant is fixed, one tool, a web search, no repository
+read. Both are inert unless a launch names the immutable target — a head, a diff or a commit range — and
+criteria. The orchestrator passes the effective `judge` model for each Judgment Day launch. Ordinary
+review licenses no judge at any tier; Judgment Day, gentle-ai v4's opt-in, is the only place they
+exist — see [judgment day](../skill/policies/judgment-day.md). Setup never creates numbered judge files.
+
+The reviewers of an ordinary review are not installed. The sealed lenses `review_tier` licenses —
+`review-lens`, `review-risk`, `review-readability`, `review-reliability` and `review-readback` —
+the refuter `review-refuter` and the validator `review-validator` are launched by
+`launch_review_input` from templates embedded in the binary, with no tools, and it never reads
+`~/.claude/agents`. Setup retracts a copy an earlier build installed under one of those seven names: an owned,
+unedited one is deleted; an edited one is kept and its path relinquished; one Estigia never recorded
+is left alone. The names stay reserved, so a project definition cannot stand in for one, and a hand
+`Task` launch of one is refused as `reviewer-launched-by-the-binary` — there is no hand path.
+
+Two further definitions, `developer.md` and `analyst.md`, are installed only where `Model routing`
+names their role, and are retracted when the entry goes away, because a definition carrying a tool
+grant is authority and an upgrade may not hand out authority nobody asked for. They are installed for
+Claude Code and OpenCode, each in its host's own dialect: Claude Code's comma-separated `tools:` line
+and `effort:`, OpenCode's `permission:` map and file name, with no `effort:` field there. The routing
+is empty by default; naming a role installs it, and the model beside it says only what it runs on. The
+row's third value, `by task`, names no role and installs nothing: the shape of the work decides the
+model and the effort, and the launching agent records what it chose — a declaration, not a check, as
+[`honesty.md`](honesty.md) states. A definition at one of those paths that Estigia did not author is
+refused rather than replaced: in the preflight, before anything at all is written, and again
+immediately before the bytes go down, which catches one that arrived in between and by then has the
+skill and the directive already written behind it. Direct `config set` and `config edit` writes do not
+mutate external definitions.
+
+### How a reserved role is proven before it launches
+
+Every reserved role is operator-owned. Before Claude Code's current `Agent` or legacy `Task` launches
+any reserved role, Estigia walks from the launch cwd through the first `.git` repository root and
+recursively rejects any project `.claude/agents` definition that uses its filename or declares the same
+name in valid YAML. For a judge it then proves the canonical user definition is the only user-scoped
+definition with that identity and matches one of the renderings Estigia can produce of it — not the
+embedded bytes themselves, which the unrendered template would be; for one of the seven
+binary-launched names the project walk is the whole proof and the launch is then refused, whatever
+sits in the user tree. Setup performs the same recursive user-tree uniqueness preflight for the two
+judges before writing, revalidates at the reviewer boundary, and creates a fresh reviewer without
+replacing a path another actor won meanwhile. Missing, unreadable, changed, duplicated or ambiguous
+evidence refuses. Ordinary agents retain project-first resolution. A refused or unprovable reviewer
+does not count, and the fallback is a separate session or durable review handoff, never a smaller or
+serialized review.
+
+## Which processes Estigia launches
+
+Estigia does not run your working model. It launches two kinds of process, both detached. A reviewer
+CLI, through `launch_review_input`, for a lens, refuter or validator: the first of `claude` then
+`codex` found on `PATH`, with no setting to choose between them. And `__check-job`, through
+`run_checks`, which runs the commands the base declares as checks and records a receipt for the
+published digest; see [`generated-files.md`](generated-files.md). `record_lens_report`,
+`record_refutation` and `record_validator_result` are refused by hand as `recorded-by-capture-only`;
+only the capture writes them. Both kinds leave their working directory under `~/.estigia/jobs/<id>/`.
+
+## The gate, the hooks and the loop plugins
+
+The contract under `skill/` is text an agent may read and may ignore, which meant "perjury detected
+mechanically" was aspirational: nothing stopped a run from writing without a claim, or from
+delivering on a verdict bound to a SHA that no longer existed. The harness closes the first of those,
+and binds the second without re-checking it at the moment of delivery; [`honesty.md`](honesty.md) says
+exactly where that line falls.
+
+```
+agent (Claude Code)
+  │
+  ├─ tool: Edit / Write / Bash
+  │    └─ PreToolUse → estigia hook pre-tool-use
+  │         └─ verify_claim against the tracker → deny
+  │
+  ├─ turn about to end
+  │    └─ Stop → estigia hook stop
+  │         └─ while the run still holds its issue → block, so the turn continues
+  │
+  └─ tool: mcp__estigia__claim / verify_claim / transition / …
+       └─ estigia mcp → answered in this process, against `gh`
+
+git
+  └─ pre-push → estigia hook pre-push
+       └─ refuses a push no live claim authorises, whoever typed it
+```
+
+Two halves, and both are needed. The **tools** are how an agent does workflow work at all: the
+operations with schemas, instead of composing `gh` by hand and hoping. The one force-push the delivery
+path needs is among them, so it is adjudicated like every other write rather than typed into a shell.
+The **gate** is what happens when it tries to work around them.
+
+**The local workflow store, `~/.estigia/state.db`, is the authority**: claims, states, receipts,
+findings, verdicts, spend, tasks and `blocked-until` clauses are rows in it, and two runs on one
+machine adjudicate against each other in one transaction. The tracker keeps issues and their prose,
+pull requests, branches, and labels and an assignee written after the local commit as a projection
+that never decides — the price is that the store is one copy on one machine, as
+[`honesty.md`](honesty.md) says. A run that dies leaves no *authority* behind: whatever the store says
+a checkout is bound by is the whole of what governs it, whether or not the run that wrote it is still
+there to be asked. The **local** run pointer a dead session leaves behind is a different question — a
+machine-readable note, never authority — and `estigia doctor`'s `stale-run-pointer` row and the
+reconciliation against the store that the pre-push hook `estigia guard` installs runs, and that
+`estigia gate` reaches equally, exist for exactly the phantom pointer a dead run does leave.
+`estigia doctor`'s `prune` row, and the `estigia prune` command behind it, answer the other half a
+dead run leaves: the branch and the checkout no live claim owns, listed and removed only when a person
+confirms.
+
+### The gate no agent can route around
+
+An agent hook fires only for the agent that installed it. A `pre-push` hook sits **under git**:
+`estigia guard` installs it into a repository and `estigia guard --uninstall` removes only a hook
+Estigia wrote. It catches the *last* moment rather than the first, and it catches it for every agent,
+and for a person. The `PreToolUse` gate is still the one that matters most — it catches a lost claim
+race hours before a push — but only one agent has it. Claude Code also registers a `Stop` hook: while
+the run still holds its issue the turn continues instead of ending. That hook reads the claim at most
+once per renewal window after a successful read (a failed or unknown read is read again), so a long
+run of short turns does not spend the GitHub API budget.
+
+OpenCode can do the same, behind the `Loop plugin` setting the TUI edits: with it `on`,
+`estigia setup opencode` writes an optional plugin that continues a session while Estigia says the run
+is live, another issue is claimable, or a `blocked` item's recorded exit condition already holds — and
+it keeps the goal, with the reason it stopped, so a stopped loop is legible and `/flow-status` reports
+it; the agent can ask it to end after the current task with `estigia goal stop-after`, which a live
+claim ignores and a released one honours. A turn that ends while the run still holds a claim is
+continued with one sentence naming the issue and the run, not the whole objective again. A session
+that ended its turn only to wait on a running child session is waited on, not re-prompted, and
+continued when the child ends ([details](#the-optional-loop-plugin)). Its commands are `/flow-loop` and
+`/flow-status`, named so that they never shadow the generic `/goal` and `/loop`. Pi gets it as an owned
+extension, `estigia-loop.ts`, that continues the session when Pi reports it settled and registers the
+same two commands; its goal lives in memory, so a restarted Pi forgets it. Codex gets the same loop as
+a `Stop` and a `SessionStart` hook entry under the same row, each trusted in `config.toml`, without
+`--wait`, `--max` or `/flow-status`. Claude Code gets it too: two slash commands under its `commands/`
+directory and a `Stop` entry, with the cap and `/flow-status`. The default `off` writes nothing. A
+separate `Goal loop plugin` row, also default `off`, writes a generic `goal-loop.js` for OpenCode, or
+`estigia-goal-loop.ts` for Pi, that offers `/goal <condition>` and `/loop [interval] <prompt>` with no
+Estigia command behind them: a model judges the transcript, on every third turn and on the cap turn,
+and [`honesty.md`](honesty.md) says why that is never evidence. `estigia status` reports each agent's
+continuation word beside its harness line.
+
+### The oath binds once sworn
+
+A run that has claimed nothing is not under Estigia's authority, except where the repository's
+`Unclaimed write policy` says otherwise: by default a repository write by such a run that the gate can
+place inside the checkout is put to the person first, a write it cannot place is allowed with a
+dirtied checkout reported at the next session start, and with the row `off` every write it makes goes
+through untouched. Gating every session would be a lock, not workflow authority.
+
+**One exception, and the operator opts into it.** In a checkout where `estigia guard` installed the
+`pre-push` hook, a run holding no claim is refused every commit (`git commit`, `cherry-pick`,
+`revert`, `merge`, `rebase`, `am`) and every `git push`, on every branch, with the refusal
+`unclaimed-commit`; the `pre-push` hook refuses the same push when git runs it. The way out is to
+claim an issue and work through `start_branch`, whose isolated checkout the claim covers. Reads stay
+ungated, edits and tests are held only by `Unclaimed write policy`, and a checkout without the guard
+has no commit refusal, as does one with no tracker transport or no installed contract.
+
+**The other exception is a repository setting, and it is on by default.** `Unclaimed write policy`
+(`ask`, `off` or `required`, answered only by `<repo>/.git/estigia/estigia.local.md`) governs a run
+holding no claim in a checkout with a tracker. `required` refuses every repository write it cannot
+place outside the checkout, with `issue-required`; `ask`, the default, asks the person on Claude Code
+for one it can place inside, refuses it on a host that cannot ask, and allows one it cannot place,
+naming the checkout's dirty paths at the next session start; `off` is the behaviour described above.
+See [`configuration.md`](configuration.md) for what it covers and [`honesty.md`](honesty.md) for what
+it does not.
+
+The moment a run swears — `estigia claim 12` — every repository write it makes is measured against
+that claim, and every irreversible boundary re-verifies it against the store. That is where the value
+is. Incident I07 in the skill's own ledger is not "an agent wrote without claiming"; it is a run that
+**lost a claim race by five seconds, was told 33 seconds later, and worked another 48 minutes**
+because nothing in its loop read the claim again. That run had sworn. The gate kills that case.
+
+A routine write, and the Claude Code `Stop` hook, may ride on an answer from inside a two-minute
+renewal window — the cadence `SKILL.md` already asks for. **An irreversible boundary never does**:
+`git push`, `git merge`, `git pull`, `git tag` when it creates or deletes a tag (listing is a read),
+`gh pr merge`, `gh pr create`, `gh release create` and `gh release edit` always re-verify. The gate only ever *reads* the claim, which is what lets it sit on the critical path of
+every edit: being wrong costs a refused write, never a damaged issue. A test enforces that
+structurally.
+
+## A run id, `release` and `prune`
+
+```sh
+estigia claim 12 --run-id claude-0198fe1c --horizon 2026-08-01T18:00Z
+estigia gate Edit --run-id claude-0198fe1c --input '{"file_path":"src/x.rs"}'
+estigia release --run-id claude-0198fe1c
+```
+
+An agent does this through the MCP tools instead; nobody types these often. The run id is minted from
+the agent's session and reported by `SessionStart`, so the agent already has it. It is asked for
+rather than guessed, because a claim recorded under the wrong run id is a claim the gate will never
+match, and being asked beats being silently wrong. `release` also puts down the isolated checkout this
+run created — every slice's, not only the last — and the local branch checked out there, once the
+tracker recognises the delivery and nothing unpublished remains; what it kept, and why, is named in
+its answer. It deletes every remote head the run recorded starting, too, because the branch
+`start_branch` linked is not always the branch published and GitHub's own auto-delete removes only the
+latter. `estigia prune` clears what no delivery owned: it lists the merged or closed branches and
+checkouts, keeps any a live claim holds or that carries commits the remote does not have, and removes
+the rest only on `--confirm`. It also finds clean orphan checkouts whose remote branch is gone and
+whose commits remain on another remote ref; [the pruning rules](#explicit-orphan-pruning) describe
+that additional route and its conservative ownership checks.
+
+## What `~/.estigia/` holds, and what each uninstall step leaves
+
+| Entry | Holds | Taken by `uninstall --all` |
+|---|---|---|
+| `state.db`, `-wal`, `-shm` | the workflow store: claims, states, receipts, findings, verdicts, spend, tasks, the decision and role history, the session registry and the mailbox | yes, with the last agent, when no workspace or root record still reads it |
+| `runs/`, `stop-after/`, stand-down files | run pointers and requests, live run state | yes, with the last agent |
+| `workspaces/`, `roots/` | which workspaces and configuration roots hold an install | yes, as the last adapter in each leaves |
+| `screen`, `repositories/` | the setup screen's language, the list of checkouts | no: the person's, not any agent's |
+| `lifecycle/` | machine-wide binary provenance records, see [`lifecycle.md`](lifecycle.md) | no |
+| `jobs/` | one directory per review job and per check job: manifest, prompt, lock, logs, `result.json`, `usage.json` | no |
+| `snapshots/` | up to three daily copies of the store, for a person to restore by hand | no |
+
+Whatever the last column says no to stays until a person removes the directory, and
+`<checkout>/.git/estigia/` stays until `estigia config forget` runs in that checkout.

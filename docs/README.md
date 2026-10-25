@@ -7,7 +7,7 @@ the document that owns it, and follows that document's own links from there.
 |---|---|---|
 | [`README.md`](../README.md) | What Estigia is, and what it enforces | you are deciding whether to use it |
 | [`configuration.md`](configuration.md) | Every setting, its accepted values, and what each one governs | you are changing what a run may do |
-| [`what-it-writes.md`](what-it-writes.md) | What setup puts in somebody else's files, and how uninstall takes it back | you are installing it, or removing it |
+| [`what-it-writes.md`](what-it-writes.md) | What setup puts in somebody else's files (the hooks, the definitions, the loop plugins), how uninstall takes it back, and what `~/.estigia/` holds | you are installing it, or removing it |
 | [`lifecycle.md`](lifecycle.md) | What `estigia update` reports, what an installer records, and what neither proves | you are reading an install's provenance |
 | [`refusal-classes.md`](refusal-classes.md) | The four classes a refusal carries, what each tells the caller to do, and where every code sits | you are reading a refusal, or adding a code |
 | [`github-binding.md`](github-binding.md) | The incidents and arguments behind the GitHub binding's rules | you are asking why a binding rule exists |
@@ -22,6 +22,8 @@ the document that owns it, and follows that document's own links from there.
 | [`parity.md`](parity.md) | Which `gentle-ai` revision Estigia measures against, and which layer is in scope | you are asking whether Estigia is at parity |
 | [`AGENTS.md`](../AGENTS.md) | How an agent works in this repository, and what it owes the documentation | you are about to change this repository |
 | [`CHANGELOG.md`](../CHANGELOG.md) | What changed, released version by released version | you need the history of a behaviour |
+
+Two questions are answered in the shipped contract rather than here: what `deliver` does, step by step and hand-back by hand-back, is [`skill/bindings/github/delivery.md`](../skill/bindings/github/delivery.md#ci-merge-and-delivery--the-agents-half), and what a delivery costs is [`review-cost.md`](review-cost.md).
 
 Two things a reader might look for are deliberately not in the set. [`skill/`](../skill/SKILL.md) is
 the contract this crate **ships** to other people's agents: it is written to be installed and read

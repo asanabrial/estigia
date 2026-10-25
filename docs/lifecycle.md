@@ -211,3 +211,23 @@ a server with prints `tools off` and the reason, and no `setup` run changes it.
 The run id is minted from the agent's session and reported by `SessionStart`, so the agent has it in
 context. It is required rather than guessed: a claim recorded under the wrong run-id is a claim the
 gate will never match, and being asked beats being silently wrong.
+
+## Where each install route puts the binary, and how to remove it
+
+| Route | The binary | Removed by |
+|---|---|---|
+| `scripts/install.sh` (Linux, macOS) | `$ESTIGIA_INSTALL_DIR/estigia`, by default `~/.local/bin/estigia` | `rm` of that file |
+| `scripts/install.ps1` (Windows) | `%ESTIGIA_INSTALL_DIR%\estigia.exe`, by default `%LOCALAPPDATA%\estigia\bin\estigia.exe`; the script adds that directory to the user `PATH` when it is not there | delete the file, then take the directory out of the user `PATH` |
+| `npx -y @asanabrial/estigia` | the same archive, placed in the same directory the script above uses; npm's cache holds only the launcher, never the binary Estigia runs | the same removal as the script on that platform |
+| `cargo install estigia` or `--git` | Cargo's bin directory, by default `~/.cargo/bin/estigia` | `cargo uninstall estigia` |
+
+The provenance records the release installers write are under `~/.estigia/lifecycle` and are not
+named by `estigia uninstall`; [`what-it-writes.md`](what-it-writes.md#what-estigia-holds-and-what-each-uninstall-step-leaves)
+lists what the rest of `~/.estigia/` holds.
+
+`scripts/build-install.sh` (macOS and Linux) or `scripts/build-install.ps1` (Windows) does the whole
+loop for someone developing Estigia itself, from a checkout: it requires `rustup` and `cargo` already
+on `PATH`, installs the pinned toolchain through that existing `rustup` if needed, compiles the locked
+release build, reinstalls through Cargo, runs setup for every agent, and finishes with `status` and
+`doctor`. Close the agents using Estigia first — Windows will not replace a running binary, and any
+platform can refuse one an agent holds locked.
