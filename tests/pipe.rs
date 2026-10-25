@@ -771,12 +771,6 @@ fn issue_answer(state: &str) -> String {
         .expect("the script serialises")
 }
 
-/// One `ESTIGIA_FAKE_ANSWERS` entry answering `gh pr view <pr>` with the PR
-/// sitting at `head_ref_oid`.
-///
-/// Ordered ahead of any `issue view` entry it is combined with: `matches` is a
-/// substring test, and `pr view {pr}`/`issue view` never overlap, but a widened
-/// matcher added later should still see this one first.
 /// [`issue_view_entry`], with a `ci-release` marker for the receipt the merge
 /// pipe tests put in the pointer, under the given epoch.
 fn released_issue_view_entry(state: &str, epoch: &str, head: &str) -> serde_json::Value {
@@ -803,6 +797,12 @@ fn released_issue_view_entry(state: &str, epoch: &str, head: &str) -> serde_json
     entry
 }
 
+/// One `ESTIGIA_FAKE_ANSWERS` entry answering `gh pr view <pr>` with the PR
+/// sitting at `head_ref_oid`.
+///
+/// Ordered ahead of any `issue view` entry it is combined with: `matches` is a
+/// substring test, and `pr view {pr}`/`issue view` never overlap, but a widened
+/// matcher added later should still see this one first.
 fn pr_view_entry(pr: u64, head_ref_oid: &str) -> serde_json::Value {
     let view = serde_json::json!({
         "number": pr,

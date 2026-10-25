@@ -8573,7 +8573,7 @@ fn a_merge_reads_its_ci_release_and_an_unreadable_store_refuses() {
         "the store could not be read".to_owned(),
     )))
     .expect("an unreadable store refuses");
-    assert_ne!(unreadable.code, "merge-without-ci-release");
+    assert_eq!(unreadable.code, "read-failed");
 
     let (push, _) = classify("Bash", &json!({"command": "git push"}));
     assert!(super::unreleased_merge(&push, &run, &|_, _| Ok(false)).is_none());
