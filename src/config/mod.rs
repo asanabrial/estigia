@@ -21,6 +21,7 @@ pub use block::{BLOCK_BEGIN, BLOCK_END, CONFIG_FENCE};
 pub use delivery::{
     Corrections, DeliveryPreset, MAPPED_STATES, Party, PresetRows, ReviewStage, StageKind,
 };
+pub(crate) use delivery::{parse_stages, render_stages};
 pub(crate) use settings::retired_setting_report;
 pub use settings::{
     AGENT_SETTINGS, Answers, CutBy, CutShort, EVERYWHERE_SETTINGS, FIXED_UNDER_AUTONOMOUS, Group,
