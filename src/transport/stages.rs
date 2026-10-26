@@ -10,12 +10,15 @@ use super::claim::{PUBLISH_READBACK_ATTEMPTS, readback_delay_secs};
 use super::{Context, Failure, How, run};
 use crate::config::{Party, ReviewStage, StageKind};
 
+pub(crate) mod thread;
+
 const QUERY: &str = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,\
-name:$name){pullRequest(number:$number){number state isDraft headRefOid url mergeCommit{oid} \
+name:$name){pullRequest(number:$number){number state isDraft headRefName headRefOid baseRefOid url mergeCommit{oid} \
 author{login} reviewRequests(first:100){pageInfo{hasNextPage} nodes{requestedReviewer{__typename \
 ... on User{login} ... on Team{combinedSlug} ... on Bot{login}}}} latestReviews(first:100)\
-{pageInfo{hasNextPage} nodes{author{login} state body}} reviewThreads(first:100){pageInfo\
-{hasNextPage} nodes{isResolved comments(first:1){nodes{author{login} body path line url}}}} \
+{pageInfo{hasNextPage} nodes{author{login} state body commit{oid}}} reviewThreads(first:100){pageInfo\
+{hasNextPage} nodes{id isResolved isOutdated path line comments(first:100){pageInfo{hasNextPage} \
+nodes{id viewerDidAuthor author{login} body path line url commit{oid} originalCommit{oid}}}}} \
 commits(last:1){nodes{commit{oid statusCheckRollup{contexts(first:100){pageInfo{hasNextPage} \
 nodes{__typename ... on CheckRun{name status conclusion} ... on StatusContext{context \
 state}}}}}}}}}}";
@@ -36,6 +39,10 @@ pub struct Stages<'a> {
     /// Whether to request the review the current stage waits on, when it is
     /// a person's and not yet requested.
     pub request: bool,
+    /// The published head this reading must describe, when supplied.
+    pub expected_head: Option<&'a str>,
+    /// Maximum polling sleep, at most 300 seconds; waiting requires an exact head.
+    pub wait_seconds: u64,
 }
 
 /// `review-stages` — see the module.
@@ -48,6 +55,12 @@ fn stages_with_sleep(
     what: &Stages<'_>,
     sleep: &mut dyn FnMut(std::time::Duration),
 ) -> Result<serde_json::Value, Failure> {
+    if what.wait_seconds > 300 || (what.wait_seconds > 0 && what.expected_head.is_none()) {
+        return Err(Failure::ConfigDefect(serde_json::json!({
+            "ok": false, "reason": "review-wait-invalid",
+            "action": "waiting requires expected_head and wait_seconds between 0 and 300",
+        })));
+    }
     let Some(number) = latest_pr(context, what.branch)? else {
         return Ok(serde_json::json!({
             "ok": true,
@@ -56,8 +69,26 @@ fn stages_with_sleep(
             "tracker_written": false,
         }));
     };
-    let pr = fetch(context, number)?;
-    let answer = position(&pr, what.stages, what.ready_by, what.merge_by);
+    let mut pr = fetch(context, number)?;
+    verify_reading(&pr, what.branch, what.expected_head)?;
+    let base = text(&pr, &["baseRefOid"]).map(str::to_owned);
+    let mut remaining = what.wait_seconds;
+    while remaining > 0 && ci_pending(&pr, what.stages) && text(&pr, &["state"]) == Some("OPEN") {
+        let delay = remaining.min(5);
+        sleep(std::time::Duration::from_secs(delay));
+        remaining -= delay;
+        pr = fetch(context, number)?;
+        verify_reading(&pr, what.branch, what.expected_head)?;
+        if text(&pr, &["baseRefOid"]) != base.as_deref() {
+            return Err(stale("the pull request base changed during this reading"));
+        }
+    }
+    let mut answer = position(&pr, what.stages, what.ready_by, what.merge_by);
+    answer["wait_timed_out"] =
+        serde_json::json!(what.wait_seconds > 0 && ci_pending(&pr, what.stages));
+    if answer["wait_timed_out"] == true {
+        return Ok(answer);
+    }
     if !what.request
         || answer.get("position").and_then(serde_json::Value::as_str) != Some("review-to-request")
     {
@@ -104,6 +135,8 @@ fn stages_with_sleep(
         }
         let reread = fetch(context, number)
             .map_err(|failure| unconfirmed(seen.clone(), failure.detail()))?;
+        verify_reading(&reread, what.branch, text(&pr, &["headRefOid"]))
+            .map_err(|failure| unconfirmed(seen.clone(), failure.detail()))?;
         if requested(&reread).iter().any(|who| same(who, &reviewer)) {
             let mut answer = position(&reread, what.stages, what.ready_by, what.merge_by);
             answer["requested"] = serde_json::Value::String(reviewer);
@@ -112,6 +145,88 @@ fn stages_with_sleep(
         seen = serde_json::json!(requested(&reread));
     }
     Err(unconfirmed(seen, "the request was never listed".to_owned()))
+}
+
+fn stale(detail: &str) -> Failure {
+    Failure::Stop(serde_json::json!({
+        "ok": false, "reason": "assisted-review-head-moved", "detail": detail,
+        "action": "read the published head and its checks and threads again; old evidence is stale",
+    }))
+}
+
+fn verify_reading(
+    pr: &serde_json::Value,
+    branch: &str,
+    expected: Option<&str>,
+) -> Result<(), Failure> {
+    if text(pr, &["headRefName"]) != Some(branch)
+        || expected.is_some_and(|head| text(pr, &["headRefOid"]) != Some(head))
+    {
+        return Err(stale(
+            "the pull request no longer names the expected branch and head",
+        ));
+    }
+    if text(pr, &["state"]) == Some("OPEN") {
+        let commit = nodes(pr, &["commits"])
+            .first()
+            .and_then(|node| text(node, &["commit", "oid"]));
+        if commit.is_none() || commit != text(pr, &["headRefOid"]) {
+            return Err(Failure::Read(
+                "checks were not read for the pull request's exact head".to_owned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn ci_pending(pr: &serde_json::Value, stages: &[ReviewStage]) -> bool {
+    matches!(ci_for_stages(pr, stages), "pending" | "missing")
+}
+
+fn ci_for_stages(pr: &serde_json::Value, stages: &[ReviewStage]) -> &'static str {
+    let observed = ci_state(pr);
+    if observed == "failed" {
+        return observed;
+    }
+    let mut pending = false;
+    for stage in stages.iter().filter(|stage| stage.blocking) {
+        if let StageKind::Check { name, .. } = &stage.kind {
+            match check(pr, name) {
+                Check::Failed(_) => return "failed",
+                Check::Missing | Check::Pending => pending = true,
+                Check::Passed => {}
+            }
+        }
+    }
+    if pending && observed != "missing" {
+        "pending"
+    } else {
+        observed
+    }
+}
+
+fn ci_state(pr: &serde_json::Value) -> &'static str {
+    let contexts = nodes(pr, &["commits"])
+        .first()
+        .map(|node| nodes(node, &["commit", "statusCheckRollup", "contexts"]))
+        .unwrap_or_default();
+    if contexts.is_empty() {
+        return "missing";
+    }
+    let mut pending = false;
+    for context in contexts {
+        if text(context, &["status"]).is_some_and(|status| status != "COMPLETED")
+            || matches!(text(context, &["state"]), Some("PENDING" | "EXPECTED"))
+        {
+            pending = true;
+        } else if !matches!(
+            text(context, &["conclusion"]).or_else(|| text(context, &["state"])),
+            Some("SUCCESS" | "NEUTRAL" | "SKIPPED")
+        ) {
+            return "failed";
+        }
+    }
+    if pending { "pending" } else { "passed" }
 }
 
 fn latest_pr(context: &Context, branch: &str) -> Result<Option<u64>, Failure> {
@@ -167,6 +282,17 @@ fn fetch(context: &Context, number: u64) -> Result<serde_json::Value, Failure> {
             "the pull request's {list} did not fit in one page, so no stage is known from a part \
              of them"
         )));
+    }
+    for thread in nodes(&pr, &["reviewThreads"]) {
+        if thread
+            .pointer("/comments/pageInfo/hasNextPage")
+            .and_then(serde_json::Value::as_bool)
+            != Some(false)
+        {
+            return Err(Failure::Read(
+                "review thread comments were incomplete; no complete reading is known".to_owned(),
+            ));
+        }
     }
     Ok(pr)
 }
@@ -412,10 +538,11 @@ fn review_stage(
             serde_json::json!({ "stage": index, "comments": comments }),
         );
     }
-    if reviews
-        .iter()
-        .any(|review| text(review, &["state"]) == Some("APPROVED"))
-    {
+    if reviews.iter().any(|review| {
+        text(review, &["state"]) == Some("APPROVED")
+            && text(review, &["commit", "oid"]).is_some()
+            && text(review, &["commit", "oid"]) == text(pr, &["headRefOid"])
+    }) {
         return Verdict::Done(Vec::new());
     }
     if reviewer == "any" || requested(pr).iter().any(|who| same(who, reviewer)) {
@@ -448,6 +575,11 @@ pub(crate) fn position(
             "ok": true,
             "pr": pr.get("number"),
             "head": pr.get("headRefOid"),
+            "base": pr.get("baseRefOid"),
+            "ci": ci_for_stages(pr, stages),
+            "open_threads": nodes(pr, &["reviewThreads"]).into_iter()
+                .filter(|thread| thread.get("isResolved").and_then(serde_json::Value::as_bool) == Some(false))
+                .collect::<Vec<_>>(),
             "position": position,
             "next": next,
             "tracker_written": false,

@@ -171,7 +171,9 @@ impl Tool {
         // the two pins differ.
         match self.name {
             "publish_review" | "republish_review" | "release_ci" | "draft_pr" | "ready_pr"
-            | "review_stages" | "judge_workspaces" => TransportBind::RepositoryHost,
+            | "review_stages" | "review_thread" | "judge_workspaces" => {
+                TransportBind::RepositoryHost
+            }
             _ => TransportBind::Tracker,
         }
     }
@@ -1411,9 +1413,9 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "draft pull request",
         description: "Publish an assisted run's branch, where the `Workflow` row is `assisted`, as \
                       a draft pull request: pushes fast-forward, opens a draft with the title and \
-                      body as given, and reads it back. Refuses a closing keyword in the title, \
-                      body or commits, and a branch whose open pull request is ready for review; \
-                      an open draft is reused. Writes nothing to the tracker. The branch and \
+                       body as given, and reads it back. Refuses closing keywords. Reuses an open \
+                       PR: ready corrections follow `Corrections after ready` (push-ready keeps it \
+                       ready, redraft returns it to draft, refuse stops). Writes nothing to the tracker. The branch and \
                       checkout are the ones `assist` recorded.",
         operation: "draft-pr",
         arguments: &[
@@ -1445,15 +1447,38 @@ pub const TOOLS: &[Tool] = &[
         description: "Where an assisted run's pull request stands in `External reviewers`, read \
                       from GitHub: a check still running, comments to address, a review to \
                       request or awaited, the merge awaited, or merged. Review comments come back \
-                      as data. `request_review` asks for the review the current stage waits on.",
+                       as data, including open threads from all authors. `expected_head` pins the \
+                       reading; `wait_seconds` polls CI for that head (0-300). Every push requires \
+                       a new reading. `request_review` asks for the current stage's review.",
         operation: "review-stages",
         arguments: &[
             RUN_ID,
+            Argument::optional("expected_head", "string", "The exact published commit to inspect."),
+            Argument::optional("wait_seconds", "integer", "Poll CI up to 300 seconds; requires expected_head. Missing checks never count as passed.").counting_from(0),
             Argument::optional(
                 "request_review",
                 "boolean",
                 "Request the review the current stage waits on, when every earlier stage is done.",
             ),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
+        name: "review_thread",
+        contract_name: "review thread",
+        description: "Reply to one thread on the assisted branch's open PR and optionally resolve \
+                      it. Requires the exact published head. Resolution requires a fix commit \
+                      after the thread's original commit and already on that head. Verifies \
+                      thread ownership and reads writes back; never proves a fix is semantically correct.",
+        operation: "review-thread",
+        arguments: &[
+            RUN_ID,
+            Argument::required("thread_id", "string", "Thread ID from review_stages.open_threads."),
+            Argument::required("expected_head", "string", "Exact published 40-hex commit SHA."),
+            Argument::required("body_file", "string", "Path to the reply text."),
+            Argument::optional("fix_commit", "string", "Published fix SHA; required to resolve."),
+            Argument::optional("resolve", "boolean", "Resolve only after the reply and published fix are verified."),
         ],
         effect: PointerEffect::None,
         writes: true,
@@ -1680,6 +1705,7 @@ pub const POINTER_ONLY: &[(&str, &str)] = &[
     ("draft_pr", "run_id"),
     ("ready_pr", "run_id"),
     ("review_stages", "run_id"),
+    ("review_thread", "run_id"),
 ];
 
 /// Whether an argument is bookkeeping rather than a flag.
@@ -1739,7 +1765,13 @@ pub const TRACKER_WRITERS: &[&str] = &[
 
 /// The tools that exist only where `Workflow` is `assisted`, and are refused
 /// everywhere else.
-pub const ASSISTED_ONLY: &[&str] = &["assist", "draft_pr", "ready_pr", "review_stages"];
+pub const ASSISTED_ONLY: &[&str] = &[
+    "assist",
+    "draft_pr",
+    "ready_pr",
+    "review_stages",
+    "review_thread",
+];
 
 /// The tools this server answers itself, never as one transport operation.
 ///

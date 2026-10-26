@@ -1463,6 +1463,7 @@ fn publication_tools_bind_to_the_repository_host_and_the_rest_to_the_tracker() {
         "draft_pr",
         "ready_pr",
         "review_stages",
+        "review_thread",
         "judge_workspaces",
     ];
     for tool in TOOLS {
@@ -2610,7 +2611,7 @@ fn every_tool_sends_flags_the_transport_accepts() {
             | "review-validator-result"
             | "review-computed-verdict"
             | "spend" => &["--operation-id"],
-            "draft-pr" => &["--branch", "--worktree"],
+            "draft-pr" | "review-thread" => &["--branch", "--worktree"],
             "ready-pr" => &["--branch", "--worktree", "--issue"],
             "review-stages" => &["--branch", "--issue"],
             _ => &[],
@@ -4607,9 +4608,6 @@ fn an_integer_that_counts_from_one_is_refused_below_it_and_says_so_in_the_schema
             if argument.json_type != "integer" {
                 continue;
             }
-            // Every integer this server takes is a count of something that
-            // starts at one; a new one that is genuinely unbounded is a
-            // decision, not an omission, and this is where it gets made.
             let least = argument.least.unwrap_or_else(|| {
                 panic!(
                     "`{}` on `{}` is an integer with no floor, and it goes into argv",
@@ -4617,9 +4615,15 @@ fn an_integer_that_counts_from_one_is_refused_below_it_and_says_so_in_the_schema
                 )
             });
             assert_eq!(
-                least, 1,
+                least,
+                if tool.name == "review_stages" && argument.name == "wait_seconds" {
+                    0
+                } else {
+                    1
+                },
                 "`{}` on `{}` counts from {least}",
-                argument.name, tool.name
+                argument.name,
+                tool.name
             );
 
             let schema = tool.schema();
@@ -5677,6 +5681,34 @@ fn draft_pr_is_refused_for_a_run_with_no_local_claim() {
 }
 
 #[test]
+fn review_thread_refuses_a_stale_assisted_ownership_marker_before_transport() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository_with_commit();
+    let mut context = assisted_context(&root);
+    context.repo_dir = repo.path().to_path_buf();
+    let mut run = session::Run::new("claude-abcd1234".to_owned());
+    run.issue = Some(crate::identity::Identity::Number(12));
+    run.assisted = true;
+    run.branch = Some("issue-12".to_owned());
+    run.worktree = Some(repo.path().to_path_buf());
+    run.repo_dir = Some(repo.path().to_path_buf());
+    session::store(&context.state_root, &run).unwrap();
+    let failure = run_tool(
+        "review_thread",
+        &json!({
+            "run_id":"claude-abcd1234", "thread_id":"thread-1", "expected_head":"a".repeat(40),
+            "body_file":root.path().join("absent.md").to_str().unwrap(),
+        }),
+        Ok(&context),
+    )
+    .unwrap_err();
+    let ToolFailure::Refused(refusal) = failure else {
+        panic!("{failure:?}");
+    };
+    assert_eq!(refusal.code, "assisted-claim-stale");
+}
+
+#[test]
 fn draft_pr_publishes_the_branch_and_checkout_the_assisted_pointer_names() {
     let root = tempfile::tempdir().expect("a temporary root");
     let repo = repository_with_commit();
@@ -5703,20 +5735,32 @@ fn draft_pr_publishes_the_branch_and_checkout_the_assisted_pointer_names() {
         &["remote", "add", "origin", &origin.to_string_lossy()],
     );
     git(repo.path(), &["push", "--quiet", "origin", "main"]);
-    git(repo.path(), &["checkout", "--quiet", "-b", "issue-12"]);
+    git(repo.path(), &["config", "core.hooksPath", ".husky/_"]);
+    let worktree = root.path().join("tree");
     git(
         repo.path(),
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            "issue-12",
+            worktree.to_str().unwrap(),
+        ],
+    );
+    git(
+        &worktree,
         &["commit", "--allow-empty", "--quiet", "-m", "work"],
     );
-    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let head = git(&worktree, &["rev-parse", "HEAD"]);
 
     let mut context = assisted_context(&root);
-    context.repo_dir = repo.path().to_path_buf();
+    context.repo_dir = worktree.clone();
     let mut run = crate::harness::session::Run::new("claude-abcd1234".to_owned());
     run.issue = Some(crate::identity::Identity::Number(12));
     run.assisted = true;
     run.branch = Some("issue-12".to_owned());
-    run.worktree = Some(repo.path().to_path_buf());
+    run.worktree = Some(worktree.clone());
     run.repo_dir = Some(repo.path().to_path_buf());
     crate::harness::session::store(&context.state_root, &run).expect("the pointer writes");
 
@@ -5749,6 +5793,59 @@ fn draft_pr_publishes_the_branch_and_checkout_the_assisted_pointer_names() {
     let after = crate::harness::session::load(&context.state_root, "claude-abcd1234");
     assert_eq!(after.issue, Some(crate::identity::Identity::Number(12)));
     assert_eq!(after.verified_at, None, "the pointer moved");
+    assert!(!worktree.join(".husky/_").exists());
+    let marker = crate::transport::branch::ownership_path(&worktree).unwrap();
+    std::fs::write(
+        marker,
+        json!({
+            "run_id":"claude-abcd1234", "issue":12, "branch":"issue-12",
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut snapshot = json!({
+        "number":7, "state":"OPEN", "headRefName":"issue-12", "headRefOid":head,
+        "reviewRequests":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+        "latestReviews":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+        "reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[{
+            "id":"thread-1", "isResolved":false, "comments":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+        }]},
+        "commits":{"nodes":[{"commit":{"oid":head}}]},
+    });
+    let before = snapshot.clone();
+    let key = crate::transport::claim::review_operation_id(
+        "thread-reply",
+        &["thread-1", &head, "", "Words."],
+    );
+    snapshot["reviewThreads"]["nodes"][0]["comments"]["nodes"] = json!([{
+        "id":"reply-1", "viewerDidAuthor":true,
+        "body":format!("Words.\n\n<!-- estigia-thread-reply:{key} -->"),
+    }]);
+    let response = crate::test_env::answers(&[
+        json!({"matches":"pr list","stdout":"[{\"number\":7}]"}),
+        json!({"matches":"repo view","stdout":"{\"owner\":{\"login\":\"example\"},\"name\":\"repo\"}"}),
+        json!({"matches":"query=mutation","stdout":"{\"data\":{}}"}),
+        json!({"matches":"query=query","nth":1,"stdout":json!({"data":{"repository":{"pullRequest":before}}}).to_string()}),
+        json!({"matches":"query=query","stdout":json!({"data":{"repository":{"pullRequest":snapshot}}}).to_string()}),
+    ]);
+    let answer = crate::test_env::with_counting_logging_gh(
+        bin.path(),
+        &response,
+        &root.path().join("counts"),
+        &root.path().join("log"),
+        || {
+            run_tool(
+                "review_thread",
+                &json!({
+                    "run_id":"claude-abcd1234", "thread_id":"thread-1", "expected_head":head,
+                    "body_file":body.to_str().unwrap(),
+                }),
+                Ok(&context),
+            )
+        },
+    )
+    .unwrap();
+    assert!(answer.to_string().contains("reply-1"), "{answer}");
 }
 
 #[test]
@@ -5873,7 +5970,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 51_747;
+const TOOLS_LIST_CEILING: usize = 53_203;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {

@@ -39,6 +39,7 @@ const SWITCHES: &[&str] = &[
     "compact",
     "takeover",
     "request-review",
+    "resolve",
     "identities",
     "include-heading",
     "read-only",
@@ -1636,6 +1637,10 @@ fn run_operation(
                     ready_by: layered.ready_by(),
                     merge_by: layered.merge_by(),
                     request: f.on("request-review"),
+                    expected_head: f.get("expected-head"),
+                    wait_seconds: f.get("wait-seconds").unwrap_or("0").parse::<u64>().map_err(|_| Failure::ConfigDefect(serde_json::json!({
+                        "ok": false, "reason": "malformed-argument", "argument": "--wait-seconds",
+                    })))?,
                 },
             )?;
             if read.get("position").and_then(serde_json::Value::as_str) == Some("merged") {
@@ -1649,6 +1654,18 @@ fn run_operation(
             }
             Ok(read)
         }
+        "review-thread" => super::stages::thread::respond(
+            context,
+            &super::stages::thread::Response {
+                branch: f.need("branch", operation)?,
+                worktree: Path::new(f.need("worktree", operation)?),
+                thread_id: f.need("thread-id", operation)?,
+                expected_head: f.need("expected-head", operation)?,
+                fix_commit: f.get("fix-commit"),
+                body_file: Path::new(f.need("body-file", operation)?),
+                resolve: f.on("resolve"),
+            },
+        ),
         "ready-pr" => {
             let layered = context.layered();
             let ready = super::draft::mark_ready(
