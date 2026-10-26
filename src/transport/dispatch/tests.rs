@@ -413,6 +413,8 @@ fn every_flag_a_tool_sends_is_one_the_dispatcher_reads() {
     const FROM_THE_POINTER: &[(&str, &str)] = &[
         ("draft-pr", "branch"),
         ("draft-pr", "worktree"),
+        ("review-thread", "branch"),
+        ("review-thread", "worktree"),
         ("ready-pr", "branch"),
         ("ready-pr", "worktree"),
         ("review-stages", "branch"),

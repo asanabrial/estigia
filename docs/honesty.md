@@ -969,7 +969,7 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 18,354 | file on disk |
+  | `skill/bindings/github.md` | 18,397 | file on disk |
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
@@ -5854,10 +5854,12 @@ pointer that leaves it names the document it points at.
     leaves outside a thread, or a summary review, is not read, and a thread somebody resolves without
     addressing it counts as addressed. For `any` and `org/team` a review from any account other than
     the author, a `[bot]` or a check stage's author satisfies the stage — team membership is not read.
-    An approval completes a review stage whichever commit it was given on, as GitHub keeps it unless
-    the repository dismisses stale approvals. A list GitHub answers with a next page — more than a
-    hundred threads, reviews, requests or check runs — refuses the reading rather than deciding
-    from the first page. A blocking check that is not reported on the head holds the stages behind it
+    An approval completes a review stage only for the current head; GitHub does not expose the
+    historical base that reviewer read. Exact-head polling, full thread conversations, guarded
+    reply/resolution and their non-atomic mutation limit are in [assisted review](assisted-review.md).
+    A list GitHub answers with a next page — more than a hundred threads, comments per thread,
+    reviews, requests or check runs — refuses the reading rather than deciding from the first page.
+    A blocking check that is not reported on the head holds the stages behind it
     and says it was never reported, because a check that has not started yet and a stage name that
     matches no check look the same from here; an advisory check never holds them. Measured by
     `src/transport/stages/tests.rs` against a fake `gh`, including that no review is requested while

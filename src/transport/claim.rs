@@ -8079,6 +8079,7 @@ pub(super) enum Push<'a> {
     /// The ordinary publication. The remote refuses anything that is not a
     /// fast-forward, and that refusal is the whole safety of this path.
     FastForward,
+    ConfinedFastForward,
     /// The republication of a branch whose history was rewritten — a rebase
     /// onto a base that moved, or an amended commit.
     ///
@@ -8090,7 +8091,9 @@ pub(super) enum Push<'a> {
     /// value the run has only just learned protects nothing. The recorded head
     /// is a value a human reviewed and a receipt bound, which is the only
     /// expectation worth leasing against.
-    Leased { recorded_head: &'a str },
+    Leased {
+        recorded_head: &'a str,
+    },
 }
 
 /// See [`Publication`].
@@ -9176,6 +9179,24 @@ pub(super) fn push_to_origin(
     push: Push<'_>,
 ) -> Result<(), Failure> {
     match push {
+        Push::ConfinedFastForward => {
+            let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
+            super::run(
+                &[
+                    "git",
+                    "push",
+                    "--no-force",
+                    "--no-follow-tags",
+                    "--recurse-submodules=no",
+                    "-u",
+                    "origin",
+                    "--",
+                    &refspec,
+                ],
+                Some(at),
+                super::How::write(),
+            )
+        }
         Push::FastForward => super::run(
             &["git", "push", "-u", "origin", "--", branch],
             Some(at),

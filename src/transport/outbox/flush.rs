@@ -33,6 +33,7 @@ const WRITES_TO_GITHUB: &[&str] = &[
     "draft-pr",
     "ready-pr",
     "review-stages",
+    "review-thread",
     "handoff",
 ];
 

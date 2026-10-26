@@ -414,7 +414,7 @@ fn the_states_follow_state_is_called_with_are_ones_state_names_maps() {
 
 fn merged_pull_request() -> String {
     serde_json::json!({ "data": { "repository": { "pullRequest": {
-        "number": 7, "state": "MERGED", "isDraft": false, "headRefOid": "abc",
+        "number": 7, "state": "MERGED", "isDraft": false, "headRefOid": "abc", "headRefName": "eng-123",
         "mergeCommit": { "oid": "m1" }, "author": { "login": "alexis" },
         "reviewRequests": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
         "latestReviews": { "pageInfo": { "hasNextPage": false }, "nodes": [] },
