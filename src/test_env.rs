@@ -607,6 +607,58 @@ pub(crate) fn fake_cli_directory(names: &[&str]) -> &'static tempfile::TempDir {
     directory
 }
 
+/// A fresh copy of the directory `build` fills once per test binary in `template`.
+///
+/// For fixtures that cost processes to make, such as Git repositories, and that a
+/// test then changes: the copy is the caller's to change, the template is never
+/// handed out. Git metadata that names the template by absolute path — a remote's
+/// URL in `config`, a worktree's `gitdir` and `.git` files — is re-pointed at the
+/// copy, so the copy answers Git exactly as a freshly built fixture would.
+pub(crate) fn copy_of_template(
+    template: &'static std::sync::OnceLock<tempfile::TempDir>,
+    build: impl FnOnce(&Path),
+) -> tempfile::TempDir {
+    let template = template.get_or_init(|| {
+        let directory = tempfile::tempdir().expect("a template directory");
+        build(directory.path());
+        directory
+    });
+    let copy = tempfile::tempdir().expect("a directory for the template's copy");
+    let from = directory_name(template.path());
+    let to = directory_name(copy.path());
+    copy_tree(template.path(), copy.path(), &from, &to);
+    copy
+}
+
+fn directory_name(path: &Path) -> String {
+    path.file_name()
+        .and_then(OsStr::to_str)
+        .expect("a temporary directory has a UTF-8 name")
+        .to_owned()
+}
+
+fn copy_tree(from: &Path, to: &Path, template_name: &str, copy_name: &str) {
+    for entry in std::fs::read_dir(from).expect("the template is readable") {
+        let entry = entry.expect("a template entry");
+        let source = entry.path();
+        let destination = to.join(entry.file_name());
+        if entry.file_type().expect("a template entry type").is_dir() {
+            std::fs::create_dir(&destination).expect("a copied directory");
+            copy_tree(&source, &destination, template_name, copy_name);
+        } else if names_a_checkout(&entry.file_name()) {
+            let text = std::fs::read_to_string(&source).expect("Git metadata is text");
+            std::fs::write(&destination, text.replace(template_name, copy_name))
+                .expect("re-pointed Git metadata");
+        } else {
+            std::fs::copy(&source, &destination).expect("a copied file");
+        }
+    }
+}
+
+fn names_a_checkout(name: &OsStr) -> bool {
+    name == "config" || name == "gitdir" || name == ".git"
+}
+
 #[path = "../tests/support/fixture_flags.rs"]
 mod fixture_flags;
 
@@ -1161,5 +1213,103 @@ mod fake_cli_link_tests {
             seen += 1;
         }
         assert_eq!(seen, 1);
+    }
+}
+
+#[cfg(test)]
+mod copy_of_template_tests {
+    use super::copy_of_template;
+    use std::path::Path;
+    use std::sync::OnceLock;
+
+    fn git(at: &Path, arguments: &[&str]) -> String {
+        let args: Vec<&str> = ["git"]
+            .into_iter()
+            .chain(arguments.iter().copied())
+            .collect();
+        crate::transport::run(&args, Some(at), crate::transport::How::write())
+            .unwrap_or_else(|failure| panic!("git {arguments:?} failed: {}", failure.detail()))
+            .stdout
+    }
+
+    fn build(root: &Path) {
+        let remote = root.join("remote.git");
+        let work = root.join("work");
+        git(
+            root,
+            &["init", "--quiet", "--bare", remote.to_str().unwrap()],
+        );
+        std::fs::create_dir(&work).unwrap();
+        git(&work, &["init", "--quiet", "-b", "main"]);
+        git(&work, &["config", "user.email", "estigia@example.invalid"]);
+        git(&work, &["config", "user.name", "Estigia test"]);
+        std::fs::write(work.join("a.txt"), "a\n").unwrap();
+        git(&work, &["add", "a.txt"]);
+        git(&work, &["commit", "--quiet", "-m", "a"]);
+        git(
+            &work,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+        git(&work, &["push", "--quiet", "origin", "main"]);
+        let tree = root.join("tree");
+        git(
+            &work,
+            &[
+                "worktree",
+                "add",
+                "--quiet",
+                "-b",
+                "side",
+                tree.to_str().unwrap(),
+            ],
+        );
+    }
+
+    fn canonical(path: &str) -> std::path::PathBuf {
+        std::fs::canonicalize(path.trim()).unwrap_or_else(|_| panic!("{path:?} exists"))
+    }
+
+    #[test]
+    fn a_copy_answers_git_about_itself_and_never_about_the_template() {
+        static TEMPLATE: OnceLock<tempfile::TempDir> = OnceLock::new();
+        let first = copy_of_template(&TEMPLATE, build);
+        let second = copy_of_template(&TEMPLATE, |_| panic!("the template is built once"));
+        let root = std::fs::canonicalize(second.path()).unwrap();
+        let work = second.path().join("work");
+        let tree = second.path().join("tree");
+
+        let url = git(&work, &["remote", "get-url", "origin"]);
+        assert_eq!(canonical(&url), root.join("remote.git"));
+        let listed: Vec<_> = git(&work, &["worktree", "list", "--porcelain"])
+            .lines()
+            .filter_map(|line| line.strip_prefix("worktree "))
+            .map(canonical)
+            .collect();
+        assert_eq!(listed, vec![root.join("work"), root.join("tree")]);
+        assert_eq!(
+            canonical(&git(&tree, &["rev-parse", "--show-toplevel"])),
+            root.join("tree")
+        );
+
+        std::fs::write(tree.join("b.txt"), "b\n").unwrap();
+        git(&tree, &["add", "b.txt"]);
+        git(&tree, &["commit", "--quiet", "-m", "b"]);
+        git(&tree, &["push", "--quiet", "origin", "side"]);
+        let template = TEMPLATE.get().unwrap().path();
+        assert_eq!(
+            git(&template.join("remote.git"), &["branch", "--list", "side"]),
+            ""
+        );
+        assert_eq!(
+            git(
+                &first.path().join("remote.git"),
+                &["branch", "--list", "side"]
+            ),
+            ""
+        );
+        assert_eq!(
+            git(&template.join("work"), &["rev-list", "--count", "side"]).trim(),
+            "1"
+        );
     }
 }

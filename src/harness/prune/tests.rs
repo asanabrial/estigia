@@ -600,14 +600,21 @@ fn git(at: &std::path::Path, arguments: &[&str]) {
 /// merged, one open, one closed, and one detached — the four shapes the sweep
 /// has to tell apart.
 fn sweep_fixture() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
-    let root = tempfile::tempdir().expect("a fixture root");
-    let remote = root.path().join("remote.git");
-    let work = root.path().join("work");
+    static TEMPLATE: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+    let root = crate::test_env::copy_of_template(&TEMPLATE, build_sweep_fixture);
     let clone = root.path().join("clone");
     let trees = root.path().join("trees");
+    (root, clone, trees)
+}
+
+fn build_sweep_fixture(root: &std::path::Path) {
+    let remote = root.join("remote.git");
+    let work = root.join("work");
+    let clone = root.join("clone");
+    let trees = root.join("trees");
 
     git(
-        root.path(),
+        root,
         &["init", "--quiet", "--bare", remote.to_str().unwrap()],
     );
     std::fs::create_dir_all(&work).expect("a work directory");
@@ -647,7 +654,7 @@ fn sweep_fixture() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf
     git(&work, &["switch", "--quiet", "main"]);
 
     git(
-        root.path(),
+        root,
         &[
             "clone",
             "--quiet",
@@ -705,8 +712,6 @@ fn sweep_fixture() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf
         &trees.join("issue-3-closed"),
         &["commit", "--quiet", "-m", "unpublished"],
     );
-
-    (root, clone, trees)
 }
 
 #[test]
