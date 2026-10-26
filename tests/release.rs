@@ -31,7 +31,7 @@ fn position(text: &str, needle: &str, meaning: &str) -> usize {
         .unwrap_or_else(|| panic!("{meaning}: {needle:?}"))
 }
 
-/// The six the installers can ask for: every architecture they resolve, on
+/// The five the installers can ask for: every architecture they resolve, on
 /// every operating system they resolve.
 const TARGETS: &[&str] = &[
     "x86_64-unknown-linux-gnu",
@@ -39,7 +39,6 @@ const TARGETS: &[&str] = &[
     "x86_64-apple-darwin",
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
-    "aarch64-pc-windows-msvc",
 ];
 
 /// The triples the workflow's build matrix actually lists.
@@ -193,6 +192,19 @@ fn the_installers_resolve_exactly_the_targets_the_workflow_builds() {
 }
 
 #[test]
+fn windows_on_arm_installs_the_x86_64_binary() {
+    let powershell = code_of(&script("install.ps1"));
+    assert!(
+        powershell.contains("'ARM64' { 'x86_64' }"),
+        "install.ps1 does not send ARM64 to the x86_64 build, and no aarch64 Windows archive is published"
+    );
+    assert!(
+        !powershell.contains("'aarch64'"),
+        "install.ps1 still composes an aarch64 Windows triple the release never builds"
+    );
+}
+
+#[test]
 fn the_asset_names_are_the_ones_the_installers_compose() {
     // `estigia-<version>-<triple>` plus `.tar.gz` or `.zip`. Both halves are
     // read out of the scripts rather than written here, so this cannot agree
@@ -225,13 +237,13 @@ fn the_asset_names_are_the_ones_the_installers_compose() {
 
 #[test]
 fn a_partial_release_is_refused_rather_than_published() {
-    // Four assets out of six is the worst outcome: two platforms get a
+    // Three assets out of five is the worst outcome: two platforms get a
     // download failure from an installer that is working perfectly, and
     // nothing in the release says which two.
     let workflow = read(".github/workflows/release.yml");
     assert!(
-        workflow.contains("-ne 6"),
-        "nothing checks that all six archives are present before publishing"
+        workflow.contains("-ne 5"),
+        "nothing checks that all five archives are present before publishing"
     );
     assert!(
         workflow.contains("fail-fast: false"),

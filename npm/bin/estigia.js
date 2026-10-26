@@ -17,7 +17,7 @@ const TARGETS = {
   "darwin-x64": { triple: "x86_64-apple-darwin", archive: "tar.gz", exe: "estigia" },
   "darwin-arm64": { triple: "aarch64-apple-darwin", archive: "tar.gz", exe: "estigia" },
   "win32-x64": { triple: "x86_64-pc-windows-msvc", archive: "zip", exe: "estigia.exe" },
-  "win32-arm64": { triple: "aarch64-pc-windows-msvc", archive: "zip", exe: "estigia.exe" },
+  "win32-arm64": { triple: "x86_64-pc-windows-msvc", archive: "zip", exe: "estigia.exe" },
 };
 
 class EstigiaError extends Error {}
