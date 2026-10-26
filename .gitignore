@@ -32,3 +32,8 @@ __pycache__/
 # Committing it publishes the session identifiers of whoever happened to be
 # running, and the directories refill on every run.
 /.opencode/*-loop/
+
+# A skill registry an editor plugin generates into the checkout root. It lists
+# the operator's globally installed skills with their descriptions and absolute
+# paths: a description of one machine and of unrelated projects, none of it ours.
+/.atl/
