@@ -1441,6 +1441,7 @@ pub fn assist(
             String::new(),
         )
     };
+    let adopted = adoptable_pull_request(context, what)?;
     let reserved = reserve_checkout(context, what, configured)?;
     let (head, verdict) = settle_identity(context, what, &reserved, false)?;
     Ok(serde_json::json!({
@@ -1449,6 +1450,7 @@ pub fn assist(
         "title": title,
         "description": description,
         "branch": what.branch,
+        "adopted_pr": adopted,
         "worktree": reserved.path.display().to_string(),
         "tracker_written": false,
         "resumed_existing_worktree": reserved.resuming,
@@ -1461,6 +1463,109 @@ pub fn assist(
         "reminder": "gitignored files (.env, credentials, local settings) are NOT in a fresh \
                      worktree",
     }))
+}
+
+/// The open pull request an existing remote branch is adopted through, or `None`
+/// for a branch origin does not have.
+///
+/// A branch origin already has is taken only when it is the head of exactly one
+/// open pull request whose title, body or head branch names the issue — the
+/// references Linear's GitHub integration links by. Anything else is refused
+/// before a repository write, and a failed read is a failed read, never "no
+/// pull request".
+fn adoptable_pull_request(
+    context: &Context,
+    what: &Start<'_>,
+) -> Result<Option<serde_json::Value>, Failure> {
+    let branch = what.branch;
+    if remote_head(context, &format!("refs/heads/{branch}"))?.is_none() {
+        return Ok(None);
+    }
+    let open = super::gh_json(
+        &[
+            "pr",
+            "list",
+            "--head",
+            branch,
+            "--state",
+            "open",
+            "--json",
+            "number,url,title,body,headRefName",
+        ],
+        Some(&context.repo_dir),
+    )?
+    .and_then(|value| value.as_array().cloned())
+    .ok_or_else(|| {
+        Failure::Read(format!(
+            "gh pr list returned no list for {branch}, so whether it heads an open pull request \
+             is unknown; nothing was created"
+        ))
+    })?;
+    let refuse = |detail: String| {
+        Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "assist-branch-not-adoptable",
+            "branch": branch,
+            "issue": what.issue,
+            "detail": detail,
+            "action": "name a branch that does not exist yet, or the head branch of this issue's \
+                       open pull request; nothing was created",
+        }))
+    };
+    match open.as_slice() {
+        [] => Err(refuse(format!(
+            "`{branch}` already exists on origin and heads no open pull request"
+        ))),
+        [pr] if names_issue(pr, &what.issue) => Ok(Some(serde_json::json!({
+            "number": pr.get("number"),
+            "url": pr.get("url"),
+        }))),
+        [pr] => Err(refuse(format!(
+            "`{branch}` heads pull request #{}, whose title, body and branch do not name {}",
+            super::claim::pr_number(pr),
+            what.issue
+        ))),
+        _ => Err(Failure::Stop(serde_json::json!({
+            "ok": false,
+            "reason": "ambiguous-open-prs",
+            "prs": open,
+            "action": "more than one open pull request for this branch \u{2014} resolve by hand; \
+                       nothing was created",
+        }))),
+    }
+}
+
+/// Whether a pull request's title, body or head branch names `issue`.
+fn names_issue(pr: &serde_json::Value, issue: &crate::identity::Identity) -> bool {
+    let field = |name: &str| {
+        pr.get(name)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let (title, body, head) = (field("title"), field("body"), field("headRefName"));
+    match issue {
+        crate::identity::Identity::Number(number) => {
+            let needle = format!("#{number}");
+            [&title, &body]
+                .into_iter()
+                .any(|text| mentions(text, &needle, false))
+        }
+        crate::identity::Identity::Key(key) => [&title, &body, &head]
+            .into_iter()
+            .any(|text| mentions(&text.to_ascii_uppercase(), &key.to_ascii_uppercase(), true)),
+    }
+}
+
+/// Whether `needle` occurs in `text` with no digit after it and, where `bounded_before`, no
+/// letter or digit before it.
+fn mentions(text: &str, needle: &str, bounded_before: bool) -> bool {
+    text.match_indices(needle).any(|(at, _)| {
+        let before = text[..at].chars().next_back();
+        let after = text[at + needle.len()..].chars().next();
+        !(bounded_before && before.is_some_and(char::is_alphanumeric))
+            && !after.is_some_and(|next| next.is_ascii_digit())
+    })
 }
 
 /// Records on the issue that this run started this branch.

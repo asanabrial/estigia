@@ -47,8 +47,9 @@ enum Placement {
 
 /// The decision for a write made by a run holding no claim, or `None` when this is not one.
 ///
-/// Only a routine write is one: a boundary is held by the checks that already answer for it, and
-/// a write that lands outside every repository the gate can place is not a write to this
+/// A routine write is one, and so is `git push`: it publishes this repository's refs, so it is held
+/// as a commit is. Every other boundary is held by the checks that already answer for it, and a
+/// write that lands outside every repository the gate can place is not a write to this
 /// repository. `declared` are the paths a write tool named in a patch body, empty for every other
 /// call; they are placed one by one, and a write to any repository is held. Under `ask` a write
 /// the gate cannot place is allowed rather than put to the person; `required` still holds it.
@@ -59,6 +60,14 @@ pub fn decision(
     literal: Option<&str>,
     declared: &[String],
 ) -> Option<Decision> {
+    if super::unclaimed::is_a_push(action) {
+        let requirement = in_force(context)?;
+        let scope = scope_of(&context.repo_dir);
+        if matches!(scope, Scope::Outside) {
+            return None;
+        }
+        return held(context, requirement, &scope);
+    }
     let Action::Write { target } = action else {
         return None;
     };
