@@ -40,7 +40,7 @@ fn commits_or_pushes(literal: &str) -> bool {
         .any(|fragment| super::contains_whole_command(&normalized, fragment))
 }
 
-fn is_a_push(action: &Action) -> bool {
+pub(super) fn is_a_push(action: &Action) -> bool {
     matches!(action, Action::Boundary { command, .. } if command == "git push")
 }
 

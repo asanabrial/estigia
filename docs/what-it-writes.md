@@ -1522,7 +1522,8 @@ has no commit refusal, as does one with no tracker transport or no installed con
 holding no claim in a checkout with a tracker. `required` refuses every repository write it cannot
 place outside the checkout, with `issue-required`; `ask`, the default, asks the person on Claude Code
 for one it can place inside, refuses it on a host that cannot ask, and allows one it cannot place,
-naming the checkout's dirty paths at the next session start; `off` is the behaviour described above.
+naming the checkout's dirty paths at the next session start; a `git push` is held as a commit is;
+`off` is the behaviour described above.
 See [`configuration.md`](configuration.md) for what it covers and [`honesty.md`](honesty.md) for what
 it does not.
 

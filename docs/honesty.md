@@ -6778,7 +6778,9 @@ pointer that leaves it names the document it points at.
   - **A write the hook does not intercept is not held.** A tool no matcher wakes for, an editor or
     script that writes through a shell line naming none of the git fragments, a formatter run over
     the tree, or another clone, passes. The row is as wide as the classifier and no wider.
-  - **Only a routine write is held.** A boundary — a push, a merge, a tag, a write to a control-surface
+  - **Only a routine write and a `git push` are held.** A push is held as a commit is, so publishing
+    is never less guarded than recording (`an_unclaimed_push_is_held_as_an_unclaimed_commit_is`).
+    Every other boundary — a merge, a tag, a write to a control-surface
     file — is answered by the checks that already hold it, so an unclaimed run writing
     `.git/estigia/estigia.local.md` through a shell line is not stopped by this row, and can set it
     to `off`. `unclaimed-commit` stays what it was, and answers first where the push guard is installed.
@@ -6916,8 +6918,20 @@ pointer that leaves it names the document it points at.
     `no_effect_but_the_assisted_decision_leaves_a_stamp_on_an_assisted_pointer` and
     `a_later_swear_makes_the_pointer_a_tracker_claim_again`.
   - **An unsworn session in the worktree is not stopped by this.** `issue_requirement` reads an
-    assisted pointer's worktree as claimed, whichever session writes there, and `unclaimed::refusal`
-    catches a commit or a push only where the push guard is installed.
+    assisted pointer's worktree as claimed for a routine write, whichever session writes there, and
+    `unclaimed::refusal` catches a commit only where the push guard is installed. A `git push` from
+    that session is the exception: it is held by `Unclaimed write policy` wherever it runs.
+  - **`assist` adopts an existing branch through its pull request, read as text.** A branch origin
+    already has is taken only when it heads exactly one open pull request whose title, body or head
+    branch names the issue (`#12` for a number, `ABC-102` for a key, case-insensitive, as a whole
+    reference); otherwise it is refused `assist-branch-not-adoptable`, and a failed read stops before
+    any repository write. The mention is the reference Linear's GitHub integration links by, but
+    Linear's own attachment is not read, the pull request's author is not checked, and a branch this
+    run published through `draft_pr` with a title and body that never named the issue cannot be
+    taken again by `assist`. Measured by the `assist_*existing_branch*`, `assist_adopts_*` and
+    `a_pull_request_names_an_issue_only_as_a_whole_reference` tests in `src/transport/branch/tests.rs`
+    against a real bare remote and a scripted `gh`. One run holds one issue, so correcting several
+    pull requests at once is one session per pull request, each adopting its own branch.
   - **The marker and the branch are bytes the agent can write.** A shell command inside the
     worktree can rewrite the marker or switch the branch back, and nothing places that write.
   - **`draft_pr` publishes a draft and guarantees little else.** It pushes

@@ -1924,6 +1924,128 @@ fn assist_refuses_issue_number_zero() {
     assert!(!trees.exists(), "a worktree directory was made");
 }
 
+fn existing_branch_answers(open_prs: serde_json::Value) -> String {
+    serde_json::json!([
+        crate::test_env::issue_view_answer(
+            12,
+            serde_json::json!({ "state": "OPEN", "title": "A title" })
+        ),
+        {
+            "matches": "pr list --head fix-review",
+            "stdout": open_prs.to_string(),
+            "status": 0,
+        },
+    ])
+    .to_string()
+}
+
+fn assist_on_existing_branch(
+    open_prs: Option<serde_json::Value>,
+) -> (AssistRig, Result<serde_json::Value, Failure>, bool) {
+    let rig = assist_rig();
+    shell(
+        &rig.repo,
+        &["push", "--quiet", "origin", "main:refs/heads/fix-review"],
+    );
+    let trees = rig.root.path().join("trees");
+    let trees_arg = trees.to_string_lossy().into_owned();
+    let what = start_what("fix-review", Some(&trees_arg));
+    let script = match open_prs {
+        Some(open) => existing_branch_answers(open),
+        None => serde_json::json!([
+            crate::test_env::issue_view_answer(
+                12,
+                serde_json::json!({ "state": "OPEN", "title": "A title" })
+            ),
+            { "matches": "pr list --head fix-review", "stdout": "", "status": 1 },
+        ])
+        .to_string(),
+    };
+    let bin = crate::test_env::scripted_gh();
+    let answer = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        super::assist(&rig.context, &what, None)
+    });
+    let made = std::fs::read_dir(rig.root.path())
+        .expect("the root reads")
+        .any(|entry| {
+            entry.is_ok_and(|entry| entry.file_name().to_string_lossy().starts_with("trees"))
+        });
+    (rig, answer, made)
+}
+
+#[test]
+fn assist_refuses_an_existing_branch_that_heads_no_open_pull_request() {
+    let (_rig, answer, made) = assist_on_existing_branch(Some(serde_json::json!([])));
+    let failure = answer.expect_err("a branch with no pull request was adopted");
+    assert_eq!(reason(failure), "assist-branch-not-adoptable");
+    assert!(!made, "a worktree directory was made");
+}
+
+#[test]
+fn assist_refuses_an_existing_branch_whose_pull_request_names_another_issue() {
+    let (_rig, answer, made) = assist_on_existing_branch(Some(serde_json::json!([{
+        "number": 40,
+        "url": "https://example.invalid/pull/40",
+        "title": "Fix the thing",
+        "body": "Refs #120",
+        "headRefName": "fix-review",
+    }])));
+    let failure = answer.expect_err("another issue's pull request was adopted");
+    let envelope = failure.envelope();
+    assert_eq!(envelope["reason"], "assist-branch-not-adoptable");
+    assert!(
+        envelope["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("#40"),
+        "{envelope}"
+    );
+    assert!(!made, "a worktree directory was made");
+}
+
+#[test]
+fn assist_stops_before_any_repository_write_when_the_open_pull_requests_cannot_be_read() {
+    let (rig, answer, made) = assist_on_existing_branch(None);
+    assert!(
+        answer.is_err(),
+        "an unreadable pull request list was read as none"
+    );
+    assert!(!made, "a worktree directory was made");
+    assert!(
+        !repository_state(&rig.repo).0.contains("fix-review"),
+        "a local branch was cut"
+    );
+}
+
+#[test]
+fn assist_adopts_the_head_branch_of_the_issues_open_pull_request() {
+    let (_rig, answer, made) = assist_on_existing_branch(Some(serde_json::json!([{
+        "number": 41,
+        "url": "https://example.invalid/pull/41",
+        "title": "Fix the thing",
+        "body": "Refs #12",
+        "headRefName": "fix-review",
+    }])));
+    let answer = answer.expect("the issue's pull request branch is adopted");
+    assert_eq!(answer["adopted_pr"]["number"], 41);
+    assert_eq!(answer["branch"], "fix-review");
+    assert!(made, "no worktree was made");
+}
+
+#[test]
+fn a_pull_request_names_an_issue_only_as_a_whole_reference() {
+    let pr = |title: &str, body: &str, head: &str| serde_json::json!({ "title": title, "body": body, "headRefName": head });
+    let number = crate::identity::Identity::Number(12);
+    let key = crate::identity::Identity::Key("ABC-102".to_owned());
+    assert!(super::names_issue(&pr("", "Refs #12.", "x"), &number));
+    assert!(!super::names_issue(&pr("", "Refs #120", "x"), &number));
+    assert!(!super::names_issue(&pr("", "", "issue-12"), &number));
+    assert!(super::names_issue(&pr("", "", "alexis/abc-102-fix"), &key));
+    assert!(super::names_issue(&pr("[ABC-102] fix", "", "x"), &key));
+    assert!(!super::names_issue(&pr("ABC-1020", "", "x"), &key));
+    assert!(!super::names_issue(&pr("XABC-102", "", "x"), &key));
+}
+
 fn sibling_checkout(
     repo: &std::path::Path,
     root: &std::path::Path,
