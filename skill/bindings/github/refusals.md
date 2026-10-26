@@ -7,6 +7,17 @@ and nothing was written — retrying the same call unchanged will produce the sa
 |---|---|---|
 | `unknown-operation` | The operation name is not one that exists. | Use a name from the operations table in `github.md`. |
 | `missing-argument` | A required argument was not passed. The refusal names it in `argument`. | Pass it and call again. |
+| `review-wait-invalid` | CI polling has no expected head or exceeds 300 seconds. | Pass the published `expected_head` and a wait from 0 through 300 to `review_stages`. |
+| `assisted-review-head-moved` | The PR branch, head or polling base changed. | Read the new published head and restart CI/review inspection; do not reuse old evidence. |
+| `review-thread-invalid` | A reply is blank, a SHA is incomplete, or resolution has no fix SHA. | Supply a reply file, full `expected_head`, and `fix_commit` when resolving. |
+| `review-thread-pr-unconfined` | There is not exactly one open PR or the thread does not belong to it. | Read the claimed branch's PR and use its thread ID. |
+| `review-thread-fix-unpublished` | The fix is not strictly after the thread's original commit and already on the published head, or ancestry is unknown. | Publish the correction first and supply its confirmed head and fix SHA. |
+| `review-thread-write-unconfirmed` | A reply or resolution may have landed without a confirming readback. | Read the thread before retrying. Preserve `reply_confirmed`; do not claim resolution completed. |
+| `draft-pr-branch-not-checked-out` | The checkout does not have the pointer's branch checked out. | Return to the checkout/branch recorded by `assist`. |
+| `draft-pr-exists-ready` | A ready PR exists and correction policy is `refuse`. | A person decides the repository's correction policy; the run does not override it. |
+| `draft-pr-redraft-not-read-back` | A requested return to draft was not confirmed; no correction was pushed. | Read the PR before attempting publication again. |
+| `closing-keyword-live` | Title, body or commits would close an issue on merge. | Remove the closing keyword before publication. |
+| `ambiguous-open-prs` | Multiple open PRs name the branch. | A person settles which PR owns that branch before publication. |
 | `malformed-argument` | An argument was passed and could not be read as what it has to be — an issue number that is not a number. The refusal carries the `value` it was given. | Correct it and call again. |
 | `blank-argument` | A required argument arrived carrying nothing. It is neither missing nor malformed, and it is refused because every one of these is taken into the world as a name: an empty `--to` writes `status:` with nothing after the colon, an empty `--run-id` claims an issue for nobody. The refusal names the flag in `argument` and in its own sentence. | Send the value and call again. |
 | `incomplete-review-transaction` | A review operation did not carry a 32-hex epoch, positive PR, full lowercase head/base SHAs, or 64-hex digest. | Correct the invocation from the latest `publish_review` answer; do not shorten or reconstruct receipt fields. |

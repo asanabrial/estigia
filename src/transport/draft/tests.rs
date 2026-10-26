@@ -396,6 +396,137 @@ fn a_correction_is_pushed_to_a_ready_pull_request_when_the_row_says_push_ready()
 }
 
 #[test]
+fn assisted_publication_never_follows_tags_from_git_configuration() {
+    let rig = rig();
+    git(rig.repo(), &["config", "push.followTags", "true"]);
+    git(
+        rig.repo(),
+        &["tag", "-a", "foreign-tag", "-m", "not claimed"],
+    );
+    let body = rig.body("Words.");
+    let bin = crate::test_env::scripted_gh();
+    let answers = script(&serde_json::json!([]), &view(&rig.head, true));
+    crate::test_env::with_scripted_gh(bin.path(), &answers, || rig.call("A title", &body))
+        .expect("the branch is published");
+    assert!(git(rig.repo(), &["ls-remote", "--tags", "origin"]).is_empty());
+}
+
+#[test]
+fn an_assisted_correction_cannot_force_a_rewritten_branch() {
+    let mut rig = rig();
+    let body = rig.body("Words.");
+    let bin = crate::test_env::scripted_gh();
+    crate::test_env::with_scripted_gh(
+        bin.path(),
+        &script(&serde_json::json!([]), &view(&rig.head, true)),
+        || rig.call("A title", &body),
+    )
+    .unwrap();
+    let published = rig.head.clone();
+    git(
+        rig.repo(),
+        &[
+            "commit",
+            "--amend",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            "rewritten",
+        ],
+    );
+    rig.head = git(rig.repo(), &["rev-parse", "HEAD"]);
+    let answers = script(
+        &serde_json::json!([view(&published, false)]),
+        &view(&rig.head, false),
+    );
+    crate::test_env::with_scripted_gh(bin.path(), &answers, || {
+        rig.call_correcting("A title", &body, Corrections::PushReady)
+    })
+    .expect_err("rewritten history was forced");
+    assert!(
+        git(rig.repo(), &["ls-remote", "origin", "refs/heads/issue-12"]).starts_with(&published)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn followup_publication_works_with_husky_and_a_worktree_without_generated_hooks() {
+    use std::os::unix::fs::PermissionsExt;
+
+    for ready in [false, true] {
+        for installed in [false, true] {
+            let mut rig = rig();
+            git(rig.repo(), &["config", "core.hooksPath", ".husky/_"]);
+            git(rig.repo(), &["checkout", "--quiet", "main"]);
+            let tree = rig.root.path().join("tree");
+            git(
+                rig.repo(),
+                &[
+                    "worktree",
+                    "add",
+                    "--quiet",
+                    tree.to_str().unwrap(),
+                    "issue-12",
+                ],
+            );
+            rig.context.repo_dir = tree;
+            let shim = rig.repo().join(".husky/_/pre-push");
+            let text = "#!/bin/sh\n[ ! -f .husky/pre-push ] || sh .husky/pre-push\nexit 0\n";
+            if installed {
+                std::fs::create_dir_all(shim.parent().unwrap()).unwrap();
+                std::fs::write(&shim, text).unwrap();
+                std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
+                std::fs::write(
+                    rig.repo().join(".husky/pre-push"),
+                    "echo husky-ran > husky-ran\n",
+                )
+                .unwrap();
+            } else {
+                assert!(!rig.repo().join(".husky/_").exists());
+            }
+            let body = rig.body("Words.");
+            let bin = crate::test_env::scripted_gh();
+            let first = script(&serde_json::json!([]), &view(&rig.head, true));
+            crate::test_env::with_scripted_gh(bin.path(), &first, || rig.call("A title", &body))
+                .unwrap();
+            let old_head = rig.head.clone();
+            git(
+                rig.repo(),
+                &[
+                    "commit",
+                    "--quiet",
+                    "--allow-empty",
+                    "-m",
+                    "fix review feedback",
+                ],
+            );
+            rig.head = git(rig.repo(), &["rev-parse", "HEAD"]);
+            let next = script(
+                &serde_json::json!([view(&old_head, !ready)]),
+                &view(&rig.head, !ready),
+            );
+            let answer = crate::test_env::with_scripted_gh(bin.path(), &next, || {
+                rig.call_correcting("A title", &body, Corrections::PushReady)
+            })
+            .unwrap();
+            assert_eq!(answer["head"], rig.head);
+            assert_eq!(answer["draft"], !ready);
+            assert!(
+                git(rig.repo(), &["ls-remote", "origin", "refs/heads/issue-12"])
+                    .starts_with(&rig.head)
+            );
+            assert_eq!(git(rig.repo(), &["config", "core.hooksPath"]), ".husky/_");
+            if installed {
+                assert_eq!(std::fs::read_to_string(&shim).unwrap(), text);
+                assert!(rig.repo().join("husky-ran").exists());
+            } else {
+                assert!(!shim.exists());
+            }
+        }
+    }
+}
+
+#[test]
 fn a_ready_pull_request_goes_back_to_draft_before_the_push_when_the_row_says_redraft() {
     let rig = rig();
     let body = rig.body("Words.");

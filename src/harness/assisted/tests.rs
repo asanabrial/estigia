@@ -343,6 +343,36 @@ fn a_shell_pull_request_is_refused_and_names_the_draft_pr_tool() {
 }
 
 #[test]
+fn an_assisted_api_mutation_cannot_bypass_pushed_fix_verification() {
+    let mut rig = new_rig();
+    let decision = decide(&mut rig, &boundary("gh api"), Sensitivity::Boundary);
+    assert_eq!(denied_as(&decision), "assisted-api-mutation-unverified");
+}
+
+#[test]
+fn a_pre_execution_push_names_the_effective_missing_hook_and_supported_publisher() {
+    let mut rig = new_rig();
+    git(&rig.worktree, &["config", "core.hooksPath", ".husky/_"]);
+    let decision = decide(&mut rig, &boundary("git push"), Sensitivity::Boundary);
+    let Decision::Deny(refusal) = decision else {
+        panic!("not refused");
+    };
+    let text = refusal.to_string();
+    assert!(
+        text.contains(".husky/_/pre-push") || text.contains(".husky\\_\\pre-push"),
+        "{text}"
+    );
+    assert!(
+        text.contains("Absent") && text.contains("Git has not run"),
+        "{text}"
+    );
+    assert!(
+        text.contains("draft_pr") && text.contains("push-ready"),
+        "{text}"
+    );
+}
+
+#[test]
 fn a_shell_command_the_gate_cannot_place_is_not_blamed_on_a_write_tool() {
     let mut rig = new_rig();
     let decision = write_to(&mut rig, "patch");

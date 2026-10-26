@@ -1001,6 +1001,7 @@ fn inventory() -> Vec<Refusal> {
         "assisted-does-not-deliver",
         "assisted-publishes-through-draft-pr",
         "assisted-push-unconfined",
+        "assisted-api-mutation-unverified",
     ] {
         refusals.push(Refusal::not_started(
             code,

@@ -1276,7 +1276,11 @@ fn run_tool_asking(
         flags.push(key);
     }
 
-    if matches!(tool.operation, "draft-pr" | "ready-pr" | "review-stages") {
+    let verifies_thread = tool.operation == "review-thread";
+    if matches!(
+        tool.operation,
+        "draft-pr" | "ready-pr" | "review-stages" | "review-thread"
+    ) {
         let (Some(branch), Some(worktree), true) = (&run.branch, &run.worktree, run.assisted)
         else {
             return Err(ToolFailure::Refused(Box::new(Refusal::not_started(
@@ -1291,9 +1295,17 @@ fn run_tool_asking(
                 ),
             ))));
         };
+        if verifies_thread {
+            super::assisted::standing(&run).map_err(|why| ToolFailure::Refused(Box::new(Refusal::not_started(
+                "assisted-claim-stale",
+                format!("{run_id}'s local claim no longer matches this checkout: {why}"),
+                Resolution::no_command(crate::outcome::NoCommandReason::OperatorKnowledge,
+                    "the ownership marker and checked-out branch matching this run's recorded local claim"),
+            ))))?;
+        }
         flags.push("--branch".to_owned());
         flags.push(branch.clone());
-        if matches!(tool.operation, "draft-pr" | "ready-pr") {
+        if matches!(tool.operation, "draft-pr" | "ready-pr" | "review-thread") {
             flags.push("--worktree".to_owned());
             flags.push(worktree.display().to_string());
         }
