@@ -656,12 +656,15 @@ pointer that leaves it names the document it points at.
 
 - **Three debug-only overrides keep the suite off production waits and double work, and a `--release`
   build compiles all three out.** `ESTIGIA_UNSAFE_SKIP_FSYNC` (`src/paths.rs`'s `fsync_skipped`) turns
-  `sync_durably`/`sync_parent` into no-ops; in-process tests arm it through
+  `sync_durably`/`sync_parent` into no-ops and opens the local store with `synchronous = OFF` instead
+  of `FULL` (`durability` in `src/transport/store/mod.rs`), so a fresh store's fifteen migration commits
+  flush nothing; in-process tests arm it through
   `set_fsync_skip_for_tests`. `ESTIGIA_TEST_READBACK_NO_WAIT` (`readback_wait_is_disabled` in
   `src/transport/claim.rs`) makes `publish_with` skip the 2+4+…+18 = 90 s read-back sleeps.
   `ESTIGIA_TEST_SKIP_PREVIEW` (`preview_skipped` in `src/setup/mod.rs`) skips setup's dry-run preview;
   a fixture exercising it arms `with_preview`. Each is read under `cfg(debug_assertions)`.
-  `with_real_fsync` drives `the_real_fsync_paths_run_when_the_debug_skip_is_off`;
+  `with_real_fsync` drives `the_real_fsync_paths_run_when_the_debug_skip_is_off` and
+  `the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema`, which still pins `FULL`;
   `the_debug_only_overrides_are_compiled_out_of_release` asserts all three env reads sit under
   `cfg(debug_assertions)` and not `cfg(test)` alone; two lib tests pin `PUBLISH_READBACK_ATTEMPTS` and
   `PUBLISH_READBACK_RETRY_BASE_SECS` to the production constants. Not measured: a full publish that

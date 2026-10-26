@@ -254,7 +254,7 @@ fn entries_refuse_update_and_delete() {
 
 #[test]
 fn the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema() {
-    let (_directory, store) = open();
+    let (_directory, store) = crate::paths::with_real_fsync(open);
     let connection = store.connection();
 
     let mode: String = connection
@@ -271,6 +271,17 @@ fn the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema() {
     assert_eq!(keys, 1);
     assert_eq!(synchronous, 2, "FULL");
     assert_eq!(store.schema_version().expect("reads"), 15);
+}
+
+#[cfg(debug_assertions)]
+#[test]
+fn a_test_build_that_skips_fsync_opens_the_store_without_syncing() {
+    let (_directory, store) = open();
+    let synchronous: i64 = store
+        .connection()
+        .query_row("PRAGMA synchronous", [], |row| row.get(0))
+        .expect("reads");
+    assert_eq!(synchronous, 0, "OFF");
 }
 
 #[test]
