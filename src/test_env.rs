@@ -647,7 +647,12 @@ fn copy_tree(from: &Path, to: &Path, template_name: &str, copy_name: &str) {
             copy_tree(&source, &destination, template_name, copy_name);
         } else if names_a_checkout(&entry.file_name()) {
             let text = std::fs::read_to_string(&source).expect("Git metadata is text");
-            std::fs::write(&destination, text.replace(template_name, copy_name))
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&destination)
+                .expect("a new file for the copied Git metadata");
+            std::io::Write::write_all(&mut file, text.replace(template_name, copy_name).as_bytes())
                 .expect("re-pointed Git metadata");
         } else {
             std::fs::copy(&source, &destination).expect("a copied file");
