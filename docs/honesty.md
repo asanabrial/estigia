@@ -4099,7 +4099,7 @@ pointer that leaves it names the document it points at.
   the neutral `~/.agents` root are known. The other three supported adapters have a verified *instruction* file
   and an unverified skill directory, so their skill lands in the shared root and the directive names
   the path. `estigia setup` says so on the line where it matters.
-- **No public Release exists, and `update` does not query a remote in this slice.** Six build targets
+- **No public Release exists, and `update` does not query a remote in this slice.** Five build targets
   have to be produced before `install.sh` has anything to download. `estigia update` can report only
   local recorded provenance and release high-water; it explicitly reports the latest public release
   as unavailable and does not claim currency from absence. The JSON is not authenticated against a

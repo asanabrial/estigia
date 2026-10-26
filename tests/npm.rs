@@ -34,6 +34,7 @@ fn installer_targets() -> Vec<String> {
         .map(str::to_owned)
         .collect();
     targets.sort();
+    targets.dedup();
     targets
 }
 
@@ -49,8 +50,21 @@ fn crate_version() -> String {
 #[test]
 fn the_npm_installer_offers_exactly_the_targets_the_release_builds() {
     let release = release_targets();
-    assert_eq!(release.len(), 6, "release.yml builds {release:?}");
+    assert_eq!(release.len(), 5, "release.yml builds {release:?}");
     assert_eq!(installer_targets(), release);
+}
+
+#[test]
+fn windows_on_arm_resolves_the_x86_64_binary() {
+    let installer = read("npm/bin/estigia.js");
+    let entry = installer
+        .lines()
+        .find(|line| line.trim_start().starts_with("\"win32-arm64\""))
+        .unwrap_or_else(|| panic!("npm/bin/estigia.js has no win32-arm64 entry"));
+    assert!(
+        entry.contains("triple: \"x86_64-pc-windows-msvc\""),
+        "win32-arm64 resolves {entry:?}, and no aarch64 Windows archive is published"
+    );
 }
 
 #[test]
