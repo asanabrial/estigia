@@ -201,15 +201,51 @@ fn reads_and_estigias_own_commands_are_unaffected() {
     }
 }
 
+fn push(context: &GateContext) -> Decision {
+    unclaimed_edit(
+        context,
+        "Bash",
+        serde_json::json!({ "command": "git push origin main" }),
+    )
+}
+
 #[test]
-fn a_boundary_write_is_left_to_the_checks_that_already_hold_it() {
+fn an_unclaimed_push_is_held_as_an_unclaimed_commit_is() {
+    let (_repo, _root, context) = rig(IssueRequirement::Ask);
+    let decision = push(&context);
+    assert!(
+        matches!(&decision, Decision::Ask(refusal) if refusal.code == CODE),
+        "{decision:?}"
+    );
+    let (_repo, _root, context) = rig(IssueRequirement::Required);
+    let decision = push(&context);
+    assert!(
+        matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
+        "{decision:?}"
+    );
+    let (_repo, _root, context) = rig(IssueRequirement::Off);
+    assert_eq!(push(&context), Decision::Outside(Aside::NothingSworn));
+}
+
+#[test]
+fn an_unclaimed_push_is_asked_under_a_read_only_tracker() {
+    let (_repo, _root, context) = rig(IssueRequirement::Ask);
+    let context = under_linear(context);
+    assert!(matches!(push(&context), Decision::Ask(_)));
+}
+
+#[test]
+fn a_boundary_other_than_a_push_is_left_to_the_checks_that_already_hold_it() {
     let (_repo, _root, context) = rig(IssueRequirement::Required);
     let decision = unclaimed_edit(
         &context,
         "Bash",
-        serde_json::json!({ "command": "git push origin main" }),
+        serde_json::json!({ "command": "gh pr merge 3 --merge" }),
     );
-    assert_eq!(decision, Decision::Outside(Aside::NothingSworn));
+    assert!(
+        !matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
+        "{decision:?}"
+    );
 }
 
 #[test]
