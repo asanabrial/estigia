@@ -17,6 +17,7 @@ const UNAVAILABLE: &[&str] = &[
     "capture-running",
     "checks-runner-lost",
     "clock-unreadable",
+    "feed-store-unreadable",
     "config-local-unreadable",
     "correction-state-unparseable",
     "draft-pr-readback-failed",
@@ -156,6 +157,8 @@ const UNKNOWN: &[&str] = &[
     "write-failed",
 ];
 const REFUSED: &[&str] = &[
+    "feed-repo-unknown",
+    "feed-since-malformed",
     "review-wait-invalid",
     "review-thread-invalid",
     "review-thread-pr-unconfined",

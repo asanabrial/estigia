@@ -47,6 +47,7 @@ macro_rules! say {
     }};
 }
 
+mod feed;
 pub(crate) mod sessions;
 
 /// The same line, into a string rather than onto the terminal.
@@ -319,6 +320,24 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             limit,
             cursor,
         } => sessions_command(action.as_ref(), *all, *limit, cursor.as_deref(), cli.json),
+
+        Command::Feed {
+            repo,
+            runtime,
+            run,
+            issue,
+            kind,
+            since,
+            bodies,
+            limit,
+            cursor,
+        } => feed::feed(
+            cli.json,
+            &serde_json::json!({
+                "repo": repo, "runtime": runtime, "run": run, "issue": issue, "kind": kind,
+                "since": since, "bodies": bodies, "limit": limit, "cursor": cursor,
+            }),
+        ),
 
         Command::Update => update(cli.json),
 
