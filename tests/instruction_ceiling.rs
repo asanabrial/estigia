@@ -26,12 +26,12 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/agents/review-risk.md", 4_276),
     ("skill/agents/review-validator.md", 1_998),
     ("skill/assets/analyst-issue-template.md", 3_790),
-    ("skill/bindings/github.md", 18_354),
+    ("skill/bindings/github.md", 18_397),
     ("skill/bindings/github/delivery.md", 42_206),
     ("skill/bindings/github/operations-guarantees.md", 37_422),
     ("skill/bindings/github/operations.md", 53_510),
     ("skill/bindings/github/recovery.md", 6_571),
-    ("skill/bindings/github/refusals.md", 54_453),
+    ("skill/bindings/github/refusals.md", 56_314),
     ("skill/bindings/github/setup.md", 1_611),
     ("skill/bindings/linear.md", 5_999),
     ("skill/policies/blind-judges.md", 42_284),
@@ -41,7 +41,7 @@ const DOCUMENTS: &[(&str, usize)] = &[
     ("skill/references/decision-gates.md", 4_198),
     ("skill/references/domain-composition.md", 9_798),
     ("skill/references/repository-delivery.md", 22_898),
-    ("skill/references/runtime-notes.md", 20_763),
+    ("skill/references/runtime-notes.md", 21_636),
     ("skill/references/safety-incidents.md", 16_216),
 ];
 

@@ -79,6 +79,7 @@ const UNAVAILABLE: &[&str] = &[
     "working-directory-unknown",
 ];
 const STALE: &[&str] = &[
+    "assisted-review-head-moved",
     "already-owned-by-different-operation",
     "assisted-claim-not-in-force",
     "assisted-claim-stale",
@@ -141,6 +142,7 @@ const STALE: &[&str] = &[
     "verdict-bound-to-other-bytes",
 ];
 const UNKNOWN: &[&str] = &[
+    "review-thread-write-unconfirmed",
     "ambiguous-write",
     "handoff-row-unwritten",
     "linear-move-not-read-back",
@@ -154,6 +156,10 @@ const UNKNOWN: &[&str] = &[
     "write-failed",
 ];
 const REFUSED: &[&str] = &[
+    "review-wait-invalid",
+    "review-thread-invalid",
+    "review-thread-pr-unconfined",
+    "review-thread-fix-unpublished",
     "agent-configuration-unwritable",
     "agent-file-not-editable",
     "agent-not-named",
@@ -165,7 +171,9 @@ const REFUSED: &[&str] = &[
     "ambiguous-changelog-entry",
     "ambiguous-open-prs",
     "approved-republish-without-cause",
+    "assist-branch-not-adoptable",
     "assist-issue-does-not-match-the-tracker",
+    "assisted-api-mutation-unverified",
     "assisted-does-not-deliver",
     "assisted-merge-is-the-persons",
     "assisted-outside-the-worktree",

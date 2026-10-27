@@ -25,7 +25,7 @@ $repo = 'asanabrial/estigia'
 $installDir = if ($env:ESTIGIA_INSTALL_DIR) { $env:ESTIGIA_INSTALL_DIR } else { "$env:LOCALAPPDATA\estigia\bin" }
 $version = if ($env:ESTIGIA_VERSION) { $env:ESTIGIA_VERSION } else { 'latest' }
 
-# Named in every refusal that has no prebuilt binary to offer. Six build targets
+# Named in every refusal that has no prebuilt binary to offer. Five build targets
 # have to exist before anyone can install; until they do, a source build is the
 # continuation that always works, and a refusal that does not name it is a dead
 # end.
@@ -38,7 +38,7 @@ function Fail($message) {
 
 $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
     'AMD64' { 'x86_64' }
-    'ARM64' { 'aarch64' }
+    'ARM64' { 'x86_64' }
     default { Fail "no prebuilt Estigia for $($env:PROCESSOR_ARCHITECTURE); build from source with '$sourceBuild'" }
 }
 $target = "$arch-pc-windows-msvc"

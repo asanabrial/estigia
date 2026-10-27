@@ -144,6 +144,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `task` `evidence`, then `create` `repo` and the `flush` window wording | 35 | 47,044 |
 | Ten core tools carry `_meta` (+380) and every tool takes `compact` (+1,015, paid for by trimming) | 36 | 48,496 |
 | `release` `spend` fields, then `ready_pr`, `review_stages`, `run_checks` and `deliver` join | — | 51,747 |
+| `review_thread` and exact-head CI polling parameters; typed mutations replace unverified API writes | 41 | 53,203 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the

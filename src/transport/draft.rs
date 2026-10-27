@@ -263,7 +263,7 @@ fn draft_with_sleep(
         }
     }
 
-    push_to_origin(worktree, branch, Push::FastForward)?;
+    push_to_origin(worktree, branch, Push::ConfinedFastForward)?;
     let committed = |failure: Failure| match failure {
         Failure::Read(detail) | Failure::RateLimited(detail) | Failure::Write(detail) => {
             Failure::Write(format!(

@@ -97,6 +97,18 @@ fn branch_checked_out(branch: &str, worktree: &Path) -> Result<(), String> {
     }
 }
 
+pub(super) fn standing(run: &Run) -> Result<String, String> {
+    let issue = run.issue.as_ref().ok_or("the pointer names no issue")?;
+    let branch = run.branch.as_deref().ok_or("the pointer names no branch")?;
+    let worktree = run
+        .worktree
+        .as_deref()
+        .ok_or("the pointer names no worktree")?;
+    marker_agrees(run, issue, branch, worktree)?;
+    branch_checked_out(branch, worktree)?;
+    Ok(branch.to_owned())
+}
+
 pub(super) fn decision(
     context: &GateContext,
     run: &mut Run,
@@ -196,16 +208,7 @@ pub(super) fn decision(
         ));
     }
 
-    let standing = run
-        .branch
-        .clone()
-        .ok_or_else(|| "the pointer names no branch".to_owned())
-        .and_then(|branch| {
-            marker_agrees(run, &issue, &branch, &worktree)?;
-            branch_checked_out(&branch, &worktree)?;
-            Ok(branch)
-        });
-    let branch = match standing {
+    let branch = match standing(run) {
         Ok(branch) => branch,
         Err(why) => {
             return deny(Refusal::not_started(
@@ -225,6 +228,13 @@ pub(super) fn decision(
     run.mark_verified();
 
     if let Action::Boundary { command, .. } = action {
+        if command == "gh api" {
+            return deny(Refusal::not_started(
+                "assisted-api-mutation-unverified",
+                "an API mutation has no verified pull request, thread or pushed fix in this run",
+                way_out("the typed `review_thread` tool for review replies and resolutions"),
+            ));
+        }
         if super::is_delivery(action) {
             return deny(Refusal::not_started(
                 "assisted-does-not-deliver",
@@ -244,13 +254,22 @@ pub(super) fn decision(
         if command == "git push" {
             let wanted = format!("refs/heads/{branch}");
             if observed.push_refs.is_empty() {
+                let hooks = super::guard::hooks_directory(&context.repo_dir)
+                    .map(|path| path.join(super::guard::HOOK).display().to_string())
+                    .unwrap_or_else(|_| "unknown".to_owned());
+                let hook_state = super::guard::state(&context.repo_dir);
                 return deny(Refusal::not_started(
                     "assisted-push-unconfined",
                     format!(
-                        "a push is admitted only for {wanted}, and the refs it names are known \
-                         only to the pre-push hook, which has not spoken for this call"
+                        "this pre-execution call cannot supply Git's pushed refs for {wanted}; \
+                         Git has not run, so installing a hook cannot admit this call. \
+                         Effective pre-push hook: {hooks} ({hook_state:?})"
                     ),
-                    way_out("the push made where git's own pre-push hook reads its refs"),
+                    way_out(
+                        "the `draft_pr` tool, which publishes the claimed branch fast-forward; \
+                        a ready PR follows `Corrections after ready` (`push-ready`, `redraft` or \
+                        `refuse`), without changing Git hooks",
+                    ),
                 ));
             }
             if observed

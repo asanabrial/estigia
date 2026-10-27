@@ -656,12 +656,15 @@ pointer that leaves it names the document it points at.
 
 - **Three debug-only overrides keep the suite off production waits and double work, and a `--release`
   build compiles all three out.** `ESTIGIA_UNSAFE_SKIP_FSYNC` (`src/paths.rs`'s `fsync_skipped`) turns
-  `sync_durably`/`sync_parent` into no-ops; in-process tests arm it through
+  `sync_durably`/`sync_parent` into no-ops and opens the local store with `synchronous = OFF` instead
+  of `FULL` (`durability` in `src/transport/store/mod.rs`), so a fresh store's fifteen migration commits
+  flush nothing; in-process tests arm it through
   `set_fsync_skip_for_tests`. `ESTIGIA_TEST_READBACK_NO_WAIT` (`readback_wait_is_disabled` in
   `src/transport/claim.rs`) makes `publish_with` skip the 2+4+…+18 = 90 s read-back sleeps.
   `ESTIGIA_TEST_SKIP_PREVIEW` (`preview_skipped` in `src/setup/mod.rs`) skips setup's dry-run preview;
   a fixture exercising it arms `with_preview`. Each is read under `cfg(debug_assertions)`.
-  `with_real_fsync` drives `the_real_fsync_paths_run_when_the_debug_skip_is_off`;
+  `with_real_fsync` drives `the_real_fsync_paths_run_when_the_debug_skip_is_off` and
+  `the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema`, which still pins `FULL`;
   `the_debug_only_overrides_are_compiled_out_of_release` asserts all three env reads sit under
   `cfg(debug_assertions)` and not `cfg(test)` alone; two lib tests pin `PUBLISH_READBACK_ATTEMPTS` and
   `PUBLISH_READBACK_RETRY_BASE_SECS` to the production constants. Not measured: a full publish that
@@ -969,7 +972,7 @@ pointer that leaves it names the document it points at.
 
   | Surface | Bytes | How measured |
   |---|---:|---|
-  | `skill/bindings/github.md` | 18,354 | file on disk |
+  | `skill/bindings/github.md` | 18,397 | file on disk |
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
@@ -4099,7 +4102,7 @@ pointer that leaves it names the document it points at.
   the neutral `~/.agents` root are known. The other three supported adapters have a verified *instruction* file
   and an unverified skill directory, so their skill lands in the shared root and the directive names
   the path. `estigia setup` says so on the line where it matters.
-- **No public Release exists, and `update` does not query a remote in this slice.** Six build targets
+- **No public Release exists, and `update` does not query a remote in this slice.** Five build targets
   have to be produced before `install.sh` has anything to download. `estigia update` can report only
   local recorded provenance and release high-water; it explicitly reports the latest public release
   as unavailable and does not claim currency from absence. The JSON is not authenticated against a
@@ -5854,10 +5857,12 @@ pointer that leaves it names the document it points at.
     leaves outside a thread, or a summary review, is not read, and a thread somebody resolves without
     addressing it counts as addressed. For `any` and `org/team` a review from any account other than
     the author, a `[bot]` or a check stage's author satisfies the stage — team membership is not read.
-    An approval completes a review stage whichever commit it was given on, as GitHub keeps it unless
-    the repository dismisses stale approvals. A list GitHub answers with a next page — more than a
-    hundred threads, reviews, requests or check runs — refuses the reading rather than deciding
-    from the first page. A blocking check that is not reported on the head holds the stages behind it
+    An approval completes a review stage only for the current head; GitHub does not expose the
+    historical base that reviewer read. Exact-head polling, full thread conversations, guarded
+    reply/resolution and their non-atomic mutation limit are in [assisted review](assisted-review.md).
+    A list GitHub answers with a next page — more than a hundred threads, comments per thread,
+    reviews, requests or check runs — refuses the reading rather than deciding from the first page.
+    A blocking check that is not reported on the head holds the stages behind it
     and says it was never reported, because a check that has not started yet and a stage name that
     matches no check look the same from here; an advisory check never holds them. Measured by
     `src/transport/stages/tests.rs` against a fake `gh`, including that no review is requested while
@@ -6778,7 +6783,9 @@ pointer that leaves it names the document it points at.
   - **A write the hook does not intercept is not held.** A tool no matcher wakes for, an editor or
     script that writes through a shell line naming none of the git fragments, a formatter run over
     the tree, or another clone, passes. The row is as wide as the classifier and no wider.
-  - **Only a routine write is held.** A boundary — a push, a merge, a tag, a write to a control-surface
+  - **Only a routine write and a `git push` are held.** A push is held as a commit is, so publishing
+    is never less guarded than recording (`an_unclaimed_push_is_held_as_an_unclaimed_commit_is`).
+    Every other boundary — a merge, a tag, a write to a control-surface
     file — is answered by the checks that already hold it, so an unclaimed run writing
     `.git/estigia/estigia.local.md` through a shell line is not stopped by this row, and can set it
     to `off`. `unclaimed-commit` stays what it was, and answers first where the push guard is installed.
@@ -6916,8 +6923,20 @@ pointer that leaves it names the document it points at.
     `no_effect_but_the_assisted_decision_leaves_a_stamp_on_an_assisted_pointer` and
     `a_later_swear_makes_the_pointer_a_tracker_claim_again`.
   - **An unsworn session in the worktree is not stopped by this.** `issue_requirement` reads an
-    assisted pointer's worktree as claimed, whichever session writes there, and `unclaimed::refusal`
-    catches a commit or a push only where the push guard is installed.
+    assisted pointer's worktree as claimed for a routine write, whichever session writes there, and
+    `unclaimed::refusal` catches a commit only where the push guard is installed. A `git push` from
+    that session is the exception: it is held by `Unclaimed write policy` wherever it runs.
+  - **`assist` adopts an existing branch through its pull request, read as text.** A branch origin
+    already has is taken only when it heads exactly one open pull request whose title, body or head
+    branch names the issue (`#12` for a number, `ABC-102` for a key, case-insensitive, as a whole
+    reference); otherwise it is refused `assist-branch-not-adoptable`, and a failed read stops before
+    any repository write. The mention is the reference Linear's GitHub integration links by, but
+    Linear's own attachment is not read, the pull request's author is not checked, and a branch this
+    run published through `draft_pr` with a title and body that never named the issue cannot be
+    taken again by `assist`. Measured by the `assist_*existing_branch*`, `assist_adopts_*` and
+    `a_pull_request_names_an_issue_only_as_a_whole_reference` tests in `src/transport/branch/tests.rs`
+    against a real bare remote and a scripted `gh`. One run holds one issue, so correcting several
+    pull requests at once is one session per pull request, each adopting its own branch.
   - **The marker and the branch are bytes the agent can write.** A shell command inside the
     worktree can rewrite the marker or switch the branch back, and nothing places that write.
   - **`draft_pr` publishes a draft and guarantees little else.** It pushes

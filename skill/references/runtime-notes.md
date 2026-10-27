@@ -53,6 +53,16 @@ person's review is requested with `request_review` only once every earlier stage
 is `person` the run stops at *awaiting-merge*, and reports the merge only when `review_stages`
 reads `merged` with the merge commit.
 
+For each follow-up, use `review_stages` with `expected_head` and `wait_seconds` (0-300) to poll
+that published head's CI. A timeout or missing checks is not green. `open_threads` includes all
+authors and full conversations, independent of stage ordering; incomplete lists refuse the reading.
+Fix applicable concerns, commit, and publish with `draft_pr` under `Corrections after ready`.
+Use its confirmed head in `review_thread`: supply the thread ID and reply file; resolving also
+requires `fix_commit`, a descendant of the thread's original commit already on that published head.
+Only the selected threads are resolved, after the reply reads back. A changed head restarts the
+cycle with fresh CI and review evidence. Ordinary shell pushes have no refs before Git runs and
+remain refused; generic API mutations cannot bypass the typed thread checks. Do not replace Husky.
+
 ## Independent review contexts
 
 Adversarial review is an analyst run over a bounded change. It is repository-read-only, produces

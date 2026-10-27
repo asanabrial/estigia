@@ -1,4 +1,4 @@
-# Builds the six archives the installers already know how to fetch.
+# Builds the five archives the installers already know how to fetch.
 #
 # The names here are not free: `scripts/install.sh` and `scripts/install.ps1` compose
 # `estigia-<version>-<triple>` and append `.tar.gz` or `.zip`, and they were
@@ -29,7 +29,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       # Every target is built even when one fails: a matrix that stops at the
-      # first failure reports one broken platform and hides the other five.
+      # first failure reports one broken platform and hides the other four.
       fail-fast: false
       matrix:
         include:
@@ -43,8 +43,6 @@ jobs:
             os: macos-latest
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-          - target: aarch64-pc-windows-msvc
-            os: windows-11-arm
 
     steps:
       # Raised with `ci.yml`'s rather than left behind. The issue this closes
@@ -141,7 +139,7 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # All six or none. A release with four assets is one where two platforms
+      # All five or none. A release with three assets is one where two platforms
       # get "could not reach GitHub" from an installer that is working
       # perfectly — the worst possible reading of a partial publish.
       - name: Refuse a partial release
@@ -149,8 +147,8 @@ jobs:
         run: |
           set -euo pipefail
           found=$(find dist -name 'estigia-*' \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l)
-          if [ "$found" -ne 6 ]; then
-            echo "expected 6 archives, found ${found}:" >&2
+          if [ "$found" -ne 5 ]; then
+            echo "expected 5 archives, found ${found}:" >&2
             find dist -name 'estigia-*' >&2
             exit 1
           fi
