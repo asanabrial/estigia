@@ -1345,845 +1345,219 @@ pointer that leaves it names the document it points at.
   wait on those gates stays in `review` with its exact blocker, even when a named person must supply
   the permission. The Decision Gates table in `skill/SKILL.md` owns those destinations.
 
-  **One shape of restatement is held mechanically and the rest is held by review, and four judges
-  measured where the line falls.** Four copies were removed by hand — the incident ledger's I09
-  protection column, the hard-wrapped handoff bullet beside it in the same file, a five-row table in
-  `repository-delivery.md`, and the routing tail of `SKILL.md`'s own step 6. A guard was written to
-  keep back the first of those and no other — the table is the *surviving* guard's, and an earlier
-  version of this paragraph credited one guard with both. That guard counted how many workflow states
-  a **source line** named, and both judges of its receipt defeated it three ways, and the three are
-  worth keeping apart because a later reader will want to know which test each one belongs to. It **did** catch I09's protection column, which is the copy it was written for. It
-  did **not** catch the hard-wrapped handoff bullet in the same file: that restores byte for byte and
-  passes, because no single line of it reaches the threshold. It could not see a routing table at all,
-  which names one state per row by construction — what a renamed header evades is the *surviving*
-  guard, not this one, and conflating the two was a mistake in an earlier version of this paragraph.
-  And joining two hard-wrapped lines of ordinary prose in this very file reddens it without a word
-  changing: the pair that does it enumerates the state *vocabulary*, four of those names backticked,
-  and enumerating the names is not restating the routing. The substring effect is real and separate —
-  `already` contains `ready` and `reviewer` contains `review`, which inflates the count on many lines
-  of this file — but it is not what defeated the guard here, and an earlier version of this sentence
-  said it was. Measured at both revisions the guard existed at: exactly one adjacent pair crosses the
-  threshold in each, it is the same vocabulary enumeration both times, and deleting every `already`
-  and `reviewer` from it leaves it over the threshold still. That
-  last one is why patching was the wrong move: a guard that reddens on correct prose is not narrow, it
-  is aimed at the wrong object. The guard was withdrawn rather than patched: it measured a source line while the rule
-  it was written for is about a **statement**, and the distance between those two is where all three
-  defeats live.
-
-  So what is left, exactly. **Two tests hold something**, and an earlier version of this paragraph
-  named only the first, which a judge measured as understating the guard shipped beside it:
-
-  - `every_named_disposition_uses_a_transport_state` crosses the Decision Gates table against
-    `STATES` and proves every state is *reachable* — **not** that any particular condition routes to
-    the right one. Swapping two destinations in that table leaves the suite green, measured.
-  - `the_decision_gate_is_not_restated_as_a_second_table` holds two spellings: an arrow followed by a
-    backtick — the assertion is on `-> \``, so it is *stricter* than the Decision Gates table's own
-    notation and catches an arrow into anything backticked at all — in any of the four companion
-    documents, and a table in
-    `repository-delivery.md` whose header cell reads `| Destination |`. Restoring the five-row table
-    this change deleted, byte for byte, reddens it. **Renaming that header and keeping the pointer
-    sentence restores the whole table with the suite green** — measured by a judge, and the hole is
-    named here because the guard cannot name it itself.
-
-  Everything else is held by review: a restatement in prose that uses no arrow, in any of those files,
-  passes. That is not a hypothetical — the handoff bullet this change removed restores byte for byte
-  and nothing objects.
-
-  And `SKILL.md`'s own steps restate the routing outside the section the parse is bounded to;
-  `rg -n 'analysis|ready|in-progress|review|blocked|done' skill/SKILL.md` finds them, and the number of
-  them is deliberately not written here, because a count in this paragraph is the class of claim this
-  document keeps having to correct. Step 7 gained a pointer to the table and kept its restatement:
-  step 6's routing tail became a pointer in this same change while step 7's restatement stayed, so
-  what left the contract is step 6's copy and what remains is step 7's.
+  **Restating the decision gate is held mechanically in one spelling; the rest is held by review.** A
+  guard that counted workflow states per source line was withdrawn: it measured a line while the rule is
+  about a statement, and reddened on correct prose that enumerated the state vocabulary. Two tests hold
+  something. `every_named_disposition_uses_a_transport_state` crosses the Decision Gates table against
+  `STATES` and proves every state is *reachable*, **not** that any condition routes to the right one
+  (swapping two destinations leaves the suite green). `the_decision_gate_is_not_restated_as_a_second_table`
+  holds an arrow followed by a backtick in the four companion documents and a table in
+  `repository-delivery.md` whose header cell reads `| Destination |`; **renaming that header and keeping the
+  pointer sentence restores the whole table with the suite green**. A restatement in prose with no arrow
+  passes, and `SKILL.md`'s own steps restate the routing outside the section the parse is bounded to
+  (`rg -n 'analysis|ready|in-progress|review|blocked|done' skill/SKILL.md`; their number is deliberately
+  not written here).
 - **One review-protocol readback is held by no test, and one is held only by a string search.** The
-  review protocol's guards were mutated one at a time — each disabled, the whole suite run, the tree
-  restored from a byte copy. Held by a test that goes red: all three enforcement points of the
-  requester exclusion (`claim`, `reclaim`, the review queue), the queue's fail-closed candidate read,
-  the verdict's distinctness rule on *both* its halves, its live-claim requirement, the receipt's
+  protocol's guards were mutated one at a time. Held by a test that goes red: all three enforcement points
+  of the requester exclusion (`claim`, `reclaim`, the review queue), the queue's fail-closed candidate
+  read, the verdict's distinctness rule on *both* halves, its live-claim requirement, the receipt's
   exactness on each write path **before** it writes, the CI-release gate, the comment escaping, the
-  read-side requester filter, and every field-shape validator on the four markers — receipt widths,
-  the handoff's authority, target, timestamps and its blocker/discharger, the verdict's two
-  identities and its outcome vocabulary, and the finding's class, origin, identity, evidence and
-  impact shape.
-
-  That sentence used to say "on the write paths" without the qualifier, and it was false: neutering
-  both of `handoff_review`'s receipt checks left the suite green, and a handoff recorded against a
-  superseded receipt excludes nobody while its ownership epoch has already gone — the publishing run
-  eligible again for the item it may not review, which is this repository's own livelock with an
-  audit trail. It is held now. The *second* copy, the one guarding a retry, is a different matter and
-  is named below.
-
-  **Many of the smaller ones are not, and this entry does not claim to have found them all.**
-  `handoff_review`'s post-release readback, which proves the released ownership epoch is no longer
-  authoritative, can be disabled with the suite entirely green. Its retry-path receipt recheck is
-  caught only by `the_compound_handoff_records_before_release_and_checks_review_afterwards`, which
-  searches the source text for the call: that catches deletion, and would not catch the call being
-  made and its answer ignored. Beyond those, an adversarial sweep of forty-nine mutations found a
-  further score of defensive checks — replay-path repeats of rules whose first-write copy *is* held,
-  operation-id and marker-field validators, idempotency and visibility readbacks — that can each be
-  removed with the suite green. They are one class: belt to a brace that a test does hold, which is
-  why the load-bearing list above is the one this file stands behind.
-
-  Two earlier versions of this entry were wrong, in both directions, and how they were wrong is the
-  useful part. The first named five checks as unmeasured on somebody else's report rather than a
-  measurement run here — one of the five was in fact held, and there were more than five. The second
-  said only two were unheld, which understated it by roughly a factor of ten. A count nobody counted
-  is exactly what this document exists to refuse, and it refused itself twice before this sentence
-  was written.
-
-  One caution for whoever mutates next: this crate has tests that anchor on exact whitespace in
-  `claim.rs`, so a mutation harness that rewrites line endings — Python's text mode on Windows will,
-  silently — produces failures that look like a guard being caught and are not. Two of the
-  measurements behind this entry had to be discarded and rerun for that reason.
-- **`ensure_draft`'s two doors are closed.** This entry named them and it is kept as a record of what
-  the gap was, narrowed to what is now true. It runs `gh pr ready --undo`, a remote write, and both
-  its `draft-readback-failed` stop and a failed `view_pr` read used to answer *nothing was written*
-  afterwards — the same lie the post-push refusals had already been fixed for, sitting before the push
-  rather than after it, which is how both fell outside the bar the issue set. `un_readied` carries the
-  world on both now, and both are driven end to end: the read door by a readback that fails, the stop
-  door by a pull request that comes back still ready.
-  What the second door is worth is more than a report. Wrapping the `draft-readback-failed` condition
-  in `if false &&` used to leave the whole suite green, so **nothing stopped a still-ready reused pull
-  request exposing the new head to CI** — the barrier that refusal exists to hold. That mutation is
-  red now, and so is routing its refusal through the shared wording: doing so replaced the action
-  naming the hazard with one inviting an operator to `gh pr ready`, which is the exposure itself.
-
-  Three more, from the same reviews and left with their measurements. The `[world-action]` guidance
-  naming `Refs #<n>` is held by no test — stripping it from either refusal leaves the suite green —
-  though the issue lists it under *unchanged*. `Answer::already_wrote` decides which exit-code arm
-  `translate` takes and sits outside the `exit-code` population fingerprint, and that arm's
-  `StatusRequired` axis is held by the fingerprint alone: a tripwire that says *go and read this*
-  rather than a test of what it does. The pull-request body used to be read three times — by the scan,
-  by `edit_pr`, and by `pr create` — so a body edited between the scan and the write was published
-  unscanned, and the `Closes #<n>` it could gain auto-closes the issue on merge. It is one read now,
-  hoisted above the pull-request listing and carried down as bytes, which is the *one place rather
-  than three* this entry called the fix.
-
-  Two smaller things found in the same review and left: the commit-range scan is one function now, but
-  its two callers still read from different checkouts — `publish_review` from the isolated one where
-  the commits are, `assess_autoclose` from the repository root — and unifying that changes which tree
-  a standalone `check-closing-keywords` inspects, which is a decision rather than a tidy-up. And
-  `keyword_sources` carries two shapes under one key, a list of strings from the precondition and a
-  list of `{where, text}` from `assess_autoclose`. Nothing parses it today, which is the only reason
-  that is a note and not a defect.
-
-  The closing-keyword scan was handed the delivered issue and reported only references to it, so a
-  pull request body saying `close #464` closed #464 on merge with neither the pre-push scan nor
-  `check-closing-keywords` objecting — the incident recorded earlier. The scan now reports every
-  reference, the pre-push refusal takes any of them, `assess_autoclose` carries the ones naming
-  another issue as `other_issue_keywords`, and both the post-push arm and `check-closing-keywords`
-  refuse them. What remains unread: `assess_autoclose` returns before it scans when the delivered
-  issue has no closing pull request, so a body closing another issue from a pull request that does
-  not close the delivered one is refused before the push and not by the standalone check.
-
-- **The follow-up's single-sourcing is named, not observed.** `src/transport/commands.rs`'s
-  `mandatory_follow_up` and `src/transport/claim.rs`'s branch-link follow-up both interpolate
-  `closing::FOLLOW_UP`, and each call site's test compares the emitted text to the constant's value
-  rather than to its source. Re-inlining a byte-identical copy at the `check_closing_keywords` site,
-  verified applied with no remaining reference to the constant, leaves both tests green — measured by
-  making that edit, not reasoned from the shape. What the tests hold is that the text is right; which
-  text it came from is not observed. The clause the test does hold is the transition: deleting
-  `transition --to done` from `FOLLOW_UP` reddens
-  `follow_up_names_both_the_transition_and_the_release` — measured by making that edit.
-
-- **Nothing enumerates the refusals that write before they refuse, and nothing can.** `Answer::already_wrote`
-  decides which arm `translate` takes, and a refusal earns `Committed` only by carrying
-  `"world": "committed"` in its own payload. The enumeration question was decided rather than
-  left implied: no test and no guard enumerates the stops reachable *after* a write, because
-  reachability is a property of the **interleaving** — a marker is posted, a later read comes back
-  without it — and not of the source text. The same function holds stops on both sides of its own
-  write — `claim` checks the horizon and the handoff exclusion before it posts and adjudicates after,
-  and the projection loop stops without having written whenever an earlier pass did — so a walk of the
-  source cannot place a stop relative to a write, and a hand-kept list of the sites would be a second
-  copy of the control flow that drifts silently. What holds each repaired site instead is a test that
-  drives the decision to the refusal and reads it through `translate`; that is what `lost-claim-race` and
-  `lost-reclaim-race` have, and what the five — `claim-operation-no-longer-current`,
-  `ownership-changed-projections-repaired`, `holder-runtime-missing` from the projection loop,
-  `ownership projection write did not read back exactly` and
-  `ownership-kept-changing-before-projection` — gained, together with
-  `reclaim-operation-no-longer-current`, so the two verbs answer a retry alike. The class has now
-  been closed four times — the post-push refusals, then `ensure_draft`'s two doors, then the two lost
-  races, then the five — and each sweep repaired the instances it could see. The fourth sweep's
-  reading also found sites it left silent, named here so the fifth sweep does not have to find them
-  again: `claim-operation-expired` on both its readings, `claim-metadata-mismatch`,
-  `reclaim-metadata-mismatch` and `unassign-metadata-mismatch`, the operation-conflict family —
-  `claim-operation-conflict`, `reclaim-operation-conflict`, `unassign-operation-conflict` and
-  `operation-id-kind-conflict` — `resumed_release`'s two stops and `unassign`'s post-write
-  `held-by-other-holder-disappeared` all answer `NotStarted` over a marker that is on the timeline.
-  None of them was shown unreachable, and
-  none is covered by an enumeration for the reason above. What it costs was measured rather than
-  supposed: on another repository's #318 a run was told twice that nothing had been written, and left two
-  control markers on an issue that no verb reaches.
-
-- **The control surface reaches further than it did, and what it costs is here too.** A
-  write whose path lies outside every checkout the claim covers is answered `outside-the-claim`
-  without asking the tracker — right for a scratch note, right for a `Boundary` write because those
-  stay gated, and wrong for a `Routine` write to a file that governs the harness. The instruction file
-  each adapter's `setup` writes its workflow-authority directive into was exactly that, and so were
-  `~/.claude/settings.local.json` and `~/.claude/agents`.
-
-  Counted on one platform: ten of the eleven adapters' instruction files answered `Routine` at the
-  base commit, OpenCode's being already covered by the `.config/opencode/` entry. Counting spellings
-  rather than adapters adds gemini-cli's `%APPDATA%` path, and the two `~/.claude` entries make
-  thirteen. The basis is stated because three drafts of this sentence carried a bare number, each
-  measured wrong by a different reviewer, and the fourth said twelve over a list of thirteen.
-
-  The instruction files are derived from the adapter table rather than spelled, the way the skill tree
-  is derived from `skill::DIRECTORY` — a hand-spelled copy agrees with the installer only until
-  somebody renames one, which this crate has already paid for once. The crossing that keeps them
-  honest is `every_control_file_an_adapter_has_is_one_the_gate_measures`: it resolves the real path
-  per adapter, on all three platforms, under two `XDG_CONFIG_HOME` layouts, on both roads, and asks
-  about the bare root as well as a file inside it. Every one of those four dimensions was added because a reviewer found a hole the crossing
-  could not see, and the holes are the entry below. Only the first of them was then found by the
-  crossing itself, once it had the dimension — the rest were measured by people, which is the
-  honest attribution and not the flattering one.
-
-  And the crossing catches a stale fragment **only where nothing else already matches the path**.
-  Measured by staling each of the eleven in turn — last component replaced, directory kept — and
-  running the crossing on its own. At the base it reddened for eight and stayed green for three:
-  continue, cline and windsurf, whose paths their rules directories cover independently. **At this
-  head it reddens for one and stays green for ten**, and the one is cursor.
-
-  That is a **cost of the per-project entries**, not a mistake in them, and naming it is the only
-  reason this paragraph exists. `claude.md`, `agents.md`, `gemini.md`, `qwen.md` and `crush.md` are
-  matched as whole segments at any depth, and every adapter's **home** instruction file is named
-  exactly one of those — `~/.claude/CLAUDE.md`, `~/.agents/AGENTS.md`, `~/.codex/AGENTS.md`,
-  `<xdg>/opencode/AGENTS.md`, `~/.gemini/GEMINI.md`, `~/.qwen/QWEN.md`, `<xdg>/crush/CRUSH.md`. So
-  seven fragments the crossing used to hold are now covered incidentally by a literal that has
-  nothing to do with them, on top of the three their rules directories already covered. Cursor is the one left
-  because `estigia-workflow-authority.md` is neither a per-project root file name nor inside a rules
-  directory this crate derives. Three other fragments are not root file names either —
-  `.continue/rules/estigia.md`, `.cline/rules/estigia.md` and `windsurf/memories/global_rules.md` —
-  and they were already covered by their own derived directories, which is the three the base
-  measurement named.
-
-  Nothing is thereby unguarded, and that was measured rather than assumed:
-  `the_spelled_instruction_files_and_the_adapter_table_agree` was run against the same eleven
-  stalings and **reddens for all eleven**. What narrowed is the crossing's own diagnostic value, and
-  this document is the only place that would say so.
-  OpenCode's *was* caught at the base, because the crossing walks the relocated `XDG_CONFIG_HOME`
-  layout where nothing else matched `<moved>/opencode/AGENTS.md`. Four drafts of this sentence have
-  been wrong now — it was deleted with the version of the fix it described, restored saying four,
-  inverted to read as though eight was the small number, and then re-asserted later as a
-  re-measurement that had in fact re-run only three of the eleven and reasoned about the rest. A
-  blind reviewer of that head ran all eleven and found one.
-
-  **What the missing dimensions were hiding.**
-  `%APPDATA%\gemini\settings.json` — where this harness registers Gemini's own deny hook — answered
-  `Routine`, because only the POSIX spelling with its leading dot was listed. `opencode`'s plugin,
-  that adapter's only deny mechanism, and `crush`'s settings answered `Routine` whenever
-  `XDG_CONFIG_HOME` was moved. Four entries carried a trailing slash, which split the two roads:
-  `surface_of` appends a separator, so `rm <dir>` was `Boundary` while a write to the bare directory
-  was `Routine`. And the crossing asked only about writes, so a path containing a space — the shape
-  that produced the `cli/hosts.yml` entry — would have arrived unnoticed. All closed here, each with
-  a dimension of the crossing that now holds it.
-
-  **Gating a file in a directory the host reads whole is defeated by a neighbour.** `paths_in`'s own
-  comments say so for two of them: Continue applies any rule with no frontmatter, and Cline loads its
-  rules directory for every task. Estigia's filename was gated and the directory was not, so
-  `~/.cline/rules/zz-override.md` answered `Routine` — and a sibling saying *Estigia is retired*
-  changes what an agent is told this harness may enforce without touching a `Boundary` path.
-
-  Two more directories are named alongside them on a weaker basis, and it is worth being exact about
-  which: `windsurf/memories` and `.cursor/rules` are locations those hosts read, but `paths_in` says
-  nothing about them reading a directory whole — its Windsurf comment is about a six-thousand
-  character cap on one file — and Estigia writes nothing into `.cursor/rules` at all. They are in the
-  population because the restated rule covers them, not because this crate has verified the
-  read-whole behaviour. A first draft of this paragraph claimed all four were documented; a reviewer
-  read `paths_in` and found two.
-
-  Three of those four were hand-spelled entries and were derived for a while. The
-  derivation was later removed: `windsurf/memories/` is a literal in `CONTROL_SURFACE` beside `.continue/rules/` and
-  `.cline/rules/`, so every path that answered `Boundary` still does and an install an earlier build
-  wrote stays gated exactly as it was.
-  `the_rules_directories_of_continue_and_cline_stay_gated_without_an_adapter_deriving_them` goes red
-  when either of those two literals is removed, and
-  `a_retired_hosts_instruction_directory_is_still_a_boundary` goes red when Windsurf's is — measured:
-  removing it also reddens `a_sibling_in_a_rules_directory_is_a_boundary_too` and
-  `the_control_surface_matcher_answers_its_corpus`. **What removing the derivation loses:** a future
-  adapter's rules directory is no longer a compile-time question. Nothing forces its author to say
-  whether the host reads a directory whole, and such a directory is gated only if somebody adds the
-  literal. The weaker basis above is unchanged: whether a host reads a directory whole is a fact about
-  somebody else's product, and neither the derivation nor the literals ever checked it.
-
-  **The cost, which the population's own declaration understated.** That declaration says a false
-  positive costs one tracker read "and that is the direction this chooses on purpose", illustrated by
-  a one-character typo on a path already listed. A `Boundary` never rides the renewal window and never
-  stands aside outside the claim, so it is a live `gh issue view` every time — measured, not inferred:
-  a reviewer drove 30 invocations of each class through the real hook against a `gh` with a real
-  process boundary and counted **30 tracker calls out of 30** for a `Boundary` against **0 out of 30**
-  for a `Routine`. With no network it is a refusal rather than a delay.
-
-  **What that read costs is the number to distrust, and three independent measurements disagree.**
-  0.61–1.22 s (mean 0.93, n=8); 0.58–0.92 s (mean 0.66, n=8); and 0.85–3.20 s (mean 1.74, n=10) —
-  the last one roughly double the first two and 2.6× their ceiling, taken against the same tracker on
-  a different machine and a different network. Against 0.05–0.42 s for a `Routine` write inside the
-  renewal window, likewise machine-dependent. So the honest statement is a **round trip to GitHub per
-  write to a watched path, between half a second and three seconds**, and any tighter figure here is a
-  sample of one environment rather than a property of the change. The earlier drafts of this paragraph
-  quoted the first measurement alone as though it bounded the cost, which is what a reader would have
-  believed.
-  Two attempts at the `XDG_CONFIG_HOME` fix were wrong in opposite directions before this one, and
-  both were found by reviewers rather than by a test. Dropping the `.config/` prefix left `opencode`
-  as a bare directory name matched anywhere: `node_modules/opencode/**`, `packages/opencode/**` and a
-  checkout *named* `opencode` answered `Boundary` on every file in them. Replacing the directory
-  entry with three tails then **loosened** it — everything under `~/.config/opencode/` that Estigia
-  does not write went `Boundary` to `Routine`, which is an existing entry's sensitivity changing and
-  was recorded here as an over-gating fix. Not a countable set: it is whatever OpenCode itself keeps
-  there, and three drafts of this sentence said *nine* without anybody being able to enumerate them.
-  A reviewer measured `auth.json`, `config.json`, `themes/`, `command/`, `instructions/`, `tui.json`
-  and `mcp.json` among them, and the bare directory. The directory entry is back *beside* the tails, which
-  cover the relocated root it cannot.
-
-  What that leaves, measured rather than claimed: `node_modules/opencode/index.js` and
-  `packages/opencode/src/main.ts` are `Routine` again, and `node_modules/opencode/agents/**`,
-  `node_modules/opencode/plugins/**` and `node_modules/opencode/opencode.json` are not — a vendored
-  copy of that agent with those exact subdirectories pays a tracker read per write. An earlier
-  sentence here said six shapes had come back, then three; the number was never the point and
-  neither figure was measured. This is the list.
-
-  What over-gating remains, measured rather than argued. A fragment ending in `/` names a directory
-  and the matcher honours that, so a name that merely *ends* alike — `.estigiaignore`,
-  `skills/flow.md`, `.claude/agentsmith.md`, `.cursor/rulesets.md` — stays `Routine`. A fixture holds
-  that direction, which nothing did before: every other guard here asserts something *is* `Boundary`,
-  so over-gating was invisible to all of them.
-
-  The left side is anchored for two kinds of fragment: those beginning with a **dot**, and those
-  naming a **directory**. A dot-directory is always a whole segment, so `my.claude/agents` is not
-  `.claude/agents`. Every real target of `opencode/agents/`, `opencode/plugins/`, `windsurf/memories/`
-  and `skills/issue-flow/` has that first segment whole too, so those anchor without losing anything —
-  measured, `~/.config/opencode/agents` stays `Boundary` on both roads.
-
-  It took three attempts, and each one is why the fixture lists what it lists. The first anchored
-  `ends_with` and left `contains` alone, so a bare `my.claude/agents` came back `Routine` while a file
-  under it stayed `Boundary`, and three documents said the case was closed. The second anchored the
-  dot fragments only — which left the road split alive on precisely the directory entries this change
-  added: `surface_of` gives every token a trailing `/`, so `/repo/.opencode/agents`, `/repo/.opencode/plugins`,
-  `/repo/xyzopencode/agents` and `/repo/notwindsurf/memories` each answered `Routine` to `Write` and
-  `Boundary` to `rm`. The suite was green over all of them, because nothing asserted the `Routine`
-  direction for a non-dot fragment. All four are in the fixture now, on both roads.
-
-  Anchoring cost coverage on the shell road three separate times, and the shape of that mistake is
-  worth more than the fix. `surface_of` builds a view of the command and matches the fragments against
-  it. Anchoring means a fragment now needs a separator in front of it, and each attempt supplied one
-  in a narrower place than the shell can put punctuation:
-
-  1. **Split on whitespace, append a separator.** A relative operand then has a *space* in front of
-     it and is never at position 0, because the verb is. Removing the state directory by its bare
-     relative name, or truncating the file the gate is registered in, went `Boundary` at the base to
-     `Routine`.
-  2. **Wrap each token on both sides.** That reached exactly the operands whose first character is
-     the fragment's, and no others. A quoted operand, a redirect written with no space after it, and
-     an operand joined to a long flag all put a character between the token boundary and the
-     fragment, so all three stayed `Routine` — again reaching the run pointer and the settings file,
-     by the shortest line there is. The drive-relative Windows spelling `C:` did the same thing and
-     reached the **write** road as well, which none of the others did.
-  3. **Fold every character a path segment cannot contain into a separator**, and wrap the line. That
-     reached the quotes, the redirects and the long flags at once — and not the fourth family, because
-     the character in the way there is an ordinary **letter**: a short option carrying its value
-     attached, `-o.estigia`, `-C.estigia`, `-oskills/flow/SKILL.md`. Brace expansion was the same
-     miss one character wide.
-  4. **Fold the braces too, and offer every split point of a token beginning with `-`.** The braces
-     could join the folded set because no fragment carries one. `-` could not: `hooks/pre-push`,
-     `.estigia/stand-down.json` and cursor's derived fragment all carry one, and folding it cuts them
-     in half and loses them outright. A shell gives no way to know where the option letters end and
-     the value begins, so every split point is offered instead. That is what is in the code.
-
-  5. **Normalise each token on its own and join afterwards.** Folding whitespace made the whole line
-     read as one path, and the parent-segment collapse then reached **across an operand boundary**:
-     `mv .estigia ..` became `mv/.estigia/../`, collapsed to `mv/`, and the surface being moved was
-     gone. At the base the tokens were joined with a space, so `/../` never formed there. 66 measured,
-     all of the shape *surface operand followed by an operand beginning `..`* — `mv .estigia ..`,
-     `cp -r .estigia ../snapshot`, `mv ~/.claude/settings.json ..`. These are the ordinary way to move
-     a config file aside, and this was the worst of the six because of that.
-  6. **Read the option prefix off the folded token, and let `~` start one too.** The suffix rule
-     filtered on the *raw* token beginning with `-`, so a leading quote defeated it while the fold
-     still left the option letters in the way: `wget "-O.claude/settings.json"` and
-     `7z x a.7z '-o.estigia/run.json'`, 38 measured. Quoting `-o<dir>` is the documented 7-Zip habit
-     for the reason the rule exists — the directory may hold a space. `%~dp0` expands *with* a
-     trailing separator, so `%~dp0.estigia\run.json` is the correct batch idiom and puts a digit where
-     the anchoring wants one; `%` joined the folded set and `~` joined `-` as a prefix marker. The
-     caret joined the set on the same round: under `cmd.exe` `^` escapes the next character, so
-     `del ^.estigia\run.json` names the state directory. It was the one character of 660 a reviewer
-     swept where the base's answer was right for a reason rather than by accident — `!`, `#`, `@`, `[`
-     and the rest name different files, and head stopped gating those on purpose.
-  7. **Ask each rung of the ladder on its own.** The suffixes were appended into one view, separated
-     by the same character that separates path segments, so adjacent rungs concatenated into a path
-     that was never in the command. The ladder for `~/.claude` is `.claude/claude/laude/…`, and
-     `.claude/claude` is ClaudeCode's derived instruction fragment — so a recursive delete of the home
-     config directory answered `Boundary` for a path nobody wrote, and so did `~/backup.claude`,
-     `~/notes.agents` and `-obackup.claude`. `.agents/agents` has the same `A/A[1..]` shape and did the
-     same. Introduced by the sixth, found by a reviewer, and it had already made the
-     containing-directories paragraph below false about the very directories that paragraph declares
-     open.
-  8. **Bound the ladder to the marker's own segment, and read a patch body the same way.** Two halves,
-     both found by one reviewer. Unbounded, the ladder voided the left anchoring for every token
-     beginning with `~` — which is how a home path is written — because the rungs of
-     `~/my.claude/agents` include `.claude/agents`. Eighteen of the thirty-one rows of the anchoring
-     fixture answered the opposite when respelled with `~`, against three paragraphs here that name
-     those paths as `Routine`, and every row of that fixture was spelled absolute. An option prefix and
-     a shell expansion both end before the first separator, so cutting past one is not reading a
-     prefix, it is deleting path segments. And the payload road — the fallback `classify_with` takes
-     for Codex's `apply_patch` and OpenCode's `patch`, where the path sits in a patch body rather than
-     a field — handed the whole blob to `is_control_surface` directly. That was right under a bare
-     `contains` and wrong once the fragments were anchored: thirteen relative spellings, the run
-     pointer and the stand-down record among them, stopped matching on that road while `Write` still
-     gated the same file. Both roads read free text the same way now.
-  9. **Read the ladder off the same string the matcher reads.** The view is built from
-     `normalise(&fold(token))` and the ladder's entry test read `fold(token)` alone — `normalise`
-     folds `:` and `\` and `fold` does not. So in `${P:-.claude/settings.json}` the `-` starts a
-     segment in the string that is matched and did not in the string the ladder inspected: no rung,
-     and **fourteen of the nineteen** relative surfaces answered `Routine` where the base answered
-     `Boundary`. The basis, because a number here is worth nothing without one: one relative spelling
-     per fragment in the **base's own** fragment set. The five that were never lost are the two file
-     fragments carrying no leading dot, `hooks/pre-push` and `cli/hosts.yml`, which the anchoring
-     never touched so the ladder was never needed to reach them, and `.config/opencode/opencode.json`,
-     `.gemini/settings.json` and `.config/crush/crush.json`, each reached by an unanchored sibling this
-     branch added. This sentence has now been wrong twice: first *thirteen*, with no basis and
-     unreproducible, then *every relative surface*, which is checkable and false — it would have told a
-     reader the push guard stopped being gated, and it never did. A reviewer measured both.
-     `TARGET=${1:-.claude/settings.json}` then `rm -f "$TARGET"` is the ordinary script idiom for a
-     defaulted path. A reviewer found it by sweeping **two**-character contexts; the 660-character
-     sweep recorded above is one character wide and could not reach `:-`. The same fix reaches `:~`,
-     `\-` and `\~`, which that reviewer's exhaustive two-character sweep names as the only other
-     non-lookalike contexts that were open.
-
-     **What stays open, why it is a limit rather than an oversight, and what it costs.** `${P-path}`,
-     `${P:+path}` and `${P:?path}` answer `Routine`. Not *still* — they answered `Boundary` at the base
-     commit, so this is a **loss against the base** on the same fourteen of nineteen relative surfaces
-     counted on the same basis as above, and unlike every
-     other spelling recorded in this section those three do address the file. Named that way because a
-     reviewer pointed out that the earlier wording read like a gap that had always been there.
-     Once `$`, `{`, `}` and `:` are folded away, `P-path` is
-     indistinguishable from a file named `P-path`, and `+`/`?` sit where a segment's first character
-     would. Laddering from a `-` in the *middle* of a segment would reach them and would also gate
-     `x-.claude/agents` and every `foo-bar` tail like it — trading a hole for over-gating on ordinary
-     names. Measured and left, rather than closed by widening.
-
-  `7z` is why the fourth is not optional: its extract-to spelling is `-oDIR`, a space there is a
-  syntax error, and it is in `WRITES_A_FILE` deliberately — so the only correct way to write "extract
-  into the state directory" was the one spelling that was not gated.
-
-  Each attempt was measured against the base by a reviewer classifying raw command strings through
-  the built binary, and each time the whole suite was green over the loss — because every fixture in
-  this crate spelled its commands the way the last fix had taught it to. That is the same blind spot
-  **nine** times: a narrowing nothing asserts, found by a reader who spells the command differently
-  than the fixture does. It is recorded at this length because the count is the finding, and the count
-  is the honest summary of this work: anchoring a matcher against a shell is not one change. Each
-  spelling that reaches a path is its own claim, the suite went green over every loss until somebody
-  wrote the spelling down, and **five of the nine were introduced by the fix for the one before it**.
-
-  The eighth paragraph of this section predicted a ninth and a reviewer found one in the next round,
-  which is the closest thing here to a measurement of the process rather than the code. A tenth is
-  likelier than not. The fixtures hold the nine spellings that were found, plus the eighteen folded
-  characters and the ordinary-line direction. They do not hold *the space of spellings*, because nothing in this crate
-  enumerates it. A property test over generated command lines, crossed against a second reading of the
-  same path, is the shape that would — and there is none. `punctuation_does_not_hide_a_control_surface`,
-  `a_drive_relative_spelling_is_measured_like_a_relative_one` and
-  `a_relative_operand_is_measured_like_an_absolute_one` hold the direction now, and
-  `folding_punctuation_does_not_gate_an_ordinary_line` holds the other one, because reading
-  punctuation as separators makes the view more permissive and a false `Boundary` costs a live
-  tracker read on every build.
-
-  What this leaves is stated rather than measured away. A command that *mentions* a control surface
-  while writing somewhere else is `Boundary`, which is the asymmetry `surface_of` already ran on and
-  pays one extra tracker read. Substitutions are still invisible — a path assembled from a variable or
-  a subshell names nothing any of this can match, at the base commit as much as here. So is a surface
-  split across a `cd`, and so is a glob that removes a directory's contents without naming the
-  directory; a reviewer measured all three at both commits, and they are the same at both.
-
-  The option-prefix rule is generous in one direction only — it can gate a token that merely ends like
-  a surface, never miss one that is a surface. That cost was priced rather than assumed: across 50
-  ordinary developer command lines, including the write-heavy ones whose flags take attached paths,
-  it gates **none**. `an_option_prefix_does_not_gate_an_ordinary_line` holds twelve of them. A reviewer
-  measured 149 lines the same way, 30 of them deliberately punctuation-heavy, and found the folding
-  costing **nothing** on any of them: folding only creates separators, and a separator only helps a
-  fragment that is already in the line.
-
-  What the *list* costs on an ordinary path is separate and is real. `mkdir -p
-  test/fixtures/windsurf/memories` — a project directory that happens to be spelled exactly like a
-  fragment — is `Boundary` here and was `Routine` at the base. That is not the lookalike class named
-  above, which is about names that merely resemble one; it is an exact collision inside somebody's own
-  tree, and it costs a tracker read per write. The same holds for a project's own `.claude/agents` or
-  rules directory, which is intended. A reviewer found this one by classifying paths a developer would
-  plausibly create rather than paths this crate already talks about.
-
-  **The two halves of the wrap are not alike, and the paragraph that used to stand here got it
-  backwards one commit before it was read.** It said the trailing half was not load-bearing. That was
-  true when it was written and false as soon as the option-prefix rule landed, because the suffixes
-  that rule offers are appended *after* the wrap: without the trailing separator the first suffix runs
-  straight into the folded line and the last segment of a command stops being a whole one. **Two**
-  fixtures redden without it now — `a_relative_operand_is_measured_like_an_absolute_one` and
-  `a_later_operand_does_not_collapse_an_earlier_surface` — and it is the separator pushed **between
-  tokens** that carries it, not a wrap at the end of the line: dropping the final separator alone, or
-  the one closing each ladder rung, leaves the whole suite green. This paragraph said *eight*, which
-  was measured before the ladder rungs were split out and never measured again; a reviewer counted. Nobody re-measured the sentence when the code under it moved, which
-  is the failure this document exists to catch, committed inside this document.
-
-  The **leading** half is the inert one, and it is inert structurally rather than by luck: `anchored`
-  tests `starts_with` as well as `contains`, so a fragment at position 0 is reached either way, and
-  dropping the wrap can only *add* matches. Measured over every fragment the gate consults, five
-  spellings and five write verbs — 975 command lines, **zero answers changed**. It stays for symmetry
-  and nothing holds it, which a reader should know rather than infer a guard that is not there.
-
-  Each of the eighteen folded characters is now held individually, and that took two attempts as well.
-  A reviewer mutated the set character by character and found ten of the then-fourteen could be
-  dropped with the whole suite green — the set had been justified four characters at a time by
-  measurement and the rest by the sentence *"the rest terminate a word the same way"*, which the
-  missing brace had already disproved. The first fixture written for it **iterated the constant**,
-  which reads like coverage and is none: dropping a character from the set also drops it from the
-  test, and eleven mutations still survived. The characters are spelled in the fixture now and crossed
-  against the constant, so all eighteen die.
-
-  A fragment naming a **file** without a leading dot still cannot be anchored, because `cli/hosts.yml`
-  exists to match **mid-segment**: the Windows path is `%APPDATA%\GitHub CLI\hosts.yml`, and
-  `github cli` is one segment holding a space. The cost is that a vendored copy of somebody else's
-  agent answers `Boundary`, and will keep doing so: `~/.codeium/notwindsurf/memories/global_rules.md`
-  through windsurf's derived fragment, and `vendor/myopencode/agents.md`, `vendor/mygemini/gemini.md`
-  and `vendor/mycrush/crush.md` through theirs. A draft of the fixture asserted the windsurf one away
-  and went red, which is why it is written here rather than believed.
-
-  The other three are here because two reviewers measured this paragraph and found it naming
-  `vendor/myopencode/agents/a.md`, which answers `Routine` — `opencode/agents/` is a **directory**
-  fragment and is therefore anchored, so a lookalike cannot reach it. The derived fragment that
-  demonstrates the limit is `opencode/agents.md`; the written path was off by a separator, and nothing
-  in the suite held it, because this file asserted the ends-alike direction and never this one. It is
-  held now, on both roads — which is the point of the paragraph: a declared limit nothing measures is
-  a limit that drifts from the code while the document keeps saying it.
-
-  What still over-matches is the fragments that name a file: `.claude/settings` reaches
-  `.claude/settingsmap.ts`, and `crates/crush/crush.json`, `docs/gemini/settings.json` and
-  `tests/fixtures/gemini/settings.json` answer `Boundary` because two-component fragments match
-  anywhere. Deliberate — `.claude/settings` is trimmed on purpose to reach `settings.local.json`.
-
-  And a per-project cost that is new and worth naming plainly: `<repo>/.claude/agents/*`,
-  `<repo>/.cursor/rules/*`, `<repo>/.cline/rules/*`, `<repo>/.continue/rules/*` and
-  `<repo>/.claude/settings.local.json` are `Boundary` now. A project that keeps its own agent
-  definitions or rules pays a live tracker read on every write to them. This crate ships agent
-  definitions under `skill/agents/`, which is not one of those paths — and at the head this paragraph
-  was written for, no file tracked in this repository tripped any fragment.
-
-  That last clause stopped being true, and the change is deliberate rather than
-  incidental: `<repo>/CLAUDE.md` and `<repo>/AGENTS.md` are `Boundary` now, which is **two** of this
-  repository's own tracked files, measured by classifying every path `git ls-files` reports.
-  `<repo>/.claude/plugins/**`, `<repo>/.claude/commands/**`, `<repo>/.codex/prompts/**`,
-  `<repo>/.cursor/commands/**`, `<repo>/.cursor/cli-config.json`, `<repo>/.gemini/extensions/**`,
-  `<repo>/.qwen/extensions/**`, `<repo>/.continue/config*`, `<repo>/.continue/assistants/**`,
-  `<repo>/.codeium/windsurf/**`, `<repo>/.windsurf/rules/**` and `<repo>/.opencode/agent/**` join the
-  list above in the same change and are not in it, because that list predates it. A run
-  holding a claim that edits this repository's own instructions pays one tracker read for the
-  privilege, which is the honest price of the rule the sentence above states.
-
-  **Two things this change leaves open, both measured by reviewers of it.**
-
-  Over-gating is held only for hand-spelled shapes, and it is held **unevenly**. The fixtures that
-  watch the `Routine` direction list paths by name, and nothing derives an over-gating check from the
-  adapter table, so whether widening a *derived* fragment is caught depends on whether some hand-
-  written row happens to sit under it. Measured, one adapter at a time, each widened to its bare
-  directory and the full suite re-run:
-
-  - **Eight** redden: `.agents/agents` → `.agents/`, `.claude/claude` → `.claude/`, `.codex/agents` →
-    `.codex/`, `opencode/agents.md` → `opencode/`, `.cursor/estigia-workflow-authority.md` →
-    `.cursor/`, `.continue/rules/estigia.md` → `.continue/`, `.cline/rules/estigia.md` → `.cline/`
-    and `windsurf/memories/global_rules.md` → `windsurf/`. Cline's was caught by
-    a truncation test that was deleted with the derivation, rather than by an over-gating
-    fixture — coverage arriving from the under-gating side. It is not re-measured here, and no
-    claim is made that the widening is still caught.
-  - **Five** are silent, each widened on its own with the full suite re-run: `.qwen/qwen.md` →
-    `.qwen/`, `gemini/gemini.md` → `gemini/`, `crush/crush.md` → `crush/`, `.zcode/agents` →
-    `.zcode/` and `.dsh/agents` → `.dsh/`. Nothing in this crate names a path under those five
-    directories in the `Routine` direction.
-
-    A draft of this bullet said **one**, and named crush and gemini in the bullet above
-    as reddening *through* `the_declared_over_gating_is_the_shape_the_document_names`. Blind reviewers
-    re-ran the widening and it is not so. A second draft then explained the silence by saying the
-    widening makes those fixture rows answer `Routine`, and reviewers of *that* head measured it
-    false in both halves: `/repo/vendor/mycrush/crush.md` and `/repo/vendor/mygemini/gemini.md` stay
-    `Boundary` under the widening — held by the `crush.md` and `gemini.md` entries this same change
-    added, which match a whole segment at any depth — and a row that *did* flip would turn that
-    fixture **red**, not leave it green, because the fixture asserts `Boundary`. Measured on windsurf,
-    where the row does flip: `~/.codeium/notwindsurf/memories/global_rules.md` goes `Routine` and
-    **three** tests reddened —
-    `a_directory_entry_does_not_gate_a_name_that_only_starts_the_same`,
-    `the_declared_over_gating_is_the_shape_the_document_names` and a truncation test that was
-    deleted — any one of which put windsurf in the eight; the first two remain.
-
-    So there is no special mechanism here, and the two sentences that claimed one are gone. Crush and
-    gemini are silent for the ordinary reason the bullet above states for all three: nothing in this
-    crate names a path under those directories in the `Routine` direction.
-
-    One consequence is worth keeping, because it is a coverage fact rather than an explanation: those
-    two fixture rows are now **double-covered**, by the unanchored file fragment and by the
-    per-project entry. Deleting `crush.md` alone leaves that fixture green — the entry is still held,
-    by `a_projects_own_always_loaded_rules_are_a_boundary`, but the row whose comment describes the
-    unanchored shape no longer isolates it.
-
-    This list has now said *one*, then *four*, then two, then one, then three. The four was true
-    until `the_suffix_ladder_does_not_synthesise_a_path` landed and began catching `.agents/` and
-    `.codex/`, and nobody re-ran it. Every re-count but the first came from a reviewer rather than
-    from this repository, which is the honest attribution and the argument for deriving this
-    direction rather than counting it again.
-
-  The under-gating direction is crossed against `resolve_paths` for every adapter, the retired six included. This one is
-  crossed against nothing, and the coverage it has is incidental rather than derived.
-
-  And the **containing** directories are `Routine` on both roads while their contents are now
-  `Boundary`: `~/.claude`, `~/.codex`, `~/.cursor`, `~/.qwen`, `~/.agents`, `~/.zcode`, `~/.dsh`,
-  `~/.gemini`, `~/.cline`, `~/.continue`, `~/.codeium`, `~/.codeium/windsurf`, `~/.config/crush`,
-  `~/.config/gh`. `~/.claude/skills` was in that list and is not any more: the skills
-  tree is derived per adapter, so `~/.claude/skills`, `~/.agents/skills`, `~/.codex/skills` and
-  `~/.dsh/skills` are `Boundary` themselves. So a single recursive delete of `~/.claude` — taking
-  the settings file the gate is registered in, the workflow-authority directive, the agent
-  definitions and the installed contract — answers `Routine`, and being outside every checkout it is
-  answered by `outside-the-claim` before the
-  tracker is asked. Identical at the base commit, so not a regression; recorded because *this* change
-  is what makes it matter, and re-measured because for one head it was **false** — the suffix ladder
-  concatenated `.claude/claude` out of its own rungs and answered `Boundary` for `~/.claude`, so this
-  paragraph declared open a gap that was not open, in the spelling it writes here and in no other. A
-  reviewer measured it; a fixture holds the sentence for `~/.claude`, `~/.agents` and `~/.codex`, by
-  moving files inside them to `Boundary` while the directory around them stays open. It names no
-  other entry in the list above, so the two added with ZCode and DeepSeek Harness are held by
-  reading. It is not the declared hard-link limit — it is an ordinary path a
-  shell writes. The shape that would close it already works next door: `~/.config/opencode` and
-  `~/.estigia` are `Boundary` because those entries name the directory.
-
-  **There are two readings of the same text, and the difference is deliberate.** The write road hands
-  `is_control_surface` a `file_path`, which is a path; the shell and payload roads hand
-  `text_names_a_control_surface` a command line or a patch body, which is prose with a path in it.
-  Only the second folds punctuation, because only the second can have punctuation *next to* a path
-  that is not part of it. A reviewer measured what that leaves and then measured whether it matters:
-  on the write road a decorated relative spelling — `".claude/settings.json"` with the quotes inside
-  the field, or with a leading space, tab, `~`, `$`, `%`, `{`, backtick or `=` — is `Routine` at this
-  head and was `Boundary` at the base. A draft of this paragraph used `.claude/CLAUDE.md` as the
-  worked example, which cannot be true of it: that file was not on the control surface at the base at
-  all — it is the file the population was widened for, and the fragment that reaches it arrived in this
-  branch's first commit. A reviewer caught the example contradicting the sentence around it. It is not a hole, and that was checked rather than assumed: writing
-  each of those spellings on this machine either fails outright or resolves to a different,
-  non-existent directory. Only the bare spelling reaches the file, and the bare spelling is gated. The
-  same reviewer confirmed it end to end — the quoted `file_path` costs zero tracker reads while the
-  bare one, the quoted absolute, the shell road and a patch body naming it each cost exactly one.
-
-  What is true and worth a reader's attention is that `punctuation_does_not_hide_a_control_surface`
-  drives only the shell road. The write road has no punctuation fixture, because there is no
-  punctuation behaviour there to hold — which is a fine reason and an easy one to forget.
-
-  Two more `Routine` at both commits, each found by a different reviewer and neither closed here.
-  `<repo>/.opencode/plugins` is not reached: `.opencode/agents/` was added for the repository-local
-  definition root, and the plugin directory beside it has no entry, because `opencode/plugins/` is
-  anchored and `.opencode` is not it. Estigia reads nothing from a project-local plugin directory, so
-  it is not the same class as the definition root — but it is the same *shape* as the hole this change
-  closed one directory over, and it is named here so the next reader does not have to find it twice.
-  And `curl "-o<path>"` with the value attached **and quoted** is not seen as a write at all: the gap
-  is upstream of `surface_of`, in `shell::writes_a_file`'s reading of the `curl -o` idiom, which this
-  change does not touch — `src/harness/shell.rs` is byte-identical between the two commits. `wget
-  "-O<path>"` is a `Boundary` in the same spelling, which is what makes the asymmetry visible.
-
-  Still `Routine` at the head this paragraph was written for, and **since closed**: a project's
-  own `AGENTS.md` or `CLAUDE.md` at its root, `.cursorrules`, `.clinerules`, `.windsurfrules`,
-  `.github/copilot-instructions.md` and `.mcp.json`.
-  They carry the same always-loaded authority, and they are **inside** a checkout, so they stay
-  measured against the claim rather than standing aside — which is why they were a smaller thing than
-  what this issue closed, not the same thing. `harness::roles::definition_for` reads its **five**
-  definition roots from a hand-spelled list that nothing crosses against the gate. All five answer
-  `Boundary` today and a sixth would not — but that sentence said *four*, and said it while one of
-  them was `Routine` on both roads. `<repo>/.opencode/agents` is searched beside `<repo>/.claude/agents`
-  in a single `vec!`, and the two were gated by different fragments: `.claude/agents/` reached the
-  first, `opencode/agents/` is anchored on the left so `.opencode` is not it, and nothing reached the
-  second. A definition that is not found is `Ok(None)`, which `declared_policy` reads as *every tool
-  allowed*, so the file that writes an agent its own allowlist was the one riding the renewal window.
-  A reviewer measured it; the fixture in this repository had gone further and asserted the hole,
-  listing that root among the ordinary paths a directory entry must not gate. `.opencode/agents/` is
-  a `CONTROL_SURFACE` entry now, `every_definition_root_is_a_boundary_on_both_roads` crosses all five,
-  and one of them — `~/.claude/agents` — is additionally `paths.agents_root`, reached by the walk.
-
-  What is still not crossed is the **list itself**: adding a sixth root to `definition_for` reddens
-  nothing. The fixture spells the five by hand, exactly as the roots are spelled by hand.
-
-  `gh`'s hosts file would have belonged on that list and is not on it. It decides which account
-  every tracker call acts as, so it is named in `CONTROL_SURFACE` instead — which is what the issue
-  asked for: *if one can reach tracker state, it is that path that needs naming rather than the whole
-  class*. Both spellings, and through the shell as well as the write tool, which the first attempt
-  got wrong by using a fragment with a space in it. (An earlier draft of this paragraph said the file
-  "was on that list until this change", which was a claim about a previous shipped state that never
-  existed — the whole entry is new. A reviewer checked it against `2477de0` and it was not there.)
-
-  The hole predates this: the instruction files and the two `~/.claude` paths were never `Boundary`,
-  so they were once measured against the claim and allowed under a valid one. What was newly lost is the refusal when the claim
-  is *not* valid — which is what was closed for them, and this paragraph is kept because the
-  ordering it goes on to describe is what makes any of it hold. It is no longer lost when no contract is installed: the answer is
-  given after the `control-surface-not-installed` refusal, and
-  `an_unreadable_control_surface_refuses_even_a_write_outside_the_claim` is what stops that drifting
-  back. One published head had it the other way round and both reviewers of that head raised the
-  cost, so it moved rather than staying here as a declared limit.
-
-  It was lost again **inside the renewal window** for as long as the window's `Allow` sat above the
-  contract refusal — for its duration a routine write was permitted with no `SKILL.md` on disk at
-  all, on both roads, and the guard above passed only because its fixture was outside the window. An
-  earlier draft of this paragraph claimed the rule applied *without an exception* while that was an
-  absolute the code did not hold; a reviewer measured the exception by adding one `mark_verified()`
-  line to that fixture. It was closed by moving `control-surface-not-installed` above the
-  window rather than below it, which costs one `is_file()` on a path `decide` was already joining.
-  Each of the two fixtures now has a twin differing only in that `mark_verified()` line —
-  `an_unreadable_control_surface_permits_no_write_inside_the_renewal_window` and
-  `an_unreadable_control_surface_refuses_a_write_outside_the_claim_inside_the_window` — and both go
-  red with `Allow("issue #N was verified inside the renewal window")` if the order is put back.
-
-  One stand-aside still answers above that refusal, and it is not the window. `another-checkout`
-  fires on the directory the hook was invoked in rather than on the write target, so a run claimed in
-  one checkout whose hook fires in an unrelated one stands aside without the contract being read.
-  Unlike `nothing-sworn` and `no-tracker`, which are above the check because a run holding no issue
-  and a project with no transport are outside the remit entirely, this one is reached by a run that
-  *does* hold an issue with a tracker configured. Measured rather than argued:
-  `a_claim_in_another_checkout_does_not_gate_this_one` uses the default fixture context — no contract
-  on disk — with a sworn run, and is green both before and after that change. Keeping it above the check
-  was that change's own requirement, so the honest sentence is that every answer above the contract refusal is
-  a deny or a scope stand-aside and the renewal window is no longer among them; the unqualified
-  absolute is not one the code holds.
-
-  What was still lost when this entry first said so is closed, and the entry above says how. Three
-  drafts of this paragraph described the state before the fix that shipped in the same commit — the
-  last of them naming two `CONTROL_SURFACE` entries that the same diff had already replaced. Four
-  reviewers found it, one after another, which is the measure of how easily a paragraph written
-  before the code survives the code.
-
-  And one boundary this cannot cross at all: a **hard link** outside the checkout pointing at a
-  file inside it. Measured — `mklink /H <outside>/alias.rs <repo>/src/kept.rs`, classified
-  outside, and writing through the alias rewrote the file in the checkout; `ln` does the same on
-  POSIX. A hard link has no path to resolve to, so no amount of placing finds it.
-  `is_control_surface` declares that same limit for its own matcher, and `writes_outside_the_claim`'s
-  own doc comment now carries it too. A Linux `mount --bind` is the same shape and equally out of
-  reach. Two more that path resolution cannot answer: the classification is taken before the write,
-  so a link created in between is not seen, and a write tool that creates missing parents can make a
-  directory inside the checkout on the way to a target that is honestly outside it.
-
-  `gh`'s hosts file is named at its default location only. `GH_CONFIG_DIR` and `XDG_CONFIG_HOME` move
-  it, and those spellings answer `Routine` — measured at `/home/me/xdg/gh/hosts.yml` and at a
-  `gh-config` directory under a Windows profile. Narrowing the entry from the directory to the file
-  also left `config.yml` `Routine`, which is deliberate: it holds the default host and protocol, not
-  the credential that decides which account acts.
-
-  Three limits of the stand-aside itself, none closed here.
-  A landing that is not on a drive cannot be compared to a checkout that is, so `placed` declines it
-  and the caller reads that as *inside*. That is what shuts the administrative-share hole, and it
-  also means the whole feature is **off** on UNC ground: measured, a claim over `C:\...\repo` gates
-  a write to `\\192.168.1.10\pikaflix\notes\scratch.md` rather than standing aside, and a run whose
-  checkout is itself `\\192.168.1.10\pikaflix\repo` stands aside for nothing at all. An operator
-  whose profile is redirected to a share, or whose checkout lives on one, gets the field failure
-  this issue exists to end. Closing it means deciding what a share is the same *place* as, which is
-  the question that made declining the honest answer in the first place.
-
-  The second limit is not over-gating but measurement: the guard has none on a machine that does
-  not serve its drives as shares. Widening its allow-list to accept UNC reddens both share fixtures
-  here; on a runner without `\\localhost\C$` it would redden nothing and they would report pass
-  having asserted nothing. A machine-independent companion was written, measured passing against
-  that same widened allow-list, and deleted rather than kept — the guard only fires on a landing
-  `canonicalize` actually produced, and producing one takes a real share. There is a second silent
-  road on the newer of the two fixtures: it also passes when `mklink /D` is refused for want of
-  Developer Mode or elevation. Measured by sabotaging the flag with the guard deleted — it printed
-  its skip line and reported pass, while the older fixture still went red, so a machine that will
-  not link loses the landing-versus-spelling measurement and not the guard's existence.
-
-  The third is latent and could not be measured at all. The guard requires the landing to carry a
-  drive prefix rather than rejecting the prefixes it knows, so a landing with no prefix component
-  would be refused instead of compared as though it were relative. Nothing `canonicalize` produced
-  on this machine has that shape and two reviewers went looking, so the branch is written for its
-  failure direction and is held by no test.
-
-  Separately from those three, and about the review rather than the change: **the POSIX half of
-  this is measured by nobody who reads it.** The `..` handling in `placed` is where the two
-  platforms genuinely disagree — Windows collapses the segment in the spelling, POSIX resolves the
-  link first — and the arm that says so is a `cfg!(unix)` *expression*, so it is compiled on this
-  desk and never runs here. The CI lanes are the only place it runs.
-
-  **Narrowed later, and only for repositories that answer.** When this was written CI first
-  ran when `release_ci` marked the pull request ready, which is after every review has been
-  obtained; `publish_review` now starts a publication lane against the head it pushes and
-  `record_computed_verdict` refuses to bank an approval for a head whose lane is red or still
-  running. So on **this** repository a POSIX-only failure is found before the verdicts are spent
-  rather than after. What is unchanged is everything below about the review itself — nobody reading
-  the change runs the POSIX arm, nothing in `skill/SKILL.md` or `skill/references/` asks for a
-  platform, and the lane answers a question no reviewer asked. The gap is smaller; the reason it
-  existed is not closed.
-
-  What that costs, measured on this change:
-  `a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled` wrote through
-  `<root>/decoy/../repo/src/main.rs` without creating `decoy`. Windows does not need it to exist;
-  POSIX answers `ENOENT`. Seven published heads of this branch carried it, every one of them
-  reviewed and none of the reviews able to run it, and it went red on both POSIX lanes the first
-  time CI saw the branch — after the last verdict was recorded and the target released.
-
-  The protocol did not lack the means, it lacked the question. Two reviewers of the fix reached the
-  same failure from this same desk in minutes, by extracting `placed` into one file and running it
-  under the WSL `rustc` that is already installed; one reproduced the `ENOENT` byte for byte and
-  also on a symlinked root, which is the shape macOS gives every temporary directory. Nothing in
-  `skill/SKILL.md` or `skill/references/` mentions a platform at all, so nothing asks for it. An
-  earlier draft of this entry said the arm *cannot be compiled* here and that nothing in the
-  protocol *could have* caught it. Both were measured false by the reviewers of the very head that
-  claimed them — the first with a deliberate type error inside the arm, which failed the build on
-  Windows.
-
-  And the lanes measure less than "the lanes" suggests: `cargo test` is fail-fast across targets, so
-  when the lib target failed on Linux and macOS the integration targets never ran there at all —
-  `tests/pipe.rs`, which is where this change's end-to-end evidence lives, never executed on POSIX on
-  this branch. That half was a diagnosis comment and is closed separately: the workflow
-  passes `--no-fail-fast`, so a red run reports every target rather than the first.
-
-  What is **not** true, and was written here for one commit: that those sixteen tests had never run
-  on any runner. They had. A bare `cargo test` builds examples — cargo says so, and
-  `cargo test --all-features --no-run` in a cold tree at this base leaves a runnable
-  `fake_process.exe`. The measurement that produced the wrong claim was taken with
-  `cargo test --test pipe`, a **filtered** invocation that builds no other target and appears nowhere
-  in the workflow. A reviewer caught it before it shipped. The exposure is real and narrower: a
-  filtered run in a cold tree, which is exactly how every mutation measurement in this document is
-  taken. The skip is gone from the rig's type; `cargo clippy --all-targets` remains no help
-  there, leaving a `.d` and a zero-byte `.rmeta`.
+  read-side requester filter, and every field-shape validator on the four markers. **Many smaller ones are
+  not, and this entry does not claim to have found them all**: `handoff_review`'s post-release readback can
+  be disabled with the suite green; its retry-path receipt recheck is caught only by
+  `the_compound_handoff_records_before_release_and_checks_review_afterwards`, a source-text search that
+  catches deletion and not the call being made with its answer ignored; and an adversarial sweep of
+  forty-nine mutations found a further score of defensive checks (replay-path repeats of rules whose
+  first-write copy *is* held, operation-id and marker-field validators, idempotency and visibility
+  readbacks) removable with the suite green. A mutation harness that rewrites line endings produces failures
+  that look like a guard being caught, because tests here anchor on exact whitespace in `claim.rs`.
+- **Four stops around `ensure_draft` and the closing-keyword scan are unheld.** The `[world-action]`
+  guidance naming `Refs #<n>` is held by no test. `Answer::already_wrote` decides which exit-code arm
+  `translate` takes and sits outside the `exit-code` population fingerprint, so that arm's `StatusRequired`
+  axis is held by the fingerprint alone, a tripwire that says *go and read this*. The commit-range scan is
+  one function whose two callers read different checkouts (`publish_review` the isolated one,
+  `assess_autoclose` the repository root); unifying them changes which tree a standalone
+  `check-closing-keywords` inspects, a decision rather than a tidy-up. `keyword_sources` carries two shapes
+  under one key; nothing parses it today. The scan reports every reference, not only to the delivered issue:
+  a pull request body saying `close #464` closed #464 on merge with neither scan objecting, so the pre-push
+  refusal takes any reference and `assess_autoclose` carries the others as `other_issue_keywords`. What
+  remains unread: `assess_autoclose` returns before it scans when the delivered issue has no closing pull
+  request, so a body closing another issue from a pull request that does not close the delivered one is
+  refused before the push and not by the standalone check.
+- **The follow-up's single-sourcing is named, not observed.** `mandatory_follow_up`
+  (`src/transport/commands.rs`) and the branch-link follow-up (`src/transport/claim.rs`) both interpolate
+  `closing::FOLLOW_UP`, and each call site's test compares the emitted text to the constant's value rather
+  than its source: re-inlining a byte-identical copy at the `check_closing_keywords` site leaves both green
+  (measured). What is held is the transition: deleting `transition --to done` from `FOLLOW_UP` reddens
+  `follow_up_names_both_the_transition_and_the_release`.
+- **Nothing enumerates the refusals that write before they refuse, and nothing can.**
+  `Answer::already_wrote` decides which arm `translate` takes, and a refusal earns `Committed` only by
+  carrying `"world": "committed"` in its payload. Whether a stop is reachable *after* a write is a property
+  of the interleaving (a marker is posted, a later read comes back without it), not the source text, and one
+  function holds stops on both sides of its own write, so a walk cannot place a stop relative to a write and
+  a hand-kept list would be a second copy of the control flow. What holds each repaired site is a test that
+  drives the decision to the refusal and reads it through `translate` (`lost-claim-race`,
+  `lost-reclaim-race`, `claim-operation-no-longer-current`, `reclaim-operation-no-longer-current`,
+  `ownership-changed-projections-repaired`, `holder-runtime-missing`, `ownership-kept-changing-before-projection`
+  and `ownership projection write did not read back exactly`). Sites that still answer `NotStarted` over a
+  marker on the timeline, none shown unreachable: `claim-operation-expired` (both readings),
+  `claim-metadata-mismatch`, `reclaim-metadata-mismatch`, `unassign-metadata-mismatch`, the
+  operation-conflict family (`claim-operation-conflict`, `reclaim-operation-conflict`,
+  `unassign-operation-conflict`, `operation-id-kind-conflict`), `resumed_release`'s two stops and
+  `unassign`'s post-write `held-by-other-holder-disappeared`. Measured cost: on another repository's #318 a
+  run was told twice that nothing had been written, and left two control markers on an issue that no verb
+  reaches.
+
+- **The control surface reaches further than a checkout, and the reach has a price.** A write outside every
+  checkout the claim covers is answered `outside-the-claim` without asking the tracker: right for a scratch
+  note and for a `Boundary` write (which stays gated), wrong for a `Routine` write to a file that governs
+  the harness, so each adapter's instruction file, `~/.claude/settings.local.json` and `~/.claude/agents`
+  are `Boundary`. The instruction files are derived from the adapter table;
+  `every_control_file_an_adapter_has_is_one_the_gate_measures` resolves the real path per adapter on all
+  three platforms, under two `XDG_CONFIG_HOME` layouts, on both roads, for the bare root as well as a file
+  inside it. It catches a stale fragment **only where nothing else already matches the path**: staling each
+  of the eleven in turn, it reddens for one (cursor) and stays green for ten (`claude.md`, `agents.md`,
+  `gemini.md`, `qwen.md` and `crush.md` match as whole segments at any depth; continue, cline and windsurf
+  are covered by their rules directories). Nothing is unguarded:
+  `the_spelled_instruction_files_and_the_adapter_table_agree` reddens for all eleven.
+
+  **Gating a file in a directory the host reads whole is defeated by a neighbour.** Continue applies any
+  rule with no frontmatter and Cline loads its rules directory for every task, so a sibling of Estigia's file
+  saying *Estigia is retired* changes what an agent is told; the rules directories are gated.
+  `windsurf/memories` and `.cursor/rules` are in the population on a weaker basis (`paths_in` does not say
+  those hosts read a directory whole, and Estigia writes nothing into `.cursor/rules`), since whether a host
+  reads a directory whole is a fact about somebody else's product. The Continue and Cline rules directories
+  are literals in `CONTROL_SURFACE`
+  (`the_rules_directories_of_continue_and_cline_stay_gated_without_an_adapter_deriving_them`; Windsurf's by
+  `a_retired_hosts_instruction_directory_is_still_a_boundary`), so a future adapter's rules directory is
+  gated only if somebody adds the literal.
+
+  **The cost of a `Boundary`.** A `Boundary` never rides the renewal window and never stands aside outside the
+  claim, so it is a live `gh issue view` every time: 30 invocations through the real hook counted **30
+  tracker calls out of 30** against **0 out of 30** for a `Routine`, and with no network it is a refusal.
+  Three measurements of the read disagree (means 0.93 s, 0.66 s, 1.74 s; range 0.58 to 3.20 s), so the honest
+  statement is **a round trip to GitHub per write to a watched path, between half a second and three seconds**.
+
+  **Anchoring and over-gating.** A fragment ending in `/` names a directory, so a name that merely *ends*
+  alike (`.estigiaignore`, `skills/flow.md`, `.claude/agentsmith.md`) stays `Routine`; the left side is
+  anchored for dot-fragments and directory fragments. A fragment naming a **file** without a leading dot cannot
+  be anchored (`cli/hosts.yml` must match mid-segment: the Windows path is `%APPDATA%\GitHub CLI\hosts.yml`),
+  so vendored copies answer `Boundary` (`vendor/myopencode/agents.md`, `vendor/mygemini/gemini.md`,
+  `~/.codeium/notwindsurf/memories/global_rules.md`) and two-component file fragments match anywhere
+  (`.claude/settingsmap.ts`, `docs/gemini/settings.json`; deliberate, since `.claude/settings` is trimmed to
+  reach `settings.local.json`). An exact collision in somebody's own tree and every per-project entry
+  (`<repo>/.claude/agents/*`, `.cursor/rules/*`, `.cline/rules/*`, `.continue/rules/*`, `CLAUDE.md`,
+  `AGENTS.md`, `.claude/plugins|commands/**`, `.codex/prompts/**`, `.cursor/commands/**`, `.gemini|qwen/extensions/**`,
+  `.continue/config*`, `.codeium/windsurf/**`, `.windsurf/rules/**`, `.opencode/agent/**`) costs a tracker read
+  per write; this repository's own `CLAUDE.md` and `AGENTS.md` trip it. **Over-gating is held unevenly**: the
+  `Routine`-direction fixtures list paths by name and nothing derives one from the adapter table, so widening
+  a derived fragment to its bare directory is caught only where a hand-written row sits under it. Eight
+  widenings redden (`.agents/agents`, `.claude/claude`, `.codex/agents`, `opencode/agents.md`,
+  `.cursor/estigia-workflow-authority.md`, `.continue/rules/estigia.md`, `.cline/rules/estigia.md`,
+  `windsurf/memories/global_rules.md`; Cline's is not re-measured) and five are silent (`.qwen/qwen.md`,
+  `gemini/gemini.md`, `crush/crush.md`, `.zcode/agents`, `.dsh/agents`). The under-gating direction is crossed
+  against `resolve_paths` for every adapter, the retired six included.
+
+  **The shell road folds punctuation, and the fold was reached by nine separate fixes.** `surface_of` builds a
+  view of the command and matches fragments against it; anchoring needs a separator in front of a fragment,
+  and each attempt to supply one missed a spelling the shell allows (an operand after the verb; quoted
+  operands, redirects with no space and operands joined to a long flag; a short option with its value attached
+  such as 7-Zip's `-oDIR`; brace expansion; `mv .estigia ..`, where joined tokens let the parent-segment
+  collapse cross an operand boundary; `%~dp0` and the `cmd.exe` `^` escape; a suffix ladder that concatenated
+  rungs into a path nobody wrote, then one unbounded by the marker's segment, then one read off a different
+  string than the matcher's, so `${P:-.claude/settings.json}` was missed). **Five of the nine were introduced
+  by the fix for the one before it**, and the suite was green over every loss because each fixture spelled its
+  commands the way the last fix had taught it. A tenth is likelier than not: the fixtures hold the nine
+  spellings, the eighteen folded characters (spelled in the fixture and crossed against the constant) and the
+  ordinary-line direction, not the space of spellings, and no property test over generated command lines
+  exists (`punctuation_does_not_hide_a_control_surface`,
+  `a_drive_relative_spelling_is_measured_like_a_relative_one`,
+  `a_relative_operand_is_measured_like_an_absolute_one`,
+  `a_later_operand_does_not_collapse_an_earlier_surface`; the other direction by
+  `folding_punctuation_does_not_gate_an_ordinary_line` and `an_option_prefix_does_not_gate_an_ordinary_line`).
+  **Open:** `${P-path}`, `${P:+path}` and `${P:?path}` answer `Routine` (once `$`, `{`, `}` and `:` fold away
+  `P-path` is a file named `P-path`; laddering from a mid-segment `-` would also gate `x-.claude/agents`);
+  substitutions, a surface split across a `cd` and a glob that empties a directory without naming it are
+  invisible; a command that merely *mentions* a control surface while writing elsewhere is `Boundary`.
+
+  **The containing directories are `Routine` while their contents are `Boundary`:** `~/.claude`, `~/.codex`,
+  `~/.cursor`, `~/.qwen`, `~/.agents`, `~/.zcode`, `~/.dsh`, `~/.gemini`, `~/.cline`, `~/.continue`,
+  `~/.codeium`, `~/.codeium/windsurf`, `~/.config/crush`, `~/.config/gh`. A single recursive delete of
+  `~/.claude` takes the settings file the gate is registered in, the directive, the agent definitions and
+  the installed contract, and being outside every checkout is answered by `outside-the-claim` before the
+  tracker is asked. A fixture holds it for `~/.claude`, `~/.agents` and `~/.codex`. It is an ordinary path a
+  shell writes, not the hard-link limit; the shape that would close it already works next door
+  (`~/.config/opencode` and `~/.estigia` are `Boundary` because those entries name the directory).
+
+  **Two readings of the same text, deliberately.** The write road hands `is_control_surface` a `file_path`; the
+  shell and payload roads hand `text_names_a_control_surface` a command line or patch body, and only the second
+  folds punctuation. On the write road a decorated relative spelling (quotes inside the field, a leading
+  space, tab, `~`, `$`, `%`, `{`, backtick or `=`) is `Routine`, which is not a hole: each either fails
+  outright or resolves to a different directory, and only the bare spelling reaches the file and is gated.
+
+  **Open, neither closed.** `<repo>/.opencode/plugins` has no entry (`opencode/plugins/` is anchored,
+  `.opencode` is not it; Estigia reads nothing from a project-local plugin directory). `curl "-o<path>"`
+  with the value attached **and quoted** is not seen as a write at all, upstream of `surface_of` in
+  `shell::writes_a_file` (`wget "-O<path>"` is a `Boundary`). `harness::roles::definition_for` reads its five
+  definition roots from a hand-spelled list: `every_definition_root_is_a_boundary_on_both_roads` crosses all
+  five, but adding a sixth reddens nothing, and a definition not found is `Ok(None)`, which
+  `declared_policy` reads as *every tool allowed*. `gh`'s hosts file decides which account every tracker
+  call acts as and is named in `CONTROL_SURFACE` at its default location only: `GH_CONFIG_DIR` and
+  `XDG_CONFIG_HOME` move it and those spellings answer `Routine` (measured at `/home/me/xdg/gh/hosts.yml`);
+  `config.yml` stays `Routine` on purpose (default host and protocol, not the credential).
+
+  **The contract refusal comes before every answer except two.** A control-surface write is refused when no
+  contract is installed, even outside the claim
+  (`an_unreadable_control_surface_refuses_even_a_write_outside_the_claim`), and the renewal window's `Allow`
+  sits below it (`an_unreadable_control_surface_permits_no_write_inside_the_renewal_window`,
+  `an_unreadable_control_surface_refuses_a_write_outside_the_claim_inside_the_window`). One stand-aside still
+  answers above it: `another-checkout` fires on the directory the hook was invoked in rather than the write
+  target, so a run claimed in one checkout whose hook fires in an unrelated one stands aside without the
+  contract being read (unlike `nothing-sworn` and `no-tracker`, it is reached by a run that does hold an
+  issue; `a_claim_in_another_checkout_does_not_gate_this_one` is green with no contract on disk).
+
+  **Limits of the stand-aside.** A **hard link** outside the checkout to a file inside it cannot be crossed
+  (`mklink /H`, `ln`, a Linux `mount --bind`), the classification is taken before the write so a link created
+  in between is not seen, and a write tool that creates missing parents can make a directory inside the
+  checkout on the way to a target that is honestly outside. A landing that is not on a drive cannot be
+  compared to a checkout that is, so `placed` declines it and the caller reads that as *inside*: the feature
+  is **off** on UNC ground (a claim over `C:\...\repo` gates a write to `\\192.168.1.10\pikaflix\...`, and a
+  run whose checkout is on a share stands aside for nothing). The guard has no measurement on a machine that
+  does not serve its drives as shares, the newer fixture passes when `mklink /D` is refused for want of
+  Developer Mode, and a landing with no drive-prefix component would be refused instead of compared as
+  relative (no test). **The POSIX half of `placed` is measured by nobody who reads it**: the `..` handling is
+  where the platforms disagree and the arm is a `cfg!(unix)` expression that never runs on a Windows desk
+  (`a_write_that_lands_inside_the_claim_is_gated_however_it_is_spelled` once wrote through
+  `<root>/decoy/../repo/src/main.rs` and went red on both POSIX lanes only after the last verdict was
+  recorded); the publication lane now starts CI against the pushed head and `record_computed_verdict` refuses
+  an approval for a head whose lane is red or running, so a POSIX-only failure is found before the verdicts
+  are spent, but nobody reading the change runs the POSIX arm.
 
 ## What the gate writes, and who else reads
 
-- **The gate named what Estigia writes, and the host reads further than that.** It is
-  the layer immediately outside the one above. The class was closed for the instruction file each
-  adapter's `setup` authors and for four rules directories; a reviewer of that change walked one step
-  further out and found the same shape in three places it did not reach.
+- **The gate named what Estigia writes, and the host reads further than that.** The instruction
+  *file* each adapter's `setup` authors is derived from the adapter table; the rules *directories*
+  are literals in `CONTROL_SURFACE`. So a twelfth adapter's directive is gated with no edit to any
+  list and its rules directory is not: with an `acme` adapter whose instructions resolve to
+  `~/.acme/rules/estigia.md`, the neighbour `zz-override.md` answered `Routine` with the whole suite
+  green. `.cursor/rules/` was always a literal, because Estigia writes no file into it.
+  `agents_root` is a `match` on an enum rather than on `adapter.slug`, since a `&str` match can
+  never be exhaustive.
 
-  **The mechanism, which is the half with teeth.** The instruction *file* is derived from the adapter
-  table; the four rules *directories* were hand-spelled. So a twelfth adapter's directive was gated
-  with no edit to any list and its rules directory was not — measured with an `acme` adapter whose
-  instructions resolved to `~/.acme/rules/estigia.md`, whose neighbour `zz-override.md` answered
-  `Routine` with the whole suite green. Three of the four were derived for a while, by truncating the fragment the adapter
-  already declares, behind a `match` with **no wildcard arm**. All three have since been turned
-  into literals in `CONTROL_SURFACE` and the derivation is gone, so the twelfth-adapter hole measured
-  above is open again by construction; it is the cost named under the weaker basis earlier in this
-  document. `.cursor/rules/` was always a literal, for a reason of the same kind — Estigia writes no
-  file into it.
-  `agents_root` had the same defect in the more usual spelling — `match adapter.slug` with `_ => None`,
-  and a `&str` match can never be exhaustive — so it moved onto the same enum.
+  The surface is decided by one principle: *a path is on the control surface when a host loads it
+  without a person choosing it at the moment of use*. Under it the skills tree around Estigia's own
+  installed contract (derived per adapter from the field that decides where the installer writes),
+  plugin payloads, commands and prompts, the Gemini and Qwen extension roots, Continue's assistant
+  configuration, Windsurf's MCP file and workflows, and the per-project twins (a project's own root
+  `CLAUDE.md`, `AGENTS.md`, `.clinerules`, `.windsurf/rules`) are all `Boundary`. A slash command is
+  invoked explicitly, but its name and description are put in front of the agent whether or not it
+  ever is, so the principle puts it on the surface.
 
-  **The two decisions, taken as sets.** The remaining items were enumerations rather than mechanisms,
-  and the issue asked for them to be decided together rather than one path at a time. They were, on
-  one stated principle: *a path is on the control surface when a host loads it without a person
-  choosing it at the moment of use*. Under it, the skills tree around Estigia's own installed contract
-  (derived per adapter from the same field that decides where the installer writes), plugin payloads,
-  commands and prompts, the Gemini and Qwen extension roots, Continue's assistant configuration and
-  Windsurf's MCP file and workflows all join — and so do the per-project twins, including a project's
-  own root `CLAUDE.md`, `AGENTS.md`, `.clinerules` and `.windsurf/rules`, which the previous line
-  excluded by nothing better than which home fragment happened to carry a dotted prefix.
-
-  The commands and prompts directories are the one row where the principle is doing visible work
-  rather than confirming an obvious answer. A slash command is invoked explicitly, which is the
-  weaker authority the issue itself noted; its name and description are put in front of the agent
-  whether or not it ever is, which is the always-loaded half. Deciding that per directory is the
-  reasoning that left the class open in the first place, so the principle decides it.
-
-  **What it costs, measured.** Every path `git ls-files` reports was classified: **two** of this
-  repository's own tracked files are `Boundary` now, `CLAUDE.md` and `AGENTS.md`. A run holding a
-  claim that edits this repository's instructions pays one live tracker read for it. A run holding no
-  claim is `Outside` and pays nothing.
-
-  That count is the **write** road only, and it understates the roads that read prose. Two of them
-  do. `apply_patch` and `patch` put the path in a patch body, so `classify_with` reads the whole
-  payload: a patch to `README.md` whose body contains *see AGENTS.md for the rules* is `Boundary`,
-  and the same patch without the mention is `Routine`. And a **shell** line pays it too, whenever the
-  command is already one `writes_a_file` recognises. Measured, each against its own control:
+  **What it costs.** `CLAUDE.md` and `AGENTS.md` are `Boundary` in this repository (a claimed run pays one live
+  tracker read; an unclaimed one is `Outside` and pays nothing). The write road is not the whole count:
+  `apply_patch` and `patch` put the path in a patch body, so `classify_with` reads the whole payload and a
+  patch to `README.md` whose body contains *see AGENTS.md for the rules* is `Boundary`; and a **shell** line
+  pays it whenever the command is already one `writes_a_file` recognises, including a trailing comment:
 
   ```
   Routine   git commit -m "update AGENTS.md"          Routine   echo see CLAUDE.md
@@ -2193,92 +1567,48 @@ pointer that leaves it names the document it points at.
   Boundary  sed -i 's/x/y/' /repo/notes.txt # per AGENTS.md
   ```
 
-  So the rule is not *which agent* but *whether the line writes at all*: a command that is not a write
-  never reaches the matcher, and one that is pays for every control-surface name anywhere in its text,
-  including a trailing comment. Two reviewers measured the writing half and one measured the
-  non-writing half and read the scope as accurate; both are right about their own examples, and this
-  is the statement that covers both. No count in this document covers this road.
+  The rule is *whether the line writes at all*: a command that is not a write never reaches the matcher, and
+  one that is pays for every control-surface name anywhere in its text. No count in this document covers this
+  road.
 
-  **What is still open, and none of it is closed by this entry.**
+  **What is open.**
 
-  - The matcher grew a third anchoring rule — a fragment holding no separator is a whole segment,
-    without which `agents.md` reaches `myagents.md` — and it anchors only the **left** side. So
-    `<repo>/AGENTS.md.bak` and `<repo>/CLAUDE.md.orig` are `Boundary`, as `.claude/settings` already
-    reached `.claude/settingsmap.ts`. Deliberate and the same trade: the right side is where
-    `settings.local.json` and `CLAUDE.local.md` live, and trimming to reach them is why those entries
-    are prefixes at all.
-  - `.continue/config` is trimmed to reach `config.yaml`, `config.json` and `config.ts` under one
-    stem, so `~/.continue/configuration-notes.md` is `Boundary` too.
-  - `<repo>/.opencode/plugins` is still `Routine`, unchanged and named in the entry above. Estigia
-    reads nothing from a project-local plugin directory, which is the stated reason and not a
-    measurement.
-  - The over-gating direction is still not derived from the adapter table. How many adapters are
-    silent when their fragment is widened is measured in the paragraph above and stated **only**
-    there — this bullet used to repeat the number and the two disagreed after the count was corrected
-    in one place. One fact, one place.
-  - A host that reads a directory whole and is declared not to is invisible here, in exactly the way
-    the four hand-spelled entries were invisible for the adapters nobody thought of. The declaration
+  - A fragment holding no separator is a whole segment on the **left** only, so
+    `<repo>/AGENTS.md.bak` and `<repo>/CLAUDE.md.orig` are `Boundary`, as `.claude/settings` reaches
+    `.claude/settingsmap.ts`. Deliberate: the right side is where `settings.local.json` and
+    `CLAUDE.local.md` live. `.continue/config` is trimmed to reach `config.yaml`, `config.json` and
+    `config.ts`, so `~/.continue/configuration-notes.md` is `Boundary` too. Further instances follow
+    the same shapes (`/repo/.cursorrules-old`, `/repo/.windsurfrules.bak`, `/repo/qwen.mdx`,
+    `/repo/vendor/gemini/extensions/pack/manifest.json`). One shape is road-dependent, and the suffix
+    ladder is its cause: `/repo/-agents.md`, `/repo/-claude.md`, `/repo/-qwen.md` and
+    `/repo/--agents.md` are `Routine` to `Write` and `Boundary` to `rm`. The cost is one tracker read
+    and nothing is under-gated. The fixture holds representatives, not the family.
+  - `<repo>/.opencode/plugins` is `Routine`; Estigia reads nothing from a project-local plugin
+    directory, which is the stated reason and not a measurement. The over-gating direction is not
+    derived from the adapter table (the measurement is in the previous section).
+  - A host that reads a directory whole and is declared not to is invisible here. The declaration
     moved from a distant list onto the adapter; it did not become checkable.
-  - **Flipping the row does not re-render the installed definition, and nothing reports the drift.**
-    `config set` writes the contract table and reads it back; it never writes an agent's files, which
-    is true of every row and stated as a safety property in `docs/configuration.md`. For this row it is
-    also a hazard: measured, `estigia config set "Evidence standard" measuring` answers `Evidence
-    standard is now measuring` with exit 0 while `~/.claude/agents/review-blind.md` still reads
-    `tools: Read, Grep, Glob`, and `doctor` answers `ok canonical — and every configured agent reads
-    the rows it decides by`. Only `setup` or `sync` re-renders. **One** direction of the mismatch fails
-    closed at the gate, which enforces from the embedded definition rendered with the effective row
-    rather than from the file: a host offering a grant the row no longer asks for is refused there.
-    The other direction is not the gate’s doing at all — with the row widened and the file not
-    yet re-rendered, the gate **allows**, and what refuses is the host’s stale `tools:` line, if
-    that host enforces one, which the opening entry of this document says Estigia cannot prove. Either way the judge is told one thing by its own
-    definition and answered another by the hook. An earlier version of this sentence said both
-    directions fail closed at the gate, and contradicted itself one clause later; the repair for that
-    left this fragment behind, which a reviewer then found. Nothing reports it, and `reviewer_is_static`
-    accepts any body `Evidence::all()` × `RESERVED_REVIEWERS` renders by design — more than the
-    reading/measuring pair alone, since seven of the eight rows are sealed and each of those collapses
-    to one body, `render_reviewer_agent`'s sealed arm never reading `evidence` at all
-    (`src/setup/mod.rs`). Six of the seven carry their own template; `review-blind-sealed`
-    shares the judge's (`src/harness/roles.rs`). `reviewer_is_static_for_seal`, which is what
-    a launch reads, cannot see the drift either.
-  - **Only one of the two derived families is compiler-forced**, named here only because this row now
-    decides a grant beside them. The measurement is **further down and in a different entry** — the
-    roles entry's *Still open* list, under the bullet beginning *"Only one of the two derived
-    families"* — and is not repeated here. Two earlier versions of this pointer were wrong in two
-    different ways: the first sent a reader to *the entry above*, where the material is not, and the
-    second fixed the direction and still said *this same entry*, which it is not either. Both were
-    found by reviewers.
+  - **Flipping the Evidence standard row does not re-render the installed definition, and nothing reports the
+    drift.** `config set` writes the contract table and reads it back but never writes an agent's files
+    (`docs/configuration.md` states it as a safety property). Measured: `estigia config set "Evidence
+    standard" measuring` answers `Evidence standard is now measuring` with exit 0 while
+    `~/.claude/agents/review-blind.md` still reads `tools: Read, Grep, Glob`, and `doctor` answers `ok
+    canonical — and every configured agent reads the rows it decides by`; only `setup` or `sync` re-renders.
+    A grant the row no longer asks for is refused at the gate, which enforces from the embedded definition
+    rendered with the effective row; with the row widened and the file not re-rendered the gate **allows**
+    and only the host's stale `tools:` line refuses, if it enforces one. `reviewer_is_static` accepts any body
+    `Evidence::all()` × `RESERVED_REVIEWERS` renders, and `reviewer_is_static_for_seal`, which a launch reads,
+    cannot see the drift either.
+  - **Only one of the two derived families is compiler-forced.** The measurement is in the roles
+    entry's *Still open* list, under the bullet beginning *"Only one of the two derived families"*.
   - **Plugin-provided sub-agent definitions are the same shape as `.opencode/agent/`.**
-    `~/.claude/plugins/**/agents/*.md` is a `Boundary` now and `roles::definition_for` does not search
-    it, so such a definition is `Ok(None)` on read, which `declared_policy` reads as *every tool
-    allowed*. Gated against being written, not read when enforcing.
-  - The over-gating this change adds is declared **by shape, not by instance**: left-anchored only, a
-    whole segment at any depth, and `.clinerules` / `.continue/config` as prefixes. Instances a
-    reviewer measured beyond the fixture's rows — `/repo/.cursorrules-old`, `/repo/.windsurfrules.bak`,
-    `/repo/.github/copilot-instructions.md.bak`, `/repo/target/doc/qwen.md`, `/repo/qwen.mdx`,
-    `/repo/vendor/gemini/extensions/pack/manifest.json` — each follow one of those shapes. One shape
-    is road-dependent, and the suffix ladder is its cause: `/repo/-agents.md`, `/repo/-claude.md`,
-    `/repo/-qwen.md` and `/repo/--agents.md` are `Routine` to `Write` and `Boundary` to `rm`, because
-    the shell road splits a token at a `-` or `~` that starts a segment and offers the rest as a rung,
-    while the write road has no ladder. The cost is one tracker read and nothing is under-gated. The
-    fixture holds representatives, not the family.
-  - **This change narrowed the crossing's own diagnostic value**, and the paragraph on staling the
-    eleven fragments carries the measurement: from eight of eleven caught to one, because the
-    per-project entries also match every adapter's home instruction file. Nothing was unguarded at
-    that head — `the_spelled_instruction_files_and_the_adapter_table_agree` reddened for all eleven
-    of the fragments the table then held — but a reviewer relying on the crossing to catch a stale
-    fragment now has one adapter's worth of signal.
-  - `.opencode/agent/` — the singular spelling — is a `Boundary` now, and
-    `roles::definition_for` still searches only `.opencode/agents` beside `.claude/agents`. So a
-    sub-agent defined in the singular directory is gated against being written and is still
-    `Ok(None)` when read, which `declared_policy` reads as *every tool allowed*. This change closed
-    the gate half of a one-letter asymmetry and left the enforcement half; the sentence above about
-    five definition roots is not falsified, but a sixth spelling is known now and is not searched.
-  - **Other wildcards of the `agents_root` shape survive.** Adding another `InstructionFile`
-    variant fails to compile in **seven** places, and **six** `_` arms on that enum in shipping
-    code then hand it a default nobody chose. Read by hand with `grep`, and that is the limit of
-    the claim — nothing derives this list, so it is a reading and not a measurement, and an
-    earlier draft that said these were *named rather than implied* named five of the eight it then
-    held:
+    `~/.claude/plugins/**/agents/*.md` and `.opencode/agent/` (singular) are `Boundary`, but
+    `roles::definition_for` searches neither, so such a definition is `Ok(None)` on read, which
+    `declared_policy` reads as *every tool allowed*. They are gated against being written, not read
+    when enforcing; a sixth definition spelling is known and not searched.
+  - **Other wildcards of the `agents_root` shape survive.** Adding an `InstructionFile` variant
+    fails to compile in several places, and six `_` arms on that enum in shipping code then hand it a
+    default nobody chose. This is a reading by `grep`, not a measurement; nothing derives the list:
 
     | where | arm | reachable by the next adapter |
     |---|---|---|
@@ -2289,39 +1619,18 @@ pointer that leaves it names the document it points at.
     | `setup/mod.rs` `model_catalog` | `_ => …None` | yes, and advisory |
     | `setup/render.rs` `gate_gap` | `_ => "no published reference…"` | only the next one, and the text is no longer benign |
 
-    `mcp_config` is one of the seven the compiler now forces, so a new adapter's author is made to
-    choose an MCP file. `paths_in`'s own comment beside `mcp_config` is the argument for forcing that
-    choice at all — *an MCP entry written where the agent does not read it reports success and
-    configures nothing; a wrong path is worse than a missing one, because it fails while claiming to
-    have worked* — and until this change the **dialect** written into that file, once an author
-    answered `Some`, still came from a wildcard: nothing crossed it, and no test asserted the format
-    for an adapter that did not already have one.
+    `mcp_config` is compiler-forced, so a new adapter's author must choose an MCP file; `paths_in`
+    explains why — an MCP entry written where the agent does not read it reports success and
+    configures nothing. `gate_spec`'s and `mcp_format`'s wildcards are spelled out in
+    `src/setup/render.rs`, which is what stopped ZCode and DeepSeek Harness getting *no gate* and the
+    flat `mcpServers.estigia` default silently.
 
-    `gate_spec`'s `_ => None` was the eighth entry here and is **closed**: it is spelled out at
-    `src/setup/render.rs` since ZCode and DeepSeek Harness joined the table, because that
-    wildcard is what handed both of them *no gate* with nothing written down — and `gate_gap`'s
-    wildcard beside it then told an operator that no reference had been read for ZCode, where the
-    bullet on ZCode below says one was. That is what a silent default costs on this enum, measured
-    rather than anticipated, and it is why the `gate_gap` row above no longer calls its text benign.
-
-    `mcp_format`'s `_ => McpFormat::McpServers` is **closed** too, by this change: it is spelled out
-    at `src/setup/render.rs`, because that wildcard is the one three reviewers found
-    independently, and a wrong dialect in the right file fails the same way `mcp_config`'s own
-    comment says a wrong path does — it reports success and configures nothing. Left open, it would
-    have handed ZCode the same flat `mcpServers.estigia` default every plain adapter gets, where
-    ZCode's own CLI reads a two-level `mcp.servers.estigia` — the shape `render_mcp` and `strip_mcp`
-    now write and remove explicitly, crossed against a running ZCode CLI 0.16.5 rather than read on
-    a page (`docs/honesty.md`, the ZCode adapter entry below).
-
-    None of the six that remain is closed here.
-
-    Two defaults of the same kind are invisible to that grep because they are not `_` arms:
-    `supports_mcp` and `can_gate_tools`, both `matches!`-shaped on the same enum, so a new variant
-    falls to `true` for the first and `false` for the second. Each is caught by a test rather than by
-    the compiler — `every_agent_that_supports_mcp_resolves_a_config_path` and
-    `the_gate_gap_and_the_gate_never_disagree` — so neither is a silent default in behaviour, only in
-    the reading. The same grep also finds one `_` arm in test code (`src/setup/tests.rs`), which hands
-    a default to a test and not to the harness; the six above are shipping code.
+    Two defaults of the same kind are not `_` arms and are invisible to that grep: `supports_mcp` and
+    `can_gate_tools`, both `matches!`-shaped, so a new variant falls to `true` for the first and
+    `false` for the second. A test catches each rather than the compiler —
+    `every_agent_that_supports_mcp_resolves_a_config_path` and
+    `the_gate_gap_and_the_gate_never_disagree`. One more `_` arm sits in test code
+    (`src/setup/tests.rs`).
 
 ## Roles and the definitions they need
 
