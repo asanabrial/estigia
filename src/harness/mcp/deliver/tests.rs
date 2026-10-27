@@ -1172,11 +1172,12 @@ fn store_holder(
     repo: &Path,
     run_id: &str,
     issue: u64,
+    state: &str,
     receipt: Option<crate::transport::claim::ReviewTransaction>,
 ) {
     let mut run = session::Run::new(run_id.to_owned());
     run.issue = Some(crate::identity::Identity::Number(issue));
-    run.state = Some("in-progress".to_owned());
+    run.state = Some(state.to_owned());
     run.repo_dir = Some(repo.to_path_buf());
     run.review_transaction = receipt;
     session::store(&context.state_root, &run).expect("the pointer writes");
@@ -1200,36 +1201,71 @@ fn the_live_merge_decision_names_its_caller_when_another_live_run_holds_the_same
         repo.path(),
         "claude-caller000",
         12,
+        "review",
         Some(holder_receipt()),
     );
-    store_holder(&context, repo.path(), "claude-bystander", 34, None);
-    let bystander_before = session::load(&context.state_root, "claude-bystander");
+    store_holder(
+        &context,
+        repo.path(),
+        "claude-bystander",
+        34,
+        "in-progress",
+        None,
+    );
+    let bystander_bytes = std::fs::read(session::pointer_path(
+        &context.state_root,
+        "claude-bystander",
+    ))
+    .expect("the pointer reads");
 
+    let receipt = holder_receipt();
+    let marker = crate::transport::markers::render(
+        "ci-release",
+        &[
+            ("run-id", "claude-caller000"),
+            ("epoch", &receipt.epoch),
+            ("pr", "7"),
+            ("head", &receipt.head),
+            ("base", &receipt.base),
+            ("digest", &receipt.digest),
+        ],
+    )
+    .expect("the marker renders");
+    let store = root.path().join("store").join("state.db");
+    std::fs::create_dir_all(store.parent().expect("a parent")).expect("a store directory");
     let bin = scripted_gh();
     let script = answers(&[
-        crate::test_env::live_holder_issue("claude-caller000", 12, "in-progress"),
+        crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
         crate::test_env::live_holder_issue("claude-bystander", 34, "in-progress"),
-        pr_head_answer(&holder_receipt().head),
+        pr_head_answer(&receipt.head),
     ]);
-    let refused = crate::test_env::with_scripted_gh(bin.path(), &script, || {
-        live_for(&context, "claude-caller000")
-            .merge_decision(7)
-            .expect_err("no CI release is recorded for this receipt")
+    let allowed = crate::transport::store::with_store_at(&store, || {
+        crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            let transport = transport::Context::live(
+                context.skill_root.clone(),
+                context.repo_dir.clone(),
+                None,
+            );
+            crate::transport::store::Ledger::open(&transport, 12, "2026-10-27T00:00:00Z")
+                .expect("the issue is imported")
+                .append(
+                    &format!("CI released.\n\n{marker}\n"),
+                    "2026-10-27T00:00:01Z",
+                )
+                .expect("the release is recorded");
+            live_for(&context, "claude-caller000").merge_decision(7)
+        })
     });
 
-    assert_ne!(
-        refused["code"], "several-runs-hold-this-checkout",
-        "{refused}"
+    allowed.expect("the reviewed, released caller is allowed beside another live holder");
+    assert_eq!(
+        std::fs::read(session::pointer_path(
+            &context.state_root,
+            "claude-bystander"
+        ))
+        .expect("the pointer reads"),
+        bystander_bytes
     );
-    assert!(
-        ["merge-without-ci-release", "read-failed"]
-            .contains(&refused["code"].as_str().unwrap_or_default()),
-        "{refused}"
-    );
-    let bystander_after = session::load(&context.state_root, "claude-bystander");
-    assert_eq!(bystander_after.issue, bystander_before.issue);
-    assert_eq!(bystander_after.state, bystander_before.state);
-    assert!(bystander_after.review_transaction.is_none());
 }
 
 #[test]
@@ -1242,9 +1278,17 @@ fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_or_unreada
         repo.path(),
         "claude-caller000",
         12,
+        "review",
         Some(holder_receipt()),
     );
-    store_holder(&context, repo.path(), "claude-bystander", 34, None);
+    store_holder(
+        &context,
+        repo.path(),
+        "claude-bystander",
+        34,
+        "in-progress",
+        None,
+    );
 
     let unclaimed = live_for(&context, "claude-nothing000")
         .merge_decision(7)
@@ -1255,7 +1299,7 @@ fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_or_unreada
     let script = answers(&[crate::test_env::live_holder_issue(
         "claude-caller000",
         12,
-        "in-progress",
+        "review",
     )]);
     let foreign = crate::test_env::with_scripted_gh(bin.path(), &script, || {
         live_for(&context, "claude-caller000")
@@ -1267,7 +1311,7 @@ fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_or_unreada
     let stale = crate::test_env::with_scripted_gh(
         bin.path(),
         &answers(&[
-            crate::test_env::live_holder_issue("claude-caller000", 12, "in-progress"),
+            crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
             pr_head_answer(&"f".repeat(40)),
         ]),
         || {

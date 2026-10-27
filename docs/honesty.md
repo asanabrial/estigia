@@ -579,9 +579,9 @@ pointer that leaves it names the document it points at.
   neither does `deliver`'s merge decision: it loads the pointer of the run id it was given and asks the
   same session gate the hook does, so another live holder of the shared checkout neither blocks it nor
   lends it authority. A run id with no claim, an unreadable pointer, a receipt for another pull request,
-  a moved head and a missing CI release each still refuse. Uncrossed: the regression stops at the
-  missing-CI-release refusal, because no test seeds the local store with a release, so the `Allow` of an
-  otherwise valid delivery is read from the code and not driven.
+  a moved head and a missing CI release each still refuse. A reviewed caller whose exact receipt has
+  a recorded CI release is allowed beside another live holder, and the other holder's pointer is left
+  byte-identical; the release is seeded into the test store rather than produced by `release_ci`.
 
   **The `workdir` spelling is not crossed against the host, and neither is the resolution base.**
   `workdir` was read from OpenCode's shell-tool schema in the installed binary, but nothing here holds a
