@@ -16638,26 +16638,31 @@ fn change_of(
     before: &str,
     after: &str,
 ) -> (tempfile::TempDir, Context, ReviewTransaction) {
-    let root = tempfile::tempdir().expect("a directory");
+    static TEMPLATES: crate::test_env::Templates<(String, String)> =
+        crate::test_env::Templates::new();
+    let (root, (base, head)) = TEMPLATES.copy(&format!("{file}\0{before}\0{after}"), |root| {
+        let repo = root.join("repo");
+        std::fs::create_dir_all(repo.join("src")).expect("the src directory");
+        git(&repo, &["init", "--quiet", "-b", "main"]);
+        git(&repo, &["config", "user.email", "estigia@example.invalid"]);
+        git(&repo, &["config", "user.name", "Estigia test"]);
+        git(
+            &repo,
+            &["remote", "add", "origin", "git@github.com:fixture/repo.git"],
+        );
+        std::fs::write(repo.join(file), before).expect("content");
+        git(&repo, &["add", file]);
+        git(&repo, &["commit", "--quiet", "-m", "base"]);
+        let base = head_of(&repo);
+        std::fs::write(repo.join(file), after).expect("content");
+        git(&repo, &["add", file]);
+        git(&repo, &["commit", "--quiet", "-m", "head"]);
+        (base, head_of(&repo))
+    });
     let repo = root.path().join("repo");
-    std::fs::create_dir_all(repo.join("src")).expect("the src directory");
-    git(&repo, &["init", "--quiet", "-b", "main"]);
-    git(&repo, &["config", "user.email", "estigia@example.invalid"]);
-    git(&repo, &["config", "user.name", "Estigia test"]);
-    git(
-        &repo,
-        &["remote", "add", "origin", "git@github.com:fixture/repo.git"],
-    );
-    std::fs::write(repo.join(file), before).expect("content");
-    git(&repo, &["add", file]);
-    git(&repo, &["commit", "--quiet", "-m", "base"]);
-    let base = head_of(&repo);
-    std::fs::write(repo.join(file), after).expect("content");
-    git(&repo, &["add", file]);
-    git(&repo, &["commit", "--quiet", "-m", "head"]);
     let receipt = ReviewTransaction {
-        head: head_of(&repo),
-        base,
+        head: head.clone(),
+        base: base.clone(),
         ..ledger_receipt()
     };
     let context = Context {

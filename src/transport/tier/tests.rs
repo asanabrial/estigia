@@ -765,18 +765,19 @@ fn oid(at: &std::path::Path) -> String {
 }
 
 fn repo() -> tempfile::TempDir {
-    let root = tempfile::tempdir().expect("a repository");
-    let at = root.path();
-    git(at, &["git", "init", "--quiet", "-b", "main", "."]);
-    git(
-        at,
-        &["git", "config", "user.email", "estigia@example.invalid"],
-    );
-    git(at, &["git", "config", "user.name", "Estigia test"]);
-    git(at, &["git", "config", "core.autocrlf", "false"]);
-    std::fs::write(at.join(".gitkeep"), "").expect("the seed file");
-    git(at, &["git", "add", "."]);
-    git(at, &["git", "commit", "--quiet", "-m", "seed"]);
+    static TEMPLATES: crate::test_env::Templates<()> = crate::test_env::Templates::new();
+    let (root, ()) = TEMPLATES.copy("seeded", |at| {
+        git(at, &["git", "init", "--quiet", "-b", "main", "."]);
+        git(
+            at,
+            &["git", "config", "user.email", "estigia@example.invalid"],
+        );
+        git(at, &["git", "config", "user.name", "Estigia test"]);
+        git(at, &["git", "config", "core.autocrlf", "false"]);
+        std::fs::write(at.join(".gitkeep"), "").expect("the seed file");
+        git(at, &["git", "add", "."]);
+        git(at, &["git", "commit", "--quiet", "-m", "seed"]);
+    });
     root
 }
 

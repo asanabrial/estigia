@@ -607,27 +607,55 @@ pub(crate) fn fake_cli_directory(names: &[&str]) -> &'static tempfile::TempDir {
     directory
 }
 
-/// A fresh copy of the directory `build` fills once per test binary in `template`.
+/// Fixture directories built once per test binary, one per key, each handed out
+/// only as a fresh copy alongside what its build answered.
 ///
 /// For fixtures that cost processes to make, such as Git repositories, and that a
-/// test then changes: the copy is the caller's to change, the template is never
-/// handed out. Git metadata that names the template by absolute path — a remote's
-/// URL in `config`, a worktree's `gitdir` and `.git` files — is re-pointed at the
-/// copy, so the copy answers Git exactly as a freshly built fixture would.
-pub(crate) fn copy_of_template(
-    template: &'static std::sync::OnceLock<tempfile::TempDir>,
-    build: impl FnOnce(&Path),
-) -> tempfile::TempDir {
-    let template = template.get_or_init(|| {
-        let directory = tempfile::tempdir().expect("a template directory");
-        build(directory.path());
-        directory
-    });
-    let copy = tempfile::tempdir().expect("a directory for the template's copy");
-    let from = directory_name(template.path());
-    let to = directory_name(copy.path());
-    copy_tree(template.path(), copy.path(), &from, &to);
-    copy
+/// test then changes: the copy is the caller's to change, the template never is.
+/// Git metadata that names the template by absolute path — a remote's URL in
+/// `config`, a worktree's `gitdir` and `.git` files — is re-pointed at the copy,
+/// so the copy answers Git exactly as a freshly built fixture would.
+pub(crate) struct Templates<T: 'static> {
+    built: std::sync::OnceLock<
+        Mutex<std::collections::HashMap<String, &'static (tempfile::TempDir, T)>>,
+    >,
+}
+
+impl<T: Send + Sync> Templates<T> {
+    pub(crate) const fn new() -> Self {
+        Self {
+            built: std::sync::OnceLock::new(),
+        }
+    }
+
+    pub(crate) fn copy(
+        &'static self,
+        key: &str,
+        build: impl FnOnce(&Path) -> T,
+    ) -> (tempfile::TempDir, &'static T) {
+        let template: &'static (tempfile::TempDir, T) = {
+            let mut built = self
+                .built
+                .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            if let Some(template) = built.get(key) {
+                template
+            } else {
+                let directory = tempfile::tempdir().expect("a template directory");
+                let answer = build(directory.path());
+                let template: &'static (tempfile::TempDir, T) =
+                    Box::leak(Box::new((directory, answer)));
+                built.insert(key.to_owned(), template);
+                template
+            }
+        };
+        let copy = tempfile::tempdir().expect("a directory for the template's copy");
+        let from = directory_name(template.0.path());
+        let to = directory_name(copy.path());
+        copy_tree(template.0.path(), copy.path(), &from, &to);
+        (copy, &template.1)
+    }
 }
 
 fn directory_name(path: &Path) -> String {
@@ -872,33 +900,35 @@ pub(crate) fn answers(entries: &[serde_json::Value]) -> String {
 /// built on this to green having measured nothing. `docs/honesty.md` records
 /// what the silent form cost.
 pub(crate) fn repository_with_commit() -> tempfile::TempDir {
-    let directory = tempfile::tempdir().expect("a temporary directory");
-    let git = |arguments: &[&str]| {
-        let output = std::process::Command::new("git")
-            .arg("-C")
-            .arg(directory.path())
-            .args(arguments)
-            .output()
-            .unwrap_or_else(|error| {
-                panic!(
-                    "this fixture needs a usable `git` on PATH and could not run \
-                     `git {}`: {error}. Install git, or fix the command, because a test \
-                     that reports `ok` without running is a defect this repository has filed against itself.",
-                    arguments.join(" ")
-                )
-            });
-        assert!(
-            output.status.success(),
-            "`git {}` failed: {}. This fixture needs a usable `git` on PATH — \
-             `docs/honesty.md` records why an unmeasured test must not report `ok`.",
-            arguments.join(" "),
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    };
-    git(&["init", "--quiet"]);
-    git(&["config", "user.email", "nobody@example.invalid"]);
-    git(&["config", "user.name", "nobody"]);
-    git(&["commit", "--allow-empty", "--quiet", "-m", "base"]);
+    static TEMPLATES: Templates<()> = Templates::new();
+    let (directory, ()) = TEMPLATES.copy("one-commit", |at| {
+        let git = |arguments: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(at)
+                .args(arguments)
+                .output()
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "this fixture needs a usable `git` on PATH and could not run \
+                         `git {}`: {error}. Install git, or fix the command, because a test \
+                         that reports `ok` without running is a defect this repository has filed against itself.",
+                        arguments.join(" ")
+                    )
+                });
+            assert!(
+                output.status.success(),
+                "`git {}` failed: {}. This fixture needs a usable `git` on PATH — \
+                 `docs/honesty.md` records why an unmeasured test must not report `ok`.",
+                arguments.join(" "),
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.email", "nobody@example.invalid"]);
+        git(&["config", "user.name", "nobody"]);
+        git(&["commit", "--allow-empty", "--quiet", "-m", "base"]);
+    });
     directory
 }
 
@@ -1223,9 +1253,8 @@ mod fake_cli_link_tests {
 
 #[cfg(test)]
 mod copy_of_template_tests {
-    use super::copy_of_template;
+    use super::Templates;
     use std::path::Path;
-    use std::sync::OnceLock;
 
     fn git(at: &Path, arguments: &[&str]) -> String {
         let args: Vec<&str> = ["git"]
@@ -1276,9 +1305,20 @@ mod copy_of_template_tests {
 
     #[test]
     fn a_copy_answers_git_about_itself_and_never_about_the_template() {
-        static TEMPLATE: OnceLock<tempfile::TempDir> = OnceLock::new();
-        let first = copy_of_template(&TEMPLATE, build);
-        let second = copy_of_template(&TEMPLATE, |_| panic!("the template is built once"));
+        static TEMPLATES: Templates<&str> = Templates::new();
+        let (first, built) = TEMPLATES.copy("repo", |root| {
+            build(root);
+            "built"
+        });
+        let (second, again) =
+            TEMPLATES.copy("repo", |_| panic!("the template for one key is built once"));
+        assert_eq!((*built, *again), ("built", "built"));
+        let (other, _) = TEMPLATES.copy("other", |root| {
+            std::fs::write(root.join("marker"), "other\n").unwrap();
+            "other"
+        });
+        assert!(other.path().join("marker").is_file());
+        assert!(!other.path().join("work").exists());
         let root = std::fs::canonicalize(second.path()).unwrap();
         let work = second.path().join("work");
         let tree = second.path().join("tree");
@@ -1300,9 +1340,12 @@ mod copy_of_template_tests {
         git(&tree, &["add", "b.txt"]);
         git(&tree, &["commit", "--quiet", "-m", "b"]);
         git(&tree, &["push", "--quiet", "origin", "side"]);
-        let template = TEMPLATE.get().unwrap().path();
+        let (fresh, _) = TEMPLATES.copy("repo", |_| unreachable!());
         assert_eq!(
-            git(&template.join("remote.git"), &["branch", "--list", "side"]),
+            git(
+                &fresh.path().join("remote.git"),
+                &["branch", "--list", "side"]
+            ),
             ""
         );
         assert_eq!(
@@ -1313,7 +1356,7 @@ mod copy_of_template_tests {
             ""
         );
         assert_eq!(
-            git(&template.join("work"), &["rev-list", "--count", "side"]).trim(),
+            git(&fresh.path().join("work"), &["rev-list", "--count", "side"]).trim(),
             "1"
         );
     }
