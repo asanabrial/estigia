@@ -920,35 +920,83 @@ pub(crate) fn answers(entries: &[serde_json::Value]) -> String {
 /// what the silent form cost.
 pub(crate) fn repository_with_commit() -> tempfile::TempDir {
     static TEMPLATES: Templates<()> = Templates::new();
-    let (directory, ()) = TEMPLATES.copy("one-commit", |at| {
-        let git = |arguments: &[&str]| {
-            let output = std::process::Command::new("git")
-                .arg("-C")
-                .arg(at)
-                .args(arguments)
-                .output()
-                .unwrap_or_else(|error| {
-                    panic!(
-                        "this fixture needs a usable `git` on PATH and could not run \
-                         `git {}`: {error}. Install git, or fix the command, because a test \
-                         that reports `ok` without running is a defect this repository has filed against itself.",
-                        arguments.join(" ")
-                    )
-                });
-            assert!(
-                output.status.success(),
-                "`git {}` failed: {}. This fixture needs a usable `git` on PATH — \
-                 `docs/honesty.md` records why an unmeasured test must not report `ok`.",
-                arguments.join(" "),
-                String::from_utf8_lossy(&output.stderr).trim()
-            );
-        };
-        git(&["init", "--quiet"]);
-        git(&["config", "user.email", "nobody@example.invalid"]);
-        git(&["config", "user.name", "nobody"]);
-        git(&["commit", "--allow-empty", "--quiet", "-m", "base"]);
-    });
+    let (directory, ()) = TEMPLATES.copy("one-commit", initialize_repository);
     directory
+}
+
+/// A repository with one commit at `at`, for a checkout nested inside a fixture rather than a
+/// temporary directory of its own.
+pub(crate) fn repository_at(at: &Path) {
+    initialize_repository(at);
+}
+
+fn initialize_repository(at: &Path) {
+    let git = |arguments: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(at)
+            .args(arguments)
+            .output()
+            .unwrap_or_else(|error| {
+                panic!(
+                    "this fixture needs a usable `git` on PATH and could not run \
+                     `git {}`: {error}. Install git, or fix the command, because a test \
+                     that reports `ok` without running is a defect this repository has filed against itself.",
+                    arguments.join(" ")
+                )
+            });
+        assert!(
+            output.status.success(),
+            "`git {}` failed: {}. This fixture needs a usable `git` on PATH — \
+             `docs/honesty.md` records why an unmeasured test must not report `ok`.",
+            arguments.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    };
+    git(&["init", "--quiet"]);
+    git(&["config", "user.email", "nobody@example.invalid"]);
+    git(&["config", "user.name", "nobody"]);
+    git(&["commit", "--allow-empty", "--quiet", "-m", "base"]);
+}
+
+/// Adds a GitHub remote to `repo`, so a tracker configured with no named repository has a
+/// repository it can infer from the checkout.
+pub(crate) fn add_github_remote(repo: &Path) {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args([
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/asanabrial/estigia.git",
+        ])
+        .output()
+        .expect("this fixture needs a usable `git` on PATH");
+    assert!(
+        output.status.success(),
+        "`git remote add` failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+}
+
+/// [`repository_with_commit`] with no remote, asserted rather than assumed: the checkout a GitHub
+/// tracker configured with no named repository cannot infer an issue from.
+pub(crate) fn repository_with_no_remote() -> tempfile::TempDir {
+    let repo = repository_with_commit();
+    let answer = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo.path())
+        .arg("remote")
+        .output()
+        .expect("this fixture needs a usable `git` on PATH");
+    assert!(
+        answer.status.success() && answer.stdout.is_empty(),
+        "{} holds remotes, so it cannot stand for a checkout with none: {}",
+        repo.path().display(),
+        String::from_utf8_lossy(&answer.stdout).trim()
+    );
+    repo
 }
 
 /// A path for a shell command or a TOML string: forward slashes, so neither

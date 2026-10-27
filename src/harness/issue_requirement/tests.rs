@@ -34,6 +34,16 @@ fn context(root: &Path, repo: &Path, requirement: IssueRequirement) -> GateConte
 
 fn rig(requirement: IssueRequirement) -> (tempfile::TempDir, tempfile::TempDir, GateContext) {
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path(), repo.path(), requirement);
+    (repo, root, context)
+}
+
+fn rig_without_a_remote(
+    requirement: IssueRequirement,
+) -> (tempfile::TempDir, tempfile::TempDir, GateContext) {
+    let repo = crate::test_env::repository_with_no_remote();
     let root = tempfile::tempdir().expect("a temporary root");
     let context = context(root.path(), repo.path(), requirement);
     (repo, root, context)
@@ -156,6 +166,120 @@ fn off_changes_nothing() {
     assert_eq!(edit(&context), Decision::Outside(Aside::NothingSworn));
 }
 
+fn write_to(context: &GateContext, tool: &str, path: &Path) -> Decision {
+    unclaimed_edit(
+        context,
+        tool,
+        serde_json::json!({ "file_path": path.display().to_string() }),
+    )
+}
+
+#[test]
+fn a_checkout_with_no_remote_is_not_held_for_an_issue() {
+    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+        let (_repo, _root, context) = rig_without_a_remote(requirement);
+        for (tool, name) in [("Edit", "src.rs"), ("Write", "new.rs")] {
+            let decision = write_to(&context, tool, &context.repo_dir.join(name));
+            assert_eq!(
+                decision,
+                Decision::Outside(Aside::NothingSworn),
+                "{requirement:?} {tool}: {decision:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_no_remote_checkout_answers_the_write_hook_with_nothing() {
+    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+        let (_repo, _root, context) = rig_without_a_remote(requirement);
+        let answer = hook_answer(&context, Dialect::ClaudeCode, "claude-code");
+        assert_eq!(answer, serde_json::json!({}), "{requirement:?}: {answer}");
+    }
+}
+
+#[test]
+fn adding_a_remote_holds_the_same_write_again() {
+    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+        let (repo, _root, context) = rig_without_a_remote(requirement);
+        assert_eq!(edit(&context), Decision::Outside(Aside::NothingSworn));
+        crate::test_env::add_github_remote(repo.path());
+        let decision = edit(&context);
+        assert!(
+            matches!(&decision, Decision::Ask(refusal) | Decision::Deny(refusal) if refusal.code == CODE),
+            "{requirement:?}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn a_named_repository_holds_the_write_where_the_checkout_has_no_remote() {
+    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+        let (_repo, _root, mut context) = rig_without_a_remote(requirement);
+        context.tracker = crate::config::Tracker::Github {
+            repo: Some(crate::config::RepoRef::parse("asanabrial/estigia").expect("a repo ref")),
+        };
+        let decision = edit(&context);
+        assert!(
+            matches!(&decision, Decision::Ask(refusal) | Decision::Deny(refusal) if refusal.code == CODE),
+            "{requirement:?}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn a_write_into_a_nested_checkout_that_has_a_remote_is_still_held() {
+    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+        let (repo, _root, context) = rig_without_a_remote(requirement);
+        let nested = repo.path().join("nested");
+        std::fs::create_dir(&nested).expect("a directory for the nested checkout");
+        crate::test_env::repository_at(&nested);
+        crate::test_env::add_github_remote(&nested);
+        let decision = write_to(&context, "Write", &nested.join("notes.md"));
+        assert!(
+            matches!(&decision, Decision::Ask(refusal) | Decision::Deny(refusal) if refusal.code == CODE),
+            "{requirement:?}: {decision:?}"
+        );
+    }
+}
+
+#[test]
+fn a_session_in_a_checkout_with_no_remote_is_told_nothing_is_gated() {
+    for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
+        let (_repo, _root, context) = rig_without_a_remote(requirement);
+        std::fs::write(context.repo_dir.join("notes.txt"), "x\n").expect("a dirty file");
+        let text = session_start_text(&context);
+        assert!(text.contains("no git remote"), "{requirement:?}: {text}");
+        for wording in [
+            "each repository write is put to the person",
+            "refuses every repository write",
+            "This checkout has uncommitted changes",
+        ] {
+            assert!(!text.contains(wording), "{requirement:?}: {text}");
+        }
+    }
+}
+
+#[test]
+fn a_failed_remote_read_is_not_zero_remotes() {
+    let (_repo, _root, context) = rig(IssueRequirement::Required);
+    let elsewhere = non_repository();
+    let answer = std::process::Command::new("git")
+        .arg("-C")
+        .arg(elsewhere.path())
+        .arg("remote")
+        .output()
+        .expect("a usable `git` on PATH");
+    assert!(
+        !answer.status.success(),
+        "the fixture's `git remote` answered successfully, so it cannot stand for a failed read"
+    );
+    assert!(
+        names_an_issue(&context, elsewhere.path()),
+        "a failed remote read was read as zero remotes"
+    );
+}
+
 #[test]
 fn a_checkout_where_nothing_can_be_claimed_is_unaffected_under_every_value() {
     for requirement in IssueRequirement::all() {
@@ -251,6 +375,7 @@ fn a_boundary_other_than_a_push_is_left_to_the_checks_that_already_hold_it() {
 #[test]
 fn the_push_guards_refusal_is_still_the_one_a_guarded_commit_gets() {
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     guard::install(repo.path(), Path::new("/usr/local/bin/estigia"), false)
         .expect("the guard installs");
     let root = tempfile::tempdir().expect("a temporary root");
@@ -277,6 +402,7 @@ fn under_linear(mut context: GateContext) -> GateContext {
 #[test]
 fn a_guarded_checkout_under_a_read_only_tracker_refuses_an_unsworn_commit() {
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     guard::install(repo.path(), Path::new("/usr/local/bin/estigia"), false)
         .expect("the guard installs");
     let root = tempfile::tempdir().expect("a temporary root");
@@ -310,6 +436,7 @@ fn ask_puts_an_unclaimed_edit_to_the_person_under_a_read_only_tracker() {
 #[test]
 fn a_read_only_tracker_without_an_assisted_workflow_refuses_nothing() {
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     guard::install(repo.path(), Path::new("/usr/local/bin/estigia"), false)
         .expect("the guard installs");
     let root = tempfile::tempdir().expect("a temporary root");
@@ -336,6 +463,7 @@ fn a_read_only_tracker_without_an_assisted_workflow_refuses_nothing() {
 #[test]
 fn an_assisted_run_is_told_to_assist_not_to_claim() {
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     guard::install(repo.path(), Path::new("/usr/local/bin/estigia"), false)
         .expect("the guard installs");
     let root = tempfile::tempdir().expect("a temporary root");
@@ -365,6 +493,7 @@ fn an_assisted_run_is_told_to_assist_not_to_claim() {
 #[test]
 fn an_assisted_run_under_github_is_told_to_assist_not_to_claim() {
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     guard::install(repo.path(), Path::new("/usr/local/bin/estigia"), false)
         .expect("the guard installs");
     let root = tempfile::tempdir().expect("a temporary root");
@@ -404,6 +533,7 @@ fn session_start_text(context: &GateContext) -> String {
 #[test]
 fn an_assisted_session_start_names_assist_and_not_the_refused_tools() {
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     guard::install(repo.path(), Path::new("/usr/local/bin/estigia"), false)
         .expect("the guard installs");
     // The third arm is reached with no push guard and nothing required: Estigia
@@ -489,6 +619,7 @@ fn the_row_defaults_to_ask_and_only_the_repository_file_sets_it() {
 #[test]
 fn the_repository_file_sets_it_and_the_contract_and_agent_files_do_not() {
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     let path = crate::skill::repository_config_path(repo.path());
     std::fs::create_dir_all(path.parent().expect("a parent")).expect("the directory");
     std::fs::write(&path, "| Setting | Value here | Skill default |\n|---|---|---|\n| Issue requirement | required | ask |\n")
@@ -547,6 +678,7 @@ fn a_session_without_a_claim_may_write_inside_a_checkout_a_claim_names() {
     for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
         let (_repo, root, mut context) = rig(requirement);
         let worktree = crate::test_env::repository_with_commit();
+        crate::test_env::add_github_remote(worktree.path());
         holder_of(&context, worktree.path());
         context.repo_dir = worktree.path().to_path_buf();
         let decision = edit(&context);
@@ -563,6 +695,7 @@ fn a_session_without_a_claim_may_write_inside_a_checkout_a_claim_names() {
 fn a_holder_whose_worktree_is_its_repo_dir_grants_no_exemption() {
     let (_repo, _root, mut context) = rig(IssueRequirement::Ask);
     let worktree = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(worktree.path());
     let mut holder = session::Run::new("opencode-aaaa1111".to_owned());
     holder.issue = Some(crate::identity::Identity::Number(12));
     holder.repo_dir = Some(worktree.path().to_path_buf());
@@ -576,6 +709,7 @@ fn a_holder_whose_worktree_is_its_repo_dir_grants_no_exemption() {
 fn the_primary_checkout_stays_asked_while_a_claim_names_another() {
     let (_repo, _root, context) = rig(IssueRequirement::Ask);
     let worktree = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(worktree.path());
     holder_of(&context, worktree.path());
     assert!(matches!(edit(&context), Decision::Ask(_)));
 }
@@ -584,6 +718,7 @@ fn the_primary_checkout_stays_asked_while_a_claim_names_another() {
 fn an_unreadable_pointer_gives_no_exemption() {
     let (_repo, _root, mut context) = rig(IssueRequirement::Ask);
     let worktree = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(worktree.path());
     holder_of(&context, worktree.path());
     for entry in std::fs::read_dir(&context.state_root).expect("the state root") {
         std::fs::write(entry.expect("an entry").path(), "{").expect("corrupted");
@@ -849,6 +984,7 @@ fn a_write_the_gate_cannot_place_is_reported_at_session_start_rather_than_asked(
     ));
 
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     let root = tempfile::tempdir().expect("a temporary root");
     let asking = context(root.path(), repo.path(), IssueRequirement::Ask);
     std::fs::write(asking.repo_dir.join("notes.txt"), "x\n").expect("a dirty file");
@@ -999,6 +1135,7 @@ fn a_shell_file_under_a_non_git_directory_is_not_refused_for_an_issue() {
 fn a_write_from_a_non_git_directory_into_a_repository_is_still_held() {
     let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     let root = tempfile::tempdir().expect("a temporary root");
     let inside = repo.path().join("src.rs");
     let outside = launch.path().join("notes.md");
@@ -1034,6 +1171,7 @@ fn a_write_from_a_non_git_directory_into_a_repository_is_still_held() {
 fn a_patch_that_deletes_or_moves_a_path_in_a_repository_is_still_held() {
     let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     let root = tempfile::tempdir().expect("a temporary root");
     let context = context(root.path(), launch.path(), IssueRequirement::Ask);
     let inside = repo.path().join("src.rs").display().to_string();
@@ -1065,6 +1203,7 @@ fn a_patch_that_deletes_or_moves_a_path_in_a_repository_is_still_held() {
 fn a_content_string_is_not_a_target_list_for_a_tool_that_is_not_a_patch() {
     let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     // `pre_write_code` names its path in `file`, which `path_argument` does not
     // read, so this is a write whose destination the gate never read. A marker
     // in its `content` is body text, not a target list.
@@ -1150,6 +1289,7 @@ fn an_ancestor_this_process_cannot_open_is_held_rather_than_exempted() {
 fn a_write_tool_whose_body_named_no_readable_path_is_still_held() {
     let (_launch, _root, context) = in_a_non_repository(IssueRequirement::Ask);
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     let inside = repo.path().join("src.rs").display().to_string();
     for (tool, input) in [
         (
@@ -1176,6 +1316,7 @@ fn a_write_from_a_non_git_directory_into_a_claimed_worktree_is_still_held() {
     let root = tempfile::tempdir().expect("a temporary root");
     let context = context(root.path(), launch.path(), IssueRequirement::Ask);
     let worktree = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(worktree.path());
     holder_of(&context, worktree.path());
     let decision = unclaimed_edit(
         &context,
@@ -1218,6 +1359,7 @@ fn a_repository_git_cannot_read_under_a_non_git_directory_is_still_held() {
 fn a_refusal_from_a_non_git_directory_does_not_call_it_this_repository() {
     let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     let root = tempfile::tempdir().expect("a temporary root");
     for requirement in [IssueRequirement::Ask, IssueRequirement::Required] {
         let context = context(root.path(), launch.path(), requirement);

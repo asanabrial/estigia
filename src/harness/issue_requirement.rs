@@ -1,4 +1,4 @@
-//! What a run holding no claim may write in a checkout that has a tracker.
+//! What a run holding no claim may write in a checkout whose tracker can name an issue.
 
 use std::path::{Path, PathBuf};
 
@@ -9,11 +9,13 @@ use crate::outcome::{NoCommandReason, Refusal, Resolution};
 /// The stable code of this refusal.
 pub const CODE: &str = "issue-required";
 
-/// The requirement in force here, or `None` where nothing can be required.
+/// The requirement the configuration puts in force, or `None` where nothing can be required.
 ///
 /// A claim cannot be made without a tracker a run can hold one against (a transport to swear it
 /// through, or a read-only tracker under an assisted workflow) and a contract that says how, so
-/// requiring one without them would be a lock nobody can open.
+/// requiring one without them would be a lock nobody can open. Whether the checkout a write lands
+/// in can name an issue is a separate question, asked where the write is placed and again for the
+/// checkout a call runs in.
 pub fn in_force(context: &GateContext) -> Option<IssueRequirement> {
     (context.issue_requirement != IssueRequirement::Off
         && context
@@ -21,6 +23,49 @@ pub fn in_force(context: &GateContext) -> Option<IssueRequirement> {
             .adjudicates_unclaimed_writes(context.workflow)
         && context.skill_root.join(crate::skill::CONTRACT).is_file())
     .then_some(context.issue_requirement)
+}
+
+/// Whether the configured tracker can name an issue for the checkout rooted at `root`.
+///
+/// GitHub with a named repository names one wherever the checkout is, as does every other tracker.
+/// GitHub with none reads it from the checkout's remotes: zero remotes read successfully is a
+/// tracker that can name nothing, while a failed read is not zero remotes and stays `true`.
+pub(super) fn names_an_issue(context: &GateContext, root: &Path) -> bool {
+    match &context.tracker {
+        crate::config::Tracker::Github { repo: None } => {
+            remotes(root).is_none_or(|remotes| !remotes.is_empty())
+        }
+        crate::config::Tracker::Github { repo: Some(_) }
+        | crate::config::Tracker::Linear { .. } => true,
+    }
+}
+
+fn remotes(root: &Path) -> Option<Vec<String>> {
+    let answer = super::proof_git_command(root, &["remote"]).output().ok()?;
+    if !answer.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(answer.stdout).ok()?;
+    Some(
+        text.lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    )
+}
+
+/// The requirement in force for a write landing in the checkout the call runs in.
+///
+/// [`in_force`] answers for the configuration alone; this narrows it by the checkout, because a
+/// GitHub tracker with no named repository has nothing to claim against in a checkout with no
+/// remote.
+pub(super) fn in_force_here(context: &GateContext) -> Option<IssueRequirement> {
+    let requirement = in_force(context)?;
+    match scope_of(&context.repo_dir) {
+        Scope::Repository(root) if !names_an_issue(context, &root) => None,
+        _ => Some(requirement),
+    }
 }
 
 /// Where the directory a call was launched from sits with respect to Git.
@@ -81,12 +126,117 @@ pub fn decision(
     let scope = scope_of(&context.repo_dir);
     match placement(context, action, literal, declared, &scope) {
         Placement::Outside => None,
+        Placement::Inside
+            if matches!(
+                &context.tracker,
+                crate::config::Tracker::Github { repo: None }
+            ) && no_landing_can_name_an_issue(context, action, literal, declared, &scope) =>
+        {
+            None
+        }
         Placement::Inside => held(context, requirement, &scope),
         Placement::Unplaceable => match requirement {
             IssueRequirement::Ask => Some(Decision::Allow(allowed(target))),
             _ => held(context, requirement, &scope),
         },
     }
+}
+
+/// Whether every repository this write lands in is one the configured tracker cannot name an
+/// issue for.
+///
+/// A target outside every repository grants nothing on its own: the answer is `true` only when at
+/// least one target lands inside a repository and none of those repositories can name an issue.
+/// A target this process cannot place, or one whose repository it cannot establish, answers
+/// `false`, because an unknown is not clearance.
+fn no_landing_can_name_an_issue(
+    context: &GateContext,
+    action: &Action,
+    literal: Option<&str>,
+    declared: &[String],
+    scope: &Scope,
+) -> bool {
+    let Action::Write { target } = action else {
+        return false;
+    };
+    match literal {
+        Some(line) => no_shell_landing_can_name_an_issue(context, target, line, scope),
+        None => no_file_landing_can_name_an_issue(context, target, declared),
+    }
+}
+
+fn no_file_landing_can_name_an_issue(
+    context: &GateContext,
+    target: &str,
+    declared: &[String],
+) -> bool {
+    let Some(targets) = file_targets(target, declared) else {
+        return false;
+    };
+    let mut inside_a_repository = false;
+    for target in targets {
+        let Some(landing) = landing(context, target) else {
+            return false;
+        };
+        let Some(root) = repository_of(&landing) else {
+            continue;
+        };
+        inside_a_repository = true;
+        if names_an_issue(context, &root) {
+            return false;
+        }
+    }
+    inside_a_repository
+}
+
+fn no_shell_landing_can_name_an_issue(
+    context: &GateContext,
+    target: &str,
+    line: &str,
+    scope: &Scope,
+) -> bool {
+    if super::shell::runs_a_program_after_pre(line) {
+        return false;
+    }
+    if super::shell::writes_a_file(&line.to_ascii_lowercase()).as_deref() != Some(target) {
+        return match scope {
+            Scope::Repository(root) => !names_an_issue(context, root),
+            _ => false,
+        };
+    }
+    let Some(targets) = super::shell::redirect_targets(line) else {
+        return false;
+    };
+    let mut inside_a_repository = false;
+    for target in targets {
+        let Some(landing) = landing(context, &target) else {
+            return false;
+        };
+        let Some(root) = repository_of(&landing) else {
+            continue;
+        };
+        inside_a_repository = true;
+        if names_an_issue(context, &root) {
+            return false;
+        }
+    }
+    inside_a_repository
+}
+
+/// The repository `landing` belongs to, or `None` where git names none.
+///
+/// The first ancestor that exists is the one git is asked: a file that has not been written yet
+/// sits under a directory that has, and a directory that will be created sits under one that
+/// already exists.
+fn repository_of(landing: &Path) -> Option<PathBuf> {
+    let mut probe = Some(landing);
+    while let Some(directory) = probe {
+        if directory.is_dir() {
+            return git_root(directory);
+        }
+        probe = directory.parent();
+    }
+    None
 }
 
 fn held(context: &GateContext, requirement: IssueRequirement, scope: &Scope) -> Option<Decision> {
@@ -131,16 +281,11 @@ fn placement(
 }
 
 fn file_tool(context: &GateContext, target: &str, declared: &[String], scope: &Scope) -> Placement {
-    if declared.is_empty() && super::names_no_write_path(target) {
+    let Some(targets) = file_targets(target, declared) else {
         // No field and no body named a path, so `target` is the tool's own name
         // and the destination was never read. Held rather than placed by name,
         // which is what a relative target would otherwise answer for.
         return Placement::Inside;
-    }
-    let targets: Vec<&str> = if declared.is_empty() {
-        vec![target]
-    } else {
-        declared.iter().map(String::as_str).collect()
     };
     // Only *all targets outside* exempts the write: one placed inside, or one
     // that could not be placed, holds it — the asymmetry `paths::placed` states.
@@ -150,6 +295,17 @@ fn file_tool(context: &GateContext, target: &str, declared: &[String], scope: &S
         }
     }
     Placement::Outside
+}
+
+fn file_targets<'a>(target: &'a str, declared: &'a [String]) -> Option<Vec<&'a str>> {
+    if declared.is_empty() && super::names_no_write_path(target) {
+        return None;
+    }
+    Some(if declared.is_empty() {
+        vec![target]
+    } else {
+        declared.iter().map(String::as_str).collect()
+    })
 }
 
 /// A shell write is placed only by literal redirect targets; a named repository operation arrives
@@ -177,15 +333,20 @@ fn shell_write(context: &GateContext, target: &str, line: &str, scope: &Scope) -
     }
 }
 
-/// Where one named target lands, given the scope the call was launched in.
-fn against(context: &GateContext, scope: &Scope, target: &str) -> Placement {
+/// Where an absolute target lands, or a relative one from the directory the call runs in.
+fn landing(context: &GateContext, target: &str) -> Option<PathBuf> {
     let target = Path::new(target);
     let target = if target.is_absolute() {
         target.to_path_buf()
     } else {
         context.repo_dir.join(target)
     };
-    let Some(landing) = crate::paths::placed(&target) else {
+    crate::paths::placed(&target)
+}
+
+/// Where one named target lands, given the scope the call was launched in.
+fn against(context: &GateContext, scope: &Scope, target: &str) -> Placement {
+    let Some(landing) = landing(context, target) else {
         return Placement::Unplaceable;
     };
     match scope {

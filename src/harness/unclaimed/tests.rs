@@ -31,6 +31,7 @@ fn context(root: &Path, repo: &Path) -> GateContext {
 
 fn guarded() -> (tempfile::TempDir, tempfile::TempDir, GateContext) {
     let repo = crate::test_env::repository_with_commit();
+    crate::test_env::add_github_remote(repo.path());
     guard::install(repo.path(), Path::new("/usr/local/bin/estigia"), false)
         .expect("the guard installs");
     let root = tempfile::tempdir().expect("a temporary root");
@@ -121,6 +122,41 @@ fn the_pre_push_hook_refuses_an_unclaimed_push_where_the_guard_is_installed() {
     let (repo, _root, context) = guarded();
     let decision = guard::decide(&context, repo.path(), &[]).decision;
     assert!(refused_as_unclaimed(&decision), "{decision:?}");
+}
+
+#[test]
+fn a_guarded_checkout_with_no_remote_refuses_no_commit() {
+    let repo = crate::test_env::repository_with_no_remote();
+    guard::install(repo.path(), Path::new("/usr/local/bin/estigia"), false)
+        .expect("the guard installs");
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path(), repo.path());
+    for command in ["git commit -m x", "git push origin main"] {
+        let decision = shell(&context, repo.path(), command);
+        assert_eq!(
+            decision,
+            Decision::Outside(crate::harness::Aside::NothingSworn),
+            "{command}: {decision:?}"
+        );
+    }
+    let hook = guard::decide(&context, repo.path(), &[]).decision;
+    assert_eq!(hook, Decision::Outside(crate::harness::Aside::NothingSworn));
+}
+
+#[test]
+fn a_named_repository_refuses_a_commit_where_the_checkout_has_no_remote() {
+    let repo = crate::test_env::repository_with_no_remote();
+    guard::install(repo.path(), Path::new("/usr/local/bin/estigia"), false)
+        .expect("the guard installs");
+    let root = tempfile::tempdir().expect("a temporary root");
+    let mut context = context(root.path(), repo.path());
+    context.tracker = crate::config::Tracker::Github {
+        repo: Some(crate::config::RepoRef::parse("asanabrial/estigia").expect("a repo ref")),
+    };
+    for command in ["git commit -m x", "git push origin main"] {
+        let decision = shell(&context, repo.path(), command);
+        assert!(refused_as_unclaimed(&decision), "{command}: {decision:?}");
+    }
 }
 
 #[test]
