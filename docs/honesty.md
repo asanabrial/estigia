@@ -3084,13 +3084,21 @@ pointer that leaves it names the document it points at.
     stopped for a routine write (`issue_requirement` reads the worktree as claimed, whichever session writes
     there; a `git push` from it is held by `Unclaimed write policy` wherever it runs), and an unclaimed shell
     write to the repository's own `estigia.local.md` can set `assisted`.
-  - **`assist` adopts an existing branch through its pull request, read as text.** A branch origin already
-    has is taken only when it heads exactly one open pull request whose title, body or head branch names the
-    issue (`#12`, or `ABC-102` for a key, case-insensitive, as a whole reference); otherwise it is refused
-    `assist-branch-not-adoptable`, and a failed read stops before any repository write. Linear's own
-    attachment is not read, the author is not checked, and a branch `draft_pr` published without naming the
-    issue cannot be taken again. Measured by the `assist_*existing_branch*`, `assist_adopts_*` and
-    `a_pull_request_names_an_issue_only_as_a_whole_reference` tests in `src/transport/branch/tests.rs`.
+  - **`assist` adopts an existing branch only through linkage the tracker records.** A branch origin already
+    has is taken only when it heads exactly one open pull request that the host links to the issue: for a
+    number, a closing reference on the pull request (`closingIssuesReferences`) or the branch in the issue's
+    Development sidebar; for a Linear key, the pull request's URL among the issue's Linear attachments.
+    Otherwise it is refused `assist-branch-not-adoptable`, and a failed read of the list, the sidebar or the
+    attachments stops before any repository write. The free-text mention (`Refs #12`, a key in the title or
+    branch name) was dropped as an admission path: anyone able to open a pull request could write it, and
+    assisted pull requests never carry a closing keyword, which is why the sidebar link counts. What stays
+    open: the author of the pull request or of the link is not checked, so whoever can link a branch to the
+    issue can make it adoptable, and still only for a branch the operator names to `assist`; a branch
+    published without being linked (a plain `git push` and `draft_pr`) cannot be taken again until it is.
+    The sidebar link names a branch, not a pull request, and a closing reference is matched on the issue number alone, not on the
+    repository it names. Measured by the `assist_*existing_branch*`, `assist_adopts_*`, `assist_refuses_*`
+    and `only_a_closing_reference_to_the_number_closes_the_issue` tests in `src/transport/branch/tests.rs`, and
+    by `a_key_is_adopted_only_when_linear_attaches_the_pull_request` in `src/transport/linear/tests.rs`.
   - **`draft_pr` publishes a draft and guarantees little else.** It pushes the pointer's branch
     fast-forward, opens a draft and reads it back as open, a draft and at the pushed head; it writes nothing
     to the tracker and adds no marker, receipt or `Refs` line. The team's own CI and reviews are theirs; a

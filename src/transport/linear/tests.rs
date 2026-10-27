@@ -522,3 +522,57 @@ fn a_github_issue_read_merged_through_dispatch_sends_nothing_to_linear() {
     assert!(answer.get("linear_state").is_none(), "{answer}");
     assert!(linear_calls(&calls).is_empty(), "{calls:?}");
 }
+
+fn attachments(nodes: &[&str], has_next: bool) -> serde_json::Value {
+    let nodes: Vec<_> = nodes
+        .iter()
+        .map(|url| serde_json::json!({ "url": url }))
+        .collect();
+    serde_json::json!({
+        "matches": "EstigiaAttachments",
+        "stdout": serde_json::json!({ "data": { "issue": { "attachments": {
+            "nodes": nodes, "pageInfo": { "hasNextPage": has_next }
+        } } } })
+        .to_string(),
+    })
+}
+
+fn attached(entry: serde_json::Value) -> Result<bool, crate::transport::Failure> {
+    through(&[entry], || {
+        super::has_attachment(
+            &Identity::Key("ENG-123".to_owned()),
+            "https://github.com/acme/app/pull/7",
+        )
+    })
+    .0
+}
+
+#[test]
+fn a_key_is_adopted_only_when_linear_attaches_the_pull_request() {
+    let url = "https://github.com/acme/app/pull/7";
+    assert!(attached(attachments(&["https://example.invalid/x", url], false)).expect("read"));
+    assert!(!attached(attachments(&["https://github.com/acme/app/pull/70"], false)).expect("read"));
+    assert!(attached(attachments(&[url], true)).expect("a hit on any page is conclusive"));
+}
+
+#[test]
+fn an_incomplete_attachment_page_is_a_failed_read_not_an_absence() {
+    let failure = attached(attachments(&[], true)).expect_err("the absence is unproven");
+    assert_eq!(a_reason(&failure), "linear-unreachable");
+}
+
+#[test]
+fn an_unknown_issue_or_a_rejected_credential_is_not_an_absence() {
+    let unknown = attached(serde_json::json!({
+        "matches": "EstigiaAttachments",
+        "stdout": "{\"data\":{\"issue\":null}}",
+    }))
+    .expect_err("an unknown issue");
+    assert_eq!(a_reason(&unknown), "linear-issue-unknown");
+    let rejected = attached(serde_json::json!({
+        "matches": "EstigiaAttachments",
+        "stdout": "{\"errors\":[{\"message\":\"Authentication required\"}]}",
+    }))
+    .expect_err("a rejected credential");
+    assert_eq!(a_reason(&rejected), "linear-credential-rejected");
+}

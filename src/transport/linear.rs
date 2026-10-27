@@ -32,6 +32,11 @@ const DEADLINE: Duration = Duration::from_secs(30);
 pub const QUERY: &str =
     "query EstigiaIssue($id: String!) { issue(id: $id) { title description state { type } } }";
 
+/// The query that reads the URLs attached to an issue, which is where Linear's GitHub
+/// integration records the pull request it linked.
+pub const ATTACHMENTS_QUERY: &str = "query EstigiaAttachments($id: String!) { issue(id: $id) { \
+                                     attachments(first: 100) { nodes { url } pageInfo { \
+                                     hasNextPage } } } }";
 /// The query that reads an issue's state and the states its team offers.
 pub const STATES_QUERY: &str = "query EstigiaStates($id: String!) { issue(id: $id) { id state { \
                                 name } team { states { nodes { id name } } } } }";
@@ -65,6 +70,62 @@ pub struct Issue {
 pub fn read_issue(identity: &Identity) -> Result<Issue, Failure> {
     let variables = serde_json::json!({ "id": identity.to_string() });
     parse(&post(QUERY, &variables, How::read())?, identity)
+}
+
+/// Whether `url` is among the URLs attached to the issue in Linear.
+///
+/// Finding it is conclusive on any page; its absence is only claimed from a complete one, so
+/// a connection advertising another page answers a failed read, never `false`.
+pub fn has_attachment(identity: &Identity, url: &str) -> Result<bool, Failure> {
+    let variables = serde_json::json!({ "id": identity.to_string() });
+    let value = json_of(&post(ATTACHMENTS_QUERY, &variables, How::read())?)?;
+    let connection = value
+        .get("data")
+        .and_then(|data| data.get("issue"))
+        .and_then(|issue| issue.get("attachments"))
+        .filter(|connection| connection.is_object());
+    let Some(connection) = connection else {
+        if graphql_errors(&value)
+            .into_iter()
+            .any(is_authentication_error)
+        {
+            return Err(credential_rejected());
+        }
+        if value
+            .get("data")
+            .is_some_and(|data| data.get("issue").is_some_and(serde_json::Value::is_null))
+        {
+            return Err(issue_unknown(identity));
+        }
+        return Err(unreachable_api(&Failure::Read(
+            "Linear answered no attachment connection".to_owned(),
+        )));
+    };
+    let Some(nodes) = connection
+        .get("nodes")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return Err(unreachable_api(&Failure::Read(
+            "Linear answered attachments without nodes".to_owned(),
+        )));
+    };
+    if nodes
+        .iter()
+        .any(|node| node.get("url").and_then(serde_json::Value::as_str) == Some(url))
+    {
+        return Ok(true);
+    }
+    let has_next = connection
+        .get("pageInfo")
+        .and_then(|page| page.get("hasNextPage"))
+        .and_then(serde_json::Value::as_bool);
+    if has_next != Some(false) {
+        return Err(unreachable_api(&Failure::Read(
+            "Linear's attachments are not all on the page read, so the absence is unproven"
+                .to_owned(),
+        )));
+    }
+    Ok(false)
 }
 
 /// Moves one issue to the state its team names `target`, and reads it back.
