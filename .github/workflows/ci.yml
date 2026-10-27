@@ -66,6 +66,18 @@ jobs:
         with:
           node-version: '22'
 
+      # Windows only, on a runner thrown away after the job: real-time scanning
+      # inspects every process the suite spawns and every file it creates, and
+      # the suite spawns git by the thousand. Printed before and after, so the
+      # log says whether the switch took rather than assuming it did.
+      - name: real-time scanning off
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          (Get-MpComputerStatus).RealTimeProtectionEnabled
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          (Get-MpComputerStatus).RealTimeProtectionEnabled
+
       # A failing run saves its cache too. Without this the action's default
       # discards everything a red run compiled, so the fix pushed after it starts
       # from cold on all three platforms, exactly when somebody is iterating on a
