@@ -49,4 +49,12 @@ one ([`sessions.md`](sessions.md), "Ordering and the snapshot").
 
 Prose is one line per event, a footer saying how many of how many matched, and the list of what the feed
 cannot see. `--json` carries `events`, `returned`, `matched`, `more`, `next_cursor`, `since`, `taken_at`,
-`scope` and `cannot_see`. The MCP tool is a later slice; the CLI is the whole interface today.
+`scope` and `cannot_see`.
+
+## The MCP tool
+
+`feed` answers the same page as `estigia feed --json`, from the same function, on every runtime with a
+tool server; the CLI-only runtimes (deepseek-harness, the neutral `agents` root) use the command. The
+tool takes the command's selectors as arguments, except that the repository is `repository` rather than
+`repo`, a name the tool menu keeps for `create`. It is read-only and answered from the local store, never
+from the tracker.

@@ -832,6 +832,7 @@ fn run_tool_asking(
             return messaging::send_message(arguments, context, named.as_ref(), consent);
         }
         "list_sessions" => return messaging::list_sessions(arguments, context),
+        "feed" => return messaging::feed(arguments, context),
         "deliver" => return deliver::deliver(arguments, context, named.as_ref()),
         _ => {}
     }

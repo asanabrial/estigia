@@ -2344,6 +2344,9 @@ fn a_boolean_argument_is_one_the_transport_takes_without_a_value() {
     let mut booleans = 0;
     let mut valueless_seen = 0;
     for tool in TOOLS {
+        if tools::is_local_store(tool.name) {
+            continue;
+        }
         let valueless = transport_valueless(tool.operation);
         valueless_seen += valueless.len();
         for argument in tool.arguments {
@@ -5222,6 +5225,7 @@ fn verify_claim_carries_the_closing_pin_from_the_arguments_to_the_transport() {
 
 const READ_TOOLS: &[&str] = &[
     "list_sessions",
+    "feed",
     "tasks",
     "verify_claim",
     "review_status",
@@ -5970,7 +5974,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 53_359;
+const TOOLS_LIST_CEILING: usize = 54_779;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -6793,6 +6797,46 @@ mod send_message {
             assert!(matches!(failure, ToolFailure::Malformed(_)), "{failure}");
         }
         assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn the_feed_tool_answers_the_rows_the_cli_does() {
+        let rig = Rig::new();
+        rig.hold(12, SENDER);
+        let root = rig.context().state_root;
+        rusqlite::Connection::open(store::beside(&root))
+            .expect("the store opens")
+            .execute_batch(&format!(
+                "INSERT INTO transitions (repo_id, issue, at, run_id, from_state, to_state)
+                 SELECT id, 12, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), '{SENDER}',
+                        'in-progress', 'review'
+                 FROM repos WHERE owner = 'asanabrial' AND name = 'estigia';"
+            ))
+            .expect("a transition seeds");
+        let arguments = json!({"kind": "transition", "issue": 12});
+
+        let tool = answered(run_tool("feed", &arguments, Ok(&rig.context())).expect("a page"));
+        let cli = crate::cli::feed::page(&arguments, &root, crate::harness::session::now_seconds())
+            .expect("a page");
+
+        assert_eq!(tool["events"].as_array().map(Vec::len), Some(1), "{tool}");
+        assert_eq!(tool["events"], cli["events"]);
+        assert_eq!(tool["events"][0]["to"], "review", "{tool}");
+        assert_eq!(tool["cannot_see"], cli["cannot_see"]);
+    }
+
+    #[test]
+    fn the_feed_tool_refuses_a_repository_the_store_does_not_hold() {
+        let rig = Rig::new();
+        let refused = run_tool(
+            "feed",
+            &json!({"repository": "nobody/nothing"}),
+            Ok(&rig.context()),
+        );
+        let Err(super::ToolFailure::Refused(refusal)) = refused else {
+            panic!("an unknown repository was answered: {refused:?}");
+        };
+        assert_eq!(refusal.code, "feed-repo-unknown", "{refusal:?}");
     }
 
     #[test]

@@ -3891,9 +3891,10 @@ does not measure:
 
 ## The feed
 
-`estigia feed` ([`feed.md`](feed.md)) projects the local store and records nothing (ten unit tests seed a store with
+`estigia feed` ([`feed.md`](feed.md)) projects the local store and records nothing (eleven unit tests seed a store with
 claims, transitions, a marker entry in a second repository and a message, and drive each filter, the paging, the
-refusals and the absent store). What it does not measure:
+refusals and the absent store). The `feed` MCP tool calls the same function; two tests hold it to the command's rows
+for one seeded transition and to the unknown-repository refusal, not to every filter. What it does not measure:
 
 - **It sees only what the store recorded.** A merge is read live from the tracker and is not an event; a consent
   prompt, a turn that ended and a gate decision older than the 30-day retention are not in the store. A state change
