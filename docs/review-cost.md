@@ -145,6 +145,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | Ten core tools carry `_meta` (+380) and every tool takes `compact` (+1,015, paid for by trimming) | 36 | 48,496 |
 | `release` `spend` fields, then `ready_pr`, `review_stages`, `run_checks` and `deliver` join | — | 51,747 |
 | `review_thread` and exact-head CI polling parameters; typed mutations replace unverified API writes | 41 | 53,203 |
+| `ensure_states` says a closed git operation window answers `deferred` and the labels come from the flush | 41 | 53,359 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the
@@ -175,6 +176,9 @@ name still dispatches and refuses with its own typed reason.
   about 50,000 tokens of context and the hundred bytes are paid once.
 - **`compact: true`** omits `build` from an answer and drops from `review_status`'s `next.arguments`
   the fields `receipt` already holds. Without it every answer is byte-identical to before.
+- **`ensure_states`** says that while the git operation window is closed it answers `deferred` and
+  writes nothing, and that a queued create, claim or transition creates the labels at the flush: a caller
+  that reads `deferred` as the whole answer has no reason to wait for the flush.
 - **`target`** answers the brief form by default, so the manifest, about 100 bytes per tracked file,
   is paid only by a call that passes `manifest`.
 - **`republish_review`** stays a tool of its own although its arguments equal `publish_review`'s: its

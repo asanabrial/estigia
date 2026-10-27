@@ -1113,7 +1113,9 @@ pub const TOOLS: &[Tool] = &[
         name: "ensure_states",
         contract_name: "ensure_states",
         description: "Create the workflow's labels. Idempotent; run before the first write in an \
-                      unfamiliar project.",
+                      unfamiliar project. While the git operation window is closed it answers \
+                      `deferred` and writes nothing — a queued create, claim or transition creates \
+                      the labels at the flush.",
         operation: "ensure-states",
         arguments: &[],
         effect: PointerEffect::None,

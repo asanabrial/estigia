@@ -5970,7 +5970,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 53_203;
+const TOOLS_LIST_CEILING: usize = 53_359;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -7618,6 +7618,26 @@ mod send_message {
             run_ids(&second)
         );
     }
+}
+
+#[test]
+fn the_ensure_states_description_names_the_deferred_answer() {
+    let tool = tools::TOOLS
+        .iter()
+        .find(|tool| tool.operation == "ensure-states")
+        .expect("ensure_states is a tool");
+    assert!(
+        tool.description
+            .contains("closed it answers `deferred` and writes nothing"),
+        "`ensure_states` answers `deferred` while the git operation window is closed and its \
+         description does not say so, so a caller reads that as the whole answer: {}",
+        tool.description
+    );
+    assert!(
+        tool.description.contains("creates the labels at the flush"),
+        "the deferred answer leaves a caller with no idea where the labels then come from: {}",
+        tool.description
+    );
 }
 
 mod handoff {
