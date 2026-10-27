@@ -349,7 +349,7 @@ impl DecisionMode {
     }
 }
 
-/// What a run holding no claim may do to a checkout that has a tracker.
+/// What a run holding no claim may do to a checkout whose tracker can name an issue.
 ///
 /// Repository-only: it is read from the repository's own file and nowhere else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -938,7 +938,7 @@ pub struct Config {
     pub publication_lane: PublicationLane,
     /// Whether a run asks the person or decides and reports.
     pub decision_mode: DecisionMode,
-    /// What a run holding no claim may write in a checkout that has a tracker.
+    /// What a run holding no claim may write in a checkout whose tracker can name an issue.
     pub issue_requirement: IssueRequirement,
     /// Who witnesses a claim in this repository.
     pub workflow: Workflow,

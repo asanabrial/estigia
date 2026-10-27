@@ -2990,8 +2990,9 @@ pointer that leaves it names the document it points at.
   `guard::state` answers `Installed` or `Chained` (running `estigia guard` is the opt-in), on any branch,
   since any unclaimed commit or push skips the flow. A guard reading `Unreadable`, `Inert`, `Foreign` or
   `Absent` stands aside (denying would lock every commit because of a hook file; `doctor` reports the first
-  two as broken), as does a repository whose tracker cannot adjudicate an unsworn write or whose skill has no
-  contract file (`unclaimed::applies`). `--abort`/`--quit`/`--skip` recovery and `git pull` are not refused;
+  two as broken), as does a repository whose tracker cannot adjudicate an unsworn write, whose skill has no
+  contract file, or a checkout with no remote for a GitHub tracker that names no repository
+  (`unclaimed::applies`). `--abort`/`--quit`/`--skip` recovery and `git pull` are not refused;
   an alias, script, editor or `gh api` writing a commit passes; `git push --no-verify` skips the hook half; a
   **claimed** run is not held to its worktree (its claim covers the checkout it was made in too). Held by
   `a_commit_without_a_claim_is_refused_where_the_guard_is_installed`,
@@ -3000,11 +3001,24 @@ pointer that leaves it names the document it points at.
   entry points (`estigia gate` with no session, the dialect hook with an empty session id) end to end.
 - **`Unclaimed write policy` holds the writes the hook sees, and cannot hold the rest.** With the row
   `required` or `ask`, a run holding no claim is refused (`issue-required`) or asked before a routine write
-  the gate can place inside a checkout with a tracker and an installed contract (a file edit or write, or a
-  shell line carrying a `REPOSITORY_SHELL` fragment such as `git commit`). Under `ask` a write the gate
+  the gate can place inside a checkout whose tracker can name an issue there and that has an installed
+  contract (a file edit or write, or a shell line carrying a `REPOSITORY_SHELL` fragment such as
+  `git commit`). Under `ask` a write the gate
   **cannot place** is allowed and the checkout it may have dirtied is named at the next session start (at
   most eight paths, then a count; it cannot prove they came from an allowed write rather than the
   operator's own work). What it does not hold:
+  - **A GitHub tracker that names no repository infers one from the remote, so zero remotes is a tracker
+    that cannot name an issue.** A write landing only in such repositories is not held (no ask, no deny) and
+    the SessionStart text says there is nothing to claim. The read is `git remote` in the repository each
+    target lands in, not the launch directory, so a no-remote checkout writing into a nested checkout that
+    has one is still held. A failed read or a `.git` entry git will not use is not zero remotes. A
+    non-GitHub remote still counts, because the URL is not read. Open: a refusal that survives there (an
+    unplaceable write under `required`, a nested target the tracker can name) still names `claim`/`create`,
+    which cannot run from the no-remote checkout. Held by `a_checkout_with_no_remote_is_not_held_for_an_issue`,
+    `adding_a_remote_holds_the_same_write_again`,
+    `a_named_repository_holds_the_write_where_the_checkout_has_no_remote`,
+    `a_write_into_a_nested_checkout_that_has_a_remote_is_still_held`,
+    `a_failed_remote_read_is_not_zero_remotes` and `a_guarded_checkout_with_no_remote_refuses_no_commit`.
   - **`ask` is an ask on Claude Code and on Pi's terminal UI only, and its answer cannot be read back.** Pi
     is asked through `estigia gate --runtime pi --can-ask` (exit `4`; the extension passes the flag only
     when `ctx.mode === "tui"` and shows `ctx.ui.confirm`), **unverified against a live Pi** (the `confirm`
@@ -3021,7 +3035,8 @@ pointer that leaves it names the document it points at.
     the ancestors for a `.git` entry. **No entry anywhere** is outside every repository; **an entry git will
     not use, or an ancestor this process cannot read**, is no answer and the write is held. The walk is not
     git's, so a work tree named only through `GIT_DIR`, a ceiling directory, or a bare or mirror layout is
-    read as a repository only where an ancestor has a `.git` entry; it costs one subprocess per such write.
+    read as a repository only where an ancestor has a `.git` entry; it costs one subprocess per such write,
+    plus one `git remote` per landing repository for a GitHub tracker that names none.
   - **A write tool whose paths live in a patch body is placed by the body's own paths** (for `patch` and
     `apply_patch` only: `*** Add File:`/`Update File:`/`Delete File:`/`Move to:` lines; a write to **any**
     repository among them is held; no other write tool's body is read as paths, which a `pre_write_code` call

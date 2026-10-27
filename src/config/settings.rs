@@ -63,7 +63,7 @@ pub enum Setting {
     Summary,
     /// The language the rest of the issue body is written in.
     Body,
-    /// What a run holding no claim may write in a checkout that has a tracker.
+    /// What a run holding no claim may write in a checkout whose tracker can name an issue.
     IssueRequirement,
     /// Who witnesses a claim in this repository: Estigia, or the team.
     Workflow,

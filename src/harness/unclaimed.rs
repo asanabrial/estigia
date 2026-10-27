@@ -4,7 +4,8 @@
 //! Estigia. In that checkout a commit or a push made with no claim is the way into the flow being
 //! skipped, so both are refused, on every branch: the one way to commit is `claim` and then
 //! `start_branch`, whose isolated checkout the claim covers (under `Workflow: assisted`, `assist`
-//! in a worktree).
+//! in a worktree). A checkout whose configured tracker cannot name an issue stays outside: there
+//! is no claim to make there, so the refusal would be a lock nobody can open.
 
 use std::path::Path;
 
@@ -47,8 +48,9 @@ pub(super) fn is_a_push(action: &Action) -> bool {
 /// Whether an unclaimed commit or push is refused in this checkout at all.
 ///
 /// A claim cannot be made without a tracker a run can hold one against (a transport to swear it
-/// through, or a read-only tracker under an assisted workflow) and a contract that says how, so
-/// refusing without them would be a lock nobody can open.
+/// through, or a read-only tracker under an assisted workflow), a contract that says how, and a
+/// checkout the tracker can name an issue for, so refusing without them would be a lock nobody
+/// can open.
 pub fn applies(context: &GateContext, repo_dir: &Path) -> bool {
     context
         .tracker
@@ -58,6 +60,7 @@ pub fn applies(context: &GateContext, repo_dir: &Path) -> bool {
             super::guard::state(repo_dir),
             super::guard::State::Installed | super::guard::State::Chained
         )
+        && super::issue_requirement::names_an_issue(context, repo_dir)
 }
 
 /// The refusal for this action when no claim holds the checkout, or `None` when this is not the
