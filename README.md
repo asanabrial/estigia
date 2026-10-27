@@ -15,16 +15,13 @@
 
 # estig**IA** — workflow authority for AI coding agents
 
-Your agent says it claimed the issue. It says the review passed. It says the branch is current.
-Estigia is what turns those sentences from things you trust into things that were checked: the claim
-is recorded in the local workflow store (`~/.estigia/state.db`), every write the agent makes afterwards is measured
-against it, and a review verdict is bound to exact bytes — so a later push invalidates it, and nobody
-has to remember to notice.
+Your agent says it claimed the issue, that the review passed, that the branch is current. Estigia
+turns those sentences into things that were checked: the claim lives in a local store
+(`~/.estigia/state.db`), every later write is measured against it, every step that cannot be undone
+re-verifies it, and a review verdict is bound to exact bytes, so a push invalidates it.
 
-One binary. It sits under whatever agent you already use, and it does not run your model. It launches
-two kinds of detached process and no others: a reviewer CLI for a lens, refuter or validator
-(`launch_review_input`), and the declared checks (`run_checks`, through `__check-job`); see
-[what it writes](docs/what-it-writes.md#which-processes-estigia-launches).
+One binary, under whatever agent you already use; it does not run your model. Its only detached
+processes are a reviewer CLI and the declared checks ([which](docs/what-it-writes.md#which-processes-estigia-launches)).
 
 > *El río del juramento. Lo que un agente promete, queda ligado a unos bytes exactos.*
 
@@ -34,10 +31,8 @@ one makes you forget, the other holds you to it.
 
 ## What it feels like
 
-Mostly, nothing. Your agent calls Estigia only to claim the issue it is about to work on; a run that
-has claimed nothing works as before. The moment it claims issue 12, every file it writes is measured against that claim, and every step that cannot be undone —
-a push, a merge, a tag, a release — re-verifies the claim against the store first. When it refuses, it
-says what it read and what to do about it:
+Mostly, nothing: a run that has claimed nothing works as before. When it refuses, it says what it
+read and what to do about it:
 
 ```
 $ git push origin HEAD
@@ -49,62 +44,129 @@ error: failed to push some refs
 *The tracker could not be read* is a different answer from *you may not push*, and Estigia will not
 turn the first into the second. That distinction is most of the design.
 
-## What it is not
+## FLOW — Fast, Lean, Outcome-driven Workflow
 
-It is not memory ([Leteo](https://github.com/asanabrial/leteo) does that), and it is not planning.
-It does not run your working model, define your tools, or manage your context — it holds one thing: the
-workflow authority. A feature that does not fit that sentence does not go in.
+**FLOW is Estigia's own methodology: how a run takes a piece of work from an issue to a merge.**
 
-## FLOW
+- **Fast:** small work stays small. Understood work is done directly, not planned.
+- **Lean:** one writer, the smallest topology that works, and review only as heavy as the risk.
+- **Outcome-driven:** done means the issue's acceptance criteria hold, with evidence, merged and verified.
 
-FLOW is how a run works under Estigia: the claimed issue is the record of the work, and the
-publication is the review candidate. The contract an agent reads is
-[`skill/SKILL.md`](skill/SKILL.md#flow); the GitHub half is [`delivery.md`](skill/bindings/github/delivery.md).
+It rests on two pillars: *the claimed issue is the record of the work*, and *the publication is the
+review candidate*. Four principles follow from them: small work stays small; review is sized by risk;
+a review lineage gets a bounded number of corrections (`Corrections per lineage`, default 3); and the
+heavyweight two-judge review (Judgment Day) runs only when asked for.
 
-1. **Six states, one at a time.** `analysis` (not yet a valid specification), `ready` (implementable,
-   unassigned), `in-progress` (claimed, being built), `review` (built, awaiting delivery evidence or
-   permission), `blocked` (an exact exit condition and who discharges it) and `done` (merged and
-   verified). The local store is authoritative; labels are a projection, written and read back.
-2. **Claim before the first write.** `claim` takes a run id and a horizon and the store adjudicates:
-   the earliest live claim wins. The gate re-verifies it on the writes it sees and at every
-   irreversible boundary.
-3. **Build, then publish.** Understand, route, execute test-first, verify. The publication — a draft
-   pull request with its epoch, head, base and digest — is the review candidate; it says `Refs #<n>`,
-   never a closing keyword.
-4. **Review sized by risk.** `review_tier` reads the diff: no lens at `low`, one at `medium`, four at
-   `high`, over one immutable target, by a context that did not write the change. Per-tier cost is in
-   [`review-cost.md`](docs/review-cost.md); [`blind-judges.md`](skill/policies/blind-judges.md) settles findings.
-5. **A verdict bound to exact bytes.** The computed verdict records the epoch, pull request, head, base
-   and digest it was produced on. Any push moves one of them and invalidates it: `republish_review`
-   and ask again.
-6. **`deliver`.** One call records the verdict, releases CI, waits for it, merges at the reviewed head,
-   reads the topology back and closes. It stops at the first step that needs a decision (receipt,
-   review, authorisation, CI, base, version, merge, close) and names it with the `next` to follow.
-7. **Close with evidence, then release.** `release` records the spend, moves the issue to `done`, posts
-   the evidence (review, CI, tests, delivering SHA, run id) and puts the claim down, in that order
-   ([details](docs/what-it-writes.md#a-run-id-release-and-prune)).
+You start it with `flow` (analyse and build, choosing the next issue from the tracker), `flow dev
+[issue]` (build) or `flow triage` (analyse and file at most one evidenced issue). A run then goes
+through five steps, which may merge or repeat:
+
+```mermaid
+flowchart LR
+    understand["Understand"] --> route["Route"] --> execute["Execute"] --> verify["Verify"] --> deliver["Deliver"]
+    verify -->|"finding"| execute
+```
+
+| Step | What happens |
+|---|---|
+| **Understand** | Read only; explore in proportion; at most one product question and one challenge to a premise. |
+| **Route** | Do it directly when it is understood; plan briefly only for real uncertainty; delegate only for a stated reason. |
+| **Execute** | Bounded changes, Conventional Commits, test-first wherever a deterministic test applies. |
+| **Verify** | Deterministic evidence first, then the review: none, one or four sealed lenses by risk tier, by a context that did not write the change. |
+| **Deliver** | `deliver` records the verdict, waits for CI, merges at the reviewed head and closes with evidence — or hands the decision back. |
+
+Work that spans sessions or divides into units with their own acceptance keeps an ordered checklist
+on the claimed issue (`task`), never in a file. FLOW is how a run works; the workflow below is what
+Estigia enforces while it does.
+
+## The workflow
+
+The workflow is the part a run cannot talk its way around: the states an issue moves through and the
+checks at each boundary. FLOW runs inside it.
+
+```mermaid
+flowchart TD
+    analysis(["analysis"]) --> ready(["ready"])
+    ready --> claim["claim"]
+    claim --> inprogress(["in-progress"])
+    inprogress -.-> blocked(["blocked"])
+    blocked -.-> inprogress
+    inprogress --> publish["publish"]
+    publish --> review(["review by risk tier"])
+    review --> verdict["verdict on exact bytes"]
+    verdict -->|"push: republish"| publish
+    verdict --> deliver["deliver"]
+    deliver -->|"approved"| release["release"]
+    release --> done(["done"])
+    deliver -.->|"needs a person"| person["hand-back"]
+    person -.-> deliver
+
+    classDef state fill:none,stroke:gray,stroke-width:2px
+    classDef action fill:none,stroke:gray,stroke-dasharray:4 3
+    class analysis,ready,inprogress,blocked,review,done state
+    class claim,publish,verdict,deliver,person,release action
+```
+
+Rounded nodes are states, square nodes are actions; dotted edges are the exceptions. What the gate
+holds at each boundary:
+
+- **One state at a time**, in the local store; labels are a projection, written and read back.
+  `blocked` names an exact exit condition and who discharges it.
+- **A claim before the first write.** The earliest live claim wins, and the gate re-verifies it on
+  every write it sees and at every irreversible step.
+- **A verdict bound to exact bytes** — epoch, head, base and digest. Any push invalidates it:
+  republish and ask again. A body says `Refs #<n>`, never a closing keyword.
+- **Release last**, after the evidence is posted ([details](docs/what-it-writes.md#a-run-id-release-and-prune)).
+
+The contract an agent reads is [`skill/SKILL.md`](skill/SKILL.md#flow); the GitHub half is
+[`delivery.md`](skill/bindings/github/delivery.md); review cost per tier is in
+[`review-cost.md`](docs/review-cost.md).
 
 ## Install
 
-1. Run the installer. Nothing to install first; it checks the archive against its published checksum
-   and refuses to install what does not match.
+Pick one route. Each is copy-paste.
 
-   ```sh
-   curl -fsSL https://raw.githubusercontent.com/asanabrial/estigia/main/scripts/install.sh | sh   # Linux, macOS
-   irm https://raw.githubusercontent.com/asanabrial/estigia/main/scripts/install.ps1 | iex       # Windows (PowerShell)
-   ```
+Linux, macOS:
 
-   The binary lands in `~/.local/bin/estigia`, or `%LOCALAPPDATA%\estigia\bin\estigia.exe` on Windows;
-   `ESTIGIA_INSTALL_DIR` moves it and `ESTIGIA_VERSION` takes a tag other than the latest.
-2. Or, with Node: `npx -y @asanabrial/estigia setup --all`. The package carries no binary; it fetches
-   the same archive, checks the same `.sha256` and places it in the same directory
-   ([why](docs/lifecycle.md)). It is also what the [MCP registry](https://registry.modelcontextprotocol.io)
-   entry starts: `mcp-name: io.github.asanabrial/estigia`, which the registry reads to accept the
-   `cargo` package.
-3. Or build it, the one route that needs Rust: `cargo install estigia` (or `--git
-   https://github.com/asanabrial/estigia` for main). A source build has no installer record, so the
-   commands that write into your agents ask for `--allow-source-build` ([why](docs/lifecycle.md)).
-   The [`Dockerfile`](Dockerfile) builds a server-only image; none is published.
+```sh
+curl -fsSL https://raw.githubusercontent.com/asanabrial/estigia/main/scripts/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/asanabrial/estigia/main/scripts/install.ps1 | iex
+```
+
+npm (installs and sets up in one step):
+
+```sh
+npx -y @asanabrial/estigia setup --all
+```
+
+Cargo (needs Rust):
+
+```sh
+cargo install estigia
+```
+
+Then register it in your agents, and check:
+
+```sh
+estigia setup --all      # or: estigia tui
+estigia status
+estigia doctor
+```
+
+The installers check the archive against its published checksum and refuse a mismatch. The binary
+lands in `~/.local/bin/estigia` (`%LOCALAPPDATA%\estigia\bin\estigia.exe` on Windows);
+`ESTIGIA_INSTALL_DIR` moves it and `ESTIGIA_VERSION` takes a tag other than the latest. The npm
+package carries no binary: it fetches the same archive ([why](docs/lifecycle.md)), and it is what the
+[MCP registry](https://registry.modelcontextprotocol.io) entry starts (`mcp-name: io.github.asanabrial/estigia`,
+which the registry reads to accept the `cargo` package). A source build has no installer record, so the
+commands that write into your agents ask for `--allow-source-build` ([why](docs/lifecycle.md));
+`cargo install --git https://github.com/asanabrial/estigia` takes main. The [`Dockerfile`](Dockerfile)
+builds a server-only image; none is published.
 
 ## Set it up in your agents
 
@@ -136,39 +198,35 @@ writes is in [what it writes](docs/what-it-writes.md#what-setup-installs-besides
 ## Uninstall
 
 Uninstall removes what Estigia created and nothing else: not another tool's block, not your notes, not
-a file of its own you have since edited, which it keeps and names.
+a file of its own you have since edited, which it keeps and names. Run in this order:
 
-1. Take it out of the agents. The first command changes nothing and says what the second will do;
-   `estigia uninstall claude-code` leaves the other agents alone.
+```sh
+estigia uninstall --all --dry-run   # changes nothing; says what the next line will do
+estigia uninstall --all             # or: estigia uninstall claude-code
+estigia guard --uninstall           # in each repository with the push guard
+estigia config forget               # in each checkout
+cargo uninstall estigia             # source build only; otherwise delete the binary
+rm -rf ~/.estigia                   # optional, read the warning first
+```
 
-   ```sh
-   estigia uninstall --all --dry-run
-   estigia uninstall --all
-   ```
+1. The dry run is safe to repeat; `estigia uninstall claude-code` leaves the other agents alone.
+2. `uninstall --all` takes Estigia out of every agent.
+3. `guard --uninstall` removes only a hook Estigia wrote, and must go before the binary, which the
+   hook calls.
+4. `config forget` removes `<checkout>/.git/estigia/`, the repository settings every uninstall
+   survives; it says which file it removed.
+5. Remove the binary by the route you installed with. Installer script or npm: delete
+   `~/.local/bin/estigia` (or `$ESTIGIA_INSTALL_DIR/estigia`); on Windows delete
+   `%LOCALAPPDATA%\estigia\bin\estigia.exe` (or under `%ESTIGIA_INSTALL_DIR%`) and take that directory
+   out of the user `PATH`. A source build: `cargo uninstall estigia`.
 
-2. In each repository that has the push guard, run `estigia guard --uninstall`. It removes only a hook
-   Estigia wrote, and must go before the binary, which the hook calls.
-3. In each checkout, run `estigia config forget`. `<checkout>/.git/estigia/` holds its repository
-   settings and survives every uninstall, which was given an agent and not a repository; the command
-   says which file it removed.
-4. Remove the binary by the route you installed with; uninstalling the agents does not touch it.
-   - Installer script or npm: delete `~/.local/bin/estigia` (or `$ESTIGIA_INSTALL_DIR/estigia`). On
-     Windows delete `%LOCALAPPDATA%\estigia\bin\estigia.exe` (or under `%ESTIGIA_INSTALL_DIR%`) and
-     take that directory out of the user `PATH`, where the installer added it.
-   - Source build: `cargo uninstall estigia`.
-5. Know what `~/.estigia/` holds before deleting it. `state.db` is the workflow store, one copy on this
-   machine: claims, states, receipts, findings, verdicts, spend, tasks, the decision history, the
-   session registry and the mailbox. Beside it: run pointers; `jobs/` (review and check jobs);
-   `snapshots/` (up to three copies of the store); `lifecycle/` (the binary's provenance records);
-   `workspaces/` and `roots/` (where installs are); the screen's language; your checkouts list. The
-   last `uninstall --all` takes the store and the run state, and keeps `jobs/`, `snapshots/`,
-   `lifecycle/`, the language and the list
-   ([per entry](docs/what-it-writes.md#what-estigia-holds-and-what-each-uninstall-step-leaves)).
-   Delete it only when you no longer want the history of what this machine's gate decided:
-
-   ```sh
-   rm -rf ~/.estigia
-   ```
+**Before `rm -rf ~/.estigia`:** `state.db` is the workflow store, one copy on this machine: claims,
+states, receipts, findings, verdicts, spend, tasks, the decision history, the session registry and the
+mailbox. Beside it: run pointers; `jobs/`; `snapshots/` (up to three copies of the store);
+`lifecycle/` (the binary's provenance records); `workspaces/` and `roots/`; the screen's language; your
+checkouts list. The last `uninstall --all` takes the store and the run state and keeps the rest
+([per entry](docs/what-it-writes.md#what-estigia-holds-and-what-each-uninstall-step-leaves)). Delete it
+only when you no longer want the history of what this machine's gate decided.
 
 What `REPLACE` and `OVERWRITE` mean is in [`docs/what-it-writes.md`](docs/what-it-writes.md).
 
