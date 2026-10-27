@@ -237,6 +237,15 @@ fn unreadable(what: &str) -> impl Fn(rusqlite::Error) -> Failure + '_ {
     }
 }
 
+/// `FULL`, unless the debug-only fsync skip `paths::sync_durably` obeys is armed.
+fn durability() -> &'static str {
+    #[cfg(debug_assertions)]
+    if crate::paths::fsync_skipped() {
+        return "PRAGMA synchronous = OFF; PRAGMA foreign_keys = ON;";
+    }
+    "PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;"
+}
+
 impl Store {
     /// Opens the store at `path`, creating and migrating it.
     pub fn open(path: &Path) -> Result<Self, Failure> {
@@ -272,7 +281,7 @@ impl Store {
             .map_err(unreadable("set its busy timeout"))?;
         settle_wal(|| connection.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0)))?;
         connection
-            .execute_batch("PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;")
+            .execute_batch(durability())
             .map_err(unreadable("set its durability"))?;
         Ok(Self { connection })
     }
