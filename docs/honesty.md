@@ -575,7 +575,13 @@ pointer that leaves it names the document it points at.
 
   Where two runs hold isolated worktrees inside one base checkout, a write through a tool naming neither
   a directory nor a target path is covered by both at equal depth and refused
-  `several-runs-hold-this-checkout`. A call carrying the host's session id never reaches this road.
+  `several-runs-hold-this-checkout`. A call carrying the host's session id never reaches this road, and
+  neither does `deliver`'s merge decision: it loads the pointer of the run id it was given and asks the
+  same session gate the hook does, so another live holder of the shared checkout neither blocks it nor
+  lends it authority. A run id with no claim, an unreadable pointer, a receipt for another pull request,
+  a moved head and a missing CI release each still refuse. Uncrossed: the regression stops at the
+  missing-CI-release refusal, because no test seeds the local store with a release, so the `Allow` of an
+  otherwise valid delivery is read from the code and not driven.
 
   **The `workdir` spelling is not crossed against the host, and neither is the resolution base.**
   `workdir` was read from OpenCode's shell-tool schema in the installed binary, but nothing here holds a

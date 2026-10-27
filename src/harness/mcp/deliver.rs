@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 
 use super::{NamedRun, ToolFailure};
 use crate::harness::{Action, CommitTarget, Decision, GateContext, RunsIn, Sensitivity, session};
+use crate::outcome::Observed;
 use crate::transport::claim::ReviewTransaction;
 use crate::transport::{self, Failure, How, Output};
 
@@ -1049,12 +1050,18 @@ impl Hands for Live<'_> {
             runs_in: RunsIn::Session,
             target: CommitTarget::Checkout,
         };
-        match crate::harness::guard::decide_action(
+        let mut run = session::load(&self.context.state_root, self.run_id);
+        let decided = crate::harness::gate_observing(
             self.context,
-            &self.context.repo_dir,
+            &mut run,
             &action,
             Sensitivity::Boundary,
-        ) {
+            &Observed::default(),
+        );
+        if matches!(decided, Decision::Allow(_)) {
+            let _ = session::store(&self.context.state_root, &run);
+        }
+        match decided {
             Decision::Allow(_) => Ok(()),
             Decision::Deny(refusal) | Decision::Ask(refusal) => Err(json!({
                 "code": refusal.code,

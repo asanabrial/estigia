@@ -1120,3 +1120,171 @@ fn an_unreadable_appendix_file_is_handed_back_before_anything_runs() {
     assert_eq!(answer["stopped"]["step"], "appendix", "{answer}");
     assert_eq!(answer["stopped"]["reason"], "appendix-unreadable");
 }
+
+fn live_for<'a>(context: &'a GateContext, run_id: &'a str) -> Live<'a> {
+    Live {
+        context,
+        run_id,
+        transport: transport::Context::live(
+            context.skill_root.clone(),
+            context.repo_dir.clone(),
+            None,
+        ),
+    }
+}
+
+fn shared_checkout_context(root: &Path, repo: &Path) -> GateContext {
+    let skill_root = root.join("skill");
+    std::fs::create_dir_all(&skill_root).expect("a skill root");
+    std::fs::write(skill_root.join(crate::skill::CONTRACT), "the contract\n")
+        .expect("the contract is installed");
+    GateContext {
+        integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
+        flag: None,
+        stand_down: None,
+        skill_root,
+        repo_dir: repo.to_path_buf(),
+        state_root: root.join("state"),
+        operation_window: Default::default(),
+        issue_requirement: crate::config::IssueRequirement::Off,
+        decision_mode: crate::config::DecisionMode::Ask,
+        workflow: Some(crate::config::Workflow::Autonomous),
+        window: crate::harness::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        repository_host: crate::config::RepositoryHost::Github { repo: None },
+        boundaries: Vec::new(),
+    }
+}
+
+fn holder_receipt() -> crate::transport::claim::ReviewTransaction {
+    crate::transport::claim::ReviewTransaction {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    }
+}
+
+fn store_holder(
+    context: &GateContext,
+    repo: &Path,
+    run_id: &str,
+    issue: u64,
+    receipt: Option<crate::transport::claim::ReviewTransaction>,
+) {
+    let mut run = session::Run::new(run_id.to_owned());
+    run.issue = Some(crate::identity::Identity::Number(issue));
+    run.state = Some("in-progress".to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    run.review_transaction = receipt;
+    session::store(&context.state_root, &run).expect("the pointer writes");
+}
+
+fn pr_head_answer(head: &str) -> Value {
+    json!({
+        "matches": "pr view 7",
+        "stdout": json!({"headRefOid": head}).to_string(),
+        "status": 0,
+    })
+}
+
+#[test]
+fn the_live_merge_decision_names_its_caller_when_another_live_run_holds_the_same_checkout() {
+    let root = tempfile::tempdir().expect("a gate root");
+    let repo = crate::test_env::repository_with_commit();
+    let context = shared_checkout_context(root.path(), repo.path());
+    store_holder(
+        &context,
+        repo.path(),
+        "claude-caller000",
+        12,
+        Some(holder_receipt()),
+    );
+    store_holder(&context, repo.path(), "claude-bystander", 34, None);
+    let bystander_before = session::load(&context.state_root, "claude-bystander");
+
+    let bin = scripted_gh();
+    let script = answers(&[
+        crate::test_env::live_holder_issue("claude-caller000", 12, "in-progress"),
+        crate::test_env::live_holder_issue("claude-bystander", 34, "in-progress"),
+        pr_head_answer(&holder_receipt().head),
+    ]);
+    let refused = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        live_for(&context, "claude-caller000")
+            .merge_decision(7)
+            .expect_err("no CI release is recorded for this receipt")
+    });
+
+    assert_ne!(
+        refused["code"], "several-runs-hold-this-checkout",
+        "{refused}"
+    );
+    assert!(
+        ["merge-without-ci-release", "read-failed"]
+            .contains(&refused["code"].as_str().unwrap_or_default()),
+        "{refused}"
+    );
+    let bystander_after = session::load(&context.state_root, "claude-bystander");
+    assert_eq!(bystander_after.issue, bystander_before.issue);
+    assert_eq!(bystander_after.state, bystander_before.state);
+    assert!(bystander_after.review_transaction.is_none());
+}
+
+#[test]
+fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_or_unreadable() {
+    let root = tempfile::tempdir().expect("a gate root");
+    let repo = crate::test_env::repository_with_commit();
+    let context = shared_checkout_context(root.path(), repo.path());
+    store_holder(
+        &context,
+        repo.path(),
+        "claude-caller000",
+        12,
+        Some(holder_receipt()),
+    );
+    store_holder(&context, repo.path(), "claude-bystander", 34, None);
+
+    let unclaimed = live_for(&context, "claude-nothing000")
+        .merge_decision(7)
+        .expect_err("a run that holds nothing is refused");
+    assert_eq!(unclaimed["code"], "merge-not-covered", "{unclaimed}");
+
+    let bin = scripted_gh();
+    let script = answers(&[crate::test_env::live_holder_issue(
+        "claude-caller000",
+        12,
+        "in-progress",
+    )]);
+    let foreign = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        live_for(&context, "claude-caller000")
+            .merge_decision(8)
+            .expect_err("a foreign PR is refused")
+    });
+    assert_eq!(foreign["code"], "delivery-pr-mismatch", "{foreign}");
+
+    let stale = crate::test_env::with_scripted_gh(
+        bin.path(),
+        &answers(&[
+            crate::test_env::live_holder_issue("claude-caller000", 12, "in-progress"),
+            pr_head_answer(&"f".repeat(40)),
+        ]),
+        || {
+            live_for(&context, "claude-caller000")
+                .merge_decision(7)
+                .expect_err("a moved head is refused")
+        },
+    );
+    assert_eq!(stale["code"], "verdict-bound-to-other-bytes", "{stale}");
+
+    std::fs::write(
+        session::pointer_path(&context.state_root, "claude-garbled000"),
+        "{not json",
+    )
+    .expect("a garbled pointer");
+    let unreadable = live_for(&context, "claude-garbled000")
+        .merge_decision(7)
+        .expect_err("an unreadable pointer is refused");
+    assert_eq!(unreadable["code"], "run-pointer-unreadable", "{unreadable}");
+}
