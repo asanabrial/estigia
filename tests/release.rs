@@ -724,6 +724,129 @@ fn no_workflow_needs_only_interpreters_it_sets_up() {
     }
 }
 
+/// The suite runs under nextest, so a hung test is killed and named instead of
+/// holding the job until its limit.
+///
+/// Read as steps in order: nextest installed, the fixtures built, then the runs
+/// with the flags that keep them complete, then the doc tests nextest does not run.
+/// Off Windows nextest runs everything; on Windows it runs every target but the
+/// lib, which stays under libtest there, and nothing else escapes the bound.
+/// The bound itself lives in `.config/nextest.toml`, which the `ci` profile
+/// inherits, so the profile is checked to exist and the default to carry it.
+#[test]
+fn ci_runs_the_suite_under_a_per_test_timeout() {
+    let running = what_runs(&read(".github/workflows/ci.yml"));
+    let mut steps: Vec<(String, String)> = Vec::new();
+    let mut condition = String::new();
+    for code in &running {
+        if code.trim_start().starts_with("- ") {
+            condition.clear();
+        }
+        match key_and_value(code) {
+            Some((key, value)) if key == "if" => condition = value,
+            Some((key, value)) if key == "run" => steps.push((condition.clone(), value)),
+            _ => {}
+        }
+    }
+    let position = |prefix: &str, when: &str| {
+        steps
+            .iter()
+            .position(|(condition, command)| command.starts_with(prefix) && condition == when)
+            .unwrap_or_else(|| panic!("ci.yml runs no `{prefix}` under `if: {when}`: {steps:?}"))
+    };
+    let fixtures = position("cargo build --bins --examples", "");
+    let suite = position("cargo nextest run", "runner.os != 'Windows'");
+    let windows = position("cargo nextest run", "runner.os == 'Windows'");
+    let windows_lib = position(
+        "cargo test --lib",
+        "(success() || failure()) && runner.os == 'Windows'",
+    );
+    let doc = position("cargo test --doc", "success() || failure()");
+    assert!(
+        fixtures < suite && suite < windows && windows < windows_lib && windows_lib < doc,
+        "the fixtures must exist before the suite and the doc tests follow it: {steps:?}"
+    );
+    assert!(
+        !steps[suite].1.contains(" -E ") && steps[windows].1.ends_with("-E \"not kind(lib)\""),
+        "off Windows nextest must run every target, and on Windows every target but the lib: {steps:?}"
+    );
+    for step in [suite, windows] {
+        for flag in [
+            "--profile ci",
+            "--all-features",
+            "--no-fail-fast",
+            "--locked",
+        ] {
+            assert!(
+                steps[step].1.contains(flag),
+                "the nextest step lacks `{flag}`: {}",
+                steps[step].1
+            );
+        }
+    }
+    for (step, flags) in [
+        (
+            windows_lib,
+            &["--all-features", "--no-fail-fast", "--locked"][..],
+        ),
+        (doc, &["--all-features", "--locked"][..]),
+    ] {
+        for flag in flags {
+            assert!(
+                steps[step].1.contains(flag),
+                "`{}` lacks `{flag}`",
+                steps[step].1
+            );
+        }
+    }
+    assert!(
+        steps
+            .iter()
+            .enumerate()
+            .all(|(at, (_, command))| !command.starts_with("cargo test")
+                || at == windows_lib
+                || at == doc),
+        "a libtest run of the suite stands beside nextest, so a hang there has no bound: {steps:?}"
+    );
+    assert!(
+        running
+            .iter()
+            .any(|code| { runs_action(code, "taiki-e/install-action").is_some() })
+            && running
+                .iter()
+                .filter_map(|code| key_and_value(code))
+                .any(|(key, value)| key == "tool" && value == "nextest"),
+        "ci.yml runs nextest and never installs it"
+    );
+
+    let workflow = code_of(&read(".github/workflows/ci.yml"));
+    let check = workflow
+        .split_once("\n  check:\n")
+        .and_then(|(_, rest)| rest.split_once("\n  lint:\n"))
+        .map(|(check, _)| check)
+        .unwrap_or_else(|| panic!("ci.yml has no `check` job before `lint`"));
+    let limit: u32 = check
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("timeout-minutes:"))
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or_else(|| panic!("the `check` job has no numeric `timeout-minutes`"));
+    assert!(
+        limit <= 30,
+        "the `check` job is allowed {limit} minutes; a hang is bounded by nextest, so the job \
+         limit only has to cover a normal run"
+    );
+
+    let config = code_of(&read(".config/nextest.toml"));
+    let compact: String = config.chars().filter(|c| !c.is_whitespace()).collect();
+    assert!(
+        compact.contains("[profile.default]")
+            && compact.contains("slow-timeout={period=\"60s\",terminate-after=3}")
+            && compact.contains("[profile.ci]"),
+        "`.config/nextest.toml` no longer bounds a test in the default profile and names the \
+         `ci` profile the workflow selects:\n{config}"
+    );
+}
+
 /// Every check the contributing rules name is a check CI runs.
 ///
 /// `AGENTS.md` tells the next person what to run before calling a change done,
@@ -889,6 +1012,7 @@ const RUNTIME_FLOORS: &[(&str, u32)] = &[
     ("actions/download-artifact", 7),
     ("softprops/action-gh-release", 3),
     ("swatinem/rust-cache", 2),
+    ("taiki-e/install-action", 2),
     // The composite's own major, which bounds nothing about the node20 exposure —
     // that is in the two commits it pins, and `docs/honesty.md` records why this
     // reader cannot reach them. It is floored anyway, so a revert to `@v2` — the

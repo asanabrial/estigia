@@ -43,7 +43,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v7
@@ -79,17 +79,37 @@ jobs:
         with:
           cache-on-failure: true
 
-      # `--no-fail-fast` because `cargo test` stops at the first target that
-      # fails and skips every later one. Measured with a failing lib test: the
-      # bare command prints **one** `test result` line and this one prints nine.
-      # The lib is the first target, so a failure there hides all eight others —
-      # an earlier version of this comment said three, which is what a failing
-      # *integration* target gives, and it was written without being run.
-      # That is why `tests/pipe.rs` — the end-to-end evidence for the review
-      # protocol — never ran on the Linux and macOS lanes the one time they went
-      # red. It does not soften a red run; the job still fails.
+      # nextest, so a test that hangs is killed after `slow-timeout` in
+      # `.config/nextest.toml` and named in the log, instead of the job being
+      # cancelled at its limit with nothing to read.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+
+      # nextest runs no doc tests and the stand-in `gh` is an example, so the
+      # fixtures are built first and the doc tests get a step of their own.
+      - name: fixtures
+        run: cargo build --bins --examples --all-features --locked
+
+      # `--no-fail-fast` for the reason `cargo test` needed it: the first red
+      # target must not hide every later one, `tests/pipe.rs` most of all.
       - name: tests
-        run: cargo test --all-features --no-fail-fast --locked
+        if: runner.os != 'Windows'
+        run: cargo nextest run --profile ci --all-features --no-fail-fast --locked
+
+      # On Windows a process per test grew `check` by a fifth, so the lib target
+      # stays under libtest there and only the other targets are bounded.
+      - name: tests (Windows, all but the lib)
+        if: runner.os == 'Windows'
+        run: cargo nextest run --profile ci --all-features --no-fail-fast --locked -E "not kind(lib)"
+
+      - name: tests (Windows, lib)
+        if: (success() || failure()) && runner.os == 'Windows'
+        run: cargo test --lib --all-features --no-fail-fast --locked
+
+      - name: doc tests
+        if: success() || failure()
+        run: cargo test --doc --all-features --locked
 
   # Per platform, because `cfg(windows)` and `cfg(unix)` code is only linted and
   # documented on the platform that compiles it.

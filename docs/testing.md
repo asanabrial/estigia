@@ -168,6 +168,36 @@ launch in `src/setup/tests.rs` goes through `run_node`, which drains both pipes 
 fails naming the test and printing what it had written, so a hung driver reads as a failure with
 evidence instead of a cancelled job.
 
+## How the CI lane runs the suite, and the deadline on every test
+
+The `check` job runs the suite under [`cargo-nextest`](https://nexte.st), installed by
+`taiki-e/install-action`: `cargo build --bins --examples` first, then
+`cargo nextest run --profile ci --all-features --no-fail-fast --locked` (on Windows, for every target
+but the lib; see below), then
+`cargo test --doc --all-features --locked`, because nextest runs no doc tests. The bound is
+[`.config/nextest.toml`](../.config/nextest.toml): a test still running after `60s` is reported slow,
+and after three periods (180 s) it is killed and the job fails with its name in the log. Before this
+a hung test was ended only by the job's limit, and a job ended that way left no log to read (run
+40399731794, `windows-11-arm`, 55 minutes lost). The `check` limit is 30 minutes for that reason: it
+only has to cover a normal run. `tests/release.rs` pins the step order, the flags, the limit and the
+config.
+
+nextest runs one process per test. `ENVIRONMENT` in `src/test_env.rs` and the other process-wide
+statics only exclude threads of one process, so with one test per process they are uncontended and
+exclude nothing that was not already alone; the `OnceLock` caches (the fixture copies, the generated
+scripts) are rebuilt per test rather than once per binary, which costs time and decides nothing. A
+filtered local run is still `cargo test` or `scripts/test.sh`; nextest is not required to work here.
+
+**On Windows the lib target is not bounded.** There a process per test costs what the other runners do
+not: with everything under nextest, `check (windows-latest)` took 21m04s, 16m27s and 20m34s on one head
+(median 20m34s) against a libtest median of 16m55s over the thirteen green runs before it, a fifth
+more. So on Windows nextest runs every target but the lib (`-E "not kind(lib)"`), and the lib's
+~3,700 tests run under `cargo test --lib --no-fail-fast`, where a hang still ends only at the job's
+30-minute limit. Every other runner bounds every test. The doc tests and the Windows lib step run
+after a red step too (`if: success() || failure()`), so a red suite hides neither.
+
+The `node` drivers keep their own 120 s deadline above, which sits inside nextest's 180 s.
+
 ## Interpreters, and what happens without one
 
 None of those skips when `node` is missing; all fail and say so, since a skip spelled as a pass is a
