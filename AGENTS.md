@@ -127,8 +127,9 @@ a second copy that will disagree.
 
    The four commands in the next paragraph run once, before publishing — not on every edit.
 
-   **Run everything**: `cargo test`, `cargo clippy --all-targets`, `cargo fmt`, `cargo doc
-   --no-deps`. One hundred and eleven tests **require** `node` on the path, four of them `tar` too,
+   **Run everything**: `cargo test` (CI runs `cargo nextest run --profile ci` plus `cargo test
+   --doc`, which kills a hung test after the `.config/nextest.toml` bound), `cargo clippy
+   --all-targets`, `cargo fmt`, `cargo doc --no-deps`. One hundred and eleven tests **require** `node` on the path, four of them `tar` too,
    one requires `bash`, nine in `tests/usage_accounting.rs` require `python3` on Unix; all of
    those fail rather than skip without it, and `doctor` asks for none. Which test drives which
    generated integration, which driver carries it and what each one needs is
