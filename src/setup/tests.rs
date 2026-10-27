@@ -22919,31 +22919,42 @@ fn a_pi_look_estigia_wrote_is_brought_current_and_one_without_the_marker_is_left
 
 #[test]
 fn the_pi_look_and_theme_follow_the_agent_directory_they_are_installed_for() {
-    let (home, options) = sandbox();
-    let agent_root = home.path().join("elsewhere").join("pi-agent");
+    let home = tempfile::tempdir().expect("a home");
+    let elsewhere = tempfile::tempdir().expect("a directory outside the home");
+    let agent_root = elsewhere.path().join("pi-agent");
     let options = SetupOptions {
-        pi_agent_dir: Some(agent_root.clone()),
-        ..options
+        platform: Some(Platform::Unix),
+        ..SetupOptions::default()
     };
     let adapter = agent("pi");
-    let look = agent_root.join("extensions").join(plugin::PI_LOOK_FILE);
+    let look = agent_root
+        .join(plugin::PI_DIRECTORY)
+        .join(plugin::PI_LOOK_FILE);
     let theme = agent_root
         .join(plugin::PI_THEME_DIRECTORY)
         .join(plugin::PI_THEME_FILE);
 
-    setup(adapter, &Config::default(), &options).expect("setup succeeds");
-    assert_eq!(
-        fs::read_to_string(&look).expect("the look reads"),
-        plugin::PI_LOOK
-    );
-    assert_eq!(
-        fs::read_to_string(&theme).expect("the theme reads"),
-        plugin::PI_THEME
-    );
+    with_home_env_and_pi_agent_dir(
+        home.path(),
+        &home.path().join("AppData").join("Roaming"),
+        &home.path().join(".config"),
+        &agent_root,
+        || {
+            setup(adapter, &Config::default(), &options).expect("setup succeeds");
+            assert_eq!(
+                fs::read_to_string(&look).expect("the look reads"),
+                plugin::PI_LOOK
+            );
+            assert_eq!(
+                fs::read_to_string(&theme).expect("the theme reads"),
+                plugin::PI_THEME
+            );
 
-    uninstall(adapter, &options).expect("uninstall succeeds");
-    assert!(!look.exists(), "uninstall left the look behind");
-    assert!(!theme.exists(), "uninstall left the theme behind");
+            uninstall(adapter, &options).expect("uninstall succeeds");
+            assert!(!look.exists(), "uninstall left the look behind");
+            assert!(!theme.exists(), "uninstall left the theme behind");
+        },
+    );
 }
 
 #[test]
@@ -23116,21 +23127,39 @@ percent = 90;
 const context90 = context();
 
 const savedHome = process.env.HOME;
+const savedProfile = process.env.USERPROFILE;
 process.env.HOME = "/home/bob";
 const realCwd = ctx.cwd;
 ctx.cwd = "/home/bobby/x";
 const besideHome = header.render(120).join("\n");
+delete process.env.HOME;
+process.env.USERPROFILE = "C:\\Users\\bob";
+ctx.cwd = "C:\\Users\\bob\\repo";
+const backslashHome = header.render(120).join("\n");
 ctx.cwd = realCwd;
 if (savedHome === undefined) delete process.env.HOME;
 else process.env.HOME = savedHome;
+if (savedProfile === undefined) delete process.env.USERPROFILE;
+else process.env.USERPROFILE = savedProfile;
 
-const withoutStatuses = tui.calls.footers.at(-1)({}, theme, { getExtensionStatuses: () => undefined });
-let statless = null;
-try {
-  statless = withoutStatuses.render(120).join("\n");
-} catch {
-  statless = null;
-}
+const drawnWith = (footerData) => {
+  const footer = tui.calls.footers.at(-1)({}, theme, footerData);
+  try {
+    return footer.render(140).join("\n");
+  } catch (error) {
+    return `threw: ${error?.message ?? error}`;
+  }
+};
+const statusShapes = {
+  absent: drawnWith({ getGitBranch: () => "main" }),
+  undefined: drawnWith({ getGitBranch: () => "main", getExtensionStatuses: () => undefined }),
+  throwing: drawnWith({
+    getGitBranch: () => "main",
+    getExtensionStatuses: () => {
+      throw new Error("the host refused");
+    },
+  }),
+};
 
 await tui.calls.commands[0].handler("off", ctx);
 const off = { header: tui.calls.headers.at(-1) ?? null, footer: tui.calls.footers.at(-1) ?? null };
@@ -23184,7 +23213,8 @@ writeFileSync(
     context70,
     context90,
     besideHome,
-    statless,
+    backslashHome,
+    statuses: statusShapes,
     bogus,
     off,
     on,
@@ -23446,13 +23476,38 @@ fn the_pi_look_draws_a_header_and_a_footer_and_decides_nothing() {
         "a sibling of the home was abbreviated as if it were inside: {beside}"
     );
 
-    let statless = answer["statless"].as_str().expect("the footer renders");
+    let backslash = answer["backslashHome"].as_str().expect("the header");
     assert!(
-        !statless.contains("#1028"),
-        "a host with no statuses produced a claim: {statless}"
+        backslash.contains("~\\repo"),
+        "a home spelled with backslashes was not abbreviated: {backslash}"
     );
-    assert!(statless.contains("no claim"), "{statless}");
-    assert!(statless.contains("$0.120"), "{statless}");
+    assert!(
+        !backslash.contains("C:\\Users\\bob"),
+        "the whole backslash home was drawn: {backslash}"
+    );
+
+    for (shape, described) in [
+        ("undefined", "an accessor that answers undefined"),
+        ("throwing", "an accessor that throws"),
+        ("absent", "no accessor at all"),
+    ] {
+        let drawn = answer["statuses"][shape].as_str().unwrap_or_else(|| {
+            panic!("the footer with {described}: {}", answer["statuses"][shape])
+        });
+        assert!(
+            !drawn.starts_with("threw:"),
+            "the footer threw with {described}: {drawn}"
+        );
+        assert!(
+            !drawn.contains("#1028"),
+            "the footer drew a claim with {described}: {drawn}"
+        );
+        assert!(drawn.contains("no claim"), "with {described}: {drawn}");
+        assert!(
+            drawn.contains("$0.120"),
+            "the cost left the footer with {described}: {drawn}"
+        );
+    }
 
     assert_eq!(
         answer["bogus"]["drawn"], 0,
