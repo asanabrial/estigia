@@ -1736,7 +1736,7 @@ pub(crate) fn transition_on(
         None
     };
     if super::outbox::is_closed(context) {
-        ledger.set_state(to)?;
+        ledger.set_state(to, now)?;
         let queued = super::outbox::queue(
             context,
             issue,
@@ -1756,7 +1756,7 @@ pub(crate) fn transition_on(
         }
         return Ok(deferred);
     }
-    let mut result = project_state(context, ledger, issue, to, from)?;
+    let mut result = project_state(context, ledger, issue, to, from, now)?;
     if let Some(delivery) = delivery {
         result["delivery"] = delivery;
     }
@@ -1772,6 +1772,7 @@ pub(super) fn project_state(
     issue: u64,
     to: &str,
     from: Option<&str>,
+    now: &str,
 ) -> Result<serde_json::Value, Failure> {
     let mirror = super::board::set_status(context, issue, to);
 
@@ -1825,7 +1826,7 @@ pub(super) fn project_state(
         )));
     }
 
-    ledger.set_state(to).map_err(|failure| {
+    ledger.set_state(to, now).map_err(|failure| {
         Failure::Write(format!(
             "the labels moved but the local store did not record the state: {}",
             failure.detail()

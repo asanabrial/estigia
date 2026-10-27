@@ -549,6 +549,7 @@ impl Store {
                 .map_err(&write)?;
             for table in [
                 "entries",
+                "transitions",
                 "tasks",
                 "blocked_clauses",
                 "review_jobs",
