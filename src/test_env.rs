@@ -665,25 +665,44 @@ fn directory_name(path: &Path) -> String {
         .to_owned()
 }
 
+// A template at rest holds no lock. A `git maintenance run --auto` a build's
+// `git commit` detached can still be creating and removing locks in it, so a lock
+// is never copied and an entry that vanished between listing and copying is skipped.
 fn copy_tree(from: &Path, to: &Path, template_name: &str, copy_name: &str) {
-    for entry in std::fs::read_dir(from).expect("the template is readable") {
+    let entries = match std::fs::read_dir(from) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
+        entries => entries.expect("the template is readable"),
+    };
+    for entry in entries {
         let entry = entry.expect("a template entry");
+        if Path::new(&entry.file_name()).extension() == Some(OsStr::new("lock")) {
+            continue;
+        }
         let source = entry.path();
         let destination = to.join(entry.file_name());
-        if entry.file_type().expect("a template entry type").is_dir() {
+        let copied = if entry.file_type().expect("a template entry type").is_dir() {
             std::fs::create_dir(&destination).expect("a copied directory");
             copy_tree(&source, &destination, template_name, copy_name);
+            Ok(())
         } else if names_a_checkout(&entry.file_name()) {
-            let text = std::fs::read_to_string(&source).expect("Git metadata is text");
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&destination)
-                .expect("a new file for the copied Git metadata");
-            std::io::Write::write_all(&mut file, text.replace(template_name, copy_name).as_bytes())
+            std::fs::read_to_string(&source).map(|text| {
+                let mut file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&destination)
+                    .expect("a new file for the copied Git metadata");
+                std::io::Write::write_all(
+                    &mut file,
+                    text.replace(template_name, copy_name).as_bytes(),
+                )
                 .expect("re-pointed Git metadata");
+            })
         } else {
-            std::fs::copy(&source, &destination).expect("a copied file");
+            std::fs::copy(&source, &destination).map(drop)
+        };
+        match copied {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            copied => copied.expect("a copied template entry"),
         }
     }
 }
@@ -1301,6 +1320,18 @@ mod copy_of_template_tests {
 
     fn canonical(path: &str) -> std::path::PathBuf {
         std::fs::canonicalize(path.trim()).unwrap_or_else(|_| panic!("{path:?} exists"))
+    }
+
+    #[test]
+    fn a_lock_a_background_git_holds_in_the_template_is_not_copied() {
+        static TEMPLATES: Templates<()> = Templates::new();
+        let (copy, ()) = TEMPLATES.copy("locked", |root| {
+            std::fs::create_dir_all(root.join(".git/objects")).unwrap();
+            std::fs::write(root.join(".git/objects/maintenance.lock"), "").unwrap();
+            std::fs::write(root.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+        });
+        assert!(copy.path().join(".git/HEAD").is_file());
+        assert!(!copy.path().join(".git/objects/maintenance.lock").exists());
     }
 
     #[test]
