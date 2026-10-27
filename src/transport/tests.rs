@@ -807,3 +807,96 @@ fn the_layered_configuration_carries_the_repositorys_own_delivery_rows() {
     assert_eq!(layered.merge_by(), crate::config::Party::Person);
     assert_eq!(layered.external_reviewers, written.external_reviewers);
 }
+
+#[cfg(unix)]
+#[test]
+fn an_isolated_diff_reads_the_admin_directories_and_object_format_in_one_git_call() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().expect("a fixture root");
+    let repo = root.path().join("repo");
+    let tree = root.path().join("tree");
+    std::fs::create_dir(&repo).expect("a repository directory");
+    let git = |at: &Path, arguments: &[&str]| {
+        let args: Vec<&str> = ["git"]
+            .into_iter()
+            .chain(arguments.iter().copied())
+            .collect();
+        run(&args, Some(at), How::write())
+            .unwrap_or_else(|failure| panic!("git {arguments:?} failed: {}", failure.detail()));
+    };
+    git(&repo, &["init", "--quiet", "-b", "main"]);
+    git(&repo, &["config", "user.email", "estigia@example.invalid"]);
+    git(&repo, &["config", "user.name", "Estigia test"]);
+    git(&repo, &["commit", "--quiet", "--allow-empty", "-m", "base"]);
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            "side",
+            tree.to_str().unwrap(),
+        ],
+    );
+
+    let shims = tempfile::tempdir().expect("a shim directory");
+    let log = shims.path().join("calls.log");
+    let real = which_git();
+    let shim = shims.path().join("git");
+    std::fs::write(
+        &shim,
+        format!(
+            "#!/bin/sh\necho \"$*\" >> '{}'\nexec '{}' \"$@\"\n",
+            log.display(),
+            real.display()
+        ),
+    )
+    .expect("a logging git");
+    std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).expect("executable");
+
+    let (guard, envs) =
+        with_process_override(shims.path(), &[], || isolated_diff_env(&tree)).expect("isolates");
+
+    let calls = std::fs::read_to_string(&log).expect("the shim logged");
+    let rev_parses = calls
+        .lines()
+        .filter(|line| line.starts_with("rev-parse"))
+        .count();
+    assert_eq!(rev_parses, 1, "{calls}");
+    let common = std::fs::canonicalize(repo.join(".git")).expect("the common directory");
+    let private = common.join("worktrees").join("tree");
+    let isolated = std::fs::canonicalize(&guard.dir).expect("the isolated directory");
+    assert_eq!(isolated.parent(), Some(private.as_path()));
+    let objects = envs
+        .iter()
+        .find(|(name, _)| name == "GIT_OBJECT_DIRECTORY")
+        .map(|(_, value)| std::fs::canonicalize(value).expect("the object directory"));
+    assert_eq!(objects, Some(common.join("objects")));
+    let config = std::fs::read_to_string(guard.dir.join("config")).expect("a config");
+    assert!(!config.contains("objectformat"), "{config}");
+}
+
+#[cfg(unix)]
+fn which_git() -> PathBuf {
+    let found = run(&["sh", "-c", "command -v git"], None, How::read()).expect("git is on PATH");
+    PathBuf::from(found.stdout.trim())
+}
+
+#[test]
+fn an_isolated_diff_over_a_sha256_repository_declares_that_object_format() {
+    let root = tempfile::tempdir().expect("a fixture root");
+    run(
+        &["git", "init", "--quiet", "--object-format=sha256", "repo"],
+        Some(root.path()),
+        How::write(),
+    )
+    .expect("a sha256 repository");
+
+    let (guard, _envs) = isolated_diff_env(&root.path().join("repo")).expect("isolates");
+
+    let config = std::fs::read_to_string(guard.dir.join("config")).expect("a config");
+    assert!(config.contains("objectformat = sha256"), "{config}");
+    assert!(config.contains("repositoryformatversion = 1"), "{config}");
+}
