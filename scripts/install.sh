@@ -144,9 +144,29 @@ say "  extracting"
 tar -xzf "$TEMP/$ARCHIVE" -C "$TEMP"
 CANDIDATE="$TEMP/$PACKAGE/estigia"
 say "  recording candidate lifecycle"
-if ! "$CANDIDATE" __record-install; then
+RECORD_STDERR="$TEMP/record.stderr"
+record_status=0
+"$CANDIDATE" __record-install 2>"$RECORD_STDERR" || record_status=$?
+if [ "$record_status" -ne 0 ]; then
+    # 126 and 127 are the shell's words for a file it could not execute or find,
+    # which is also what the dynamic linker's refusal arrives as.
+    case "$record_status" in
+        126|127)
+            loader_words="$(cat "$RECORD_STDERR")"
+            detail="this platform cannot run the $TARGET archive, and that is the reason"
+            [ -z "$loader_words" ] || detail="$detail; the loader said: $loader_words"
+            case "$TARGET" in
+                *-unknown-linux-gnu) detail="$detail
+    The published $TARGET archives need glibc 2.39 or newer." ;;
+            esac
+            fail "the downloaded candidate could not be executed, so it was not asked to record itself: $detail
+    Build on this machine instead: cargo install estigia  (main: $(source_build))
+    Refusing to replace the installed executable." ;;
+    esac
+    cat "$RECORD_STDERR" >&2
     fail "candidate lifecycle admission failed; refusing to replace the installed executable"
 fi
+cat "$RECORD_STDERR" >&2
 
 say "  installing to $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
