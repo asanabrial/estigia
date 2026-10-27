@@ -573,17 +573,27 @@ fn an_assisted_session_start_names_assist_and_not_the_refused_tools() {
 fn a_claimed_run_is_unaffected_under_every_value() {
     for requirement in IssueRequirement::all() {
         let (_repo, _root, context) = rig(requirement);
-        let mut run = session::Run::new("claude-abcd1234".to_owned());
-        run.issue = Some(crate::identity::Identity::Number(12));
         let target = context.repo_dir.join("src.rs");
-        let input = serde_json::json!({ "file_path": target.display().to_string() });
-        let (action, how, _) = crate::harness::classify_observing("Edit", &input, &[]);
-        let decision = crate::harness::gate(&context, &mut run, &action, how);
-        assert!(
-            !matches!(&decision, Decision::Ask(_))
-                && !matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
-            "{requirement:?}: {decision:?}"
-        );
+        for (tool, input) in [
+            (
+                "Edit",
+                serde_json::json!({ "file_path": target.display().to_string() }),
+            ),
+            (
+                "Bash",
+                serde_json::json!({ "command": "sed -i '' s/a/b/ src.rs" }),
+            ),
+        ] {
+            let mut run = session::Run::new("claude-abcd1234".to_owned());
+            run.issue = Some(crate::identity::Identity::Number(12));
+            let (action, how, _) = crate::harness::classify_observing(tool, &input, &[]);
+            let decision = crate::harness::gate(&context, &mut run, &action, how);
+            assert!(
+                !matches!(&decision, Decision::Ask(_))
+                    && !matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
+                "{requirement:?} {tool}: {decision:?}"
+            );
+        }
     }
 }
 
@@ -681,12 +691,16 @@ fn a_session_without_a_claim_may_write_inside_a_checkout_a_claim_names() {
         crate::test_env::add_github_remote(worktree.path());
         holder_of(&context, worktree.path());
         context.repo_dir = worktree.path().to_path_buf();
-        let decision = edit(&context);
-        assert!(
-            !matches!(&decision, Decision::Ask(_))
-                && !matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
-            "{requirement:?}: {decision:?}"
-        );
+        for decision in [
+            edit(&context),
+            shell_write(&context, "sed -i '' s/a/b/ src.rs"),
+        ] {
+            assert!(
+                !matches!(&decision, Decision::Ask(_))
+                    && !matches!(&decision, Decision::Deny(refusal) if refusal.code == CODE),
+                "{requirement:?}: {decision:?}"
+            );
+        }
         drop(root);
     }
 }
@@ -729,6 +743,85 @@ fn an_unreadable_pointer_gives_no_exemption() {
 
 fn shell_write(context: &GateContext, command: &str) -> Decision {
     unclaimed_edit(context, "Bash", serde_json::json!({ "command": command }))
+}
+
+const UNPLACEABLE_SHELL_WRITES: &[&str] = &[
+    "sed -i '' s/a/b/ existing.txt",
+    "perl -pi -e s/a/b/ existing.txt",
+    "python3 -c \"open('existing.txt','w').write('x')\"",
+    "cat > new.txt <<EOF\nx\nEOF",
+    "bash -c 'echo x > src/lib.rs'",
+];
+
+#[test]
+fn an_unplaceable_shell_write_launched_in_a_repository_is_asked_under_ask() {
+    let (_repo, _root, asking) = rig(IssueRequirement::Ask);
+    for command in UNPLACEABLE_SHELL_WRITES {
+        let Decision::Ask(refusal) = shell_write(&asking, command) else {
+            panic!("{command} was not put to the person");
+        };
+        assert_eq!(refusal.code, CODE);
+        assert!(
+            refusal.message.contains("could not be placed"),
+            "{command}: {}",
+            refusal.message
+        );
+    }
+    let (_repo, _root, required) = rig(IssueRequirement::Required);
+    for command in UNPLACEABLE_SHELL_WRITES {
+        assert!(
+            matches!(
+                shell_write(&required, command),
+                Decision::Deny(refusal) if refusal.code == CODE
+            ),
+            "{command} was not refused under `required`"
+        );
+    }
+}
+
+#[test]
+fn an_unplaceable_shell_write_launched_outside_every_repository_is_still_allowed_under_ask() {
+    let (_launch, _root, asking) = in_a_non_repository(IssueRequirement::Ask);
+    for command in UNPLACEABLE_SHELL_WRITES {
+        assert!(
+            matches!(shell_write(&asking, command), Decision::Allow(_)),
+            "{command} was not allowed outside every repository"
+        );
+    }
+    let (_launch, _root, required) = in_a_non_repository(IssueRequirement::Required);
+    for command in UNPLACEABLE_SHELL_WRITES {
+        assert!(
+            matches!(
+                shell_write(&required, command),
+                Decision::Deny(refusal) if refusal.code == CODE
+            ),
+            "{command} was not refused under `required`"
+        );
+    }
+}
+
+#[test]
+fn an_unplaceable_shell_write_at_an_unestablished_scope_is_asked_under_ask() {
+    let (launch, _root, _) = in_a_non_repository(IssueRequirement::Ask);
+    std::fs::create_dir(launch.path().join(".git")).expect("a `.git` entry Git cannot use");
+    let root = tempfile::tempdir().expect("a temporary root");
+    let context = context(root.path(), launch.path(), IssueRequirement::Ask);
+    assert!(
+        matches!(scope_of(launch.path()), Scope::Unknown),
+        "{} was established, so this test never reaches the unknown scope",
+        launch.path().display()
+    );
+    for command in UNPLACEABLE_SHELL_WRITES {
+        let Decision::Ask(refusal) = shell_write(&context, command) else {
+            panic!("{command} was not put to the person");
+        };
+        assert_eq!(refusal.code, CODE);
+        assert!(
+            refusal.message.contains("could not be established"),
+            "{command}: {}",
+            refusal.message
+        );
+    }
 }
 
 #[test]
@@ -851,13 +944,8 @@ fn a_heredoc_that_is_not_the_one_exact_shape_is_held() {
             "echo x > /tmp/a; echo \"a\\\"\" > src/x",
         ] {
             let decision = shell_write(&context, command);
-            // Only the absolute-target heredoc is placed inside the checkout; every other shape
-            // here is unplaceable, which `ask` passes and `required` still holds.
-            let placed_inside = command == inside.as_str();
-            let held = matches!(&decision, Decision::Ask(r) | Decision::Deny(r) if r.code == CODE);
-            assert_eq!(
-                held,
-                requirement == IssueRequirement::Required || placed_inside,
+            assert!(
+                matches!(&decision, Decision::Ask(r) | Decision::Deny(r) if r.code == CODE),
                 "{requirement:?} {command}: {decision:?}"
             );
         }
@@ -922,23 +1010,8 @@ fn any_other_shell_write_is_still_held() {
             inside.as_str(),
         ] {
             let decision = shell_write(&context, command);
-            // A shell write is placed inside only by its literal redirect targets or by naming a
-            // repository operation; the rest are unplaceable, which `ask` passes.
-            let placed_inside = command == inside.as_str()
-                || matches!(
-                    command,
-                    "echo x > out.txt"
-                        | "echo x > ./a"
-                        | "echo x > /tmp/a > out.txt"
-                        | "git commit -m x > /tmp/log"
-                        | "git reset --hard > /tmp/log"
-                        | "git checkout -b x > /tmp/log"
-                        | "gh issue develop 3 > /tmp/log"
-                );
-            let held = matches!(&decision, Decision::Ask(r) | Decision::Deny(r) if r.code == CODE);
-            assert_eq!(
-                held,
-                requirement == IssueRequirement::Required || placed_inside,
+            assert!(
+                matches!(&decision, Decision::Ask(r) | Decision::Deny(r) if r.code == CODE),
                 "{requirement:?} {command}: {decision:?}"
             );
         }
@@ -946,7 +1019,7 @@ fn any_other_shell_write_is_still_held() {
 }
 
 #[test]
-fn the_three_prompting_shapes_pass_under_ask_without_a_claim() {
+fn the_three_unplaceable_shapes_are_asked_under_ask_and_refused_under_required() {
     let scratch = "/private/tmp/estigia-719-scratchpad";
     let shapes = [
         format!("cd {scratch} && cat > c64.md <<'EOF'\n## Problem\nan issue body\nEOF"),
@@ -957,7 +1030,7 @@ fn the_three_prompting_shapes_pass_under_ask_without_a_claim() {
     for shape in &shapes {
         let decision = shell_write(&ask, shape);
         assert!(
-            !matches!(&decision, Decision::Ask(_) | Decision::Deny(_)),
+            matches!(&decision, Decision::Ask(refusal) if refusal.code == CODE),
             "{shape}: {decision:?}"
         );
     }
@@ -972,17 +1045,7 @@ fn the_three_prompting_shapes_pass_under_ask_without_a_claim() {
 }
 
 #[test]
-fn a_write_the_gate_cannot_place_is_reported_at_session_start_rather_than_asked() {
-    let (_repo, _root, ask) = rig(IssueRequirement::Ask);
-    assert!(matches!(
-        shell_write(&ask, "echo x > src/lib.rs"),
-        Decision::Ask(_)
-    ));
-    assert!(matches!(
-        shell_write(&ask, "bash -c 'echo x > src/lib.rs'"),
-        Decision::Allow(_)
-    ));
-
+fn a_dirty_checkout_is_reported_at_session_start_for_an_unclaimed_asked_run() {
     let repo = crate::test_env::repository_with_commit();
     crate::test_env::add_github_remote(repo.path());
     let root = tempfile::tempdir().expect("a temporary root");

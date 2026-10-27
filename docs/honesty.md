@@ -3003,10 +3003,11 @@ pointer that leaves it names the document it points at.
   `required` or `ask`, a run holding no claim is refused (`issue-required`) or asked before a routine write
   the gate can place inside a checkout whose tracker can name an issue there and that has an installed
   contract (a file edit or write, or a shell line carrying a `REPOSITORY_SHELL` fragment such as
-  `git commit`). Under `ask` a write the gate
-  **cannot place** is allowed and the checkout it may have dirtied is named at the next session start (at
-  most eight paths, then a count; it cannot prove they came from an allowed write rather than the
-  operator's own work). What it does not hold:
+  `git commit`), and before one it **cannot place** when the call was launched in a repository or from a
+  directory whose repository could not be established. Such an unplaceable write is allowed under `ask`
+  only from outside every repository, and the checkout it may have dirtied is named at the next session
+  start (at most eight paths, then a count; it cannot prove they came from an allowed write rather than
+  the operator's own work). What it does not hold:
   - **A GitHub tracker that names no repository infers one from the remote, so zero remotes is a tracker
     that cannot name an issue.** A write landing only in such repositories is not held (no ask, no deny) and
     the SessionStart text says there is nothing to claim. The read is `git remote` in the repository each
@@ -3047,8 +3048,9 @@ pointer that leaves it names the document it points at.
     one plain printing command (`echo`, `printf`, `cat`, `ls`, `grep`, `rg`, `head`, `tail`, `wc`, `date`,
     `pwd`) with no quote, `$`, backtick, backslash, `<`, `|`, `;`, `&`, parenthesis, line break or `..`.
     **Everything else a shell line can write is unplaceable** (a `cd` before a redirect, a variable, `&&`, a
-    second writer, inline interpreter code): refused under `required`, allowed under `ask`; a symlink outside
-    the checkout pointing in is not resolved. **Exactly one shape is added**
+    second writer, inline interpreter code): refused under `required`; under `ask` put to the person when the
+    call was launched in a repository or from an unestablished directory, and allowed only from outside
+    every repository; a symlink outside the checkout pointing in is not resolved. **Exactly one shape is added**
     (`shell::quoted_heredoc_target`): `cat > TARGET <<'DELIM'`, `cat >> TARGET <<'DELIM'` or `cat <<'DELIM' >
     TARGET`, a literal absolute `TARGET` without `..`, any body (**not read**; how an issue body is drafted in
     the scratchpad) and a closing `DELIM` line. An "any shape" relaxation was abandoned after five review

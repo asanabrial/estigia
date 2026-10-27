@@ -558,8 +558,8 @@ fn state_clause(state: Option<&str>) -> String {
     }
 }
 
-/// The dirty paths of a checkout an unclaimed run under `ask` may have written without the gate
-/// being able to place the write. Empty for a claimed run, another requirement, or a clean tree.
+/// The dirty paths of a checkout an unclaimed run under `ask` may have written, whichever answer
+/// let the write through. Empty for a claimed run, another requirement, or a clean tree.
 fn unclaimed_dirt_note(context: &GateContext, run: &session::Run) -> String {
     if run.issue.is_some()
         || super::issue_requirement::in_force_here(context)
@@ -599,8 +599,8 @@ fn unclaimed_dirt_note(context: &GateContext, run: &session::Run) -> String {
     };
     format!(
         "\n\nThis checkout has uncommitted changes: {named}{more}. A run holding no issue under \
-         `ask` is allowed a write the gate cannot place, so one of these may be its residue; \
-         inspect them before claiming."
+         `ask` writes here only when the person approves the prompt, or when the write is one the \
+         gate cannot see, so one of these may be its residue; inspect them before claiming."
     )
 }
 

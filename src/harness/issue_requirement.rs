@@ -90,6 +90,13 @@ enum Placement {
     Unplaceable,
 }
 
+/// How a hold was reached: by placing the write, or by failing to place it.
+#[derive(Clone, Copy)]
+pub(crate) enum Reach {
+    Placed,
+    Unplaceable,
+}
+
 /// The decision for a write made by a run holding no claim, or `None` when this is not one.
 ///
 /// A routine write is one, and so is `git push`: it publishes this repository's refs, so it is held
@@ -97,7 +104,9 @@ enum Placement {
 /// write that lands outside every repository the gate can place is not a write to this
 /// repository. `declared` are the paths a write tool named in a patch body, empty for every other
 /// call; they are placed one by one, and a write to any repository is held. Under `ask` a write
-/// the gate cannot place is allowed rather than put to the person; `required` still holds it.
+/// the gate cannot place is put to the person when the call was launched in a repository, or from
+/// a directory whose repository could not be established, and allowed from outside every
+/// repository; `required` holds it either way.
 pub fn decision(
     context: &GateContext,
     action: &Action,
@@ -111,7 +120,7 @@ pub fn decision(
         if matches!(scope, Scope::Outside) {
             return None;
         }
-        return held(context, requirement, &scope);
+        return held(context, requirement, &scope, Reach::Placed);
     }
     let Action::Write { target } = action else {
         return None;
@@ -134,10 +143,10 @@ pub fn decision(
         {
             None
         }
-        Placement::Inside => held(context, requirement, &scope),
-        Placement::Unplaceable => match requirement {
-            IssueRequirement::Ask => Some(Decision::Allow(allowed(target))),
-            _ => held(context, requirement, &scope),
+        Placement::Inside => held(context, requirement, &scope, Reach::Placed),
+        Placement::Unplaceable => match (requirement, &scope) {
+            (IssueRequirement::Ask, Scope::Outside) => Some(Decision::Allow(allowed(target))),
+            _ => held(context, requirement, &scope, Reach::Unplaceable),
         },
     }
 }
@@ -239,18 +248,25 @@ fn repository_of(landing: &Path) -> Option<PathBuf> {
     None
 }
 
-fn held(context: &GateContext, requirement: IssueRequirement, scope: &Scope) -> Option<Decision> {
+fn held(
+    context: &GateContext,
+    requirement: IssueRequirement,
+    scope: &Scope,
+    reach: Reach,
+) -> Option<Decision> {
     let assisted = context.workflow == Some(crate::config::Workflow::Assisted);
     match requirement {
         IssueRequirement::Required => Some(Decision::Deny(Box::new(refusal(
             assisted,
             requirement,
             scope,
+            reach,
         )))),
         IssueRequirement::Ask => Some(Decision::Ask(Box::new(refusal(
             assisted,
             requirement,
             scope,
+            reach,
         )))),
         IssueRequirement::Off => None,
     }
@@ -259,8 +275,9 @@ fn held(context: &GateContext, requirement: IssueRequirement, scope: &Scope) -> 
 fn allowed(target: &str) -> String {
     format!(
         "this run holds no issue and `Issue requirement` is `ask`; this call's write ({target}) \
-         cannot be placed inside or outside the checkout without running it, so it is allowed, and \
-         a checkout it dirties is named when the next session starts"
+         cannot be placed inside or outside a repository without running it, and this directory \
+         is outside every repository, so it is allowed, and a checkout it dirties is named when \
+         the next session starts"
     )
 }
 
@@ -448,10 +465,15 @@ fn holds_a_git_entry(directory: &Path) -> Option<bool> {
 
 /// The refusal for an unclaimed write under the requirement in force.
 ///
-/// The clause bound to `scope` keeps it honest: only a scope Git named may name
+/// The clause bound to `scope` and `reach` keeps it honest: only a scope Git named may name
 /// a directory, and a hold reached by *failing* to place the write says so
 /// rather than implying the write landed in a repository.
-pub(crate) fn refusal(assisted: bool, requirement: IssueRequirement, scope: &Scope) -> Refusal {
+pub(crate) fn refusal(
+    assisted: bool,
+    requirement: IssueRequirement,
+    scope: &Scope,
+    reach: Reach,
+) -> Refusal {
     let way_in = if assisted {
         "a local claim taken with `assist` in a worktree, which gives the isolated checkout to \
          write in"
@@ -460,12 +482,16 @@ pub(crate) fn refusal(assisted: bool, requirement: IssueRequirement, scope: &Sco
          change, then a branch started with `start_branch`, which gives the isolated \
          checkout to write in"
     };
-    let here = match scope {
-        Scope::Repository(_) => " in this repository",
-        Scope::Outside => {
+    let here = match (scope, reach) {
+        (Scope::Repository(_), Reach::Placed) => " in this repository",
+        (Scope::Repository(_), Reach::Unplaceable) => {
+            ", and this write could not be placed inside or outside this repository without \
+             running it, so it is held"
+        }
+        (Scope::Outside, _) => {
             ", and this write could not be placed outside every repository, so it is held"
         }
-        Scope::Unknown => {
+        (Scope::Unknown, _) => {
             ", and whether this directory or this write's landing is a repository could not \
              be established"
         }

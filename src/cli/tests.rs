@@ -60,6 +60,7 @@ fn inventory() -> Vec<Refusal> {
             &crate::harness::issue_requirement::Scope::Repository(std::path::PathBuf::from(
                 "/a/checkout",
             )),
+            crate::harness::issue_requirement::Reach::Placed,
         ),
         crate::harness::unclaimed::not_claimed(false),
         crate::harness::decision_mode::refusal(&[], true),
