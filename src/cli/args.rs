@@ -206,6 +206,50 @@ pub enum Command {
         action: Option<SessionsAction>,
     },
 
+    /// List what the local store recorded across sessions, oldest first.
+    ///
+    /// Read-only. Transitions, claim and review markers, and messages from this
+    /// machine's store, on one UTC time scale, a bounded page at a time. The
+    /// last 24 hours unless `--since` says otherwise. Bodies are left out unless
+    /// `--bodies` is given. The output names what the feed cannot see.
+    Feed {
+        /// Only this repository, as `owner/name`; one the store does not hold is refused.
+        #[arg(long, value_name = "OWNER/NAME")]
+        repo: Option<String>,
+
+        /// Only events of runs on this runtime.
+        #[arg(long)]
+        runtime: Option<String>,
+
+        /// Only events of this run, or messages to or from it.
+        #[arg(long, value_name = "RUN-ID")]
+        run: Option<String>,
+
+        /// Only this issue; messages carry no issue and are left out.
+        #[arg(long, value_name = "N")]
+        issue: Option<u64>,
+
+        /// Only this kind: `transition`, `message`, or a marker kind such as `claim`.
+        #[arg(long)]
+        kind: Option<String>,
+
+        /// Start of the window: a duration (`90m`, `6h`, `2d`) or a UTC time.
+        #[arg(long, value_name = "WHEN")]
+        since: Option<String>,
+
+        /// Include the first 200 characters of each entry or message body.
+        #[arg(long)]
+        bodies: bool,
+
+        /// Take a page of at most this many events.
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u64).range(1..))]
+        limit: Option<u64>,
+
+        /// Continue the page a `next_cursor` came from, exactly as it gave the token.
+        #[arg(long, value_name = "TOKEN")]
+        cursor: Option<String>,
+    },
+
     /// Check that everything a run needs before it swears actually works.
     ///
     /// Read-only. A refusal otherwise arrives one edit at a time with no way to
