@@ -1269,7 +1269,7 @@ fn the_live_merge_decision_names_its_caller_when_another_live_run_holds_the_same
 }
 
 #[test]
-fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_or_unreadable() {
+fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_unreadable_or_unreleased() {
     let root = tempfile::tempdir().expect("a gate root");
     let repo = crate::test_env::repository_with_commit();
     let context = shared_checkout_context(root.path(), repo.path());
@@ -1331,4 +1331,32 @@ fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_or_unreada
         .merge_decision(7)
         .expect_err("an unreadable pointer is refused");
     assert_eq!(unreadable["code"], "run-pointer-unreadable", "{unreadable}");
+
+    let store = root.path().join("store").join("state.db");
+    std::fs::create_dir_all(store.parent().expect("a parent")).expect("a store directory");
+    let unreleased = crate::transport::store::with_store_at(&store, || {
+        crate::test_env::with_scripted_gh(
+            bin.path(),
+            &answers(&[
+                crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
+                pr_head_answer(&holder_receipt().head),
+            ]),
+            || {
+                let transport = transport::Context::live(
+                    context.skill_root.clone(),
+                    context.repo_dir.clone(),
+                    None,
+                );
+                crate::transport::store::Ledger::open(&transport, 12, "2026-10-27T00:00:00Z")
+                    .expect("the issue is imported");
+                live_for(&context, "claude-caller000")
+                    .merge_decision(7)
+                    .expect_err("a reviewed caller with no CI release is refused")
+            },
+        )
+    });
+    assert_eq!(
+        unreleased["code"], "merge-without-ci-release",
+        "{unreleased}"
+    );
 }
