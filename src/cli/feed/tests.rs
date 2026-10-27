@@ -81,6 +81,15 @@ fn a_transition_is_listed_with_its_time_run_and_both_states() {
 }
 
 #[test]
+fn a_message_carries_its_sender_as_run_id_and_its_recipient_as_to() {
+    let events = rig().events(json!({"kind": "message"}));
+
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0]["run_id"], run_id("claude", "beta"));
+    assert_eq!(events[0]["to"], run_id("pi", "alpha"));
+}
+
+#[test]
 fn the_three_sources_share_one_chronological_scale() {
     let events = rig().events(json!({}));
 

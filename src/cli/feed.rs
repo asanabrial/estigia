@@ -259,7 +259,7 @@ fn event_of(row: FeedRow, bodies: bool) -> Event {
         run_id: row.run_id,
         kind: row.kind,
         from: row.from,
-        to: if row.source == MESSAGE { None } else { row.to },
+        to: row.to,
         preview,
         body,
     }
