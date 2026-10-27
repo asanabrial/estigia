@@ -2138,947 +2138,217 @@ pointer that leaves it names the document it points at.
 
 ## Setup, configuration and uninstall
 
-- **The superseded-reviewer ledger is crossed against the templates beside it, and not against a
-  freeze that never happened.** `REVIEWER_TEMPLATES_SUPERSEDED` (`src/setup/mod.rs`) is
-  the hand-written list of every previous `review-blind.md` and lens body, and `reviewer_is_ours`
-  consults it so an install still carrying an older definition upgrades instead of being refused as
-  foreign. Nothing crossed it: commenting out an entry left the suite green while every operator
-  carrying that body met a refusal.
-  `every_frozen_reviewer_template_is_a_member_of_the_superseded_ledger` (`src/setup/tests.rs`) now
-  reads `src/setup/mod.rs` through `source_text::code_of` and requires every `include_str!` const to
-  be a ledger member and vice versa, and every `.md` file in `src/setup/` to be declared. **It cannot
-  see a freeze that never happened.** An author who edits the current template and updates the
-  `replacen` chain `the_default_rendering_is_the_bytes_already_installed` walks, but never adds the
-  previous body as a new `include_str!` const, adds nothing for this guard to cross: the sibling
-  guard is satisfied by the chain alone, the ledger stays one body short, and neither guard holds the
-  chain against the list. The two hold one half each — this one the list against its declarations,
-  the sibling the chain against the current rendering.
-- **`status` names why the tools half is off, and leaves two of the four states together.** `tools off` was one word for four states — no verified registration site, a site known and
-  not written yet, a file that cannot be read or parsed, and an entry under a key this build does not
-  look under — and the only prose on the row answered the *gate* half. `AgentAdapter::tools_gap()`
-  now names the first and `status` prints it under the harness line, while an adapter that can
-  register but has not prints `run: estigia setup <agent>`. **The last two still print that same
-  command.** `exposes_tools` (`src/setup/mod.rs`) answers `false` for an unreadable file, an
-  unparseable one and an entry under a key this build does not look under alike, and the row reads
-  that one bit. `tools_command` reads the same file and returns `None` for the same three, so
-  neither tells them apart, and the sentence printed beside the command says no registration is
-  there for states where the entry may exist or the file may not be readable.
-- **The two readers of the configuration table are not identical, and one half is now closed.**
-  Both read the same block of the same file, and they resolve a row differently. The binding looks a
-  setting up by **prefix** — `cfg` returns the first key that `startswith` the label — and this crate
-  compared whole words, so `| Repair ceiling (mine) | 2 |` was a row the transport acted on and
-  Estigia reported as unset — `Repair ceiling` was read by the transport then and is a retired
-  setting now, and the example stays because the two readers still resolve any other label this way.
-  Measured on the installed pair: the transport read the value `2` there, `Repair ceiling  3` here. That half is closed —
-  `a_row_the_binding_acts_on_is_a_row_this_reader_finds` holds it — by trying the prefix **after** the
-  exact match, so an exact spelling never loses to a looser one.
-  **The other half is closed too, and by neither of the two ways this entry said it would take.**
-  It said closing it meant resurrecting the silent drop, or reporting the row as one nobody reads —
-  and reporting it is what `doctor` did, on a **BROKEN** row, for several rounds. The third way is
-  that the transport stopped reading the operator's cells at all: `Context::live` reads *this
-  crate's own rendering* of the layered configuration, so `| Repair  ceiling |` with a doubled space
-  and `` | `Repair ceiling` | `` with backticks both reach it as the value this crate read out of
-  them. The `doctor` row went with the gap, and
-  `a_label_this_crate_forgives_is_one_the_transport_reads_too` stands where it was.
-
-  What is left is not a difference between two readers: `get` answers with the **first** row whose
-  label the question is a prefix of, so `| Worktree location (mine) |` still answers `worktree location`.
-  That is written on `Context::get` and is the same surprise on both sides.
-- **An override row is matched by its label, and a label no setting resolves is reported rather
-  than dropped in silence.** `estigia.local.md` is the operator's own file and `setup` never
-  regenerates it, so a row outlives the setting it named. Every reader resolves a row through
-  `Setting::from_label`, which answers `None` for a label this build does not know — a deleted
-  setting and a typo alike — and the row falls out of a `filter_map`. Nothing refused, warned
-  about or reported it, so the row read as configured and did nothing. `doctor`'s `contract` row
-  now names the file and the labels in it that resolve to no setting
-  (`skill::unknown_override_rows`, read into the row through `Contract::unknown`). **It is a
-  report, not a refusal**: the row is still dropped from the effective table, every other row in
-  the file still applies, and no command fails. Only the labels are read — the values are
-  permissions and machine paths and never reach the report. A file that cannot be opened is a
-  different case and unchanged: `local_overrides` refuses it by name, because falling back to the
-  values underneath would run on settings nobody chose. What this still cannot do is tell a typo
-  from a deleted setting; both are named, and the operator is the one who knows which they meant.
-- **An uninstall takes an empty `hooks` wrapper it may not have written.** When Estigia's entries
-  leave a settings file, the now-empty `hooks` object goes with them, on the reading that Estigia put
-  it there — which is right whenever it did. An operator who wrote `"hooks": {}` themselves loses it,
-  and it is measured rather than argued: `estigia setup cursor --uninstall`, on a machine where
-  nothing was ever installed, rewrites that file and reports `update`. Telling the two apart needs a
-  record of what this crate created; one exists for the instruction file (`created_outside`) and not
-  for this. `an_uninstall_leaves_no_empty_husk_of_its_own_making` asserts the half that is decidable
-  and says in its own body why it stops there.
-- **The oracle covered 125 of the transport's 131 reachable functions when it was retired.**
-  That number is now a fact about two deleted files — the reference implementation and the recording
-  of it — and it is kept because it is the high-water mark of what was ever crossed. Six functions
-  were never crossed and never will be: `read_ownership` and `read_lock_record`,
-  which needed a real checkout on disk rather than a scripted `git`; `reclaim_landed`, the read-back
-  inside `cmd_reclaim` that every reclaim crossing stopped before; and three legacy command bodies
-  kept for older markers. The port's behaviour in those six places has never been crossed against a
-  second implementation and cannot be now.
-
-  **The numerator was measured with a tracer that loses lines.** Four traced runs of the same suite
-  disagreed — 124 and 125, and one of them dropped `cmd_config`, which every run of `config`
-  executes — because the crossings ran in parallel and each recorded into one file. The number above
-  is the union of those runs, which is the honest reading of a counter that can miss and cannot
-  invent.
-
-  **What replaced it can fail, and that was measured.** Corrupting one recorded answer turns its
-  crossing red; the corpus is load-bearing rather than decorative. What it cannot do is answer a
-  question it was never asked: a fixture that changes fails with *no recorded answer for this
-  crossing* rather than quietly agreeing, and re-blessing one from the port itself is possible,
-  named in that message, and costs the case its independence.
-
-  The refusal for a case with no recorded answer used to name an `ESTIGIA_ORACLE_BLESS` that was
-  **never implemented** — a message promising a way out that does not exist, which is worse than
-  promising none. It now says the only thing that can extend the corpus: bring the reference back,
-  re-record, delete it again.
-
-  **The question was wider than the answer, which made ordinary editing expensive.** A crossing's
-  fingerprint took every file of a fixture's payload, so rewording a sentence in
-  `bindings/github.md` invalidated a recorded answer about the *configuration block* — and the only
-  remedy on offer was the blessing above. It now takes the three files the transport opens out of a
-  payload, at any depth: the contract and the two spellings of the operator's own overrides. The
-  corpus was re-recorded against the reference, which had to be brought back to do it and was
-  deleted again after — and narrowed once more when a sentence added to the contract's step 6
-  invalidated a crossing about the table: of a payload document it now takes the **configuration
-  block**, which is the part `Context::live` parses.
-- **Fifty-nine refusals the transport can give are named in no prose an agent reads.**
-  `every_refusal_the_port_can_give_is_one_somebody_has_been_told_how_to_answer` accepted a reason
-  spelled anywhere in `github.py` as documented — and the binding's source is not something an agent
-  reads. Deleting that file did not create these; it stopped concealing them. `lost-claim-race` and
-  fifty-eight more reach a run as a word to branch on, with the instructions that go with them living
-  only in the `action` field of the envelope itself.
-  Two of these — `holder-not-stale` and `operation-id-kind-conflict` — were closed by naming
-  them in `skill/bindings/github.md`'s `reclaim` and `claim` rows. `reclaim-discarded` was then added
-  to the `reclaim` row with its instructions, and the same sentence names
-  `lost-reclaim-race`, so that refusal left this list as the new one arrived documented. The figure
-  this entry carried before that change counted one more than the list held, so the correction moved
-  it by two rather than one: the over-count retired and `lost-reclaim-race` removed. Then
-  `board-empty-inconclusive` came off the list as the audit-board operation left the port, moving the
-  figure once more.
-
-  The list was then re-derived against `TRANSPORT_VOCABULARY` — the vocabulary `build.rs` generates
-  from all three spellings a refusal can take — where this check had re-implemented only the first.
-  Seven refusals the narrower walk could not see joined it: `read-failed`, `write-failed` and
-  `ambiguous-write` from `Failure::envelope`'s `match self`, and `already-yours`, `nothing-to-reclaim`,
-  `not-current-live-holder` and `unexpected-state` from `stop` calls whose reason was not a
-  `"reason":` literal. Each is a real gap, not an exemption: the transport can answer with it and no
-  prose an agent reads names it.
-
-  Eleven then joined the list: eight of them were spelled by `operation_marker`'s two
-  `format!`-built expressions, and three were verdicts of `branch_identity_verdict`
-  (`src/transport/worktree.rs`) that `checkout_identity` passed through a plain `&'static str`. That
-  function returns four incoherent verdicts across three return sites — one site carrying two — and
-  the fourth, `remote-not-reachable-from-local`, was already documented in
-  `skill/bindings/github/delivery.md`. They were as unreadable to this walk as they were to
-  `build.rs`'s: a `"reason": <expression>` the check's own literal-only extractor could not read was a
-  reason it silently skipped, the identical blindness `TRANSPORT_VOCABULARY`'s extractor had. Giving
-  each kind's two reasons a literal per match arm (see `OperationKind` in `src/transport/claim.rs`)
-  fixed both walks at once: the harness gap that was filed, and this one, which had been
-  concealing eleven reasons this walk had never been able to see rather than eleven the crate had
-  newly grown.
-
-  The number counts **refusals**, which is what `UNDOCUMENTED_REFUSALS` holds. The check now reads
-  `TRANSPORT_VOCABULARY` itself, so it collects one entry per code and the two counts are one: the
-  list is the exact set of vocabulary codes no prose names, and either a code the prose does not name
-  or an entry that is no longer missing is red.
-
-  The list is frozen in `UNDOCUMENTED_REFUSALS` and the check is a ratchet: a **new** refusal with no
-  prose is red on the review that adds one, an entry that stops being undocumented has to be taken
-  off, and the list can only get shorter *for a refusal the check could already see*. Closing it means
-  writing the instructions into `skill/references/`, and that is not written yet.
-- **A read-back that agrees after waiting may agree for the wrong reason, and nothing here can tell.**
-  Ten spaced attempts now cover about ninety seconds because the pull request object lags the branch
-  ref — 45 and 120 seconds on the two publications measured — and the refusal says which
-  world the last read stood in: the ref carrying the pushed head means wait, a moved head means
-  investigate, an unreadable ref means it cannot tell. What the distinction cannot do is see a foreign
-  push land inside the waiting window. A run that pushes, waits through lag, and reads agreement may
-  be reading a pull request that settled onto a head it did not push, and the receipt binds that head
-  either way; the branch-ref check narrows the world to the last read, not to the whole window.
-- **An exit-2 refusal with no `action` is still sent to `estigia config list`, and nothing checks
-  that the command clears it.** `translate`'s code-2 arm carries the transport's own `action` for
-  every reason the table does not answer, and the fallback message repeats the envelope's scalar
-  fields; that closed a gap where a `finding-citation-unresolvable` reached a session as the
-  exit code and a configuration command and nothing else, and the session spent five calls guessing
-  at a `cause` the envelope had carried all along. The fallback is not the code-2 arm's alone: it
-  runs for **every** code whose envelope carries no `detail`, and `Failure::envelope` writes one for
-  `Read`, `Timeout` and `Write`, so `3`, `4` and `5` keep the exit-code sentence while a code-1
-  `Stop` payload with a field beside `ok`, `reason`, `action` and `world` lists those fields where
-  it used to name only the exit code. What is left is the arm's last resort. Counted by walking
-  every `Failure::ConfigDefect(serde_json::json!({` block under `src/transport/`, tests excluded,
-  plus the two `Failure::Stop` reasons `Failure::code` sends to `2`: 41 sites, 16 with an `action`,
-  3 answered by `malformed_argument`'s table, and **22 that reach the caller as `run: estigia config
-  list`** — `invalid-finding-class`, `missing-argument`, `incomplete-review-transaction` and their
-  neighbours, none of which the configuration has any part in. Where the envelope carries a
-  scalar-valued field beside the ones the refusal is built from, the message repeats it; a null or
-  an object value is dropped, and
-  `an_envelope_field_that_is_not_scalar_is_dropped_and_a_scalar_is_repeated` holds both directions.
-  The command is still a dead end, and only a per-reason decision about what does clear each one can
-  replace it.
-- **The operator's local file used to reach the gate and not the transport, and it now reaches both.**
-  Kept here because how it was closed is the part worth reading. `load_config` opened
-  `SKILL_DIR / "operator.local.md"` and nothing else, while Estigia had renamed that file to
-  `estigia.local.md` and said so in the contract it writes; and `_parse_config_block` answered `{}`
-  for any document it could not find a marker pair in, while `settings::rows` falls back to the whole
-  document. Both are closed in the vendored copy, and **neither is carried upstream yet**.
-
-  Which side moved was the decision. Teaching the gate to read nothing would have agreed just as
-  well and would have **loosened** it — no declared boundaries, the widest renewal window, every
-  narrowing the operator typed silently dropped. Moving the transport can only let it see rows the
-  gate is already enforcing, so that is the direction both fixes went.
-
-  Closing the second half found a third thing nobody had measured: a document whose closing marker
-  sits **above** its opening one — which a truncated rewrite produces — satisfied
-  `start in text and end in text`, so the transport believed it had found a block and read the empty
-  tail of the file. There is no fallback from a block you think you have. The gate answered `linear`
-  on that document and the transport answered nothing.
-  `a_document_with_no_usable_block_is_read_the_same_by_both` now puts six shapes of unmarked and
-  half-written document to both readers, with a floor that fails if the transport reads nothing
-  anywhere — because agreement about nothing is what the defect looked like.
-
-  What stands is the risk the fallback inherits: an unmarked document is read whole, so a prose table
-  in it is offered as configuration, and nothing comes of that only because no prose row's first cell
-  spells a setting. The reader's own comment calls that *luck, not a property*, and
-  `no_prose_table_in_the_contract_spells_a_setting` holds the shipped contract to it — measured with
+- **The superseded-reviewer ledger is crossed against the templates beside it, and not against a freeze that
+  never happened.** `REVIEWER_TEMPLATES_SUPERSEDED` (`src/setup/mod.rs`) lists every previous
+  `review-blind.md` and lens body so an install carrying an older definition upgrades instead of being
+  refused as foreign. `every_frozen_reviewer_template_is_a_member_of_the_superseded_ledger` requires every
+  `include_str!` const to be a ledger member and vice versa, and every `.md` file in `src/setup/` to be
+  declared. **It cannot see a freeze that never happened:** an author who edits the current template and
+  updates the `replacen` chain `the_default_rendering_is_the_bytes_already_installed` walks, but never adds the
+  previous body as an `include_str!` const, satisfies the sibling guard, leaves the ledger one body short, and
+  no guard holds the chain against the list.
+- **`status` names why the tools half is off, and leaves two of the four states together.** `tools off`
+  covers no verified registration site, a site known and not written yet, a file that cannot be read or
+  parsed, and an entry under a key this build does not look under. `AgentAdapter::tools_gap()` names the first
+  and an adapter that can register but has not prints `run: estigia setup <agent>`; **the last two still print
+  that same command**, because `exposes_tools` answers `false` and `tools_command` returns `None` for an
+  unreadable file, an unparseable one and an unrecognised key alike.
+- **The two readers of the configuration table differ in one place.** The binding looks a setting up by
+  **prefix** (`cfg` returns the first key that `startswith` the label) and this crate compares whole words,
+  trying the exact match first (`a_row_the_binding_acts_on_is_a_row_this_reader_finds`). `Context::live` reads
+  *this crate's own rendering* of the layered configuration, so a label this crate forgives (a doubled space,
+  backticks) reaches the transport as the value read out of it
+  (`a_label_this_crate_forgives_is_one_the_transport_reads_too`). What is left is `get` answering with the
+  **first** row whose label the question is a prefix of, so `| Worktree location (mine) |` still answers
+  `worktree location` (written on `Context::get`).
+- **An override row is matched by its label, and a label no setting resolves is reported rather than dropped
+  in silence.** `estigia.local.md` is the operator's own file and `setup` never regenerates it, so a row outlives
+  the setting it named; `Setting::from_label` answers `None` for a deleted setting and a typo alike. `doctor`'s
+  `contract` row names the file and those labels (`skill::unknown_override_rows`, through `Contract::unknown`),
+  never the values (permissions and machine paths). It is a report, not a refusal: the row is dropped from the
+  effective table and no command fails; a file that cannot be opened is refused by name by `local_overrides`,
+  since the values underneath would run on settings nobody chose. It cannot tell a typo from a deleted setting.
+- **An unmarked document is read whole, and a prose table in it is offered as configuration.** Nothing comes
+  of that only because no prose row's first cell spells a setting (the reader's own comment calls it *luck,
+  not a property*). `no_prose_table_in_the_contract_spells_a_setting` holds the shipped contract to it: with
   its closing marker removed, 8 configuration rows become 25, the extra 17 being prose
-  (`Situation | Action`, `Load | When`), and the resulting configuration is still identical.
-- **Skill directories are verified for four entries.** `claude-code`, `codex`, `deepseek-harness` and
-  the neutral `~/.agents` root are known. The other three supported adapters have a verified *instruction* file
-  and an unverified skill directory, so their skill lands in the shared root and the directive names
-  the path. `estigia setup` says so on the line where it matters.
-- **No public Release exists, and `update` does not query a remote in this slice.** Five build targets
-  have to be produced before `install.sh` has anything to download. `estigia update` can report only
-  local recorded provenance and release high-water; it explicitly reports the latest public release
-  as unavailable and does not claim currency from absence. The JSON is not authenticated against a
-  malicious same-user writer. Official release installers publish candidate-derived local records
-  before replacement, but publication and copy are not atomic and concurrent installers remain
-  unserialized. There is no remote update, self-upgrade, rollback, or mutating public upgrade command.
-- **The seam tests check the payload against itself**, not against an agent that read it. They
-  measure both directions: every markdown file the payload links to is shipped, and every shipped
-  runtime companion is reachable from another shipped file through a link or its canonical routed
-  identity. These prose-to-prose checks cannot prove that an agent opened or obeyed any document.
-- **The retired SDD spellings still load from a table, and neither the setting nor the screen
-  remains.** `Planning: sdd*` is retired: the retirement reading recognises the retired
-  spellings and reports `planning-protocol-retired` once without storing a planning value; `setup`
-  drops the row when it rewrites the block, and an owned `sdd-*.md` is retracted by the retired-names
-  list in [`src/skill.rs`](../src/skill.rs). The
-  `Planning` row and the planning phase model targets are removed from the interactive surface, and
-  the setting, the protocol, the phase assets and the `PlanningPhase` routing
-  kind are gone, while keeping that retirement reading in `src/config/settings.rs`. What is **not** measured:
-  doctor reads through the folding read, so it sees `direct` and does not surface the report the
-  writer prints. The retirement list names `sdd-apply`, `sdd-verify` and `sdd-archive`, which no
-  build here installed, because retraction is by ownership and the list is the retired protocol's
-  phase vocabulary, not its executor set.
+  (`Situation | Action`, `Load | When`). `a_document_with_no_usable_block_is_read_the_same_by_both` puts six
+  shapes of unmarked and half-written document to both readers, with a floor failing if the transport reads
+  nothing anywhere.
+- **An uninstall takes an empty `hooks` wrapper it may not have written.** When Estigia's entries leave a
+  settings file the now-empty `hooks` object goes with them. An operator who wrote `"hooks": {}` themselves
+  loses it (measured: `estigia setup cursor --uninstall` on a machine where nothing was ever installed rewrites
+  that file and reports `update`). Telling the two apart needs a record of what this crate created, which
+  exists for the instruction file (`created_outside`) and not for this;
+  `an_uninstall_leaves_no_empty_husk_of_its_own_making` asserts the decidable half.
+- **Fifty-three refusals the transport can give are named in no prose an agent reads.**
+  `every_refusal_the_port_can_give_is_one_somebody_has_been_told_how_to_answer` reads `TRANSPORT_VOCABULARY`
+  (the vocabulary `build.rs` generates from all three spellings a refusal can take), one entry per code, and
+  `UNDOCUMENTED_REFUSALS` in `tests/honesty.rs` is the exact set no prose names. The check is a ratchet: a
+  **new** undocumented refusal is red on the review that adds it, an entry that stops being undocumented must
+  be taken off, and the list can only shrink. Each is a real gap (`lost-claim-race` among them): the
+  instructions live only in the `action` field of the envelope, and the binding's source is not something an
+  agent reads. Closing it means writing them into `skill/references/`. The separate build-time measurement of
+  refusals that name no way out is under *Refusals, and the way out they name*.
+- **A read-back that agrees after waiting may agree for the wrong reason, and nothing here can tell.** Ten
+  spaced attempts cover about ninety seconds because the pull request object lags the branch ref (45 and 120
+  seconds on the two publications measured), and the refusal says which world the last read stood in (the ref
+  carrying the pushed head means wait, a moved head means investigate, an unreadable ref means it cannot
+  tell). It cannot see a foreign push landing inside the window: a run that pushes, waits through lag and
+  reads agreement may be reading a pull request that settled onto a head it did not push, and the receipt
+  binds that head either way.
+- **An exit-2 refusal with no `action` is still sent to `estigia config list`, and nothing checks that the
+  command clears it.** `translate`'s code-2 arm carries the transport's own `action` for every reason the
+  table does not answer; the fallback repeats the envelope's scalar-valued fields beside the ones the refusal
+  is built from (`an_envelope_field_that_is_not_scalar_is_dropped_and_a_scalar_is_repeated`) and runs for
+  **every** code whose envelope carries no `detail`. What is left is the last resort: a
+  `Failure::ConfigDefect` or code-2 `Failure::Stop` without an `action` or a `malformed_argument` entry
+  (`invalid-finding-class`, `missing-argument`, `incomplete-review-transaction` and their neighbours, none of
+  which the configuration has any part in) reaches the caller as `run: estigia config list`, a dead end that
+  only a per-reason decision can replace.
+- **Skill directories are verified for four entries** (`claude-code`, `codex`, `deepseek-harness` and the
+  neutral `~/.agents` root); the other adapters (OpenCode, Pi, Cursor, ZCode) have an unverified skill
+  directory, so their skill lands in the shared root and the directive names the path, which `estigia setup`
+  says on the line where it matters.
+- **`estigia update` reports local state only and verifies nothing remote.** It reports local recorded
+  provenance and release high-water, makes no network request, and reports the latest public release as not
+  verifiable without claiming currency from absence. The JSON is not authenticated against a malicious
+  same-user writer; official installers publish candidate-derived local records before replacement, but
+  publication and copy are not atomic and concurrent installers stay unserialized. There is no remote update,
+  self-upgrade, rollback, or mutating public upgrade command.
+- **The seam tests check the payload against itself**, not against an agent that read it: every markdown file
+  the payload links to is shipped, and every shipped runtime companion is reachable from another shipped file,
+  which cannot prove an agent opened or obeyed any document.
 
 ## The gate's reach across the agents
 
-- **`Decision mode: auto` is enforced on Claude Code alone.** The gate refuses `AskUserQuestion`,
-  the one question tool its matcher is woken for, and records the recommended answer from the
-  payload. Codex, OpenCode and Pi register no question tool with the gate, so on them `auto` is the
-  contract's sentence and nothing more — and on every agent a question asked in prose rather than
-  through the tool is not seen at all. "Recommended" is the option the agent itself labelled
-  `(Recommended)`, or its first option: the gate reads which answer the agent ranked first and does
-  not judge it. Measured by `src/harness/decision_mode/tests.rs`; turning the refusal off reddens
-  two of its six tests.
+- **`Decision mode: auto` is enforced on Claude Code alone.** The gate refuses `AskUserQuestion`, the one
+  question tool its matcher is woken for, and records the recommended answer from the payload. Codex,
+  OpenCode and Pi register no question tool with the gate, so on them `auto` is the contract's sentence
+  and nothing more, and on every agent a question asked in prose rather than through the tool is not seen.
+  "Recommended" is the option the agent itself labelled `(Recommended)`, or its first option: the gate reads
+  which answer the agent ranked first and does not judge it. Measured by
+  `src/harness/decision_mode/tests.rs`; turning the refusal off reddens two of its six tests.
 
-- **The harness gates named populations, not every write.** The editing tools each agent ships, the
-  git spellings that change the tree, the irreversible steps, and — since 2026-08-01 — the shell
-  constructs that visibly write a file: a redirect, a `sed -i`, an interpreter handed code, and the
-  utilities that copy, move or delete — including under a prefix that runs them, since `sudo rm -rf src`
-  hides nothing and was missed for no better reason than its first word. That list of prefixes had
-  been filled to thirteen and not to its own boundary: measured on 2026-08-06, `flock … rm -rf src`,
-  `taskset`, `parallel`, `runuser`, `chroot`, `strace`, `ltrace`, `watch`, `systemd-run`,
-  `eatmydata`, `unbuffer`, `xvfb-run`, `proxychains`, `torify` and `setarch` each classified as
-  nothing at all while `timeout 5 rm` beside them classified as a write — the same shape and the
-  same visibility. All fifteen are matched now. What is still not matched is a
-  write that shows nothing: an `eval`, a wrapper *script*, a merge reached by an alias or `gh api`.
-  The command a segment runs is resolved before any check reads it (`shell::candidate_commands`):
-  the reserved words `if`, `then`, `else`, `elif`, `do`, `while`, `until`, `!` and `{`, and any
-  `NAME=value` assignment, are skipped, so `if true; then rm -rf src; fi`, `{ rm src/x; }`,
-  `! rm x` and `LC_ALL=C rm -rf src` are read as the `rm` they run. Behind a
-  `RUNS_ANOTHER_COMMAND` wrapper every later word is read as a head of its own, because which
-  wrapper options take an argument is not known, so the interpreter, `-i`, `curl -o`, `dd of=` and
-  `find -delete` checks apply to the wrapped command: `timeout 60 bash -c '…'`,
-  `sudo sed -i …` and `xargs sh -c '…'` are writes. Keywords not listed (`case`, `select`) are not
-  resolved, and a quoted command word is out of scope.
-  Since 2026-08-06 a **long write flag** counts whatever the command is — `--write`, `--in-place`,
-  `--fix` — because the boundary is what is visible on the line and those are as visible as a
-  redirect; they had been read only for the few commands that take `-i`, so `prettier --write src`
-  and `eslint --fix .` rewrote every file in a tree and classified as nothing at all. What is
-  **still** not matched is a formatter whose default is to rewrite: `cargo fmt`, `black .` and
-  `gofmt -w` show no long flag, and the last shows a short one that means *whole word* to `grep`.
-  Reading short flags everywhere would report a search as a write, so that gap is left open and
-  written down rather than closed by guessing.
+- **The harness gates named populations, not every write.** The editing tools each agent ships, the git
+  spellings that change the tree, the irreversible steps, and the shell constructs that visibly write a
+  file: a redirect, a `sed -i`, an interpreter handed code, the utilities that copy, move or delete (also
+  under fifteen prefixes that run them: `sudo`, `flock`, `timeout`, …), and any command with a **long write
+  flag** (`--write`, `--in-place`, `--fix`). The command a segment runs is resolved first
+  (`shell::candidate_commands`: `if`, `then`, `else`, `elif`, `do`, `while`, `until`, `!`, `{` and
+  `NAME=value` are skipped; behind a `RUNS_ANOTHER_COMMAND` wrapper every later word is a head of its own).
+  **Not matched:** a write that shows nothing (an `eval`, a wrapper *script*, a merge reached by an alias or
+  `gh api`), a formatter whose default is to rewrite (`cargo fmt`, `black .`, `gofmt -w`; reading short flags
+  everywhere would report a search as a write), the keywords `case` and `select`, and a quoted command word
+  except as below.
 
-  Since 2026-09-07 **`git pull` is matched**, as an `IRREVERSIBLE` boundary and deliberately not as a
-  `DELIVERS` one. It runs a merge internally, so a run refused on the first spelling reached the
-  identical commit with the second — measured once, where `git pull origin main --no-rebase
-  --no-edit` produced merge `3e09d3d` after the merge spelling was refused, and the substitution was
-  reported rather than performed quietly. Before the change it classified `Untouched`, which is no
-  gate at all; it is now a boundary, so the claim is verified, and it stays out of `DELIVERS` because
-  pulling is an integration step rather than a landing one — `DELIVERS` holds the spellings that end
-  a delivery — and `stale_verdict` would otherwise refuse the contract's own `integrate before
-  publishing` default. Classifying by *direction* instead was
-  considered and rejected: merging `origin/main` into a feature branch is an integration but merging
-  `origin/<feature>` into `main` is a delivery, so the distinction is not readable from the
-  arguments, and a rule that read it from the checkout would demote a real delivery to a routine
-  write. The same entry also intercepts `git pull --rebase`, which had been missing
-  `REPOSITORY_SHELL`'s rebase fragment: a boundary is stricter than that arm, which is
-  conditional on the surface the line names.
-  **The merge spelling now integrates where the pull spelling always did.** The two used to differ
-  for no reason the contract cares about: `stale_verdict` and `out_of_phase` return early for any
-  fragment `DELIVERS` does not hold, so a run refused `verdict-bound-to-other-bytes` on `git merge`
-  could integrate with `git pull --no-rebase`. An exact integration merge in the run's own
-  checkout (the shapes are in the entry on `stale_verdict` below) spends no verdict either, so the
-  asymmetry no longer pushes anybody to the pull spelling. The pull stays out of `DELIVERS` and is
-  still read as neither a delivery nor an integration by `stale_verdict`.
-  Since 2026-10-04 the fragment and disarm lists, the unclaimed-commit matcher and
-  `shell::writes_a_file` read a line whose **provably data** spans are blanked, so a command name
-  written as data is no longer adjudicated as a command. Both measured refusals were this shape
-  (2026-08-24): a read-only `gh issue view --jq '… | split(…) …'` refused for the `split` inside its
-  single-quoted program — that one was `writes_a_file` reading the write verb — and a `cat > file
-  <<EOF` whose prose quoted `estigia stand-down` refused for the word in its body.
-  **The whole-text scan is the floor, and only a proven span is suppressed.** Eligibility is a
-  **grammar the scanner checks byte by byte** — an allowlist, because the denylist it replaced lost
-  seven review rounds, each to one more spelling bash reads differently (round 7: `a=/cat sh -c '…'`,
-  `</bin/cat sh -c '…'` and `sh${IFS}-c${IFS}'$1'${IFS}x/cat '…'` were read as `cat` lines through a
-  basename of the first word). A line is eligible only when all of this holds, and anything else is
-  returned whole. The grammar reads the **original-case** line — the classifier and the
-  unclaimed-commit matcher lowercase the view it returns, not the text it reads — so a here-document
-  terminator is compared byte for byte as bash does, and a head with an upper-case letter (`Cat`,
-  `gh Pr`) is not a bare word and makes the line ineligible. Handing it a lowercased copy let `eof`
-  close an unquoted here-document that bash left open, and the substitution line after it was read as
-  a quoted body and blanked (round 9, measured: `cat <<EOF <<'X'`, `eof`, `$(git push origin main)`,
-  `EOF`, `X` classified `Routine` while bash ran the substitution). **The view is built only for a
-  single-string command** (round 10, measured): a payload naming several command keys is joined text
-  that bash never parses as one script, and a quote opened in one value closed in another and blanked
-  a boundary the other carried (`{"command": "echo '", "commandLine": "git push #'"}` and a
-  `cat <<'EOF'` / `git push …\nEOF` pair classified `Routine` while the single key is a boundary). A
-  joined multi-key text and an argv array are read unblanked, as before the view existed;
-  `a_quote_opened_in_one_command_key_does_not_blank_another` holds it:
-  - the first word is, **bare**, one of a bounded list of commands that read their arguments and
-    cannot run them (`gh`, `cat`, `grep`, `head`, `tail`, `wc`, `jq`, `ls`, `uniq`, `cut`, `tr`,
-    `echo`, `date`, `pwd`, `true`, `false`, `basename`, `dirname`, `realpath`, `stat`, `file`,
-    `which`, `type`) — `[a-z]+` between blanks, so no path, assignment, redirect, quote, escape or
-    expansion can make a word that only looks like the name; for `gh` the second word is bare in the
-    list below;
-  - outside quotes every byte is an ASCII alphanumeric, a space, a tab or one of `-_./:,=+@%>`, so
-    `$`, backtick, backslash, `|;&()<{}*?[]~!#` (`<` except as a here-document operator, below), a
-    carriage return and any non-ASCII byte are never read — nothing is a separator, expansion, glob, comment or escape; `>` stays because a redirect
-    writes a file and runs nothing, and `shell::writes_a_file` reads the view, in which `>` and its
-    unquoted target are never blanked;
-  - a quote opens at the start of a word and is followed by a blank or the end of the line, so no word
-    is glued from quoted and unquoted parts, and never as a redirect target, so `> '.git/hooks/x'`
-    keeps the file it writes visible; `'…'` is data and `"…"` is data when it holds no `$`,
-    backtick, backslash or `!`;
-  - a here-document is `<<` or `<<-` after a blank, a delimiter of `[A-Za-z0-9_]+` — bare, in single
-    or double quotes, or after one backslash — that ends the word, so `<<<`, `<<END-X`, `<<E'OF'`,
-    `<<EOF>f` and a delimiter holding a backslash are not read;
-  - a body is data under a quoted delimiter and under a bare one holds no `$`, backtick or
-    backslash, the terminator is the exact delimiter (leading tabs stripped only for `<<-`), and
-    nothing may follow the last terminator, because the line after it is a new command.
-  `rg` and `sort` are deliberately absent from the list: `rg --pre` and `sort --compress-program`
-  run the program they are handed. So are `printf` and `test`: both are shell builtins that
-  evaluate an array subscript, so `printf -v 'a[$(cmd)]'` and `test -v 'a[$(cmd)]'` run `cmd` out of
-  a quoted word (found by the round-6 panel).
-  **The allowlist was audited head by head in round 7**, and what each was cleared on is:
-  `cat`, `head`, `tail`, `wc`, `ls`, `uniq`, `cut`, `tr`, `basename`, `dirname`, `realpath` — external
-  programs that read their operands and have no option that runs one; `grep` — `-f` reads patterns,
-  no GNU or BSD option runs a program (`rg --pre` is the one that does); `jq` — `env`, `input` and
-  `$__loc__` read, and nothing in the language runs a process; `echo` — `-e` interprets escapes and
-  evaluates nothing; `true`, `false`, `pwd` — ignore their operands; `date` — `-f` and `-r` read,
-  `-s` sets the clock and runs nothing; `stat` and `file` — `-m`, `-f` and `--printf` read or format;
-  `which` and `type` — look a name up and do not evaluate it. Removed: `printf` and `test` (above),
-  and the `gh` subcommands `repo` and `gist`, whose `clone`, `fork` and `create` forward the words
-  after `--` to `git`, where `--upload-pack` and `--config core.sshCommand` run a program; a quoted
-  `'--'` forms the same word, so no spelling of the separator can be told apart from data.
-  What stays unproved is only what a user's own shell profile or an alias changes about these names.
-  `gh` is admitted by an **allowlist of its second word** (`api`, `issue`, `pr`, `run`,
-  `release`, `search`, `status`, `label`, `project`, `workflow`), read as it stands in the
-  blanked line. An earlier round denied the words `codespace`, `ssh`, `exec`, `alias` and
-  `extension` and a panel beat it with spellings the shell forms into them — `gh code\space
-  s\sh`, `gh co"de"space`, `$'codespace'` — and a user-defined `gh` alias runs a shell command the
-  line never shows. A formed word never equals an allowlisted one, so nothing has to recognise the
-  spelling, and `gh browse`, `gh auth` and every alias fall out with the rest.
-  **A differential test holds the property against bash itself.**
-  `nothing_bash_executes_is_blanked_as_data` runs the inputs earlier rounds measured and 4000
-  generated cases (a fixed seed; about six seconds) under `bash --noprofile --norc -c`, and fails
-  when a marker command bash executed is not still in `data_view`'s line. A marker is `touch ran_N_`
-  in a per-case directory, detected by the file's existence: it holds only bytes inside the grammar,
-  where the earlier `echo ran N >&2` carried `&`, so any line with one outside quotes or a body was
-  rejected at that byte and the positions after `;`, `#`, `|` and a bare newline were never really
-  exercised (the recorded `differential-marker-contains-ampersand` warning). The generator includes head
-  words with assignment prefixes, leading redirects, paths, `${IFS}` joins and glued quotes, and
-  here-document body lines that are the lower- or upper-case copy of the delimiter. It cannot
-  pass vacuously: a timeout fails it, every measured input must run its marker on a bash new enough
-  to run it (each carries the version it needs), a floor of executed markers (4500; 4790 measured on the local bash) must be met, and the failure
-  names the bash it ran against. It found the double-quoted backslash-newline hole and, once the
-  generator learned head words, the round-7 class. It requires `bash`, found on the inherited `PATH`
-  and then `/usr/bin` and `/bin`, and fails without it. The versions: `printf -v` subscripts 4.0, `test -v` 4.2, `${ cmd; }` 5.3. The local bash 3.2 was
-  measured to reject all three, so it cannot see them — the unit tests carry those, and the version
-  numbers are unmeasured here; a newer bash proves them.
-  The text of a `#` comment is never blanked, so a verb in a comment is still read.
-  Every other line — a pipeline, a separator, an interpreter (`sh`, `bash`, `dash`, `python`, `php`,
-  `lua`), a wrapper, an assignment — is returned unchanged, so the scan that caught it before still
-  catches it. A
-  corpus of the executor spellings two blind panels found — `echo 'git push' | sh`, `printf '…' |
-  bash`, `sh <<EOF`, `bash <<'EOF'`, `bash <<< '…'`, `bash -lc '…'`, `dash -c '…'`, `php -r`,
-  `lua -e`, `eval '…'`, `ssh host '…'`, `"estigia" stand-down`, `git config "core.hooksPath"
-  /dev/null` — asserts each is still a boundary; it was red against the masking approach before this
-  one, which is why the allowlist replaced it. What is **not** closed: an unquoted argument, so
-  `echo git push` still reads as a boundary — the suppression is drawn at quoted data and
-  here-document bodies, not at prose a person typed without quotes.
-  The choice is **subtract only proven data, never subtract a whole class of quotes**: an earlier
-  attempt blanked every quoted region an interpreter was not provably handed, and a panel found its
-  boundaries were themselves holes — the quote in the `echo` segment of `echo 'git push' | sh`, a
-  here-document body handed to `sh`, a combined flag (`bash -lc`) the code-flag table did not list.
-  The same change drops `git tag --list=<pattern>` from the listing exemption: `--list` takes no
-  value (`error: option 'list' takes no value`, measured 2026-10-04), so that spelling stays a
-  boundary and the `irreversible-shell` declaration names every listing it exempts. A quoted `-l` or
-  `--list` still lists because `git` is not in the allowlist, so `git tag '--list'` is read whole and
-  the flag reader sees the flag; no separate quoted-flag view is needed.
-  **A quoted command word is read as the word it spells.** Bash removes quotes before it
-  runs a word, so `git 'push' origin main`, `gh pr 'merge' 7` and `estigia config 'set' …` run the
-  unquoted command, and used to classify as nothing while `gh pr 'merge'` was worse: the data view
-  blanked the verb itself. `shell::unquote_plain_words` now runs once, before every matcher and
-  before `data_view`: a quoted run holding only `[A-Za-z0-9_\-./:,@%+]` loses its quotes, wherever it
-  sits in a word (`pu'sh'`, `"gi"t`, `$'push'`), including inside `$(…)`, backticks and double
-  quotes, where the text still runs. A run holding a blank, an expansion, a backslash or a glob byte
-  keeps its quotes and stays data, a here-document delimiter keeps its quotes, and a quote that never
-  closes leaves the whole line as it was. `read_only_spans` also refuses a `gh` line whose
-  subcommand is followed by a quoted word, so a verb is never blanked. Not read: a backslash-escaped
-  quote (`` `git \"push\"` `` inside double quotes), a word spelled through a variable, `$(…)`, an
-  alias or a script, and a quoted word whose content is not plain (`git "pu\sh"`).
-  **What exact-literal matching leaves is enumerated rather than implied**, because it guarantees
-  something always is. Traced by reading the six matchers on 2026-09-07 and not by running them.
-  *Not matched at all:* a backslash line continuation survives, because the
-  shell strips continuations and the literal text does not match (a quoted verb is read now); a `.exe` suffix and a full path
-  carrying a global option survive, because `.exe` is stripped only for `estigia` and
-  `without_leading_options` compares the word `git` exactly; `git update-ref refs/tags/…` creates a
-  tag without the tag verb; `gh release upload`, `delete` and `delete-asset` are in no list at all;
-  `git send-pack` and `gh repo sync` write remote refs without the push verb; and
-  `git branch <name>`, `git checkout HEAD -- <path>`, `git checkout -f` and `git filter-repo` reach
-  what `REPOSITORY_SHELL` names by other spellings.
-  *Matched, but never read as a delivery:* `gh api` against the merge, release and tag-ref
-  endpoints, and the pull spelling this entry adds — both reach a boundary, and `stale_verdict` and
-  `out_of_phase` read neither. Two further families are filed here rather than declared. The first
-  is two `estigia config` subcommands that write what the disarm list watches, filed as unwatched; both are matched now, and the disarm paragraph below this one says what the crossing
-  holds. The other family, `su -c`/`script -c`, is covered: both names joined
-  `INLINE_CODE`, so the code flag reads their quoted command. **BSD `script` runs the words after
-  the optional typescript file instead, and that spelling is covered**: `script` joined
-  `RUNS_ANOTHER_COMMAND` too, whose reading takes any later word that names a write, so
-  `script /dev/null rm -rf src` — measured running the deletion on darwin, where `-c` is an
-  illegal option — is a write now. What that buys costs one tracker read in the direction the
-  module always picks: a typescript file named after a write reads as `… under script`.
-  **`rg --pre COMMAND` is the same shape spelled as a flag, and it is covered**: `rg`
-  alone searches, so it is not on `RUNS_ANOTHER_COMMAND`, but `--pre`/`--pre=` names a program the
-  line runs over every file it searches. Such a line is a write, and it is placed **inside**
-  however it redirects — `rg --pre /bin/rm x > /tmp/out` is held, not passed by its redirect to
-  `/tmp/out` — because the program's target is not on the line to be bounded. `rg pattern src` and
-  `rg pattern src > /tmp/out` keep their previous reading. The flag spelling is matched by
-  `shell::runs_a_program_after_pre`, read by `writes_a_file` and by the placement in
-  `issue_requirement::shell_write`; `--pre-glob` takes a glob, not a program, and is not one.
-  Since 2026-08-04 the gate also measures **its own disarmament**: `estigia stand-down`,
-  `guard --uninstall` and `uninstall` classified as nothing at all, so the one thing the whole model
-  rests on — that an agent cannot switch the gate off — was reachable through the tool it uses most.
-  It also measures writes to the files those decisions are read from — its own state, the
-  contract, and the entry in each agent's settings — because closing the road through the shell
-  left the shorter one open. Since 2026-09-27 the list holds the sibling subcommands too:
-  between them `estigia config edit` and `estigia config forget` cover the same contract and
-  repository rows as the listed `estigia config set` — `edit` the installed contract, `forget` the
-  repository's own file — and neither matched any population, so the gate answered
-  `Untouched` — `Outside(NotWatched)`, no gate at all rather than a weaker one. The crossing that
-  reads the parser's own tree now holds every leaf below a verb the list names to that list or to
-  `DISARM_READS`, which declares the two subcommands that only read (`config list`, `config repos`),
-  so a third writing subcommand fails a test instead of arriving unclassified. Since 2026-10-05 the
-  leading-option normalisation reaches Estigia's own verbs too: `without_leading_options` moves a
-  global option out from between the binary and the verb, so `estigia --json config edit` carries
-  the listed `estigia config edit` fragment and is refused where the plain spelling is — before that
-  the flag broke the contiguous substring and the line answered `Untouched`. The walk recognises the
-  binary by its basename, so a path prefix and a `.exe` suffix are folded here the same way
-  `as_estigia` folds them for the match itself. Since 2026-10-06 declaring a stand-down is **a
-  person's act, not an agent's**, and since 2026-10-07 that covers the record as well as the command.
-  `estigia stand-down` stays on the disarm list, but the classifier reads it first
-  (`harness::person_only`) and the gate refuses an agent's shell line that runs it with
-  `stand-down-is-for-a-person`, on every host and for a sub-agent as for the orchestrator. A write
-  that names `~/.estigia/stand-down.json` (also with `"`, `'` or `\` inside the name) is refused with the same code: a file tool (`Write`,
-  `Edit`, `MultiEdit`, `NotebookEdit`, an `apply_patch` or `patch` body) and a shell line that
-  writes a file and names the record (a redirect, `tee`, `cp`, `mv`, `rm`). The name is anchored
-  at both ends, so a backup such as `stand-down.json.bak` is a different file; and a shell line
-  that names the control directory and writes the record under its bare name is the record too, so
-  `cd ~/.estigia && echo x > stand-down.json` is refused even though the two halves never join
-  into one path. Deleting the record is
-  refused too, because a line that deletes it cannot be told from one that also writes it, so
-  the person lifts with
-  `estigia stand-down --lift --reason <why>` in their own shell. An agent's lift is refused as well,
-  because the gate cannot tell a lift from a declaration that only quotes the flag (`--rea\son=,
-  #--lift` declares): a line carrying `--lift` anywhere is refused with the same code and a message
-  whose way out is the lift command; `doctor` names the same lift as an operator-knowledge
-  resolution carrying the command for the person to run, never as a runnable one, because an agent
-  is refused it. The rule is
-  decided in one function from the classified action, called first by `gate`, `gate_observing`,
-  the push guard, and the role road in the hook and in `estigia gate`, so no stand-down, claim,
-  refusal on the same line, or unreadable sub-agent definition lifts or replaces it, and each
-  refusal is in the ledger, on the hook road always and on `estigia gate` when the call carries a
-  run id. A stand-down a person declares in their own shell, or with `!` in
-  Claude Code, still lifts every other refusal and `ask`; it never lifts this one. What stays
-  open, by declaration: a spelling that never writes `estigia stand-down` as two words (an alias,
-  a wrapper script, `cargo run -- stand-down`, a renamed binary), a write to the record the shell
-  reader does not recognise as a write (an interpreter's `open(...)`), a glob (`stand-*.json`) or a
-  directory target (`cp x ~/.estigia/`) that never spells the file name, a directory change in a
-  separate call, one whose target is held in a variable, or one the matcher does not read (`popd`,
-  which returns to the stack top) while a later line writes the bare name, and any name the shell
-  expands before the reader sees it (`stand-$'down'.json`, `${x:-stand-down.json}`), and a name split
-  across a line continuation, which the shell joins. The match
-  is broad on purpose, and its over-reach is a refusal with no lift: a commit message, `rg`,
-  `git grep` or `git log --grep` that names `estigia` and then `stand-down` is refused, and so is
-  a patch body that merely names the record, and a line that reads the record with `cat` beside any
-  other write. A plain `cat` of the record, and the `Read` tool, stay allowed. `estigia guard --uninstall`,
-  `uninstall`, `config set|edit|forget`, `setup`, `install` and `tui` remain refusals a person's
-  stand-down can lift and an agent can no longer declare one; they stay ordinary disarm-list gates
-  until somebody decides they are person-only too. What that crossing
-  still does not reach is a new **top-level** verb: it walks the subcommand tree of a verb the list
-  already names, and a verb the list does not name is a review decision rather than a failing test.
-  Twenty `Population` consts in the source (`src/harness/population.rs`
-  holds the type) name each legitimate population and what falls
-  outside it, and that number is checked here.
-- **An issue is refused from a shell line, and the template is checked in one place.** `create`
-  refuses a body whose first `##` heading outside a code fence is not `## Description for dumb
-  humans` followed by a `> [!NOTE]` alert (prose before that heading is accepted), or that lacks a required heading, or has them out of order, before it calls `gh` at all. The
-  required headings are the `##` lines of the fenced block in `skill/assets/analyst-issue-template.md`,
-  extracted by `build.rs`, so the file is the only list. Headings inside a code fence in the body
-  do not count, and headings beyond the required ones are allowed. `gh issue create` and its alias
-  `gh issue new`, `gh api` posting to an `/issues` path, and a GraphQL `createIssue` mutation are
-  refused with `issue-creation-outside-flow` whoever holds the checkout, naming the `create` tool and its `repo` argument, which files in another repository.
-  The matching is on substrings of the command line, with options allowed between `gh`, `issue`
-  and `create`, so a line that merely mentions the command is refused too, `gh` after a wrapper
-  such as `sudo` is matched, and an alias or a script that never spells `gh` on the line still
-  files an issue nothing checks. A `gh api` call is read from its own words, per command of the line (a separator inside quotes does not split it, a substitution inside double
-  quotes does, and a line whose quotes do not balance is split on every separator), so
-  an unrelated `-f` on another command does not make it a post and an explicit `GET` with fields
-  is a read in every spelling. The read exemption that remains knows only `-X GET` and
-  `--method GET` and matches them anywhere on the line, so a post beside a `-X GET` read
-  (`gh api -X GET a; gh api repos/o/r/issues -f t=x`) still files an issue unchecked. The check is structural: it reads headings
-  and the alert, not the prose beneath them. The template's `###` sub-sections (`### Today`,
-  `### Expected`, `### Pitfalls`, `### Size`, `### Rules that apply`) are prose guidance and are
-  not enforced: a body that omits them is accepted, whereas `## Where to start` and `## How to
-  verify` are `##` headings and so required. It is held only by `create`, so an issue filed in
-  the web interface or by a token outside this harness is unchecked as well.
-- **A delivery is refused in a state that holds no verdict.** Holding an issue and being allowed to
-  land it were one question, and only the first was ever put: a run in `in-progress` that ran
-  `gh pr merge` was told yes, because the tracker confirmed the claim and nobody asked what the
-  claim was *for*. `git merge`, `git tag`, `gh pr merge` and the two `gh release` steps now need the
-  issue to be in `review` or `done`. `git push` and `gh pr create` are deliberately exempt —
-  publishing is how a run reaches review, and gating it on review is a deadlock. Boundaries the
-  operator declared are never read as deliveries: Estigia cannot know whether a `make deploy`
-  delivers or rehearses, and guessing would refuse a step it never understood.
+  **`git pull` is an `IRREVERSIBLE` boundary and deliberately not a `DELIVERS` one.** It runs a merge
+  internally (a run once reached the identical merge with `git pull origin main --no-rebase --no-edit` after
+  the merge spelling was refused), but pulling is an integration step and `stale_verdict` would otherwise
+  refuse the contract's own `integrate before publishing` default. Classifying by *direction* was rejected
+  (`origin/main` into a feature branch is an integration, `origin/<feature>` into `main` a delivery, and the
+  arguments do not say which). `git pull --rebase` is intercepted too.
 
-  Two `git merge` shapes are preparation rather than delivery, not one — the second, an integration in
-  the run's own checkout, is its own entry further down this file and is not repeated here. This entry
-  is the first and narrower of the two: an exact literal `git merge --ff-only
-  <target>` (also accepting `--` before the target) may run from `in-progress` after the tracker
-  agrees when local Git proves all of it. The checkout is on a branch, its upstream is a canonical
-  `refs/remotes/*` ref, the worktree is clean, the target is that upstream's exact short or full
-  canonical name, or a full object ID of the length this repository's object format requires, and
-  ancestry runs from `HEAD` through the target to the upstream. An object ID must resolve to itself
-  as a commit; an annotated tag's ID does not qualify merely because it peels to one. Every proof Git
-  process removes every inherited `GIT_*` variable, and the exception is denied when any such
-  variable was present at entry. It is also denied when `BASH_ENV`, `ENV`, or Bash's exported `git`
-  function name (`BASH_FUNC_git%%`) is present, compared without case so Windows environment names
-  cannot evade the check. Those variables can make the shell execute a different `git` from the
-  direct process the proof resolved; `PATH` remains eligible because both resolve through the same
-  inherited path when no shell-only steering is present. The `GIT_*` check prevents the named
-  repository, object-store, index, shallow-file and configuration steering, while the three shell
-  checks prevent those specific initialization and inherited-function paths from substituting a
-  different command. It remains a `Boundary`, so it still pays the live tracker read and is recorded
-  in the decision ledger. The
-  verdict-to-bytes check runs first; a stale verdict is refused before this exception can skip only
-  the `out-of-phase` check, and only when the tracker answered exactly `in-progress`. `analysis`,
-  `ready` and `blocked` keep the ordinary refusal. Wrappers, compound commands, duplicate command
-  aliases, quoting, expansion, alternate git directories, extra flags or targets, detached branches,
-  dirty trees and any unreadable Git answer all retain the existing refusal here, under this
-  exemption's own local-Git proofs. That does not carry over whole to the second exemption, the
-  integration merge covered further down this file: its literal reader, `exact_integration_merge`,
-  spawns no process, so it independently refuses wrappers, compound commands, duplicate command
-  aliases, quoting, expansion, alternate git directories, and extra flags or targets on the command
-  text alone. A detached branch is refused there too, but not by that reader — by
-  `is_integration_in_the_runs_own_checkout`'s separate `symbolic-ref` check. An unreadable Git
-  answer is not something a reader that spawns no process can produce or see. A dirty tree is
-  refused nowhere on the integration path, and that absence is deliberate: `--continue` only ever
-  runs against a mid-merge tree, which a cleanliness check would refuse along with everything else,
-  leaving the exemption with no case left to grant.
-  `a_conflicting_integration_is_resolved_without_leaving_in_progress` in `tests/pipe/part_04.rs` stages
-  exactly that tree — a resolved conflict, mid-merge — and gates `git merge --continue` expecting it
-  allowed. What stands in the cleanliness check's place is git's own refusal to run a merge that
-  would overwrite local changes it was not asked to discard.
+  **Provably data spans are blanked; the whole-text scan is the floor.** The fragment and disarm lists, the
+  unclaimed-commit matcher and `shell::writes_a_file` read a line whose data spans are blanked, so a command
+  name written as data (the `split` inside a single-quoted `gh issue view --jq '…'` program, `estigia
+  stand-down` quoted in a `cat > file <<EOF` body) is not adjudicated as a command. Eligibility is a
+  **grammar checked byte by byte** in `data_view`, an allowlist (the denylist it replaced lost seven review
+  rounds, each to one more spelling bash reads differently): a bare first word from a bounded list of
+  read-only commands, a restricted byte set outside quotes, quotes opened at a word start and plain
+  here-documents. `rg`, `sort`, `printf` and `test` are absent because they run what they are handed
+  (`rg --pre`, `sort --compress-program`, array subscripts), and `gh repo`/`gist` because `clone`, `fork` and
+  `create` forward words after `--` to `git`. **Not closed:** an unquoted argument, so `echo git push` still
+  reads as a boundary; what a user's shell profile or an alias changes about the allowlisted names is
+  unproved. **A differential test holds the property against bash itself**:
+  `nothing_bash_executes_is_blanked_as_data` runs the measured inputs and 4000 generated cases under `bash
+  --noprofile --norc -c` and fails when a marker command bash executed (`touch ran_N_`) is not still in
+  `data_view`'s line. It cannot pass vacuously (a timeout fails, every measured input must run its marker on a
+  bash new enough, a floor of 4500 executed markers with 4790 measured), requires `bash` and fails without
+  it; the versions needed are `printf -v` subscripts 4.0, `test -v` 4.2 and `${ cmd; }` 5.3, the local bash
+  3.2 rejects all three so unit tests carry those, and the version numbers are unmeasured here. **A quoted
+  command word is read as the word it spells** (`shell::unquote_plain_words`: `pu'sh'`, `"gi"t`, `$'push'`);
+  not read are a backslash-escaped quote, a word spelled through a variable, `$(…)`, an alias or script, and
+  non-plain content (`git "pu\sh"`).
 
-  **The proof is local and can therefore be stale.** It never fetches and cannot establish that the
-  remote-tracking ref still matches the server. It proves only that the merge is safe relative to
-  the tracking ref already present in this checkout; a later fetch may reveal commits it did not
-  know about. Avoiding network access keeps the gate from changing repository state or turning every
-  local update into another remote boundary, and this limitation is recorded rather than hidden.
+  **What exact-literal matching leaves** (traced by reading on 2026-09-07, not run): *not matched at all* are a
+  backslash line continuation, a `.exe` suffix and a full path carrying a global option, `git update-ref
+  refs/tags/…`, `gh release upload`/`delete`/`delete-asset`, `git send-pack`, `gh repo sync`, `git branch
+  <name>`, `git checkout HEAD -- <path>`, `git checkout -f` and `git filter-repo`; *matched but never read as
+  a delivery* are `gh api` against the merge, release and tag-ref endpoints and the pull spelling.
 
-  **The proof and the merge are not one atomic operation.** Attachment, upstream, cleanliness,
-  object resolution and ancestry are separate local Git processes, and the shell resolves and runs
-  the merge only after the gate returns. Another process can move a ref, change the worktree, or
-  replace what `PATH` resolves between any two of those reads, or between the final read and
-  execution. `--ff-only` still prevents a merge commit, but Estigia takes no repository or process
-  resolution lock and cannot claim the executed command saw the exact state or executable it proved.
-  The decision ledger has the same pre-existing resolution limit: its allow line names the
-  subject as `git merge` and the live claim, not whether this local proof or an ordinary reviewed
-  delivery admitted it. Changing that shared allow vocabulary would reach every gate consumer, so
-  this narrow exception records the residual ambiguity here instead.
-- **That narrowing is not configurable, and the asymmetry is the reason.** Every other axis here can
-  be switched; this one only tightens, and a setting that could loosen a guard rail turns it into a
-  preference. It is the same rule as the operator's boundary list, which adds and never removes.
-- **Closing the shell hole changed a declaration that had been wrong.** `repository-shell` claimed
-  "every spelling of a repository write reachable from a shell" while matching only spellings that
-  name git. A redirect writes the same tree and was never in reach of that list. The claim is now
-  split in two, because the two halves have two different boundaries.
+  **The gate also measures its own disarmament.** `estigia stand-down`, `guard --uninstall`, `uninstall` and
+  writes to the files those decisions are read from (its state, the contract, each agent's settings entry)
+  are on the disarm list with the sibling subcommands (`estigia config edit`/`forget` beside `set`); a
+  crossing over the parser's own tree holds every leaf below a listed verb to that list or to `DISARM_READS`
+  (`config list`, `config repos`), so a third writing subcommand fails a test, while a new **top-level** verb
+  is a review decision. `without_leading_options` moves a global option out from between the binary and the
+  verb (`estigia --json config edit` is refused) and the binary is recognised by basename.
+
+  **Declaring a stand-down is a person's act, and that covers the record as well as the command.**
+  `harness::person_only` is decided first by `gate`, `gate_observing`, the push guard and the role road, so
+  no stand-down, claim or unreadable definition lifts it. The gate refuses an agent's shell line running
+  `estigia stand-down` (`stand-down-is-for-a-person`, any host, sub-agent or orchestrator), a file-tool,
+  patch-body or shell write naming the stand-down record under `~/.estigia` (also via the control directory
+  and the bare name), deleting it, and a line carrying `--lift` (it cannot be told from a declaration that
+  only quotes the flag). The person lifts with `estigia stand-down --lift --reason <why>` in their own
+  shell, or `!` in Claude Code. **Open by declaration:** a spelling that never writes `estigia stand-down`
+  as two words (an alias, wrapper script, `cargo run -- stand-down`, a renamed binary), a write the shell
+  reader does not recognise (an interpreter's `open(...)`), a glob or directory target that never spells the
+  file name, a directory change in a separate call or through a variable or `popd`, a name the shell expands
+  (`stand-$'down'.json`, `${x:-stand-down.json}`) and a name split across a line continuation. The match is
+  broad on purpose: a commit message, `rg`, `git grep` or `git log --grep` naming `estigia` then `stand-down`
+  and a patch body naming the record are refused with no lift; `cat` and the `Read` tool stay allowed.
+
+  Twenty `Population` consts in the source (`src/harness/population.rs` holds the type) name each legitimate population and what falls outside it, and that number is checked here.
+- **An issue is refused from a shell line, and the template is checked in one place.** `create` refuses a
+  body whose first `##` heading outside a code fence is not `## Description for dumb humans` followed by a
+  `> [!NOTE]` alert, or that lacks a required heading or has them out of order, before it calls `gh`. The
+  required headings are the `##` lines of the fenced block in `skill/assets/analyst-issue-template.md`
+  (extracted by `build.rs`, so the file is the only list); the `###` sub-sections are not enforced, and
+  the check is structural, not about the prose beneath. `gh issue create`/`new`, `gh api` posting to an
+  `/issues` path and a GraphQL `createIssue` are refused `issue-creation-outside-flow` whoever holds the
+  checkout, naming `create` and its `repo` argument. Matching is on substrings of the command line, so a
+  line that merely mentions the command is refused, `gh` after `sudo` is matched, and an alias or script
+  that never spells `gh` still files an issue nothing checks. The read exemption knows only `-X GET` and
+  `--method GET` anywhere on the line, so a post beside a `-X GET` read (`gh api -X GET a; gh api
+  repos/o/r/issues -f t=x`) is unchecked. An issue filed in the web interface or by a token outside this
+  harness is unchecked too.
+- **A delivery is refused in a state that holds no verdict.** `git merge`, `git tag`, `gh pr merge` and the
+  two `gh release` steps need the issue in `review` or `done`; `git push` and `gh pr create` are exempt
+  (publishing is how a run reaches review). Operator-declared boundaries are never read as deliveries,
+  since Estigia cannot know whether a `make deploy` delivers or rehearses. Two `git merge` shapes are
+  preparation, not delivery; the integration merge has its own entry below. The narrower: an exact literal
+  `git merge --ff-only <target>` (also `--` before the target) may run from `in-progress` after the tracker
+  agrees when local Git proves all of it: on a branch, upstream a canonical `refs/remotes/*` ref, clean
+  worktree, target that upstream's exact name or a full commit object ID, and ancestry from `HEAD` through
+  the target to the upstream. Every proof Git process strips inherited `GIT_*`, and the exception is denied
+  when any was present at entry or when `BASH_ENV`, `ENV` or `BASH_FUNC_git%%` is (compared without case).
+  It stays a `Boundary` (a live tracker read, a ledger entry), skips only `out-of-phase`, only when the
+  tracker answered exactly `in-progress`, after the verdict-to-bytes check. `analysis`, `ready` and
+  `blocked` keep the refusal. `exact_integration_merge` spawns no process, so it refuses wrappers,
+  compounds, quoting, expansion, alternate git directories and extra flags on the text alone; a detached
+  branch is refused by `is_integration_in_the_runs_own_checkout`'s `symbolic-ref`; a dirty tree is refused
+  nowhere on that path, deliberately, since `--continue` runs against a mid-merge tree
+  (`a_conflicting_integration_is_resolved_without_leaving_in_progress`). **The proof is local and can be
+  stale** (it never fetches), **and the proof and the merge are not atomic**: another process can move a
+  ref, change the worktree or replace what `PATH` resolves between any two reads, and Estigia takes no
+  lock. The ledger's allow line names `git merge` and the live claim, not which exemption admitted it.
+- **That narrowing is not configurable, and the asymmetry is the reason.** Every other axis here can be
+  switched; this one only tightens, and a setting that could loosen a guard rail turns it into a
+  preference, as with the operator's boundary list, which adds and never removes.
 - **Nothing here has driven a real agent.** The hook protocol is exercised by feeding the binary the
-  payloads an agent sends and reading what it prints. That proves Estigia answers correctly; it does
-  not prove Claude Code asks.
-- **The tool-call gate reaches every agent Estigia knows but two.** Five agents, in four shapes,
-  each taken from that agent's published reference or its source: Claude Code and Codex
-  (`PreToolUse` → `permissionDecision`), Cursor (`preToolUse` → `{"permission":"deny",…}`),
-  OpenCode (a plugin that blocks by throwing) and Pi (an extension that blocks by returning
-  `{ block: true, reason }`). The two it does not reach are ZCode and DeepSeek
-  Harness, and the bullets on them below say why. The eighth entry is the agent-neutral skills root,
-  which is not an agent and has no tool loop to gate.
-  The gate also still answers for six retired hosts — Gemini CLI, Continue, Cline, Crush, Windsurf
-  and Qwen — because a machine that installed one before it was retired still carries its hook
-  and dialect; `setup` installs into none of them and `uninstall` is the only path that touches them.
-- **No live Pi turn has run the gate; the rest is read from the installed Pi 1.1.0 package.** The Pi
-  extension is measured under `node` against a stand-in binary: the arguments it hands
-  `estigia gate`, the working directory, the three outcomes and the `{ block: true, reason }` it
-  returns are asserted. Against `@earendil-works/pi-coding-agent` 1.1.0 itself, the `.d.ts` and
-  tool sources in its `dist` give `ToolCallEventResult`, `ExtensionFactory`, `ctx.cwd`,
-  `ctx.sessionManager.getSessionId()` and the `bash`, `edit` and `write` argument names, and Pi's own
-  `loadExtensions` (its jiti loader) was run once by hand on the generated file: it loaded with no
-  error, registered one `tool_call` handler, and that handler, driven with a `write` event and the real
-  binary, returned `{ block: true, reason }`. That check is not in the suite, which does not depend on
-  Pi being installed. What no check here has done is run a model turn, so that Pi **acts** on the
-  returned `block` while a model calls a tool, and awaits an async handler there, is read from the
-  types and not observed. The built-in MCP client the `mcp.json` entry depends on exists from Pi
-  0.99.0; an older Pi ignores the file while `status` reports the tools registered. The entry's
-  `exposure: "direct"` is read from Pi's `docs/mcp.md` ("Control tool exposure"), not observed: no live
-  Pi has connected to the server and declared its tools to a model. An older Pi that does not know the
-  field is not known to ignore it rather than reject the entry.
-- **`deferred` exposure was measured with one model and one run per prompt, and setup reads the Pi version from
-  `pi --version`.** On Pi 1.2.0 with `opencode-go/deepseek-v4.1-flash`, a first request cost 3,255 input tokens with
-  `deferred` against 13,868 with `direct` and 2,986 with the server off, and the model reached
-  `mcp__estigia__*` tools through `tool_search` for an explicit prompt (8,720 input tokens in all) and an
-  implicit one (67,063). Those are single runs, turn counts varied between 2 and 15, and no other model was
-  tried. What is not measured: a real flow (claim, task, transition, release) under `deferred`, where each
-  `tool_search` result stays declared on the branch and the cost after several loads is the open number. The
-  version gate is a comparison against 1.2.0 of the first `x.y.z` in `pi --version`'s output; a pre-release
-  suffix is dropped, so `1.2.0-beta.1` reads as 1.2.0. A `pi` that is not on the `PATH` of the process
-  running `setup`, or prints no version, gets `direct`, and the Pi that actually runs may be another one. The
-  entry is written when `setup` runs, so a Pi upgraded afterwards keeps `direct` until the next setup, which
-  is what the `pi-config` warning names. Pi 1.2.0 itself was not installed on the machine this was built on
-  (1.1.0 was); the 1.2.0 behaviour is read from the issue's measurements, not re-observed here.
-- **No live Pi turn has run the review relay, and no model completion has been requested through it.**
-  The relay is measured under `node` against a stand-in binary and a stubbed `ctx.modelRegistry`: the
-  arguments it hands `estigia review prompt`, `model` and `admit`, the prompt it submits verbatim as the
-  one user message, the model it chooses, the raw answer it pipes into `admit`, and the refusal codes it
-  keeps apart (`authority_unavailable`, `capture-result-stale`, `transport-refused`, and the
-  `reviewer-*` codes for a completion that failed) are asserted. So are the paths a failed completion
-  takes: a `streamSimple` that is still running when the deadline passes (aborted by the relay's
-  timeout) and one that returns after it, each `reviewer-deadline` with nothing admitted, driven with a
-  100 ms deadline in place of the default; a result whose `stopReason` is `aborted`; and a registry with no
-  `streamSimple`. The argv without `--session-id` and `--runtime` for a blank or throwing `getSessionId`
-  and the refusal of an `inherit` row with no `ctx.model` are asserted too, and the `estigia review model`
-  text a relay reads (the bare model, or nothing) by a pipe test against a seeded relay job. Against `@earendil-works/pi-coding-agent`
-  1.1.0, Pi's own `loadExtensions` was run once by hand on the generated file in a temporary home: it
-  loaded with no error and registered `estigia_review_lens`, and the tool's plain JSON-schema
-  `parameters` passed Pi's own `validateToolArguments` for a listed name and failed it for an unlisted
-  or missing one. That check is not in the suite. Not observed: a model calling the tool, a real
-  `streamSimple` call returning an `AssistantMessage` — its shape, `stopReason` and `content` are read
-  from the `.d.ts` files of the installed `ModelRegistry` and `pi-ai` — a provider honouring the
-  extension's `AbortSignal`, and an extension-registered provider answering through the registry. A
-  completion is never requested by a check here, because it would spend the operator's credentials.
-- **No live Pi turn has run the loop extension; the events and calls it uses are read from the installed
-  Pi 1.1.0 package.** The extension is measured under `node` against a stand-in binary and a fake `pi`:
-  the arguments handed to `estigia goal`, the continuation it sends, the waits, the retries, the stops
-  and the refusals to act (a changed session id, a child session, an aborted or busy turn) are asserted.
-  From Pi's `dist`: `agent_settled` exists in 1.1.0 and is emitted from `AgentSession._emitAgentSettled`
-  after retries, compaction and queued work, and `pi.sendMessage` with `triggerTurn` called while that
-  event is being emitted is deferred until the emission ends; `registerCommand`'s handler takes
-  `(args, ctx)`; `ctx.isIdle()` and `ctx.ui.notify` exist; a custom message reaches the model as a user
-  message. Not observed: a model turn actually started by that continuation, Pi's behaviour on a
-  `sendMessage` after the session was replaced, and `agent_settled` firing in print and RPC modes beyond
-  the source's `emit`. Pi 1.1.0 has no sub-agent concept, so "child session" is a heuristic —
-  only a `parentSession` in the session header marks one, and a child started without that header is not
-  recognised as a child. A loop only
-  exists where `/flow-loop` was typed, which is what keeps a child from running one in practice.
-- **The Pi subagent runner has been driven against a stand-in `pi`, never a live one, and it is the first
-  slice of the issue.** Reproduced first: each of the four runner tests fails when the piece it names
-  is removed. Spawning the child without the parent's environment, zeroing the tokens, the cost or the
-  elapsed time on the card, dropping the refusal lines, making the stop a no-op, skipping the check that
-  the child loaded the gate, and skipping the check that the parent session was exported each turn one of
-  them red. The stand-in `pi` speaks only the RPC records the runner reads (`get_commands`, `get_state`,
-  `prompt`, then `tool_execution_*`, `message_update`, `message_end`, `agent_settled`) and loads the real
-  generated gate extension, with a logging stand-in for the binary, so what is measured is the argument
-  list the child's gate call carries. Not measured: a real Pi child, Pi's own RPC event shapes beyond the
-  documented ones, whether Pi's `setWidget` accepts the component the runner returns, a UI at all (the
-  tests pass a `ctx.ui` that records), a child that is slow to answer `get_commands`, the stall
-  watchdog (there is none: a child that never settles runs until stopped, and only the thirty-second
-  deadline for its first answer is enforced), and Windows (the runner kills the child, not its group,
-  and the tests are Unix-only because the stand-in is an executable script). The card truncates by code
-  units, not columns, so a wide character can overflow a row. The check that the child
-  loaded the gate starts the process and sends it one command before the prompt; it is not a refusal to
-  launch. A child that lists `estigia-doctor` from another extension passes it. The tool is named
-  `estigia_subagent`, not `subagent`, so it cannot replace another runner's tool of that name, which means the
-  issue's wording is not met literally.
-- **Pi parent and child messages were run live twice, both on one host and by hand.** On 2026-10-15, with Pi
-  1.1.0 as both parent and child:
-  - The first run used a foreground `estigia_subagent`. The IPC channel and the child tool worked, and the run
-    showed that the parent could not reply while it waited on that child.
-  - The second run used `background: true`. The child's query woke the parent, the parent's
-    `estigia_subagent_reply` came back as the child's tool result, and the child's final answer reached the
-    parent as a follow-up, all within 15 seconds.
-
-  Not run live:
-  - the immediate refusal of a foreground query;
-  - steering through `estigia_subagent_message`;
-  - a query that times out after the background fix;
-  - a child launched under an agent definition that restricts `--tools`.
-- **A reply can still be reported as answered after its child gave up.** When a child's query times out, the
-  child sends a withdraw frame and the parent forgets the query. Two windows remain. One is a reply that crosses
-  the withdraw in flight. The other is a withdraw that never arrives, in which case the parent's own expiry
-  (`WITHDRAW_GRACE_MS`, five seconds after the timeout) is all that closes it. In either window
-  `estigia_subagent_reply` answers `answered`, although the child never receives the text. No test covers
-  either window, a failed withdraw send, or a withdraw for an unknown request.
-- **Pi parent and child messages were first driven against a stand-in `pi` that is a Node script.** Reproduced first, by mutation: removing the running check on the steer, the
-  `triggerTurn` option, the deletion of an answered request, the query timeout, the condition that registers
-  the child-side tool, the answer text in the child's result and the steer send each turn exactly the
-  test that names them red. Not measured: that a real `pi` is a Node program and so inherits the IPC
-  channel, that it passes an extension tool's thrown error back to the model as a tool error, that
-  `--tools` in an agent definition leaves an extension tool available, that `sendMessage` with
-  `deliverAs: "followUp"` really queues at a turn boundary and wakes an idle session (the stand-in records
-  the call and its options only), and any ordering between two children. At-most-once: a notification sent
-  while the parent is gone is lost without the child being told after the send call returns. The query
-  timeout, 120 seconds, is a constant, not a setting.
-- **The Pi subagent view, steering and history have been driven against recorded stand-ins for Pi's UI and
-  session API, never a live Pi.** Reproduced first: each of the four view tests and the three `doctor`
-  and setup tests fails when its piece is removed. Dropping the transcript, the `steer` send, the stop
-  confirmation, the `appendEntry` call, the read-back of history on `session_start`, the
-  `doctor` naming of Estigia's own runner, the `pi-config` exclusion of `estigia-agents.ts`
-  and the setup note each turn one red; a `sendMessage` added beside `appendEntry` turns the history test red,
-  which is the whole of "never sent to the model" as measured: the test records every method the runner
-  calls on the host and allows only registering and `appendEntry`. Not measured: that `ctx.ui.custom`
-  with `overlay: true` opens an overlay in a real Pi, that the component's `render` and `handleInput` match
-  what Pi's TUI calls (the key bytes for the arrows are the usual ANSI ones, not read from Pi), that
-  `registerShortcut("ctrl+alt+a")` is free in a real session, that `getEntries()` returns entries as
-  `{ type: "custom", customType, data }` and that Pi keeps them out of the model's context (the
-  runner's part, calling only `appendEntry`, is measured; Pi's is not), that RPC `steer` is accepted by a
-  real child (the stand-in only records it, and a steer the child refuses is not shown), and any
-  rendering of the overlay on a screen. The transcript is only what the runner saw in events, capped at
-  two hundred lines of two thousand characters, so a child's thinking and long tool output are cut. A
-  resumed session lists earlier children but cannot stop or steer them. The view's row ids restart at
-  `a1` each process, so a restored entry can share an id with a live one. `doctor` and setup find
-  another runner by the word `subagent` in its name, as before, so a runner called otherwise is not
-  named; the row stays fine, not a warning, when Estigia's own runner sits beside a gated one. The setup
-  note is advisory. A step the issue names that is still not met literally: the tool is `estigia_subagent`,
-  not `subagent`.
-- **A Pi child is linked by its session header, with the pid as the fallback; the live check ran without
-  a claim and under `-p` only.** Reproduced first: an in-process child (the parent's pid, a header
-  naming its parent) was decided as an unrelated session and overwrote the exported root, so a later
-  separate-process child inherited the wrong parent; `the_pi_extension_links_a_child_by_its_parent_header_whatever_its_pid`
-  fails against that code. The id of the parent is the exported root, else the `id` in the parent's
-  session file, else the part of its file name after the first `_`; none of the three is
-  authenticated, as with the flag. The live check, 2026-10-14, in an isolated Pi home: a child `pi`
-  started by Pi's `subagent` example was another process (parent pid 43006, child pid 55301), and every
-  `write` and `bash` from it reached the gate with `--parent-session-id` equal to the parent's session.
-  The write was refused `issue-required` because no claim was held, so what a child is *allowed* under a
-  held claim was not observed there; and it ran under `-p` only, never in the terminal UI or RPC mode.
-  A forked or new session also carries a `parentSession`, but Pi starts it with the reason `new`,
-  `fork`, `resume` or `reload`, and the extension reads a session so started as a root whatever its
-  header says; a child that began at `startup` is linked by the header. Only the start reason
-  separates the two, and a replacement session started inside a separate child process is still
-  linked by the pid. The `pi-subagents` row of `doctor` reads names and source text, not behaviour: a
-  runner is recognised only when `subagent` is in its package source or extension name, its children
-  are judged by whether its source mentions `--no-extensions` or an in-process session constructor,
-  and it is called gating only when every `.ts`/`.js`/`.mjs`/`.cjs` file within three directory
-  levels was read inside a 1 MiB budget and a `spawn(`, `execFile(` or `spawnSync(` call visibly
-  takes `pi` (or a path ending in `/pi`) as a string literal first argument; a command held in a
-  variable, a file skipped for size or depth, or a spawn of anything else is answered unknown. An
-  npm or git package is unread because the row does not know where Pi unpacks it (only an absolute local
-  path and the extension directories are read), and whether a runner replaces the environment its
-  child inherits is not examined. The next entry is the earlier measurement.
-- **A Pi subagent is linked to its parent by an environment variable and an unauthenticated flag; no
-  live Pi child has run it.** Reproduced first: a child `--session-id CHILD --runtime pi`
-  writing in a claimed worktree is answered `outside` / `nothing-sworn`, because its derived run holds no
-  issue (`a_pi_child_is_decided_as_its_parent_run_when_it_names_the_parent_session` pins that row, then
-  the same call with `--parent-session-id` refused exactly as the parent's own write is). What is
-  measured is the extension under `node`, including a real second `node` process spawned with the default
-  environment seeing the exported root. What is read, not run: that Pi's subagent example spawns `pi`
-  without an `env` option, so Node hands the child `process.env` as it is at spawn time (read from
-  `examples/extensions/subagent/index.ts` in 1.1.0), and that every extension shares one process, so
-  the mutation made by this extension is visible to the one that spawns. A subagent extension that
-  passes its own `env` without the two variables is unlinked and unmeasured as before. The flag is an
-  assertion the binary cannot check, like `--run-id`: whoever can run `estigia gate` can name any
-  session. A parent that names no run gets no fallback to the child's own, so the child then receives
-  the parent's answer, `nothing-sworn` included. The child's own session id is not recorded: the role
-  attribution `agent_type` drives takes a real agent definition, and a made-up label would be refused as
-  an unknown one. A root session that switches (`/new`, `/resume`) re-exports its new id, so a child
-  spawned afterwards names the new session; one spawned before keeps the old one.
-- **No live Pi has drawn the claim status or the refusal card; both are read from the installed Pi
-  1.1.0 package.** Measured under `node` against a stand-in binary and a fake `pi`: the
-  arguments of the `goal` call, that a held claim, a stopped one, none, a signal, an exit code, unparsable
-  output and a call past the bound each produce the status text or the clear the code says, that a
-  child asks about the root session, that nothing is shown without `ctx.hasUI`, and that a refusal
-  appends one entry carrying the reason byte for byte and sends no message. Read, not run:
-  `ExtensionUIContext.setStatus`, `ExtensionAPI.appendEntry` and `registerEntryRenderer` in
-  `dist/core/extensions/types.d.ts`; `convertToLlm` in `dist/core/messages.js` turning a `custom`
-  message into a user message regardless of `display` (the reason the card is an entry);
-  `CustomEntryComponent` and `addCustomEntryToChat` in `dist/modes/interactive` drawing a renderer's
-  component on `entry_appended`; `Component` as `render(width)` plus `invalidate()`. Not observed: the
-  footer showing the line, the card on screen, how it looks in a narrow terminal or under a theme, and
-  `appendEntry` called from inside a `tool_call` handler during a streaming turn. The issue text names
-  `registerMessageRenderer`; that API draws `sendMessage` messages, which reach the model, so it was
-  not used. Print and RPC modes have no UI: no status and no card there, and the model still gets the
-  reason as the block result. The status costs one `estigia goal` process per refresh, and `goal`
-  reads the tracker to say whether a claim is live, so a slow tracker shows the claim as unknown after
-  five seconds.
-- **No live Pi has run `/estigia-doctor` or expanded the prompt templates; both are read from the
-  installed Pi 1.1.0 package.** Measured under `node` against a stand-in binary and a fake
-  `pi`: the one `doctor` call and its working directory, that the report arrives as one entry carrying
-  the binary's text unchanged and sends no message, that a nonzero exit with output still shows it,
-  that a missing binary, a signal, a call past the bound and a silent exit each say `did not answer`
-  rather than show a report, and that no UI means standard output. Setup is measured for the two
-  templates' bytes, ownership, no-op rerun, removal and the relocated directory. Read, not run:
-  `registerCommand` in `dist/core/extensions/types.d.ts` and `docs/extensions.md`, and
-  `docs/prompt-templates.md` for the directory, the frontmatter keys and `$ARGUMENTS`. Not observed: the
-  command in the completion list, the entry drawn on screen (`appendEntry` called from a command handler
-  rather than an event), `doctor` run from Pi's working directory taking less than its bound, Pi
-  expanding the templates, and whether the MCP tool is listed to the model under the bare name `claim`
-  or one a Pi MCP adapter prefixes, which the templates assume. `ctx.ui.notify` is a single notification
-  and was not used for the report. The templates' marker is sent to the model with the body.
-- **The Pi loop forgets its goal when Pi restarts, and `/flow` is not expanded.** The goal is held in the
-  extension's memory (OpenCode keeps it in its plugin storage), so a restart or a switched session starts
-  with no loop and `/flow-status` says nothing is stored; the run's claim and `stop-after` request live in
-  the store and are unaffected. The objective is sent as a custom message in the shape OpenCode's slash
-  text has (`/flow dev`); Pi names skills `/skill:flow`, and a custom message is not expanded, so whether
-  the model treats the text as a request to load the `flow` skill is not measured. A timer that fires
-  after the session was replaced finds the session id changed and stops the loop without notifying,
-  because the stale context is not touched.
-- **No live Pi has received the session context, and a replaced session's pointer outlives it.** Reproduced first: the generated extension never ran `estigia session`, so a Pi turn began
-  without the run id, the held issue or the `Issue requirement` note a Claude Code session is told. Now
-  measured under `node` against a stand-in binary: the arguments of `session start` with the reason and
-  the previous session id read from the first line of `previousSessionFile`, the `sections.estigia`
-  assignment beside a section it must keep and no returned `systemPrompt`, a non-zero exit, a signal
-  and a call past the bound each giving the `session context unknown` line, one `session end` for two
-  `session_shutdown` events, and a child asking about the root and never ending it; and against the
-  binary, the fork paragraph for `fork` and `new` only, and the pointer kept for every replacing reason
-  and forgotten for `quit`. Read, not run: `BeforeAgentStartEvent.systemPromptOptions` and
-  `NormalizedBuildSystemPromptOptions.sections` in `dist/core/extensions/types.d.ts` and
-  `dist/core/system-prompt.d.ts` (a section renders as `<name>` around its content), `SessionStartEvent`
-  and `SessionShutdownEvent` with their `reason` values, and the session header's `id` in
-  `docs/session-format.md`. Not observed: that Pi accepts a section added in place by a handler and sends
-  it to the model, that it awaits an async `session_shutdown` handler before exiting, that `/fork` and
-  `/clone` both report `fork`, and the section after a compaction. A previous session file that cannot
-  be read gives no `--previous-session-id`, so the fork paragraph is absent rather than guessed. The
-  pointers of sessions that were replaced and never resumed are not forgotten by this change; they are
-  the ordinary stale pointers the daily prune in `session::maintain` already ages out.
-
-- **The Pi `/goal` judge was read from Pi's declarations, not run.** The extension asks
-  `ctx.modelRegistry.streamSimple(ctx.model, { systemPrompt, messages }, { signal, maxTokens })` and reads
-  the text blocks of `await stream.result()`; the signatures, the `AssistantMessage` content shape and the
-  `stopReason` values were read from the installed Pi 1.1.0's `.d.ts` files and `docs/extensions.md`, and
-  the tests drive a stand-in registry shaped like them. No test reaches a provider, so three things are
-  not measured: that request-time authentication succeeds for a model the session picked, that a model
-  given 200 output tokens answers on its first line (a reasoning model that spends them on thinking
-  returns no text, which stops the goal as unreadable, never as met), and what the judge is shown. The
-  transcript is the extension's own plain-text rendering of user, custom, assistant text and tool-result
-  messages from `buildSessionProjection`, not `convertToLlm`'s: images, thinking, tool-call arguments,
-  compaction and branch summaries are not rendered, a user or assistant message is cut at 4,000 characters,
-  tool output at 2,000 and the whole at 20,000 keeping the newest, so after a compaction, or a long
-  turn, the judge sees less than the model does. The judge runs on every third turn and on the cap
-  turn, so a condition that holds after turn 1 is noticed at turn 3, and the turns it was not asked on
-  were spent: no completion marker in the session is read to judge earlier (issue #3). The goal and loop live in the
-  extension's memory and `session_shutdown` clears them; that the event fires for `/new`, `/resume` and
-  `/fork` as well as quitting is read from the documentation's statement about session replacement, not
-  observed. Another extension that registers `goal` or `loop` is not detected, and which registration Pi
-  keeps was not read.
-- **Pi's reviewer model is only as precise as the `reviewer` routing row.** The row is one value for every
-  host, and a CLI reviewer reads it as a flag. A `provider/id` that Pi lists runs on that model; a bare
-  alias such as `opus` is a valid CLI model and an unresolvable one for Pi, and is refused
-  `reviewer-unavailable` rather than guessed at. On a machine with the `claude` CLI installed Pi's relay
-  is never reached, so a `provider/id` row there is passed to that CLI instead. Pi reasoning effort is
-  not set: the completion sends no `reasoning` option, so the model's own default applies whatever effort
-  the row names. Neither the relay nor `admit` bounds the answer's size the way a CLI reviewer's `MAX_OUTPUT` does; only the completion's own limits apply.
-- **Pi's `powershell` is read as POSIX shell, other extensions' tools are gated only by input shape,
-  and Pi's own settings are not covered.** The extension sends any tool whose input has a string
-  `command` to the gate as `bash`, and a string `path` with a string `content` or an `edits` array as
-  `write` or `edit`. That includes Pi's `powershell` and gentle-shell's `bash_background` and `monitor`.
-  The shell classifier reads POSIX shell, so a PowerShell cmdlet that writes (`Set-Content`,
-  `Out-File`, `Remove-Item`, `Add-Content`) is classified as no write and goes through, while the
-  `git`/`gh` command lines, redirects and nested interpreters it does recognise are caught: a Windows
-  Pi that writes through cmdlets writes ungated, and this was chosen over not gating `powershell`
-  at all. A tool that names its command or path differently (`cmd`, `file_path`, `script`) is not
-  recognised, and one that hands over a write in a shape other than those is not gated; the
-  extension does not guess at it. The refusal text the binary prints names `bash` or `write`, not the
-  tool's real name; the card names the real one. None of this has run in a live Pi: it is measured
-  against a stand-in binary under `node`. A later `tool_call` handler can mutate `event.input` after this one has answered; Pi documents that
-  mutation as allowed. Pi's own control files are covered in the entry below.
-- **Pi's settings can unload the gate and the tool server, and the gate measures the write and
-  `doctor` reads the result, not the loader.** Read in Pi 1.1.0's documentation and
-  settings screen: the `extensions` array of `settings.json` takes an exact exclusion `-path`, a glob
-  exclusion `!pattern` and the built-in `-builtin:mcp`; a project's settings apply over the user's;
-  and a project `mcp.json` entry with no `command`, `url` or `type` overrides only `enabled`,
-  `exposure` and `toolExposure` of the user's server of that name. One ordinary write to
-  `~/.pi/agent/settings.json`, `.pi/settings.json` or `.pi/mcp.json` therefore unloads the gate or the
-  tool server from the next session without touching a file Estigia owns. All of those, and the
-  project's `.pi/extensions/`, are on the control surface now, so a write or a shell command naming one
-  is a boundary. The matcher does not tell a home path from a project one: each is a fragment read
-  anywhere in the path, so `.pi/settings.json` matches the project file and `.pi/agent/settings.json`
-  the user's, and a write to a *different* repository's `.pi/settings.json` is a boundary as well. The
-  `pi-config` row of `doctor` reads the user and project `settings.json` for an `extensions` entry that
-  excludes `estigia-workflow-authority.ts` or `estigia-review-relay.ts`, by exact name or by a glob that
-  matches either, or `-builtin:mcp`, and the project `mcp.json` for `enabled: false` or an `exposure`
-  other than `direct` or `deferred` on the `estigia` server; it is broken, never rewrites a file, and names no
-  command, because `estigia setup pi` does not touch Pi's settings. What is not measured: whether a
-  project `-path` excludes a *user-level loose* extension at load time (the write path was read, not
-  the loader); Pi's glob dialect (the row's own matcher lets `*` cross `/` and knows `?`, nothing
-  else); other resource arrays and `packages`, which are not read; a settings or `mcp.json` that does
-  not parse, which the row treats as Pi would, as absent; the row's checkout is the directory `doctor`
-  runs in, not necessarily the project Pi opens; and that a project file takes effect only once the
-  project is trusted, which the row does not consult. The agent directory is the one the entry below describes.
-- **Pi's agent directory follows `PI_CODING_AGENT_DIR`, but only as the process that runs `setup`,
-  `status`, `doctor` or the gate sees it.** One resolver reads the variable (a leading `~`
-  is the home; anything else not absolute is dropped with a note, falling back to `~/.pi/agent`) and
-  every Pi path comes from it: the directive, the server entry, the extensions, the agent definitions,
-  and the directory the `pi-config` row reads. The directory is followed wherever it points, unlike
-  `DSH_HOME`, which is contained under the home. The gate treats the named directory's `extensions/`,
-  `mcp.json`, `settings*`, `AGENTS*` and `agents/` as control surface, but the static
-  `harness::CONTROL_SURFACE` cannot spell a directory the environment chooses, so that coverage is the
-  gate process's own variable: a Pi started with a different one is not covered. Not measured: an install
-  made under `~/.pi/agent` and then run under a variable that names another is not reported at all (Pi,
-  with that variable, does not read it either, and `doctor` says only that Pi is not configured); Pi's own
-  expansion of the variable beyond the leading `~` is not reproduced; and nothing was run against a
-  live Pi under the variable. Pi documents that `AGENTS.override.md` replaces `AGENTS.md` in the same
-  directory (read in the installed Pi's `docs/configuration.md` and `loadContextFileFromDir`), so a file
-  by that name leaves the fenced block unread; the `pi-config` row is broken when one is in the agent
-  directory, and does not look for one beside a project's own `AGENTS.md`.
-- **Pi's agent definitions follow an example extension's convention, and none has run in Pi.** Pi's
-  core has no subagents. The `name`, `description`, `tools` and `model` frontmatter, the
-  `~/.pi/agent/agents/` directory and the `--tools`/`--model` pass-through are read from the shipped
-  `examples/extensions/subagent` (`agents.ts` and `index.ts`) in Pi 1.1.0; another subagent extension
-  (gentle-shell's) may read a different directory or dialect, and no child `pi` was launched against
-  an installed definition. `model` is the `Model routing` value verbatim, so an alias Pi's `--model`
-  cannot resolve fails the child rather than being mapped; `inherit` writes no line. No effort is
-  written, because the example reads none. `tools` restricts only built-in tools (`Glob` becomes `find`
-  and `ls`): Pi's `--tools` keeps MCP tools unless an entry starts with `mcp__`, so the analyst is
-  read-only for built-ins and still reaches Estigia's own MCP operations and any codemode script;
-  what stops it writing is the gate measuring the child against the parent's claim, not the
-  definition. `harness::roles::definition_for` does not search this root, since Pi children carry no
-  role in the gate call; the directory is control surface through the Pi instruction fragment. A
-  `PI_CODING_AGENT_DIR` move strands them with the rest, as above.
-- **A gate plugin newer than its binary blocks every gated call.** Both plugins send `--input -` and
-  the input on standard input. An older binary reads `-` as the JSON, refuses with exit `1`, and the
-  plugin blocks the call with that refusal. `setup` writes the plugins together with the installed binary,
-  so the skew arises only when a plugin outlives a downgrade; re-running `setup` clears it.
-
+  payloads an agent sends and reading what it prints. That proves Estigia answers correctly; it does not
+  prove Claude Code asks.
+- **The tool-call gate reaches every agent Estigia knows but two.** Five agents, in four shapes, each
+  taken from that agent's published reference or its source: Claude Code and Codex (`PreToolUse` →
+  `permissionDecision`), Cursor (`preToolUse` → `{"permission":"deny",…}`), OpenCode (a plugin that blocks
+  by throwing) and Pi (an extension that blocks by returning `{ block: true, reason }`). The two it does not
+  reach are ZCode and DeepSeek Harness, and the bullets on them say why. The eighth entry is the
+  agent-neutral skills root, which is not an agent and has no tool loop to gate. The gate also still
+  answers for six retired hosts — Gemini CLI, Continue, Cline, Crush, Windsurf and Qwen — because a machine
+  that installed one before it was retired still carries its hook and dialect; `setup` installs into none
+  of them and `uninstall` is the only path that touches them.
 - **Three gates fire on every tool, and only Estigia's own lists narrow them; one of the three is
   still installable.** Cursor registers no matcher, so its host wakes the hook for whatever the model
   called and the tool name arrives in the payload; the retired Windsurf does the same, and the
@@ -3098,371 +2368,322 @@ pointer that leaves it names the document it points at.
   The guard that enforces this entry walks every agent whose tool calls Estigia gates by any
   mechanism, retired ones included, because their hooks are still on machines that installed them; a
   plugin-written gate that carries no list of its own has to be named here.
-- **`ensure-states` cannot tell "already there" from "gh could not run".** `gh label create
-  --force` exits non-zero for both, and the command reads that status as idempotence — which is
-  right for the first and wrong for the second. Measured on both sides against a `gh` that refuses
-  every call: each answers `ok: true` with all six labels listed as `ensured`, and not one of them
-  exists. The workflow then proceeds to label an issue with names the tracker has never heard of.
-  It is not a divergence, so the differential oracle could not have failed on it even while it
-  existed. Closing it means reading
-  what `gh` printed rather than only its exit code, and this crate has never been shown those exact
-  words — the same reason `icacls` is named beside `neutralising-shell` and not added to it.
-  A closed git operation window is the one case where the answer says so: it carries
-  `deferred: true` and `window: closed` beside the same `ensured` list, and
-  nothing was created — so a reader has to tell that answer from a `gh` that could not run, and the
-  `deferred` field is the only thing that does it.
-- **Both of those numbers used to drift unread.** The check accepted the phrase "every agent Estigia
-  knows" and then stopped, so the sentence went on to say "six of them, in three dialects" while ten
-  were gated in five. The counts in that sentence are now crossed against the adapter table and the
-  dialect list, which is the same defect this project keeps finding: one end written by hand, the
-  other in code, and only *part* of the prose crossing over.
-- **A sub-agent's declared tool list is enforced only for the tools the gate wakes for, and only
-  where an agent name arrives.** The role gate runs in `PreToolUse` and, since it was added there
-  too, in `estigia gate` — but that second door is reached in this tree only by OpenCode's plugin,
-  which sends the tool's own arguments and no agent name, and whose own documented limit is that
-  `tool.execute.before` never sees a call made by a subagent at all. So the second door closes
-  nothing today: it is open for a caller that names a sub-agent, and there is not one yet. Where the
-  question *is* asked, it sees exactly what the matcher wakes the hook for —
-  `Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion` for Claude Code. `Agent` and `Task` first
-  take the dedicated reserved-reviewer prelaunch path rather than repository classification. A tool outside that set is
-  never offered to it. Measured against the list this crate itself cites as the case it exists for,
-  a published `builder` sub-agent declaring `Read, Write, Edit, Glob, Grep, Bash`: three of the six are tools the
-  gate can judge, and `Read`, `Glob` and `Grep` are never seen. What it can therefore refuse is a
-  tool **in the matcher and not in the list** — `MultiEdit`, `NotebookEdit`, `Update` for that
-  builder — and not `WebFetch` or `WebSearch`, which are among those an operator narrowing a
-  sub-agent usually means. The module says it *makes the author's policy true*; it makes the part
-  of it that overlaps the gate true. Widening the matcher would close it and is the one thing the
-  matcher exists to avoid — waking this process for every `Read` and every `Grep` is a cost paid
-  thousands of times to answer "not mine" — so this is stated rather than fixed.
-- **The verdict's binding is checked at delivery only for what this run published through Estigia's
-  own tools, with an earlier exact-receipt check at CI release.** `publish_review` records a fresh
-  epoch over PR/head/base/digest while the PR is confirmed draft. `release_ci` re-verifies the live
-  `review` claim, the newest receipt on the receipt's own pull request across runs, the verdict recomputed over the live ledger and its marker,
-  current draft PR and coherent clean target, then marks ready and reads back every outcome. The
-  gate asks for one approved computed verdict; it does not enforce the blind policies' lens count,
-  concurrency, independence, blindness or same-finding identity, and it cannot tell one
-  context from two or five. An identical-byte republish still invalidates old evidence because it creates a new
-  epoch. GitHub has no atomic conditional-ready operation, so an out-of-band ready or push can bypass
-  this cooperative order.
-  The local delivery gate persists the complete epoch/PR/head/base/digest receipt and still checks
-  the published head at the boundary that spends it, but not always against the
-  same thing: a `git merge`, `git tag` or `gh release` from a run whose recorded review head is not
-  the invoking checkout's own head is refused as `verdict-bound-to-other-bytes`, naming the path
-  inspected and the head found there (the run's own merge commit is the exception the entry on
-  #58 below describes). The invoking checkout is the covered directory the gate already
-  selected and verified for this call; it is not inferred again from the run pointer, whose worktree
-  can be absent after a handoff. A `gh pr merge` is instead refused against the PR head the tracker
-  reports — one `gh pr view <number>` read per merge attempt, naming the PR number, the reviewed head
-  and the head found there — never against the invoking checkout's own `HEAD`. That checkout is,
-  under Claude Code, structurally the launch checkout, since the Bash tool resets it between calls;
-  comparing against it could never pass even when the PR's remote head was exactly the one reviewed,
-  which is the gap that was closed. For a delivery `gh pr merge` boundary only, a linked sibling
-  sharing the pointer checkout's Git common directory can reach that verification. The classifier
-  first retains one positive numeric PR only from one literal `gh pr merge <number> ...`; malformed,
-  omitted, URL, branch, long, leading-zero, duplicate, compound and shell-evaluated targets remain
-  irreversible boundaries but cannot select sibling evidence. So does any merge that names a
-  repository — `--repo`, `--repo=` or a short option bundle containing `R` — even for the run's own
-  receipt: the line is refused as `delivery-pr-repository-option`, which names the option and says to
-  run the merge from the checkout without it, because the number is there and the gate reads one
-  spelling only. A command the byte filter disqualifies — quoting, escaping, expansion, a
-  redirect — is refused as `delivery-pr-unidentified` with the disqualifying byte named in the
-  resolution, so a `2>&1` redirect reads as what it is rather than as a claim that the command names
-  no PR. Candidate pointers are then filtered by complete `receipt.pr == command PR`, exactly one
-  holder must remain, and only then is the PR head the tracker reports compared with that holder's
-  receipt and its live tracker claim verified. Equal PR heads never select between PR lineages — the
-  receipt's own PR field already did. A legacy `reviewed_head` pointer remains readable after upgrade
-  but cannot qualify PR-targeted sibling delivery because it carries no PR, epoch, base or digest.
-  Ambiguous candidates and unreadable pointers select no holder, including for ledger attribution; the
-  recorded holder comes from the same adjudication as the decision rather than a later directory
-  scan. An unrelated or unreadable checkout named with that run can answer six ways: a checkout
-  that is not a checkout of the reviewed repository, or a PR head the tracker reports that has moved
-  from the reviewed head, is `verdict-bound-to-other-bytes`; a command whose identity the byte
-  filter disqualified is `delivery-pr-unidentified`; a merge naming a repository is
-  `delivery-pr-repository-option`; a merge whose PR differs from the receipt's is
-  `delivery-pr-mismatch`; and a pointer carrying only a legacy head is
-  `complete-review-transaction-missing`; a linked sibling that selects no unique holder is
-  `complete-review-transaction-not-selected`. A sessionless call in an unrelated clone has no local holder
-  to adjudicate and remains outside. Successful publish and republish effects first invalidate prior
-  complete and legacy local authority, then retain output only when all five receipt fields are
-  complete. Their refusals also invalidate that authority when the transport says a write committed
-  or cannot exclude one; a conclusive pre-write or read-only refusal preserves it. Verdict and
-  CI-release effects restore a supplied complete receipt atomically into a reviewer's pointer after a
-  handoff removed the publisher's pointer. `gh pr merge` is also refused `merge-without-ci-release`
-  unless the local store holds a trusted `ci-release` marker for exactly the pointer's receipt,
-  which `release_ci` writes only over the basis it admits; the read is the issue's facts and then
-  the store read-only, and an unreadable one refuses. A marker is trusted as every other is: written
-  by this identity and never edited, so an imported comment carrying one counts the same.
-  A `claim` restores one too: its answer carries the issue's newest publication under
-  `review_transaction` when that publication is confirmed, stands approved and unescalated, and its
-  pull request is open at the receipt's head with a base that is the receipt's or has advanced cleanly
-  past it (see *A base that advanced cleanly keeps the receipt live* below), so a release-then-claim
-  sequence keeps the merge the gate admits. That is one `gh pr view` read, made only when the issue
-  holds a publication, plus one local ancestry read when only the base differs, and a failed read
-  restores nothing rather than failing the claim. It does not read CI state, and a
-  push between the claim's read and the merge is caught only by `--match-head-commit`.
-  `git push` and `gh pr create` are deliberately not gated on it, because pushing after a review is
-  how a run fixes what the review found and the answer to a moved head is *re-publish*, not *stop*.
-  What it does not see: a run that bypasses the tools and changes GitHub directly. The gate's own question to the tracker is still
-  `verify-claim --issue --run-id --expect-state`, carrying neither head nor base; the head comparison
-  is a separate question, and only for `git merge`, `git tag` and `gh release` is it local, against
-  that invoking checkout. For those three, both halves of the comparison — whether the invoking
-  directory shares the covered clone, and what HEAD it is at — run through the same unsteered git
-  invocation the fast-forward proof already used, so an exported `GIT_DIR` cannot make an unrelated
-  clone look like the reviewed checkout. `gh pr merge` still takes the first half from that same
-  unsteered invocation — an exported `GIT_DIR` cannot make an unrelated clone pass its
-  `same-repository` check either — but takes the second from the tracker read described above rather
-  than from local git.
+- **`ensure-states` cannot tell "already there" from "gh could not run".** `gh label create --force` exits
+  non-zero for both, and the command reads that as idempotence. Measured against a `gh` that refuses every
+  call: each answers `ok: true` with all six labels listed as `ensured`, and none exists. Closing it means
+  reading what `gh` printed, and this crate has never been shown those exact words (the reason `icacls` is
+  named beside `neutralising-shell` and not added to it). A closed git operation window is the one case
+  where the answer says so (`deferred: true`, `window: closed`, nothing created).
+- **The counts in the sentence about gated agents are crossed against the adapter table and the dialect
+  list.** The check accepts the phrase "every agent Estigia knows" and used to stop there, while the
+  sentence went on to say "six of them, in three dialects" when ten were gated in five: one end written by
+  hand and the other in code, with only *part* of the prose crossing over.
+- **A sub-agent's declared tool list is enforced only for the tools the gate wakes for, and only where an
+  agent name arrives.** The role gate runs in `PreToolUse` and in `estigia gate`, but the second door is
+  reached in this tree only by OpenCode's plugin, which sends no agent name, and whose documented limit is
+  that `tool.execute.before` never sees a subagent's call, so it closes nothing today. Where the question
+  *is* asked it sees exactly what the matcher wakes the hook for
+  (`Edit|Write|MultiEdit|NotebookEdit|Update|Bash|Agent|Task|AskUserQuestion` for Claude Code; `Agent` and
+  `Task` take the reserved-reviewer prelaunch path first). Measured against a published `builder`
+  sub-agent declaring `Read, Write, Edit, Glob, Grep, Bash`: three of the six are tools the gate can judge
+  and `Read`, `Glob` and `Grep` are never seen. It can refuse a tool **in the matcher and not in the
+  list** (`MultiEdit`, `NotebookEdit`, `Update` for that builder), and not `WebFetch` or `WebSearch`,
+  which an operator narrowing a sub-agent usually means. Widening the matcher would close it and is the
+  one thing the matcher exists to avoid: waking this process for every `Read` and `Grep` is a cost paid
+  thousands of times to answer "not mine".
+- **The verdict's binding is checked at delivery only for what this run published through Estigia's own
+  tools, with an earlier exact-receipt check at CI release.** `publish_review` records a fresh epoch over
+  PR/head/base/digest while the PR is confirmed draft. `release_ci` re-verifies the live `review` claim, the
+  newest receipt on the receipt's pull request across runs, the verdict recomputed over the live ledger, a
+  current draft PR and a coherent clean target, then marks ready and reads back every outcome. The gate asks
+  for one approved computed verdict; it does not enforce the blind policies' lens count, concurrency,
+  independence, blindness or same-finding identity, and cannot tell one context from two or five. GitHub has
+  no atomic conditional-ready operation, so an out-of-band ready or push can bypass this cooperative order.
+
+  The local delivery gate persists the complete epoch/PR/head/base/digest receipt and checks the published
+  head at the boundary that spends it, against different things per boundary. A `git merge`, `git tag` or
+  `gh release` from a run whose recorded review head is not the invoking checkout's own head is refused
+  `verdict-bound-to-other-bytes` (the run's own merge commit is the #58 exception); the invoking checkout is
+  the covered directory selected for this call, not inferred from the pointer, whose worktree can be absent
+  after a handoff. A `gh pr merge` is refused against the PR head the tracker reports (one `gh pr view
+  <number>` read per attempt), never the invoking checkout's `HEAD`, which under Claude Code is structurally
+  the launch checkout. A linked sibling sharing the pointer checkout's Git common directory can reach that
+  verification: the classifier retains one positive numeric PR only from one literal `gh pr merge <number>
+  ...`, candidates are filtered by complete `receipt.pr == command PR`, exactly one holder must remain, and
+  only then are the tracker's PR head and that holder's claim compared. Refusals name the cause:
+  `delivery-pr-repository-option` (`--repo`, `-R`), `delivery-pr-unidentified` (quoting, escaping, expansion,
+  a redirect), `delivery-pr-mismatch`, `complete-review-transaction-missing` (a pointer with only a legacy
+  `reviewed_head`) and `complete-review-transaction-not-selected` (no unique sibling holder); ambiguous
+  candidates and unreadable pointers select no holder, and a sessionless call in an unrelated clone remains
+  outside.
+
+  Publish and republish first invalidate prior complete and legacy local authority and retain output only
+  when all five receipt fields are complete (also when a refusal says a write committed or cannot exclude
+  one); verdict and CI-release effects restore a supplied receipt into a reviewer's pointer after a handoff
+  removed the publisher's. `gh pr merge` is also refused `merge-without-ci-release` unless the store holds a
+  trusted `ci-release` marker for exactly the pointer's receipt (written by this identity, never edited, so
+  an imported comment carrying one counts the same; an unreadable store refuses). A `claim` restores a
+  receipt when its answer carries the issue's newest confirmed, approved, unescalated publication whose pull
+  request is open at the receipt's head with that base or one advanced cleanly past it, at the price of one
+  `gh pr view` read (a failed read restores nothing); it does not read CI state, and a push between the
+  claim's read and the merge is caught only by `--match-head-commit`. `git push` and `gh pr create` are not
+  gated on it (the answer to a moved head is *re-publish*). Not seen: a run that bypasses the tools and
+  changes GitHub directly. For `git merge`, `git tag` and `gh release` both halves of the comparison run
+  through the same unsteered git invocation, so an exported `GIT_DIR` cannot make an unrelated clone look
+  like the reviewed checkout.
+- **No live Pi turn has run any Estigia extension; each is measured under `node` against a stand-in binary
+  and a fake `pi`, and the rest is read from the installed Pi 1.1.0 package.** The stand-ins assert the
+  arguments handed to `estigia gate`, `goal`, `review prompt|model|admit`, `session start|end` and `doctor`,
+  the working directory, the three outcomes and the `{ block: true, reason }`, the relay's refusal codes and
+  failed-completion paths, the loop's continuation, waits and stops, the status text, the refusal card and
+  the subagent runner's RPC handling (the stand-in `pi` speaks only the records the runner reads and loads
+  the real generated gate). `loadExtensions` was run once by hand against the generated gate and relay files
+  (not in the suite). **Not observed:** that Pi **acts** on a returned `block` and awaits an async handler; a
+  model calling the review tool or a real `streamSimple` returning an `AssistantMessage` (shape read from the
+  `.d.ts`); a provider honouring the `AbortSignal`; a model turn started by the loop's continuation, and
+  `agent_settled` in print and RPC modes (which have no UI); the footer line, the card on screen,
+  `appendEntry` inside a streaming `tool_call` handler, the completion list, prompt-template expansion,
+  `ctx.ui.custom` with `overlay: true`, `registerShortcut("ctrl+alt+a")` being free; that Pi accepts a section
+  added in place by a `before_agent_start` handler, awaits an async `session_shutdown` handler and reports
+  `fork` for both `/fork` and `/clone`; RPC `steer` accepted by a real child; the subagent runner's stall
+  watchdog (none: a child that never settles runs until stopped; only the thirty-second first-answer deadline
+  is enforced) and Windows (it kills the child, not its group). The built-in MCP client the `mcp.json` entry
+  depends on exists from Pi 0.99.0 (an older Pi ignores the file while `status` reports the tools
+  registered), and `exposure: "direct"` is read from `docs/mcp.md`. Pi 1.1.0 has no sub-agent concept, so
+  "child session" is a heuristic (a `parentSession` in the session header). The tool is `estigia_subagent`,
+  not `subagent`, so the issue's wording is not met literally.
+- **The Pi loop forgets its goal when Pi restarts, and its `/goal` judge was read from Pi's declarations, not
+  run.** The goal is held in the extension's memory (the run's claim and `stop-after` live in the store), a
+  timer firing after the session was replaced stops the loop without notifying, and the objective is sent as
+  a custom message Pi does not expand like `/skill:flow`. The judge asks `ctx.modelRegistry.streamSimple`
+  and no test reaches a provider: not measured are request-time authentication, whether a model given 200
+  output tokens answers on its first line (a reasoning model that spends them on thinking returns no text,
+  which stops the goal as unreadable, never as met), and what the judge sees (a plain-text transcript cut at
+  4,000 characters a message, 2,000 per tool output, 20,000 in all, keeping the newest; every third turn and
+  the cap turn). Another extension registering `goal` or `loop` is not detected.
+- **`deferred` exposure was measured with one model and one run per prompt, and setup reads the Pi version
+  from `pi --version`.** On Pi 1.2.0 with `opencode-go/deepseek-v4.1-flash` a first request cost 3,255 input
+  tokens with `deferred` against 13,868 with `direct` and 2,986 with the server off, and the model reached
+  `mcp__estigia__*` tools through `tool_search` for an explicit prompt (8,720 tokens in all) and an implicit
+  one (67,063): single runs, 2 to 15 turns, no other model, and a real flow under `deferred` is the open
+  number. The version gate compares the first `x.y.z` in `pi --version` with 1.2.0; a `pi` off the `PATH` of
+  the process running `setup`, or printing no version, gets `direct`, and a Pi upgraded afterwards keeps
+  `direct` until the next setup (the `pi-config` warning names it). Pi 1.2.0 was not installed on the build
+  machine.
+- **Pi parent and child messages were run live twice, by hand** (2026-10-15, Pi 1.1.0 as both): a foreground
+  `estigia_subagent` showed the parent cannot reply while it waits, and a `background: true` run woke the
+  parent on the child's query, returned the reply as the child's tool result and delivered the child's final
+  answer as a follow-up within 15 seconds. Not run live: the immediate refusal of a foreground query,
+  steering through `estigia_subagent_message`, a query that times out after the background fix, a child under
+  an agent definition restricting `--tools`, `deliverAs: "followUp"` waking an idle session, and ordering
+  between two children. A notification sent while the parent is gone is lost (at-most-once), and the
+  120-second query timeout is a constant. **A reply can still be reported as answered after its child gave
+  up**: a reply that crosses the child's withdraw frame in flight, or a withdraw that never arrives (the
+  parent's own expiry `WITHDRAW_GRACE_MS`, five seconds after the timeout, is all that closes it), makes
+  `estigia_subagent_reply` answer `answered` though the child never receives the text; no test covers either
+  window, a failed withdraw send, or a withdraw for an unknown request.
+- **A Pi child is linked by its session header, with the pid as the fallback and an environment variable
+  beneath that; the live check ran without a claim and under `-p` only.** The header link is held by
+  `the_pi_extension_links_a_child_by_its_parent_header_whatever_its_pid`. The parent's id is the exported
+  root, else the `id` in its session file, else the part of its file name after the first `_`; none is
+  authenticated and `--parent-session-id` is an assertion the binary cannot check, like `--run-id`. Live
+  (2026-10-14, isolated Pi home): a child `pi` started by Pi's `subagent` example was another process and its
+  `write` and `bash` reached the gate with `--parent-session-id` equal to the parent's session; the write was
+  refused `issue-required` for want of a claim, so what a child is *allowed* under a held claim was not
+  observed. A forked or new session also carries a `parentSession` but is read as a root by its start reason;
+  a replacement inside a separate child process is still linked by the pid; an extension passing its own
+  `env` without the two variables is unlinked; a parent that names no run gets no fallback to the child's own
+  (the child receives the parent's answer, `nothing-sworn` included). The `pi-subagents` row of `doctor`
+  reads names and source text, not behaviour: a runner is recognised when `subagent` is in its package source
+  or extension name and called gating only when every `.ts`/`.js`/`.mjs`/`.cjs` file within three levels was
+  read inside a 1 MiB budget and a `spawn(`, `execFile(` or `spawnSync(` visibly takes `pi` as a
+  string-literal first argument; anything else is answered unknown, and an npm or git package is unread.
+- **Pi's reviewer model is only as precise as the `reviewer` routing row, and Pi's agent definitions follow an
+  example extension's convention.** A `provider/id` Pi lists runs on that model; a bare alias such as `opus`
+  is a valid CLI model and unresolvable for Pi (`reviewer-unavailable`); on a machine with the `claude` CLI
+  Pi's relay is never reached; no reasoning effort is set; and neither the relay nor `admit` bounds the
+  answer's size as a CLI reviewer's `MAX_OUTPUT` does. The agent definitions (`name`, `description`,
+  `tools`, `model` frontmatter, `~/.pi/agent/agents/`, the `--tools`/`--model` pass-through) come from the
+  shipped `examples/extensions/subagent` in Pi 1.1.0 and no child `pi` was launched against one. `tools`
+  restricts only built-in tools (MCP tools stay unless an entry starts with `mcp__`), so what stops the
+  analyst writing is the gate measuring the child against the parent's claim, and
+  `harness::roles::definition_for` does not search this root.
+- **Pi's `powershell` is read as POSIX shell, other extensions' tools are gated only by input shape, and
+  Pi's own settings are not covered.** The extension sends any tool whose input has a string `command` to the
+  gate as `bash` and a string `path` with `content` or an `edits` array as `write`/`edit`; a PowerShell
+  cmdlet that writes (`Set-Content`, `Out-File`, `Remove-Item`) goes through, a tool naming its command or
+  path differently (`cmd`, `file_path`, `script`) is not recognised, and a later `tool_call` handler can
+  mutate `event.input` after this one answered. **Pi's settings can unload the gate and the tool server**:
+  the `extensions` array of `settings.json` takes an exact exclusion `-path`, a glob `!pattern` and
+  `-builtin:mcp`, a project's settings apply over the user's, and a project `mcp.json` entry with no
+  `command`, `url` or `type` overrides `enabled`, `exposure` and `toolExposure` of the user's server, so one
+  write to `~/.pi/agent/settings.json`, `.pi/settings.json` or `.pi/mcp.json` unloads them without touching
+  a file Estigia owns. All of those, and `.pi/extensions/`, are on the control surface (a write to a
+  *different* repository's `.pi/settings.json` too, since the matcher cannot tell home from project). The
+  `pi-config` row of `doctor` reads them for an exclusion of `estigia-workflow-authority.ts`,
+  `estigia-review-relay.ts` or `-builtin:mcp`, and the project `mcp.json` for `enabled: false` or an
+  `exposure` other than `direct`/`deferred`; it is broken, rewrites nothing and names no command. Not
+  measured: whether a project `-path` excludes a *user-level loose* extension at load time, Pi's glob
+  dialect (the row lets `*` cross `/` and knows `?`), other resource arrays and `packages`, that the row's
+  checkout is the project Pi opens, and project trust.
+- **Pi's agent directory follows `PI_CODING_AGENT_DIR`, but only as the process that runs `setup`, `status`,
+  `doctor` or the gate sees it.** One resolver reads the variable (a leading `~` is the home; anything else
+  not absolute is dropped with a note, falling back to `~/.pi/agent`) and every Pi path comes from it;
+  unlike `DSH_HOME` the directory is followed wherever it points. The gate treats the named directory's
+  `extensions/`, `mcp.json`, `settings*`, `AGENTS*` and `agents/` as control surface, but the static
+  `harness::CONTROL_SURFACE` cannot spell a directory the environment chooses, so a Pi started with a
+  different variable is not covered. An install made under `~/.pi/agent` and then run under a variable
+  naming another is not reported (`doctor` says only that Pi is not configured), Pi's expansion beyond the
+  leading `~` is not reproduced, and nothing was run against a live Pi under the variable. Pi documents
+  that `AGENTS.override.md` replaces `AGENTS.md` in the same directory, so the `pi-config` row is broken
+  when one is in the agent directory and does not look beside a project's own `AGENTS.md`.
+- **A gate plugin newer than its binary blocks every gated call.** Both plugins send `--input -` and the
+  input on standard input; an older binary reads `-` as the JSON, refuses with exit `1`, and the plugin
+  blocks the call. `setup` writes the plugins together with the installed binary, so the skew arises only
+  when a plugin outlives a downgrade; re-running `setup` clears it.
 
 ## Delivery: the receipt, the base and the remote
 
-- **What the `gh pr view` read measures, and what it does not.** It measures the PR's
-  `headRefOid` at the moment `stale_verdict` asks, one read per merge attempt, and refuses a mismatch
-  against the receipt with the PR number, the reviewed head and the head found. It does not measure
-  the base: `release_ci` already re-verified `baseRefOid` at ready time, and the only later reads of
-  it are `review_status` and the claim's restoration of a receipt, which accept a clean advance (the
-  entry after this one) — the delivered SHA's first parent is GitHub's strict setting's promise,
-  as the branch-protection entry below says — so a base that moves *between* that ready check and
-  this merge attempt is not seen at this boundary. It does not measure anything after the read: the
-  read is a snapshot, and a push landing on the PR between this read and the merge itself is not seen
-  by this check. A push in that window is refused by GitHub itself only when the merge call carries
-  `--match-head-commit <head-sha>` naming the reviewed head, which `skill/bindings/github/delivery.md`
-  prescribes for the `merge` step and which this gate does not verify was used. It does not resolve which
-  repository `gh` would ask: an unrelated clone is refused on `same_repository` — whether the
-  covered checkout and this one share a Git common directory — never on what `gh pr view` itself
-  would have answered for it, so a checkout `gh` could still reach is refused before that read ever
-  runs if it is not a checkout of the claimed repository.
+- **What the `gh pr view` read measures, and what it does not.** It measures the PR's `headRefOid` at
+  the moment `stale_verdict` asks, one read per merge attempt, and refuses a mismatch against the
+  receipt with the PR number, the reviewed head and the head found. It does not measure the base:
+  `release_ci` re-verified `baseRefOid` at ready time, and the only later reads of it are
+  `review_status` and the claim's restoration of a receipt, which accept a clean advance (next entry),
+  so a base that moves *between* that ready check and this merge attempt is not seen at this boundary.
+  It does not measure anything after the read: a push landing on the PR between the read and the merge
+  is refused by GitHub itself only when the merge call carries `--match-head-commit <head-sha>`, which
+  `skill/bindings/github/delivery.md` prescribes and this gate does not verify was used. It does not
+  resolve which repository `gh` would ask: an unrelated clone is refused on `same_repository` (whether
+  the covered checkout and this one share a Git common directory), never on what `gh pr view` would
+  have answered for it.
 - **A base that advanced cleanly keeps the receipt live, and a semantic conflict between two
   independently green changes is not tested before the merge.** Issue #44, operator decision
-  2026-10-13. A receipt used to be live only while the pull request's `baseRefOid` was the reviewed
-  base, so every merge to `main` cost each other approved pull request a review and a CI run. It now
-  stays live for the merge, in `review_status` and in the claim's restoration of it
-  (`current_review_transaction`), when the head is the reviewed head, the pull request is ready and
+  2026-10-13. A receipt stays live for the merge, in `review_status` and in the claim's restoration of
+  it (`current_review_transaction`), when the head is the reviewed head, the pull request is ready and
   its receipt approved, the current base descends from the reviewed base (`git merge-base
   --is-ancestor`), and GitHub reports `mergeable: MERGEABLE` with a `mergeStateStatus` that is not
   `DIRTY`. `UNKNOWN` in either field is answered `mergeability-unknown`, never clean. **The accepted
-  risk:** CI went green on the reviewed head over the *old* base, and nothing asks it again over the
+  risk:** CI went green on the reviewed head over the *old* base and nothing asks it again over the
   new one, so two changes that merge without a textual conflict yet break each other are not caught
-  before the merge; only the CI that runs on `main` afterwards sees it. The gate still compares the
-  head alone (the entry above), so it never refused a moved base; what changed is that the receipt
-  is no longer withdrawn. `release_ci` stays strict about the base: it publishes the target to CI,
-  and a draft whose base moved is answered `pull-request-moved`, as is every approved-but-not-ready,
-  rejected or unjudged receipt. `mergeable` is GitHub's own and is lazily computed, so a clean read
-  can still precede a conflict that lands in between; `--match-head-commit` guards the head only.
-  When the base object is not in the local clone the ancestry read fails and `review_status` answers
-  `unavailable` rather than guessing; the claim restores nothing.
-- **`recorded_receipt` no longer requires the caller to be the run that published, and this proves
-  only that the tracker recorded the publication — never that the caller reviewed anything.** A
-  local run pointer is deleted at `SessionEnd` (`session::forget`, `src/harness/hook.rs`) while
-  the tracker's own comment marking the publication is not, so a run that resumes an issue, holds
-  the live `review` claim, and supplies the byte-exact latest receipt used to be refused
-  `published-transaction-mismatch` on the publisher field alone even when every other field matched.
-  `recorded_receipt` (which delegates to `require_recorded_receipt`, where the one comparison lives) now
-  compares only `latest.receipt != *supplied`;
-  the run id that published is read back into the refusal's `recorded.run_id` for a caller to see,
-  but is never itself grounds to refuse. What still stands between an arbitrary caller and CI is
-  everything else `release_ci` already re-verifies: a live review claim on this exact issue, a
-  computed `approved` verdict recomputed over this exact receipt's ledger, the current draft PR
-  identity, and a re-derived coherent clean target — the same four checks the paragraph above this one names.
-  **What "distinct" excludes is the publisher and every handoff requester, not the caller**,
-  so after this change the run that recorded the computed verdict can be the run that spends it. That was already the design — `src/harness/mcp/mod.rs`
-  writes the supplied receipt into the pointer for `release_ci`, for
-  "a reviewer claiming after a handoff" — and the publisher comparison contradicted it. Removing it
-  closes that contradiction rather than opening a hole, and Estigia still cannot prove who reviewed
-  anything, which the entry on panels already records.
-  Restoring the receipt this way answers one question only: *did the tracker record this exact
-  publication?* It does not and cannot answer *did the
-  resuming run review any of it* — that is what the computed verdict is for, and this change
-  reads it rather than substituting for it. `PointerEffect::Renew` then writes the restored receipt
-  back into the resuming run's own local pointer, in the `PointerEffect::Renew` arm of
-  `src/harness/mcp/mod.rs`; no code path here or in that arm hand-edits a pointer file, and none
-  should be needed for this restore to work.
-- **A delivery can still merge onto a base the reviewed receipt did not name, and this repository
-  now answers it with a GitHub setting that Estigia neither sets nor reads back.** It was measured
-  the gap: `release_ci` re-verifies every byte of the reviewed head, and nothing asked whether `main`
-  was still the receipt's base when the merge happened — GitHub's own protection reported
-  `required_status_checks.strict: false`, so a stale branch merged cleanly onto whatever `main` had
-  become. The chosen remedy is that one setting: with `strict: true`, GitHub requires the topic branch
-  to be up to date with the base before merging, and an update is a push, which invalidates the
-  receipt — so a moved base forces a fresh publish/review round rather than a silent merge. **The forced round is defined as follows.** The `compatible` classification still integrates, but the
-  integrating republish is repair-shaped: the republish gate reads whether the base **advanced** past
-  the parent receipt's rather than the push shape, so a merge that keeps the parent head is publishable
-  over an approved parent, the marker records the parent receipt and the delta, the panel re-judges
-  the parent receipt's findings over the whole change, since a moved base is read whole, and
-  a republish over an
-  approved parent is now a new candidate that spends no correction — the platform elected it, not the
-  author. A merged advance keeps `parent-head` an ancestor and so used to read as the narrow range;
-  `repair_range` now answers `whole-change` with `whole_change_reason: "base-advanced"`
-  whenever the base moved, merged or rebased — and `"merged-range"` when the base did not move but
-  a side branch was merged back — so the delta lens never reviews base content, and
-  the budget now measures the round against the tree git merges the parent head and the new
-  base into. The exemption is also direction-aware: it read inequality of the two base
-  tips before, so a base reset backwards counted as an integration, and now it needs the parent's
-  base to be a proper ancestor of this publication's. Every other classification still integrates and re-reviews the whole
-  change, `unknown` is still never compatible, and this change touches neither `strict` nor the
-  gate's head comparison. What that
-  does **not** guarantee is written here because it is the boundary of the fix:
+  before the merge; only the CI that runs on `main` afterwards sees it. `release_ci` stays strict
+  about the base: a draft whose base moved is answered `pull-request-moved`. `mergeable` is GitHub's
+  own and lazily computed, so a clean read can precede a conflict that lands in between. When the base
+  object is not in the local clone the ancestry read fails and `review_status` answers `unavailable`
+  rather than guessing; the claim restores nothing.
+- **`recorded_receipt` does not require the caller to be the run that published, and this proves only
+  that the tracker recorded the publication — never that the caller reviewed anything.** A local run
+  pointer is deleted at `SessionEnd` (`session::forget`) while the tracker's comment marking the
+  publication is not, so a run that resumes an issue, holds the live `review` claim, and supplies the
+  byte-exact latest receipt is not refused on the publisher field. `require_recorded_receipt` compares
+  only `latest.receipt != *supplied`; the publishing run id is read back into the refusal's
+  `recorded.run_id` but is never grounds to refuse. What still stands between an arbitrary caller and
+  CI is what `release_ci` re-verifies: a live review claim on this exact issue, a computed `approved`
+  verdict over this receipt's ledger, the current draft PR identity, and a re-derived coherent clean
+  target. **"Distinct" excludes the publisher and every handoff requester, not the caller**, so the
+  run that recorded the computed verdict can be the run that spends it; that was already the design
+  (`PointerEffect::Renew` writes the restored receipt into the resuming run's pointer). Estigia still
+  cannot prove who reviewed anything.
+- **A delivery can still merge onto a base the reviewed receipt did not name, and the remedy is a
+  GitHub setting that Estigia neither sets nor reads back.** `release_ci` re-verifies every byte of
+  the reviewed head, and nothing asks whether `main` was still the receipt's base when the merge
+  happened. With `required_status_checks.strict: true`, GitHub requires the topic branch to be up to
+  date with the base, and an update is a push, which invalidates the receipt, so a moved base forces a
+  fresh publish/review round. The forced round: the `compatible` classification still integrates, but
+  the integrating republish is repair-shaped (the republish gate reads whether the base **advanced**
+  past the parent receipt's), so a merge that keeps the parent head is publishable over an approved
+  parent, spends no correction, and the panel re-judges the parent receipt's findings over the whole
+  change. `repair_range` answers `whole-change` with `whole_change_reason: "base-advanced"` whenever
+  the base moved, merged or rebased (`"merged-range"` when a side branch was merged back), so the
+  delta lens never reviews base content, and the budget measures the round against the tree git
+  merges the parent head and the new base into. The exemption is direction-aware: it needs the
+  parent's base to be a proper ancestor of this publication's, so a base reset backwards is not an
+  integration. `unknown` is never compatible. What this does **not** guarantee:
   - **Estigia does not read the setting back.** Nothing in the gate queries branch protection at
-    delivery time; the guarantee holds only while a collaborator leaves `strict: true` on. A setting
-    removed between publication and merge is a delivery with the same exposure as before, and no
-    local check would say so. Read live on 2026-09-27: `main`'s protection answered
-    `required_status_checks: null`, so the setting is not on at this moment — the exposure this
-    bullet names. The forced-integration shape is, until it is restored, the
-    contract's intended route rather than the platform's requirement.
+    delivery time; the guarantee holds only while a collaborator leaves `strict: true` on. Read live
+    on 2026-09-27, `main`'s protection answered `required_status_checks: null`, so the setting was
+    not on, and the forced-integration shape was the contract's intended route rather than the
+    platform's requirement.
   - **The delivered SHA's first parent is guaranteed by GitHub's strict check, not by Estigia.** The
-    gate's merge-identity checks (`stale_verdict`, `pr_merge_target`) still compare the reviewed
-    head — for `gh pr merge`, the PR head the tracker reports; for the other three deliveries, the
-    invoking checkout's own head — never the base; the base's constancy is the repository setting's
-    promise, taken on trust.
-  - **A strict setting does not make concurrent delivery converge.** The 2026-08-20 diagnosis
-    measured `main` moving seven times under one branch while the full delivery floor — integrate
-    (~4 min) + `ready_for_review` CI (14 min) + merge, over 18 minutes even at zero review time —
-    already exceeded the delivery interval (15–25 minutes); each base move now costs an
-    integrate-and-republish round that invalidates the accepted verdict. The window the contract
-    needs — publish, review, CI, merge with the base unchanged — is still longer than the observed
-    interval, so a run delivering beside another may wait many rounds. An integration
-    over a moved base is admitted over an approved parent — and it is a new candidate that
-    spends no correction, repair-shaped on a `compatible` movement — so the correction limit does not
-    bound a base-movement storm either; the honest bound there is the base itself, and what ends the
-    wait is
-    the base stopping rather than a person being escalated to. That is the honest price of
-    the guarantee, stated rather than hidden. `ci.yml` carries `merge_group:` so a merge
-    queue can run the suite after ready without each branch re-integrating by hand first; enabling
-    the queue and whether its run satisfies required contexts is a live-repository configuration
-    and measurement, not something this crate sets or proves. Read live on 2026-09-12: this
-    repository's `main` answered `Required status checks not enabled` and GraphQL `mergeQueue` was
-    `null`, so that measurement could not be taken from a checkout alone.
-- **A `published` marker does not prove the remote still holds that head, and an unconfirmed one
-  does not prove the pull request ever reported it.** After a successful push,
-  `publish_review` reads the PR back before recording a confirmed receipt. When that readback
-  disagrees, the push has already landed and the timeline would otherwise name nothing the lease
-  can target — leaving only a hand force-push, which is the step `republish_review` exists to keep
-  adjudicated. The recovery records an **unconfirmed** publication (`unconfirmed=true`) naming the
-  head that was pushed: `republish_review` leases against it; `recorded_receipt` /
-  `require_recorded_receipt` refuse it as `publication-unconfirmed` so review and CI cannot bind to
-  bytes nobody confirmed. What that still does not prove: that the remote is *still* at that head
-  when the lease runs (git decides), that the PR view ever agreed (it is what failed), or that the
-  unconfirmed marker was written if the comment post itself failed — the refusal then says so and
-  names no executable recovery. A confirmed marker still only means the PR agreed *at publication
-  time*; nothing re-checks the remote before a later verdict.
+    gate's merge-identity checks (`stale_verdict`, `pr_merge_target`) compare the reviewed head, never
+    the base; the base's constancy is the repository setting's promise, taken on trust.
+  - **A strict setting does not make concurrent delivery converge.** A 2026-08-20 diagnosis measured
+    `main` moving seven times under one branch while the delivery floor (integrate ~4 min, CI 14 min,
+    merge: over 18 minutes at zero review time) exceeded the delivery interval (15 to 25 minutes);
+    each base move costs an integrate-and-republish round that invalidates the accepted verdict. An
+    integration over a moved base spends no correction, so the correction limit does not bound a
+    base-movement storm either; what ends the wait is the base stopping. `ci.yml` carries
+    `merge_group:` so a merge queue can run the suite after ready, but enabling the queue and whether
+    its run satisfies required contexts is live-repository configuration this crate neither sets nor
+    proves.
+- **A `published` marker does not prove the remote still holds that head, and an unconfirmed one does
+  not prove the pull request ever reported it.** After a successful push, `publish_review` reads the
+  PR back before recording a confirmed receipt. When that readback disagrees, the push has already
+  landed, and the recovery records an **unconfirmed** publication (`unconfirmed=true`) naming the head
+  pushed: `republish_review` leases against it, and `require_recorded_receipt` refuses it as
+  `publication-unconfirmed` so review and CI cannot bind to bytes nobody confirmed. Still unproved:
+  that the remote is *still* at that head when the lease runs (git decides), that the PR view ever
+  agreed, or that the unconfirmed marker was written if the comment post itself failed (the refusal
+  then says so and names no executable recovery). A confirmed marker means only that the PR agreed
+  *at publication time*.
 - **A `republish_review` that refuses has already written to the pull request, and names which
   writes.** Its refusals arrive after the reused pull request has been edited — the renewal stands
   immediately before the push, and the lease is evaluated by git at the push itself — so a remote
-  somebody else moved leaves the branch untouched, which is what the operation is for, and leaves the
-  pull request altered. **Every** refusal site downstream of a write carries that fact, so none answers
-  *nothing was written* — the draft readback, the failed edit, the renewal and the push. Counted rather
-  than named, that sentence said *three* and a later change made it four without moving it; the number
-  is the part that had no reason to be there.
-  Each had reached the agent through the same `stop()` and `?` every other path uses, whose envelopes
-  carry no `world`, so *the absence of a claim about the world was read as a claim that the world was
-  untouched*.
-  **Which** writes is the part that took four rounds. The report was built from one boolean and named
-  two writes: an edit, and a conversion back to draft. `ensure_draft` un-readies only a pull request
-  that was *ready*, and at republish time the reused one is normally already draft — `publish_review`
-  drafts it and only `release_ci` makes it ready — so the common path claimed a conversion nobody
-  performed. An operator putting that back runs `gh pr ready`, which exposes the branch to CI: the
-  exact outcome `ensure_draft` exists to prevent. The report now names each write separately and only
-  when it happened, which is the same rule this document applies to everything else — say what was
-  measured, not what usually accompanies it. What is still on the reader is the decision: Estigia
-  reports the write, it does not undo it.
-- **The timeline does not record that a publication was a republish.** The answer `republish_review`
-  returns carries `republished` and the head it leased against, but the `published` marker it writes to
-  the issue is byte-identical to an ordinary publication's. So an incident review reading the timeline
-  — which is the only record that outlives the call — sees a new epoch and cannot tell whether the
-  bytes arrived by fast-forward or over a force-push.
-  **Corrected: this was never a consumer cost.** The entry used to say
-  naming it in the marker would change what every consumer of that marker parses — stated as a general
-  claim about the marker rather than about `republished` specifically. It was wrong: `markers::parse`
-  (`markers.rs`) inserts every key with no validation on read, and every `published` reader
-  takes named keys only, so a new key breaks none. No count is given, because a count here would be a
-  second copy of something nothing crosses: an earlier edit of this entry said `eight`, and the
-  readings that checked it disagreed on what counts as a reader. The
-  `topology`/`topology-reason` entry below adds two keys on that basis, at zero
-  cost to every existing reader. What was actually declined here is narrower and still stands:
-  `republished` is not recorded, and the reason is scope — this repository's own rule against
-  widening one issue's fix into a second one's, not a technical wall. A future change is free to add
-  it the same way.
-- **The review transaction carries a declared execution topology, and Estigia sees the declaration,
-  not the delegation.** `publish_review`/`republish_review` take `--topology` and
-  `--topology-reason`, write them to the `published` marker on the `payload-digest` precedent —
-  recorded, not bound, since Estigia cannot observe how an agent wrote code — and answer them
-  through `review_transaction`, not through the publish answer. Four things this still cannot prove, named rather than smoothed over:
-  - **The string is what a run wrote about itself, not what happened.** `verify_claim` sees a claim;
-    `publish_review` sees a topology field. Neither watches which contexts a run launched. A run that
-    types `--topology developer:3` having launched nothing is indistinguishable on the timeline from
-    one that actually delegated — the same standing a lens report has for a lens nobody launched.
-  - **There is no refusal, because the proxy that stood in for one could not judge the row.** An
-    earlier version refused a bare `inline` over two changed files. The contract's writing row now
-    delegates a writer for a named reason — independent units, or the parent's context limit — and a
-    file count says neither. Measured against this repository's own last twenty merges
-    (`git log --format=%H --merges -20 main`, changed files per merge against its first parent), every
-    one touched at least 3 files, the range running 3–26 and the median 11, so the refusal would have
-    asked for a sentence on every delivery that declared itself `inline`. It was removed rather than
-    raised: a higher number is still a file count. The declaration is recorded as typed and the gate
-    gains no authority from it.
-  - **Estigia already holds half of an *observed* topology, and this field is not it.** `Run.roles`
-    (`src/harness/session.rs`) records which roles this run's delegated contexts actually ran
-    as — observed from tool calls, not declared in a launch prompt — and this document's own earlier
-    entry on it (`docs/honesty.md`) is its own measured limit: per-session, dies with the
-    run, names a role and never a count, and under the default `Evidence standard: reading` the
-    reserved reviewer is never recorded at all because its grant holds no tool the hook matcher wakes
-    for. A reader who finds a *declared* topology field on the review transaction should know the
-    crate holds half of an *observed* one elsewhere, unconnected to it — wiring the two together is a
-    separate issue, not this one.
-  - **Saying nothing is free, and so is saying `inline`.** A publication that passes no `--topology`
-    carries no topology key, and one that passes `inline` carries exactly that string. A report was
-    filed because *"nobody can tell 'judged the table and departed with reasons' apart from 'never
-    read the table'"*, and nothing here closes that: the field is a record a reader can weigh against
-    the diff, not a check. Making it required would refuse every caller that predates it.
-
-  The three ways a declaration could differ across the note, the marker and the
-  answer were closed: a blank `--topology` or `--topology-reason` is refused rather than recorded, a reason with
-  no topology is refused as incomplete, and both values are trimmed once before the
-  marker and the answer see them — so the three surfaces agree by construction. Case is preserved as
-  typed: with nothing reading the field back, folding it would lose information for nothing.
+  somebody else moved leaves the branch untouched and the pull request altered. **Every** refusal site
+  downstream of a write carries that fact (the draft readback, the failed edit, the renewal and the
+  push); the report names each write separately and only when it happened, because `ensure_draft`
+  un-readies only a pull request that was *ready*, and an operator undoing a conversion nobody
+  performed runs `gh pr ready`, which exposes the branch to CI. Estigia reports the write; it does not
+  undo it.
+- **The review transaction carries a declared execution topology, and Estigia sees the declaration, not the
+  delegation.** `publish_review`/`republish_review` take `--topology` and `--topology-reason`, write them to
+  the `published` marker (recorded, not bound) and answer them through `review_transaction`; a blank value or
+  a reason with no topology is refused and both are trimmed once. The string is what a run wrote about itself:
+  `--topology developer:3` having launched nothing is indistinguishable on the timeline from a real
+  delegation. There is no refusal, because the proxy that stood in for one (a bare `inline` over two changed
+  files) could not judge the row: this repository's last twenty merges touched 3 to 26 files (median 11).
+  `Run.roles` holds half of an *observed* topology elsewhere, unconnected. Saying nothing is free, and so is
+  `inline`: nothing tells "judged the table and departed with reasons" from "never read the table", and
+  making the field required would refuse every caller that predates it. The `published` marker also does not
+  record that a publication was a republish (`republished` is in the answer only); that costs no reader and
+  was declined on scope.
 - **A republish cannot lease against a receipt published from a different GitHub account.**
   `latest_publication` keeps only comments the authenticated identity authored, because a marker this
-  identity did not write is one anybody could have forged. The consequence is narrow and worth naming
-  rather than leaving to be discovered: a run that reclaims an abandoned issue published from another
-  account finds no receipt, is refused `published-transaction-missing`, and then has no route inside
-  Estigia at all — `publish_review` cannot fast-forward a rewritten branch either. It fails closed,
-  which is the right direction, and it leaves that reclaim with nothing to do but step outside the
-  tools, which is the thing this operation exists to stop.
-  What the lease does **not** prove is that the rewritten history still contains the reviewed change.
-  It compares one commit id to another; a rebase that dropped a hunk leases exactly as cleanly as one
-  that did not. Every republish creates a new epoch and invalidates the prior review evidence for
-  that reason, and the answer to *is this still the change that was approved* is a fresh verdict
-  against the new receipt, never the lease.
+  identity did not write is one anybody could have forged. A run that reclaims an abandoned issue
+  published from another account finds no receipt, is refused `published-transaction-missing`, and has
+  no route inside Estigia (`publish_review` cannot fast-forward a rewritten branch either). It fails
+  closed and leaves that reclaim nothing to do but step outside the tools. The lease compares one
+  commit id to another, so a rebase that dropped a hunk leases as cleanly as one that did not; every
+  republish creates a new epoch and invalidates prior evidence, and the answer to *is this still the
+  change that was approved* is a fresh verdict against the new receipt, never the lease.
 
-- **The store-only timeline read trusts the store and is given its repository.** `Ledger::read_timeline_at`
-  (S2a) reads no GitHub, so it cannot learn what the store has not yet synced: a stand-down or
-  adjudication commented since this machine last touched the issue is not in what it answers. It also
-  does not discover which repository the checkout belongs to — the caller names it, and
-  `review_status` does so from the checkout (next entry). The `expected_epoch` check on `publish_review` and `republish_review` reads the timeline
-  the publication already reads, so it is as fresh as that read; it compares the newest publication on
-  the branch's pull request and nothing else, and a branch with no open pull request compares against
-  `none`.
+- **The store-only timeline read trusts the store and is given its repository.**
+  `Ledger::read_timeline_at` reads no GitHub, so it cannot learn what the store has not yet synced: a
+  stand-down or adjudication commented since this machine last touched the issue is not in what it
+  answers. It does not discover which repository the checkout belongs to; the caller names it, and
+  `review_status` does so from the checkout. The `expected_epoch` check on `publish_review` and
+  `republish_review` reads the timeline the publication already reads, compares the newest
+  publication on the branch's pull request and nothing else, and a branch with no open pull request
+  compares against `none`.
 
-- **`review_status` is a read, not a lock, and it names the repository from the checkout.** The answers are in [`review-status.md`](review-status.md). It answers against the receipt it
-  read and every command it names carries that receipt, so a publication landing afterwards is refused
-  by the command (`published-transaction-mismatch`, `expected-epoch-moved`) and never executed. That
-  protects a reader that executes the answer unchanged; it does nothing for one that decides from the
-  answer and drops the binding. The store it reads is as fresh as this machine's last sync (see the
-  entry above), so a finding another run posted since is not in the answer until a tool that syncs has
-  run. The repository comes from the operator-named repository, else the `origin` remote when that is
-  a `github.com` remote, never from GitHub: where `gh` resolves a different repository (a fork with an
-  `upstream` default) the store holds the issue under that other name and the answer is
-  `review-status-issue-not-in-store`, unavailable, never a wrong state. A pull request merged and a new
-  slice not yet published under the same issue answers `delivered` for the issue's newest publication
-  only. An approval is read through `release_basis` and a computable approval through the publication
-  lane; a refusal outside the cases below is passed through as theirs rather than named a second way.
-  **A stale approval with no cause has no command of its own.** When the ledger or tier moved after an
-  approval and no finding was recorded against it (a tier that moved, a late lens report that escalates
-  the lens focus), neither a publication (`approved-republish-without-cause`) nor a re-record
-  (`computed-verdict-already-recorded`) is admitted without a cause, so `review_status` answers a
-  `verdict-stale` stop that names a person, who either records the finding the verdict did not weigh
-  with `record_review_finding` — which admits the publication — or closes the pull request and
-  publishes the change afresh. Whether such an approval should be re-reviewable without a finding is
-  open. A base advance is not read, so a stale approval whose base advanced still answers the stop.
+- **`review_status` is a read, not a lock, and it names the repository from the checkout.** The
+  answers are in [`review-status.md`](review-status.md). It answers against the receipt it read and
+  every command it names carries that receipt, so a publication landing afterwards is refused by the
+  command (`published-transaction-mismatch`, `expected-epoch-moved`) and never executed. That protects
+  a reader that executes the answer unchanged; it does nothing for one that decides from the answer
+  and drops the binding. The store it reads is as fresh as this machine's last sync, so a finding
+  another run posted since is not in the answer until a tool that syncs has run. The repository comes
+  from the operator-named repository, else the `origin` remote when that is a `github.com` remote,
+  never from GitHub: where `gh` resolves a different repository (a fork with an `upstream` default)
+  the answer is `review-status-issue-not-in-store`, unavailable, never a wrong state. A pull request
+  merged and a new slice not yet published under the same issue answers `delivered` for the issue's
+  newest publication only. **A stale approval with no cause has no command of its own.** When the
+  ledger or tier moved after an approval and no finding was recorded against it (a tier that moved, a
+  late lens report that escalates the lens focus), neither a publication
+  (`approved-republish-without-cause`) nor a re-record (`computed-verdict-already-recorded`) is
+  admitted, so `review_status` answers a `verdict-stale` stop that names a person, who either records
+  the finding the verdict did not weigh with `record_review_finding` or closes the pull request and
+  publishes afresh. Whether such an approval should be re-reviewable without a finding is open. A base
+  advance is not read, so a stale approval whose base advanced still answers the stop.
 
 ## The seams, and the gates that never see a call
 
