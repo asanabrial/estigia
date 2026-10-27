@@ -2669,6 +2669,18 @@ pointer that leaves it names the document it points at.
   transaction and `outbox::rekey_files` follows with the run pointers and the ownership record; a branch or
   worktree directory named with the provisional number keeps that name. A provisional issue opens its
   ledger without any GitHub call, and an unallocated or unrecorded number is refused.
+- **The transition record is the store's own, and it is not a log of everything that moved a state.** Schema 16
+  adds `transitions` (`at`, `run_id`, `from_state`, `to_state` per issue), append-only like `entries`, and
+  `Ledger::set_state` writes the row in the same transaction as the state, so a history that cannot be written
+  leaves the state unchanged and the transition fails. Every state change a command makes goes through
+  `set_state` (`transition`, `transition --to` on `claim`, the merged-release close, the begin-review step, and the
+  flush's reconverge), so none bypasses it; setting the state an issue already has records nothing, which
+  makes the flush's re-projection invisible. What it cannot see: a transition names no caller, so `run_id` is
+  whoever holds the issue at `at` and is empty when nobody does; the state an import reads from the labels is a starting point, not a transition, and states set before
+  schema 16 have no row, and
+  the first change after it records `from_state` as the state the store held; a label edited on GitHub by hand
+  never reaches the store, and another machine's changes are another machine's store. Nothing reads the
+  record yet.
 - **The flush sends the queue in one line, and a stalled write holds everything behind it.**
   `outbox::flush::run` refuses while the window is closed, takes a per-repository lease in `store_meta`
   (a pid and an expiry; a dead or expired holder is taken over), rekeys pointers and ownership files, and

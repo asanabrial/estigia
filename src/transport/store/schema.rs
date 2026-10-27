@@ -226,4 +226,29 @@ pub(super) const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX taken_decisions_unreported ON taken_decisions (run_id) WHERE reported_at IS NULL;
     ",
+    "
+    CREATE TABLE transitions (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_id INTEGER NOT NULL REFERENCES repos(id),
+        issue INTEGER NOT NULL,
+        at TEXT NOT NULL,
+        run_id TEXT,
+        from_state TEXT,
+        to_state TEXT NOT NULL CHECK (to_state IN
+            ('analysis', 'ready', 'in-progress', 'review', 'blocked', 'done'))
+    );
+    CREATE INDEX transitions_issue ON transitions (repo_id, issue, seq);
+    CREATE TRIGGER transitions_no_update BEFORE UPDATE ON transitions
+        WHEN NOT (
+            NEW.issue <> OLD.issue
+            AND EXISTS (SELECT 1 FROM provisional_issues
+                        WHERE repo_id = OLD.repo_id AND provisional = OLD.issue
+                          AND real = NEW.issue)
+            AND NEW.seq IS OLD.seq AND NEW.repo_id IS OLD.repo_id
+            AND NEW.at IS OLD.at AND NEW.run_id IS OLD.run_id
+            AND NEW.from_state IS OLD.from_state AND NEW.to_state IS OLD.to_state)
+        BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+    CREATE TRIGGER transitions_no_delete BEFORE DELETE ON transitions
+        BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+    ",
 ];

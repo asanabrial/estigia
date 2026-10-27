@@ -1564,7 +1564,7 @@ that additional route and its conservative ownership checks.
 
 | Entry | Holds | Taken by `uninstall --all` |
 |---|---|---|
-| `state.db`, `-wal`, `-shm` | the workflow store: claims, states, receipts, findings, verdicts, spend, tasks, the decision and role history, the session registry and the mailbox | yes, with the last agent, when no workspace or root record still reads it |
+| `state.db`, `-wal`, `-shm` | the workflow store: claims, states and the history of each state change, receipts, findings, verdicts, spend, tasks, the decision and role history, the session registry and the mailbox | yes, with the last agent, when no workspace or root record still reads it |
 | `runs/`, `stop-after/`, stand-down files | run pointers and requests, live run state | yes, with the last agent |
 | `workspaces/`, `roots/` | which workspaces and configuration roots hold an install | yes, as the last adapter in each leaves |
 | `screen`, `repositories/` | the setup screen's language, the list of checkouts | no: the person's, not any agent's |

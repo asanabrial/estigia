@@ -483,23 +483,51 @@ impl Ledger {
         Ok(found.flatten())
     }
 
-    /// Records the workflow state the issue moved to.
-    pub(crate) fn set_state(&self, to: &str) -> Result<(), Failure> {
-        self.store
-            .connection()
-            .execute(
-                "UPDATE issues SET state = ?1 WHERE repo_id = (SELECT id FROM repos
-                    WHERE host = ?2 AND owner = ?3 AND name = ?4) AND number = ?5",
-                rusqlite::params![
-                    to,
-                    self.repo.host,
-                    self.repo.owner,
-                    self.repo.name,
-                    int(self.issue)
-                ],
+    /// Records the workflow state the issue moved to, and the move itself.
+    ///
+    /// One transaction holds both, so a history that cannot be written leaves
+    /// the state where it was. Setting the state the issue already has records
+    /// no move. The run recorded is whoever holds the issue at `now`, since a
+    /// transition names no caller.
+    pub(crate) fn set_state(&self, to: &str, now: &str) -> Result<(), Failure> {
+        let transaction =
+            Transaction::new_unchecked(self.store.connection(), TransactionBehavior::Immediate)
+                .map_err(unreadable("begin a state change"))?;
+        let repo_id = repo_id(&transaction, &self.repo)?;
+        let issue = int(self.issue);
+        let from: Option<String> = transaction
+            .query_row(
+                "SELECT state FROM issues WHERE repo_id = ?1 AND number = ?2",
+                rusqlite::params![repo_id, issue],
+                |row| row.get(0),
             )
-            .map(|_| ())
-            .map_err(unreadable("record an issue's state"))
+            .optional()
+            .map_err(unreadable("read an issue's state"))?
+            .flatten();
+        transaction
+            .execute(
+                "UPDATE issues SET state = ?3 WHERE repo_id = ?1 AND number = ?2",
+                rusqlite::params![repo_id, issue, to],
+            )
+            .map_err(unreadable("record an issue's state"))?;
+        if from.as_deref() != Some(to) {
+            let holder = crate::transport::claim::holding(
+                &super::entries(&transaction, repo_id, self.issue)
+                    .map_err(unreadable("read a timeline"))?,
+                now,
+            )
+            .holder;
+            transaction
+                .execute(
+                    "INSERT INTO transitions (repo_id, issue, at, run_id, from_state, to_state)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    rusqlite::params![repo_id, issue, now, holder, from, to],
+                )
+                .map_err(unreadable("record a state transition"))?;
+        }
+        transaction
+            .commit()
+            .map_err(unreadable("commit a state change"))
     }
 
     /// Appends one entry written here and posted nowhere: the claim family's

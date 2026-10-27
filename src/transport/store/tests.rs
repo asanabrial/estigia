@@ -270,7 +270,7 @@ fn the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema() {
     assert_eq!(mode, "wal");
     assert_eq!(keys, 1);
     assert_eq!(synchronous, 2, "FULL");
-    assert_eq!(store.schema_version().expect("reads"), 15);
+    assert_eq!(store.schema_version().expect("reads"), 16);
 }
 
 #[cfg(debug_assertions)]
@@ -294,7 +294,7 @@ fn reopening_keeps_the_schema_and_a_newer_one_is_refused() {
             .expect("reopens")
             .schema_version()
             .expect("reads"),
-        15
+        16
     );
 
     rusqlite::Connection::open(&path)
@@ -506,7 +506,7 @@ fn doctor_reports_the_path_the_schema_and_the_last_hours_calls() {
         panic!("a readable store is fine: {:?}", check.health);
     };
     assert!(
-        detail.contains("state.db") && detail.contains("schema 15"),
+        detail.contains("state.db") && detail.contains("schema 16"),
         "{detail}"
     );
     assert!(detail.contains("3 GraphQL, 0 REST"), "{detail}");
@@ -713,7 +713,7 @@ fn a_migration_another_opener_finished_while_this_one_waited_is_not_applied_twic
     })
     .expect("the slower opener finds the schema already laid down");
 
-    assert_eq!(slow.schema_version().expect("reads"), 15);
+    assert_eq!(slow.schema_version().expect("reads"), 16);
 }
 
 #[test]
@@ -1339,7 +1339,7 @@ fn recorded(inserted: super::jobs::Inserted) -> bool {
 #[test]
 fn migration_five_creates_the_review_jobs_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 15);
+    assert_eq!(store.schema_version().expect("a version"), 16);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('review_jobs')")
@@ -1375,7 +1375,7 @@ fn migration_five_creates_the_review_jobs_table() {
 #[test]
 fn migration_six_creates_the_blocked_clauses_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 15);
+    assert_eq!(store.schema_version().expect("a version"), 16);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('blocked_clauses')")
@@ -1392,7 +1392,7 @@ fn migration_six_creates_the_blocked_clauses_table() {
 #[test]
 fn migration_seven_creates_the_record_tables() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 15);
+    assert_eq!(store.schema_version().expect("a version"), 16);
     for (table, wanted) in [
         ("decisions", ["at", "body"].as_slice()),
         ("roles", ["at", "body"].as_slice()),
@@ -1699,6 +1699,75 @@ fn a_fresh_store_carries_the_task_table_and_an_older_one_gains_it() {
     drop(older);
     let migrated = Store::open(&path).expect("the older store migrates");
     assert_eq!(migrated.tasks(&repo(), 7).expect("no tasks read"), []);
+}
+
+#[test]
+fn a_fresh_store_and_an_older_one_both_carry_the_append_only_transitions_table() {
+    let (directory, store) = open();
+    let append_only = |store: &Store| {
+        store
+            .connection()
+            .execute(
+                "INSERT INTO issues (repo_id, number, history) VALUES (1, 9, 'native')",
+                [],
+            )
+            .ok();
+        store
+            .connection()
+            .execute(
+                "INSERT INTO transitions (repo_id, issue, at, run_id, from_state, to_state)
+                 VALUES (1, 9, ?1, NULL, NULL, 'ready')",
+                [NOW],
+            )
+            .expect("a transition appends");
+        for statement in [
+            "UPDATE transitions SET to_state = 'done'",
+            "DELETE FROM transitions",
+        ] {
+            let error = store
+                .connection()
+                .execute(statement, [])
+                .expect_err("the append-only table accepted it");
+            assert!(
+                error.to_string().contains("append-only"),
+                "{statement}: {error}"
+            );
+        }
+    };
+    store
+        .connection()
+        .execute(
+            "INSERT INTO repos (host, owner, name) VALUES ('github.com', 'asanabrial', 'estigia')",
+            [],
+        )
+        .expect("a repo");
+    append_only(&store);
+    drop(store);
+
+    let path = directory.path().join("older.db");
+    let older = rusqlite::Connection::open(&path).expect("a file to age");
+    let before = super::schema::MIGRATIONS.len() - 1;
+    older
+        .execute_batch("CREATE TABLE meta (schema_version INTEGER NOT NULL);")
+        .expect("the version table");
+    for sql in &super::schema::MIGRATIONS[..before] {
+        older.execute_batch(sql).expect("an old migration applies");
+    }
+    older
+        .execute(
+            "INSERT INTO meta (schema_version) VALUES (?1)",
+            [i64::try_from(before).expect("small")],
+        )
+        .expect("the old version is recorded");
+    older
+        .execute(
+            "INSERT INTO repos (host, owner, name) VALUES ('github.com', 'asanabrial', 'estigia')",
+            [],
+        )
+        .expect("a repo");
+    drop(older);
+    let migrated = Store::open(&path).expect("the older store migrates");
+    append_only(&migrated);
 }
 
 #[test]
@@ -2331,6 +2400,33 @@ mod rekey {
     }
 
     #[test]
+    fn rekeying_moves_the_transitions_of_the_issue_with_it() {
+        let (_directory, mut store, provisional) = provisional_issue();
+        store
+            .connection()
+            .execute(
+                "INSERT INTO transitions (repo_id, issue, at, run_id, from_state, to_state)
+                 SELECT id, ?1, ?2, NULL, 'ready', 'in-progress' FROM repos",
+                rusqlite::params![i64::try_from(provisional).expect("fits"), NOW],
+            )
+            .expect("a transition");
+
+        store
+            .rekey(&repo(), provisional, REAL, None)
+            .expect("rekeys");
+
+        let moved: i64 = store
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM transitions WHERE issue = ?1",
+                [i64::try_from(REAL).expect("fits")],
+                |row| row.get(0),
+            )
+            .expect("reads");
+        assert_eq!(moved, 1);
+    }
+
+    #[test]
     fn a_clause_naming_a_longer_number_that_starts_the_same_is_left_alone() {
         let (_directory, mut store, provisional) = provisional_issue();
         let other = format!("<!-- issue-flow: blocked-until encoding=pct issue={provisional}0 -->");
@@ -2455,10 +2551,98 @@ mod provisional_ledger {
             ledger.state().expect("reads"),
             Some("in-progress".to_owned())
         );
-        ledger.set_state("review").expect("moves");
+        ledger.set_state("review", NOW).expect("moves");
         ledger.append("a local note", NOW).expect("appends");
         assert_eq!(ledger.state().expect("reads"), Some("review".to_owned()));
         assert_eq!(ledger.timeline().expect("reads").len(), 2);
+    }
+
+    type Row = (String, Option<String>, Option<String>, String, String);
+
+    fn transitions(path: &std::path::Path) -> Vec<Row> {
+        let connection = rusqlite::Connection::open(path).expect("opens");
+        let mut statement = connection
+            .prepare("SELECT at, run_id, from_state, to_state, repo_id || '#' || issue FROM transitions ORDER BY seq")
+            .expect("prepares");
+        statement
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            })
+            .expect("reads")
+            .collect::<Result<_, _>>()
+            .expect("rows")
+    }
+
+    #[test]
+    fn a_state_change_is_recorded_with_when_who_held_the_issue_and_where_it_came_from() {
+        let directory = tempfile::tempdir().expect("a directory");
+        let path = directory.path().join("state.db");
+        let provisional = held_provisional(&path);
+        let ledger = Ledger::open_at(&path, &context(directory.path()), provisional, NOW)
+            .expect("the provisional ledger opens");
+
+        ledger.set_state("review", NOW).expect("moves");
+        ledger.set_state("done", NOW).expect("moves again");
+
+        assert_eq!(
+            transitions(&path),
+            [
+                (
+                    NOW.to_owned(),
+                    Some(RUN.to_owned()),
+                    Some("in-progress".to_owned()),
+                    "review".to_owned(),
+                    format!("1#{provisional}")
+                ),
+                (
+                    NOW.to_owned(),
+                    Some(RUN.to_owned()),
+                    Some("review".to_owned()),
+                    "done".to_owned(),
+                    format!("1#{provisional}")
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn setting_the_state_it_already_has_records_nothing() {
+        let directory = tempfile::tempdir().expect("a directory");
+        let path = directory.path().join("state.db");
+        let provisional = held_provisional(&path);
+        let ledger = Ledger::open_at(&path, &context(directory.path()), provisional, NOW)
+            .expect("the provisional ledger opens");
+
+        ledger.set_state("in-progress", NOW).expect("settles");
+
+        assert_eq!(transitions(&path), []);
+    }
+
+    #[test]
+    fn a_history_write_that_fails_leaves_the_state_where_it_was() {
+        let directory = tempfile::tempdir().expect("a directory");
+        let path = directory.path().join("state.db");
+        let provisional = held_provisional(&path);
+        let ledger = Ledger::open_at(&path, &context(directory.path()), provisional, NOW)
+            .expect("the provisional ledger opens");
+        rusqlite::Connection::open(&path)
+            .expect("opens")
+            .execute_batch("DROP TABLE transitions")
+            .expect("the history is made unwritable");
+
+        let refused = ledger.set_state("review", NOW);
+
+        assert!(refused.is_err(), "a state moved with no record of it");
+        assert_eq!(
+            ledger.state().expect("reads"),
+            Some("in-progress".to_owned())
+        );
     }
 
     #[test]

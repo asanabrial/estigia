@@ -617,7 +617,7 @@ impl<'a> Engine<'a> {
     fn project(&self, row: &OutboxRow) -> Result<(), Failure> {
         let ledger = store::Ledger::open(self.context, row.issue, self.now)?;
         if let Some(to) = ledger.state()? {
-            commands::project_state(self.context, &ledger, row.issue, &to, None)?;
+            commands::project_state(self.context, &ledger, row.issue, &to, None, self.now)?;
         }
         let ownership = row
             .payload
