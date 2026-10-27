@@ -2687,841 +2687,365 @@ pointer that leaves it names the document it points at.
 
 ## The seams, and the gates that never see a call
 
-- **This section is checked against the code.** `tests/honesty.rs` crosses the *countable* claims
-  here — how many agents are gated, how many things `doctor` looks at, which mechanisms the code
-  still uses — against the thing they describe, and fails when they drift. The claims about *kind*
-  are judgements and are not checked, because a test that pretended to would be the false comfort
-  the section exists to prevent.
-- **The seams are checked along the path, not at its ends.** Three places had each end verified and
-  the middle assumed: the gates, the flag lists the MCP tools build for the transport, and the
-  values a configuration refusal tells an operator to write. Each is now crossed against the thing
-  it has to agree with — the classifier, the transport's own `argparse`, and the parser itself.
-  In a refusal, a backticked value is a literal a person types, and every one of them is checked to
-  parse.
-- **A registered gate is not an enforcing gate.** Five of them registered, fired, reached the
-  classifier, found a tool name it did not know and stood aside — for four rounds, while `status`
-  correctly reported `gate on`. Two guards now cross-check every matcher and the OpenCode plugin's
-  own list against the names the classifier recognises. Two further instances turned up later, from
-  the other end of the same path: an entry naming an event this build refuses (`PreToolUse`, the
-  spelling the host's own documentation prints — a non-blocking error, so the tool call went through
-  ungated with one line in a transcript), and an entry naming an executable that is no longer there
-  (`cargo clean` deletes it; so does moving the checkout). Both were live on the machine this was
-  written on. `estigia status` now reads the registered command back and says `gate REGISTERED BUT
-  DEAD` rather than `gate on`, and `doctor` reports the file and the fault.
-- **That count went 1 → 2 → 4 → 5 → 6**, once per round of actually checking. Every stop along the
-  way was a verification route not yet exhausted rather than an agent that could not be gated —
-  twice the answer was in a source repository the published documentation did not mention.
+- **This section is checked against the code, and the seams along the path.** `tests/honesty.rs` crosses the
+  *countable* claims (how many agents are gated, how many things `doctor` looks at, which mechanisms the code
+  uses); the claims about *kind* are judgements and are not checked. The gates, the flag lists the MCP tools
+  build for the transport and the values a configuration refusal tells an operator to write are each crossed
+  against the classifier, the transport's own `argparse` and the parser itself.
+- **A registered gate is not an enforcing gate.** Two guards cross-check every matcher and the
+  OpenCode plugin's own list against the names the classifier recognises, because a registered gate
+  that finds a tool name it does not know stands aside while `status` reports `gate on`. Entries naming
+  an event this build refuses (`PreToolUse` where the host's documentation prints another spelling:
+  a non-blocking error) or an executable that is no longer there (`cargo clean` deletes it; so does
+  moving the checkout) are caught from the other end: `estigia status` reads the registered command
+  back and says `gate REGISTERED BUT DEAD` rather than `gate on`, and `doctor` reports the file and
+  the fault.
 - **A worktree Claude Code makes for itself is not seen.** `--worktree`, `isolation: "worktree"` and
   background sessions create one through the runtime rather than through a shell, so no `Bash` call
   carries `git worktree add` and `PreToolUse` never fires. The event that does fire is
   `WorktreeCreate`, and it is not a permission gate: it *replaces* git's behaviour, expects the
   worktree path on standard output, and fails creation when the hook fails or prints nothing.
-  Registering there to deny would make Estigia responsible for creating every worktree, and would
-  break the feature for anyone whose run holds no issue. So the shell spelling is gated and the
-  native path is not — and a write inside that worktree is still measured, because the claim covers
-  the directory rather than the way it was made.
-
+  Registering there to deny would make Estigia responsible for creating every worktree. So the shell
+  spelling is gated and the native path is not — and a write inside that worktree is still measured,
+  because the claim covers the directory rather than the way it was made.
 - **Claude Code subagents are covered; that is why the line below is OpenCode's and not the
   design's.** A subagent's tool calls fire the same `PreToolUse` hooks as the main thread, carrying
-  `agent_id` and `agent_type`. Checked in the runtime's own hook reference rather than assumed from
-  the parent behaviour, because the sibling runtime answers differently.
-
-- **An extension point is not automatically a place to deny.** Three were checked and refused for
-  the same reason, and it is worth stating once rather than three times. Claude Code's
-  `WorktreeCreate` *replaces* git's behaviour and fails creation when the hook says nothing, so
-  registering there to deny would make Estigia responsible for making every worktree. Goose's
-  classification API is an HTTP service that labels text as prompt injection. OpenHands'
-  `SecurityAnalyzerBase` is an in-process Python class returning a **risk level**, and what happens
-  next is the user's confirmation setting. Estigia's refusal means *this run holds no claim covering
-  this write* — rendering that as "high risk", or as an injection score, is a different sentence, and
-  one the receiving tool is entitled to overrule. A gate is a place that asks permission and obeys
-  the answer; anything else is a suggestion with a hook's costs.
-
-- **Kiro's terminal agent can deny, and one unknown keeps it out.** Not the IDE — that was the wrong
-  target: the IDE's hooks live in a workspace's `.kiro/hooks/` and `setup` writes user-level files.
-  `kiro-cli`, from the Amazon Q Developer CLI lineage, is the gateable one. Its `PreToolUse` is the
-  only blocking event, it rejects with **exit code 2 and the reason on standard error**, and any
-  other code lets the action proceed — which is Estigia's own rule about a broken hook, and its
-  existing exit-code dialect. The payload is `{hook_event_name, cwd, session_id, tool_name,
-  tool_input}`: Estigia's shape exactly, with nothing to rename.
-
-  What is missing is where the hook is registered. Kiro's own reference documents the events and the
-  exit codes and **not the configuration path**; the only evidence for one is a third-party
-  integration naming `~/.kiro/agents/<name>.json` and the key `preToolUse` — lower case, where the
-  reference writes `PreToolUse`. Two unknowns, and both fail silently: a key in the wrong case is a
-  hook that parses and never fires, and `<name>` is the operator's *default agent*, whose file
-  Estigia cannot name. Settling it needs a real `kiro-cli` installation, not another documentation
-  page. Everything else is already built.
-
-- **An extension point is not automatically a place to deny.** Three were checked and refused for
-  the same reason, and it is worth stating once rather than three times. Claude Code's
-  `WorktreeCreate` *replaces* git's behaviour and fails creation when the hook says nothing, so
-  registering there to deny would make Estigia responsible for making every worktree. Goose's
-  classification API is an HTTP service that labels text as prompt injection. OpenHands'
-  `SecurityAnalyzerBase` is an in-process Python class returning a **risk level**, and what happens
-  next is the user's confirmation setting. Estigia's refusal means *this run holds no claim covering
-  this write* — rendering that as "high risk", or as an injection score, is a different sentence, and
-  one the receiving tool is entitled to overrule. A gate is a place that asks permission and obeys
-  the answer; anything else is a suggestion with a hook's costs.
-
-- **Kiro can deny and is not here yet, on purpose.** Its `PreToolUse` blocks on exit 2 and hands
-  standard error to the agent — the same shape the retired Windsurf adapter used — and its steering file at
-  `~/.kiro/steering/` is global and always loaded. What is missing is where its *hooks* live for
-  every workspace: only `.kiro/hooks/` inside a workspace is documented, and `setup` writes
-  user-level files. Adding it ungated would buy a contract nobody enforces, which is the state
-  Estigia exists to leave. The one thing to check is whether `~/.kiro/hooks/` is read; if it is, this
-  is a table entry and a `GateSpec`, and nothing else.
-
+  `agent_id` and `agent_type`, checked in the runtime's own hook reference.
+- **An extension point is not automatically a place to deny.** Three were checked and refused for the
+  same reason. Claude Code's `WorktreeCreate` *replaces* git's behaviour and fails creation when the
+  hook says nothing. Goose's classification API is an HTTP service that labels text as prompt
+  injection. OpenHands' `SecurityAnalyzerBase` is an in-process Python class returning a **risk
+  level**, and what happens next is the user's confirmation setting. Estigia's refusal means *this run
+  holds no claim covering this write*; rendering that as "high risk", or as an injection score, is a
+  different sentence, and one the receiving tool is entitled to overrule. A gate is a place that asks
+  permission and obeys the answer; anything else is a suggestion with a hook's costs.
+- **Kiro is not an adapter, and one unknown keeps it out.** Only `kiro-cli` (from the Amazon Q
+  Developer CLI lineage) is gateable, not the IDE, whose hooks live in a workspace's `.kiro/hooks/`
+  while `setup` writes user-level files. Its `PreToolUse` is the only blocking event, it rejects with
+  **exit code 2 and the reason on standard error** (any other code lets the action proceed, which is
+  Estigia's own rule about a broken hook), and its payload `{hook_event_name, cwd, session_id,
+  tool_name, tool_input}` is Estigia's shape exactly. Its steering file at `~/.kiro/steering/` is
+  global and always loaded. What is missing is where the hook is registered: Kiro's reference
+  documents the events and exit codes and **not the configuration path**. The only evidence is a
+  third-party integration naming `~/.kiro/agents/<name>.json` and the key `preToolUse` (lower case,
+  where the reference writes `PreToolUse`), and whether `~/.kiro/hooks/` is read at all is
+  unchecked. Both unknowns fail silently — a key in the wrong case parses and never fires, and `<name>`
+  is the operator's *default agent*, whose file Estigia cannot name — and adding it ungated would buy
+  a contract nobody enforces. Settling it needs a real `kiro-cli` installation. If `~/.kiro/hooks/` is
+  read, this is a table entry and a `GateSpec`, and nothing else.
 - **The OpenCode plugin does not see subagents.** Measured on OpenCode 1: `tool.execute.before` is
   reported not to intercept tool calls made by subagents spawned through the task tool. OpenCode 2's
-  `execute.before` has not been measured for the same hole. A gate with a hole is still
-  a gate; a gate whose hole nobody mentions is a lie, so it is written into the plugin file itself.
+  `execute.before` has not been measured for the same hole. A gate with a hole is still a gate; a gate
+  whose hole nobody mentions is a lie, so it is written into the plugin file itself.
 - **The OpenCode plugin costs a process per gated call.** It shells out to the binary for `edit`,
   `write`, `patch`, `multiedit`, `notebookedit`, `update`, `bash` and `shell` — named rather than `*`,
   because waking a process for every read would be a cost paid thousands of times to answer "not
-  mine".
-  `notebookedit` and `update` were missing from this sentence for as long as it has existed, which is
-  the shape of drift this file is most exposed to: the list is crossed against the classifier by
-  `the_plugin_gates_the_tools_the_classifier_judges`, and prose naming the same list is crossed by
-  nothing.
+  mine". The list is crossed against the classifier by `the_plugin_gates_the_tools_the_classifier_judges`;
+  prose naming the same list is crossed by nothing.
 - **The push guard is a guard rail, not a lock.** `git push --no-verify` bypasses it, so does a push
   from another checkout of the same repository, and so does anything that writes refs without
   invoking hooks. A guard rail that claims to be a lock is worse than one that does not.
   - **The operation schedule is observed through the same openings.** An enabled `Git operation
-    window` denies commits, ordinary pushes, and branch creation at every Estigia entry point —
-    the shell classifier, the pre-push guard, and `publish_review` — and nothing
-    else enforces it. `start_branch` is no longer one of them: while the window is closed it makes
-    the local branch and the worktree and queues the link to the issue. `git push --no-verify` skips the guard, direct object and ref writes never
-    reach the classifier, hosting APIs never reach any hook, and another clone holds no copy of
-    the row at all: the repository override lives in one clone's git directory. A quiet period is
-    therefore observed through instrumented entry points, never proven across the repository. An
-    enabled value that does not parse, and a clock that cannot be read, deny the protected
-    operations rather than falling back to unrestricted — and ordinary file edits, tests, builds,
-    and worktree operations on an existing branch stay available either way. The weekday and the
-    minute are the ones the machine's local clock reports, so a changed `TZ` or system zone moves
-    the window with it.
+    window` denies commits, ordinary pushes, and branch creation at every Estigia entry point — the
+    shell classifier, the pre-push guard, and `publish_review` — and nothing else enforces it.
+    `start_branch` makes the local branch and the worktree and queues the link to the issue while the
+    window is closed. `git push --no-verify` skips the guard, direct object and ref writes never reach
+    the classifier, hosting APIs never reach any hook, and another clone holds no copy of the row: the
+    repository override lives in one clone's git directory. A quiet period is observed through
+    instrumented entry points, never proven across the repository. An enabled value that does not
+    parse, and a clock that cannot be read, deny the protected operations rather than falling back to
+    unrestricted, and ordinary file edits, tests, builds, and worktree operations on an existing branch
+    stay available either way. The weekday and the minute are the ones the machine's local clock
+    reports, so a changed `TZ` or system zone moves the window with it.
 
 ## The push guard, the MCP server and the state a run keeps
 
 - **Nothing adjudicates what a push is aimed at.** git hands a `pre-push` hook the refs it is about
-  to write, on standard input, for free. They are read and written into the ledger, so the record
-  names *which* push was decided on rather than only that one was — and no decision is given them
-  **to classify the push itself**: `guard::decide` now takes the checkout *and* the refs, and what
-  it adjudicates is still the three words `git push`, the same whichever branch the refs name. So a
-  run holding a live claim may `git push origin branch-a:main` — the local ref, `refs/heads/branch-a`,
-  is the run's own branch, so narrowing (below) selects that run's holder same as any other push of
-  it — and the guard allows it as the same three unaimed words `git push`: the byte-binding check
-  never fires, because `git push` is deliberately absent from the delivery population — *publishing a
-  review target is how a run reaches review, and pushing after one is how it fixes what the review
-  found*. That reasoning assumes a push is a step **towards** delivery. A push aimed at the base
-  branch **is** the delivery, and it never runs `git merge`, so no verdict is ever asked for. For the
-  adapters that get the contract and no tool gate (ZCode and DeepSeek Harness), this hook is the only enforcement there is.
-  Measured by `what_a_push_is_aimed_at_is_recorded_and_not_adjudicated`.
+  to write, on standard input. They are read and written into the ledger, so the record names *which*
+  push was decided on, but no decision is given them **to classify the push itself**: `guard::decide`
+  takes the checkout *and* the refs, and what it adjudicates is the three words `git push`, whichever
+  branch the refs name. A run holding a live claim may `git push origin branch-a:main`, and the guard
+  allows it as the same three unaimed words, because `git push` is deliberately absent from the
+  delivery population — publishing a review target is how a run reaches review, and pushing after one
+  is how it fixes what the review found. That reasoning assumes a push is a step **towards** delivery.
+  A push aimed at the base branch **is** the delivery, and it never runs `git merge`, so no verdict is
+  ever asked for. For the adapters that get the contract and no tool gate (ZCode and DeepSeek Harness)
+  this hook is the only enforcement there is. Measured by
+  `what_a_push_is_aimed_at_is_recorded_and_not_adjudicated`.
 
-  **Under `Workflow: assisted` the destination is checked, and everywhere else it still is not.** An
-  assisted run's push is admitted only when every line git names has the run's own branch as both
-  its local and its remote ref (`harness::assisted`, measured by
-  `a_push_is_admitted_only_for_the_runs_own_branch_and_only_when_its_refs_are_known`). That is the
-  one place a push's aim decides anything; the paragraph above describes every other run, and still
-  holds for them.
+  **Under `Workflow: assisted` the destination is checked, and everywhere else it still is not.** An assisted
+  run's push is admitted only when every line git names has the run's own branch as both its local and remote
+  ref (`harness::assisted`, `a_push_is_admitted_only_for_the_runs_own_branch_and_only_when_its_refs_are_known`).
+  It is not closed for other runs because closing it wrongly is worse than the gap: the check needs the base
+  branch and `Integration mode` (under `trunk` the base branch is where work is meant to land), and a
+  boundary that refuses a legitimate push is how a harness gets uninstalled.
 
-  Narrowing (below) changes what this gap used to catch incidentally. Before it existed, any local
-  ref other than one resolving to exactly one holder left every several-holder checkout refused
-  `several-runs-hold-this-checkout` regardless of what the push was aimed at, so a base-branch push
-  from a several-holder checkout was blocked by the ambiguity refusal, not by anything reading the
-  destination. Narrowing lifts that incidental block for a push whose local ref resolves to one
-  holder's own branch — measured against real git in a throwaway repository with a bare remote and a
-  stdin-dumping `pre-push` hook: `git push origin branch-a` and `git push origin branch-a:main` both
-  write the local ref `refs/heads/branch-a`, so both narrow to branch-a's holder and reach the same
-  unaimed decision. `git push origin HEAD:main` writes the literal `HEAD` as its local ref, which is
-  not `refs/heads/<branch>`, so it still fails narrowing closed and stays refused under several
-  holders.
-
-  It is not closed here because closing it wrongly is worse than the gap. The check needs the base
-  branch and the `Integration mode` setting — under `trunk` the base branch is exactly where work is
-  meant to land — and a boundary that refuses a legitimate push is how a harness gets uninstalled,
-  which gates nothing at all.
-
-  What *is* now read from those refs is narrower, and closes a different gap: **who** several
-  holders' refusal belongs to, not **what** the push is. A git hook has no session to mint a run id
-  from, so `holders_of` is all the push road has — and when two or more runs held one checkout it
-  refused `several-runs-hold-this-checkout` even where the push named a branch exactly one of those
-  runs' isolated worktrees was checked out on.
-  `adjudicate_action` now takes the local refs as a fifth argument and, before the tracker
-  reconciliation, narrows the holder list — through `git worktree list`, read fresh rather than
-  trusted from any pointer, and stripped of every inherited `GIT_*` variable the same way every other
-  proof git command in this crate is, because a `pre-push` hook already runs with `GIT_DIR` set.
-
-  **The rule is not a union over whatever happens to resolve.** Every ref has to resolve, to one
-  worktree, owned by one holder, and every ref has to agree on that same holder; anything else
-  returns the holder list unchanged, for the refusal that follows to name.
-  `narrow_to_pushed_branch`'s own doc comment in `guard.rs` points here rather than repeating the
-  enumeration. It fails closed on:
-  - an empty ref list, or a local ref that is not `refs/heads/<branch>` — a tag, `HEAD`, a raw sha, or
-    the literal `(delete)` git sends for a branch deletion, none of which can be attributed to a
-    worktree. Measured, not assumed: `git push origin v1` (a tag) writes `refs/tags/v1`,
-    `git push origin HEAD:main` writes `HEAD`, `git push origin --delete topic` writes `(delete)`,
-    and `git push origin <sha>:refs/heads/x` writes the bare sha;
-  - a listing that cannot be read or parsed;
-  - a branch carried by zero of git's own registered worktrees, or by two or more of them —
-    `git worktree add --force` or `git checkout --ignore-other-worktrees` can put one branch in two
-    worktrees at once;
-  - a registered worktree owned by zero of `holders`, or by two or more of them — two of this
-    machine's own pointers can name one worktree even though `parse_worktree_listing` refuses a
-    *repeated path* from git's own registry; `skill/references/repository-delivery.md` names this
-    directly: *"registration is not ownership."*
-  - two refs landing on different holders.
-
-  Only when every ref lands on the one and same holder does narrowing return that holder alone —
-  never two candidates, and never a guess between them. An earlier version of this rule did both:
-  it dropped whichever ref did not resolve rather than failing the whole narrowing closed, and it
-  took the *first* registry entry carrying a branch rather than requiring exactly one, so a
-  `git push origin main <holder's own branch>` on a machine with three live holders was refused for
-  `main` alone and **allowed** for the same line plus the holder's branch — a base-branch write
-  smuggled through on the back of a ref that happened to resolve. Both are the roads enumerated
-  above now; `harness::guard::tests` drives each one, including the two-ref shapes nothing in the
-  checkout exercised before.
-
-  Two edges stay outside all of this. The run-id-less **tool** road — the OpenCode plugin's
-  `tool.execute.before` when its host handed it no session id and no run id was exported around the
-  plugin's process, and `estigia gate <tool>` invoked with no identity at all — asks the same
-  `adjudicate_action` with no refs to narrow on, because a tool call carries no destination ref to
-  read; that gap is separate, and this change does not touch it. And `guard::decide` is the one
-  production caller: `cli::mod::git_hook`'s `PrePush` arm calls it directly rather than building its
-  own copy of the `Action::Boundary` literal and calling `adjudicate_action`, and
-  `tests/pipe/gate_hook.rs`'s `a_pre_push_hook_is_decided_on_the_holder_the_pushed_branch_names` drives that
-  exact wiring with a real `pre-push` stdin — the first test in the checkout to do so with more than
-  one holder in play.
+  What *is* read from the refs is **who** several holders' refusal belongs to, not **what** the push is: a git
+  hook has no session, so `holders_of` is all the push road has, and `adjudicate_action` narrows the holder
+  list by the pushed refs through `git worktree list`, read fresh and stripped of inherited `GIT_*`.
+  `git push origin branch-a` and `branch-a:main` both write the local ref `refs/heads/branch-a`, so both
+  narrow to branch-a's holder and reach the same unaimed decision; `HEAD:main` writes the literal `HEAD` and
+  stays refused under several holders. **The rule is not a union over whatever resolves**: every ref has to
+  resolve to one worktree owned by one holder, and all refs to the same holder; it fails closed on an empty
+  ref list or a local ref that is not `refs/heads/<branch>` (a tag, `HEAD`, a raw sha, `(delete)`), an
+  unreadable listing, a branch carried by zero or by two or more registered worktrees (`git worktree add
+  --force`), a worktree owned by zero or by two or more of `holders`, and two refs on different holders.
+  `harness::guard::tests` drives each road. Two edges stay outside: the run-id-less **tool** road (the
+  OpenCode plugin's `tool.execute.before` when its host handed it no session id and no run id was exported,
+  and `estigia gate <tool>` with no identity) has no refs to narrow on, and `guard::decide` is the one
+  production caller (`a_pre_push_hook_is_decided_on_the_holder_the_pushed_branch_names`, `tests/pipe/gate_hook.rs`,
+  drives that wiring with a real `pre-push` stdin).
 - **The push guard refuses to replace somebody else's hook.** A `pre-push` is a test runner or a
-  secret scanner as often as it is nothing, and Estigia will not take away a check somebody relies
-  on to add one they did not ask for. It says so and names the way out.
+  secret scanner as often as it is nothing, and Estigia will not take away a check somebody relies on
+  to add one they did not ask for. It says so and names the way out.
 - **The MCP server has never met a real client.** Every response is checked against the JSON-RPC
   envelope rules a client's parser enforces before any content matters, and the server is driven
   through a full session in tests. That proves the envelopes are legal and the answers are right; it
   does not prove a particular client is happy with them, and the protocol subset is a subset.
 - **The cost avoided by hand-writing this server instead of using `rmcp` is asserted, not
-  benchmarked.** Leteo uses `rmcp`; this crate does not, because the same binary answers a
-  `PreToolUse` hook on every edit, and a `tokio` runtime spun up per process was judged too
-  expensive to pay that often. Synchronous stdio JSON-RPC over a fixed, small tool list avoids
-  spinning one up at all — but nothing here has measured what either approach costs per invocation;
-  the judgement rests on the shape of the workload, not on a number.
+  benchmarked.** Leteo uses `rmcp`; this crate does not, because the same binary answers a `PreToolUse`
+  hook on every edit, and a `tokio` runtime spun up per process was judged too expensive to pay that
+  often. Synchronous stdio JSON-RPC over a fixed, small tool list avoids spinning one up at all, but
+  nothing here has measured what either approach costs per invocation.
 - **The renewal window is a cadence, and a cadence is a gap.** A routine write inside two minutes of
-  the last answer is not re-verified, and neither is a Claude Code `Stop`: it used to read the tracker
-  at every turn end, which with the claim read-back's own reads spent the GitHub GraphQL budget of a
-  whole account, so it now keeps a successful answer for the window and records its own.
-  A claim lost inside it keeps the turn going once more per window. Only a successful read is kept;
-  one that failed or answered unknown is read again. The Codex `Stop` path and `estigia goal` read the
-  tracker on every call and are not covered by this. A claim lost during those two minutes is a claim the gate does
-  not catch until the window closes or a boundary arrives.
-
-  **Claim validity is the whole of what it excepts.** The window used to except the control surface
-  as well — its `Allow` answered above `control-surface-not-installed`, so for two minutes a routine
-  write went through with no `SKILL.md` on disk at all. The contract check now sits above the
-  window, and what the window caches is now only what it ever measured: that the tracker answered
-  about this issue recently. A boundary never consults it at all, and an unreadable control surface
-  permits no write inside it either.
+  the last answer is not re-verified, and neither is a Claude Code `Stop`: it keeps a successful
+  answer for the window and records its own, because reading the tracker at every turn end spent the
+  GitHub GraphQL budget of a whole account. A claim lost inside the window keeps the turn going once
+  more per window. Only a successful read is kept; one that failed or answered unknown is read again.
+  The Codex `Stop` path and `estigia goal` read the tracker on every call and are not covered. A claim
+  lost during those two minutes is not caught until the window closes or a boundary arrives. **Claim
+  validity is the whole of what the window excepts**: the contract check sits above it, a boundary
+  never consults it, and an unreadable control surface permits no write inside it.
 - **A rate limit is named, never waited out, and its reset is only as readable as `gh` makes it.** A
   read that fails with `gh` saying a primary or secondary rate limit was exceeded answers
   `rate-limited` (exit `3`, still a refusal and never clearance) instead of `read-failed`, and the
-  detail carries a reset instant only when `gh`'s own stderr printed one; otherwise it says the reset
-  time is unknown. Nothing asks GitHub for the reset (`rate_limit` is itself a call), nothing retries
-  — a retry spends the budget being waited for — and a rate-limited *write* is still `write-failed`,
-  because it may have landed. The stderr is matched on the phrases `gh` prints today; a rewording
-  falls back to `read-failed`, which is the safe direction.
-- **A JSON file Estigia edits keeps its shape and loses its shaping.** `settings.json` and
-  `.claude.json` have to be parsed to be edited safely, and four things are read off the original
-  and given back: the indentation, a byte-order mark, the line endings, and whether the file ended
-  with a newline. Key order is preserved too — `serde_json` is built with `preserve_order` for
-  exactly this. Measured rather than argued: every operator file of every adapter, written the
-  ordinary Windows way, comes back **byte for byte** through an install and an uninstall, held by
-  `every_agents_own_files_come_back_byte_for_byte`. The readers (`is_gated`, `exposes_tools`,
-  `tools_start_the_server`, `wiring::narrowed`, `wiring::wires`) parse through the same
-  `render::parse_settings`, so a file whose mark Estigia kept still reads as gated and tooled, held by
-  `a_bom_settings_file_still_reads_as_gated_and_tooled_after_setup`.
-  What is *not* kept is the formatting inside the document. A hand-written
-  `"allow": ["Read", "Grep"]` on one line comes back over four, and a blank line between two keys
-  is gone — the value is re-serialised, and only the four properties above are read off what was
-  there. So a diff on a file Estigia edited shows the entry it added, and shows the operator's own
-  arrays reflowed around it. Markdown is spliced textually and does not go through any of this.
+  detail carries a reset instant only when `gh`'s own stderr printed one. Nothing asks GitHub for the
+  reset (`rate_limit` is itself a call), nothing retries, and a rate-limited *write* is still
+  `write-failed`, because it may have landed. The stderr is matched on the phrases `gh` prints today; a
+  rewording falls back to `read-failed`, the safe direction.
+- **A JSON file Estigia edits keeps its shape and loses its shaping.** The indentation, a byte-order mark, the
+  line endings and whether the file ended with a newline are read off the original and given back, and key
+  order is preserved (`serde_json` with `preserve_order`): every operator file of every adapter, written the
+  ordinary Windows way, comes back **byte for byte** through an install and an uninstall
+  (`every_agents_own_files_come_back_byte_for_byte`), and the readers parse through `render::parse_settings`
+  so a BOM file still reads as gated and tooled (`a_bom_settings_file_still_reads_as_gated_and_tooled_after_setup`).
+  The formatting inside the document is not kept: a hand-written one-line `"allow": ["Read", "Grep"]` comes
+  back over four, so a diff shows the operator's arrays reflowed around the entry added. Markdown is spliced
+  textually.
 - **`skills/` is left behind, even empty.** It is the agent's namespace, not a file Estigia created.
   What comes out is the tree that was written.
 
 ## What the gate covers
 
 - **The gate covers two directories: the checkout the claim was made in, and the isolated one
-  `start_branch` created or a resumed run adopted.** A run that makes its own worktree by hand — one
-  git has never registered, or whose ownership marker names no issue — gets that write gated but the
-  directory is never recorded, so subsequent writes there read as `Outside`. Use the tool, or resume
-  through a checkout the transport already knows about.
+  `start_branch` created or a resumed run adopted.** A run that makes its own worktree by hand (one git
+  has never registered, or whose ownership marker names no issue) gets that write gated but the directory
+  is never recorded, so subsequent writes there read as `Outside`. Use the tool, or resume through a
+  checkout the transport already knows about.
 
-  *Two* is now what the isolation step writes, rather than what it assumes it will find. It used to
-  record only the worktree, which is correct whenever the claim already recorded a checkout and
-  wrong in the one shape nobody has to do anything strange to reach: a `claim` whose tracker write
-  lands and whose readback fails returns before the pointer effect runs, so no checkout is recorded
-  at all. From there the dispatch guard's own precondition — *a run that has claimed nothing has
-  nothing to be outside of* — lets `start_branch` through, and the worktree it writes becomes the
-  run's **only** covered directory. The server that made the call is then outside its own run, every
-  later call is refused `run-id-names-another-checkout`, and repeating it cannot help: an MCP
-  server's directory does not change when a child command uses another one. The only way out
-  observed in the field was restarting the agent from a path the workflow had just created, which
-  loses the live context and can mint a different runtime identity — the thing claim attribution
-  exists to prevent.
+  `start_branch` records the claim's checkout as well as the worktree, filling and never overwriting. A
+  `claim` whose tracker write lands and whose readback fails returns before the pointer effect runs, so no
+  checkout is recorded and the worktree would become the run's **only** covered directory; the server is
+  then outside its own run and every later call is refused `run-id-names-another-checkout`
+  (`one_server_survives_the_isolation_it_created` drives one real server through both calls and reads the
+  pointer **between** them). The dispatch guard measures `repo_dir`, not `covered().count()`, so a record
+  that never named its checkout stands aside like a run that has claimed nothing (standing aside is not
+  clearance), and a renewal answered `ok` completes such a record with no tracker **write** and no
+  invented authority (`a_renewal_completes_a_record_the_tracker_has_just_agreed_with`,
+  `a_stranded_run_recovers_from_the_checkout_it_is_running_in`).
 
-  So `start_branch` fills the claim's checkout in as well as the worktree, and fills rather than
-  overwrites: a run whose claim named checkout A keeps A when a server standing in B calls under its
-  id, because refusing B for that run is exactly what the guard is for. It is not coverage
-  manufactured from a client's path — `start_branch` verifies the claim against the tracker from
-  that same directory before it creates anything. Measured by
-  `one_server_survives_the_isolation_it_created`, which drives one real server through both calls
-  down one pipe, because no per-call `GateContext` can pose *the same server asking twice* — and
-  which reads the pointer **between** the two, because the renewal below fills the same field by its
-  own route. Asserting only at the end measured the pair and not the halves: with the check at the
-  end, removing the isolation's line left that test green while the unit test beside it reddened.
-  Two independent reviewers of this change found that, separately, by deleting the line and running
-  the suite.
+  **The same renewal discovers a checkout this run never built.** `claim`, `reclaim` and every renewal read
+  every checkout `git worktree list` has registered, find the one whose ownership marker names this issue,
+  and fill `worktree` from it (`a_renewal_records_the_checkout_a_resumed_run_adopted`,
+  `a_reclaim_records_the_checkout_it_takes_over`,
+  `a_write_inside_an_adopted_checkout_is_gated_once_a_renewal_records_it`). It records nothing for **more
+  than one checkout naming the same issue**, nor for **a read that fails**; the scan's `?` stops at the
+  first unreadable marker, which disables discovery for every issue and run this clone holds until that
+  marker reads again, without turning a successful renewal into a refusal. It cannot see a checkout git
+  never registered or whose marker was never written in the shape `read_ownership` reads.
 
-  **And a run already in that state gets itself back**, which prevention does not do for the runs
-  that are in it. Two things were needed. The refusal above measured `covered().count()`, which is
-  the right question asked of the wrong field: the worktree is the *additional* directory a claim
-  covers, never the one that says where it was sworn. So a record holding only a worktree could
-  ground a refusal — and an incomplete record is not a narrower claim, it is an unknown one. It
-  measures `repo_dir` now, so a record that never named its checkout stands aside exactly as a run
-  that has claimed nothing does. Nothing is widened for a record that *does* name one: a foreign run
-  id, an unrecorded worktree and a directory outside the coverage are refused as before, and
-  standing aside is not clearance — the call still goes to the tracker, which is the only thing that
-  adjudicates.
-
-  Then the way back is a call the contract already requires. A renewal answered `ok` is the tracker
-  saying, at that moment, that this run is the live holder of this issue in this state — the same
-  fact `Swear` writes, from the same authority — so the pointer is completed from it rather than
-  left broken until something writes to the tracker again. It takes no tracker **write**, which is
-  what makes it reachable during exactly the outage that causes the damage: the state is produced by
-  a `claim` whose write lands and whose readback fails, and during that outage there is no write to
-  be had. Filled and never overwritten, and unable to invent authority, because a run that does not
-  hold the issue is refused before the pointer is touched. Measured by
-  `a_renewal_completes_a_record_the_tracker_has_just_agreed_with` and, as a process,
-  `a_stranded_run_recovers_from_the_checkout_it_is_running_in` — which asserts both halves, since a
-  run readmitted on an empty record is a run whose writes are still measured against nothing.
-
-  **The same renewal also discovers a checkout this run never built at all.**
-  Everything above repairs a run stranded mid-`claim`, from a worktree that run *created* itself.
-  A run that never calls `start_branch` — because a previous session's checkout, or the one its own
-  `reclaim` just took over, already exists — used to leave `worktree` `None` for the whole of its
-  life: the same hole this entry opens with, reached from the other side. The run swore to a
-  checkout it does not edit, and the one it does edit was never on the pointer at all, so `covered`
-  answered `Outside` for every write the run actually made. `claim`, `reclaim` and every renewal now
-  read every checkout `git worktree list` has registered for this repository, find the one whose
-  ownership marker names this issue, and fill `worktree` from it — the same fill-never-overwrite
-  discipline as everything else here.
-
-  Two shapes it answers by recording nothing rather than guessing, because a repair is not an
-  authority: **more than one registered checkout naming the same issue** is not resolved by
-  preferring the newest or this run's own id, and neither is **a read that fails**. The scan's `?`
-  stops at the first one, so a failed listing and an unreadable marker do not read the same: the
-  listing is one read for the whole clone, but a marker is read once per registered checkout, and an
-  unreadable one anywhere among them — not only in the checkout it belongs to — aborts the scan for
-  every checkout still unread, disabling discovery for every issue and every run this clone holds
-  until that one marker reads again. Both leave `worktree` exactly as it was, and neither turns
-  an otherwise-successful renewal into a refusal — discovery rides on a call that already succeeded
-  and is never itself a gate. What it cannot see at all: a checkout git never registered, or one whose
-  ownership marker was never written in the shape `read_ownership` reads — the same "use the tool"
-  the entry above already says, now stated for the read side rather than the write side. Measured by
-  `a_renewal_records_the_checkout_a_resumed_run_adopted`, `a_reclaim_records_the_checkout_it_takes_over`,
-  `two_adopted_checkouts_are_not_conflated_into_one_holder`, and
-  `discovery_records_nothing_it_cannot_prove_and_refuses_nothing_on_its_own_account`, the last of
-  which drives all three refusals — the unreadable marker, the ambiguous pair, and the failed listing
-  — in one place, on a machine where its fixture succeeds; two of its three blocks are skipped rather
-  than returned from where it does not, which the fixture entry above states. The central claim —
-  that a write inside the discovered checkout is gated once the
-  fill records it, rather than passing through ungated as `Outside` — is measured by
-  `a_write_inside_an_adopted_checkout_is_gated_once_a_renewal_records_it` and its push twin
-  `a_push_from_the_adopted_checkout_stops_reading_as_unsworn_once_recorded`.
-
-  **One thing here is pinned on one platform only, and the suite does not say so.** The discovered
-  path is canonicalised before it is recorded, so this field's two writers spell one directory one
-  way — `start_branch`'s and discovery's. Removing that canonicalisation reddens the byte assertions
-  in the two recording tests **on Windows and nowhere else**, because Windows is the only platform
-  where the two spellings differ at all: `git worktree list --porcelain` reports forward slashes
-  there, while `canonical_worktree_path` returns native ones. On Linux and macOS that helper is
-  `canonicalize(parent).join(name)` followed by a prefix strip its own doc calls an identity there,
-  so for an already-resolved parent it returns its input byte for byte and the mutation is invisible.
-  The lane runs `windows-latest`, so a regression is caught by the machine — but the local run a
-  contributor types on Linux is not what catches it.
-
-  **What the renewal's fill accepts on no directory evidence.** `start_branch` at least performs its
-  tracker read from the directory it then records; `verify_claim` performs the same read and neither
-  read binds a directory at all, so the renewal takes the caller's working directory as coverage
-  because it is the only one on offer. Run ids are public — every claim comment carries one — so a
-  call under run A's id arriving from directory B, while `A.repo_dir` is unset, writes B into A's
-  record permanently, and A's own server is then refused in its real checkout. That is this defect
-  in mirror image, and it is not closed: what bounds it is that the shape it needs is the one the
-  isolation fix stops producing, and that the alternative — not filling on renewal — is the stranding
-  itself. Deleting the pointer is the only correction. Both reviewers raised it and neither blocked
-  on it.
-
-  Discovery reaches the same call from the same unbound directory: `discover_adopted_worktree` reads
-  `git worktree list` against `context.repo_dir`, which is this same caller-supplied directory B, not
-  a directory anything has verified is A's. The identical shape can plant a `worktree` as permanently
-  as it plants a `repo_dir` — whichever checkout B's clone happens to register for A's issue becomes
-  A's record, read from a repository A's own server never touched. Bounded the same way and by the
-  same argument, and closed the same way: deleting the pointer.
-
-  **And the same rule is now spelled two ways.** The dispatch guard asks `repo_dir.is_some()`; the
-  write gate in `src/harness/mod.rs` still asks `covered().count() > 0` about the same question. The
-  semantic argued for above — *an incomplete record is unknown rather than narrow* — applies verbatim
-  to the second, where the direction of failure is the opposite: a worktree-only record makes writes
-  in the base checkout read as `Outside` and go ungated rather than refused. Not a regression, and
-  not made worse here, but this repository's own rule is that a fact written twice is a fact that
-  will disagree with itself, and these two now do. Unifying them is a change to the write gate and
-  belongs to its own issue.
-
-  The claim retry that this entry used to leave open is closed: a live marker for this same run is
-  adopted rather than refused, so the pointer can be completed without a second comment. A live
-  marker with no adoptable operation id is still `already-owned-by-different-operation`.
-- **Two checkouts are told apart by resolving them, and by case when they will not resolve.**
-  `canonicalize` answers with the real spelling on disk, so a live directory spelled two ways is one
-  directory whatever the operator typed. A path this process cannot resolve has only its spelling
-  left, and there the answer is folded the way Windows folds — the whole way, not only ASCII. This
-  entry used to record the ASCII half as a residual, on the strength of a code comment claiming the
-  transport folded that way too. It did not: `branch::spelling` calls `to_lowercase()` and the
-  retired binding's `fold_case` called `.lower()`, and **both of those ran** — the harness was Rust
-  and the transport that executed was Python, so two live components folding differently answered
-  *is this the same checkout* differently. One of the two is gone and the rule that survived is the
-  wider one, which is the direction that keeps a checkout from being mistaken for somebody else's.
-  Measured by
-  `a_checkout_this_process_cannot_resolve_is_still_one_checkout`, whose corpus differs by an
-  accented pair rather than an ASCII one, because an ASCII pair cannot tell the two rules apart.
+  **The renewal's fill accepts the caller's working directory on no directory evidence.** `verify_claim`'s
+  tracker read binds no directory, and run ids are public, so a call under run A's id from directory B,
+  while `A.repo_dir` is unset, writes B into A's record permanently (A's own server is then refused in its
+  real checkout), and `discover_adopted_worktree` plants a `worktree` the same way from B's clone. Not
+  closed: the shape needed is the one the isolation fix stops producing, not filling on renewal is the
+  stranding itself, and deleting the pointer is the only correction. **The same rule is spelled two
+  ways**: the dispatch guard asks `repo_dir.is_some()`, the write gate in `src/harness/mod.rs` asks
+  `covered().count() > 0`, so a worktree-only record makes writes in the base checkout read as `Outside`
+  and go ungated; unifying them is a change to the write gate that belongs to its own issue.
 - **A branch differing from a registered one only by case or Unicode normalization is refused, on a
-  filesystem that distinguishes them too.** `worktree_path` composes `<branch>~<run-id>`,
-  and the run ID is lowercase by construction while the branch is only separator-encoded — so
-  `Fix-1-a` and `fix-1-a` with one run ID compose `/w/estigia~Fix-1-a~run-x` and
-  `/w/estigia~fix-1-a~run-x`, two strings and one directory on the filesystems this crate's operators
-  run (default APFS on macOS, NTFS on Windows). On such a volume the second run's path exists — it is
-  the first run's checkout — but the registry is keyed by `normalise_path`, whose Unix spelling is hex
-  of the bytes and so folds neither case nor normalization, so the lookup missed and `may_occupy`
-  answered `worktree-path-occupied` with `occupied_by_branch: null`. That is the orphan diagnosis,
-  and its action invited removing the first run's live checkout.
-  `may_occupy` now compares the **spellings** of the composed path and every registered worktree —
-  separators unified, then NFC-normalized and case-folded — and refuses a collision as
-  `case-insensitive-branch-collision` with an action that names both branches and says not to
-  delete. The fold is deliberately independent of the filesystem: on a volume that distinguishes the
-  two spellings they are two directories and they are refused anyway, the conservative direction,
-  because accepting them there would leave the hazard standing on the volumes that fold. The composed
-  `<branch>~<run-id>` shape and `SCOPE_JOIN` are unchanged. The fold was extended to
-  normalization: `é` as U+00E9 and `e` plus U+0301 are different byte sequences but one directory on
-  default APFS, which is normalization-insensitive, so the same orphan diagnosis was reachable through
-  an ordinary accented branch name. The fold normalizes, lowercases and normalizes again: the first
-  pass cannot compose a capital base with no precomposed accented form, so `J` plus U+030C stays two
-  code points, and only after lowercasing changes the base to `j` does the second pass compose it to
-  `ǰ` — the one code point the composed spelling already was. The case half is still
-  `str::to_lowercase`, not full Unicode case folding, so a pair the volume's case folding merges but
-  `to_lowercase` does not — `Σ`/`ς`, `µ`/`μ`, `ſ`/`s` — is not refused; that limit is separate and this
-  change does not touch it. Measured by
-  `two_branches_differing_only_by_case_are_refused_rather_than_called_an_orphan` and
-  `two_branches_differing_only_by_normalization_are_refused_rather_than_called_an_orphan`, which
-  compose the pair through `worktree_path` and read the reason back, and by
-  `a_case_only_difference_is_the_collision_and_a_separator_one_is_not`, which holds the Windows
-  separator case apart from it and the case-plus-normalization pair with it.
-- **`worktree_path` substitutes placeholders in one pass and refuses a component `trim()` would change.**
-  The template was resolved by four chained `replace` calls, so placeholder text inside
-  an earlier value was substituted again by a later one — branch `a<run-id>` and `aR` under run `R`
-  composed one path. Separately, the component was passed through `trim()`, which strips Unicode
-  whitespace git allows in a ref name (U+00A0, U+2003), so `\u{a0}fix` and `fix` composed one path.
-  The template is now scanned once for `<repo>`, `<branch>`, `<run-id>` and `<issue>` and substituted
-  text is never rescanned; an unknown or unclosed `<…` is left as written. A component with leading
-  or trailing whitespace of any kind is refused as `unsafe-worktree-component`, which also means an
-  ASCII-padded branch or repository name that used to be trimmed silently is now refused. Measured by
-  `placeholder_text_inside_a_branch_is_never_substituted_again` and
-  `a_component_that_trim_would_change_is_refused_and_not_given_its_twin`.
-- **The closed-window refusal covers the transport's own spawns, and the gate reads an agent's line by the same matcher.**
-  While the git operation window is closed, `window::tripwire` refuses a `gh` write or a
-  `git push` that `transport::run` is asked to start, with `outbox-bypass`. A `gh` line an agent
-  runs itself never passes through it; the gate classifies the line instead, through
-  `window::is_outbound_write` over each command of the line, as an `Action::Remote` and denies it
-  with `git-operation-window-denied` while the window is closed, and stands aside from it while the
-  window is open, as it did before. `gh pr merge`, `gh pr create`, `gh release create` and `edit`,
-  `git merge`, `git tag`, `gh issue create` and `develop`, and a mutating `gh api` were already
-  classified and are now denied with it, and so are `gh cache delete`, `gh ssh-key` and `gh gpg-key`
-  `add` and `delete`, and `gh repo deploy-key` and `gh repo autolink` `add`, `create` and `delete`
-  (`the_gh_writes_outside_the_old_verb_table_are_remote_and_denied_while_closed`). The matcher is
-  a table of the write verbs it knows, so a `gh` subcommand a later release adds reads as a
-  non-write until the table names it; `release` and `project` are the two read-listed exceptions.
-  What the matcher does not read goes through: an alias, a
-  script, a shell variable or a command substitution that spells the call, and a `gh` word that is
-  not the first of its command. A `gh api` call is judged from its own words, per command and without regard to
-  case, so an attached `-XPUT`, an explicit `-X GET` with fields and a `-F` belonging to another
-  command are all read as they run. A `gh api graphql -f query=…` that only reads stays a
-  read, but one whose query comes from `--input` or an `@file` field is treated as a write in
-  `api_writes`, because its content cannot be read from the words of the call; a mutation hidden
-  behind a shell variable still passes. While it is closed, `create`, `comment`, `transition`, `claim`, `claim --takeover`,
-  `unassign` and `start_branch` queue their GitHub writes instead of sending them, and a publication
-  is refused with `git-operation-window-denied` and the number of writes waiting. Measured by
-  `a_transition_while_closed_moves_the_store_and_queues_the_projection`,
-  `a_comment_while_closed_is_queued_with_its_escaped_body`,
-  `a_create_while_closed_is_held_under_a_provisional_number`,
-  `a_claim_while_closed_is_recorded_and_its_projection_queued`,
-  `a_takeover_while_closed_queues_its_projection`,
-  `a_release_while_closed_queues_its_projection_and_its_evidence`,
-  `a_branch_started_while_closed_is_made_locally_and_its_link_queued`,
-  `a_branch_that_exists_locally_and_remotely_is_not_linked_while_closed`,
-  `an_issue_created_while_closed_can_be_worked_from_claim_to_release`,
-  `while_closed_a_gh_write_is_refused_before_any_process_starts`,
-  `while_closed_a_git_push_is_refused`,
-  `every_write_to_github_classifies_as_a_protected_operation`,
-  `reads_from_github_stay_unprotected`, `a_remote_write_outside_the_period_is_denied` and
-  `a_remote_write_inside_the_period_or_with_no_schedule_is_not_watched`. `release_ci` is refused with
-  `git-operation-window-denied` while the window is closed, like a publication, because marking a
-  pull request ready is a write the queue does not hold; measured by
-  `release_ci_denies_outside_the_period_before_reading_anything_else`.
-- **The window's scope is the repository a write is aimed at, and the gate's reading of an agent's
-  own shell line still belongs to the checkout it runs in.** The transport resolves the pin
-  `Context::repo` — `create`'s `repo` argument, or the tracker's or host's named repository — to a
-  checkout whose `origin` names it: the caller's own first, otherwise one recorded among
-  `known_repositories`, and reads that checkout's rows; a repository with no such checkout is closed
-  rather than inheriting the caller's schedule. Measured by
-  `a_create_aimed_at_another_repository_is_judged_by_that_repositorys_window`,
-  `a_flush_readback_reports_the_window_of_the_repository_it_is_aimed_at`,
-  `a_closed_caller_filing_into_an_open_repository_is_not_deferred` and
-  `a_repository_with_no_readable_rows_closes_rather_than_inheriting_the_caller`. What stays open:
-  the gate classifies a hand-written `gh` line through `harness::operation_window::check_protected`,
-  which reads `GateContext.operation_window` — built by `cli` from the **caller's** checkout — so a
-  shell `gh issue create -R <destination>` is still denied or allowed by the caller's schedule, and
-  only the transport's own `create` and the flush moved. The destination lookup also reads each
-  recorded checkout's remote through git, so a destination whose checkout is not registered, or
+  filesystem that distinguishes them too.** `worktree_path` composes `<branch>~<run-id>`, so `Fix-1-a` and
+  `fix-1-a` under one run ID are two strings and one directory on default APFS and NTFS, and the registry
+  (keyed by `normalise_path`, which folds neither) answered `worktree-path-occupied` with
+  `occupied_by_branch: null`, the orphan diagnosis whose action invited removing the first run's live
+  checkout. `may_occupy` compares the **spellings** (separators unified, NFC-normalized, lowercased,
+  normalized again) and refuses a collision `case-insensitive-branch-collision`, naming both branches. The
+  fold ignores the filesystem on purpose (the conservative direction). The case half is
+  `str::to_lowercase`, not full Unicode case folding, so a pair the volume merges but `to_lowercase` does
+  not (`Σ`/`ς`, `µ`/`μ`, `ſ`/`s`) is not refused. Held by
+  `two_branches_differing_only_by_case_are_refused_rather_than_called_an_orphan`,
+  `two_branches_differing_only_by_normalization_are_refused_rather_than_called_an_orphan` and
+  `a_case_only_difference_is_the_collision_and_a_separator_one_is_not`.
+- **The closed-window refusal covers the transport's own spawns, and the gate reads an agent's line by the same
+  matcher.** While the git operation window is closed, `window::tripwire` refuses a `gh` write or `git push`
+  that `transport::run` is asked to start (`outbox-bypass`), and a `gh` line an agent runs itself is
+  classified through `window::is_outbound_write` as an `Action::Remote` and denied
+  `git-operation-window-denied` (`gh pr merge`/`create`, `gh release create`/`edit`, `git merge`, `git tag`,
+  `gh issue create`/`develop`, a mutating `gh api`, `gh cache delete`, `gh ssh-key`/`gpg-key` and `gh repo
+  deploy-key`/`autolink` writes: `the_gh_writes_outside_the_old_verb_table_are_remote_and_denied_while_closed`).
+  The matcher is a table of the write verbs it knows, so a `gh` subcommand a later release adds reads as a
+  non-write until named; it does not read an alias, a script, a shell variable or substitution that spells the
+  call, or a `gh` word that is not first in its command, and a `gh api graphql` whose query comes from
+  `--input` or an `@file` field is treated as a write while a mutation behind a shell variable passes. While
+  closed, `create`, `comment`, `transition`, `claim`, `claim --takeover`, `unassign` and `start_branch` queue
+  their GitHub writes, a publication is refused with the number of writes waiting, and `release_ci` is
+  refused (`release_ci_denies_outside_the_period_before_reading_anything_else`).
+- **The window's scope is the repository a write is aimed at, and the gate's reading of an agent's own
+  shell line still belongs to the checkout it runs in.** The transport resolves the pin `Context::repo` to
+  a checkout whose `origin` names it (the caller's own, else one among `known_repositories`) and reads that
+  checkout's rows; a repository with no such checkout is closed rather than inheriting the caller's
+  schedule. The gate classifies a hand-written `gh` line through
+  `harness::operation_window::check_protected`, which reads `GateContext.operation_window` built from the
+  **caller's** checkout, so a shell `gh issue create -R <destination>` is judged by the caller's schedule;
+  only the transport's own `create` and the flush moved. A destination whose checkout is not registered, or
   whose `origin` is not a GitHub remote, reads as no rows and closes.
-- **The store holds a write queue and one permitted rewrite of an entry.**
-  Schema 9 adds `outbox` and `provisional_issues`, and the `entries_no_update` trigger now lets
-  exactly one update through: moving an entry's `issue` from a provisional number to the real
-  number `provisional_issues` records for it, every other column unchanged. Measured by
-  `an_entry_may_move_from_a_provisional_issue_to_its_recorded_real_number_and_nowhere_else`.
-  Provisional numbers start at `PROVISIONAL_BASE` and are allocated from one counter in `store_meta`,
-  so two machines can allocate the same number and file the same issue twice.
-  `Store::rekey` moves the rows of a provisional issue to its real number in one transaction, and
-  `outbox::rekey_files` follows with the run pointers and the ownership record of the worktree each
-  names; a branch or a worktree directory named with the provisional number keeps that name, and an
-  ownership record in a worktree no pointer names is not found. Measured by
-  `rekeying_moves_every_row_of_the_issue_to_the_real_number` and
-  `the_ownership_file_of_the_pointed_worktree_follows_the_issue`.
-  A provisional issue opens its ledger without any call to GitHub, which has no such issue, and the
-  ledger reads as open; a provisional number the store never allocated, or allocated and never
-  recorded, is refused. Measured by `a_provisional_issue_opens_without_asking_github_anything`.
+- **The store holds a write queue and one permitted rewrite of an entry.** Schema 9 adds `outbox` and
+  `provisional_issues`, and the `entries_no_update` trigger lets exactly one update through, moving an
+  entry's `issue` from a provisional number to the real number `provisional_issues` records
+  (`an_entry_may_move_from_a_provisional_issue_to_its_recorded_real_number_and_nowhere_else`). Provisional
+  numbers start at `PROVISIONAL_BASE` from one counter in `store_meta`, so two machines can allocate the
+  same number and file the same issue twice. `Store::rekey` moves a provisional issue's rows in one
+  transaction and `outbox::rekey_files` follows with the run pointers and the ownership record; a branch or
+  worktree directory named with the provisional number keeps that name. A provisional issue opens its
+  ledger without any GitHub call, and an unallocated or unrecorded number is refused.
 - **The flush sends the queue in one line, and a stalled write holds everything behind it.**
   `outbox::flush::run` refuses while the window is closed, takes a per-repository lease in `store_meta`
-  (`outbox-lease host/owner/name`, a pid and an expiry; a dead or expired holder is taken over; a flush of another repository does not hold it, and a write runs the flush only when its own repository has unsent writes, measured by `a_flush_for_another_repository_does_not_refuse_this_ones_write` and `a_lease_of_one_repository_does_not_keep_another_repository`), rekeys the pointers
-  and ownership files, and then sends unsent writes oldest first. A write is marked `sending` before it
-  is sent and `sent` only after its own readback: a comment is read back by the
-  `<!-- estigia-outbox:{op_id} -->` marker it carries, a create by `gh issue view` on the number
-  `gh issue create` printed, a link by the issue's Development sidebar, and a reconverge by the
-  readbacks `transition` already makes. A write whose outcome cannot be read stays `sending` and stops
-  the flush with `outbox-pending`; the next flush reads it first and sends it only when the readback
-  says it did not land. A failure that learned nothing on a first attempt puts the write back as
-  `queued` with the reason; once a write has been `sending` it is never put back. A link that
-  `gh issue develop` cannot make, and whose sidebar read says the branch is not linked (a branch of
-  that name already exists), is settled as `sent` with the `gh` reason in its detail and listed under
-  `not_linked` in the flush report, the same verdict the open-window `start-branch` gives
-  (`natively_linked: false`); a link whose outcome cannot be read still stops the flush. The line is global:
-  one ambiguous write stalls every write behind it, including writes for other issues. A `sending`
-  create is resolved by searching for exactly its title, and that search is the index GitHub updates
-  after the issue exists, so a flush run seconds after an ambiguous create can find nothing and file
-  a second issue; two issues with the title stop the flush instead of being guessed between. The
-  search adopts only an issue the authenticated user (`--author @me`) created no more than five
-  minutes before the row was enqueued and whose number the store does not already hold; an older
-  issue, one the store holds, or one the search lists without a `createdAt` is refused as a candidate,
-  so a same-title issue that is not this attempt's is neither adopted nor allowed to stall the row at
-  `rekey`. A search that answers nothing, or anything other than a JSON list, is a failed read that
-  keeps the row `sending`, not "no such issue". The bound is the enqueue time and not the first
-  attempt, an issue another run of the same user filed under the same title after the row was
-  enqueued is still adopted, and the `create` of an open window that left only a `pending-create`
-  mark has no row time and so is bound by author and store alone. A
-  reconverge rebuilds labels, board and owner from the store, so it overwrites an assignee or label
-  someone changed on GitHub meanwhile. A comment keeps the marker in the text GitHub shows, and its
-  timestamp there is the flush time. The readback of a comment lists the thread without a `since`
-  filter, so a local clock ahead of GitHub's cannot hide a posted comment
-  (`the_comment_readback_does_not_filter_by_the_local_clock`); the cost is that a thread of a
-  thousand comments or more is refused as unread. Every `gh issue comment` and `gh issue create` the
-  flush makes gives up after `WRITE_SECONDS`, well inside `LEASE_SECONDS`
-  (`a_write_the_flush_makes_gives_up_before_the_lease_runs_out`), and a flusher renews the lease
-  before it sends and before it settles a row, stopping without touching the row when another live
-  process holds it (`a_flusher_that_lost_its_lease_does_not_mark_the_row_sent`,
-  `a_flusher_that_lost_its_lease_sends_nothing`). What stays open: the renewal and the `gh` call are
-  not one step, so a flusher that loses the lease in the instant after the check can still send once
-  more, and a write that times out has an unknown outcome and is resolved by the next flush's
-  readback, which for a create is the search whose index lag is described above. Measured by `the_queue_is_sent_in_the_order_it_was_made`,
-  `a_created_issue_takes_its_number_before_the_next_write_on_it`,
-  `an_ambiguous_create_stops_the_queue_with_the_rest_still_queued`,
-  `a_create_left_sending_is_adopted_by_its_title_and_not_filed_twice`,
-  `a_create_left_sending_does_not_adopt_an_issue_older_than_the_row`,
-  `a_create_left_sending_does_not_adopt_an_issue_without_a_creation_time`,
-  `a_create_left_sending_does_not_adopt_an_issue_the_store_already_holds`,
-  `a_title_search_that_answers_a_non_list_does_not_file_the_create_again`,
-  `an_empty_title_search_answer_does_not_file_the_create_again`,
-  `a_comment_left_sending_that_already_landed_is_not_posted_again`,
-  `a_reconverge_that_cannot_be_read_back_stops_the_queue`,
-  `a_write_already_sent_once_never_goes_back_to_the_queue`,
-  `a_link_gh_cannot_make_is_settled_with_the_reason_and_does_not_hold_the_queue`,
-  `a_link_left_sending_that_gh_cannot_make_is_settled_and_never_requeued`,
-  `a_flush_while_closed_sends_nothing_and_keeps_the_queue` and
-  `a_lease_is_kept_by_a_live_holder_and_taken_from_a_dead_or_expired_one`.
-- **The queue is sent before anything else writes, and a detached flush is the machine's, not the session's.**
-  With the window open and a write waiting, `comment`, `create`, `transition`, `claim`, `unassign`,
-  `start-branch`, `publish-review`, `republish-review`, `release-ci`, `draft-pr` and `ensure-states` run
-  the flush first and are refused `outbox-pending` when it stops; the other operations do not, so a
-  stalled queue does not block a read or a local-store write. The list of those operations is written
-  down in `outbox::flush` and is not derived from what each operation spawns, so a new operation that
-  writes to GitHub is unflushed until it is added. When nothing is waiting the check opens the store
-  read-only and asks GitHub nothing. `estigia flush --detach` starts the same flush with no terminal in
-  its own process group and reports the pid it started, not whether the flush then succeeded; the
-  lease keeps it from running beside another. Measured by
-  `a_write_while_open_sends_what_the_closed_window_queued_first`,
-  `a_write_while_open_is_refused_when_the_queue_does_not_drain`,
-  `an_open_write_with_an_empty_queue_asks_nothing_extra`,
-  `a_publication_refused_while_closed_says_what_is_queued_and_what_runs_it` and
-  `flush_detach_returns_at_once_with_the_process_it_started`.
-- **"Offline" means the window is closed, not that the network is down, and what a closed window shows is the machine's own view.**
-  Reads still go to GitHub while the window is closed, so `list_state` fails exactly as it does with
-  the window open when GitHub cannot be reached; nothing here queues a read. `list_state` answers
-  the state from the local store, as it always did, so a transition made while closed is already in
-  it; it also lists the issues created while closed and not yet filed, marked `provisional`, with the
-  title and labels the queued create carries, and `list_state --identities` lists their identity so a
-  finding is not filed twice. Another machine, a person, and the board see none of it until the flush:
-  the labels, the board column, the assignee and the comments on GitHub disagree with the store for
-  as long as their writes are queued, and a second machine can file the same issue and take the same
-  provisional number. A task whose work is a commit cannot be marked done while closed, because
-  the commit that records it is denied by the window; a task closed by an `evidence` note instead
-  is not. `start_branch` makes the local branch and worktree while closed,
-  which it refused before, so a branch can exist locally that GitHub has not been told of. Measured by
-  `an_issue_created_while_closed_is_listed_as_provisional_in_the_state_the_store_gives_it`,
-  `a_listing_with_no_provisional_issue_carries_no_trace_of_one` and
-  `the_identity_of_an_issue_created_while_closed_is_listed_so_it_is_not_filed_twice`.
-- **The session hooks read the queue count and nothing else, so what they say can be out of date.**
-  `SessionStart` and `Stop` open the local store read-only and count the unsent writes; they ask
-  GitHub nothing, and they count every repository's writes, not only the one the session is in. With
-  the window closed and a write waiting they say how many are queued and when the window permits a
-  flush; `Stop` says it as a `systemMessage` and never blocks the stop for it. With the window open
-  they start `estigia flush` detached and say so, and report that the flush was started, not that
-  it succeeded: a session that ends at once leaves it running, and its failure is read from
-  `estigia flush --status` the next time. The text of a session start with an empty queue is
-  unchanged. Measured by `an_empty_queue_leaves_the_session_start_text_as_it_was`,
-  `a_closed_window_says_what_is_queued_and_starts_nothing`,
-  `an_open_window_with_a_queue_starts_the_flush_and_says_so`,
-  `the_stop_hook_names_the_queue_and_never_blocks_for_it` and
-  `the_stop_hook_with_an_empty_queue_answers_as_before`; a queued claim's owner and runtime label
-  are projected from the store, not from the payload, measured by
-  `a_queued_claim_projects_the_assignee_and_runtime_label_from_the_store`.
-- **One row is read by nobody.** `Delivery preset` stores nothing of its own and only writes the
-  rows it stands for, so nothing reads it at run time. `State names` is read by `assist`, `ready_pr`
-  and `review_stages`, which move a Linear issue to the state it maps. `Corrections after ready` and `Ready by` are read by `draft_pr` and
-  `ready_pr`, `External reviewers` by `review_stages`, and `Merge by` by `review_stages` and by `deliver`, which hands
-  back at `authorisation` when it is not `agent`, all through
-  `Context::layered`. `READ_BY_NOBODY` in `tests/honesty.rs` lists `Delivery preset` and fails when it
-  is read and not taken off the list.
+  (a pid and an expiry; a dead or expired holder is taken over), rekeys pointers and ownership files, and
+  sends unsent writes oldest first, marking each `sending` before and `sent` only after its own readback (a
+  comment by its `<!-- estigia-outbox:{op_id} -->` marker, a create by `gh issue view` on the number printed,
+  a link by the Development sidebar, a reconverge by `transition`'s readbacks). A write whose outcome cannot
+  be read stays `sending` and stops the flush with `outbox-pending`; a failure that learned nothing on a first
+  attempt goes back to `queued`, a write that has been `sending` never does. The line is global: one ambiguous
+  write stalls every write behind it, other issues' included. A `sending` create is resolved by searching for
+  exactly its title, and that search is the index GitHub updates after the issue exists, so a flush seconds
+  after an ambiguous create can find nothing and file a second issue; two issues with the title stop the
+  flush. The search adopts only an issue the authenticated user (`--author @me`) created within five minutes
+  before the row was enqueued whose number the store does not hold (the bound is the enqueue time, not the
+  first attempt, so a same-user same-title issue filed after enqueue is still adopted, and an open-window
+  `pending-create` mark has no row time and is bound by author and store alone). A reconverge rebuilds labels,
+  board and owner from the store, overwriting changes made on GitHub meanwhile; the comment readback lists
+  the thread without a `since` filter (a thread of a thousand comments or more is refused as unread). Writes
+  give up after `WRITE_SECONDS`, inside `LEASE_SECONDS`, and a flusher renews the lease before it sends and
+  before it settles a row. **Open:** the renewal and the `gh` call are not one step, so a flusher that loses
+  the lease in that instant can send once more, and a write that times out has an unknown outcome resolved by
+  the next flush's readback, which for a create is the lagging search.
+- **The queue is sent before anything else writes, and a detached flush is the machine's, not the
+  session's.** With the window open and a write waiting, `comment`, `create`, `transition`, `claim`,
+  `unassign`, `start-branch`, `publish-review`, `republish-review`, `release-ci`, `draft-pr` and
+  `ensure-states` run the flush first and are refused `outbox-pending` when it stops; other operations do
+  not. The list is written in `outbox::flush`, not derived from what each operation spawns, so a new
+  operation that writes to GitHub is unflushed until added. With nothing waiting the check opens the store
+  read-only and asks GitHub nothing. `estigia flush --detach` reports the pid it started, not whether the
+  flush then succeeded; the lease keeps it from running beside another.
+- **"Offline" means the window is closed, not that the network is down.** Reads still go to GitHub while
+  closed. `list_state` answers from the local store and lists issues created while closed as `provisional`;
+  another machine, a person and the board see none of it until the flush, so labels, board column, assignee
+  and comments disagree with the store for as long as writes are queued, and a second machine can file the
+  same issue under the same provisional number. A task whose work is a commit cannot be marked done while
+  closed (the window denies the commit); one closed by an `evidence` note can. `SessionStart` and `Stop` count
+  unsent writes of every repository from a read-only open and say so (`Stop` as a `systemMessage`, never
+  blocking), and with the window open they start `estigia flush` detached and report that it was started, not
+  that it succeeded.
+- **One row is read by nobody.** `Delivery preset` stores nothing of its own and only writes the rows it
+  stands for. `State names` is read by `assist`, `ready_pr` and `review_stages`; `Corrections after ready`
+  and `Ready by` by `draft_pr` and `ready_pr`; `External reviewers` by `review_stages`; `Merge by` by
+  `review_stages` and `deliver`, which hands back at `authorisation` when it is not `agent`; all through
+  `Context::layered`. `READ_BY_NOBODY` in `tests/honesty.rs` lists `Delivery preset` and fails when it is
+  read and not taken off the list.
   - **`review_stages` reads, and decides nothing.** Its answer is a reading of the pull request at the
-    moment of the call; nothing is recorded, so a run that does not ask again acts on a stale one.
-    A check stage's comments are its author's **unresolved review threads**: a comment the author
-    leaves outside a thread, or a summary review, is not read, and a thread somebody resolves without
-    addressing it counts as addressed. For `any` and `org/team` a review from any account other than
-    the author, a `[bot]` or a check stage's author satisfies the stage — team membership is not read.
-    An approval completes a review stage only for the current head; GitHub does not expose the
-    historical base that reviewer read. Exact-head polling, full thread conversations, guarded
-    reply/resolution and their non-atomic mutation limit are in [assisted review](assisted-review.md).
-    A list GitHub answers with a next page — more than a hundred threads, comments per thread,
-    reviews, requests or check runs — refuses the reading rather than deciding from the first page.
-    A blocking check that is not reported on the head holds the stages behind it
-    and says it was never reported, because a check that has not started yet and a stage name that
-    matches no check look the same from here; an advisory check never holds them. Measured by
-    `src/transport/stages/tests.rs` against a fake `gh`, including that no review is requested while
-    the cubic check is pending.
+    moment of the call; nothing is recorded, so a run that does not ask again acts on a stale one. A check
+    stage's comments are its author's **unresolved review threads** (a comment outside a thread, or a
+    summary review, is not read, and a thread resolved without addressing it counts as addressed). For
+    `any` and `org/team` a review from any account other than the author, a `[bot]` or a check stage's
+    author satisfies the stage; team membership is not read. An approval completes a review stage only
+    for the current head; GitHub does not expose the historical base that reviewer read. Exact-head
+    polling, full thread conversations, guarded reply/resolution and their non-atomic mutation limit are
+    in [assisted review](assisted-review.md). A list with a next page (more than a hundred threads,
+    comments per thread, reviews, requests or check runs) refuses the reading. A blocking check not
+    reported on the head holds the stages behind it and says it was never reported, since a check not yet
+    started and a stage name matching no check look the same; an advisory check never holds them. Held
+    against a fake `gh` by `src/transport/stages/tests.rs`.
 - **No other setting is read by nobody.**
   An operator sets thirty rows and `config list` reports all of them. Measured: `context.get` is
   called for the labels in `READ_BY_THE_TRANSPORT` — `worktree location`, `Review budget` (for the review forecast line) and `Git operation window`. The gate reads
-  `Irreversible commands`, and the payload's prose names the rest of the acted-on rows. That once
-  left `Delivery authorisation`, `Transition authorisation`, `Delivery route`, `Merge strategy`,
-  `Review delegation` and `Model routing` read by nothing at all. `setup::Applies::Asked` said of
-  three of them *"the contract asks, and the agent may still honour it, but nothing checks"*, and
-  for three the contract did not ask either. The four rows that had exactly one
-  answer — `Delivery route`, `Review delegation`, `Merge strategy` and `Review protocol` — were retired, and
-  hard-coded what each meant, so they are no longer settings to read, and the list the guard
-  declares is empty.
-
-  The two authorisations are closed: `SKILL.md` now says, in the steps where a state moves and where
-  a change is delivered, that doing it unasked needs the row's permission. `Delivery authorisation` is
-  also read in code now: `deliver` hands back `authorisation` unless it is `auto`, and so does `Merge by`
-  unless it is `agent`, both through `Context::layered`. A merge made by hand through the shell is still
-  held only by the prose, so the row stops no run that never calls `deliver`. `Model routing` is closed
-  too, and by a narrower claim than the row's name suggests: `setup` reads it for the
-  `model:` and `effort:` lines of the definitions it writes, and the managed block of the **installed**
-  `SKILL.md` now carries a sentence telling the agent to honour the row. It is generated rather than
-  payload text — `selected_documents` builds it and `configuration_body` splices it between the
-  markers — so it is in no file in this repository, which is why an earlier draft of this entry sent a
-  reader to `skill/SKILL.md` to look for it and a later one sent them to the directive file, where the
-  configuration block is never written at all. Five of the eight supported adapters share the neutral skill
-  root — `adapters_on_the_neutral_root()` computes it, and `docs/what-it-writes.md` is held to the
-  same number by a test — so they share one installed contract and one rendered sentence rather than
-  each having their own, and the sentence is written for that: it names the host it means, Claude Code
-  being the one adapter that receives the definitions `setup` installs, and leaves the routing value
-  in the per-agent row, which that adapter's own file may move, rather than restating it.
-  Comments in the
-  source still say eight; that population carries the search rather than a count. It does
-  **does** decide whether those two definitions exist — naming the role in `Model routing` is what
-  installs it, and removing the entry retracts it, which is the change made when the
-  `Delegated workers` row was deleted. Nothing here starts a model; what changed is that something
-  reads the row. `Merge strategy` left
-  the unread list when `closing_merge` read it. It was then retired, so
-  delivery's merge commit is hard-coded and the row is gone: the list in
-  `every_setting_is_read_by_the_gate_the_transport_or_the_prose` is empty, and the guard now fails on
-  any row the gate, the transport and the prose all leave unread.
+  `Irreversible commands`, and the payload's prose names the rest of the acted-on rows. The four rows that
+  had exactly one answer (`Delivery route`, `Review delegation`, `Merge strategy`, `Review protocol`) were
+  retired and hard-coded, and the guard fails on any row the gate, the transport and the prose all leave
+  unread (`every_setting_is_read_by_the_gate_the_transport_or_the_prose`). `Delivery authorisation` and
+  `Merge by` are read in code (`deliver` hands back `authorisation` unless they are `auto` and `agent`), and
+  a merge made by hand through the shell is held only by the prose. `Model routing` is closed by a narrower
+  claim than its name suggests: `setup` reads it for the `model:` and `effort:` lines of the definitions it
+  writes, and the managed block of the **installed** `SKILL.md` carries a generated sentence telling the
+  agent to honour the row (`selected_documents` builds it and `configuration_body` splices it, so it is in
+  no file in this repository). Five of the eight supported adapters share the neutral skill root
+  (`adapters_on_the_neutral_root()` computes it; `docs/what-it-writes.md` is held to the same number), so
+  they share one installed contract and one rendered sentence, which names Claude Code as the one adapter
+  that receives the definitions `setup` installs. Naming a role in `Model routing` installs its definition
+  and removing the entry retracts it. Nothing here starts a model; what changed is that something reads
+  the row.
 
 ## doctor, and what it checks
 
-- **`doctor`'s rows were measured as builders and not as report — closed, with the measurement.**
-  Each row's own function was tested. The **assembly** was not: downgrading every `Broken` of one
-  row family on its way out of `doctor::full` left the whole suite green for ten of the eleven. A row
-  could therefore be built correctly and dropped, filtered or softened on the way into the report,
-  and every unit test on its builder would still pass — which was not hypothetical, because `full`
-  once failed to pass the home directory to `state_root`, and the push-guard row vanished entirely
-  under a tracker with no transport.
+- **`doctor`'s rows are forced through the binary, except two, and the assembly is held row by row.**
+  Each row's own function is tested, and the **assembly** into the report is crossed too (downgrading every
+  `Broken` of one row family in `doctor::full` once left the suite green for ten of eleven rows). All rows
+  can break, and all but two are forced through the binary in `tests/pipe/status_doctor.rs`'s `FORCED`
+  list; a row added later fails until it is forced or says why not. The exemptions:
+  - `stale-run-pointer` needs a `gh` that answers `issue-not-open` for one specific issue number;
+    `harness::doctor`'s own module drives `stale_run_pointers` through a scripted `gh`
+    (`a_readable_stale_pointer_is_reported_and_names_the_release_command`,
+    `a_readable_live_pointer_is_reported_fine`, `a_tracker_read_that_fails_is_reported_as_unread_not_stale`).
+  - `gate-version` is forced against a checkout sharing no history with the binary, but that state is not
+    its *broken*: `git merge-base --is-ancestor` cannot answer, so the row reports `skipped`. Genuinely
+    `Broken` on a real ancestor pair is `gate_version_reports_fine_and_genuinely_stale_against_real_commits`,
+    which may execute nowhere on a given run (it skips on a dirty build and when a shallow clone lacks the
+    binary's commit, which is what CI's checkout gives it). What holds the `Broken` decision
+    unconditionally is `an_older_binary_than_the_checkout_is_reported_broken_with_a_reinstall` against
+    `gate_age_verdict`, fed `Some(false)`, so it cannot see which end of the ancestry the call site asks
+    for; in those two conditions a swapped argument would report a current gate broken and a stale one
+    current.
 
-  All of them can break now — `gate-version` joined them, after
-  `stale-run-pointer`, and `transport` is gone rather than kept as the one row that never could:
-  with Linear and Trello removed, the only tracker left always has an executable, so the row
-  answered `ok` on every configuration and nothing else. All but two are forced through the
-  binary, on states any machine can be put into: no skill; an install whose asset digest came
-  from another build; a contract taken from under a registered agent; two installed roots whose
-  machine-wide rows disagree; a gate and a tool server whose settings name a binary that is not
-  there; a checkout with
-  no remote; a `pre-push` hook that is not text; an unreadable stand-down; an unreadable run pointer;
-  a ledger line saying a call went through ungated; and, for the one row that is about the machine
-  rather than the installation, a search path with no `gh` on it.
-
-  The other two are exemptions: named in `tests/pipe/status_doctor.rs`'s own `FORCED` list without being forced
-  *broken* there, each with its own reason said inline rather than left as a silent gap.
-
-  `stale-run-pointer` is one: `a_row_that_is_broken_comes_out_of_the_
-  report_broken` names it in that list without forcing it broken. Forcing it needs a `gh` that
-  answers `issue-not-open` for one specific issue number rather than the blanket absence the `gh`
-  row's own forcing step already uses — a different fixture shape than every other row on this list
-  needs, and one `harness::doctor`'s own module already builds through a scripted `gh`:
-  `a_readable_stale_pointer_is_reported_and_names_the_release_command`,
-  `a_readable_live_pointer_is_reported_fine` and `a_tracker_read_that_fails_is_reported_as_unread_
-  not_stale` drive `stale_run_pointers` directly, with `stale-run-pointer` reported `Broken` (a
-  stale pointer, and separately an unread one) and `Fine`. `harness::guard::tests` scripts `gh` for
-  its own reconciliation tests but constructs no `doctor::Check` and never touches this row.
-
-  `gate-version` is the other. The same fixture forces it against a checkout that shares no history
-  with the binary under test — an unrelated repository built with a fresh `git init` — but that state
-  is not the row's *broken*: `git merge-base --is-ancestor` cannot answer either *yes* or *no* about
-  two histories with no object in common, so the row reports `skipped`, *could not be established*,
-  the same *cannot tell* answer this row gives for a dirty build. Shares-no-history is not the same
-  fact as older, and reading it as one is the inference this row was rewritten to stop making.
-  Genuinely `Broken`, on a real ancestor pair, is `harness::doctor`'s own
-  `gate_version_reports_fine_and_genuinely_stale_against_real_commits` — not forced through this
-  binary either, the same shape as `stale-run-pointer` above. That name is the assembled,
-  end-to-end version, and it may execute nowhere on a given run: it skips on a dirty build — every
-  local dev loop — and again at its own `cat-file -e` guard when a local clone of a shallow
-  checkout does not hold the binary's own commit, which is what CI's checkout gives it. What holds
-  the `Broken` decision unconditionally is a separate, pure test on fabricated inputs —
-  `an_older_binary_than_the_checkout_is_reported_broken_with_a_reinstall`, against
-  `gate_age_verdict` directly. That holds what the arm *says* when it is reached, and not that it
-  is reached: it is fed `Some(false)`, so it cannot see which end of the ancestry the call site
-  asks for. Under the two conditions above — a dirty build, or a clone without the commit — the
-  assembly is what goes unheld, and the assembly is where a swapped argument would report a
-  current gate broken and a stale one current. Naming the two revisions rather than passing a
-  slice is what stands in for a test there, and it is a weaker thing than a test.
-
-  **A build that stops carrying its commit degrades to *cannot tell* everywhere, and nothing
-  fails.** A `build.rs` regression that stopped emitting `ESTIGIA_COMMIT` — the
-  whole of the identity this issue exists to add — would leave the suite green: `VERSION` becomes
-  `0.1.0 (unknown build)` and the `--version` test still passes, the end-to-end stale test
-  early-returns, and the pipe fixture takes its no-commit arm and asserts that degradation as a
-  success. The failure mode is honest — every row answers `skipped`, never a false `ok` — and a
-  *corrupted* commit is still caught on a clean build by the `Fine` assertion against the manifest
-  directory. What is unheld is the absence.
-
-  A row added later fails the same test until somebody forces it or says why they cannot.
-
-  The same lens was then turned on the other two assembled pages, and found two more of the same
-  shape. Blanking the **skill root** printed under a configured agent in `estigia status` left the
-  suite green — the line that answers *which directory*, for somebody who has just been told their
-  skill is out of date. And the whole of `estigia setup --companion <slug>` was crossed by nothing:
-  its one `say!` could be replaced with a discard, and the unpublished companion could be answered
-  with `cargo install leteo`, a command that would 404, without a single test objecting. Both are
-  now read back out of the binary by `what_status_prints_is_what_somebody_needs_to_act_on` and
-  `what_the_companion_verb_prints_is_crossed`.
-
-  A row can also be wrong in the direction that reads as working. The `gate` row and `status`'s
-  `gate on` both come from one question — *is Estigia's hook registered for this agent* — and
-  `is_estigia_hook`, which answers half of it, could be made to say **yes to every entry** with the
-  suite still green: the only files anything crossed it against held Estigia's own hook or held
-  nothing at all. Between those sits an ordinary machine, an operator with their own `PreToolUse`
-  hook and no Estigia entry beside it, and there a yes prints `gate on` over no gate. That machine
-  is now built and read back by `somebody_elses_hook_is_not_this_agents_gate`.
-- **Estigia cannot check who reviewed.** The contract requires that a review *"MUST NOT be
-  performed by the context that wrote the change"*. The harness reads who recorded a computed
-  verdict, and will not let the publishing run or a run that asked for review resolve its own
-  handoff or supersede its own escalation. Where the reviewing run recorded its own verdict that is timeline attribution; where the
-  claim holder recorded somebody else's, it is a name that run supplied. The judgement still belongs
-  to the agent; Estigia records its outcome and receipt but does not observe who or what produced
-  it.
-- **Refusals about a tracker or host with no transport can no longer fire on GitHub alone, and are
-  kept anyway.** Removing Linear and Trello left `Tracker` with one variant, and
-  `RepositoryHost` is GitHub-only the same way, so both `transport()` methods answer
-  `Some("estigia")` for every value that can exist. Production sites still branch on absence —
-  tracker sites in `src/cli/mod.rs`, `src/harness/doctor.rs`, `src/harness/mod.rs`, and the
-  per-operation match in `src/harness/mcp/mod.rs` (tracker-bound tools vs host-bound tools after
-  the split) — and every one of those branches is unreachable while only GitHub is implemented. The
-  tests that could only construct the missing-transport scenario were deleted rather than weakened;
-  the guards were not. What the split *did* change is the shape of the MCP refusal: it is no longer a
-  single top-of-`run_tool` check on the tracker for every tool; publication and receipt-bound
-  review tools ask the host instead, so a future tracker without a transport can still run
-  `publish_review` against a GitHub host.
-
-  The removal of Linear and Trello also deleted `doctor`'s `transport` row, for the same arithmetic,
-  so the two decisions need the distinction that separates them stated rather than assumed: **a refusal that cannot fire
-  is inert and harmless, while a reported row that cannot vary is noise an operator reads every
-  time.** The `Option` also still carries a real statement — that a tracker might have no
-  executable — which is true of the design and would be true again the day a second binding ships
-  with one. What is given up by keeping them is that nothing distinguishes a guard held for that
-  reason from one nobody noticed had died, and this paragraph is the only thing recording which
-  these are.
-
-- **`doctor` is held at the function and at the composition, and not at the call site.** Two tests
-  now cross that the tracker `doctor` reports on is the checkout's own and not the contract's:
-  `the_tracker_in_force_is_the_one_this_checkout_names_not_the_contracts` gives the contract a named
-  repository so both layers are distinguishable, and
-  `the_stale_run_pointer_check_asks_gh_about_the_checkout_s_own_repository` composes
-  `tracker_in_force` into `stale_run_pointers` and reads back which repository `gh` was asked about.
-  Mutating `tracker_in_force` to answer from the contract alone reddens both.
-
-  **Neither reaches `cli::doctor()` itself, and that gap is measured rather than supposed.** Replacing
-  the call at `src/cli/mod.rs` with a contract-only read — leaving `tracker_in_force` correct and
-  breaking only what the caller hands it — leaves the whole suite green: 1,251 lib tests and nine
-  further suites, 0 failed. That function reads `std::env::current_dir()` directly and takes no
-  parameters, so it is reachable only through a subprocess, and this repository's own convention sends
-  `stale-run-pointer` the other way: `tests/pipe/status_doctor.rs`'s `FORCED` list deliberately exempts it and the
-  row is measured in `harness::doctor`'s own module with a scripted `gh` instead.
-
-  So a defect purely in that call site's arguments — the wrong root, the wrong directory, the two
-  swapped — is caught by nothing. The original test that would have caught it drove the binary, and it
-  was deleted in this change because its other assertions could no longer be posed. That is the
-  trade this round made, and it is written here rather than left in a report.
-
-- **A guard's copy detector lost half its grip in the same change, and stayed inert and unnamed for
-  one round.** `tests/honesty.rs`'s `every_reader_of_a_transportless_tracker_asks_the_same_function`
-  had two halves: a floor (at least four production call sites ask `Tracker::transport()`) and a text
-  search for `["linear", "trello"]` written out as a literal pair — the shape of a second
-  implementation of "is this tracker operable" that would drift from `transport()` silently. Removing
-  Linear and Trello took both names out of every `.rs` file under `src/` — measured directly,
-  grepping for them returns nothing — so the second half became permanently unfalsifiable: no edit
-  anyone could make would ever fail it again. The doc comment above it was left stale too, still
-  naming "the doctor's row" as one of four callers after this same change deleted that row.
-
-  Both are fixed now: the doc comment names the six current call sites by file and line instead of a
-  soft count, and the copy detector is deleted rather than re-aimed. Re-aiming it at "some future
-  second tracker decided by a hand-rolled match instead of `transport()`" was considered and rejected
-  — there is no real violation of that shape to prove such a detector against today, and a guard that
-  cannot be shown red is not measured, only asserted. What this gives up: a tracker added later with
-  no transport could again be decided by a second, drifting implementation, and nothing in this suite
-  would catch it until the guard is rewritten against that tracker's actual shape.
+  **A build that stops carrying its commit degrades to *cannot tell* everywhere, and nothing fails.** A
+  `build.rs` regression that stopped emitting `ESTIGIA_COMMIT` leaves the suite green (`VERSION` becomes
+  `0.1.0 (unknown build)`, the end-to-end stale test early-returns, the pipe fixture takes its no-commit
+  arm). The failure is honest (every row answers `skipped`), and a *corrupted* commit is caught on a clean
+  build; what is unheld is the absence. `what_status_prints_is_what_somebody_needs_to_act_on`,
+  `what_the_companion_verb_prints_is_crossed` and `somebody_elses_hook_is_not_this_agents_gate` read the
+  assembled pages and the ordinary machine (an operator's own `PreToolUse` hook beside no Estigia entry)
+  where `is_estigia_hook` saying yes to every entry would print `gate on` over no gate.
+- **Estigia cannot check who reviewed.** The contract requires that a review *"MUST NOT be performed by
+  the context that wrote the change"*. The harness reads who recorded a computed verdict, and will not let
+  the publishing run or a run that asked for review resolve its own handoff or supersede its own
+  escalation. Where the reviewing run recorded its own verdict that is timeline attribution; where the claim
+  holder recorded somebody else's, it is a name that run supplied. The judgement belongs to the agent.
+- **Refusals about a tracker or host with no transport: only the tracker's can fire.** `Tracker` has two
+  variants and `Tracker::transport()` answers `None` for Linear (read-only, admitted only under `Workflow:
+  assisted`); `RepositoryHost` is GitHub-only, so the host-bound branches in `src/harness/mcp/mod.rs` are
+  unreachable while only GitHub is implemented and are kept: a refusal that cannot fire is inert and
+  harmless, while a reported row that cannot vary is noise, and nothing distinguishes a guard kept for that
+  reason from one nobody noticed had died except this paragraph.
+  `every_reader_of_a_transportless_tracker_asks_the_same_function` holds a floor alone (at least four
+  production call sites ask `Tracker::transport()`); its second half, a text search for a literal
+  tracker-name pair, was deleted because it became unfalsifiable when Linear and Trello were removed, so a
+  hand-rolled second decision about a tracker with no transport is caught by nothing. The test's own doc
+  comment still says `Tracker` is down to one variant, which is no longer so.
+- **`doctor` is held at the function and at the composition, and not at the call site.**
+  `the_tracker_in_force_is_the_one_this_checkout_names_not_the_contracts` and
+  `the_stale_run_pointer_check_asks_gh_about_the_checkout_s_own_repository` cross that the tracker `doctor`
+  reports on is the checkout's own, not the contract's. Neither reaches `cli::doctor()` itself: replacing
+  its call with a contract-only read leaves the suite green, since the function reads
+  `std::env::current_dir()`, takes no parameters, and is reachable only through a subprocess. A defect
+  purely in that call site's arguments is caught by nothing.
 
 - **`doctor` checks twenty things, not everything.** Skill, installed skill assets, `gh`
   authentication, a git remote, this repository's push guard, the contract each configured agent
@@ -3537,626 +3061,241 @@ pointer that leaves it names the document it points at.
   the gate, whether a tracked lockfile is sent to every reviewer in full because
   `estigia.generated.toml` does not declare it (an advisory row that is absent when there is nothing to name), and which permission mode each of
   Claude Code, Codex, OpenCode and Pi is configured with (see the entry below). It does not check the tracker's labels, or whether the
-  repository it found is the one the issues live in.
+  repository it found is the one the issues live in. The skill comparison is against this binary's embedded
+  copy, so a stale binary reports its own age as current; an install whose operator table no build
+  recognises reports unreadable rather than current.
 
-  The skill comparison is against this binary's embedded copy, so a stale binary reports its own
-  age as current — it cannot detect that a newer build would write something else. An install whose
-  operator table no build recognises reports unreadable rather than current, and the remedy names
-  the row rather than `sync`. Same mechanism as the installed judge definition, which is
-  linked rather than restated.
-
-- **A host's automatic mode keeping Estigia's gate is pinned by tests and measured live on three hosts of four.**
-  The rule: an automatic mode approves the host's own prompts, and Estigia's decisions are never
-  among them. Checked on 2026-10-14 in a scratch repository with no claim held and `Issue
-  requirement` at `ask`, asking the model to write `hello.txt`: OpenCode v2.0.26 under `opencode run
-  --auto` and Claude Code 2.1.296 under `claude -p --permission-mode bypassPermissions` both refused
-  `issue-required` and created no file, and Pi 1.1.0 has no permission prompts at all, so its gate
-  was unchanged and a subagent child's writes were refused too. **Codex 0.159.2 was not run:** the
-  local install was not signed in (`401 Unauthorized`), so nothing here says what Codex does under
-  `--full-auto` or the `never` approval policy, and the Codex check stays open until a signed-in run
-  records it. What the suite pins instead is the part Estigia owns: with the mode's fields in the
-  hook payload (`permission_mode` of `bypassPermissions`, `auto`, `dontAsk`, `acceptEdits`;
-  `approval_policy` of `never`), the answer is byte-identical to the answer without them, a
-  deny where the requirement is `required` and, where it is `ask`, an `ask` on Claude Code and a deny
-  on Codex; and the generated OpenCode plugin throws on exits `1` and `2` with automatic-mode fields on
-  the hook input, in both generations of its loader, and registers no permission hook. What no test
-  can pin is the host's own ordering: a host release that put its permission layer before hooks or
-  plugins would turn a refusal into an approval, and only a live run against that release would see
-  it. Under `ask`, Claude Code's hook answers `ask`, and the live run saw the file not created; it
-  did not separate a host that put the question to nobody from one that refused it. The `permission` row
-  of `doctor` reads the setting from the host's settings files only (`permissions.defaultMode` for
-  Claude Code, from the project's `settings.local.json`, then its `settings.json`, then the user's; `permission` in `opencode.json`; `approval_policy` and
-  `sandbox_mode` at the top level of `~/.codex/config.toml`), so a mode chosen on a command line
-  (`--auto`, `--permission-mode`, `--full-auto`), a Codex profile, a managed policy file or an
-  environment variable is invisible to it, and `no permission mode is set` means the files say
-  nothing, not that the host runs its default. A file that does not parse is reported as unread, not as
-  a mode. Other hosts get no row.
+- **A host's automatic mode keeping Estigia's gate is pinned by tests and measured live on three hosts of
+  four.** The rule: an automatic mode approves the host's own prompts, and Estigia's decisions are never
+  among them. Checked on 2026-10-14 in a scratch repository with no claim held and `Issue requirement` at
+  `ask`, asking the model to write `hello.txt`: OpenCode v2.0.26 under `opencode run --auto` and Claude Code
+  2.1.296 under `claude -p --permission-mode bypassPermissions` both refused `issue-required` and created no
+  file, and Pi 1.1.0 has no permission prompts at all. **Codex 0.159.2 was not run** (the local install was
+  not signed in, `401 Unauthorized`), so nothing says what Codex does under `--full-auto` or the `never`
+  approval policy. What the suite pins is the part Estigia owns: with the mode's fields in the hook payload
+  (`permission_mode` of `bypassPermissions`, `auto`, `dontAsk`, `acceptEdits`; `approval_policy` of `never`)
+  the answer is byte-identical to the answer without them (a deny under `required`; under `ask`, an `ask` on
+  Claude Code and a deny on Codex), and the generated OpenCode plugin throws on exits `1` and `2` with
+  automatic-mode fields, in both loader generations, and registers no permission hook. What no test can
+  pin is the host's own ordering: a release that put its permission layer before hooks or plugins would turn
+  a refusal into an approval. Under `ask` the live run saw the file not created but did not separate a host
+  that put the question to nobody from one that refused it. The `permission` row of `doctor` reads the
+  setting from the host's settings files only (`permissions.defaultMode` for Claude Code, from the
+  project's `settings.local.json`, then `settings.json`, then the user's; `permission` in `opencode.json`;
+  `approval_policy` and `sandbox_mode` at the top level of `~/.codex/config.toml`), so a mode chosen on a
+  command line, a Codex profile, a managed policy file or an environment variable is invisible to it, and
+  `no permission mode is set` means the files say nothing, not that the host runs its default. A file that
+  does not parse is reported as unread. Other hosts get no row.
 
 - **Installed-asset staleness is a recorded digest comparison, and a mismatch is Broken with `sync`.**
-  Every install records an aggregate digest of the embedded skill assets — sorted
-  paths, NUL-delimited, metadata-free, so two builds from identical sources agree — and `doctor`
-  compares it against the running build's. A mismatch is a stale install and names `sync`; no
-  record at all is skipped, not cleared, because absence says nothing about the files. The same
-  decision at the reviewer-definition door reads the other way round: bytes that moved since the
-  install wrote them name an edit, while a record that predates digests cannot tell an older
-  build from one and says unknown rather than picking. What neither answers is whether the
-  running binary itself is current — the comparison is against its own embedded copy either way.
-- **The `gate-version` row compares what is installed against the checkout, not what any host
-  actually invokes.** The comparison is the running binary's embedded commit against the
-  checkout's `HEAD`: it establishes whether the checkout's `HEAD` is a point *this* binary — the
-  one answering the command — already contained; a **no** does not establish that this build is
-  earlier, only that the checkout's head is not a fact of the history this build already held. It
-  does not discover which path another agent's hooks invoke; a host wired to a different executable
-  is the `gate` row's *not this build* warning, a separate question the count above keeps separate.
-  It cannot tell when the build carried
-  no commit (a published crate, or a build made without git on the path — a released archive built
-  by `release.yml` still has one, since that workflow checks out the tag before building), came from
-  a dirty tree, the directory has no head, or `git merge-base --is-ancestor` itself could not answer
-  (exit code neither `0` nor `1` — most often the binary's commit is not an object this checkout's
-  repository holds at all, e.g. two unrelated histories or a shallow clone) — and in every one of
-  those four cases it says *skipped* rather than passing, because an unknown answer is not
-  clearance.
-  `doctor` keeps every one of those rows. The session-start note (`build_note` in the hook) is
-  silent in exactly one of them: a clean build with a commit, a readable head, and a repository
-  that does not hold the commit (`git cat-file -e` fails), which is every project that is not
-  Estigia's own and where nothing can be done about it. A dirty build, a build with no commit and a
-  directory with no head are still named at session start, and so is a stale build in a checkout
-  that holds its commit. A shallow clone of Estigia that lacks the commit is silent too, since it
-  looks the same as a foreign repository; `doctor` still says *skipped* there.
-- **`status --json`'s copy of the identity is asserted nowhere.** `estigia --version` has
-  `version_reports_the_build_identity_not_only_the_crate_version` in `tests/pipe/cli_process.rs` comparing the
-  printed line to `estigia::build_info::VERSION` directly, and the same assertion was added
-  for the MCP handshake's `serverInfo.version` (`src/harness/mcp/mod.rs`) and the TUI banner
-  (`src/tui.rs`). `status --json`'s `"estigia"` field (`src/cli/mod.rs`) has no equivalent:
-  reverting it to bare `env!("CARGO_PKG_VERSION")` leaves the whole suite green.
-- **The embedded identity's `dirty` flag can go stale between builds, and only that half.** The
-  first cut of `build.rs` watched `build.rs` itself and every `.rs` file under `src/transport`
-  except any named `tests.rs` — `rust_sources` skips those, so `src/transport/claim/tests.rs` was
-  never among them — and emitting any `rerun-if-changed` at all disables Cargo's default "rerun
-  the build script if anything in the package changed" — so an edit anywhere else recompiled the
-  crate while Cargo replayed the previous run's cached `ESTIGIA_COMMIT` and `ESTIGIA_DIRTY`.
-  Measured: editing `src/harness/doctor.rs` (outside `src/transport`) and rebuilding left
-  `--version` reporting the commit and dirtiness of whatever tree the build script had last
-  actually run under, not the one on disk. It now additionally watches the git files whose change
-  means the *commit* half is stale — the per-worktree `HEAD`, resolved through `git rev-parse
-  --git-dir`/`--git-common-dir` so a worktree's indirection and a branch's ref both work, plus
-  `packed-refs` for a ref a `git gc` has moved. That closes the commit half: committing, or
-  switching branches, and rebuilding now reports the new commit. Nothing but that hand measurement
-  holds the claim, and it is the only thing that does: deleting the `watch_git_identity(&root);`
-  call at `build.rs` leaves the suite green, and the identity would simply go stale on the next
-  unrelated rebuild — silently, in the direction that reads as working. It does not close the
-  `dirty` half, and cannot without giving up the point of not emitting a `rerun-if-changed` for
-  every file — editing an already-tracked file's *content*, without
-  committing or touching any ref, changes `git status --porcelain`'s answer without touching anything
-  this build script watches. Measured the same way: after the fix, editing `doctor.rs` again and
-  rebuilding still reports the tree clean, because nothing told Cargo to rerun the script. A wrong
-  *clean* is the failure mode this row was filed to prevent for *older*, and it is still reachable
-  here for *dirty* — an operator who committed cleanly, then edited without rebuilding through a
-  fresh `cargo build` invocation that itself changes a watched file, sees a stale `clean` on the next
-  unrelated rebuild. There is no cheap fix: watching every tracked file for content changes is
-  exactly the default Cargo behaviour this build script turned off for the transport-vocabulary
-  extraction's sake, and restoring it here would restore the unrelated-edit rebuild this same change
-  was written to close.
+  Every install records an aggregate digest of the embedded skill assets (sorted paths, NUL-delimited,
+  metadata-free) and `doctor` compares it against the running build's. No record at all is skipped, not
+  cleared. At the reviewer-definition door bytes that moved since the install wrote them name an edit,
+  while a record that predates digests says unknown rather than picking. Neither answers whether the
+  running binary itself is current.
+- **The `gate-version` row compares what is installed against the checkout, not what any host actually
+  invokes.** The running binary's embedded commit is compared with the checkout's `HEAD`: a **no** does not
+  establish that this build is earlier, only that the checkout's head is not in the history this build
+  held. It does not discover which path another agent's hooks invoke (that is the `gate` row's *not this
+  build* warning). It says *skipped* rather than passing when the build carried no commit (a published
+  crate, or built without git; a `release.yml` archive still has one), came from a dirty tree, the
+  directory has no head, or `git merge-base --is-ancestor` could not answer (exit neither `0` nor `1`,
+  most often because the commit is not an object this repository holds: two unrelated histories or a
+  shallow clone). The session-start note (`build_note`) is silent in exactly one of those: a clean build
+  with a commit, a readable head, and a repository that does not hold the commit, which is every project
+  that is not Estigia's own (a shallow clone of Estigia lacking the commit is silent too; `doctor` still
+  says *skipped*).
+- **`status --json`'s copy of the identity is asserted nowhere.** `estigia --version`, the MCP
+  handshake's `serverInfo.version` and the TUI banner are compared to `estigia::build_info::VERSION`
+  (`version_reports_the_build_identity_not_only_the_crate_version` in `tests/pipe/cli_process.rs`);
+  `status --json`'s `"estigia"` field (`src/cli/mod.rs`) has no equivalent, and reverting it to bare
+  `env!("CARGO_PKG_VERSION")` leaves the whole suite green.
+- **The embedded identity's `dirty` flag can go stale between builds, and only that half.** `build.rs` emits
+  `rerun-if-changed` for itself, the `.rs` files under `src/transport` (except `tests.rs`) and the git files
+  whose change means the *commit* half is stale (the per-worktree `HEAD` and `packed-refs`); emitting any
+  disables Cargo's default rerun, so an edit elsewhere recompiles the crate while Cargo replays the cached
+  `ESTIGIA_COMMIT` and `ESTIGIA_DIRTY`. That closes the commit half (deleting `watch_git_identity(&root);`
+  leaves the suite green; only a hand measurement holds it) and not the `dirty` half: editing a tracked
+  file's *content* without committing changes `git status --porcelain` without touching anything watched, so
+  the next unrelated rebuild still reports the tree clean and the row prints `ok  gate-version this build (C)
+  is current against the checkout`, a pass spoken plainly for a state it cannot see. The dirty read uses
+  `--untracked-files=no`, a narrower claim than "compiled from" (`build.rs`'s `rust_sources` walks the
+  filesystem under `src/transport`, so an untracked `.rs` file there is folded into `TRANSPORT_VOCABULARY`
+  while the tree reads clean; no test holds it). `capture_identity`'s `git_query` returns `None` for both
+  "failed" and "empty", so a build where `git rev-parse` succeeds and `git status` fails embeds
+  `ESTIGIA_DIRTY=0`; distinguishing them needs `dirty` to carry three states.
 
-  The dirty read itself narrowed too, on purpose: `git status --porcelain` counts an untracked file
-  the same as an edit to a tracked one, so a machine that always has one lying around — a stray
-  build artifact outside `target/`, an editor swap file — reported `dirty` on every build, and the
-  row this feeds was permanently `skipped` there, which is the machine the issue was filed about.
-  `capture_identity` now reads `--untracked-files=no`, because the question is whether the
-  *committed* tree still matches the commit it names, and an untracked file does not change that —
-  a narrower claim than "compiled from": `build.rs`'s own `rust_sources` walks the filesystem under
-  `src/transport` rather than git, so an untracked `.rs` file placed there *is* folded into the
-  generated `TRANSPORT_VOCABULARY` while this flag still reports the tree clean. `--untracked-
-  files=no` is held the same way as the commit-half closure above: by the hand measurement in this
-  entry, and nothing else — no test in this repository builds an untracked file and asserts that it
-  does not flip `dirty`.
-
-  A fourth route to reporting an unread state as clean, not disclosed until now:
-  `capture_identity`'s own `dirty` (`build.rs`) is
-  `git_match(&["status", "--porcelain", "--untracked-files=no"]).is_some()`, and `git_query`
-  (`build.rs`) returns `None` for both "the command failed" and "the reply was empty" — so a
-  build where `git rev-parse` succeeds and `git status` fails embeds `ESTIGIA_DIRTY=0`, and the row
-  reports `ok … current` for a tree whose status was never actually read. Left as found rather than
-  fixed this round: distinguishing a failed `status` from a clean one needs `dirty` to carry three
-  states, not two, which is a change to what `build_info::dirty()` returns, not a change local to
-  `build.rs`.
-
-  A fifth reading of this row, filed and measured apart, is **not** the same fact: it was
-  two artifacts of one `cargo test` reading *different* values, not one value going stale. The
-  `gate-version` fixture in `tests/pipe.rs` chose its assertion branch from
-  `estigia::build_info::dirty()` — a constant compiled into the test target's copy of the library —
-  while asserting on what the *binary* printed; a run once saw the test target read `dirty` while the
-  binary's row did not, which is the failure message naming the dirty branch. Re-measured, the
-  disagreement did **not** reproduce: in one `cargo test` the integration test and the binary link the
-  same library rlib, so `dirty()` is a single compiled value and the two targets cannot read it apart.
-  What was true, and what the fix removes, is the shape that could produce the symptom at all — a
-  branch chosen from a different artifact than the row is about. The fixture now reads the binary's own
-  identity from `estigia --version`, whose `VERSION` always carries a parenthetical marker (`, dirty`,
-  or `unknown build`), so whichever shape the binary is in, its own report picks the branch, and all
-  three *cannot tell* branches are still asserted on their own words. This does not prove the original
-  observation wrong, only that it is not reproducible on this toolchain and that the test no longer
-  rests on the two artifacts agreeing.
-
-  What the row answers during that stale-`dirty` window is not silent either way: it still prints
-  `ok       gate-version this build (C) is current against the checkout`, the same line it prints
-  when the tracked tree genuinely matches, for a binary whose source is in fact an edited tree
-  neither commit `C` nor the checkout's `HEAD` names. The issue this row was filed against is
-  "never a silent pass" — this is a pass, spoken plainly, for a state the row cannot see.
-
-- **Codex's trust for Estigia's gate is written from a re-implementation of its hash, and `doctor`
-  cannot ask Codex whether it would run the hook.** codex-cli 0.159 skipped Estigia's
-  hook without a message because no `[hooks.state."<key>"] trusted_hash` named it, while `doctor`
-  said `1 live`: the row read the registration and never whether the agent would honour it. Setup now
-  writes the entry, and `doctor` reads it back. What that leaves unproven:
-
+- **Codex's trust for Estigia's gate is written from a re-implementation of its hash, and `doctor` cannot
+  ask Codex whether it would run the hook.** codex-cli 0.159 skipped Estigia's hook without a message
+  because no `[hooks.state."<key>"] trusted_hash` named it while `doctor` said `1 live`; setup now writes
+  the entry and `doctor` reads it back. What that leaves unproven:
   - **The hash is Estigia's port of `hook_hash` and `version_for_toml` in `codex-rs`
-    (`hooks/src/engine/discovery.rs`, `config/src/fingerprint.rs`), read at `rust-v0.159.2`.** It is
-    held by six vectors taken from what `codex app-server`'s `hooks/list` reported for the same
-    `hooks.json` — different events, a matcher that Codex ignores for `Stop`, a timeout of `0`,
-    an absent timeout, `async`, `statusMessage`, and a command with a non-ASCII character, quotes and a
-    backslash — and by a measurement with the real binary: trusted by the table `setup` wrote, and the
-    gate invoked. It is **not** held against any other Codex version. A release that adds a field to
-    the hashed identity, changes the canonical form or the key, makes Estigia's hash drift silently:
-    Codex then reports the hook as modified and skips it, and `doctor` — which compares against
-    Estigia's own hash, not Codex's — still says `live`. A drift like that fails no test here.
-    `estigia setup codex` does not detect it either, and the vectors would have to be re-taken.
-  - **`doctor` assumes a Codex that enforces trust.** On an older one the hook runs whether or not the
-    table is there, so a hand-edited `config.toml` without it is reported broken for a gate that runs.
-    After `setup` the table is there either way.
-  - **The version boundary was read from the source, not measured.** `trusted_hash` first appears in
-    Codex's `config.schema.json` at `rust-v0.129.0` and is absent at `rust-v0.128.0`, `0.127.0`,
-    `0.125.0` and `0.123.0`. The schema of `0.105.0`, `0.113.0`, `0.115.0`, `0.118.0`, `0.121.0` and
-    `0.123.0` has no `hooks` key at all, and `0.125.0` to `0.127.0` have `hooks` as the events table
-    with no `state`. `ConfigToml` at `0.105.0`, `0.113.0`, `0.125.0`, `0.127.0`, `0.128.0`, `0.129.0` and
-    `0.159.2` carries `#[schemars(deny_unknown_fields)]` and no `#[serde(deny_unknown_fields)]`; the
-    generated schema says `additionalProperties: false`, which is the editor's schema and not the
-    loader, so the extra table is ignored there. No pre-0.159 binary was run. A user who starts Codex
-    with `--strict-config` is not covered by that reading.
-  - **The key is built from the `hooks.json` path Estigia resolves** (`$HOME/.codex/hooks.json`), and
-    `setup` does not read `CODEX_HOME`. If Codex resolves its home to another path, or to a symlinked
-    one that it normalises, the key differs from Codex's, the hook is untrusted there, and `doctor`
-    still says `live`. Measured only with `CODEX_HOME` set to the same directory setup wrote.
-  - **Enterprise-managed, project-level and plugin hooks are not looked at**; only the user layer
-    `setup` writes is.
-  - **Nothing here asks Codex to run a write it should refuse.** The invocation measurement used a
-    stand-in gate that always denies, to see whether Codex calls the hook and honours a refusal. The
-    decisions Estigia's own gate takes for a Codex write are covered by the tests on the gate, not by
-    this measurement, and the gate stands aside outside a repository with a claim.
-  - **`status` still says `gate on` from the registration alone.** Only `doctor` reads trust.
+    (`hooks/src/engine/discovery.rs`, `config/src/fingerprint.rs`), read at `rust-v0.159.2`.** Six vectors
+    taken from what `codex app-server`'s `hooks/list` reported for the same `hooks.json` (different
+    events, a matcher Codex ignores for `Stop`, timeout `0`, absent timeout, `async`, `statusMessage`, a
+    command with non-ASCII, quotes and a backslash) and a real-binary measurement (trusted by the table
+    `setup` wrote, gate invoked) hold it, and it is **not** held against any other Codex version. A release
+    that adds a field to the hashed identity makes the hash drift silently: Codex reports the hook modified
+    and skips it while `doctor`, comparing against Estigia's own hash, says `live`. No test fails on that,
+    `estigia setup codex` does not detect it, and the vectors would have to be re-taken.
+  - **`doctor` assumes a Codex that enforces trust**; on an older one a hand-edited `config.toml` without
+    the table is reported broken for a gate that runs. The boundary was read from the source:
+    `trusted_hash` first appears in `config.schema.json` at `rust-v0.129.0` and is absent at
+    `0.128.0`/`0.127.0`/`0.125.0`/`0.123.0`; `ConfigToml` carries `#[schemars(deny_unknown_fields)]` and no
+    `#[serde(deny_unknown_fields)]`, so the loader ignores the extra table. No pre-0.159 binary was run,
+    and `--strict-config` is not covered.
+  - **The key is built from the `hooks.json` path Estigia resolves** (`$HOME/.codex/hooks.json`) and
+    `setup` does not read `CODEX_HOME`; if Codex resolves its home elsewhere or through a symlink it
+    normalises, the hook is untrusted there and `doctor` still says `live` (measured only with `CODEX_HOME`
+    set to the directory setup wrote). Enterprise-managed, project-level and plugin hooks are not looked at.
+    Nothing here asks Codex to run a write it should refuse (the invocation measurement used a stand-in gate
+    that always denies), and `status` still says `gate on` from the registration alone.
+  - **`config.toml` is edited through a TOML parser (`toml_edit`)**, so every spelling of the key names the
+    same entry and comments, order, spacing, CRLF and a BOM survive, and before writing `setup` re-parses
+    the whole file and reads the trust back, refusing a file that does not parse or carry it. The
+    `[mcp_servers.estigia]` table is still edited by the line (a comment inside it is dropped with it when a
+    key follows), covered by the parse-before-write guard, and the re-read is Estigia's own, not Codex's.
 
-- **`config.toml` is read and edited through a TOML parser, and setup refuses a file it cannot read
-  back.** The line reader that wrote `[hooks.state."<key>"]` misread valid inputs two
-  blind panels found: a `[hooks]` header carrying a URL with `=` in its comment, a `]` inside a
-  header comment, a single-quoted `'state'` key, and a line starting with `[` inside a `"""…"""`
-  value. It missed the spellings `[hooks."state"."<key>"]` and `[ hooks.state."<key>" ]`, so a table
-  already written that way was duplicated; it read a foreign header carrying `=` as part of Estigia's
-  own section, taking that table's trust with it; and it refused `["hooks.state"]`, which is a
-  different key. `hooks.state` is now edited with `toml_edit`, so every spelling names the same entry
-  and comments, key order, spacing, CRLF and a leading BOM survive. Before writing, `setup` re-parses
-  the whole file it is about to write and reads the trust back, refusing a file that does not parse
-  or does not carry the trust the entry earned. What that leaves:
-
-  - **The `[mcp_servers.estigia]` table is still edited by the line.** The parse-before-write guard
-    covers that edit — a line-based removal that leaves the file unparseable is refused before the
-    write — but the edit itself is not done through the parser. A comment inside the table is dropped with it when a key follows; a comment after the last key is kept.
-  - **The re-read is Estigia's own.** Setup proves the file parses and that Estigia reads the trust
-    it meant to write; it still does not ask Codex whether Codex would honour it, which is the
-    gap above.
-
-- **A stalled `gh` is a broken row within ten seconds, and the screen that waits on it is not
-  measured.** `doctor`'s `gh` row ran `gh auth status` with no time limit, and the
-  `tui` Doctor page ran the checks on the thread that reads keys, so in raw mode (where Ctrl-C is a
-  key and not a signal) a stalled `gh` froze the screen with no way out, and the keys pressed during
-  the wait were handed to the page afterwards. `src/bounded.rs` now runs the program (the runner the
-  advisory model catalog already used, moved rather than copied), and a program that does not answer
-  within `PROGRAM_TIMEOUT` is `Broken` with the row's own resolution.
-  `a_program_that_stalls_is_broken_within_its_limit` measures that through `program_within` with a
-  stand-in that sleeps past a short limit. It does not go through `examine`: the check starts `gh`
-  from `PATH`, not through the transport's scripted `gh`, so no fixture here stands in for it there.
-
-  `App` carries the busy state (`Busy`): while the checks or a model catalog load run, `press` ignores
-  every key but `q` and Ctrl-C, and `keys_pressed_while_the_checks_run_change_neither_the_page_nor_the_report`
-  and its two siblings measure that. `a_checks_worker_that_panics_reaches_the_screen_as_a_report_not_a_stuck_wait`
-  drives `spawn_worker` and `deliver` with a closure that panics, so a worker that dies without
-  answering is measured clearing the busy state; a worker's normal answer is not. What stays
-  unmeasured is `run` itself, as before: that the channel is read by the loop, that `poll` ticks while it waits, and that
-  quitting during the wait restores the terminal are read from the code, not driven. Quitting
-  abandons the worker rather than cancelling it, so a stalled `gh` or catalog probe is left to its
-  own bound, and unsaved answers still make `q` or Ctrl-C ask once first.
+- **A stalled `gh` is a broken row within ten seconds, and the screen that waits on it is not measured.**
+  `src/bounded.rs` runs the program and one that does not answer within `PROGRAM_TIMEOUT` is `Broken`
+  (`a_program_that_stalls_is_broken_within_its_limit` through `program_within`, not `examine`: the check
+  starts `gh` from `PATH`, not through the transport's scripted `gh`). While the checks or a model catalog
+  load, `App::press` ignores every key but `q` and Ctrl-C
+  (`keys_pressed_while_the_checks_run_change_neither_the_page_nor_the_report`;
+  `a_checks_worker_that_panics_reaches_the_screen_as_a_report_not_a_stuck_wait`). `run` itself is read, not
+  driven: that the channel is read by the loop, that `poll` ticks while it waits, and that quitting during
+  the wait restores the terminal. Quitting abandons the worker rather than cancelling it.
 
 ## Identity and the tracker
 
 - **The identity and the verdict reach different surfaces, and a refused call carries neither.**
-  `answer_text` (`src/harness/mcp/mod.rs`) inserts a `build` object — `commit()` and `dirty()` from
-  `src/build_info.rs`, read directly and not through `gate_age_verdict` — into a successful tool
-  answer whose body is a JSON object, unless the call passed `compact: true`; a body of any other shape is left as it was. `gate_version`'s
-  `Health`, which is what `gate_age_verdict` decides, has two callers: `doctor`'s `gate-version`
-  row, as it always has, and now `hook::session_start_response`, which renders it into
-  a sentence at `SessionStart` when it is not `Fine`. It reaches no tool answer, so no tool answer
-  says whether the build that produced it is current. None of this
-  touches `refusal_from_answer`'s
-  `Refusal` path nor `crate::transport::Failure::envelope`: a call that is refused reports no commit
-  and no dirty flag, the same as before this round. A caller who only ever sees refusals for a given
-  tool still cannot tell which build answered.
-
-  The `SessionStart` note is computed once, from one `gate_version(&context.repo_dir)` call at the
-  moment the hook fires. Nothing re-reads it for the rest of the session: a checkout that commits,
-  pulls, or checks out a different branch after that message was printed leaves the agent holding a
-  verdict that described an earlier state of the repository, until the next `SessionStart`.
-
-  The note also speaks on every session it cannot compare, and carries nothing to act on when it
-  does. `build_info::dirty()` is true for any build from an uncommitted tree, and a crate installed
-  from a released tarball carries no embedded commit at all; both reach a `Skipped` arm, so both see
-  the note at every `SessionStart`, and nothing a reader can do removes it. `Health::Skipped` holds
-  no `Resolution`, and `render_build_note` discards the one `Health::Broken` holds, so the reinstall
-  command `doctor`'s own row offers reaches neither arm. Both seats of the panel on this change
-  reached the first of those independently.
-
-  **The `Broken` arm is also not rare.** `render_build_note` is silent only for `Fine`, and `Fine`
-  needs the checkout's head to be reachable from the build's commit. A clean build, installed from
-  `main`, on any branch that carries a commit the installed binary lacks therefore takes `Broken`,
-  not `Skipped`: every feature-branch session after an install from `main` sees the note. The
-  `Skipped` populations above are not the only ones that hear it every session.
-
-  **The note names no command, by decision.** `CLAUDE.md` says a message names no command unless
-  running it clears the block, and a reinstall does not clear this one in-session: the `Broken` detail
-  says the tools pick up a reinstalled binary only once the session restarts. That rule wins over the
-  ratchet in `src/harness/doctor.rs` that wants a `Resolution` on every failing check: the `Broken`
-  note says plainly that the block clears only after reinstalling and restarting the session, the
-  `Skipped` note names nothing because nothing a reader does clears it, and no `Resolution` field is
-  added to either.
-
-  **Three mutations were run against the tests of this note, and each reddened a test.** Deleting
-  `{distance}; ` from the `Health::broken` format string reddened three in `harness::doctor`
-  (`a_broken_verdict_names_the_distance_when_it_is_known`,
-  `a_broken_verdict_says_the_distance_could_not_be_read_rather_than_current` and
-  `a_broken_verdict_over_a_real_git_commits_ahead_names_the_distance`). Making `render_build_note`'s
-  `Skipped` arm return an empty string reddened three in `harness::hook`
-  (`a_nameless_session_start_carries_the_build_note_too`,
-  `a_session_start_carries_the_build_note_when_the_checkout_cannot_be_compared` and
-  `a_skipped_build_health_says_cannot_tell_never_current`). Replacing `if let Value::Object(fields)`
-  in `answer_text` with an unconditional wrap reddened exactly one,
-  `a_non_object_body_is_left_alone_rather_than_corrupted`. Each count is of the library tests under
-  `harness::` only; none was run against the integration targets.
-
-  The comparison itself — which only the verdict makes, since the tool answer reads two constants and
-  compares nothing — is against the **local checkout's `HEAD`**, the directory `GateContext::repo_dir`
-  names, and never against a remote's default branch. Production code does read
-  remote and upstream refs: `@{upstream}` in `src/harness/mod.rs`, `symbolic-ref --quiet HEAD` there
-  and in `src/transport/branch.rs`, and `ls-remote --heads origin` for a caller-supplied refname. None
-  of those resolves a repository default branch — an upstream is the current branch's own tracking
-  ref, and `ls-remote` is told which name to look up — so there is no such notion here for either
-  surface to compare against, and what a fork or a stale local clone's `HEAD` last pointed at is the
-  only fact either one reads.
+  `answer_text` (`src/harness/mcp/mod.rs`) inserts a `build` object (`commit()` and `dirty()` from
+  `src/build_info.rs`, read directly, not through `gate_age_verdict`) into a successful tool answer whose
+  body is a JSON object, unless the call passed `compact: true`. `gate_version`'s `Health` has two callers,
+  `doctor`'s `gate-version` row and `hook::session_start_response`, which renders it into a sentence at
+  `SessionStart` when it is not `Fine`; it reaches no tool answer, and a refused call reports no commit and
+  no dirty flag, so a caller who only sees refusals cannot tell which build answered. The note is computed
+  once from one `gate_version(&context.repo_dir)` call when the hook fires, so a checkout that commits,
+  pulls or switches branch afterwards leaves the agent holding a verdict about an earlier state. It speaks
+  on every session it cannot compare and carries nothing to act on (a dirty build or a tarball install with
+  no embedded commit reaches a `Skipped` arm), and **the `Broken` arm is not rare**: `Fine` needs the
+  checkout's head reachable from the build's commit, so a clean build installed from `main` on any branch
+  carrying a commit the binary lacks takes `Broken`, and every feature-branch session after an install from
+  `main` hears it. **The note names no command, by decision**: `CLAUDE.md` says a message names no command
+  unless running it clears the block, and a reinstall does not clear this one in-session (the tools pick up
+  a reinstalled binary only after the session restarts), so the `Broken` note says plainly that the block
+  clears only after reinstalling and restarting, the `Skipped` note names nothing, and no `Resolution` field
+  is added to either (overriding the ratchet in `src/harness/doctor.rs` that wants one on every failing
+  check). The comparison is against the **local checkout's `HEAD`** (`GateContext::repo_dir`), never a
+  remote's default branch: production code reads `@{upstream}`, `symbolic-ref --quiet HEAD` and `ls-remote
+  --heads origin` for a caller-supplied name, none of which resolves a repository default branch.
 
 - **A phantom holder is reconciled against the tracker only where the ambiguity is real.**
-  `guard::adjudicate_action` used to refuse `several-runs-hold-this-checkout` for two or more run
-  pointers naming one checkout without ever asking whether either was still true, naming *runs that
-  no longer exist* and a resolution its reader could not perform. It now asks the tracker about each
-  named holder before building that refusal, and drops one only on an explicit `issue-not-open` —
-  every other answer, including a failed read, keeps it counted, because an unknown result is not
-  clearance in this direction either.
+  `guard::adjudicate_action` asks the tracker about each named holder before refusing
+  `several-runs-hold-this-checkout`, and drops one only on an explicit `issue-not-open`; every other answer,
+  including a failed read, keeps it counted. The decision is per holder: one answering `issue-not-open` and
+  another's read failing leaves `holders.len()` exactly **1**, the `1 =>` arm calls `gate`, and whatever
+  `gate` refuses first is what the operator is told, not the read that failed.
 
-  **Reconciliation decides each holder on its own answer, and a mixed pair is what reached CI.** The
-  rule above is per-holder, not a pair of whole-run cases: one holder answering `issue-not-open` and
-  another's read failing are decided separately. The first drops and the second is kept,
-  `holders.len()` is exactly **1**, and the `1 =>` arm calls `gate`. Whatever `gate` refuses first is
-  then what the operator is told, and it is not the read that failed. Measured twice on this
-  repository's own lane, both times on `ubuntu-latest` alone and both times the only failure in a run
-  that otherwise passed: run
-  32738461410 on 2026-08-24 and run 33482324896 on 2026-09-01, each reporting
-  `control-surface-not-installed` against a `SKILL.md` under a temporary directory, with a resolution
-  of `estigia setup --all`. The guard tests' own fixture had never installed a contract, so the first
-  thing `gate` reached was its absence. The refusal named a file the failure had nothing to do with,
-  and sent its reader to install something that was not missing anywhere but in the fixture.
+  A flake of that shape reached CI twice on `ubuntu-latest` alone (runs 32738461410 and 33482324896) and was
+  never explained: the guard tests' fixture had installed no contract, so `control-surface-not-installed`
+  surfaced; `guard/tests.rs`'s `context` now writes it
+  (`an_unanswered_tracker_read_names_the_read_and_not_the_contract`), but why one of two identical reads fails
+  on Linux and on neither other platform is unidentified and the lane has been disabled since 2026-09-01.
 
-  `guard/tests.rs`'s `context` now writes the contract itself rather than leaving the tests that
-  reach the tracker to install it themselves, so the same asymmetry answers `read-failed`,
-  `gh issue view 12 returned nothing`, with the resolution the transport already carried: *the
-  tracker could not be read; write nothing and retry the read*. Pinned by
-  `an_unanswered_tracker_read_names_the_read_and_not_the_contract`, which reports the
-  `control-surface-not-installed` refusal verbatim when the fixture's write is removed.
+  **A single holder is not reconciled, on purpose.** A single holder whose issue is closed by a close this
+  harness cannot recognise as the review's registered delivery still refuses every write in its checkout
+  with `issue-not-open`. Folding it into the loop would **erase** that refusal rather than repeat it:
+  dropping it gives zero holders, the `0 =>` arm answers `Outside(NothingSworn)` unless something there
+  denies first (`complete_review_receipt_not_selected`, `run-pointers-unreadable`), and only
+  `Outside(NothingSworn)` replaces `gate`'s refusal. Changing `holders.len() >= 2` to `>= 1` reddens
+  `a_single_stale_holder_still_refuses_through_its_own_issue_not_open`. A close this harness *does*
+  recognise (the closing PR the newest confirmed publication names, and a merge whose second parent is the
+  reviewed head and whose first parent descends from the reviewed base: `src/transport/claim/close.rs`)
+  makes `verify_claim` answer `closed-by-own-delivery`, so `holder_standing` counts the pointer `Live`.
 
-  **What the fixture change does not close, and cannot be closed from here.** Why one of two
-  identical reads fails on Linux and on neither of the other two platforms is unidentified. Three
-  readings survive the code
-  and are indistinguishable from the failure output — a transient spawn failure against the freshly
-  copied `fake_process` binary that `scripted_gh` writes per call at 74 call sites, a `canonicalize`
-  that succeeds for one holder's coverage depth and falls back for the other, and a pointer file
-  transiently unreadable, which the `1 =>` arm never consults. Separating them needs instrumentation
-  recording how many `gh issue view` calls the failing run made, and that instrumentation would have
-  to run on a platform this repository's maintainers do not reproduce on. No further sighting is
-  possible for now: this lane has been disabled since 2026-09-01. The legibility is
-  fixed and measured; the flake itself is not, and the entry says so rather than implying the
-  fixture change ended it.
+  **`doctor`'s `stale-run-pointer` row has three buckets**: `issue-not-open` (named with the `estigia
+  release --run-id` command), `Passed` with an own-delivery close (`stranded`, via `Answer::standing()` and
+  the token `OWN_DELIVERY_CLOSE_PREFIX`, one spelling bound by `OWN_DELIVERY_CLOSE_SPELLING_POPULATION`) and
+  an answer the row could not read (`unread`). `Fine` is returned only when all three are empty and says how
+  many pointers it read as still open and held by this run
+  (`the_fine_sentence_claims_only_the_buckets_the_row_empties`). An aged stranded pointer reaches `Fine`
+  (`reduce_ownership` moves a lapsed acquisition into `stale` with `holder: None`, so `verify_claim` answers
+  `not-current-live-holder`, which the row treats as neither stale nor stranded nor unread). The predicate
+  that routes the population is exercised
+  (`own_delivery_close_reads_the_transports_own_prefix_and_nothing_else`); the end-to-end `stranded` arm is
+  not, since no fixture produces `delivery_close`. **A blind spot, plausibly the commonest dead-pointer
+  shape:** `same_git_repository` fails closed to `false`, so a pointer whose recorded checkout no longer
+  resolves as a git repository (deleted, moved, the removed-worktree phantom) is excluded from the row:
+  not stale, not unread, not named.
 
-  What reconciliation deliberately does not close: a **single** holder whose issue is closed by a
-  close this harness cannot recognise as the review's registered delivery still refuses every write in the
-  checkout it
-  names, with the same `issue-not-open` reason it always has. Reconciliation is guarded to two or
-  more holders on purpose — not because `GateContext` cannot tell an own-delivery close from a
-  stranger's, but because folding a single holder into this loop would not repeat that refusal, it
-  would **erase** it. A close this harness *does* recognise as the review's registered delivery — the closing
-  PR the newest confirmed publication names, and a merge whose second parent is the reviewed head and whose first parent
-  descends from the reviewed base
-  (`src/transport/claim/close.rs`) — makes `verify_claim` answer `closed-by-own-delivery`
-  rather than `issue-not-open`, so `holder_standing` counts that pointer `Live` and there is nothing
-  to drop. A close it does not recognise this way already refuses through the single-holder arm's
-  own call into `gate`. Reconciling that same holder anyway would drop it, bringing
-  `holders.len()` to zero, which falls to the `0 =>` arm below — and that arm answers
-  `Outside(NothingSworn)` only when nothing else there denies first: an unfinished sibling
-  review still denies `complete_review_receipt_not_selected`, and any unreadable pointer
-  machine-wide still denies `run-pointers-unreadable` (`guard.rs`'s `0 =>` arm). Only landing on
-  `Outside(NothingSworn)` replaces `gate`'s refusal rather than repeating it — the other two arms
-  still deny — and that is the gate-widening hazard the guard exists to keep closed. Measured: changing
-  `guard.rs`'s `holders.len() >= 2` to `>= 1` reddens
-  `a_single_stale_holder_still_refuses_through_its_own_issue_not_open`, which then reports "a single
-  stale holder no longer refuses on its own answer: Outside(NothingSworn)". `doctor`'s new
-  `stale-run-pointer` row reports the stranger case: it names the pointer and the release command. A
-  pointer this harness recognises as an own-delivery close is not that residue, and it has
-  a bucket of its own — `stale_run_pointers` (`src/harness/doctor.rs`) now reads `Answer::standing()`
-  (`src/harness/tracker.rs`), which tells a code-0 pass apart from a code that never landed a read
-  where `stopped_reason` alone could not, and tests a passing answer's own `checked[0]` for the
-  token `OWN_DELIVERY_CLOSE_PREFIX` (`src/transport/claim.rs`) to route it to a `stranded` population,
-  reported by name with the
-  same `estigia release --run-id` command the stale population gets. Before that change this
-  population fell into the row's unread arm instead, whose message asserts the pointer "could not be
-  checked against the tracker" and sends the operator to find out why `gh issue view` failed — both
-  wrong for a call that succeeded. That was a defect in the row's own message, and it is fixed for
-  this population now. That token has **one spelling**: `verify_claim` builds
-  `checked[0]` from `OWN_DELIVERY_CLOSE_PREFIX` and `Answer::is_own_delivery_close` reads it back from the
-  same const, where before the transport wrote the literal and the harness matched a second copy of
-  it with nothing crossing them. `OWN_DELIVERY_CLOSE_SPELLING_POPULATION` binds to the const, so
-  editing the token reopens `tests/guards.rs`; a second spelling introduced elsewhere is the escape
-  that population names rather than hides. **The predicate that routes the population is exercised
-  by a test; the end-to-end arm is not.** The test `own_delivery_close_reads_the_transports_own_prefix_and_nothing_else` calls the predicate
-  with a fabricated `Answer` — including bodies whose `checked[0]` is absent, non-array or
-  non-string — so the reader itself is measured. Driving the whole `stranded` arm still needs a
-  fixture that actually produces `delivery_close` — a closing PR the receipt names and a merge
-  whose second parent is the reviewed head and whose first parent descends from the reviewed base —
-  and, as the next entry's own disclosure says, no such fixture exists
-  anywhere in this crate's suite, so the `stranded` arm is classified code with no test behind it,
-  same as the population it was carved out of.
+  **Two dead pointers with nothing live covering the same checkout reconcile all the way to zero, and the
+  gate stands aside, while one dead pointer still refuses.** A live holder survives reconciliation however
+  many dead pointers sit beside it, so this is the all-dead case; `holders.len() == 0` answers
+  `Outside(NothingSworn)` when `session::unreadable_holdings` is also empty, so a machine with two phantom
+  pointers for one checkout is *more* permissive than one with a single live-looking one. That is a
+  consequence of the guard: a checkout two closed claims left behind is one nobody currently holds.
 
-  **Two more findings landed on the same row.** The `Fine` sentence used to say no
-  pointer "names one closed behind this run's own delivery", which is false of an **aged** stranded
-  pointer: `verify_claim` orders its checks open-or-own-delivery, then label state, then live
-  holdership, and `reduce_ownership` (`src/transport/ownership.rs`) moves an acquisition
-  whose deadline has passed into `stale` with `holder: None`, so such a pointer answers
-  `not-current-live-holder` — a code-1 stop the row treats as neither stale nor stranded nor unread
-  and so reports `Fine` over. The sentence was narrowed and the row says how many pointers it
-  actually read as still open and held (`N of them read as still open and held by this run`). That
-  count is what makes `a_genuinely_passing_pointer_is_reported_fine` fail when the fixture's label
-  state is changed to `"review"`: the pointer then answers `unexpected-state` and the count is zero,
-  where asserting the `Health` variant alone passed either way.
+  Two or more holders reconciliation cannot separate, because the tracker says both are live, are the common
+  case (`start_branch` gives each run its own worktree without narrowing what the claim covers, so two
+  healthy runs both cover the shared base checkout). `not-current-live-holder` is the only standing
+  `estigia release --run-id <run-id>` is offered for, and it covers three timelines (no acquisition for this
+  run; this run's own acquisition gone stale past its horizon; a live acquisition that lost a claim race). A
+  pointer's `worktree` field was tried first and was wrong in both directions (`PointerEffect::Swear` writes
+  none until `PointerEffect::Isolated` runs after `start_branch`). When nothing among the survivors is
+  `not-current-live-holder` the resolution names no command, since no CLI verb isolates a checkout (that
+  tool is MCP-only). `plan_release` searches `ownership.live` chained with `ownership.stale`: not found
+  answers `nothing-to-unassign` and only the local pointer goes; found, `release` ends it with a genuine
+  tracker write under the operator's identity, only once that pointer's recorded repository is the one
+  `release` ran against. **The cost:** with two or more pointers on one checkout, every gated action pays one
+  tracker round trip per named holder plus the survivor's own `gate` call unless it is a `Routine` write
+  inside the renewal window (two to three reads), above `standdown::over`, so a hung `gh` is not a door
+  `estigia stand-down` can open past; no fixture drives it. A `git push` narrows on the pushed refs before
+  the loop (see "Nothing adjudicates what a push is aimed at"), so a push naming exactly one holder's own
+  branch pays nothing and skips the `ClosedIssue` filter
+  (`narrowing_before_the_tracker_can_deny_what_reconciliation_would_have_allowed`).
 
-  **The narrowed sentence still denied two states.** Its first clause, "names an
-  issue the tracker reports closed", is false of an aged stranded pointer, which reaches `Fine` with
-  its issue closed. Its second, "still holds one closed behind the registered delivery", is false of
-  a label-mismatched own-delivery close: that one stops at `unexpected-state` before holdership is
-  examined, so it reaches `Fine` with a live holder while `checked[0]` still carries the prefix. The
-  sentence now names exactly the row's three buckets — answered with `issue-not-open`, answered with
-  `Passed` and an own-delivery close, or carried an answer the row could not read — which is true of
-  every state that reaches `Fine`, because `Fine` is returned only when all three are empty.
-  `the_fine_sentence_claims_only_the_buckets_the_row_empties` pins the bucket names and rejects both
-  over-claims, since neither state is drivable through the scripted-`gh` fixtures.
-  `stale_run_pointers`' own doc now names both arms that feed `unread` — `Standing::Unread`, and the
-  outer `None` from `tracker_answer_for_pointer` that is no answer at all.
+  **The sibling holder list is driven only at its floor.** `holders_for_action` builds one for a `gh pr
+  merge` with no ordinary holder here, filtered to siblings whose own complete receipt names the pull request;
+  `sibling_selection_binds_pr_before_head_and_attributes_no_ambiguous_holder` gives it two receipt-matched
+  siblings with an unreachable tracker (both unknown, denial follows). It has never been crossed against a
+  *successful* tracker read, and no fixture takes a sibling list past two or drops one as `ClosedIssue`.
+  `run_with_path_locked` clears `GH_REPO`, `GH_HOST` and `GH_TOKEN`
+  (`an_operators_gh_repo_never_reaches_a_spawned_gh`), a before/after on the mechanism; other variables a real
+  `gh` reads are not audited. The harness's own `GH_REPO` pin is set or removed by `apply_gh_repo` on every call
+  (`a_named_gh_repo_pin_does_not_survive_a_call_that_names_none`) but is still a process global, so concurrent
+  tests racing on `set_var` remain under the Rust-2024 precondition the `test_env` entry names.
 
-  The row has a blind spot of its own, and it is plausibly the commonest dead-pointer shape:
-  `same_git_repository` fails closed to `false`, so a pointer whose recorded checkout no longer
-  resolves as a git repository at all — deleted, moved, the removed-worktree phantom this row
-  exists for — compares `false` against every repository, this one included, and is silently
-  excluded from the row entirely: not stale, not unread, not named. `run_pointers` still reports it
-  if the pointer itself will not parse; a pointer that parses fine and names a checkout `git
-  rev-parse` can no longer find is invisible to both rows.
+- **The delivery sequence asks for its own release, and nothing adjudicates that it happened.**
+  `skill/SKILL.md`'s Developer step 6 names merge, tag, renew, transition to `done`, record evidence, close
+  *and release*, but that is prose, and no code observes that a run which reached `done` still holds a
+  pointer. `transition`'s `PointerEffect::Moved` calls `run.mark_verified()` only when the call names the
+  issue the pointer holds, so a `transition --to done` not followed by release restarts the renewal window
+  (the stranded pointer looks *more* live), and `release_ci`'s `PointerEffect::Renew` fills `run.issue`,
+  `run.repo_dir` and `run.worktree` when absent, sets `review_receipt`, clears `reviewed_head` for a complete
+  receipt and calls `mark_verified()` too; neither forgets the run. **A pointer left behind by a delivery
+  that followed the rest of step 6 reads as live to everything that would otherwise clear it**: a recognised
+  delivery close makes `verify_claim` answer `closed-by-own-delivery`, `Answer::stopped_reason()` is `None`
+  for anything but a code-1 answer, `holder_standing` classifies it `Live`, reconciliation cannot drop it at
+  any holder count, and the single-holder `gate` call does not refuse it; only `doctor`'s `stranded` bucket
+  names it. The next run to claim there makes two holders, neither droppable, and
+  `several-runs-hold-this-checkout` refuses that run's first write (measured). `release` removes the
+  delivering run's checkout on exactly `delivery_close`'s proof
+  (`releasing_a_delivered_issue_puts_its_checkout_and_branch_down` and
+  `a_delivery_that_follows_the_sequence_puts_its_own_claim_down`, `tests/pipe/part_09.rs`, read the
+  directory, registry and local branch back); the removal is best-effort and self-reported on the shipped
+  path, and `a_single_stale_holder_still_refuses_through_its_own_issue_not_open` covers only the stranger
+  population, so a single holder whose issue closed behind a recognised delivery is exercised by no guard
+  test. A delivery that skips release still reports success.
 
-  Also deliberate, and the sharper edge: **two dead pointers with nothing live covering the same
-  checkout reconcile all the way to zero, and the gate stands aside, while one dead pointer still
-  refuses.** A live holder covering that checkout survives reconciliation regardless of how many
-  dead pointers sit alongside it, so this is the all-dead case specifically, not "two or more stale
-  pointers" on its own. `holders.len() == 0` after reconciliation answers `Outside(NothingSworn)` —
-  the ordinary shape of a checkout nobody claims — when `session::unreadable_holdings` is also empty;
-  an unreadable pointer anywhere on the machine denies `run-pointers-unreadable` instead
-  (`guard.rs`'s `0 =>` arm), and an unfinished sibling review denies through its own arm ahead of
-  either. So a machine carrying two phantom pointers for one checkout, and nothing else unreadable,
-  is *more* permissive than one carrying a single live-looking one. That is a consequence of the
-  guard stated above, not a second gap: a lone
-  `issue-not-open` pointer refuses through `gate`'s own single-holder path rather than through this
-  reconciliation, so `N == 1` was never touched, and nothing here decided that two phantoms are safer
-  than one legitimate refusal — it decided that a checkout two closed claims both left behind is a
-  checkout nobody currently holds, which is true.
+  **Naming the release in step 6 costs the `dev:<runtime>` label on every delivery that follows it.**
+  `release`'s `unassign` ends through `converge_ownership_projection` (`src/transport/claim.rs`): with no
+  holder left, every `dev:<runtime>` label is emitted as `--remove-label` from an inline
+  `BTreeSet::difference`. This is not measured: `src/transport/claim/tests.rs` exercises
+  `converge_projection`, a helper with zero production callers, and disabling the production emission leaves
+  the whole suite green. A query grouped by `dev:<runtime>` no longer shows which runtime delivered a closed
+  issue; only the run-id in the close evidence survives.
 
-  Two or more holders that reconciliation cannot separate — because the tracker genuinely says both
-  are still live — are the common case rather than the rare one: `start_branch` gives each run its
-  own isolated worktree without narrowing what the pointer's claim covers, so two healthy runs both
-  still cover the shared base checkout. What tells them apart is the tracker's own answer for each
-  survivor, not the pointer: `not-current-live-holder` is the only standing `estigia release
-  --run-id <run-id>` is offered for, and it is **three** different timelines, not one — once a
-  state label already matches (a disagreement answers `unexpected-state` first, and classifies
-  live), `verify_claim` answers it whenever `holding().holder` is not this run, which covers no
-  acquisition for this run at all; an acquisition of this run's own that has gone stale, past its
-  horizon and still on the timeline (`ownership::holding` moves a lapsed one into `stale` rather
-  than dropping it); and a live acquisition of this run's own that lost a claim race to a different,
-  earlier holder. A pointer's `worktree` field was tried first and was wrong in both directions,
-  measured against this crate's own `mcp::run_tool`: `PointerEffect::Swear`, what `claim` runs,
-  writes `issue`, `state` and `repo_dir`, and writes `worktree` only when an adopted checkout is
-  already there to discover — a fresh `claim` ahead of its own `start_branch` still writes none.
-  `PointerEffect::Isolated`, what `start_branch` runs *after* the claim, is what fills it for that
-  ordinary case — so a live run between the two still names no worktree and was offered for release,
-  and a session that died right after `start_branch` names one nobody works in any more and was read
-  as live. When nothing among the survivors is
-  `not-current-live-holder` — two or more claims the tracker itself calls live — the resolution
-  names no command: there is no CLI verb for isolating a checkout the way `start_branch` does (that
-  tool is MCP-only), so nothing exists that would actually discharge the block for a reader holding
-  one of the live claims, and naming one anyway would be exactly the dead end this repository's own
-  rule forbids.
-
-  `estigia release` had to be made to actually clear a phantom pointer's refusal, and what it does
-  differs by which of the three timelines this is: `plan_release` searches `ownership.live` chained
-  with `ownership.stale` for this run's own acquisition. Not found — no acquisition ever existed —
-  answers `nothing-to-unassign`, and only the local pointer goes. Found — a stale acquisition, or a
-  live one that lost the race — the acquisition is really there on the timeline, only lapsed or
-  losing, and `release` ends it: a genuine write to the tracker under the operator's own identity,
-  not the no-op "clears it harmlessly" first read as. Both shapes are recognised, and only once that
-  pointer's own recorded repository is the one `release` was run against, so a successful read of an
-  unrelated project's timeline forgets nothing; every other refusal, including a failed read, leaves
-  the pointer exactly where it was.
-
-  **The cost this buys**: once two or more pointers cover one checkout, every gated action pays one
-  tracker round trip per named holder before the filter runs, plus the survivor's own `gate` call once
-  it has — two holders reduced to one costs at most three tracker reads, not one. The survivor's own
-  `gate` call is the one that can skip its read: `Sensitivity::Routine` inside the renewal window
-  (`harness::gate`, `how == Sensitivity::Routine && run.within_window(context.window)`) answers
-  `Allow` from the cached verification without dispatching at all, so the true floor is the two reads
-  reconciliation itself spent and the ceiling is three. The spawn happens above
-  `standdown::over`, not below it, so a `gh` that hangs is not a door `estigia stand-down` can open
-  past — the reconciliation blocks before the stand-down is even consulted. Unmeasured beyond that: no
-  fixture drives this cost.
-
-  One action pays less than this whenever it can. `git push` narrows on the pushed refs when
-  `holders.len() >= 2` (`src/harness/guard.rs`), which is *before* the reconciliation loop that spends
-  the tracker round trips above (see "Nothing adjudicates what a push is aimed at" above), so a push
-  whose local ref names exactly one holder's own branch reduces to one holder for free — no tracker
-  round trip is spent reconciling the holder list at all, only the survivor's own boundary `gate`
-  call. The two-or-three-read cost above is what a push that does *not* narrow — no refs, an
-  unresolved branch, or any of the other fail-closed roads — still pays, the same as every other
-  gated action with two or more pointers on one checkout. Narrowing before reconciliation also means
-  the `ClosedIssue` filter that reconciliation applies never runs on the narrowed survivor — see
-  `narrowing_before_the_tracker_can_deny_what_reconciliation_would_have_allowed`.
-
-  The *other* holder list this same reconciliation reads over is driven, not left untouched:
-  `holders_for_action` builds one for a `gh pr merge` with no ordinary holder in this checkout,
-  filtered to siblings whose own complete review receipt names the pull request being merged — a
-  `map`/`filter`/`collect` this reconciliation runs exactly as it does for an ordinary holder list —
-  and `guard::tests::sibling_selection_binds_pr_before_head_and_attributes_no_ambiguous_holder` gives
-  it two receipt-matched siblings naming the same pull request to reconcile between, scripted with
-  `unreachable_tracker_answer()` — a `gh` that exits 1 — so both answer as unknown, not as live, and
-  denial follows the same fail-closed rule an unauthenticated `gh` in this environment would actually
-  reach: an unknown result keeps a holder counted rather than dropping it (`guard.rs`'s own comment on
-  the `_` arm is explicit that this is not the same thing as "live"). This sibling path has never been
-  crossed against a *successful* tracker read. Undriven beyond that two-holder floor: no fixture
-  takes a sibling list past two, or reconciles a sibling list where one is dropped as `ClosedIssue`
-  while another survives —
-  every ordinary-holder test that shape has (`a_stale_holder_is_dropped_…`,
-  `a_stale_holder_dropped_to_one_live_holder_lets_gate_allow`) has no sibling-list counterpart.
-  `linked_siblings` is a different list entirely: it feeds `linked`, consulted only in the `0 =>` arm
-  to tell "no ordinary holder and no sibling either" apart from "a sibling exists but has not finished
-  reviewing," and reconciliation never touches it.
-
-  **Reconciliation made `tests/pipe.rs` non-hermetic once, and that is now measured rather than
-  believed fixed.** `run_with_path`, the fixture every `run`/`run_in` call in that file goes through,
-  spawns the real binary and inherited the developer's whole environment beyond a handful of named
-  variables — which cost nothing while a several-holder refusal never asked the tracker at all.
-  Reconciliation is what first made it ask, and `a_per_call_working_directory_selects_the_holder_
-  that_owns_it` is the one test in that file that reaches reconciliation through `run_in` rather than
-  through a scripted `tracker_command`, so it is the one an inherited `GH_REPO` — the variable this
-  crate's own transport uses to steer `gh`'s repository resolution — could point at a real repository
-  instead of the fixture's, deciding the test's outcome by whatever issues happened to exist there.
-  `run_with_path_locked` now clears `GH_REPO`, `GH_HOST` and `GH_TOKEN` before spawning.
-
-  What this closes and what it does not: `an_operators_gh_repo_never_reaches_a_spawned_gh`
-  (`tests/pipe/cli_process.rs`) puts `GH_REPO` on the test process, spawns `estigia doctor` through
-  `run_with_path_locked` with a scripted `gh` on `PATH` — `doctor`'s own unconditional `gh auth status`
-  call is the trigger, not reconciliation, so this needs no two-holder fixture — and reads back what
-  that `gh` actually saw through a file `examples/fake_process.rs` writes on request. That is a live
-  before/after on the mechanism itself: disabling `run_with_path_locked`'s `env_remove` loop with
-  `if false { … }` turned this test red, reporting the operator's own `GH_REPO` back out of the
-  child. What it is not is a reproduction of the *original* defect end to end — no test here points a
-  real `GH_REPO` at a real repository and lets `a_per_call_working_directory_selects_the_holder_
-  that_owns_it` make an actual network call to it, and none needs to now that the removal is
-  mutation-tested directly against a scripted `gh` rather than inferred from the suite passing
-  unchanged. Not audited for every other variable a real `gh` process might read to steer itself —
-  `GH_REPO`, `GH_HOST` and `GH_TOKEN` are the three this crate's own transport and `gh`'s own manual
-  name as authority- and repository-steering; others may exist and are unmeasured, the same way the
-  round-trip cost above is unmeasured rather than assumed zero.
-
-- **`GH_REPO` on the harness process was set and never cleared.** Two production
-  sites — `gate` and `tracker_answer_for_pointer` — wrote `GH_REPO` only when `named_repo` was
-  `Some`, so a later call that named none inherited the previous pin. MCP `run_tool` already set or
-  cleared it after the split; it now goes through the same `apply_gh_repo` helper. Under `cargo test` every
-  path shares one process; the SAFETY notes that said "one invocation per process" are true in
-  production and false in the suite. `apply_gh_repo` always sets or removes, and
-  `a_named_gh_repo_pin_does_not_survive_a_call_that_names_none` holds the clear. What still costs:
-  the pin is still a process global rather than a per-spawn `Command::env`, so concurrent tests that
-  race on `set_var` remain under the same Rust-2024 precondition the `test_env` entry already names;
-  and any other process-global a test fixture mutates without a restore is a separate leak this
-  change did not inventory.
-- **The delivery sequence now asks for its own release, and nothing adjudicates that it happened.**
-  `skill/SKILL.md`'s Developer step 6 names merge, tag, renew, transition to `done`, record evidence,
-  close *and release* — but that sentence is prose an agent reads, not a gate. No code observes that a
-  run which reached `done` still holds a pointer. `transition`'s `PointerEffect::Moved` sets
-  `run.state` and calls `run.mark_verified()` — only when the call names the issue the pointer holds,
-  so a `transition` of any other issue leaves the held issue's expected state and renewal window
-  alone; `release_ci`'s `PointerEffect::Renew` fills `run.issue`
-  and `run.repo_dir` when they are absent, fills `run.worktree` from a discovered checkout when the
-  pointer does not already name one, sets `review_receipt` and clears `reviewed_head` when the call
-  carries a complete receipt, and calls `run.mark_verified()` too — it fills `run.state` only for
-  a call that names one, which `release_ci` is not, since neither `state` nor `expect_state` is among
-  its arguments (`run_tool` in `src/harness/mcp/mod.rs`, the `release_ci` tool definition in
-  `src/harness/mcp/tools.rs`). Neither
-  effect forgets the run, and because `Moved` calls `mark_verified()`, a `transition --to done` that
-  is not followed by release restarts the renewal window: the stranded pointer looks *more* live
-  afterwards, not less.
-  **It also reads as live to everything that would otherwise clear it, and that is the half worth
-  knowing.** A delivery that followed the rest of step 6 leaves behind a close this harness recognises
-  as the registered delivery — `delivery_close` matches the newest confirmed publication's pull
-  request against the closing PR, and a merge whose second parent is exactly the receipt's head and
-  whose first parent descends from the receipt's base
-  (`src/transport/claim/close.rs`); the run that published the receipt is not part of the match, so a
-  successor holding the live claim renews against a predecessor's delivery, and `verify_claim` answers
-  `closed-by-own-delivery` rather than `issue-not-open` (`src/transport/claim.rs`). `Answer::stopped_reason()` is
-  `None` for anything but a code-1 answer (`src/harness/tracker.rs`), so `holder_standing`
-  classifies that pointer `Live` (`src/harness/mod.rs`). That read was rewritten to go
-  through `Answer::standing()`, and the classification it produces is unchanged: a pass reaches the
-  same `Live` arm it always did. The reconciliation cannot drop it at any holder count, and the
-  single-holder `gate` call does not refuse it, so nothing in the gate
-  itself will call that pointer stale — `doctor`'s `stale-run-pointer` row is the one place that now
-  does: it reports this population in its own `stranded` bucket, named separately from `stale` and
-  from `unread`, rather than folding it into the unknown arm the way it used to.
-  **The close proof itself has tests from 2026-09-27; the population it names does not.** `release`
-  now removes the delivering run's checkout on exactly `delivery_close`'s proof, and
-  `tests/pipe/part_09.rs` drives both directions end to end:
-  `releasing_a_delivered_issue_puts_its_checkout_and_branch_down` asserts a recognised close removes
-  the worktree and the local branch, and
-  `a_delivery_that_follows_the_sequence_puts_its_own_claim_down` asserts an unrecognised one keeps
-  the checkout and names the reason, reading `checkout.detail` back rather than only the kept flag.
-  That removal is best-effort and self-reported on the shipped path: a checkout `git worktree remove`
-  refuses is kept, and nothing outside the answer crosses what it says against the filesystem. The
-  two `tests/pipe/part_09.rs` fixtures are the exception — each reads the directory, the worktree registry
-  and the local branch back after the call — so the sentence is about production, not the suite.
-  What remains unexercised is the guard's own population: `src/harness/guard/tests.rs`'s
-  `a_single_stale_holder_still_refuses_through_its_own_issue_not_open` covers only the stranger
-  population, so a single holder whose issue closed behind a delivery this harness recognises as the
-  review's registered delivery — the population `verify_claim` answers `closed-by-own-delivery` for
-  instead of `issue-not-open` — is not
-  exercised by any guard test. That guard module discloses the gap; this entry, whose job that is,
-  did not until now.
-  What it does instead is hold the checkout. The next run to claim there makes two holders, neither of
-  them droppable, and `several-runs-hold-this-checkout` refuses that run's first write — which is what
-  was measured. The `issue-not-open` path belongs to a different population: a pointer whose
-  close this harness cannot recognise as a delivery of its own. So a delivery that follows every other
-  step and skips release still reports success, and what it leaves is not a stale record somebody
-  sweeps up later but a live-looking holder that blocks the next run. `tests/pipe/part_09.rs`'s
-  `a_delivery_that_follows_the_sequence_puts_its_own_claim_down` drives `claim`, `transition --to
-  done`, and `release` end to end against an issue the fixture closes in between, and proves the step
-  the prose now names actually succeeds — that `release` puts a closed issue's claim down cleanly, not
-  that any delivery calls it.
-
-  **Naming the release in step 6 also costs the `dev:<runtime>` label on every delivery that follows
-  it.** `release`'s `unassign` ends through `converge_ownership_projection`
-  (`src/transport/claim.rs`): with no holder left, `wanted_runtimes` is empty and every
-  `dev:<runtime>` label already on the issue is emitted as `--remove-label`, read from an inline
-  `BTreeSet::difference` inside `converge_ownership_projection` at `src/transport/claim.rs`.
-  This is not measured: `src/transport/claim/tests.rs` exercises `converge_projection`
-  (`src/transport/claim.rs`), a helper with zero production callers anywhere in the crate —
-  every call site is in that same test module — and disabling the production emission at
-  `claim.rs` leaves the whole suite green. Before this
-  step named release, delivery ended at close, so the label survived until a separate `release` ran,
-  if one ever did; now an ordinary delivery removes it as its own last write. A query
-  grouped by `dev:<runtime>` no longer shows which runtime delivered a closed issue — only the
-  unbounded run-id in the close evidence survives that removal, and reading it back means opening
-  the issue rather than filtering a label.
 ## The gate's boundary
 
 - **A redirect to `/dev/null`, `/dev/stdout`, `/dev/stderr` or `/dev/fd/<n>` is not read as a write.**
