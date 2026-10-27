@@ -167,7 +167,7 @@ mod installer {
             .collect()
     }
 
-    fn archive(dir: &Path, record_exit: u8) -> Vec<u8> {
+    fn archive(dir: &Path, record_exit: u8, record_says: &str) -> Vec<u8> {
         let staged = dir.join("stage").join(package());
         std::fs::create_dir_all(&staged).unwrap_or_else(|why| panic!("stage: {why}"));
         let fake = format!(
@@ -175,12 +175,14 @@ mod installer {
              echo \"$*\" >> \"$FAKE_LOG\"\n\
              case \"$1\" in\n\
              --version) echo 'estigia 9.9.9 (fake)' ;;\n\
-             __record-install) exit {record_exit} ;;\n\
+             __record-install) printf %s '{record_says}' >&2; exit {record_exit} ;;\n\
              *) echo \"ran $*\" ;;\n\
              esac\n"
         );
         let binary = staged.join("estigia");
         std::fs::write(&binary, fake).unwrap_or_else(|why| panic!("fake binary: {why}"));
+        std::fs::set_permissions(&binary, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .unwrap_or_else(|why| panic!("fake binary mode: {why}"));
         let tarball = dir.join("archive.tar.gz");
         let made = Command::new("tar")
             .arg("-czf")
@@ -260,8 +262,16 @@ mod installer {
     }
 
     fn rig(record_exit: u8, sum: Option<&str>) -> (tempfile::TempDir, String) {
+        rig_saying(record_exit, "", sum)
+    }
+
+    fn rig_saying(
+        record_exit: u8,
+        record_says: &str,
+        sum: Option<&str>,
+    ) -> (tempfile::TempDir, String) {
         let home = tempfile::tempdir().unwrap_or_else(|why| panic!("tempdir: {why}"));
-        let bytes = archive(home.path(), record_exit);
+        let bytes = archive(home.path(), record_exit, record_says);
         let name = format!("{}.tar.gz", package());
         let mut files = HashMap::new();
         if let Some(sum) = sum {
@@ -336,5 +346,124 @@ mod installer {
         assert!(String::from_utf8_lossy(&answer.stderr).contains("lifecycle admission failed"));
         assert!(!home.path().join("bin/estigia").exists());
         assert_eq!(log(home.path()), ["__record-install"]);
+    }
+
+    const LOADER_LINE: &str = "libc.so.6: version GLIBC_2.39 not found";
+
+    fn assert_refusal_names_the_platform(stderr: &str) {
+        assert!(
+            stderr.contains("could not be executed"),
+            "a candidate that never ran is reported as one that ran: {stderr}"
+        );
+        assert!(
+            stderr.contains("cargo install estigia"),
+            "the refusal names no continuation: {stderr}"
+        );
+        assert!(
+            stderr.contains("cargo install --git https://github.com/asanabrial/estigia"),
+            "{stderr}"
+        );
+        assert!(!stderr.contains("lifecycle admission failed"), "{stderr}");
+    }
+
+    #[test]
+    fn the_npm_installer_names_the_platform_when_the_candidate_could_not_run() {
+        let (home, base) = rig_saying(127, LOADER_LINE, Some(""));
+        let answer = run(home.path(), &base);
+        let stderr = String::from_utf8_lossy(&answer.stderr);
+        assert!(!answer.status.success());
+        assert_refusal_names_the_platform(&stderr);
+        assert!(
+            stderr.contains(LOADER_LINE),
+            "the loader's words are lost: {stderr}"
+        );
+        assert!(!home.path().join("bin/estigia").exists());
+    }
+
+    #[test]
+    fn the_npm_installer_says_the_platform_when_the_loader_said_nothing() {
+        let (home, base) = rig_saying(126, "", Some(""));
+        let answer = run(home.path(), &base);
+        let stderr = String::from_utf8_lossy(&answer.stderr);
+        assert_refusal_names_the_platform(&stderr);
+        assert!(stderr.contains("this platform cannot run"), "{stderr}");
+        assert!(!stderr.contains("the loader said"), "{stderr}");
+    }
+
+    #[test]
+    fn the_npm_installer_keeps_a_refusal_the_candidate_made_itself_apart() {
+        let (home, base) = rig_saying(1, "downgrade refused", Some(""));
+        let answer = run(home.path(), &base);
+        let stderr = String::from_utf8_lossy(&answer.stderr);
+        assert!(stderr.contains("downgrade refused"), "{stderr}");
+        assert!(stderr.contains("lifecycle admission failed"), "{stderr}");
+        assert!(!stderr.contains("cargo install estigia"), "{stderr}");
+    }
+
+    #[test]
+    fn the_shell_installer_names_the_platform_when_the_candidate_could_not_run() {
+        for (exit, says) in [(127, LOADER_LINE), (126, "")] {
+            let (home, base) = rig_saying(exit, says, Some(""));
+            let answer = run_shell(home.path(), &base);
+            let stderr = String::from_utf8_lossy(&answer.stderr);
+            assert!(!answer.status.success(), "{stderr}");
+            assert_refusal_names_the_platform(&stderr);
+            if says.is_empty() {
+                assert!(stderr.contains("this platform cannot run"), "{stderr}");
+            } else {
+                assert!(
+                    stderr.contains(says),
+                    "the loader's words are lost: {stderr}"
+                );
+            }
+            assert!(!home.path().join("bin/estigia").exists());
+        }
+    }
+
+    #[test]
+    fn the_shell_installer_keeps_a_refusal_the_candidate_made_itself_apart() {
+        let (home, base) = rig_saying(1, "downgrade refused", Some(""));
+        let answer = run_shell(home.path(), &base);
+        let stderr = String::from_utf8_lossy(&answer.stderr);
+        assert!(stderr.contains("downgrade refused"), "{stderr}");
+        assert!(stderr.contains("lifecycle admission failed"), "{stderr}");
+        assert!(!stderr.contains("cargo install estigia"), "{stderr}");
+        assert!(!home.path().join("bin/estigia").exists());
+    }
+
+    #[test]
+    fn the_shell_installer_places_a_candidate_that_recorded() {
+        let (home, base) = rig(0, Some(""));
+        let answer = run_shell(home.path(), &base);
+        assert!(
+            answer.status.success(),
+            "{}",
+            String::from_utf8_lossy(&answer.stderr)
+        );
+        assert!(home.path().join("bin/estigia").is_file());
+    }
+
+    fn run_shell(home: &Path, base: &str) -> Output {
+        let stubs = home.join("stubs");
+        std::fs::create_dir_all(&stubs).unwrap_or_else(|why| panic!("stubs: {why}"));
+        let gh = stubs.join("gh");
+        std::fs::write(&gh, "#!/bin/sh\nexit 1\n").unwrap_or_else(|why| panic!("gh: {why}"));
+        std::fs::set_permissions(&gh, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .unwrap_or_else(|why| panic!("gh mode: {why}"));
+        let path = format!(
+            "{}:{}",
+            stubs.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        Command::new("sh")
+            .arg(root().join("scripts/install.sh"))
+            .env("HOME", home)
+            .env("PATH", path)
+            .env("ESTIGIA_INSTALL_DIR", home.join("bin"))
+            .env("ESTIGIA_VERSION", TAG)
+            .env("ESTIGIA_BASE_URL", base)
+            .env("FAKE_LOG", home.join("log"))
+            .output()
+            .unwrap_or_else(|why| panic!("these tests need sh: {why}"))
     }
 }

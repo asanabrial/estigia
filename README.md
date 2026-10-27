@@ -158,12 +158,12 @@ estigia status
 estigia doctor
 ```
 
+Linux archives need glibc 2.39+ (not Debian 12, Ubuntu 22.04, RHEL 9); there, use `cargo install estigia`.
 The installers check the archive against its published checksum and refuse a mismatch. The binary
 lands in `~/.local/bin/estigia` (`%LOCALAPPDATA%\estigia\bin\estigia.exe` on Windows);
 `ESTIGIA_INSTALL_DIR` moves it and `ESTIGIA_VERSION` takes a tag other than the latest. The npm
-package carries no binary: it fetches the same archive ([why](docs/lifecycle.md)), and it is what the
-[MCP registry](https://registry.modelcontextprotocol.io) entry starts (`mcp-name: io.github.asanabrial/estigia`,
-which the registry reads to accept the `cargo` package). A source build has no installer record, so the
+package carries no binary: it fetches the same archive, and it is what the
+[MCP registry](https://registry.modelcontextprotocol.io) entry starts (`mcp-name: io.github.asanabrial/estigia`). A source build has no installer record, so the
 commands that write into your agents ask for `--allow-source-build` ([why](docs/lifecycle.md));
 `cargo install --git https://github.com/asanabrial/estigia` takes main. The [`Dockerfile`](Dockerfile)
 builds a server-only image; none is published.

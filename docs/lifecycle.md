@@ -18,7 +18,16 @@ the directory the scripts use rather than into npm's cache because `setup` write
 path of the running binary into every agent's hooks (`setup::executable_path`): a path that changed
 with each version would leave those hooks naming a file the next upgrade removed. It reinstalls when
 `estigia --version` at that path does not answer the package's version, or the one `ESTIGIA_VERSION` names. `cargo install estigia` is a
-source build, exactly as `cargo install --git` is.
+source build, exactly as `cargo install --git` is. The `mcp-name: io.github.asanabrial/estigia` line in
+`README.md` is what the MCP registry reads to accept the `cargo` package, so it stays in the README.
+
+**The Linux floor.** The `*-unknown-linux-gnu` archives are built on Ubuntu 24.04 runners and need glibc
+2.39 or newer, which excludes Debian 12, Ubuntu 22.04 and RHEL 9. On those, `cargo install estigia`
+is the route; `cargo install --git https://github.com/asanabrial/estigia` takes main. The floor is
+kept for now and stated rather than lowered. Both installers tell a candidate that could not be
+executed (the shell's 126 and 127, or a spawn error) from one that ran and refused: the first
+is reported with the loader's own words when it printed any, says the platform is the reason, and names
+those two commands; the second keeps the admission refusal above.
 
 `estigia update` is read-only. Text and global `--json` output report the pathname returned by
 `current_exe`, a SHA-256 inventory of bytes reopened through that pathname, whether a local installer

@@ -135,11 +135,27 @@ async function install(tag, target, binary) {
     fs.chmodSync(candidate, 0o755);
 
     const recorded = spawnSync(candidate, ["__record-install"], {
-      stdio: ["ignore", process.stderr, process.stderr],
+      encoding: "utf8",
+      stdio: ["ignore", process.stderr, "pipe"],
     });
-    if (recorded.error) {
-      fail(`could not run the downloaded candidate: ${recorded.error.message}`);
+    const loaderWords = (recorded.stderr || "").trim();
+    if (recorded.error || recorded.status === 126 || recorded.status === 127) {
+      const words = recorded.error ? recorded.error.message : loaderWords;
+      let detail = `this platform cannot run the ${target.triple} archive, and that is the reason`;
+      if (words) {
+        detail += `; the loader said: ${words}`;
+      }
+      if (target.triple.endsWith("-unknown-linux-gnu")) {
+        detail += `\n  The published ${target.triple} archives need glibc 2.39 or newer.`;
+      }
+      fail(
+        `the downloaded candidate could not be executed, so it was not asked to record itself: ${detail}\n` +
+          "  Build on this machine instead: cargo install estigia  " +
+          `(main: cargo install --git https://github.com/${REPO})\n` +
+          "  Refusing to replace the installed executable.",
+      );
     }
+    process.stderr.write(recorded.stderr || "");
     if (recorded.status !== 0) {
       fail("candidate lifecycle admission failed; refusing to replace the installed executable");
     }
