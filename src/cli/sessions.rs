@@ -227,7 +227,7 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
 
 /// The opaque token that names a cursor: the payload in hex, then a digest of
 /// it.
-pub(crate) fn cursor_token(cursor: &Cursor) -> String {
+pub(crate) fn cursor_token<T: Serialize>(cursor: &T) -> String {
     let payload = serde_json::to_vec(cursor).unwrap_or_default();
     format!(
         "{}.{}",
@@ -236,7 +236,7 @@ pub(crate) fn cursor_token(cursor: &Cursor) -> String {
     )
 }
 
-fn cursor_of(token: &str) -> Result<Cursor, Refusal> {
+pub(super) fn cursor_of<T: serde::de::DeserializeOwned>(token: &str) -> Result<T, Refusal> {
     if token.len() > MAX_CURSOR_BYTES {
         return Err(cursor_too_large(token.len()));
     }
@@ -611,7 +611,7 @@ pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Resu
     let store_id = store::store_identity(&store::beside(root));
     let (taken_at, after) = match arguments.get("cursor").and_then(Value::as_str) {
         Some(token) => {
-            let cursor = cursor_of(token)?;
+            let cursor: Cursor = cursor_of(token)?;
             if cursor.version != PAGE_VERSION {
                 return Err(cursor_mismatch("version"));
             }

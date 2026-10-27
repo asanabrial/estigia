@@ -3889,6 +3889,30 @@ does not measure:
   unmerged path is marked `M`. **Fifteen seconds is the bound on each Git call**, chosen rather than
   measured.
 
+## The feed
+
+`estigia feed` ([`feed.md`](feed.md)) projects the local store and records nothing (ten unit tests seed a store with
+claims, transitions, a marker entry in a second repository and a message, and drive each filter, the paging, the
+refusals and the absent store). What it does not measure:
+
+- **It sees only what the store recorded.** A merge is read live from the tracker and is not an event; a consent
+  prompt, a turn that ended and a gate decision older than the 30-day retention are not in the store. A state change
+  made before the `transitions` table existed has no event. Every answer says so in `cannot_see`.
+- **Quiet is not proof of a quiet run.** Runtimes with no gate (`zcode`, `deepseek-harness`, `agents`) or a
+  pre-tool-only gate (`cursor`) produce no lifecycle events; the feed lists none for them and cannot tell that from
+  a run that did nothing. A Cursor run registered as `claude` (`AGENT_RUNTIMES` lists only `codex`) is filtered as
+  `claude`.
+- **The window is bounded, the scan is not indexed.** `entries` and `transitions` carry no index on time, so each
+  call evaluates the time of every row before applying `--since`; not measured against a large store. An `entries`
+  row whose `created_at` SQLite cannot read as a time (the compact `20260726T005435Z` form) is not listed.
+- **The snapshot is a filtered re-read.** A row written in the same second as `taken_at` can join a later page,
+  as with `estigia sessions`; the cursor is a digest, not a MAC. A `runtime` is the one the run id names, so a
+  message is filed under its sender's runtime.
+- **There is no link and no session start or end event.** Sessions are in `estigia sessions`; the feed lists
+  transitions, markers and messages. A message's recipient may be a run that never registered.
+- **Previews are tested for the three bodies seeded, not for every marker field.** A preview is the kind and the
+  issue; nothing of a marker's other fields is shown without `--bodies`.
+
 ## The session registry
 
 `estigia sessions` lists the rows `estigia session start` and `estigia session end` write to the `sessions`

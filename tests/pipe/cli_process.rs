@@ -363,6 +363,7 @@ fn every_command_that_prints_honours_the_global_json_flag() {
     for arguments in [
         vec!["status", "--json"],
         vec!["sessions", "--json"],
+        vec!["feed", "--json"],
         session_send.to_vec(),
         session_deliver.to_vec(),
         vec!["update", "--json"],

@@ -11,6 +11,7 @@ use super::{Failure, ownership};
 
 mod calls;
 mod decisions;
+mod feed;
 mod filesystem;
 mod handoffs;
 mod import;
@@ -32,6 +33,7 @@ pub(crate) use calls::count_into as with_store_at;
 pub(crate) use calls::counting;
 pub(super) use calls::note;
 pub(crate) use decisions::Record;
+pub(crate) use feed::{FeedRow, FeedWindow, MESSAGE, TRANSITION};
 pub(crate) use handoffs::HandoffRow;
 pub use import::Imported;
 pub(crate) use jobs::{Inserted, Job, NewJob};
