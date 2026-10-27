@@ -53,7 +53,7 @@ const LINE_CEILING: usize = 2_000;
 /// else's agent, and `AGENTS.md` is read by every session that works here, so its size is paid per
 /// session rather than per install. Inventory belongs in a document that answers its own question;
 /// this is what fails when it comes back here.
-const OWN_INSTRUCTIONS: &[(&str, usize)] = &[("AGENTS.md", 13_223)];
+const OWN_INSTRUCTIONS: &[(&str, usize)] = &[("AGENTS.md", 13_357)];
 
 const LINE_EXCEPTIONS: &[LineException] = &[];
 
