@@ -1120,3 +1120,243 @@ fn an_unreadable_appendix_file_is_handed_back_before_anything_runs() {
     assert_eq!(answer["stopped"]["step"], "appendix", "{answer}");
     assert_eq!(answer["stopped"]["reason"], "appendix-unreadable");
 }
+
+fn live_for<'a>(context: &'a GateContext, run_id: &'a str) -> Live<'a> {
+    Live {
+        context,
+        run_id,
+        transport: transport::Context::live(
+            context.skill_root.clone(),
+            context.repo_dir.clone(),
+            None,
+        ),
+    }
+}
+
+fn shared_checkout_context(root: &Path, repo: &Path) -> GateContext {
+    let skill_root = root.join("skill");
+    std::fs::create_dir_all(&skill_root).expect("a skill root");
+    std::fs::write(skill_root.join(crate::skill::CONTRACT), "the contract\n")
+        .expect("the contract is installed");
+    GateContext {
+        integration: crate::config::Integration::Branch,
+        evidence: crate::config::Evidence::Reading,
+        flag: None,
+        stand_down: None,
+        skill_root,
+        repo_dir: repo.to_path_buf(),
+        state_root: root.join("state"),
+        operation_window: Default::default(),
+        issue_requirement: crate::config::IssueRequirement::Off,
+        decision_mode: crate::config::DecisionMode::Ask,
+        workflow: Some(crate::config::Workflow::Autonomous),
+        window: crate::harness::RENEWAL_WINDOW,
+        tracker: crate::config::Tracker::Github { repo: None },
+        repository_host: crate::config::RepositoryHost::Github { repo: None },
+        boundaries: Vec::new(),
+    }
+}
+
+fn holder_receipt() -> crate::transport::claim::ReviewTransaction {
+    crate::transport::claim::ReviewTransaction {
+        epoch: "1".repeat(32),
+        pr: 7,
+        head: "a".repeat(40),
+        base: "b".repeat(40),
+        digest: "c".repeat(64),
+    }
+}
+
+fn store_holder(
+    context: &GateContext,
+    repo: &Path,
+    run_id: &str,
+    issue: u64,
+    state: &str,
+    receipt: Option<crate::transport::claim::ReviewTransaction>,
+) {
+    let mut run = session::Run::new(run_id.to_owned());
+    run.issue = Some(crate::identity::Identity::Number(issue));
+    run.state = Some(state.to_owned());
+    run.repo_dir = Some(repo.to_path_buf());
+    run.review_transaction = receipt;
+    session::store(&context.state_root, &run).expect("the pointer writes");
+}
+
+fn pr_head_answer(head: &str) -> Value {
+    json!({
+        "matches": "pr view 7",
+        "stdout": json!({"headRefOid": head}).to_string(),
+        "status": 0,
+    })
+}
+
+#[test]
+fn the_live_merge_decision_names_its_caller_when_another_live_run_holds_the_same_checkout() {
+    let root = tempfile::tempdir().expect("a gate root");
+    let repo = crate::test_env::repository_with_commit();
+    let context = shared_checkout_context(root.path(), repo.path());
+    store_holder(
+        &context,
+        repo.path(),
+        "claude-caller000",
+        12,
+        "review",
+        Some(holder_receipt()),
+    );
+    store_holder(
+        &context,
+        repo.path(),
+        "claude-bystander",
+        34,
+        "in-progress",
+        None,
+    );
+    let bystander_bytes = std::fs::read(session::pointer_path(
+        &context.state_root,
+        "claude-bystander",
+    ))
+    .expect("the pointer reads");
+
+    let receipt = holder_receipt();
+    let marker = crate::transport::markers::render(
+        "ci-release",
+        &[
+            ("run-id", "claude-caller000"),
+            ("epoch", &receipt.epoch),
+            ("pr", "7"),
+            ("head", &receipt.head),
+            ("base", &receipt.base),
+            ("digest", &receipt.digest),
+        ],
+    )
+    .expect("the marker renders");
+    let store = root.path().join("store").join("state.db");
+    std::fs::create_dir_all(store.parent().expect("a parent")).expect("a store directory");
+    let bin = scripted_gh();
+    let script = answers(&[
+        crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
+        crate::test_env::live_holder_issue("claude-bystander", 34, "in-progress"),
+        pr_head_answer(&receipt.head),
+    ]);
+    let allowed = crate::transport::store::with_store_at(&store, || {
+        crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            let transport = transport::Context::live(
+                context.skill_root.clone(),
+                context.repo_dir.clone(),
+                None,
+            );
+            crate::transport::store::Ledger::open(&transport, 12, "2026-10-27T00:00:00Z")
+                .expect("the issue is imported")
+                .append(
+                    &format!("CI released.\n\n{marker}\n"),
+                    "2026-10-27T00:00:01Z",
+                )
+                .expect("the release is recorded");
+            live_for(&context, "claude-caller000").merge_decision(7)
+        })
+    });
+
+    allowed.expect("the reviewed, released caller is allowed beside another live holder");
+    assert_eq!(
+        std::fs::read(session::pointer_path(
+            &context.state_root,
+            "claude-bystander"
+        ))
+        .expect("the pointer reads"),
+        bystander_bytes
+    );
+}
+
+#[test]
+fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_unreadable_or_unreleased() {
+    let root = tempfile::tempdir().expect("a gate root");
+    let repo = crate::test_env::repository_with_commit();
+    let context = shared_checkout_context(root.path(), repo.path());
+    store_holder(
+        &context,
+        repo.path(),
+        "claude-caller000",
+        12,
+        "review",
+        Some(holder_receipt()),
+    );
+    store_holder(
+        &context,
+        repo.path(),
+        "claude-bystander",
+        34,
+        "in-progress",
+        None,
+    );
+
+    let unclaimed = live_for(&context, "claude-nothing000")
+        .merge_decision(7)
+        .expect_err("a run that holds nothing is refused");
+    assert_eq!(unclaimed["code"], "merge-not-covered", "{unclaimed}");
+
+    let bin = scripted_gh();
+    let script = answers(&[crate::test_env::live_holder_issue(
+        "claude-caller000",
+        12,
+        "review",
+    )]);
+    let foreign = crate::test_env::with_scripted_gh(bin.path(), &script, || {
+        live_for(&context, "claude-caller000")
+            .merge_decision(8)
+            .expect_err("a foreign PR is refused")
+    });
+    assert_eq!(foreign["code"], "delivery-pr-mismatch", "{foreign}");
+
+    let stale = crate::test_env::with_scripted_gh(
+        bin.path(),
+        &answers(&[
+            crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
+            pr_head_answer(&"f".repeat(40)),
+        ]),
+        || {
+            live_for(&context, "claude-caller000")
+                .merge_decision(7)
+                .expect_err("a moved head is refused")
+        },
+    );
+    assert_eq!(stale["code"], "verdict-bound-to-other-bytes", "{stale}");
+
+    std::fs::write(
+        session::pointer_path(&context.state_root, "claude-garbled000"),
+        "{not json",
+    )
+    .expect("a garbled pointer");
+    let unreadable = live_for(&context, "claude-garbled000")
+        .merge_decision(7)
+        .expect_err("an unreadable pointer is refused");
+    assert_eq!(unreadable["code"], "run-pointer-unreadable", "{unreadable}");
+
+    let store = root.path().join("store").join("state.db");
+    std::fs::create_dir_all(store.parent().expect("a parent")).expect("a store directory");
+    let unreleased = crate::transport::store::with_store_at(&store, || {
+        crate::test_env::with_scripted_gh(
+            bin.path(),
+            &answers(&[
+                crate::test_env::live_holder_issue("claude-caller000", 12, "review"),
+                pr_head_answer(&holder_receipt().head),
+            ]),
+            || {
+                let transport = transport::Context::live(
+                    context.skill_root.clone(),
+                    context.repo_dir.clone(),
+                    None,
+                );
+                crate::transport::store::Ledger::open(&transport, 12, "2026-10-27T00:00:00Z")
+                    .expect("the issue is imported");
+                live_for(&context, "claude-caller000")
+                    .merge_decision(7)
+                    .expect_err("a reviewed caller with no CI release is refused")
+            },
+        )
+    });
+    assert_eq!(
+        unreleased["code"], "merge-without-ci-release",
+        "{unreleased}"
+    );
+}
