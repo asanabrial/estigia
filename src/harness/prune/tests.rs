@@ -600,8 +600,8 @@ fn git(at: &std::path::Path, arguments: &[&str]) {
 /// merged, one open, one closed, and one detached — the four shapes the sweep
 /// has to tell apart.
 fn sweep_fixture() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
-    static TEMPLATE: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
-    let root = crate::test_env::copy_of_template(&TEMPLATE, build_sweep_fixture);
+    static TEMPLATES: crate::test_env::Templates<()> = crate::test_env::Templates::new();
+    let (root, ()) = TEMPLATES.copy("sweep", build_sweep_fixture);
     let clone = root.path().join("clone");
     let trees = root.path().join("trees");
     (root, clone, trees)

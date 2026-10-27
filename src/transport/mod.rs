@@ -596,41 +596,28 @@ pub fn fenced_git_env() -> Vec<(&'static str, &'static str)> {
 pub(crate) fn isolated_diff_env(
     at: &Path,
 ) -> Result<(IsolatedGitDir, Vec<(String, String)>), Failure> {
-    let git_dir = run(
-        &["git", "rev-parse", "--path-format=absolute", "--git-dir"],
-        Some(at),
-        How::read(),
-    )?
-    .stdout
-    .trim()
-    .to_owned();
-    let common_dir = run(
+    let answered = run(
         &[
             "git",
             "rev-parse",
             "--path-format=absolute",
+            "--git-dir",
             "--git-common-dir",
+            "--show-object-format",
         ],
         Some(at),
         How::read(),
-    )?
-    .stdout
-    .trim()
-    .to_owned();
+    )?;
+    let mut lines = answered.stdout.lines().map(str::trim);
+    let git_dir = lines.next().unwrap_or_default().to_owned();
+    let common_dir = lines.next().unwrap_or_default().to_owned();
+    let object_format = lines.next().unwrap_or_default().to_owned();
     if git_dir.is_empty() || common_dir.is_empty() {
         return Err(Failure::Read(format!(
             "git did not report an admin directory for {}",
             at.display()
         )));
     }
-    let object_format = run(
-        &["git", "rev-parse", "--show-object-format"],
-        Some(at),
-        How::read(),
-    )?
-    .stdout
-    .trim()
-    .to_owned();
 
     let unique = format!(
         ".estigia-isolated-diff-{}-{}",
