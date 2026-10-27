@@ -1924,74 +1924,205 @@ fn assist_refuses_issue_number_zero() {
     assert!(!trees.exists(), "a worktree directory was made");
 }
 
-fn existing_branch_answers(open_prs: serde_json::Value) -> String {
-    serde_json::json!([
-        crate::test_env::issue_view_answer(
-            12,
-            serde_json::json!({ "state": "OPEN", "title": "A title" })
-        ),
-        {
-            "matches": "pr list --head fix-review",
-            "stdout": open_prs.to_string(),
-            "status": 0,
-        },
-    ])
-    .to_string()
+const BRANCH: &str = "fix-review";
+
+struct Linkage<'a> {
+    open_prs: Option<serde_json::Value>,
+    sidebar: &'a [&'a str],
 }
 
-fn assist_on_existing_branch(
-    open_prs: Option<serde_json::Value>,
-) -> (AssistRig, Result<serde_json::Value, Failure>, bool) {
-    let rig = assist_rig();
+struct Adoption {
+    rig: AssistRig,
+    answer: Result<serde_json::Value, Failure>,
+    made: bool,
+}
+
+impl Adoption {
+    fn nothing_was_written(&self) {
+        assert!(!self.made, "a worktree directory was made");
+        assert!(
+            !self.rig.repo.join(".git").join("worktrees").exists(),
+            "the worktree registry, where the ownership marker lives, was written"
+        );
+        assert!(
+            !repository_state(&self.rig.repo).0.contains(BRANCH),
+            "a local branch was cut"
+        );
+    }
+}
+
+fn pull_request(number: u64, closing: &[u64]) -> serde_json::Value {
+    serde_json::json!({
+        "number": number,
+        "url": format!("https://example.invalid/pull/{number}"),
+        "title": "Fix the thing",
+        "body": "Refs #12",
+        "headRefName": BRANCH,
+        "closingIssuesReferences": closing
+            .iter()
+            .map(|number| serde_json::json!({ "number": number }))
+            .collect::<Vec<_>>(),
+    })
+}
+
+fn open_pull_requests_answer(stdout: &str, status: i32) -> serde_json::Value {
+    serde_json::json!({
+        "matches": format!("pr list --head {BRANCH}"),
+        "stdout": stdout,
+        "status": status,
+    })
+}
+
+fn sidebar_answers(sidebar: &[&str]) -> Vec<serde_json::Value> {
+    let nodes: Vec<_> = sidebar
+        .iter()
+        .map(|name| serde_json::json!({ "ref": { "name": name } }))
+        .collect();
+    vec![
+        serde_json::json!({
+            "matches": "repo view --json",
+            "stdout": serde_json::json!({ "owner": { "login": "acme" }, "name": "app" })
+                .to_string(),
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "api graphql",
+            "stdout": serde_json::json!({ "data": { "repository": { "issue": {
+                "linkedBranches": { "nodes": nodes, "pageInfo": { "hasNextPage": false } }
+            } } } })
+            .to_string(),
+            "status": 0,
+        }),
+    ]
+}
+
+fn push_existing_branch(rig: &AssistRig) {
     shell(
         &rig.repo,
-        &["push", "--quiet", "origin", "main:refs/heads/fix-review"],
+        &[
+            "push",
+            "--quiet",
+            "origin",
+            &format!("main:refs/heads/{BRANCH}"),
+        ],
     );
-    let trees = rig.root.path().join("trees");
-    let trees_arg = trees.to_string_lossy().into_owned();
-    let what = start_what("fix-review", Some(&trees_arg));
-    let script = match open_prs {
-        Some(open) => existing_branch_answers(open),
-        None => serde_json::json!([
-            crate::test_env::issue_view_answer(
-                12,
-                serde_json::json!({ "state": "OPEN", "title": "A title" })
-            ),
-            { "matches": "pr list --head fix-review", "stdout": "", "status": 1 },
-        ])
-        .to_string(),
-    };
-    let bin = crate::test_env::scripted_gh();
-    let answer = crate::test_env::with_scripted_gh(bin.path(), &script, || {
-        super::assist(&rig.context, &what, None)
-    });
+}
+
+fn adoption_of(
+    rig: AssistRig,
+    what: &Start<'_>,
+    cli: &'static tempfile::TempDir,
+    script: &[serde_json::Value],
+) -> Adoption {
+    let answer =
+        crate::test_env::with_scripted_gh(cli.path(), &crate::test_env::answers(script), || {
+            super::assist(&rig.context, what, None)
+        });
     let made = std::fs::read_dir(rig.root.path())
         .expect("the root reads")
         .any(|entry| {
             entry.is_ok_and(|entry| entry.file_name().to_string_lossy().starts_with("trees"))
         });
-    (rig, answer, made)
+    Adoption { rig, answer, made }
+}
+
+fn assist_on_existing_branch(linkage: Linkage<'_>) -> Adoption {
+    let rig = assist_rig();
+    push_existing_branch(&rig);
+    let trees = rig.root.path().join("trees");
+    let trees_arg = trees.to_string_lossy().into_owned();
+    let what = start_what(BRANCH, Some(&trees_arg));
+    let mut script = vec![
+        crate::test_env::issue_view_answer(
+            12,
+            serde_json::json!({ "state": "OPEN", "title": "A title" }),
+        ),
+        match linkage.open_prs {
+            Some(open) => open_pull_requests_answer(&open.to_string(), 0),
+            None => open_pull_requests_answer("", 1),
+        },
+    ];
+    script.extend(sidebar_answers(linkage.sidebar));
+    adoption_of(rig, &what, crate::test_env::scripted_gh(), &script)
+}
+
+fn assist_a_key_on_existing_branch(open_prs: serde_json::Value, attachments: &[&str]) -> Adoption {
+    let rig = assist_rig();
+    push_existing_branch(&rig);
+    let trees = rig.root.path().join("trees");
+    let trees_arg = trees.to_string_lossy().into_owned();
+    let mut what = start_what(BRANCH, Some(&trees_arg));
+    what.issue = crate::identity::Identity::Key("ABC-102".to_owned());
+    let nodes: Vec<_> = attachments
+        .iter()
+        .map(|url| serde_json::json!({ "url": url }))
+        .collect();
+    let script = vec![
+        serde_json::json!({
+            "matches": "EstigiaIssue",
+            "stdout": serde_json::json!({ "data": { "issue": {
+                "title": "A title", "description": "", "state": { "type": "started" }
+            } } })
+            .to_string(),
+            "status": 0,
+        }),
+        open_pull_requests_answer(&open_prs.to_string(), 0),
+        serde_json::json!({
+            "matches": "EstigiaAttachments",
+            "stdout": serde_json::json!({ "data": { "issue": { "attachments": {
+                "nodes": nodes, "pageInfo": { "hasNextPage": false }
+            } } } })
+            .to_string(),
+            "status": 0,
+        }),
+    ];
+    adoption_of(
+        rig,
+        &what,
+        crate::test_env::fake_cli_directory(&["gh", "linear"]),
+        &script,
+    )
 }
 
 #[test]
 fn assist_refuses_an_existing_branch_that_heads_no_open_pull_request() {
-    let (_rig, answer, made) = assist_on_existing_branch(Some(serde_json::json!([])));
-    let failure = answer.expect_err("a branch with no pull request was adopted");
-    assert_eq!(reason(failure), "assist-branch-not-adoptable");
-    assert!(!made, "a worktree directory was made");
+    let adoption = assist_on_existing_branch(Linkage {
+        open_prs: Some(serde_json::json!([])),
+        sidebar: &[BRANCH],
+    });
+    let failure = adoption
+        .answer
+        .as_ref()
+        .expect_err("a branch with no pull request was adopted");
+    assert_eq!(failure.envelope()["reason"], "assist-branch-not-adoptable");
+    adoption.nothing_was_written();
 }
 
 #[test]
-fn assist_refuses_an_existing_branch_whose_pull_request_names_another_issue() {
-    let (_rig, answer, made) = assist_on_existing_branch(Some(serde_json::json!([{
-        "number": 40,
-        "url": "https://example.invalid/pull/40",
-        "title": "Fix the thing",
-        "body": "Refs #120",
-        "headRefName": "fix-review",
-    }])));
-    let failure = answer.expect_err("another issue's pull request was adopted");
-    let envelope = failure.envelope();
+fn assist_refuses_a_pull_request_whose_text_names_the_issue_and_nothing_links_it() {
+    let adoption = assist_on_existing_branch(Linkage {
+        open_prs: Some(serde_json::json!([pull_request(41, &[])])),
+        sidebar: &[],
+    });
+    let failure = adoption
+        .answer
+        .as_ref()
+        .expect_err("a pull request that only says `Refs #12` was adopted");
+    assert_eq!(failure.envelope()["reason"], "assist-branch-not-adoptable");
+    adoption.nothing_was_written();
+}
+
+#[test]
+fn assist_refuses_a_pull_request_that_closes_another_issue() {
+    let adoption = assist_on_existing_branch(Linkage {
+        open_prs: Some(serde_json::json!([pull_request(40, &[120])])),
+        sidebar: &["another-branch"],
+    });
+    let envelope = adoption
+        .answer
+        .as_ref()
+        .expect_err("another issue's pull request was adopted")
+        .envelope();
     assert_eq!(envelope["reason"], "assist-branch-not-adoptable");
     assert!(
         envelope["detail"]
@@ -2000,50 +2131,135 @@ fn assist_refuses_an_existing_branch_whose_pull_request_names_another_issue() {
             .contains("#40"),
         "{envelope}"
     );
-    assert!(!made, "a worktree directory was made");
+    adoption.nothing_was_written();
+}
+
+#[test]
+fn assist_refuses_two_open_pull_requests_for_the_branch() {
+    let adoption = assist_on_existing_branch(Linkage {
+        open_prs: Some(serde_json::json!([
+            pull_request(41, &[12]),
+            pull_request(42, &[12])
+        ])),
+        sidebar: &[BRANCH],
+    });
+    let envelope = adoption
+        .answer
+        .as_ref()
+        .expect_err("an ambiguous branch was adopted")
+        .envelope();
+    assert_eq!(envelope["reason"], "ambiguous-open-prs");
+    adoption.nothing_was_written();
 }
 
 #[test]
 fn assist_stops_before_any_repository_write_when_the_open_pull_requests_cannot_be_read() {
-    let (rig, answer, made) = assist_on_existing_branch(None);
-    assert!(
-        answer.is_err(),
-        "an unreadable pull request list was read as none"
-    );
-    assert!(!made, "a worktree directory was made");
-    assert!(
-        !repository_state(&rig.repo).0.contains("fix-review"),
-        "a local branch was cut"
-    );
+    let adoption = assist_on_existing_branch(Linkage {
+        open_prs: None,
+        sidebar: &[BRANCH],
+    });
+    let failure = adoption
+        .answer
+        .as_ref()
+        .expect_err("an unreadable pull request list was read as none");
+    assert!(matches!(failure, Failure::Read(_)), "{failure:?}");
+    assert_eq!(failure.envelope()["reason"], "read-failed");
+    adoption.nothing_was_written();
 }
 
 #[test]
-fn assist_adopts_the_head_branch_of_the_issues_open_pull_request() {
-    let (_rig, answer, made) = assist_on_existing_branch(Some(serde_json::json!([{
-        "number": 41,
-        "url": "https://example.invalid/pull/41",
-        "title": "Fix the thing",
-        "body": "Refs #12",
-        "headRefName": "fix-review",
-    }])));
-    let answer = answer.expect("the issue's pull request branch is adopted");
-    assert_eq!(answer["adopted_pr"]["number"], 41);
-    assert_eq!(answer["branch"], "fix-review");
-    assert!(made, "no worktree was made");
+fn assist_stops_before_any_repository_write_when_the_sidebar_cannot_be_read() {
+    let rig = assist_rig();
+    push_existing_branch(&rig);
+    let trees = rig.root.path().join("trees");
+    let trees_arg = trees.to_string_lossy().into_owned();
+    let what = start_what(BRANCH, Some(&trees_arg));
+    let script = vec![
+        crate::test_env::issue_view_answer(
+            12,
+            serde_json::json!({ "state": "OPEN", "title": "A title" }),
+        ),
+        open_pull_requests_answer(&serde_json::json!([pull_request(41, &[])]).to_string(), 0),
+        serde_json::json!({
+            "matches": "repo view --json",
+            "stdout": serde_json::json!({ "owner": { "login": "acme" }, "name": "app" })
+                .to_string(),
+            "status": 0,
+        }),
+        serde_json::json!({ "matches": "api graphql", "stdout": "", "status": 1 }),
+    ];
+    let adoption = adoption_of(rig, &what, crate::test_env::scripted_gh(), &script);
+    let failure = adoption
+        .answer
+        .as_ref()
+        .expect_err("an unreadable sidebar was read as no link");
+    assert_eq!(failure.envelope()["reason"], "read-failed");
+    adoption.nothing_was_written();
 }
 
 #[test]
-fn a_pull_request_names_an_issue_only_as_a_whole_reference() {
-    let pr = |title: &str, body: &str, head: &str| serde_json::json!({ "title": title, "body": body, "headRefName": head });
-    let number = crate::identity::Identity::Number(12);
-    let key = crate::identity::Identity::Key("ABC-102".to_owned());
-    assert!(super::names_issue(&pr("", "Refs #12.", "x"), &number));
-    assert!(!super::names_issue(&pr("", "Refs #120", "x"), &number));
-    assert!(!super::names_issue(&pr("", "", "issue-12"), &number));
-    assert!(super::names_issue(&pr("", "", "alexis/abc-102-fix"), &key));
-    assert!(super::names_issue(&pr("[ABC-102] fix", "", "x"), &key));
-    assert!(!super::names_issue(&pr("ABC-1020", "", "x"), &key));
-    assert!(!super::names_issue(&pr("XABC-102", "", "x"), &key));
+fn assist_adopts_a_pull_request_that_closes_the_issue() {
+    let adoption = assist_on_existing_branch(Linkage {
+        open_prs: Some(serde_json::json!([pull_request(41, &[12])])),
+        sidebar: &[],
+    });
+    assert_adopted(&adoption, 41);
+}
+
+#[test]
+fn assist_adopts_a_branch_the_issues_sidebar_links() {
+    let adoption = assist_on_existing_branch(Linkage {
+        open_prs: Some(serde_json::json!([pull_request(41, &[])])),
+        sidebar: &[BRANCH],
+    });
+    assert_adopted(&adoption, 41);
+}
+
+fn assert_adopted(adoption: &Adoption, number: u64) {
+    let answer = adoption
+        .answer
+        .as_ref()
+        .expect("the issue's pull request branch is adopted");
+    assert_eq!(answer["adopted_pr"]["number"], number);
+    assert_eq!(answer["branch"], BRANCH);
+    assert!(adoption.made, "no worktree was made");
+    let worktree = std::path::PathBuf::from(answer["worktree"].as_str().expect("a worktree"));
+    let marker = read_ownership(&worktree)
+        .expect("the marker reads")
+        .expect("the local claim was not recorded");
+    assert_eq!(marker["run_id"], "claude-abcd1234");
+    assert_eq!(marker["branch"], BRANCH);
+}
+
+#[test]
+fn assist_refuses_a_key_whose_pull_request_only_names_it_in_text() {
+    let mut text_only = pull_request(41, &[]);
+    text_only["title"] = serde_json::json!("[ABC-102] Fix the thing");
+    let adoption = assist_a_key_on_existing_branch(serde_json::json!([text_only]), &[]);
+    let failure = adoption
+        .answer
+        .as_ref()
+        .expect_err("a pull request Linear does not attach was adopted");
+    assert_eq!(failure.envelope()["reason"], "assist-branch-not-adoptable");
+    adoption.nothing_was_written();
+}
+
+#[test]
+fn assist_adopts_a_key_whose_pull_request_linear_attaches() {
+    let adoption = assist_a_key_on_existing_branch(
+        serde_json::json!([pull_request(41, &[])]),
+        &["https://example.invalid/pull/41"],
+    );
+    assert_adopted(&adoption, 41);
+}
+
+#[test]
+fn only_a_closing_reference_to_the_number_closes_the_issue() {
+    assert!(super::closes_issue(&pull_request(1, &[12]), 12));
+    assert!(super::closes_issue(&pull_request(1, &[3, 12]), 12));
+    assert!(!super::closes_issue(&pull_request(1, &[120]), 12));
+    assert!(!super::closes_issue(&pull_request(1, &[]), 12));
+    assert!(!super::closes_issue(&serde_json::json!({}), 12));
 }
 
 fn sibling_checkout(

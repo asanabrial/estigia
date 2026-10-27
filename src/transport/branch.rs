@@ -1469,8 +1469,7 @@ pub fn assist(
 /// for a branch origin does not have.
 ///
 /// A branch origin already has is taken only when it is the head of exactly one
-/// open pull request whose title, body or head branch names the issue — the
-/// references Linear's GitHub integration links by. Anything else is refused
+/// open pull request that GitHub or the tracker links to the issue. Anything else is refused
 /// before a repository write, and a failed read is a failed read, never "no
 /// pull request".
 fn adoptable_pull_request(
@@ -1490,7 +1489,7 @@ fn adoptable_pull_request(
             "--state",
             "open",
             "--json",
-            "number,url,title,body,headRefName",
+            "number,url,closingIssuesReferences",
         ],
         Some(&context.repo_dir),
     )?
@@ -1516,12 +1515,12 @@ fn adoptable_pull_request(
         [] => Err(refuse(format!(
             "`{branch}` already exists on origin and heads no open pull request"
         ))),
-        [pr] if names_issue(pr, &what.issue) => Ok(Some(serde_json::json!({
+        [pr] if linked_to_issue(context, what, pr)? => Ok(Some(serde_json::json!({
             "number": pr.get("number"),
             "url": pr.get("url"),
         }))),
         [pr] => Err(refuse(format!(
-            "`{branch}` heads pull request #{}, whose title, body and branch do not name {}",
+            "`{branch}` heads pull request #{}, which GitHub and the tracker do not link to {}",
             super::claim::pr_number(pr),
             what.issue
         ))),
@@ -1535,37 +1534,37 @@ fn adoptable_pull_request(
     }
 }
 
-/// Whether a pull request's title, body or head branch names `issue`.
-fn names_issue(pr: &serde_json::Value, issue: &crate::identity::Identity) -> bool {
-    let field = |name: &str| {
-        pr.get(name)
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_owned()
-    };
-    let (title, body, head) = (field("title"), field("body"), field("headRefName"));
-    match issue {
+/// Whether GitHub or the tracker records `pr` as the work of the issue `what` names.
+///
+/// A number is linked by a closing reference on the pull request or by the branch in the
+/// issue's Development sidebar; a key, by the pull request's URL among the issue's Linear
+/// attachments. Text anyone can write in a title or body links nothing.
+fn linked_to_issue(
+    context: &Context,
+    what: &Start<'_>,
+    pr: &serde_json::Value,
+) -> Result<bool, Failure> {
+    match &what.issue {
         crate::identity::Identity::Number(number) => {
-            let needle = format!("#{number}");
-            [&title, &body]
-                .into_iter()
-                .any(|text| mentions(text, &needle, false))
+            Ok(closes_issue(pr, *number) || is_branch_linked(context, *number, what.branch)?)
         }
-        crate::identity::Identity::Key(key) => [&title, &body, &head]
-            .into_iter()
-            .any(|text| mentions(&text.to_ascii_uppercase(), &key.to_ascii_uppercase(), true)),
+        crate::identity::Identity::Key(_) => {
+            match pr.get("url").and_then(serde_json::Value::as_str) {
+                Some(url) if !url.is_empty() => super::linear::has_attachment(&what.issue, url),
+                _ => Ok(false),
+            }
+        }
     }
 }
 
-/// Whether `needle` occurs in `text` with no digit after it and, where `bounded_before`, no
-/// letter or digit before it.
-fn mentions(text: &str, needle: &str, bounded_before: bool) -> bool {
-    text.match_indices(needle).any(|(at, _)| {
-        let before = text[..at].chars().next_back();
-        let after = text[at + needle.len()..].chars().next();
-        !(bounded_before && before.is_some_and(char::is_alphanumeric))
-            && !after.is_some_and(|next| next.is_ascii_digit())
-    })
+fn closes_issue(pr: &serde_json::Value, number: u64) -> bool {
+    pr.get("closingIssuesReferences")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|closing| {
+            closing.iter().any(|reference| {
+                reference.get("number").and_then(serde_json::Value::as_u64) == Some(number)
+            })
+        })
 }
 
 /// Records on the issue that this run started this branch.
