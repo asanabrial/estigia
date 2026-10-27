@@ -29,14 +29,21 @@ const widthOf = (text) => String(text).replace(/\u001b\[[0-9;]*m/g, "").length;
 
 const home = () => process.env.HOME || process.env.USERPROFILE;
 
+const separatorOf = (base) => {
+  const last = base.slice(-1);
+  if (last === "/" || last === "\\") return last;
+  return base.includes("\\") ? "\\" : "/";
+};
+
 const abbreviated = (path) => {
   const text = String(path ?? "");
   const base = home();
   if (!base) return text;
   if (text === base) return "~";
-  const prefix = base.endsWith("/") ? base : `${base}/`;
+  const separator = separatorOf(base);
+  const prefix = base.endsWith(separator) ? base : `${base}${separator}`;
   if (!text.startsWith(prefix)) return text;
-  return `~/${text.slice(prefix.length)}`;
+  return `~${separator}${text.slice(prefix.length)}`;
 };
 
 const gitDirOf = (cwd) => {

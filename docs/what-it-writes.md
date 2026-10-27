@@ -842,11 +842,11 @@ writes it says so in a note.
 
 `~/.pi/agent/extensions/estigia-look.ts` is a display-only extension marked `estigia:look`, with the
 ownership rule of every other extension. On `session_start` it installs a startup header (`ctx.ui.setHeader`: the wordmark, the tagline `Light. Local. Agentic.` and the
-abbreviated working directory, branch and model, dropping parts as the width narrows) and
+working directory abbreviated to `~` against the home (on either path separator), branch and model, dropping parts as the width narrows) and
 a footer (`ctx.ui.setFooter`:
 `estigia`, the claim read from the `estigia-claim` status, the branch, the model and thinking level, the context percentage and the session
 cost, then the statuses other extensions published, so the look never
-hides one; as the terminal narrows it gives up cost, model,
+hides one (a host that publishes no status accessor, one that answers nothing and one that throws all draw the same line, saying `no claim`); as the terminal narrows it gives up cost, model,
 branch, then context, and never the claim). In any mode but `tui`, or on a host whose
 `ctx.ui` has no `setHeader` or `setFooter`, nothing is installed. `/estigia-look on|off` puts Pi's own
 header and footer back for the session and writes nothing. The extension registers
