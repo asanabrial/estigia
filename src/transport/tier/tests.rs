@@ -2455,8 +2455,6 @@ fn a_change_of_nothing_but_generated_files_measures_nothing_and_is_medium() {
 
 #[cfg(unix)]
 fn cat_file_calls_to_tier(files: usize) -> usize {
-    use std::os::unix::fs::PermissionsExt;
-
     let root = repo();
     let at = root.path();
     let base = oid(at);
@@ -2484,15 +2482,13 @@ fn cat_file_calls_to_tier(files: usize) -> usize {
     .trim()
     .to_owned();
     let shim = shims.path().join("git");
-    std::fs::write(
+    crate::test_env::write_executable_script(
         &shim,
-        format!(
+        &format!(
             "#!/bin/sh\necho \"$*\" >> '{}'\nexec '{real}' \"$@\"\n",
             log.display()
         ),
-    )
-    .expect("a logging git");
-    std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).expect("executable");
+    );
 
     crate::transport::with_process_override(shims.path(), &[], || {
         review_tier(&test_context(at), &base, &head, None, None).expect("an answer")

@@ -61,14 +61,28 @@ fn script_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/build-install.sh")
 }
 
+#[cfg(unix)]
+fn write_executable(path: &Path, contents: &str) {
+    use std::io::Write as _;
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|why| panic!("these tests need sh: {why}"));
+    child
+        .stdin
+        .take()
+        .expect("the child's stdin is piped")
+        .write_all(contents.as_bytes())
+        .expect("the shim reaches the child");
+    let status = child.wait().expect("the child is waited on");
+    assert!(status.success(), "the shim was not written: {status}");
+}
+
+#[cfg(not(unix))]
 fn write_executable(path: &Path, contents: &str) {
     std::fs::write(path, contents).expect("the shim script is written");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
-            .expect("the shim is made executable");
-    }
 }
 
 fn shim_dir(shims: &[(&str, &str)]) -> tempfile::TempDir {

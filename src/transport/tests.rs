@@ -811,8 +811,6 @@ fn the_layered_configuration_carries_the_repositorys_own_delivery_rows() {
 #[cfg(unix)]
 #[test]
 fn an_isolated_diff_reads_the_admin_directories_and_object_format_in_one_git_call() {
-    use std::os::unix::fs::PermissionsExt;
-
     let root = tempfile::tempdir().expect("a fixture root");
     let repo = root.path().join("repo");
     let tree = root.path().join("tree");
@@ -845,16 +843,14 @@ fn an_isolated_diff_reads_the_admin_directories_and_object_format_in_one_git_cal
     let log = shims.path().join("calls.log");
     let real = which_git();
     let shim = shims.path().join("git");
-    std::fs::write(
+    crate::test_env::write_executable_script(
         &shim,
-        format!(
+        &format!(
             "#!/bin/sh\necho \"$*\" >> '{}'\nexec '{}' \"$@\"\n",
             log.display(),
             real.display()
         ),
-    )
-    .expect("a logging git");
-    std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).expect("executable");
+    );
 
     let (guard, envs) =
         with_process_override(shims.path(), &[], || isolated_diff_env(&tree)).expect("isolates");

@@ -999,6 +999,28 @@ pub(crate) fn repository_with_no_remote() -> tempfile::TempDir {
     repo
 }
 
+/// Writes an executable script at `path` from a child `sh`, so no writable descriptor for it
+/// ever exists in this process for another test thread's fork to inherit and hold past the
+/// script's first exec (`ETXTBSY`).
+#[cfg(unix)]
+pub(crate) fn write_executable_script(path: &Path, contents: &str) {
+    use std::io::Write as _;
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|why| panic!("these tests need sh: {why}"));
+    child
+        .stdin
+        .take()
+        .expect("the child's stdin is piped")
+        .write_all(contents.as_bytes())
+        .expect("the script reaches the child");
+    let status = child.wait().expect("the child is waited on");
+    assert!(status.success(), "the script was not written: {status}");
+}
+
 /// A path for a shell command or a TOML string: forward slashes, so neither
 /// reads a `\` as an escape, and on Windows the long name with no `\\?\`
 /// prefix, since `~` is not a character the gate's reader accepts in a literal
