@@ -589,7 +589,7 @@ landed and the claim is still held: repeat with the same `spend` (it replays), a
 verdict, `release_ci` when no `ci-release` marker names the receipt, the CI read, the merge, the
 topology readback and the close, each through the operation that owns it. The merge goes through the
 decision the `gh pr merge` boundary makes. It answers `delivered`; `pending` with `ask_after`, after
-`wait_seconds` (1 to 50, default 20) of waiting inside the call; or `stopped` with the `step`, a
+`wait_seconds` (1-900, default 20) of waiting inside the call; or `stopped` with the `step`, a
 `reason` and `review_status`'s `next` when there is one. A stop writes nothing past its step, and a
 second call resumes from the store without repeating a landed write. `spend` is `release`'s;
 `appendix_file` is the agent's text appended to the generated evidence, required where no CI can

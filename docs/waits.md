@@ -53,8 +53,9 @@ Three patterns account for most of it.
   The host already notifies the session when a background job exits, so the loop added nothing but
   calls. Each loop ran into the host's 600 s ceiling on one `Bash` call and was called again. **15 of
   the 34** ended at that ceiling.
-- **`deliver`'s ceiling turns one CI run into several calls.** `deliver` waits at most 50 s per call
-  (`MAX_WAIT_SECONDS` in `src/harness/mcp/deliver.rs`), so a CI run of ten minutes or more needs repeated
+- **`deliver`'s ceiling turns one CI run into several calls.** When these transcripts were
+  written, `deliver` waited at most 50 s per call (`MAX_WAIT_SECONDS` in `src/harness/mcp/deliver.rs`),
+  so a CI run of ten minutes or more needs repeated
   calls. In `cc87dae5` the pending answers come in runs of three or four per head, about half an hour
   apart. The 50 s figure rests on the reading that some hosts give up on an MCP call near 60 s. On this
   host, `collect_review_input` calls with `wait_seconds` 900 ran past 60 s nine times, the longest for
@@ -92,9 +93,10 @@ from both totals.
   already in the background, so the foreground loop only had to be left out.
 - **A background `gh run watch`** carries a foreground loop polling `gh`, and it carries most pending CI
   reads: one launch and one notification per run, which is how 206 of the waits above were already held.
-- **`deliver`'s own wait** would carry the pending `deliver` answers if its ceiling were the one
-  `collect_review_input` already has. Whether a longer ceiling is safe on each host is the question the
-  50 s reading left open. This count shows only that Claude Code held 111 s.
+- **`deliver`'s own wait** carries the pending `deliver` answers when the caller asks for it. Its
+  ceiling is now 900 s, the one `collect_review_input` has. After the first 50 s it reads the pull
+  request every 20 s instead of every 2 s, and the default stays 20 s. Whether a host holds a call that
+  long is the question the 50 s reading left open. This count shows only that Claude Code held 111 s.
 - **No path is needed for the kept rows.** Each is a decision the model or a person makes, or a wait the
   runtime already holds.
 
