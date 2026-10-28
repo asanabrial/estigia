@@ -82,9 +82,10 @@ pointer that leaves it names the document it points at.
   Nothing holds the runtime words an operator's hosts use, so no predicate over the text can separate
   the two. Labels minted from text the old checks admitted are permanent and left alone.
 
-- **Only Codex's hook derives its own runtime word.** `session::AGENT_RUNTIMES` maps `codex` to
-  `codex`; every other agent that registers a `PreToolUse` hook (Cursor) derives `claude-…`, so it
-  disagrees with `estigia goal --runtime <its own word>`. Codex registers no `SessionStart` hook from
+- **Only Codex's and Cursor's hooks derive their own runtime word.** `session::AGENT_RUNTIMES` maps `codex`
+  to `codex` and `cursor` to `cursor`; an agent not listed derives `claude-…`. A Cursor run registered before
+  that mapping keeps its `claude-…` run id and its `claude` row, and `resume` still tells it from a Claude Code
+  run only by the shape of its session id. Codex registers no `SessionStart` hook from
   Estigia, so nothing tells a Codex run its id; whether the run can read its own session id is not
   measured.
 
@@ -3926,8 +3927,8 @@ for one seeded transition and to the unknown-repository refusal, not to every fi
   made before the `transitions` table existed has no event. Every answer says so in `cannot_see`.
 - **Quiet is not proof of a quiet run.** Runtimes with no gate (`zcode`, `deepseek-harness`, `agents`) or a
   pre-tool-only gate (`cursor`) produce no lifecycle events; the feed lists none for them and cannot tell that from
-  a run that did nothing. A Cursor run registered as `claude` (`AGENT_RUNTIMES` lists only `codex`) is filtered as
-  `claude`.
+  a run that did nothing. A Cursor run registered before `AGENT_RUNTIMES` listed `cursor` is filtered as
+  `claude`; one registered since is filtered as `cursor`.
 - **The window is bounded, the scan is not indexed.** `entries` and `transitions` carry no index on time, so each
   call evaluates the time of every row before applying `--since`; not measured against a large store. An `entries`
   row whose `created_at` SQLite cannot read as a time (the compact `20260726T005435Z` form) is not listed.
@@ -4033,8 +4034,24 @@ measure:
   registered before the process columns existed is the same.
 - **`--exec` was never run against a real agent.** Its launcher is injected in the tests, and the native
   commands remain unverified against the installed CLIs, as the first bullet says.
-- **The stored runtime binary, Pi's session-file path and the OpenCode `session end` are not built**; neither is
-  the MCP tool, so `resume` is CLI only, and `SessionStart`'s "holds no issue" text does not yet point at `claim`.
+- **The stored binary is the one seen at registration.** The registry records the program of the agent process
+  (`/proc/<pid>/exe` on Linux, `ps -o comm=` elsewhere, so a full path on macOS and possibly a bare name on other
+  Unixes) and `resume` uses it only when it is an absolute path whose file name is exactly the runtime's command.
+  A Node-hosted agent that `ps` names `node`, a binary since moved or upgraded, and a row registered before
+  migration 20 all fall back to the bare name. Which program each host's `ps` entry names was not read on real
+  hosts.
+- **Pi's session-file path comes from `ctx.sessionManager.getSessionFile()`**, which the installed Pi's type
+  declarations carry; the Node driver supplies a fake of it, and no live Pi session was resumed with the path.
+  Only a root session files its path: a child process registers under its root's id, and its own file would be
+  wrong for that row. A Pi row registered before migration 20, or by an extension older than this one, has no file
+  and `resume` refuses it.
+- **OpenCode still never sends `session end`, and no event was found that could.** The strings of OpenCode 2.1.4
+  list `session.created`, `session.execution.*`, `session.idle`, `session.archived`, `session.deleted` and the
+  like, but no event of a session being closed; `deleted` and `archived` are actions on a stored session, not the end
+  of an open one. The plugin's dispose hook ends the instance, and nothing shows it fires when the process exits. No
+  hook was shipped on a guess, so OpenCode rows only ever go `stale`; a live OpenCode session ending was not
+  observed.
+- **`resume` is CLI only, and `SessionStart`'s "holds no issue" text does not yet point at `claim`.**
 
 ## The session mailbox
 

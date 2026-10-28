@@ -2644,6 +2644,38 @@ fn hold_issue_as(rig: &TrackerRig, session: &str, issue: u64) -> String {
 }
 
 #[test]
+fn a_pi_session_start_that_names_its_file_lets_resume_print_pi_s_own_command() {
+    let rig = tracker_rig();
+    let file = rig.home.path().join("sessions").join("2026_PIFILE.jsonl");
+    let file = file.to_str().expect("a utf-8 path");
+
+    let (_, said, ok) = pi_session_run(
+        &rig,
+        &[
+            "session",
+            "start",
+            "--session-id",
+            "PIFILE",
+            "--runtime",
+            "pi",
+            "--session-file",
+            file,
+        ],
+    );
+    assert!(ok, "{said}");
+    let run = estigia::harness::session::run_id("pi", "PIFILE");
+    let (printed, said, ok) = pi_session_run(&rig, &["resume", &run, "--print", "--json"]);
+
+    assert!(ok, "{printed} {said}");
+    let report: serde_json::Value = serde_json::from_str(printed.trim()).expect("JSON");
+    assert_eq!(
+        report["command"],
+        serde_json::json!(["pi", "--session", file]),
+        "{report}"
+    );
+}
+
+#[test]
 fn a_pi_session_start_prints_the_same_context_the_hook_gives_and_names_the_forked_from_claim() {
     let rig = tracker_rig();
     let parent_run = hold_issue_as(&rig, "PARENT", 12);

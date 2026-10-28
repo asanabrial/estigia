@@ -17646,6 +17646,16 @@ fn drive_pi_session(
     plan: serde_json::Value,
     inherited: Option<&str>,
 ) -> serde_json::Value {
+    drive_pi_session_filed(steps, session, plan, inherited, None)
+}
+
+fn drive_pi_session_filed(
+    steps: serde_json::Value,
+    session: &str,
+    plan: serde_json::Value,
+    inherited: Option<&str>,
+    file: Option<&str>,
+) -> serde_json::Value {
     let node = node_executable();
     let root = tempfile::tempdir().expect("a temporary directory");
     let base = node_safe_dir(root.path());
@@ -17689,7 +17699,7 @@ if (path.basename(process.argv[1] ?? "") === "session") {
 process.env.NODE_OPTIONS = `--require "${process.env.STUB_PATH}"`;
 const handlers = {};
 (await import("./gate.mjs")).default({ on: (name, handler) => { handlers[name] = handler; } });
-const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => process.env.OWN_SESSION } };
+const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => process.env.OWN_SESSION, getSessionFile: () => process.env.SESSION_FILE || undefined } };
 const results = [];
 for (const [name, event] of JSON.parse(process.env.STEPS)) {
   const sent = { type: name, ...event };
@@ -17717,6 +17727,7 @@ console.log(JSON.stringify({ logged, results }));
             base.join("stub.cjs").to_string_lossy().replace('\\', "/"),
         )
         .env("OWN_SESSION", session)
+        .env("SESSION_FILE", file.unwrap_or(""))
         .env_remove("NODE_OPTIONS")
         .env_remove("ESTIGIA_PI_PARENT_SESSION")
         .env_remove("ESTIGIA_PI_PARENT_PID");
@@ -17764,6 +17775,42 @@ fn the_pi_extension_appends_the_binarys_session_context_to_the_prompt_sections_a
     assert!(
         run["returned"].is_null(),
         "the handler replaced the prompt: {run}"
+    );
+}
+
+#[test]
+fn the_pi_extension_names_its_session_file_to_the_registry_only_for_a_session_of_its_own() {
+    let start = |inherited| {
+        drive_pi_session_filed(
+            serde_json::json!([["session_start", {"reason": "startup"}], ["before_agent_start", {}]]),
+            "sess-1",
+            serde_json::json!({"stdout": "CONTEXT\n"}),
+            inherited,
+            Some("/h/.pi/sessions/t_sess-1.jsonl"),
+        )["logged"][0]
+            .clone()
+    };
+    assert_eq!(
+        start(None),
+        serde_json::json!([
+            "session",
+            "start",
+            "--session-id",
+            "sess-1",
+            "--runtime",
+            "pi",
+            "--wake",
+            "poll",
+            "--reason",
+            "startup",
+            "--session-file",
+            "/h/.pi/sessions/t_sess-1.jsonl"
+        ])
+    );
+    let child = start(Some("root-9"));
+    assert!(
+        !child.to_string().contains("--session-file"),
+        "a child's file was filed under its root: {child}"
     );
 }
 

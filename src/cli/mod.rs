@@ -6298,6 +6298,7 @@ fn session_lifecycle(action: &SessionAction, json: bool) -> Result<(), Refusal> 
             reason,
             previous_session_id,
             wake,
+            session_file,
         } => {
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let context = gate_context(&cwd.to_string_lossy())?;
@@ -6309,6 +6310,14 @@ fn session_lifecycle(action: &SessionAction, json: bool) -> Result<(), Refusal> 
                 &cwd,
                 wake.as_deref(),
             );
+            if let Some(file) = session_file {
+                harness::registry::record_session_file(
+                    &context.state_root,
+                    runtime,
+                    session_id,
+                    file,
+                );
+            }
             let run = harness::session::load(
                 &context.state_root,
                 &harness::session::run_id(runtime, session_id),

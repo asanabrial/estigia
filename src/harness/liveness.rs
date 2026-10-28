@@ -83,6 +83,29 @@ pub(crate) fn agent_pid() -> Option<u64> {
     }
 }
 
+#[cfg(unix)]
+fn program_of(pid: u64) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    if let Ok(path) = std::fs::read_link(format!("/proc/{pid}/exe")) {
+        return path.to_str().map(str::to_owned);
+    }
+    ps_lookup(pid).map(|(_, comm)| comm)
+}
+
+/// The program the agent process runs, as the platform names it: a full path
+/// where it gives one, else the bare command name. `None` where it cannot be
+/// read.
+pub(crate) fn agent_program() -> Option<String> {
+    #[cfg(unix)]
+    {
+        program_of(agent_pid()?)
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
+}
+
 pub(crate) fn host_name() -> Option<String> {
     #[cfg(unix)]
     {
