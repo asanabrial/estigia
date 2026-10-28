@@ -206,6 +206,11 @@ pub enum Command {
         #[arg(long, value_name = "TOKEN")]
         cursor: Option<String>,
 
+        /// Add a field set to each row of the JSON answer. `status` adds what
+        /// the run reported about itself, or the task it is on.
+        #[arg(long, value_name = "FIELDS")]
+        fields: Option<String>,
+
         /// What to do beyond listing.
         #[command(subcommand)]
         action: Option<SessionsAction>,

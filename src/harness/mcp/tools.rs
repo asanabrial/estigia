@@ -533,7 +533,7 @@ pub const TOOLS: &[Tool] = &[
         description: "Who is around: with no arguments, the live sessions beside how many \
                       rows the registry holds. `address` takes `send_message`'s vocabulary and \
                       answers the matches, or the closest when none. The page selectors \
-                      (`status`, `runtime`, `run`, `session_id`, `repo_dir`, `limit`, `cursor`) \
+                      (`status`, `runtime`, `run`, `session_id`, `repo_dir`, `limit`, `cursor`, `fields`) \
                       read the whole registry as a bounded page. Read-only.",
         operation: "list-sessions",
         arguments: &[
@@ -573,6 +573,11 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "The `next_cursor` of the page before, to continue the same snapshot. Give the \
                  same selectors again.",
+            ),
+            Argument::optional(
+                "fields",
+                "string",
+                "`status` adds each run's self-reported line, never evidence, or its task.",
             ),
         ],
         effect: PointerEffect::None,

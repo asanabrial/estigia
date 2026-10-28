@@ -482,6 +482,7 @@ cursor is refused, never silently restarted, when:
 | `sessions-cursor-mismatch` | The call's selectors or the response version differ from the cursor's. |
 | `sessions-cursor-store-replaced` | The store file the cursor was issued against is gone or is another file. |
 | `sessions-cursor-expired` | The cursor is older than `CURSOR_TTL_SECONDS` (15 minutes). |
+| `sessions-fields-unknown` | `fields` is anything but the string `status`. |
 | `sessions-limit-too-large` | `limit` is above the maximum. |
 | `sessions-selector-too-large` | A selector value is longer than the 256 bytes one may be. |
 | `sessions-unregistered-not-bounded` | `status=unregistered`: a pointer-only run is not a registry row and is not in the bounded snapshot; the full list still shows it. |
@@ -513,8 +514,31 @@ It lives in the `run_statuses` table of the local store and nowhere else. Settin
 claim, change a state or reach the tracker, and it is never review, CI or close evidence: it is what the run
 says about itself. A write within sixty seconds of the run's previous one replaces it; otherwise it is
 appended, and the newest five are kept. It is not in any hook payload, so a session pays nothing for it
-until something asks. Nothing shows it yet: the `sessions` and `list_sessions` fields, the age, the stale
-and ended rendering and the derived "task k of n" fallback are not built.
+until something asks. What asks is `fields`, below.
+
+### Showing it: `fields: status`
+
+`estigia sessions --json --fields status` and `list_sessions` with `fields: "status"` add the newest
+self-report of each row's run to the row; with no `fields` the answer is byte-for-byte what it was. The one
+value is `status`, as one string: any other value, a list or a number is refused `sessions-fields-unknown` and
+nothing is listed. On the CLI the flag changes the JSON only, the prose lines are unchanged, and `send` refuses
+it with the other listing flags. `fields` is not part of a cursor, so a walk gives it again on every page; on
+`list_sessions` it counts as a page option, so it cannot be combined with `address`.
+
+The row's existing `status` is liveness (`live`, `stale`, `ended`, `unregistered`, `unknown`) and keeps that
+meaning, so the self-reported line is `status_text`. A row whose run has a self-report gains `status_text`,
+`phase` (when one was given), `status_age` (seconds since it was set, read against the call's clock),
+`status_state` and `self_reported: true`. `status_state` is `current`, `stale` when the age is past
+`stale_after` (six hours), or `ended` when the session's registry row is ended, which wins over the other two.
+
+A row whose run has no self-report, but holds an issue whose task checklist has an open task, gains
+`status_derived: "task k of n"` (the position of the first open task, and the number of tasks) and
+`derived: true` instead, and `status_state: "ended"` when the session has ended. The checklist is read by issue
+number across the store; an issue number that two repositories both have a checklist for is ambiguous and shows
+nothing, since a session row does not name its repository. A row with neither gains none of these fields.
+
+All of it is what the run said about itself or what a checklist implies, and is never review, CI, claim or close
+evidence. Treat it as a hint about where to look, not as a fact about the work.
 
 ## What does not exist yet
 

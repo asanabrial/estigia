@@ -131,6 +131,7 @@ fn inventory() -> Vec<Refusal> {
             crate::cli::sessions::MAX_SELECTOR_BYTES + 1,
         ),
         super::sessions::unregistered_not_bounded(),
+        super::sessions::fields_unknown("\"tasks\""),
         super::feed::store_unreadable("the local store could not be read"),
         super::feed::repo_unknown("o/a"),
         super::feed::since_malformed("soon"),
@@ -189,6 +190,7 @@ fn inventory() -> Vec<Refusal> {
                 wake: None,
                 pane: None,
                 handoffs: Vec::new(),
+                reported: None,
             };
             crate::harness::mcp::messaging::flow_conflict(&holder, "flow dev 13")
                 .expect("a session holding #12 told to work #13 is refused")
