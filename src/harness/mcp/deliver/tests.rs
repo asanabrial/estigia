@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -118,6 +118,8 @@ struct Fake {
     checks: Result<Option<Value>, Value>,
     now: u64,
     evidence: RefCell<String>,
+    origin: Instant,
+    slept: Cell<Duration>,
 }
 
 const NOW: u64 = 1_800_000_000;
@@ -201,6 +203,8 @@ fn fake(world: &World) -> Fake {
         )),
         now: NOW,
         evidence: RefCell::new(String::new()),
+        origin: Instant::now(),
+        slept: Cell::new(Duration::ZERO),
     }
 }
 
@@ -268,6 +272,14 @@ impl Hands for Fake {
 
     fn now(&self) -> u64 {
         self.now
+    }
+
+    fn instant(&self) -> Instant {
+        self.origin + self.slept.get()
+    }
+
+    fn pause(&self, duration: Duration) {
+        self.slept.set(self.slept.get() + duration);
     }
 }
 
@@ -1394,4 +1406,29 @@ fn a_long_wait_reads_the_pull_request_less_often_after_the_first_fifty_seconds()
         poll_interval(Duration::from_secs(899)),
         Duration::from_secs(20)
     );
+}
+
+#[test]
+fn a_two_minute_wait_reads_thirty_times_not_sixty_one_because_the_sleep_follows_poll_interval() {
+    let world = world("b.txt", "two\n");
+    let fake = fake(&world);
+    let running = [pr_view(&world, json!([check("IN_PROGRESS", "")]))];
+    let request = Request {
+        wait: Duration::from_secs(120),
+        ..request()
+    };
+    let ran = drive(&fake, &running, &request);
+
+    assert_eq!(ran.answer["pending"]["step"], "ci", "{}", ran.answer);
+    let reads = ran
+        .gh
+        .iter()
+        .filter(|line| line.starts_with("pr view"))
+        .count();
+    assert_eq!(
+        reads, 30,
+        "25 reads at 2 s from 0 s to 48 s, then 5 at 20 s from 50 s (50, 70, 90, 110) \
+         and the last at the 120 s deadline; sleeping 2 s throughout would read 61 times"
+    );
+    assert_eq!(fake.slept.get(), Duration::from_secs(120));
 }
