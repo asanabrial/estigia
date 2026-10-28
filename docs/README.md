@@ -18,6 +18,7 @@ the document that owns it, and follows that document's own links from there.
 | [`generated-files.md`](generated-files.md) | How a repository declares a generated file or a check, which commit the declaration is read from, and what reproducing or running it answers | you are declaring a lockfile or a check, or reading `generated_files` |
 | [`review-cost.md`](review-cost.md) | What a blind review costs, measured, and what actually spends it | you are budgeting a review |
 | [`prompt-cache.md`](prompt-cache.md) | What the session context carries, which parts of it change, and what a placement change would have to answer | you are about to move fresh state out of a system prompt |
+| [`waits.md`](waits.md) | How many calls this repository's deliveries spent waiting because a clock passed, which of them an existing path could carry, and which are decisions that stay | you are about to move a wait into the runtime |
 | [`testing.md`](testing.md) | Which test drives which generated integration, what each driver holds, and which interpreter the suite needs | you are reading a red line, or adding a test that runs something else |
 | [`honesty.md`](honesty.md) | What this instrument does **not** check, each gap with the measurement that found it | you are about to believe a claim |
 | [`honesty-review-tier.md`](honesty-review-tier.md) | What the review tier, the lens and the finding do not establish — the last run of the ledger above | you are reading a tier, a lens or a finding claim |
