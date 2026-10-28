@@ -112,7 +112,8 @@ pub fn survey(context: &Context, holdings: &[Run]) -> Result<Vec<Tree>, Failure>
         .collect())
 }
 
-fn read_tree(path: PathBuf, holdings: &[Run]) -> Tree {
+/// One checkout, read where it stands.
+pub fn read_tree(path: PathBuf, holdings: &[Run]) -> Tree {
     let holder = holdings
         .iter()
         .filter(|pointer| !pointer.unreadable)

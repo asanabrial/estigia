@@ -48,6 +48,7 @@ macro_rules! say {
 }
 
 pub(crate) mod feed;
+pub(crate) mod resume;
 pub(crate) mod sessions;
 
 /// The same line, into a string rather than onto the terminal.
@@ -338,6 +339,8 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             limit,
             cursor,
         } => sessions_command(action.as_ref(), *all, *limit, cursor.as_deref(), cli.json),
+
+        Command::Resume { run, .. } => resume::resume(run, cli.json),
 
         Command::Feed {
             repo,
