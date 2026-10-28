@@ -224,16 +224,25 @@ fn native_command(
     }
     let program = stored
         .binary
-        .filter(|binary| {
-            Path::new(binary).is_absolute()
-                && Path::new(binary).file_name().and_then(|name| name.to_str()) == Some(words[0])
-        })
+        .filter(|binary| Path::new(binary).is_absolute() && names_program(binary, words[0]))
         .unwrap_or(words[0]);
     Ok(std::iter::once(program)
         .chain(words[1..].iter().copied())
         .chain([session_id])
         .map(str::to_owned)
         .collect())
+}
+
+fn names_program(binary: &str, program: &str) -> bool {
+    let path = Path::new(binary);
+    let named =
+        |part: Option<&std::ffi::OsStr>| part.and_then(|name| name.to_str()) == Some(program);
+    named(path.file_name())
+        || (cfg!(windows)
+            && path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+            && named(path.file_stem()))
 }
 
 pub(crate) fn worktree_state(path: &Path) -> WorktreeState {
@@ -505,6 +514,15 @@ mod tests {
         }
     }
 
+    fn absolute(path: &str) -> &'static str {
+        let path = if cfg!(windows) {
+            format!("C:{path}")
+        } else {
+            path.to_owned()
+        };
+        Box::leak(path.into_boxed_str())
+    }
+
     fn rig() -> (tempfile::TempDir, PathBuf, Store) {
         let directory = tempfile::tempdir().expect("a temporary directory");
         let root = directory.path().join("runs");
@@ -610,16 +628,40 @@ mod tests {
             session_file: None,
         };
         assert_eq!(
-            native_command("x", "opencode", OPENCODE, &at("/opt/bin/opencode")).expect("opencode"),
-            ["/opt/bin/opencode", "--session", OPENCODE]
+            native_command(
+                "x",
+                "opencode",
+                OPENCODE,
+                &at(absolute("/opt/bin/opencode"))
+            )
+            .expect("opencode"),
+            [absolute("/opt/bin/opencode"), "--session", OPENCODE]
         );
-        for unusable in ["/usr/bin/node", "opencode", "/opt/bin/opencode-nightly", ""] {
+        for unusable in [
+            absolute("/usr/bin/node"),
+            "opencode",
+            absolute("/opt/bin/opencode-nightly"),
+            "",
+        ] {
             assert_eq!(
                 native_command("x", "opencode", OPENCODE, &at(unusable)).expect("opencode"),
                 ["opencode", "--session", OPENCODE],
                 "{unusable:?} was used"
             );
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_stored_windows_executable_of_the_right_program_is_used() {
+        let stored = Stored {
+            binary: Some(r"C:\tools\opencode.EXE"),
+            session_file: None,
+        };
+        assert_eq!(
+            native_command("x", "opencode", OPENCODE, &stored).expect("opencode"),
+            [r"C:\tools\opencode.EXE", "--session", OPENCODE]
+        );
     }
 
     #[test]
@@ -633,12 +675,20 @@ mod tests {
                 "x",
                 "pi",
                 "019a-pi",
-                &file("/home/u/.pi/sessions/t_019a-pi.jsonl")
+                &file(absolute("/home/u/.pi/sessions/t_019a-pi.jsonl"))
             )
             .expect("pi"),
-            ["pi", "--session", "/home/u/.pi/sessions/t_019a-pi.jsonl"]
+            [
+                "pi",
+                "--session",
+                absolute("/home/u/.pi/sessions/t_019a-pi.jsonl")
+            ]
         );
-        for unusable in ["relative/t_019a-pi.jsonl", "/home/u/.pi/t_019a-pi.txt", ""] {
+        for unusable in [
+            "relative/t_019a-pi.jsonl",
+            absolute("/home/u/.pi/t_019a-pi.txt"),
+            "",
+        ] {
             let refusal =
                 native_command("x", "pi", "019a-pi", &file(unusable)).expect_err(unusable);
             assert_eq!(refusal.code, "resume-no-native-command", "{unusable:?}");
@@ -650,20 +700,27 @@ mod tests {
         let (_directory, root, store) = rig();
         let opencode = register(&store, "opencode", OPENCODE, now());
         store
-            .session_binary(&opencode, Some("/opt/bin/opencode"))
+            .session_binary(&opencode, Some(absolute("/opt/bin/opencode")))
             .expect("the binary is stored");
         let pi = register(&store, "pi", "019a-pi", now());
         store
-            .session_file(&pi, "/home/u/.pi/sessions/t_019a-pi.jsonl")
+            .session_file(&pi, absolute("/home/u/.pi/sessions/t_019a-pi.jsonl"))
             .expect("the file is stored");
 
         let first = report(&root, &opencode, now(), false).expect("a report");
         let second = report(&root, &pi, now(), false).expect("a report");
 
-        assert_eq!(argv(&first), ["/opt/bin/opencode", "--session", OPENCODE]);
+        assert_eq!(
+            argv(&first),
+            [absolute("/opt/bin/opencode"), "--session", OPENCODE]
+        );
         assert_eq!(
             argv(&second),
-            ["pi", "--session", "/home/u/.pi/sessions/t_019a-pi.jsonl"]
+            [
+                "pi",
+                "--session",
+                absolute("/home/u/.pi/sessions/t_019a-pi.jsonl")
+            ]
         );
     }
 
