@@ -453,6 +453,47 @@ pub(crate) fn is_essential_env(name: &str) -> bool {
         .any(|essential| name.eq_ignore_ascii_case(essential))
 }
 
+/// [`run`] with `input` written to the child's standard input, answering its
+/// standard output as the bytes it wrote rather than decoded: a reply framed
+/// by byte counts, `git cat-file --batch`'s, is misread once replacement has
+/// changed its length. No deadline, so a read only.
+pub(crate) fn run_with_stdin(
+    args: &[&str],
+    cwd: Option<&Path>,
+    how: How,
+    input: &[u8],
+) -> Result<Vec<u8>, Failure> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    assert!(
+        how.timeout.is_none(),
+        "run_with_stdin does not implement deadlines"
+    );
+    let mut command = prepared_command(args, cwd, how, &[], EnvMode::Layer)?;
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .map_err(|error| Failure::Read(spawn_error(OsStr::new(args[0]), cwd, &error)))?;
+    let mut stdin = child.stdin.take();
+    let output = std::thread::scope(|scope| {
+        scope.spawn(move || {
+            if let Some(pipe) = stdin.as_mut() {
+                let _ = pipe.write_all(input);
+            }
+        });
+        child.wait_with_output()
+    });
+    let mut output = output
+        .map_err(|error| Failure::Read(format!("{} could not be waited on: {error}", args[0])))?;
+    let stdout = std::mem::take(&mut output.stdout);
+    finish(args, how, output)?;
+    Ok(stdout)
+}
+
 fn run_with_env_and_mode(
     args: &[&str],
     cwd: Option<&Path>,
@@ -460,6 +501,29 @@ fn run_with_env_and_mode(
     envs: &[(&str, &str)],
     mode: EnvMode,
 ) -> Result<Output, Failure> {
+    let mut command = prepared_command(args, cwd, how, envs, mode)?;
+
+    // `Command::output` waits without a deadline. A timeout is only ever set on
+    // a call that mutates, and the honest answer when one expires is that the
+    // write's fate is unknown — so an unsupported wait must not silently become
+    // an unbounded one.
+    if how.timeout.is_some() {
+        return spawn_with_deadline(command, args, cwd, how);
+    }
+
+    match command.output() {
+        Ok(output) => finish(args, how, output),
+        Err(error) => Err(Failure::Read(spawn_error(OsStr::new(args[0]), cwd, &error))),
+    }
+}
+
+fn prepared_command(
+    args: &[&str],
+    cwd: Option<&Path>,
+    how: How,
+    envs: &[(&str, &str)],
+    mode: EnvMode,
+) -> Result<Command, Failure> {
     let Some((program, rest)) = args.split_first() else {
         return Err(Failure::Read("no command was given".to_owned()));
     };
@@ -495,19 +559,7 @@ fn run_with_env_and_mode(
     }
     #[cfg(test)]
     apply_process_override(&mut command);
-
-    // `Command::output` waits without a deadline. A timeout is only ever set on
-    // a call that mutates, and the honest answer when one expires is that the
-    // write's fate is unknown — so an unsupported wait must not silently become
-    // an unbounded one.
-    if how.timeout.is_some() {
-        return spawn_with_deadline(command, args, cwd, how);
-    }
-
-    match command.output() {
-        Ok(output) => finish(args, how, output),
-        Err(error) => Err(Failure::Read(spawn_error(OsStr::new(program), cwd, &error))),
-    }
+    Ok(command)
 }
 
 /// Builds a `git diff` invocation with its rendering pinned against the local
