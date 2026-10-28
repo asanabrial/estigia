@@ -2877,6 +2877,12 @@ pointer that leaves it names the document it points at.
   transport `.rs` contributes to `TRANSPORT_VOCABULARY`, untested. Finally `capture_identity`'s
   `git_query` conflates failed and empty output: successful rev-parse plus failed status embeds clean.
   No test closes these three dirty-state gaps.
+- **The Windows CLI's 8 MiB stack is headroom, not a measured budget.** A debug `estigia` overflowed
+  MSVC's default 1 MiB main stack on every command once `session start` gained `--session-file`
+  (PR #306's first lane: `thread 'main' has overflowed its stack` across `tests/lifecycle.rs`), so
+  `cli::run` runs the command on a thread with Unix's default stack on Windows. No test measures how
+  deep a command goes, so the margin left is unknown; the Windows lane running the binary is the only
+  detector.
 
 - **Codex's trust for Estigia's gate is written from a re-implementation of its hash, and `doctor` cannot
   ask Codex whether it would run the hook.** codex-cli 0.159 skipped Estigia's hook without a message
