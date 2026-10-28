@@ -35,9 +35,17 @@ nothing off, and it never types into another terminal. `--json` prints the same 
   session id that is not the shape the runtime mints is refused `resume-runtime-misattributed`. A runtime with no
   command is refused `resume-no-native-command`. Both name the alternatives, and perform none: keep the row,
   `estigia release --run-id`, or `handoff`.
-- **Liveness is not known.** No pid is recorded, so the output says to resume only a session that is not open
-  elsewhere, and there is no `--exec`. When the git operation window is closed the output says that the pushes
-  and commits after resuming are refused.
+- **Liveness** is read from the process the registry recorded: the parent of the `SessionStart` hook or
+  `estigia session start`, which is the agent, and the machine's host name. `--print` reports it as `live` (with
+  the pid), `gone` or `unknown`. It is `unknown` when the row has no process (it was registered before this, or on
+  Windows, which records none) or when it was registered on another machine.
+- **`--exec`** takes the place of `--print`; exactly one of the two is required. It refuses
+  `resume-liveness-unknown` when liveness is unknown and `resume-session-live`, naming the pid, when the process
+  still exists. Only a `gone` session is started: the native command runs in the directory above, its
+  standard streams are the caller's, and `estigia` exits with the child's code. A program that does not start is
+  refused `resume-launch-failed`. It never types into another terminal. The answer printed before the start says
+  that the resumed session must call `claim` to get its claim back, and, when the git operation window is closed,
+  that the pushes and commits after resuming are refused until it opens.
 
 [`honesty.md`](honesty.md#the-session-registry) says which of these commands were measured.
 
@@ -46,7 +54,8 @@ nothing off, and it never types into another terminal. `--json` prints the same 
 `~/.estigia/state.db` carries a `sessions` table, one row per run id: the runtime, the host's session id, the
 directory the session started in, when it started, when Estigia last saw it, when and why it ended, the
 short name the registry minted for it, the build that registered it, how its adapter says an idle
-session is woken, and the host pane the registering process was started in.
+session is woken, the host pane the registering process was started in, and the process and machine the
+session ran as (read by `resume`, never shown by `sessions`).
 
 The **short name** is `<repository>-<n>` (`estigia-1`), minted when the row is first written from a
 per-repository ordinal in the store. It is kept for the life of the run id and never reused, so it is what

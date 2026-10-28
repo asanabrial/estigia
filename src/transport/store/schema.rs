@@ -274,4 +274,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
         UNIQUE (repo, dedup_key)
     );
     ",
+    "
+    ALTER TABLE sessions ADD COLUMN host_pid INTEGER;
+    ALTER TABLE sessions ADD COLUMN host_name TEXT;
+    ",
 ];

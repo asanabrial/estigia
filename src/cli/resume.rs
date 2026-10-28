@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 
 use super::sessions::{self, Listed};
+use crate::harness::liveness::{self, Liveness};
 use crate::harness::{changes, session};
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use crate::transport::{claim, store};
@@ -52,6 +53,7 @@ pub(crate) struct Report {
     pub(crate) claims: Vec<Claim>,
     pub(crate) worktree: Option<WorktreeState>,
     pub(crate) window_closed: bool,
+    pub(crate) liveness: Liveness,
 }
 
 const ALTERNATIVES: &str = "alternatives, none of them done for you: keep the row as it is; \
@@ -89,6 +91,44 @@ pub(crate) fn misattributed(run_id: &str, runtime: &str, session_id: &str) -> Re
         Resolution::no_command(
             NoCommandReason::OperatorKnowledge,
             "the program that really ran this session",
+        ),
+    )
+}
+
+pub(crate) fn liveness_unknown(run_id: &str) -> Refusal {
+    Refusal::not_started(
+        "resume-liveness-unknown",
+        format!(
+            "{run_id} cannot be resumed with --exec: the registry holds no process of this machine \
+             it could check, so whether the session is still open elsewhere is unknown; nothing \
+             was started; once you know it is closed, `estigia resume {run_id} --print` gives the \
+             command to run by hand"
+        ),
+        Resolution::run(format!("estigia resume {run_id} --print")),
+    )
+}
+
+pub(crate) fn session_live(run_id: &str, pid: u64) -> Refusal {
+    Refusal::not_started(
+        "resume-session-live",
+        format!(
+            "{run_id} is still running as process {pid} on this machine; resuming it would open \
+             a second copy of the same session; nothing was started; close that process first"
+        ),
+        Resolution::no_command(
+            NoCommandReason::WorldAction,
+            format!("end process {pid}, the session's own program"),
+        ),
+    )
+}
+
+pub(crate) fn launch_failed(run_id: &str, program: &str, why: &str) -> Refusal {
+    Refusal::unavailable(
+        "resume-launch-failed",
+        format!("{run_id} could not be resumed: `{program}` did not start: {why}"),
+        Resolution::no_command(
+            NoCommandReason::WorldAction,
+            format!("`{program}` on the PATH, and the run's directory present"),
         ),
     )
 }
@@ -246,7 +286,44 @@ pub(crate) fn report(
         command,
         cwd,
         window_closed,
+        liveness: liveness::of(row.host_pid, row.host_name.as_deref()),
     })
+}
+
+/// The command `--exec` would start, or the refusal that stops it. Only a
+/// session whose recorded process is known to be gone is started.
+pub(crate) fn prepare(report: &Report) -> Result<std::process::Command, Refusal> {
+    match report.liveness {
+        Liveness::Unknown => return Err(liveness_unknown(&report.run_id)),
+        Liveness::Live(pid) => return Err(session_live(&report.run_id, pid)),
+        Liveness::Gone => {}
+    }
+    let Some((program, arguments)) = report.command.split_first() else {
+        return Err(no_native(
+            &report.run_id,
+            &report.runtime,
+            "the command is empty",
+        ));
+    };
+    let mut command = std::process::Command::new(program);
+    command.args(arguments);
+    if let Some(dir) = &report.cwd {
+        command.current_dir(dir);
+    }
+    Ok(command)
+}
+
+/// Starts the prepared command through `launch` and returns the code the
+/// process should exit with.
+pub(crate) fn execute(
+    report: &Report,
+    launch: impl FnOnce(std::process::Command) -> std::io::Result<std::process::ExitStatus>,
+) -> Result<i32, Refusal> {
+    let command = prepare(report)?;
+    let program = report.command.first().map_or("", String::as_str);
+    let status = launch(command)
+        .map_err(|error| launch_failed(&report.run_id, program, &error.to_string()))?;
+    Ok(status.code().unwrap_or(1))
 }
 
 impl Report {
@@ -284,11 +361,18 @@ impl Report {
             Some(state) => format!("worktree: {}", state.text()),
             None => "worktree: unknown, no run pointer names one".to_owned(),
         });
-        lines.push(
-            "liveness is not known: do not resume a session that is still open in another \
-             terminal"
+        lines.push(match self.liveness {
+            Liveness::Live(pid) => format!(
+                "liveness: process {pid} of this session is still running; do not resume it \
+                 while it is open"
+            ),
+            Liveness::Gone => {
+                "liveness: the process this session registered under is gone".to_owned()
+            }
+            Liveness::Unknown => "liveness is not known: do not resume a session that is still \
+                 open in another terminal"
                 .to_owned(),
-        );
+        });
         lines.push(
             "a resumed session does not get its claim back by itself: call `claim` again"
                 .to_owned(),
@@ -321,13 +405,18 @@ impl Report {
                 "uncommitted": state.uncommitted,
                 "ahead": state.ahead,
             })),
-            "liveness": "unknown",
+            "liveness": self.liveness.word(),
+            "liveness_pid": match self.liveness {
+                Liveness::Live(pid) => Some(pid),
+                _ => None,
+            },
+            "after_resume": "the resumed session must call `claim` to get its claim back",
             "window_closed": self.window_closed,
         })
     }
 }
 
-pub(super) fn resume(address: &str, json: bool) -> Result<(), Refusal> {
+pub(super) fn resume(address: &str, json: bool, exec: bool) -> Result<(), Refusal> {
     let root = session::state_root(None)?;
     let repo_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let context =
@@ -344,10 +433,19 @@ pub(super) fn resume(address: &str, json: bool) -> Result<(), Refusal> {
         )
     })?;
     let answer = report(&root, address, now, closed)?;
+    if exec {
+        prepare(&answer)?;
+    }
     if json {
         super::print_json(&answer.json());
     } else {
         say!("{}", answer.text());
+    }
+    if exec {
+        let code = execute(&answer, |mut command| command.status())?;
+        if code != 0 {
+            std::process::exit(code);
+        }
     }
     Ok(())
 }
@@ -571,5 +669,169 @@ mod tests {
 
         assert_eq!(unknown.code, "resume-run-unknown");
         assert_eq!(guessed.code, "resume-runtime-misattributed");
+    }
+
+    fn with_process(store: &Store, run_id: &str, pid: u64, host: &str) {
+        store
+            .session_process(run_id, Some(pid), Some(host))
+            .expect("the process is recorded");
+    }
+
+    fn here() -> String {
+        liveness::host_name().expect("this machine has a name")
+    }
+
+    #[test]
+    fn exec_is_refused_when_the_registry_holds_no_process_to_check() {
+        let (_directory, root, store) = rig();
+        let run_id = register(&store, "opencode", OPENCODE, now() - 7 * 3600);
+        let answer = report(&root, &run_id, now(), false).expect("a report");
+
+        assert_eq!(answer.liveness, Liveness::Unknown);
+        let refusal = prepare(&answer).expect_err("liveness is unknown");
+        assert_eq!(refusal.code, "resume-liveness-unknown");
+        let launched = std::cell::Cell::new(false);
+        let outcome = execute(&answer, |_| {
+            launched.set(true);
+            Err(std::io::Error::other("must not be called"))
+        });
+        assert_eq!(
+            outcome.expect_err("refused").code,
+            "resume-liveness-unknown"
+        );
+        assert!(!launched.get());
+    }
+
+    #[test]
+    fn exec_is_refused_when_the_session_belongs_to_another_machine() {
+        let (_directory, root, store) = rig();
+        let run_id = register(&store, "opencode", OPENCODE, now());
+        with_process(
+            &store,
+            &run_id,
+            u64::from(std::process::id()),
+            "elsewhere.invalid",
+        );
+
+        let answer = report(&root, &run_id, now(), false).expect("a report");
+
+        assert_eq!(answer.liveness, Liveness::Unknown);
+        assert_eq!(
+            prepare(&answer).expect_err("another host").code,
+            "resume-liveness-unknown"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exec_is_refused_naming_the_live_process() {
+        let (_directory, root, store) = rig();
+        let run_id = register(&store, "opencode", OPENCODE, now());
+        let own = u64::from(std::process::id());
+        with_process(&store, &run_id, own, &here());
+
+        let answer = report(&root, &run_id, now(), false).expect("a report");
+
+        assert_eq!(answer.liveness, Liveness::Live(own));
+        let refusal = prepare(&answer).expect_err("the process is live");
+        assert_eq!(refusal.code, "resume-session-live");
+        assert!(
+            refusal.message.contains(&own.to_string()),
+            "{}",
+            refusal.message
+        );
+        assert!(answer.text().contains(&own.to_string()));
+        assert_eq!(answer.json()["liveness"], "live");
+        assert_eq!(answer.json()["liveness_pid"], own);
+    }
+
+    #[cfg(unix)]
+    fn gone_row(store: &Store, run_id: &str) {
+        use std::process::Command;
+        let mut child = Command::new("true").spawn().expect("a child starts");
+        let pid = u64::from(child.id());
+        child.wait().expect("the child ends");
+        with_process(store, run_id, pid, &here());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_gone_session_builds_its_command_in_the_worktree_and_falls_back_to_the_repo_dir() {
+        let (directory, root, store) = rig();
+        let run_id = register(&store, "opencode", OPENCODE, now() - 7 * 3600);
+        gone_row(&store, &run_id);
+
+        let without_pointer = report(&root, &run_id, now(), false).expect("a report");
+        assert_eq!(without_pointer.liveness, Liveness::Gone);
+        let command = prepare(&without_pointer).expect("a gone session is prepared");
+        assert_eq!(command.get_program(), "opencode");
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            ["--session", OPENCODE]
+        );
+        assert_eq!(command.get_current_dir(), Some(Path::new("/work/estigia")));
+
+        let worktree = directory.path().join("tree");
+        std::fs::create_dir(&worktree).expect("a worktree");
+        let mut pointer = session::load(&root, &run_id);
+        pointer.issue = Some(crate::identity::Identity::Number(7));
+        pointer.worktree = Some(worktree.clone());
+        session::store(&root, &pointer).expect("the pointer is stored");
+        let with_pointer = report(&root, &run_id, now(), false).expect("a report");
+        let command = prepare(&with_pointer).expect("prepared");
+        assert_eq!(command.get_current_dir(), Some(worktree.as_path()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exec_hands_the_prepared_command_to_the_launcher_and_returns_the_childs_code() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let (_directory, root, store) = rig();
+        let run_id = register(&store, "claude", UUID, now() - 7 * 3600);
+        gone_row(&store, &run_id);
+        let answer = report(&root, &run_id, now(), true).expect("a report");
+        let seen = std::cell::RefCell::new(Vec::new());
+
+        let code = execute(&answer, |command| {
+            seen.borrow_mut().push(format!(
+                "{} {:?}",
+                command.get_program().to_string_lossy(),
+                command.get_args().collect::<Vec<_>>()
+            ));
+            Ok(std::process::ExitStatus::from_raw(3 << 8))
+        })
+        .expect("the launcher ran");
+
+        assert_eq!(code, 3);
+        assert_eq!(seen.borrow().len(), 1);
+        assert!(
+            seen.borrow()[0].starts_with("claude"),
+            "{:?}",
+            seen.borrow()
+        );
+        assert!(answer.text().contains("call `claim`"));
+        assert!(answer.text().contains("git operation window is closed"));
+        assert_eq!(answer.json()["window_closed"], true);
+        assert!(
+            answer.json()["after_resume"]
+                .as_str()
+                .is_some_and(|text| text.contains("claim"))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_program_that_does_not_start_is_reported_not_swallowed() {
+        let (_directory, root, store) = rig();
+        let run_id = register(&store, "claude", UUID, now() - 7 * 3600);
+        gone_row(&store, &run_id);
+        let answer = report(&root, &run_id, now(), false).expect("a report");
+
+        let refusal = execute(&answer, |_| Err(std::io::Error::other("no such file")))
+            .expect_err("the launch failed");
+
+        assert_eq!(refusal.code, "resume-launch-failed");
+        assert!(refusal.message.contains("no such file"));
     }
 }

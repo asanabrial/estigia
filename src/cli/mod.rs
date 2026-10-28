@@ -351,7 +351,7 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
 
         Command::NeedsPerson { limit } => needs_person::needs_person(cli.json, *limit),
 
-        Command::Resume { run, .. } => resume::resume(run, cli.json),
+        Command::Resume { run, exec, .. } => resume::resume(run, cli.json, *exec),
 
         Command::Feed {
             repo,
