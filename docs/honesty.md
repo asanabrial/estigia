@@ -2879,7 +2879,7 @@ pointer that leaves it names the document it points at.
   No test closes these three dirty-state gaps.
 - **The Windows CLI's 8 MiB stack is headroom, not a measured budget.** A debug `estigia` overflowed
   MSVC's default 1 MiB main stack on every command once `session start` gained `--session-file`
-  (PR #306's first lane: `thread 'main' has overflowed its stack` across `tests/lifecycle.rs`), so
+  (the Windows lane: `thread 'main' has overflowed its stack` across `tests/lifecycle.rs`), so
   `cli::run` runs the command on a thread with Unix's default stack on Windows. No test measures how
   deep a command goes, so the margin left is unknown; the Windows lane running the binary is the only
   detector.
