@@ -5975,7 +5975,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 55_520;
+const TOOLS_LIST_CEILING: usize = 55_645;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -7317,6 +7317,185 @@ mod send_message {
             selected(json!({"repo_dir": "/repo/one"})),
             vec!["claude-live0a1b2c3d", "codex-end0a1b2c3d"]
         );
+    }
+
+    fn row_of<'a>(page: &'a Value, run_id: &str) -> &'a Value {
+        page["sessions"]
+            .as_array()
+            .expect("rows")
+            .iter()
+            .find(|row| row["run_id"] == run_id)
+            .expect("the row")
+    }
+
+    const STATUS_KEYS: [&str; 7] = [
+        "status_text",
+        "phase",
+        "status_age",
+        "status_state",
+        "self_reported",
+        "status_derived",
+        "derived",
+    ];
+
+    #[test]
+    fn fields_status_adds_the_newest_self_report_and_nothing_else_changes() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        rig.seen("claude-said0a1b2c3d", "claude", "host-said", None, now);
+        let store = rig.store();
+        store
+            .status_set("claude-said0a1b2c3d", "first", None, now - 500)
+            .expect("a status");
+        store
+            .status_set(
+                "claude-said0a1b2c3d",
+                "reading the diff",
+                Some("verifying"),
+                now - 90,
+            )
+            .expect("a status");
+
+        let plain = rig.list(json!({"limit": 50})).expect("a page");
+        let with = answered(
+            rig.list(json!({"limit": 50, "fields": "status"}))
+                .expect("a page"),
+        );
+        let row = row_of(&with, "claude-said0a1b2c3d");
+        assert_eq!(row["status_text"], "reading the diff");
+        assert_eq!(row["phase"], "verifying");
+        let age = row["status_age"].as_u64().expect("an age");
+        assert!((90..120).contains(&age), "{age}");
+        assert_eq!(row["status_state"], "current");
+        assert_eq!(row["self_reported"], true);
+        assert_eq!(row["status"], "live");
+        assert!(row.get("derived").is_none());
+
+        let plain = answered(plain);
+        for row in plain["sessions"].as_array().expect("rows") {
+            for key in STATUS_KEYS {
+                assert!(row.get(key).is_none(), "{key} leaked without a selector");
+            }
+        }
+        let mut stripped = with.clone();
+        for row in stripped["sessions"].as_array_mut().expect("rows") {
+            for key in STATUS_KEYS {
+                row.as_object_mut().expect("an object").remove(key);
+            }
+        }
+        assert_eq!(stripped, plain);
+    }
+
+    #[test]
+    fn a_status_past_the_stale_horizon_reads_stale_and_an_ended_session_reads_ended() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        rig.seen("claude-old0a1b2c3d", "claude", "host-old", None, now);
+        rig.seen("codex-gone0a1b2c3d", "codex", "host-gone", None, now);
+        rig.ended("codex-gone0a1b2c3d", now);
+        let store = rig.store();
+        store
+            .status_set(
+                "claude-old0a1b2c3d",
+                "long ago",
+                None,
+                now - crate::cli::sessions::STALE_AFTER_SECONDS - 1,
+            )
+            .expect("a status");
+        store
+            .status_set("codex-gone0a1b2c3d", "finished", None, now - 5)
+            .expect("a status");
+
+        let page = answered(rig.list(json!({"fields": "status"})).expect("a page"));
+        assert_eq!(row_of(&page, "claude-old0a1b2c3d")["status_state"], "stale");
+        assert_eq!(row_of(&page, "codex-gone0a1b2c3d")["status_state"], "ended");
+    }
+
+    #[test]
+    fn without_a_status_the_first_open_task_is_shown_as_derived() {
+        let rig = Rig::new();
+        rig.hold(12, "claude-task0a1b2c3d");
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        rig.seen("claude-nolist0a1b2c3d", "claude", "host-nolist", None, now);
+        rig.pointer("claude-nolist0a1b2c3d", 13);
+        let mut store = rig.store();
+        for (id, done) in [("a", true), ("b", false), ("c", false)] {
+            store
+                .change_task(
+                    &repo(),
+                    12,
+                    &store::TaskChange {
+                        id,
+                        text: Some("step"),
+                        route: Some("inline"),
+                        done: Some(done),
+                        commit: done.then_some("abcdef0"),
+                        evidence: None,
+                    },
+                    "2026-01-01T00:00Z",
+                )
+                .expect("a task");
+        }
+
+        let page = answered(rig.list(json!({"fields": "status"})).expect("a page"));
+        let derived = row_of(&page, "claude-task0a1b2c3d");
+        assert_eq!(derived["status_derived"], "task 2 of 3");
+        assert_eq!(derived["derived"], true);
+        assert!(derived.get("status_text").is_none());
+        assert!(derived.get("self_reported").is_none());
+        let bare = row_of(&page, "claude-nolist0a1b2c3d");
+        for key in STATUS_KEYS {
+            assert!(bare.get(key).is_none(), "{key}");
+        }
+    }
+
+    #[test]
+    fn a_self_report_wins_over_the_derived_task() {
+        let rig = Rig::new();
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        rig.hold(12, "claude-both0a1b2c3d");
+        let mut store = rig.store();
+        store
+            .change_task(
+                &repo(),
+                12,
+                &store::TaskChange {
+                    id: "a",
+                    text: Some("step"),
+                    route: Some("inline"),
+                    done: None,
+                    commit: None,
+                    evidence: None,
+                },
+                "2026-01-01T00:00Z",
+            )
+            .expect("a task");
+        store
+            .status_set("claude-both0a1b2c3d", "says so", None, now)
+            .expect("a status");
+
+        let page = answered(rig.list(json!({"fields": "status"})).expect("a page"));
+        let row = row_of(&page, "claude-both0a1b2c3d");
+        assert_eq!(row["status_text"], "says so");
+        assert!(row.get("status_derived").is_none());
+        assert!(row.get("derived").is_none());
+    }
+
+    #[test]
+    fn a_fields_value_other_than_status_is_refused() {
+        let rig = Rig::new();
+        for fields in [
+            json!("tasks"),
+            json!("status,phase"),
+            json!(["status"]),
+            json!(1),
+        ] {
+            let code = refusal_code(
+                rig.list(json!({"fields": fields.clone()}))
+                    .expect_err("a refusal"),
+            );
+            assert_eq!(code, "sessions-fields-unknown", "{fields}");
+        }
     }
 
     #[test]

@@ -457,6 +457,7 @@ const REFUSED: &[&str] = &[
     "sessions-cursor-mismatch",
     "sessions-cursor-tampered",
     "sessions-cursor-too-large",
+    "sessions-fields-unknown",
     "sessions-limit-too-large",
     "sessions-selector-too-large",
     "sessions-send-takes-no-listing-flag",

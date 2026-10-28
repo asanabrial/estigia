@@ -412,6 +412,7 @@ pub(super) fn list_sessions(
         "repo_dir",
         "limit",
         "cursor",
+        "fields",
     ]
     .iter()
     .any(|name| arguments.get(*name).is_some());

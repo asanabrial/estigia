@@ -339,7 +339,15 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             all,
             limit,
             cursor,
-        } => sessions_command(action.as_ref(), *all, *limit, cursor.as_deref(), cli.json),
+            fields,
+        } => sessions_command(
+            action.as_ref(),
+            *all,
+            *limit,
+            cursor.as_deref(),
+            fields.as_deref(),
+            cli.json,
+        ),
 
         Command::NeedsPerson { limit } => needs_person::needs_person(cli.json, *limit),
 
@@ -6234,10 +6242,11 @@ fn sessions_command(
     all: bool,
     limit: Option<u64>,
     cursor: Option<&str>,
+    fields: Option<&str>,
     json: bool,
 ) -> Result<(), Refusal> {
     match action {
-        None => sessions::sessions(json, all, limit, cursor),
+        None => sessions::sessions(json, all, limit, cursor, fields),
         Some(SessionsAction::Send {
             session,
             text,
@@ -6250,6 +6259,7 @@ fn sessions_command(
                 all.then_some("--all"),
                 limit.is_some().then_some("--limit"),
                 cursor.is_some().then_some("--cursor"),
+                fields.is_some().then_some("--fields"),
             ]
             .into_iter()
             .flatten()

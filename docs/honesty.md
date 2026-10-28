@@ -3969,6 +3969,10 @@ answers and an empty registry offering no cursor; four store unit tests). What i
   immutable start; `status=unregistered` is refused `sessions-unregistered-not-bounded`). A bounded answer
   has no fixed byte ceiling: it is bounded by `limit` (default 50, at most 500) and the row shape; one real
   call on 2026-10-18 returned 433 sessions as 141,698 UTF-8 bytes (a response size, not a token estimate).
+- **The derived "task k of n" is matched by issue number alone.** A session row names no repository
+  identity, so `fields: status` reads the checklists of the whole store and drops an issue number that two
+  repositories both have a checklist for rather than guess which one the run holds; the row then shows nothing.
+  A `status_text` is what the run wrote, redacted and capped but not checked, and is never evidence.
 - **The pane is one environment variable, read once.** `HERDR_PANE_ID` was measured on 2026-10-22 inside herdr
   0.9.3 and 0.9.5 (the OpenCode processes in `w0:p1` and `wE:pA` carried it, matching `herdr pane list`). Not
   measured: a host exporting the same name for something else, a Windows pane, or a pane id that outlives its

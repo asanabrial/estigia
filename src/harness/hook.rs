@@ -4004,6 +4004,44 @@ mod tests {
     const FOREIGN_COMMIT: &str = "1111111111111111111111111111111111111111";
 
     #[test]
+    fn a_self_reported_status_never_enters_the_session_start_context() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let context = GateContext {
+            integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
+            flag: None,
+            stand_down: None,
+            skill_root: root.path().join("skill"),
+            repo_dir: root.path().join("repo"),
+            state_root: root.path().join("state"),
+            operation_window: Default::default(),
+            issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
+            workflow: Some(crate::config::Workflow::Autonomous),
+            window: super::super::RENEWAL_WINDOW,
+            tracker: crate::config::Tracker::Github { repo: None },
+            repository_host: crate::config::RepositoryHost::Github { repo: None },
+            boundaries: Vec::new(),
+        };
+        std::fs::create_dir_all(&context.state_root).expect("the state directory");
+        let run = session::Run::new("claude-abcd1234".to_owned());
+        crate::transport::store::Store::open(&crate::transport::store::beside(&context.state_root))
+            .expect("the store opens")
+            .status_set(
+                &run.run_id,
+                "marker-status-line-7731",
+                Some("verifying"),
+                session::now_seconds().expect("a clock"),
+            )
+            .expect("a status is recorded");
+
+        let response = session_start_response(&context, &run).to_string();
+        let text = session_start_text(&context, &run, None);
+        assert!(!response.contains("marker-status-line-7731"), "{response}");
+        assert!(!text.contains("marker-status-line-7731"), "{text}");
+    }
+
+    #[test]
     fn a_build_commit_this_repository_does_not_hold_says_nothing_at_session_start() {
         let (repo, _) = repository_with_one_commit();
         assert_eq!(

@@ -61,6 +61,28 @@ pub(crate) struct Listed {
     pub(crate) pane: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) handoffs: Vec<Handoff>,
+    #[serde(flatten)]
+    pub(crate) reported: Option<Reported>,
+}
+
+/// What a run says about itself, or what its task checklist implies, shown only
+/// when `fields` asks for it. Never evidence of anything.
+#[derive(Serialize, Clone, Default)]
+pub(crate) struct Reported {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    phase: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status_age: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status_state: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    self_reported: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status_derived: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    derived: Option<bool>,
 }
 
 impl Listed {
@@ -358,6 +380,20 @@ pub(super) fn selector_too_large(name: &str, bytes: usize) -> Refusal {
     )
 }
 
+pub(super) fn fields_unknown(asked: &str) -> Refusal {
+    Refusal::not_started(
+        "sessions-fields-unknown",
+        format!(
+            "`fields` is {asked}, and the only field set a session row can add is `status`; \
+             nothing was listed"
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "`fields` of `status`, or no `fields` at all",
+        ),
+    )
+}
+
 pub(super) fn unregistered_not_bounded() -> Refusal {
     Refusal::not_started(
         "sessions-unregistered-not-bounded",
@@ -440,6 +476,7 @@ fn registry_and_pointers(
                 wake: row.wake,
                 pane: row.pane,
                 handoffs: Vec::new(),
+                reported: None,
             },
         ));
     }
@@ -474,6 +511,7 @@ fn registry_and_pointers(
             wake: None,
             pane: None,
             handoffs: Vec::new(),
+            reported: None,
         });
     }
     (registry, unregistered)
@@ -518,6 +556,62 @@ fn read(root: &Path) -> Result<(Vec<SessionRow>, Mail, Mail, Handoffs), Refusal>
         )),
         None => Ok(Default::default()),
     }
+}
+
+/// Whether the call asked for the self-reported status, or the refusal for any
+/// other value.
+pub(crate) fn wants_status(arguments: &Value) -> Result<bool, Refusal> {
+    match arguments.get("fields") {
+        None | Some(Value::Null) => Ok(false),
+        Some(Value::String(asked)) if asked == "status" => Ok(true),
+        Some(other) => Err(fields_unknown(&other.to_string())),
+    }
+}
+
+fn attach_status(entries: &mut [Listed], root: &Path, now: u64) -> Result<(), Refusal> {
+    let Some(opened) =
+        store::open_for_read(&store::beside(root)).map_err(|f| unreadable(&f.detail()))?
+    else {
+        return Ok(());
+    };
+    let latest = opened
+        .latest_statuses()
+        .map_err(|f| unreadable(&f.detail()))?;
+    let open = opened
+        .first_open_tasks()
+        .map_err(|f| unreadable(&f.detail()))?;
+    for entry in entries {
+        let ended = entry.status == "ended";
+        entry.reported = match latest.get(&entry.run_id) {
+            Some(recorded) => {
+                let age = now.saturating_sub(recorded.set_at);
+                Some(Reported {
+                    status_text: Some(recorded.status.clone()),
+                    phase: recorded.phase.clone(),
+                    status_age: Some(age),
+                    status_state: Some(if ended {
+                        "ended"
+                    } else if age > STALE_AFTER_SECONDS {
+                        "stale"
+                    } else {
+                        "current"
+                    }),
+                    self_reported: Some(true),
+                    ..Reported::default()
+                })
+            }
+            None => match &entry.issue {
+                Some(Identity::Number(number)) => open.get(number).map(|(first, total)| Reported {
+                    status_derived: Some(format!("task {first} of {total}")),
+                    derived: Some(true),
+                    status_state: ended.then_some("ended"),
+                    ..Reported::default()
+                }),
+                _ => None,
+            },
+        };
+    }
+    Ok(())
 }
 
 fn fill(entry: &mut Listed, waiting: &Mail, undelivered: &Mail, handoffs: &Handoffs) {
@@ -597,6 +691,7 @@ pub(crate) fn page(arguments: &Value, root: &Path, now: Option<u64>) -> Result<V
 pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Result<Page, Refusal> {
     let now = now.ok_or_else(clock_unreadable)?;
     let selectors = Selectors::of(arguments);
+    let with_status = wants_status(arguments)?;
     if let Some((name, bytes)) = selectors.over_the_bound() {
         return Err(selector_too_large(name, bytes));
     }
@@ -671,7 +766,10 @@ pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Resu
     } else {
         None
     };
-    let sessions: Vec<Listed> = page.iter().map(|entry| entry.1.clone()).collect();
+    let mut sessions: Vec<Listed> = page.iter().map(|entry| entry.1.clone()).collect();
+    if with_status {
+        attach_status(&mut sessions, root, now)?;
+    }
     Ok(Page {
         version: PAGE_VERSION,
         taken_at,
@@ -728,9 +826,13 @@ fn bounded_listing(
     all: bool,
     limit: Option<u64>,
     cursor: Option<&str>,
+    fields: Option<&str>,
     root: &Path,
 ) -> Result<(), Refusal> {
     let mut arguments = serde_json::Map::new();
+    if let Some(fields) = fields {
+        arguments.insert("fields".to_owned(), Value::from(fields));
+    }
     if !all {
         arguments.insert("status".to_owned(), Value::from("live"));
     }
@@ -757,12 +859,18 @@ pub(super) fn sessions(
     all: bool,
     limit: Option<u64>,
     cursor: Option<&str>,
+    fields: Option<&str>,
 ) -> Result<(), Refusal> {
     let root = session::state_root(None)?;
     if limit.is_some() || cursor.is_some() {
-        return bounded_listing(json, all, limit, cursor, &root);
+        return bounded_listing(json, all, limit, cursor, fields, &root);
     }
-    let entries = entries(&root)?;
+    let with_status = wants_status(&serde_json::json!({ "fields": fields }))?;
+    let mut entries = entries(&root)?;
+    if with_status {
+        let now = session::now_seconds().ok_or_else(clock_unreadable)?;
+        attach_status(&mut entries, &root, now)?;
+    }
     let shown: Vec<&Listed> = entries
         .iter()
         .filter(|entry| all || entry.status == "live")

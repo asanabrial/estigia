@@ -3046,6 +3046,48 @@ fn the_cli_walks_a_bounded_session_registry_a_page_at_a_time_without_omissions_o
 }
 
 #[test]
+fn sessions_fields_status_adds_the_self_report_on_both_listing_paths_and_only_then() {
+    let rig = tracker_rig();
+    let run = pi_start(&rig, "one");
+    let (said, stderr, ok) = pi_session_run(
+        &rig,
+        &["status", "set", "reading the spec", "--run-id", &run],
+    );
+    assert!(ok, "{said}{stderr}");
+
+    let row_of = |arguments: &[&str]| -> serde_json::Value {
+        let (said, stderr, ok) = pi_session_run(&rig, arguments);
+        assert!(ok, "{said}{stderr}");
+        let answer: serde_json::Value = serde_json::from_str(said.trim()).expect("JSON");
+        answer["sessions"][0].clone()
+    };
+    for arguments in [
+        vec!["sessions", "--json", "--fields", "status"],
+        vec!["sessions", "--json", "--limit", "5", "--fields", "status"],
+    ] {
+        let row = row_of(&arguments);
+        assert_eq!(row["status_text"], "reading the spec", "{arguments:?}");
+        assert_eq!(row["self_reported"], true, "{arguments:?}");
+        assert_eq!(row["status_state"], "current", "{arguments:?}");
+    }
+    for arguments in [
+        vec!["sessions", "--json"],
+        vec!["sessions", "--json", "--limit", "5"],
+    ] {
+        let row = row_of(&arguments);
+        assert!(row.get("status_text").is_none(), "{arguments:?}: {row}");
+        assert!(row.get("self_reported").is_none(), "{arguments:?}: {row}");
+    }
+
+    let (said, stderr, ok) = pi_session_run(&rig, &["sessions", "--json", "--fields", "tasks"]);
+    assert!(!ok, "{said}{stderr}");
+    assert!(
+        format!("{said}{stderr}").contains("sessions-fields-unknown"),
+        "{said}{stderr}"
+    );
+}
+
+#[test]
 fn a_bounded_session_call_keeps_each_refusal_the_page_answers() {
     let rig = tracker_rig();
     for session in ["one", "two", "three"] {
