@@ -873,7 +873,7 @@ pointer that leaves it names the document it points at.
   | `skill/policies/blind-judges.md` | 42,284 | file on disk |
   | `skill/policies/judgment-day.md` | 15,969 | file on disk; loaded only when the operator explicitly asks for Judgment Day |
   | Installed `skill/SKILL.md` | *rendered* | `skill::rendered` over `Config::default()` — not a file size; the shipped block is rewritten |
-  | `skill/bindings/github/delivery.md` | 42,206 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
+  | `skill/bindings/github/delivery.md` | 42,205 | file on disk; a **publishing** run loads this companion per `SKILL.md`'s delivery row |
 
   A run that does not reach publication loads the binding and the installed contract, plus the policy
   its path uses: `blind-judges.md` for ordinary review, `judgment-day.md` only when the operator
@@ -3866,8 +3866,15 @@ and a merge whose answer was lost). What it does not measure:
   starts later reads `ci-absent`; one with Actions on and no workflow answers `pending` for the whole
   window. The window is a constant, not a measurement. On a `not-consulted` lane an empty rollup passes
   at once.
-- **The 50 s bound is on what `deliver` waits for, not on what it calls.** A hung `gh` or `git` call, or a
-  slow `release_ci` clean-target read, is not cut off, and no host's timeout was measured.
+- **`wait_seconds` bounds what `deliver` waits for, not what it calls.** A hung `gh` or `git` call, or a
+  slow `release_ci` clean-target read, is not cut off.
+- **A host that ends an MCP call before `wait_seconds` is not measured.** The ceiling is 900 s, the one
+  `collect_review_input` has. Claude Code held a `collect_review_input` call for 111 s
+  ([`waits.md`](waits.md)), and no other host's timeout was measured. Nothing tells a caller what its own
+  host allows, and the default stays 20 s.
+- **Past the first 50 s the pull request is read every 20 s, not every 2 s.** A check that finishes in
+  that window is seen up to 20 s late. The read count per call is bounded by the cadence, not measured
+  against GitHub's rate limit.
 - **A merge queue or an approval rule hands back.** `merge-unconfirmed` and `merge-refused` are not told
   apart from other causes, and the queue's configured method is not proven to keep a merge commit; a
   merge whose read-back never answers reads `merge-unknown` (it may have landed); an unreadable base or
@@ -4121,5 +4128,6 @@ the count cannot show:
 - **Why a run polled is not in the transcript.** The count shows that a run polled a file a background
   job would have announced. It cannot show whether the run expected no notification, or followed an
   instruction to wait in the foreground.
-- **The 50 s `deliver` ceiling is still unmeasured on the hosts it protects.** Claude Code held a
-  `collect_review_input` call for 111 s, and that is all this shows. No other host was run.
+- **The 111 s is the longest MCP call this host was seen to hold, not its limit.** No other host was
+  run, so raising `deliver`'s ceiling to 900 s leaves the shorter-host case unmeasured
+  ([*What `deliver` does not see*](#what-deliver-does-not-see)).

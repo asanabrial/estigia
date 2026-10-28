@@ -1360,3 +1360,38 @@ fn the_live_merge_decision_refuses_a_caller_that_is_unclaimed_foreign_unreadable
         "{unreleased}"
     );
 }
+
+#[test]
+fn a_wait_is_accepted_up_to_the_ceiling_collect_review_input_already_has() {
+    assert_eq!(requested_wait(&json!({})).ok(), Some(20));
+    assert_eq!(
+        requested_wait(&json!({"wait_seconds": 900})).ok(),
+        Some(900)
+    );
+    for refused in [json!(0), json!(901), json!(-1), json!(1.5), json!("60")] {
+        assert!(
+            matches!(
+                requested_wait(&json!({"wait_seconds": refused})),
+                Err(ToolFailure::Malformed(_))
+            ),
+            "wait_seconds {refused} was accepted"
+        );
+    }
+}
+
+#[test]
+fn a_long_wait_reads_the_pull_request_less_often_after_the_first_fifty_seconds() {
+    assert_eq!(poll_interval(Duration::ZERO), Duration::from_secs(2));
+    assert_eq!(
+        poll_interval(Duration::from_secs(49)),
+        Duration::from_secs(2)
+    );
+    assert_eq!(
+        poll_interval(Duration::from_secs(50)),
+        Duration::from_secs(20)
+    );
+    assert_eq!(
+        poll_interval(Duration::from_secs(899)),
+        Duration::from_secs(20)
+    );
+}

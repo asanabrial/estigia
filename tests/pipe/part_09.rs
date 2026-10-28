@@ -4490,7 +4490,7 @@ fn deliver_hands_back_at_the_receipt_over_the_real_mcp_server() {
 
     let too_long = respond(
         "deliver",
-        serde_json::json!({"issue": 12, "run_id": run_id, "wait_seconds": 51}),
+        serde_json::json!({"issue": 12, "run_id": run_id, "wait_seconds": 901}),
     );
     assert!(
         too_long["error"]["message"]

@@ -21,11 +21,13 @@ use crate::transport::{self, Failure, How, Output};
 const CONFLICT_LINES: usize = 8;
 const DATE_CHARS: usize = 10;
 const SHA_CHARS: usize = 12;
-const MAX_WAIT_SECONDS: u64 = 50;
+const MAX_WAIT_SECONDS: u64 = 900;
 const DEFAULT_WAIT_SECONDS: u64 = 20;
 const EMPTY_ROLLUP_WINDOW_SECONDS: u64 = 600;
 const ASK_AFTER_SECONDS: u64 = 15;
 const POLL: Duration = Duration::from_secs(2);
+const SHORT_WAIT: Duration = Duration::from_secs(50);
+const LONG_POLL: Duration = Duration::from_secs(20);
 const READBACK_ATTEMPTS: u32 = 4;
 const READBACK_PAUSE: Duration = Duration::from_millis(750);
 const RED: [&str; 5] = [
@@ -229,16 +231,19 @@ fn manifest_version(path: &str, text: &str) -> Result<Option<String>, ()> {
 struct Deliver<'a, H: Hands> {
     hands: &'a H,
     request: &'a Request,
+    started: Instant,
     deadline: Instant,
     released_at: u64,
     done: Vec<&'static str>,
 }
 
 pub(super) fn run<H: Hands>(hands: &H, request: &Request) -> Value {
+    let started = Instant::now();
     let mut deliver = Deliver {
         hands,
         request,
-        deadline: Instant::now() + request.wait,
+        started,
+        deadline: started + request.wait,
         released_at: 0,
         done: Vec::new(),
     };
@@ -309,7 +314,7 @@ impl<H: Hands> Deliver<'_, H> {
             return Err(pending(step, reason, ask));
         }
         let remaining = self.deadline.saturating_duration_since(Instant::now());
-        std::thread::sleep(POLL.min(remaining));
+        std::thread::sleep(poll_interval(self.started.elapsed()).min(remaining));
         Ok(())
     }
 
@@ -1128,6 +1133,26 @@ impl Hands for Live<'_> {
     }
 }
 
+fn poll_interval(elapsed: Duration) -> Duration {
+    if elapsed < SHORT_WAIT {
+        POLL
+    } else {
+        LONG_POLL
+    }
+}
+
+fn requested_wait(arguments: &Value) -> Result<u64, ToolFailure> {
+    match arguments.get("wait_seconds") {
+        None => Ok(DEFAULT_WAIT_SECONDS),
+        Some(sent) => match sent.as_u64() {
+            Some(seconds) if (1..=MAX_WAIT_SECONDS).contains(&seconds) => Ok(seconds),
+            _ => Err(ToolFailure::Malformed(format!(
+                "`wait_seconds` is a whole number from 1 to {MAX_WAIT_SECONDS}, not {sent}"
+            ))),
+        },
+    }
+}
+
 pub(super) fn deliver(
     arguments: &Value,
     context: &GateContext,
@@ -1139,17 +1164,7 @@ pub(super) fn deliver(
         ));
     };
     let issue = arguments["issue"].as_u64().unwrap_or_default();
-    let seconds = match arguments.get("wait_seconds") {
-        None => DEFAULT_WAIT_SECONDS,
-        Some(sent) => match sent.as_u64() {
-            Some(seconds) if (1..=MAX_WAIT_SECONDS).contains(&seconds) => seconds,
-            _ => {
-                return Err(ToolFailure::Malformed(format!(
-                    "`wait_seconds` is a whole number from 1 to {MAX_WAIT_SECONDS}, not {sent}"
-                )));
-            }
-        },
-    };
+    let seconds = requested_wait(arguments)?;
     let compact = arguments.get("compact").and_then(Value::as_bool) == Some(true);
     let appendix = match arguments.get("appendix_file").and_then(Value::as_str) {
         None => None,
