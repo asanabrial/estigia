@@ -261,4 +261,17 @@ pub(super) const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX run_statuses_run ON run_statuses (run_id, id);
     ",
+    "
+    CREATE TABLE needs_person (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        repo TEXT NOT NULL,
+        issue INTEGER,
+        run_id TEXT,
+        dedup_key TEXT NOT NULL,
+        at INTEGER NOT NULL,
+        delivery TEXT NOT NULL DEFAULT 'not delivered: no notifier',
+        UNIQUE (repo, dedup_key)
+    );
+    ",
 ];

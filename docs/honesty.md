@@ -615,7 +615,7 @@ pointer that leaves it names the document it points at.
 - **Three debug-only overrides keep the suite off production waits and double work, and a `--release`
   build compiles all three out.** `ESTIGIA_UNSAFE_SKIP_FSYNC` (`src/paths.rs`'s `fsync_skipped`) turns
   `sync_durably`/`sync_parent` into no-ops and opens the local store with `synchronous = OFF` instead
-  of `FULL` (`durability` in `src/transport/store/mod.rs`), so a fresh store's seventeen migration commits
+  of `FULL` (`durability` in `src/transport/store/mod.rs`), so a fresh store's eighteen migration commits
   flush nothing; in-process tests arm it through
   `set_fsync_skip_for_tests`. `ESTIGIA_TEST_READBACK_NO_WAIT` (`readback_wait_is_disabled` in
   `src/transport/claim.rs`) makes `publish_with` skip the 2+4+…+18 = 90 s read-back sleeps.
@@ -4046,6 +4046,25 @@ measure:
   goes through `store::store_path()`: the same file in production, two scratch stores under `cargo test`.
   The counts in `estigia sessions` belong to listed sessions (a message whose sender has neither a registry
   row nor a run pointer is counted and shown against nobody).
+
+## The needs-person record
+
+`estigia needs-person` lists rows written at three store writes (`escalate_review`, a `blocked` transition
+without a clause, a gate `ask`), measured by one unit test each and a store test for the dedup. What it does
+not establish:
+
+- **Nothing notifies anyone.** Every row reads `not delivered: no notifier`. A row is a record that a person
+  was needed, never that one was told, and never an approval.
+- **Three moments of the six named are not written yet.** `handoff_review`, a verified `done` and the delivery
+  halt write nothing: the first has no behavioural fixture to measure it against, and the halt is a pure read
+  that must not write.
+- **`blocked` is judged at the transition.** A clause recorded afterwards does not retract the row, and an
+  unreadable clause read records nothing.
+- **A failed write is silent.** Recording is best effort and never fails the decision it describes, so a store
+  that cannot be written leaves no row and no error.
+- **`ask` is only as real as the gate's `ask`.** A `Delivery authorisation` of `ask` may not reach the gate at
+  all, and hosts other than Claude Code convert `ask` into a deny before it is recorded.
+- **No runtime was run live.** The tests drive the functions, not a session of any host.
 
 ## The npm installer and the registries
 

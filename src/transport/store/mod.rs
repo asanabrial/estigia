@@ -18,6 +18,7 @@ mod import;
 mod jobs;
 mod ledger;
 mod messages;
+mod needs_person;
 mod outbox;
 mod records;
 mod schema;
@@ -42,6 +43,7 @@ pub(crate) use ledger::{Ledger, store_path, viewer_login};
 #[cfg(test)]
 pub(crate) use ledger::{forget_scratch_store, ledger_opens, local_bodies};
 pub(crate) use messages::{Message, MessageSent};
+pub(crate) use needs_person::Need;
 pub(crate) use outbox::{OutboxKind, OutboxRow, OutboxState};
 pub(crate) use records::{Recorded, TaskChange, TaskRow};
 pub(crate) use sessions::{SessionRow, SessionSeen};

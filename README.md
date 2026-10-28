@@ -193,7 +193,7 @@ writes is in [what it writes](docs/what-it-writes.md#what-setup-installs-besides
 1. `estigia status`: what is installed, where, and whether each agent is told (`tools on`) and stopped
    (`gate on`).
 2. `estigia doctor`: skill, gh, remote, guard, prune, permission and the rest, read-only.
-3. `estigia sessions`, `estigia feed` and `estigia changes` (uncommitted work) are read-only too.
+3. `estigia sessions`, `feed`, `needs-person` and `changes` (uncommitted work) are read-only too.
 
 ## Uninstall
 

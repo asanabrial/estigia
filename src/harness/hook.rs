@@ -545,6 +545,28 @@ pub(crate) fn note(
         entry["aimed_at"] = json!(aimed_at);
     }
     session::record(&context.state_root, &entry);
+    if let Decision::Ask(refusal) = decision {
+        record_ask(context, run_id, refusal.code);
+    }
+}
+
+fn record_ask(context: &GateContext, run_id: &str, code: &str) {
+    let (Some(now), Ok(store)) = (
+        session::now_seconds(),
+        crate::transport::store::Store::open(&crate::transport::store::beside(&context.state_root)),
+    ) else {
+        return;
+    };
+    let _ = store.need_recorded(
+        &crate::transport::store::Need {
+            kind: "ask",
+            repo: &context.repo_dir.display().to_string(),
+            issue: None,
+            run_id: Some(run_id),
+            dedup_key: &format!("ask:{run_id}:{code}"),
+        },
+        now,
+    );
 }
 
 /// How a run's workflow state is named in the sentence a session opens with.
@@ -1724,6 +1746,73 @@ mod tests {
         for suffix in ["", "-wal", "-shm"] {
             let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
         }
+    }
+
+    #[test]
+    fn an_ask_records_one_need_for_a_person_and_an_allow_or_deny_records_none() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let context = GateContext {
+            integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
+            flag: None,
+            stand_down: None,
+            skill_root: root.path().join("skill"),
+            repo_dir: root.path().join("repo"),
+            state_root: root.path().join("state"),
+            operation_window: Default::default(),
+            issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
+            workflow: Some(crate::config::Workflow::Autonomous),
+            window: super::super::RENEWAL_WINDOW,
+            tracker: crate::config::Tracker::Github { repo: None },
+            repository_host: crate::config::RepositoryHost::Github { repo: None },
+            boundaries: Vec::new(),
+        };
+        std::fs::create_dir_all(&context.state_root).expect("the state directory");
+        let refusal =
+            || Refusal::not_started("a-code", "a message", Resolution::run("estigia status"));
+        let needs = || {
+            crate::transport::store::Store::open(&crate::transport::store::beside(
+                &context.state_root,
+            ))
+            .expect("the store opens")
+            .needs_person(10)
+            .expect("the needs read")
+        };
+
+        note(
+            &context,
+            "claude-abcd1234",
+            "Bash",
+            None,
+            &Decision::Deny(Box::new(refusal())),
+            &[],
+        );
+        note(
+            &context,
+            "claude-abcd1234",
+            "Bash",
+            None,
+            &Decision::Allow("ok".to_owned()),
+            &[],
+        );
+        assert!(needs().is_empty());
+
+        for _ in 0..2 {
+            note(
+                &context,
+                "claude-abcd1234",
+                "Bash",
+                None,
+                &Decision::Ask(Box::new(refusal())),
+                &[],
+            );
+        }
+        let recorded = needs();
+        assert_eq!(recorded.len(), 1, "{recorded:?}");
+        assert_eq!(recorded[0].kind, "ask");
+        assert_eq!(recorded[0].run_id.as_deref(), Some("claude-abcd1234"));
+        assert_eq!(recorded[0].issue, None);
     }
 
     #[test]

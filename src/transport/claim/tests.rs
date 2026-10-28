@@ -773,6 +773,71 @@ fn a_transition_moves_the_state_the_store_decides_from() {
     now_new.expect("the new state is the one the store holds");
 }
 
+fn blocked_script(issue: u64, imported: &[&str], body: &str) -> String {
+    let mine = dated(
+        "1",
+        "2026-07-28T01:00:00Z",
+        claim_body("claude-a", HOLDER_OPERATION),
+    );
+    let mut import = issue_payload(&[mine], &["fixture"], imported);
+    import["body"] = body.into();
+    crate::test_env::answers(&[
+        serde_json::json!({
+            "matches": format!("issue view {issue} --json body,labels,comments"),
+            "stdout": import.to_string(),
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": format!("issue view {issue}"),
+            "stdout": issue_payload(&[], &[], &["status:blocked"]).to_string(),
+            "status": 0,
+        }),
+        serde_json::json!({
+            "matches": "api user",
+            "stdout": "{\"login\":\"fixture\"}", "status": 0,
+        }),
+    ])
+}
+
+/// A `blocked` transition with no predicate clause leaves a person to decide, so
+/// it records a need; a clause names what discharges it, so it records none; and
+/// a transition that does not change the state records nothing again.
+#[test]
+fn only_a_blocked_transition_without_a_clause_records_a_need_for_a_person() {
+    let clause = "<!-- issue-flow: blocked-until issue=5 state=done -->";
+    for (body, expected) in [("Plain.", 1), (clause, 0)] {
+        let directory = tempfile::tempdir().expect("a directory for the store");
+        let path = directory.path().join("state.db");
+        let context = context_at(directory.path());
+        let bin = crate::test_env::scripted_gh();
+        let script = blocked_script(12, &["status:in-progress"], body);
+
+        crate::transport::store::with_store_at(&path, || {
+            crate::test_env::with_scripted_gh(bin.path(), &script, || {
+                for _ in 0..2 {
+                    super::super::commands::transition(
+                        &context,
+                        12,
+                        "blocked",
+                        Some("in-progress"),
+                        RECLAIM_NOW,
+                    )
+                    .expect("the transition lands");
+                }
+            });
+        });
+
+        let needs = crate::transport::store::Store::open(&path)
+            .expect("the store opens")
+            .needs_person(10)
+            .expect("the needs read");
+        assert_eq!(needs.len(), expected, "{body}: {needs:?}");
+        if let Some(need) = needs.first() {
+            assert_eq!((need.kind.as_str(), need.issue), ("blocked", Some(12)));
+        }
+    }
+}
+
 #[test]
 fn after_the_first_touch_a_verify_and_a_heartbeat_read_no_issue_and_no_label_and_post_nothing() {
     let (root, context) = context_with_no_repository();
@@ -15966,6 +16031,61 @@ fn an_escalation_after_the_correction_is_spent_records_a_local_receipt_and_posts
         !calls.contains("issue comment"),
         "the escalation wrote a tracking comment: {calls}"
     );
+}
+
+/// The escalation is a moment the person is needed: it leaves one record in the
+/// store, and repeating the call leaves no second one.
+#[test]
+fn an_escalation_records_one_need_for_a_person_and_repeating_it_records_none() {
+    let (receipt, mut comments) = review_world_with_spent_correction();
+    comments[0] = live_claim("codex-b");
+
+    let (_root, mut context) = context_with_no_repository();
+    context.config = corrections_limit_row("1");
+    let directory = tempfile::tempdir().expect("a directory for the store");
+    let path = directory.path().join("state.db");
+    let bin = crate::test_env::scripted_gh();
+    let script = crate::test_env::answers(&[
+        crate::test_env::issue_view_answer(42, stdout_with(&comments)),
+        serde_json::json!({"matches": "issue comment 42", "stdout": "", "status": 0}),
+    ]);
+    let escalation = ReviewEscalation {
+        issue: 42,
+        run_id: "codex-b",
+        epoch: &receipt.epoch,
+        pr: receipt.pr,
+        head: &receipt.head,
+        base: &receipt.base,
+        digest: &receipt.digest,
+        escalated_to: "asanabrial",
+        reason: "the correction was spent",
+        now: "2026-08-31T00:00:00Z",
+    };
+    let needs = || {
+        crate::transport::store::Store::open(&path)
+            .expect("the store opens")
+            .needs_person(10)
+            .expect("the needs read")
+    };
+
+    crate::transport::store::with_store_at(&path, || {
+        crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            Ledger::open(&context, 42, RECLAIM_NOW).expect("the first touch imports the issue");
+            escalate_review(&context, &escalation).expect("the escalation is recorded");
+        });
+    });
+    let first = needs();
+    assert_eq!(first.len(), 1, "{first:?}");
+    assert_eq!(first[0].kind, "escalated");
+    assert_eq!(first[0].issue, Some(42));
+    assert_eq!(first[0].run_id.as_deref(), Some("codex-b"));
+
+    crate::transport::store::with_store_at(&path, || {
+        crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            escalate_review(&context, &escalation).expect("the repeat is answered");
+        });
+    });
+    assert_eq!(needs(), first, "a repeat wrote a second record");
 }
 
 /// A spent correction is what authorises an escalation, so a decision handed

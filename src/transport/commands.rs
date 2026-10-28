@@ -1730,6 +1730,7 @@ pub(crate) fn transition_on(
     from: Option<&str>,
     now: &str,
 ) -> Result<serde_json::Value, Failure> {
+    let before = ledger.state().ok().flatten();
     let delivery = if to == "done" {
         super::claim::verified_delivery(context, &ledger.timeline()?)?
     } else {
@@ -1754,13 +1755,26 @@ pub(crate) fn transition_on(
         if let Some(delivery) = delivery {
             deferred["delivery"] = delivery;
         }
+        need_person_for_blocked(ledger, to, before.as_deref(), now);
         return Ok(deferred);
     }
     let mut result = project_state(context, ledger, issue, to, from, now)?;
+    need_person_for_blocked(ledger, to, before.as_deref(), now);
     if let Some(delivery) = delivery {
         result["delivery"] = delivery;
     }
     Ok(result)
+}
+
+fn need_person_for_blocked(
+    ledger: &super::store::Ledger,
+    to: &str,
+    before: Option<&str>,
+    now: &str,
+) {
+    if to == "blocked" && before != Some("blocked") && !ledger.has_blocked_clause() {
+        ledger.needs_person("blocked", None, now);
+    }
 }
 
 /// The projection half of [`transition`]: the board column, the `status:`
