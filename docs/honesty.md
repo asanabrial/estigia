@@ -55,6 +55,7 @@ the section links below provide navigation rather than a subject index.
 - [The session mailbox](#the-session-mailbox)
 - [The npm installer and the registries](#the-npm-installer-and-the-registries)
 - [The release builds; CI tests](#the-release-builds-ci-tests)
+- [The waits audit](#the-waits-audit)
 
 The last run, **The review tier, the lens and the finding** has its own
 document: [`honesty-review-tier.md`](honesty-review-tier.md). It stays last in the order and nothing
@@ -4056,3 +4057,25 @@ passed on the same target the run before. What the change gives up:
 - **The tagged tree is assumed to be the tested tree.** A tag is cut on the merge of a pull request CI
   passed; nothing checks that the base did not advance between the green run and the merge beyond the
   delivery rules a merge already follows.
+
+## The waits audit
+
+[`waits.md`](waits.md) counts the calls this repository's deliveries made because a clock passed: 247
+of 17,062 tool calls in 45 Claude Code transcripts, carrying 72.95 M of 5,119.2 M context tokens. What
+the count cannot show:
+
+- **One machine, one host, one pace.** The transcripts are Claude Code's, from one person's profile, over
+  four weeks. OpenCode, Pi and Codex sessions, and every subagent's own transcript, are not read. A
+  slower lane or a different habit of checking CI would give other figures.
+- **The classification is read from command text.** A loop is matched by `until`/`while` and `sleep`, and
+  a pending CI read by the words `pending`, `in_progress` or `queued` in its output. A read that also
+  diagnosed a failure is counted as a wait, so the pending-read row is an upper bound. A wait written
+  in another shape is not counted, so the total is not a ceiling.
+- **Context is not saving, and not billing.** The figure is the context of the requests that carried
+  the calls, nearly all of it cache read. A replaced call still costs the request that reads its
+  notification, and that net was not computed.
+- **Why a run polled is not in the transcript.** The count shows that a run polled a file a background
+  job would have announced. It cannot show whether the run expected no notification, or followed an
+  instruction to wait in the foreground.
+- **The 50 s `deliver` ceiling is still unmeasured on the hosts it protects.** Claude Code held a
+  `collect_review_input` call for 111 s, and that is all this shows. No other host was run.
