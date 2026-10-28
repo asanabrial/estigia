@@ -335,24 +335,23 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "branch",
                 "string",
-                "Also create the isolated checkout on this branch in the same call, after the \
-                 claim and any `transition_to`, as `start_branch` does. Needs `base`. A checkout \
-                 that fails is reported under `start_branch`; the claim still stands.",
+                "Also create this branch's checkout in this call, as `start_branch` does; \
+                 needs `base`.",
             ),
             Argument::optional(
                 "base",
                 "string",
-                "The base branch the checkout starts from. Only with `branch`.",
+                "The checkout's base branch; with `branch`.",
             ),
             Argument::optional(
                 "worktree_root",
                 "string",
-                "As `start_branch`'s `worktree_root`. Only with `branch`.",
+                "As `start_branch`'s; with `branch`.",
             ),
             Argument::optional(
                 "no_link",
                 "boolean",
-                "As `start_branch`'s `no_link`. Only with `branch`.",
+                "As `start_branch`'s; with `branch`.",
             ),
             Argument::optional(
                 "takeover",

@@ -1048,10 +1048,23 @@ fn run_operation(
                 // The `claim` then `transition` pair as one call: the claim is
                 // adjudicated first, so its refusal is what a caller meets before
                 // anything moves, and the transition's own refusals follow it.
-                let checkout = match f.get("branch") {
-                    Some(branch) => Some((branch, f.need("base", operation)?)),
-                    None if f.get("base").is_some() => Some((f.need("branch", operation)?, "")),
-                    None => None,
+                let checkout = match (f.get("branch"), f.get("base")) {
+                    (Some(branch), Some(base)) => Some((branch, base)),
+                    (None, None) => None,
+                    (named, _) => {
+                        let (given, absent) = if named.is_some() {
+                            ("branch", "--base")
+                        } else {
+                            ("base", "--branch")
+                        };
+                        return Err(flag_without_its_mode(
+                            operation,
+                            given,
+                            &format!(
+                                "a checkout in the claim needs --branch and --base; {absent} was not given"
+                            ),
+                        ));
+                    }
                 };
                 let answer = match f.get("transition-to") {
                     Some(to) => {

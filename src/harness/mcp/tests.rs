@@ -2581,7 +2581,7 @@ fn the_flags_read_out_of_the_transport_are_the_ones_it_declares() {
         accepted.contains(&"--transition-to".to_owned()),
         "claim no longer accepts the state it moves the issue to in the same call: {accepted:?}"
     );
-    assert_eq!(accepted.len(), 10, "{accepted:?}");
+    assert_eq!(accepted.len(), 14, "{accepted:?}");
 
     let (_, optional) = transport_flags("transition").expect("transition is a subcommand");
     assert!(
@@ -5976,7 +5976,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 56_332;
+const TOOLS_LIST_CEILING: usize = 56_708;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {

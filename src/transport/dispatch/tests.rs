@@ -1394,11 +1394,14 @@ fn a_claim_naming_half_a_checkout_is_refused_before_anything_is_read() {
         .collect::<Vec<_>>();
         let refused = super::dispatch(&context, "claim", &flags, "2026-01-01T00:00:00Z")
             .expect_err("half a checkout is not a call that can run");
-        assert_eq!(
-            refused.envelope()["argument"],
-            missing,
-            "{given} alone was not refused for {missing}: {}",
-            refused.envelope()
+        let envelope = refused.envelope();
+        assert_eq!(envelope["reason"], "malformed-argument", "{envelope}");
+        assert_eq!(envelope["argument"], given, "{envelope}");
+        assert!(
+            envelope["detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains(missing)),
+            "{given} alone did not name {missing}: {envelope}"
         );
     }
 }
