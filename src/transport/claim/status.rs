@@ -330,6 +330,29 @@ fn refused_approval(
     Ok(Some(halt("verdict-stale", STALE_WITHOUT_CAUSE)))
 }
 
+/// The newest publication on a timeline and where its review stands, read from the timeline alone.
+pub(crate) struct Judged {
+    pub(crate) receipt: ReviewTransaction,
+    pub(crate) verdict: &'static str,
+    pub(crate) escalated: bool,
+}
+
+/// What the timeline records of the review of its newest publication, or `None` when it records
+/// no publication. A marker that does not parse is the failure, never an absent publication.
+pub(crate) fn review_judged(
+    comments: &[crate::transport::ownership::Comment],
+) -> Result<Option<Judged>, Failure> {
+    let Some(latest) = all_publications(comments)?.pop() else {
+        return Ok(None);
+    };
+    let standing = receipt_standing(comments, &latest.receipt)?;
+    Ok(Some(Judged {
+        verdict: standing.standing.word(),
+        escalated: standing.escalated,
+        receipt: latest.receipt,
+    }))
+}
+
 pub fn repo_of(context: &Context) -> Result<Repo, Failure> {
     let named = (context.repo.as_deref().map(RepoRef::parse).transpose())
         .map_err(|_| Failure::Read("the configured repository is not owner/name".to_owned()))?;

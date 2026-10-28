@@ -135,6 +135,7 @@ fn inventory() -> Vec<Refusal> {
         super::feed::store_unreadable("the local store could not be read"),
         super::feed::repo_unknown("o/a"),
         super::feed::since_malformed("soon"),
+        super::standing::malformed("`o/r` is not `owner/name#N`"),
         super::sessions::listing_flags_beside_send(&["--all", "--limit"]),
         super::resume::run_unknown("opencode-gone"),
         super::resume::no_native("pi-ab12", "pi", "its session file is not recorded"),

@@ -5226,6 +5226,7 @@ fn verify_claim_carries_the_closing_pin_from_the_arguments_to_the_transport() {
 const READ_TOOLS: &[&str] = &[
     "list_sessions",
     "feed",
+    "where",
     "tasks",
     "verify_claim",
     "review_status",
@@ -5975,7 +5976,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 55_645;
+const TOOLS_LIST_CEILING: usize = 56_332;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -6824,6 +6825,32 @@ mod send_message {
         assert_eq!(tool["events"], cli["events"]);
         assert_eq!(tool["events"][0]["to"], "review", "{tool}");
         assert_eq!(tool["cannot_see"], cli["cannot_see"]);
+    }
+
+    #[test]
+    fn the_where_tool_answers_a_number_from_the_repository_the_store_holds_it_in() {
+        let rig = Rig::new();
+        rig.hold(12, SENDER);
+
+        let tool = answered(
+            run_tool("where", &json!({"reference": "12"}), Ok(&rig.context())).expect("an answer"),
+        );
+
+        assert_eq!(tool["scope"]["repo"], "asanabrial/estigia", "{tool}");
+        assert_eq!(tool["scope"]["basis"], "candidate", "{tool}");
+        assert!(tool["issue"]["unavailable"].is_string() || tool["issue"]["state"].is_string());
+    }
+
+    #[test]
+    fn the_where_tool_is_read_only_and_unbound_to_a_claim() {
+        let tool = TOOLS
+            .iter()
+            .find(|tool| tool.name == "where")
+            .expect("declared");
+
+        assert!(!tool.writes);
+        assert!(matches!(tool.effect, tools::PointerEffect::None));
+        assert!(tools::is_local_store("where"));
     }
 
     #[test]

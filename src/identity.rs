@@ -73,6 +73,10 @@ impl Identity {
         }
         match text.parse::<u64>() {
             Ok(number) => Ok(Self::Number(number)),
+            Err(_) if text.contains('/') => Err(format!(
+                "`{text}` names a repository, which an issue identity does not carry: give a \
+                 number or a key, or read it as a `Reference`"
+            )),
             Err(_) => Ok(Self::Key(text.to_uppercase())),
         }
     }
@@ -94,6 +98,51 @@ impl Identity {
     }
 }
 
+/// What a person typed to name an issue: one in a stated repository, or an identity whose
+/// repository is still to be found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reference {
+    /// `owner/name#N`, used as given.
+    Qualified {
+        /// The owning user or organisation.
+        owner: String,
+        /// The repository name.
+        name: String,
+        /// The issue number.
+        number: u64,
+    },
+    /// A number, with or without a leading `#`, or a tracker key.
+    Local(Identity),
+}
+
+impl Reference {
+    /// Reads `owner/name#N`, `#N`, `N` or a key such as `ENG-123`. A qualified
+    /// reference is a GitHub one and never a key, whatever the key rule would say.
+    pub fn parse(text: &str) -> Result<Self, String> {
+        let text = text.trim();
+        if !text.contains('/') {
+            return Identity::parse(text.strip_prefix('#').unwrap_or(text)).map(Self::Local);
+        }
+        let malformed = || format!("`{text}` is not `owner/name#N`");
+        let (repo, number) = text.split_once('#').ok_or_else(malformed)?;
+        let (owner, name) = repo.split_once('/').ok_or_else(malformed)?;
+        let usable = |segment: &str| {
+            !segment.is_empty()
+                && segment
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || "._-".contains(character))
+        };
+        if !usable(owner) || !usable(name) {
+            return Err(malformed());
+        }
+        Ok(Self::Qualified {
+            owner: owner.to_owned(),
+            name: name.to_owned(),
+            number: number.parse().map_err(|_| malformed())?,
+        })
+    }
+}
+
 impl fmt::Display for Identity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -111,7 +160,7 @@ impl From<u64> for Identity {
 
 #[cfg(test)]
 mod tests {
-    use super::Identity;
+    use super::{Identity, Reference};
 
     #[test]
     fn a_run_of_digits_reads_as_a_number_and_the_rest_as_a_key() {
@@ -129,6 +178,41 @@ mod tests {
         assert_eq!(
             Identity::parse("eng-123"),
             Ok(Identity::Key("ENG-123".to_owned()))
+        );
+    }
+
+    #[test]
+    fn a_qualified_reference_is_a_github_issue_and_never_a_key() {
+        assert_eq!(
+            Reference::parse("o/r#12"),
+            Ok(Reference::Qualified {
+                owner: "o".to_owned(),
+                name: "r".to_owned(),
+                number: 12
+            })
+        );
+        assert!(
+            Identity::parse("o/r#12").is_err(),
+            "a qualified reference was read as a Linear key"
+        );
+        assert!(Reference::parse("o/r").is_err());
+        assert!(Reference::parse("o/r#x").is_err());
+        assert!(Reference::parse("/r#1").is_err());
+    }
+
+    #[test]
+    fn a_bare_number_a_hash_number_and_a_key_read_as_before() {
+        assert_eq!(
+            Reference::parse("12"),
+            Ok(Reference::Local(Identity::Number(12)))
+        );
+        assert_eq!(
+            Reference::parse("#12"),
+            Ok(Reference::Local(Identity::Number(12)))
+        );
+        assert_eq!(
+            Reference::parse("eng-1"),
+            Ok(Reference::Local(Identity::Key("ENG-1".to_owned())))
         );
     }
 

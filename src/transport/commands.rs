@@ -1228,19 +1228,51 @@ pub fn task(context: &Context, call: &TaskCall<'_>) -> Result<serde_json::Value,
 /// `tasks` — the task checklist the store holds for one issue, in the order the
 /// tasks were first recorded. Read-only and needing no claim: a run resuming an
 /// issue reads it before it holds anything.
+///
+/// The repository comes from the shared scope resolver, so a number the checkout has never
+/// seen but the store or a live run places elsewhere reads that repository's
+/// checklist; several candidates are refused `ambiguous-issue`. A store that does
+/// not exist, or does not hold the repository, answers `unavailable` and no count:
+/// an empty checklist is a read, and nothing was read.
 pub fn tasks(context: &Context, issue: u64) -> Result<serde_json::Value, Failure> {
-    let repo = super::claim::repo_of(context)?;
-    let rows = match super::store::open_for_read(&super::store::store_path()?)? {
-        Some(store) => store.tasks(&repo, issue)?,
-        None => Vec::new(),
+    let path = super::store::store_path()?;
+    let runs = path.with_file_name("runs");
+    let scope = super::scope::resolve(
+        context,
+        &crate::identity::Reference::Local(crate::identity::Identity::Number(issue)),
+        &super::scope::Places {
+            store_file: &path,
+            state_root: Some(&runs),
+        },
+        super::scope::Prefer::Checkout,
+    )?;
+    let named = super::scope::spelled(&scope.repo);
+    let held = match super::store::open_for_read(&path)? {
+        None => Err("the local store does not exist yet".to_owned()),
+        Some(store) if store.holds_repo(&scope.repo)? => Ok(store.tasks(&scope.repo, issue)?),
+        Some(_) => Err(format!("the local store holds no repository {named}")),
     };
-    let tasks: Vec<_> = rows.iter().map(task_json).collect();
-    Ok(serde_json::json!({
-        "ok": true,
-        "issue": issue,
-        "count": tasks.len(),
-        "tasks": tasks,
-    }))
+    Ok(match held {
+        Ok(rows) => {
+            let tasks: Vec<_> = rows.iter().map(task_json).collect();
+            serde_json::json!({
+                "ok": true,
+                "issue": issue,
+                "repo": named,
+                "scope": scope.basis.word(),
+                "count": tasks.len(),
+                "tasks": tasks,
+            })
+        }
+        Err(why) => serde_json::json!({
+            "ok": true,
+            "issue": issue,
+            "repo": named,
+            "scope": scope.basis.word(),
+            "unavailable": why,
+            "tasks": [],
+        }),
+    })
 }
 
 /// `create` — file an issue, recording its identity and `blocked-until` clauses

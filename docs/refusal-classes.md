@@ -109,6 +109,9 @@ handoff disagree until somebody re-reads the issue.
 **`refused`** — everything else, on the rule that the caller named something the ledger does not hold,
 or broke a rule it can be told. That includes:
 
+- `ambiguous-issue` and `where-reference-malformed`: the caller named an issue by a bare number that
+  several repositories hold, or by text that is no reference; the candidates are in the answer and
+  nothing was read or written ([`where.md`](where.md));
 - rule violations: budgets (`correction-budget-exceeded`, `correction-already-spent`), things already
   recorded (`computed-verdict-already-recorded`, `refutation-batch-already-recorded`,
   `validator-result-already-recorded`), `rejected-on-insufficient-evidence`, `reviewer-not-distinct`,
