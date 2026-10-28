@@ -677,6 +677,7 @@ mod tests {
             .expect("the process is recorded");
     }
 
+    #[cfg(unix)]
     fn here() -> String {
         liveness::host_name().expect("this machine has a name")
     }
