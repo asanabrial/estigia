@@ -7851,6 +7851,11 @@ pub fn escalate_review(
     // longer bounds the newest publication still governs its own transaction.
     if let Some(standing) = receipts_for(&comments, &transaction).into_iter().last() {
         if standing.terminal_state == "escalated" {
+            ledger.needs_person(
+                "escalated",
+                Some(escalation.run_id),
+                &standing.transaction.epoch,
+            );
             return Ok(serde_json::json!({
                 "ok": true,
                 "issue": escalation.issue,
@@ -7898,6 +7903,7 @@ pub fn escalate_review(
         escalation.reason,
         escalation.now,
     )?;
+    ledger.needs_person("escalated", Some(escalation.run_id), escalation.epoch);
     Ok(serde_json::json!({
         "ok": true,
         "issue": escalation.issue,

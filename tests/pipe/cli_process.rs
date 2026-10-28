@@ -374,6 +374,7 @@ fn every_command_that_prints_honours_the_global_json_flag() {
         vec!["doctor", "--json"],
         vec!["prune", "--json"],
         vec!["changes", "--json"],
+        vec!["needs-person", "--json"],
         vec!["store", "import", "--json"],
         vec!["roles", "--json"],
         vec!["flush", "--status", "--json"],

@@ -38,6 +38,7 @@ const UNAVAILABLE: &[&str] = &[
     "message-question-failed",
     "message-source-unreadable",
     "message-store-unavailable",
+    "needs-person-store-unreadable",
     "no-terminal-for-the-screen",
     "outbox-pending",
     "payload-digest-unavailable",

@@ -295,6 +295,17 @@ pub enum Command {
         base: String,
     },
 
+    /// List the moments a run needed a person, newest first.
+    ///
+    /// Read-only. One record per moment the store wrote a state a person must
+    /// act on: an escalated review, a blocked issue with no clause, a gate
+    /// `ask`. A record is never an approval, and not evidence that anyone saw it.
+    NeedsPerson {
+        /// Show at most this many records.
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u64).range(1..))]
+        limit: Option<u64>,
+    },
+
     /// List the uncommitted work in every checkout of this repository.
     ///
     /// Read-only. Reports each registered checkout and each one a run pointer

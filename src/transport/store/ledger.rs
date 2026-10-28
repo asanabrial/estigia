@@ -456,6 +456,36 @@ impl Ledger {
         self.store.timeline(&self.repo, self.issue)
     }
 
+    /// Whether the store holds a clause that discharges this issue's `blocked`
+    /// state. An unreadable answer counts as one, so that it records nothing.
+    pub(crate) fn has_blocked_clause(&self) -> bool {
+        self.store
+            .blocked_clauses(&self.repo, self.issue)
+            .map_or(true, |clauses| !clauses.is_empty())
+    }
+
+    /// Records that a person is needed for this issue, once per `key`, and
+    /// answers whether this call wrote the record. Best effort: a record that
+    /// cannot be written is not a reason to fail the write it describes.
+    pub(crate) fn needs_person(&self, kind: &str, run_id: Option<&str>, key: &str) -> bool {
+        let Some(now) = crate::harness::session::now_seconds() else {
+            return false;
+        };
+        let repo = format!("{}/{}/{}", self.repo.host, self.repo.owner, self.repo.name);
+        self.store
+            .need_recorded(
+                &super::Need {
+                    kind,
+                    repo: &repo,
+                    issue: Some(self.issue),
+                    run_id,
+                    dedup_key: &format!("{kind}:{}:{key}", self.issue),
+                },
+                now,
+            )
+            .unwrap_or(false)
+    }
+
     /// Whether this store handed the issue to `runtime` in `repo_dir`.
     pub(crate) fn handoff_explains(&self, repo_dir: &Path, runtime: &str) -> Result<bool, Failure> {
         self.store

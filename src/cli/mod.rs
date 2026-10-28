@@ -48,6 +48,7 @@ macro_rules! say {
 }
 
 pub(crate) mod feed;
+mod needs_person;
 pub(crate) mod resume;
 pub(crate) mod sessions;
 
@@ -339,6 +340,8 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             limit,
             cursor,
         } => sessions_command(action.as_ref(), *all, *limit, cursor.as_deref(), cli.json),
+
+        Command::NeedsPerson { limit } => needs_person::needs_person(cli.json, *limit),
 
         Command::Resume { run, .. } => resume::resume(run, cli.json),
 

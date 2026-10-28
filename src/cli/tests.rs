@@ -117,6 +117,7 @@ fn inventory() -> Vec<Refusal> {
             "the open issues and the local store could not be read".to_owned(),
         )),
         super::sessions::unreadable("the local store could not be read"),
+        super::needs_person::unreadable("the local store could not be read"),
         super::sessions::source_unreadable(std::path::Path::new("note.txt"), "no such file"),
         super::sessions::cursor_too_large(crate::cli::sessions::MAX_CURSOR_BYTES + 1),
         super::sessions::cursor_malformed("it carries no `.`"),
