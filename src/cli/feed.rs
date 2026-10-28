@@ -269,6 +269,10 @@ fn store_failure(failure: crate::transport::Failure) -> Refusal {
     store_unreadable(&failure.detail())
 }
 
+pub(crate) fn page(arguments: &Value, root: &Path, now: Option<u64>) -> Result<Value, Refusal> {
+    one_page(arguments, root, now).map(|page| page.answer())
+}
+
 pub(super) fn one_page(arguments: &Value, root: &Path, now: Option<u64>) -> Result<Page, Refusal> {
     let now = now.ok_or_else(clock_unreadable)?;
     let selectors = Selectors::of(arguments);
