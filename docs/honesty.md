@@ -518,6 +518,19 @@ pointer that leaves it names the document it points at.
   a catalogued name remains, but not the role — a test that lost its `#[test]` or changed which
   interpreter it needs stays green.
 
+- **The Windows `check` job sets the wall time of every CI run, and its cost is processes, not
+  compilation.** Measured on `check (windows-latest)` by the issue that cut its fixture cost: the lib suite took 845 s before that
+  issue's fixture work and about 600 s after it (576 s and 631 s on two runs of the same code, with
+  run-to-run noise near ±25 %), against about 150 s on `ubuntu-latest`; a cached build takes about
+  80 s of it. Per test, CPU-bound modules run 2–2.5× slower there and modules that spawn `git` 15–24×
+  slower, at roughly 100 ms a process. `cargo test --lib` spawned 24 648 `git` processes before
+  that work and 17 463 after (counted with a logging `git` on `PATH`); most of what remains is the code
+  under test's own Git, and the largest measured share left — `cat-file -s` then `-p` per scanned
+  blob — waits on a stdin-carrying `transport::run` (the follow-up *Tier scan reads each blob with two git processes*). Disabling Defender real-time scanning was tried and does nothing: it is
+  already off on the runner (`RealTimeProtectionEnabled` printed `False`, run 40435200479). Not
+  measured: the `tests/pipe.rs` share (about 230 s there against 90–160 s elsewhere), which spawns the
+  binary rather than `git`.
+
 ## The OpenCode plugin, and what it knows about a call
 
 - **What the OpenCode plugin knows about where a call runs, and what it does not.** The gate decides
