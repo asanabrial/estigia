@@ -1386,7 +1386,7 @@ pub const TOOLS: &[Tool] = &[
             Argument::optional(
                 "wait_seconds",
                 "integer",
-                "The longest a pending step waits inside this call, 1 to 50; default 20.",
+                "The longest a pending step waits inside this call, 1-900; default 20.",
             )
             .counting_from(1),
             Argument::optional(

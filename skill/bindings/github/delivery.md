@@ -324,7 +324,7 @@ a queue or approval rule that left it unmerged; `merge-not-covered`: no claim of
 call re-reads and never re-merges), `close` (`evidence-unwritable`: the evidence file could not be written)
 and `appendix` (`appendix-unreadable`: `appendix_file` could not be read). At any step that reads the pull
 request, `pull-request-unreadable` hands back the read that failed. A step that has to wait answers `pending` with `ask_after`
-instead of blocking past 50 s. It reads the pull request's whole rollup as the required set, whatever the lane says (a
+when `wait_seconds` runs out. It reads the pull request's whole rollup as the required set, whatever the lane says (a
 `not-consulted` lane is no evidence CI does not run), though on that lane an empty rollup passes at once
 rather than waiting; only where the lane reads `disabled` or
 `never-ran`, when no CI can run, does it skip the rollup and need `appendix_file` with the local suite command and
