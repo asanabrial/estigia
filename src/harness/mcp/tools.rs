@@ -486,6 +486,27 @@ pub const TOOLS: &[Tool] = &[
         writes: true,
     },
     Tool {
+        name: "status",
+        contract_name: "status",
+        description: "Set this run's self-reported status: one line saying what it is doing and \
+                      what comes next. Local to the store; never a claim renewal, transition, \
+                      review or evidence, and it reaches no tracker. Two writes within a minute \
+                      leave one.",
+        operation: "status",
+        arguments: &[
+            RUN_ID,
+            Argument::required(
+                "text",
+                "string",
+                "The line. Cut at 200 bytes, one line, token-shaped words redacted.",
+            ),
+            Argument::optional("phase", "string", "The coarse phase.")
+                .of(crate::harness::status::PHASES),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
         name: "handoff",
         contract_name: "handoff",
         description: "Hand an issue to another runtime: records the handoff in this machine's \
@@ -1838,7 +1859,8 @@ pub const ASSISTED_ONLY: &[&str] = &[
 /// `run_tool` takes them before the transport context is built, and the tests that walk
 /// [`TOOLS`] against the transport's operations and the binding's rows name this list as
 /// their exemption. `deliver` is the composite: it calls other tools and the gate.
-pub const LOCAL_STORE_TOOLS: &[&str] = &["send_message", "list_sessions", "feed", "deliver"];
+pub const LOCAL_STORE_TOOLS: &[&str] =
+    &["send_message", "list_sessions", "feed", "status", "deliver"];
 
 /// Whether a tool is answered from Estigia's own store.
 pub fn is_local_store(name: &str) -> bool {

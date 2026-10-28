@@ -135,6 +135,9 @@ fn inventory() -> Vec<Refusal> {
         super::feed::since_malformed("soon"),
         super::sessions::listing_flags_beside_send(&["--all", "--limit"]),
         crate::harness::mailbox::empty(),
+        crate::harness::status::empty(),
+        crate::harness::status::phase_unknown("blocked"),
+        crate::harness::status::unavailable("the local store could not be opened"),
         crate::harness::mailbox::too_long(9000),
         crate::harness::mailbox::recipient_unknown("pi-ghost"),
         crate::harness::mailbox::unavailable("the local store could not be opened"),
@@ -10865,4 +10868,33 @@ fn the_gate_command_takes_a_flag_saying_the_caller_can_ask() {
     ));
     let bare = Cli::try_parse_from(["estigia", "gate", "write"]).expect("the bare form parses");
     assert!(matches!(bare.command, Command::Gate { can_ask: false, .. }));
+}
+
+#[test]
+fn status_set_parses_beside_the_bare_status_and_takes_only_a_listed_phase() {
+    use crate::cli::args::StatusAction;
+
+    let bare = Cli::try_parse_from(["estigia", "status"]).expect("bare status parses");
+    assert!(matches!(bare.command, Command::Status { action: None }));
+    let set = Cli::try_parse_from([
+        "estigia",
+        "status",
+        "set",
+        "reading the gate",
+        "--phase",
+        "verifying",
+        "--run-id",
+        "claude-abcd1234",
+    ])
+    .expect("status set parses");
+    assert!(matches!(
+        set.command,
+        Command::Status {
+            action: Some(StatusAction::Set { .. })
+        }
+    ));
+    assert!(
+        Cli::try_parse_from(["estigia", "status", "set", "x", "--phase", "blocked"]).is_err(),
+        "blocked is a workflow state and not a phase"
+    );
 }

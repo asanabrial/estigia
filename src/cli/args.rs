@@ -179,8 +179,13 @@ pub enum Command {
     /// Report this executable's recorded lifecycle status without changing it.
     Update,
 
-    /// Say what is installed, where, and whether it is current.
-    Status,
+    /// Say what is installed, where, and whether it is current. With `set`,
+    /// record this run's self-reported status line instead.
+    Status {
+        /// What to do beyond saying what is installed.
+        #[command(subcommand)]
+        action: Option<StatusAction>,
+    },
 
     /// List the sessions that registered on this machine, with the issue each
     /// holds, and mark the silent and the ended ones. With `send`, put a
@@ -647,6 +652,35 @@ pub enum Command {
         /// What to do with the configuration.
         #[command(subcommand)]
         action: ConfigAction,
+    },
+}
+
+/// What `estigia status` does, beyond saying what is installed.
+#[derive(Debug, Subcommand)]
+pub enum StatusAction {
+    /// Set this run's self-reported status: one line, local to the store.
+    ///
+    /// Never renews a claim, changes a state, or counts as evidence; two writes
+    /// within a minute leave one.
+    Set {
+        /// What this run is doing and what comes next.
+        text: String,
+
+        /// The coarse phase.
+        #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(crate::harness::status::PHASES))]
+        phase: Option<String>,
+
+        /// This run's id; the ambient `ESTIGIA_RUN_ID` when omitted.
+        #[arg(long, value_parser = present)]
+        run_id: Option<String>,
+
+        /// This session's id, from which its run id is derived.
+        #[arg(long, value_parser = session)]
+        session_id: Option<String>,
+
+        /// The runtime whose run ids `--session-id` derives.
+        #[arg(long, value_parser = runtime)]
+        runtime: Option<String>,
     },
 }
 

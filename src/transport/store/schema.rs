@@ -251,4 +251,14 @@ pub(super) const MIGRATIONS: &[&str] = &[
     CREATE TRIGGER transitions_no_delete BEFORE DELETE ON transitions
         BEGIN SELECT RAISE(ABORT, 'append-only'); END;
     ",
+    "
+    CREATE TABLE run_statuses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        phase TEXT,
+        set_at INTEGER NOT NULL
+    );
+    CREATE INDEX run_statuses_run ON run_statuses (run_id, id);
+    ",
 ];
