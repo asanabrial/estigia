@@ -684,7 +684,7 @@ pub enum StatusAction {
     },
 }
 
-/// What `estigia goal` does, beyond the bare read. beyond listing.
+/// What `estigia sessions` does beyond listing.
 #[derive(Debug, Subcommand)]
 pub enum SessionsAction {
     /// Put a message in another session's mailbox. It is delivered at that

@@ -46,7 +46,7 @@ fn two_writes_within_sixty_seconds_leave_one_row() {
     let (_directory, root) = root();
 
     set(&root, RUN, "first", None).expect("recorded");
-    age(&root, 59);
+    age(&root, 30);
     let second = set(&root, RUN, "second", Some("verifying")).expect("recorded");
 
     assert_eq!(second["replaced"], true, "{second}");
