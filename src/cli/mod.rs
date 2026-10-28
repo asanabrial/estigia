@@ -47,7 +47,7 @@ macro_rules! say {
     }};
 }
 
-mod feed;
+pub(crate) mod feed;
 pub(crate) mod sessions;
 
 /// The same line, into a string rather than onto the terminal.

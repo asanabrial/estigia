@@ -558,6 +558,64 @@ pub const TOOLS: &[Tool] = &[
         writes: false,
     },
     Tool {
+        name: "feed",
+        contract_name: "feed",
+        description: "What happened across sessions while you were away: the local store's \
+                      transitions, marker entries and messages, oldest first, in a bounded \
+                      page over the last 24 hours unless `since` says otherwise. The same rows \
+                      as `estigia feed --json`. Read-only.",
+        operation: "feed",
+        arguments: &[
+            Argument::optional(
+                "repository",
+                "string",
+                "Only this repository, as `owner/name`; one the store does not hold is \
+                 refused `feed-repo-unknown`.",
+            ),
+            Argument::optional("runtime", "string", "Only events of runs on this runtime."),
+            Argument::optional(
+                "run",
+                "string",
+                "Only events of this run, or messages to or from it.",
+            ),
+            Argument::optional(
+                "issue",
+                "integer",
+                "Only this issue; messages carry no issue and are left out.",
+            )
+            .counting_from(1),
+            Argument::optional(
+                "kind",
+                "string",
+                "Only this kind: `transition`, `message`, or a marker kind such as `claim`.",
+            ),
+            Argument::optional(
+                "since",
+                "string",
+                "Start of the window: a duration (`90m`, `6h`, `2d`) or a UTC time.",
+            ),
+            Argument::optional(
+                "bodies",
+                "boolean",
+                "Include the first 200 characters of each entry or message body.",
+            ),
+            Argument::optional(
+                "limit",
+                "integer",
+                "The most events this page answers. Defaults to 50; a value above 500 is \
+                 refused.",
+            )
+            .counting_from(1),
+            Argument::optional(
+                "cursor",
+                "string",
+                "The `next_cursor` of the page before; give the same selectors again.",
+            ),
+        ],
+        effect: PointerEffect::None,
+        writes: false,
+    },
+    Tool {
         name: "blocked_until",
         contract_name: "blocked_until",
         description: "Record, or clear, the clauses that discharge a blocked issue. A clause \
@@ -1780,7 +1838,7 @@ pub const ASSISTED_ONLY: &[&str] = &[
 /// `run_tool` takes them before the transport context is built, and the tests that walk
 /// [`TOOLS`] against the transport's operations and the binding's rows name this list as
 /// their exemption. `deliver` is the composite: it calls other tools and the gate.
-pub const LOCAL_STORE_TOOLS: &[&str] = &["send_message", "list_sessions", "deliver"];
+pub const LOCAL_STORE_TOOLS: &[&str] = &["send_message", "list_sessions", "feed", "deliver"];
 
 /// Whether a tool is answered from Estigia's own store.
 pub fn is_local_store(name: &str) -> bool {
