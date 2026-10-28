@@ -610,7 +610,7 @@ pointer that leaves it names the document it points at.
 - **Three debug-only overrides keep the suite off production waits and double work, and a `--release`
   build compiles all three out.** `ESTIGIA_UNSAFE_SKIP_FSYNC` (`src/paths.rs`'s `fsync_skipped`) turns
   `sync_durably`/`sync_parent` into no-ops and opens the local store with `synchronous = OFF` instead
-  of `FULL` (`durability` in `src/transport/store/mod.rs`), so a fresh store's fifteen migration commits
+  of `FULL` (`durability` in `src/transport/store/mod.rs`), so a fresh store's seventeen migration commits
   flush nothing; in-process tests arm it through
   `set_fsync_skip_for_tests`. `ESTIGIA_TEST_READBACK_NO_WAIT` (`readback_wait_is_disabled` in
   `src/transport/claim.rs`) makes `publish_with` skip the 2+4+…+18 = 90 s read-back sleeps.

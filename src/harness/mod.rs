@@ -61,6 +61,7 @@ pub mod roles;
 pub mod session;
 pub mod shell;
 pub mod standdown;
+pub(crate) mod status;
 pub mod tracker;
 pub mod unclaimed;
 

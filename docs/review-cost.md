@@ -147,6 +147,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `review_thread` and exact-head CI polling parameters; typed mutations replace unverified API writes | 41 | 53,203 |
 | `ensure_states` says a closed git operation window answers `deferred` and the labels come from the flush | 41 | 53,359 |
 | `feed` joins: the store's transitions, markers and messages as a bounded page | 42 | 54,779 |
+| `status` joins: a run's self-reported line, local to the store | 43 | 55,520 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the

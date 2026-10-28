@@ -5241,6 +5241,7 @@ const LOCAL_WRITER_TOOLS: &[&str] = &[
     "blocked_until",
     "task",
     "send_message",
+    "status",
     "run_checks",
 ];
 
@@ -5974,7 +5975,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 54_779;
+const TOOLS_LIST_CEILING: usize = 55_520;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -8203,4 +8204,49 @@ fn a_held_release_spend_without_its_receipt_is_not_refused_for_the_receipt() {
         Err(other) => format!("{other:?}"),
     };
     assert!(!text.contains("--spend has no"), "{text}");
+}
+
+#[test]
+fn the_status_tool_records_a_self_reported_line_without_a_claim_or_a_tracker() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo_dir = root.path().join("repo");
+    std::fs::create_dir_all(&repo_dir).expect("a checkout");
+    let context = bare_context(&root, &repo_dir);
+
+    let answered = run_tool(
+        "status",
+        &json!({"run_id": "claude-abcd1234", "text": "reading\nthe gate", "phase": "verifying"}),
+        Ok(&context),
+    )
+    .expect("the status records");
+
+    let text = answered["content"][0]["text"].as_str().expect("text");
+    let answer: Value = serde_json::from_str(text).expect("json");
+    assert_eq!(answer["status"], "reading the gate", "{answer}");
+    assert_eq!(answer["phase"], "verifying", "{answer}");
+    assert_eq!(answer["self_reported"], true, "{answer}");
+    assert!(
+        tools::is_local_store("status") && !tools::writes_the_tracker("status"),
+        "status must be a local-store tool that never writes the tracker"
+    );
+}
+
+#[test]
+fn the_status_tool_refuses_a_phase_that_is_not_in_its_vocabulary() {
+    let root = tempfile::tempdir().expect("a temporary root");
+    let repo_dir = root.path().join("repo");
+    std::fs::create_dir_all(&repo_dir).expect("a checkout");
+    let context = bare_context(&root, &repo_dir);
+
+    let failure = run_tool(
+        "status",
+        &json!({"run_id": "claude-abcd1234", "text": "x", "phase": "blocked"}),
+        Ok(&context),
+    )
+    .expect_err("blocked is a workflow state, not a phase");
+
+    assert!(
+        matches!(failure, ToolFailure::Refused(_) | ToolFailure::Malformed(_)),
+        "{failure:?}"
+    );
 }

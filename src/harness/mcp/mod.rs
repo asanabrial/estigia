@@ -491,6 +491,32 @@ fn flags_for(tool: &tools::Tool, arguments: &Value) -> Result<Vec<String>, ToolF
     Ok(flags)
 }
 
+fn status_tool(
+    arguments: &Value,
+    context: &GateContext,
+    named: Option<&NamedRun<'_>>,
+) -> Result<Value, ToolFailure> {
+    let run = named.ok_or_else(|| {
+        ToolFailure::Malformed("`run_id` is this run's id; status needs it".to_owned())
+    })?;
+    let text = arguments
+        .get("text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ToolFailure::Malformed("`text` is a string; status needs it".to_owned()))?;
+    let phase = match arguments.get("phase") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(phase)) => Some(phase.as_str()),
+        Some(_) => {
+            return Err(ToolFailure::Malformed(
+                "`phase` is one of the listed phase words".to_owned(),
+            ));
+        }
+    };
+    crate::harness::status::set(&context.state_root, run.id, text, phase)
+        .map(|answer| messaging::text_result(answer.to_string()))
+        .map_err(|refusal| ToolFailure::Refused(Box::new(refusal)))
+}
+
 /// The run a tool call names, read from the argument rather than from the
 /// flag it renders to.
 struct NamedRun<'a> {
@@ -833,6 +859,7 @@ fn run_tool_asking(
         }
         "list_sessions" => return messaging::list_sessions(arguments, context),
         "feed" => return messaging::feed(arguments, context),
+        "status" => return status_tool(arguments, context, named.as_ref()),
         "deliver" => return deliver::deliver(arguments, context, named.as_ref()),
         _ => {}
     }

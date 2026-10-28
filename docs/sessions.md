@@ -466,6 +466,23 @@ current liveness: a session shown `live` may have died since, and one shown `sta
 claim. And it is not claim authority: whether a claim is live is read from the tracker, and the registry holds no
 claim of its own.
 
+## A run's self-reported status
+
+`estigia status set "<line>" [--phase <phase>]` and the `status` MCP tool write one line saying what a run
+is doing and what comes next, keyed by run id, so a run holding no issue can set one. The line is a single
+line of at most 200 bytes: whitespace and control characters collapse to single spaces, a comment opener
+is escaped, a token-shaped word (a known credential prefix, or thirty-two or more letters, digits, `_` and
+`-` mixing both) is replaced by `[redacted]`, and a longer line is cut and ends in `[truncated]`. The
+optional phase is one of `investigating`, `implementing`, `verifying`, `waiting-on-person` or `idle`; none
+is a workflow state or a heartbeat kind.
+
+It lives in the `run_statuses` table of the local store and nowhere else. Setting one does not renew a
+claim, change a state or reach the tracker, and it is never review, CI or close evidence: it is what the run
+says about itself. A write within sixty seconds of the run's previous one replaces it; otherwise it is
+appended, and the newest five are kept. It is not in any hook payload, so a session pays nothing for it
+until something asks. Nothing shows it yet: the `sessions` and `list_sessions` fields, the age, the stale
+and ended rendering and the derived "task k of n" fallback are not built.
+
 ## What does not exist yet
 
 - Nothing refreshes `last_seen` on a gated write, so a session that runs longer than six hours without a
