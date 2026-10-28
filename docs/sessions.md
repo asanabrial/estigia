@@ -8,6 +8,39 @@ send` puts a message in another session's mailbox, and the hook point of each ru
 ([below](#the-mcp-tools)), and all four take the same addresses. The last section lists what does not
 exist yet.
 
+## Resuming a stopped session
+
+`estigia resume <run> --print` (a run id or short name, any row of `estigia sessions --all`) prints the
+runtime's own command for going back into that session, the directory to run it in, the state of the run's
+claim and the state of its worktree. It reads and prints; it starts nothing, releases nothing and hands
+nothing off, and it never types into another terminal. `--json` prints the same as one object.
+
+| Runtime | Command | Refused when |
+|---|---|---|
+| `claude` | `claude --resume <session_id>` | the session id is not a UUID |
+| `codex` | `codex resume <session_id>` | the session id is not a UUID |
+| `opencode` | `opencode --session <session_id>` | the session id does not start `ses_` |
+| `pi` | none: Pi resumes from a session file whose path the registry does not record | always |
+| anything else | none | always |
+
+- **The directory** is the worktree the run pointer names, else the directory the session started in. An ended
+  session has no pointer, so it gets the second.
+- **The claim** is found from the claim markers the local store holds for the run id, not from the pointer, so a
+  session that ended still reports it: `live`, or `lapsed` once its horizon or its four hours of silence have
+  passed. A claim the run released, or that another run took over, is not listed. A resumed session does
+  not get its claim back by itself; it calls `claim` again.
+- **The worktree** is the uncommitted file count and the commits not on the branch's upstream. A branch with no
+  upstream reports its push state as unknown, never as pushed.
+- **A refusal is not a guess.** Cursor registers as `claude`, so the runtime word cannot tell the two apart; a
+  session id that is not the shape the runtime mints is refused `resume-runtime-misattributed`. A runtime with no
+  command is refused `resume-no-native-command`. Both name the alternatives, and perform none: keep the row,
+  `estigia release --run-id`, or `handoff`.
+- **Liveness is not known.** No pid is recorded, so the output says to resume only a session that is not open
+  elsewhere, and there is no `--exec`. When the git operation window is closed the output says that the pushes
+  and commits after resuming are refused.
+
+[`honesty.md`](honesty.md#the-session-registry) says which of these commands were measured.
+
 ## What is recorded
 
 `~/.estigia/state.db` carries a `sessions` table, one row per run id: the runtime, the host's session id, the

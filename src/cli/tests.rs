@@ -134,6 +134,10 @@ fn inventory() -> Vec<Refusal> {
         super::feed::repo_unknown("o/a"),
         super::feed::since_malformed("soon"),
         super::sessions::listing_flags_beside_send(&["--all", "--limit"]),
+        super::resume::run_unknown("opencode-gone"),
+        super::resume::no_native("pi-ab12", "pi", "its session file is not recorded"),
+        super::resume::misattributed("claude-ab12", "claude", "cursor-7"),
+        super::resume::run_ambiguous("repo-1", &[]),
         crate::harness::mailbox::empty(),
         crate::harness::status::empty(),
         crate::harness::status::phase_unknown("blocked"),
@@ -10868,6 +10872,17 @@ fn the_gate_command_takes_a_flag_saying_the_caller_can_ask() {
     ));
     let bare = Cli::try_parse_from(["estigia", "gate", "write"]).expect("the bare form parses");
     assert!(matches!(bare.command, Command::Gate { can_ask: false, .. }));
+}
+
+#[test]
+fn resume_takes_a_run_and_requires_print() {
+    assert!(Cli::try_parse_from(["estigia", "resume", "opencode-ab12"]).is_err());
+    let parsed = Cli::try_parse_from(["estigia", "resume", "opencode-ab12", "--print"])
+        .expect("resume --print parses");
+    assert!(matches!(
+        parsed.command,
+        Command::Resume { run, print: true } if run == "opencode-ab12"
+    ));
 }
 
 #[test]

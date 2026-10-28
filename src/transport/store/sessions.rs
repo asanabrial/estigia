@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use super::{Store, int, unreadable};
+use super::{Repo, Store, int, unreadable};
 use crate::transport::Failure;
 
 pub(crate) struct SessionSeen<'a> {
@@ -120,6 +120,32 @@ impl Store {
             )
             .map_err(unreadable("record the end of a session"))?;
         Ok(())
+    }
+
+    pub(crate) fn claims_marked_by(&self, run_id: &str) -> Result<Vec<(Repo, u64)>, Failure> {
+        let mut statement = self
+            .connection()
+            .prepare(
+                "SELECT DISTINCT repos.host, repos.owner, repos.name, entries.issue
+                 FROM entries JOIN repos ON repos.id = entries.repo_id
+                 WHERE instr(entries.body, 'run-id=' || ?1 || ' ') > 0
+                 ORDER BY repos.host, repos.owner, repos.name, entries.issue",
+            )
+            .map_err(unreadable("read the claims a run marked"))?;
+        statement
+            .query_map([run_id], |row| {
+                Ok((
+                    Repo {
+                        host: row.get(0)?,
+                        owner: row.get(1)?,
+                        name: row.get(2)?,
+                    },
+                    seconds(row.get(3)?),
+                ))
+            })
+            .map_err(unreadable("read the claims a run marked"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(unreadable("read the claims a run marked"))
     }
 
     pub(crate) fn sessions(&self) -> Result<Vec<SessionRow>, Failure> {
