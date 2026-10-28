@@ -1366,3 +1366,39 @@ fn a_run_checks_wait_that_is_not_an_integer_is_refused_malformed() {
     assert_eq!(refused["reason"], "malformed-argument", "{refused}");
     assert_eq!(refused["argument"], "--wait-seconds", "{refused}");
 }
+
+#[test]
+fn a_claim_naming_half_a_checkout_is_refused_before_anything_is_read() {
+    let root = tempfile::tempdir().expect("a directory");
+    let context = context(root.path());
+    for (given, value, missing) in [
+        ("--branch", "fix/7", "--base"),
+        ("--base", "main", "--branch"),
+    ] {
+        let flags = [
+            "--issue",
+            "7",
+            "--run-id",
+            "claude-abcd1234",
+            "--horizon",
+            "2099-01-01T00:00Z",
+            "--runtime",
+            "claude",
+            "--operation-id",
+            "op",
+            given,
+            value,
+        ]
+        .iter()
+        .map(|part| (*part).to_owned())
+        .collect::<Vec<_>>();
+        let refused = super::dispatch(&context, "claim", &flags, "2026-01-01T00:00:00Z")
+            .expect_err("half a checkout is not a call that can run");
+        assert_eq!(
+            refused.envelope()["argument"],
+            missing,
+            "{given} alone was not refused for {missing}: {}",
+            refused.envelope()
+        );
+    }
+}

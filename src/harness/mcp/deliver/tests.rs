@@ -146,8 +146,8 @@ fn status(receipt: &ReviewTransaction, next: Value) -> Result<Value, Value> {
     }))
 }
 
-fn execute(operation: &str) -> Value {
-    json!({"kind": "execute", "reason_code": "r", "operation": operation, "arguments": {}})
+fn execute(operation: &str, reason: &str) -> Value {
+    json!({"kind": "execute", "reason_code": reason, "operation": operation, "arguments": {}})
 }
 
 fn halt(reason: &str) -> Value {
@@ -161,8 +161,8 @@ fn fake(world: &World) -> Fake {
     scripts.insert(
         "review_status".into(),
         vec![
-            status(&receipt, execute("record_computed_verdict")),
-            status(&receipt, execute("release_ci")),
+            status(&receipt, execute("deliver", "verdict-computable")),
+            status(&receipt, execute("deliver", "approved")),
         ],
     );
     scripts.insert(
@@ -464,8 +464,8 @@ fn a_verdict_that_is_not_approved_hands_back_the_next_and_releases_nothing() {
     fake.scripts.borrow_mut().insert(
         "review_status".into(),
         vec![
-            status(&receipt, execute("record_computed_verdict")),
-            status(&receipt, execute("publish_review")),
+            status(&receipt, execute("deliver", "verdict-computable")),
+            status(&receipt, execute("publish_review", "correction-due")),
         ],
     );
     fake.scripts.borrow_mut().insert(
@@ -473,7 +473,7 @@ fn a_verdict_that_is_not_approved_hands_back_the_next_and_releases_nothing() {
         vec![Ok(json!({"ok": true, "outcome": "rejected"}))],
     );
     let ran = drive(&fake, &[], &request());
-    assert_eq!(stopped(&ran), ("review", "r"));
+    assert_eq!(stopped(&ran), ("review", "correction-due"));
     assert_eq!(ran.answer["stopped"]["next"]["operation"], "publish_review");
     assert!(!called(&fake).contains(&"release_ci".to_owned()));
     assert!(ran.gh.is_empty(), "{:?}", ran.gh);

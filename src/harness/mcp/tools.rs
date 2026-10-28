@@ -333,6 +333,28 @@ pub const TOOLS: &[Tool] = &[
             )
             .of(crate::config::STATES),
             Argument::optional(
+                "branch",
+                "string",
+                "Also create the isolated checkout on this branch in the same call, after the \
+                 claim and any `transition_to`, as `start_branch` does. Needs `base`. A checkout \
+                 that fails is reported under `start_branch`; the claim still stands.",
+            ),
+            Argument::optional(
+                "base",
+                "string",
+                "The base branch the checkout starts from. Only with `branch`.",
+            ),
+            Argument::optional(
+                "worktree_root",
+                "string",
+                "As `start_branch`'s `worktree_root`. Only with `branch`.",
+            ),
+            Argument::optional(
+                "no_link",
+                "boolean",
+                "As `start_branch`'s `no_link`. Only with `branch`.",
+            ),
+            Argument::optional(
                 "takeover",
                 "boolean",
                 "Displace an abandoned holder instead of swearing a new claim. Discovery \
@@ -1048,7 +1070,7 @@ pub const TOOLS: &[Tool] = &[
                 "record_verdict",
                 "boolean",
                 "Also record the computed verdict when no slot is running and `review_status` \
-                 then names `record_computed_verdict`; otherwise records nothing.",
+                 then reads `verdict-computable`; otherwise records nothing.",
             ),
         ],
         effect: PointerEffect::Renew,
