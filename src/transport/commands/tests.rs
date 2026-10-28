@@ -848,6 +848,8 @@ fn task_records_the_checklist_under_the_claim_and_tasks_reads_it_back() {
         serde_json::json!({
             "ok": true,
             "issue": 5,
+            "repo": "fixture/repo",
+            "scope": "candidate",
             "count": 2,
             "tasks": [
                 { "id": "T1", "text": "first", "route": "inline", "done": true, "commit": "abcdef0", "evidence": null },
@@ -1431,5 +1433,70 @@ fn ensure_states_creates_the_labels_while_the_window_is_open() {
     assert_eq!(
         created, expected,
         "an open window did not create each label once, in order: {calls}"
+    );
+}
+
+fn two_repository_store(path: &std::path::Path) {
+    drop(crate::transport::store::Store::open(path).expect("the store opens"));
+    rusqlite::Connection::open(path)
+        .expect("the store opens")
+        .execute_batch(
+            "INSERT INTO repos (id, host, owner, name) VALUES
+               (1, 'github.com', 'o', 'a'), (2, 'github.com', 'o', 'b'), (3, 'github.com', 'o', 'c');
+             INSERT INTO issues (repo_id, number, state, history) VALUES
+               (2, 77, 'in-progress', 'native'), (2, 5, 'ready', 'native'), (3, 5, 'ready', 'native');
+             INSERT INTO tasks (repo_id, issue, id, text, route, done, at)
+               VALUES (2, 77, 'T1', 'the checklist of b', 'inline', 0, '2026-01-01T00:00Z');",
+        )
+        .expect("the fixture seeds");
+}
+
+#[test]
+fn tasks_for_a_number_held_only_in_another_repository_reads_that_repositorys_checklist() {
+    let root = tempfile::tempdir().expect("a directory");
+    let store_path = root.path().join("state.db");
+    two_repository_store(&store_path);
+    let mut context = local_context(root.path());
+    context.repo = Some("o/a".to_owned());
+
+    let read = crate::transport::store::with_store_at(&store_path, || super::tasks(&context, 77))
+        .expect("the checklist reads");
+
+    assert_eq!(read["count"], 1, "{read}");
+    assert_eq!(read["repo"], "o/b", "{read}");
+    assert_eq!(read["scope"], "candidate", "{read}");
+}
+
+#[test]
+fn tasks_for_a_number_held_in_two_other_repositories_is_refused_with_both() {
+    let root = tempfile::tempdir().expect("a directory");
+    let store_path = root.path().join("state.db");
+    two_repository_store(&store_path);
+    let mut context = local_context(root.path());
+    context.repo = Some("o/a".to_owned());
+
+    let refused = crate::transport::store::with_store_at(&store_path, || super::tasks(&context, 5))
+        .expect_err("two candidates");
+
+    let envelope = refused.envelope();
+    assert_eq!(envelope["reason"], "ambiguous-issue", "{envelope}");
+    assert_eq!(envelope["candidates"], serde_json::json!(["o/b", "o/c"]));
+}
+
+#[test]
+fn tasks_from_a_repository_the_store_never_saw_is_unavailable_and_not_an_empty_list() {
+    let root = tempfile::tempdir().expect("a directory");
+    let store_path = root.path().join("state.db");
+    two_repository_store(&store_path);
+    let mut context = local_context(root.path());
+    context.repo = Some("never/seen".to_owned());
+
+    let read = crate::transport::store::with_store_at(&store_path, || super::tasks(&context, 123))
+        .expect("the read answers");
+
+    assert!(read["unavailable"].is_string(), "{read}");
+    assert!(
+        read.get("count").is_none(),
+        "an unknown repository counted tasks: {read}"
     );
 }

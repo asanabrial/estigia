@@ -137,7 +137,7 @@ impl Page {
     }
 }
 
-fn clock_unreadable() -> Refusal {
+pub(super) fn clock_unreadable() -> Refusal {
     Refusal::unavailable(
         "clock-unreadable",
         "the clock could not be read, so no window of the feed could be taken",

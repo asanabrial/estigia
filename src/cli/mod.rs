@@ -51,6 +51,7 @@ pub(crate) mod feed;
 mod needs_person;
 pub(crate) mod resume;
 pub(crate) mod sessions;
+pub(crate) mod standing;
 
 /// The same line, into a string rather than onto the terminal.
 macro_rules! line {
@@ -370,6 +371,8 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
                 "since": since, "bodies": bodies, "limit": limit, "cursor": cursor,
             }),
         ),
+
+        Command::Where { reference } => standing::show(cli.json, reference),
 
         Command::Update => update(cli.json),
 

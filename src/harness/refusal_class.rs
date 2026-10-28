@@ -160,6 +160,8 @@ const UNKNOWN: &[&str] = &[
     "write-failed",
 ];
 const REFUSED: &[&str] = &[
+    "ambiguous-issue",
+    "where-reference-malformed",
     "feed-repo-unknown",
     "feed-since-malformed",
     "review-wait-invalid",

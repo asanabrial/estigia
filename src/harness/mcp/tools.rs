@@ -642,6 +642,24 @@ pub const TOOLS: &[Tool] = &[
         writes: false,
     },
     Tool {
+        name: "where",
+        contract_name: "where",
+        description: "Where one issue stands, in one read-only answer: repository, open or closed, \
+                      workflow state and transitions, holder with worktree and branch, pull \
+                      request, review verdict with the head and base it is bound to, tasks, \
+                      `blocked-until`, the holder's messages, queued writes. A field that cannot \
+                      be read says `unavailable` and why. Same as `estigia where --json`.",
+        operation: "where",
+        arguments: &[Argument::required(
+            "reference",
+            "string",
+            "`owner/name#N`, a number or a tracker key; a number held in several repositories \
+             is refused `ambiguous-issue`.",
+        )],
+        effect: PointerEffect::None,
+        writes: false,
+    },
+    Tool {
         name: "blocked_until",
         contract_name: "blocked_until",
         description: "Record, or clear, the clauses that discharge a blocked issue. A clause \
@@ -1864,8 +1882,14 @@ pub const ASSISTED_ONLY: &[&str] = &[
 /// `run_tool` takes them before the transport context is built, and the tests that walk
 /// [`TOOLS`] against the transport's operations and the binding's rows name this list as
 /// their exemption. `deliver` is the composite: it calls other tools and the gate.
-pub const LOCAL_STORE_TOOLS: &[&str] =
-    &["send_message", "list_sessions", "feed", "status", "deliver"];
+pub const LOCAL_STORE_TOOLS: &[&str] = &[
+    "send_message",
+    "list_sessions",
+    "feed",
+    "where",
+    "status",
+    "deliver",
+];
 
 /// Whether a tool is answered from Estigia's own store.
 pub fn is_local_store(name: &str) -> bool {

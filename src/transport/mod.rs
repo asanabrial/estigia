@@ -59,6 +59,7 @@ pub mod manifest;
 pub mod markers;
 pub(crate) mod outbox;
 pub mod ownership;
+pub(crate) mod scope;
 pub mod stages;
 pub mod store;
 pub mod target;

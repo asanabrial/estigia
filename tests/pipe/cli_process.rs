@@ -367,6 +367,7 @@ fn every_command_that_prints_honours_the_global_json_flag() {
         vec!["sessions", "--json"],
         vec!["resume", ended_session.as_str(), "--print", "--json"],
         vec!["feed", "--json"],
+        vec!["where", "o/r#1", "--json"],
         status_set.to_vec(),
         session_send.to_vec(),
         session_deliver.to_vec(),

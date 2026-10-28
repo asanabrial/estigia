@@ -3939,6 +3939,25 @@ for one seeded transition and to the unknown-repository refusal, not to every fi
 - **Previews are tested for the three bodies seeded, not for every marker field.** A preview is the kind and the
   issue; nothing of a marker's other fields is shown without `--bodies`.
 
+## Where
+
+`estigia where` ([`where.md`](where.md)) is tested against a two-repository store and a stand-in tracker (eleven unit
+tests for the answer, six for the resolver, three for `tasks` and the identity parser); the live `gh` reader is not
+exercised by any of them. What it does not measure:
+
+- **The holder is the registry's, not the timeline's.** A run on a runtime with no gate leaves no pointer, so an
+  issue it holds shows no holder; the store's claim markers are not consulted for it.
+- **Linear is almost wholly unavailable.** `read_issue` returns title, description and state type, so a key
+  answers `unavailable` in every field and reaches no tracker.
+- **The repository of a pointer is read from its checkout's `origin`.** A checkout with no GitHub `origin`
+  contributes no candidate; a bare number held only there falls back to the caller's checkout.
+- **The tracker reads are two `gh` calls with no retry.** A rate limit or a missing login leaves `issue` and
+  `pull_request` `unavailable` with the reason, and `bound_to_live_head` `null`.
+- **Message previews carry bodies.** Unlike `feed`, which omits them by default, the last messages are shown with
+  200 characters, because the question is what the sessions said.
+- **A bare-number reference to `tasks` that no repository holds** answers `unavailable` only when the store or
+  the repository is missing; a repository the store knows with no tasks recorded is a real, empty checklist.
+
 ## The session registry
 
 `estigia sessions` lists the rows `estigia session start` and `estigia session end` write to the `sessions`

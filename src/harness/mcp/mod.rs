@@ -859,6 +859,7 @@ fn run_tool_asking(
         }
         "list_sessions" => return messaging::list_sessions(arguments, context),
         "feed" => return messaging::feed(arguments, context),
+        "where" => return messaging::standing(arguments, context),
         "status" => return status_tool(arguments, context, named.as_ref()),
         "deliver" => return deliver::deliver(arguments, context, named.as_ref()),
         _ => {}

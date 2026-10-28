@@ -24,6 +24,7 @@ mod records;
 mod schema;
 mod sessions;
 mod snapshot;
+mod standing;
 mod statuses;
 mod taken_decisions;
 

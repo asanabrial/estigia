@@ -281,6 +281,20 @@ pub enum Command {
         exec: bool,
     },
 
+    /// Say where one issue stands, in one answer.
+    ///
+    /// Read-only; no claim is needed and nothing is written. The repository and whether the
+    /// issue is open, its workflow state and last transitions, who holds it and from which
+    /// branch, its pull request and the review verdict with the head and base it is bound to,
+    /// the task checklist, `blocked-until` clauses, the holder's last messages and the writes
+    /// still queued. A field that could not be read says `unavailable` and why.
+    Where {
+        /// `owner/name#N`, a bare number, or a tracker key such as `ENG-123`. A bare number held
+        /// in several repositories is refused with the candidates.
+        #[arg(value_name = "REF")]
+        reference: String,
+    },
+
     /// Check that everything a run needs before it swears actually works.
     ///
     /// Read-only. A refusal otherwise arrives one edit at a time with no way to

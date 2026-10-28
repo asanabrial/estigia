@@ -36,7 +36,7 @@ pub use checks::{RunChecks, recorded_summary as checks_receipt_summary, run_chec
 pub(crate) use close::verified_delivery;
 pub use recover::{RecoverReview, host_repo_of, recover_review};
 pub use status::review_status;
-pub(crate) use status::{current_review_transaction, repo_of};
+pub(crate) use status::{Judged, current_review_transaction, repo_of, review_judged};
 pub use validator::{VALIDATOR_ATTEMPTS, ValidatorResultReview, record_validator_result};
 
 pub use computed::{

@@ -1,4 +1,4 @@
-//! `send_message`, `list_sessions` and `feed`: the tools answered from Estigia's own store.
+//! `send_message`, `list_sessions`, `feed` and `where`: the tools answered from Estigia's own store.
 //!
 //! The mailbox is [`crate::harness::mailbox`]; this file is the door an agent reaches it
 //! through, and the consent that door adds. A person sending from a terminal is never asked;
@@ -471,5 +471,20 @@ pub(super) fn feed(arguments: &Value, context: &GateContext) -> Result<Value, To
     }
     crate::cli::feed::page(&selectors, &context.state_root, session::now_seconds())
         .map(|page| text_result(page.to_string()))
+        .map_err(refused)
+}
+
+pub(super) fn standing(arguments: &Value, context: &GateContext) -> Result<Value, ToolFailure> {
+    let reference = arguments
+        .get("reference")
+        .and_then(Value::as_str)
+        .ok_or_else(|| malformed("`reference` is a string; where needs it".to_owned()))?;
+    let transport = crate::transport::Context::live(
+        context.skill_root.clone(),
+        context.repo_dir.clone(),
+        context.tracker.named_repo(),
+    );
+    crate::cli::standing::read(reference, &transport, &context.state_root)
+        .map(|answer| text_result(answer.to_string()))
         .map_err(refused)
 }
