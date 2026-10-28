@@ -59,6 +59,8 @@ pub(super) trait Hands {
     fn checks_receipt(&self, receipt: &ReviewTransaction) -> Result<Option<Value>, Value>;
     fn scratch(&self) -> PathBuf;
     fn now(&self) -> u64;
+    fn instant(&self) -> Instant;
+    fn pause(&self, duration: Duration);
 }
 
 pub(super) struct Request {
@@ -238,7 +240,7 @@ struct Deliver<'a, H: Hands> {
 }
 
 pub(super) fn run<H: Hands>(hands: &H, request: &Request) -> Value {
-    let started = Instant::now();
+    let started = hands.instant();
     let mut deliver = Deliver {
         hands,
         request,
@@ -305,7 +307,7 @@ impl<H: Hands> Deliver<'_, H> {
     }
 
     fn expired(&self) -> bool {
-        Instant::now() >= self.deadline
+        self.hands.instant() >= self.deadline
     }
 
     fn wait(&self, step: &str, reason: &str, ask_after: Option<u64>) -> Step<()> {
@@ -313,8 +315,10 @@ impl<H: Hands> Deliver<'_, H> {
             let ask = ask_after.unwrap_or(self.hands.now() + ASK_AFTER_SECONDS);
             return Err(pending(step, reason, ask));
         }
-        let remaining = self.deadline.saturating_duration_since(Instant::now());
-        std::thread::sleep(poll_interval(self.started.elapsed()).min(remaining));
+        let now = self.hands.instant();
+        let remaining = self.deadline.saturating_duration_since(now);
+        let elapsed = now.saturating_duration_since(self.started);
+        self.hands.pause(poll_interval(elapsed).min(remaining));
         Ok(())
     }
 
@@ -1130,6 +1134,14 @@ impl Hands for Live<'_> {
 
     fn now(&self) -> u64 {
         session::now_seconds().unwrap_or_default()
+    }
+
+    fn instant(&self) -> Instant {
+        Instant::now()
+    }
+
+    fn pause(&self, duration: Duration) {
+        std::thread::sleep(duration);
     }
 }
 
