@@ -3976,6 +3976,27 @@ answers and an empty registry offering no cursor; four store unit tests). What i
   URL is recorded for any runtime**: the OpenCode service seen on 2026-10-21 (`127.0.0.1:49374`) answered
   `GET /session` with HTML and `GET /api/session` with 401, so a recorded URL would not have been a way in.
 
+### `estigia resume --print`
+
+Unit tests cover the command per runtime, each refusal, a stale OpenCode run with its worktree, an ended run whose
+claim is live and one whose claim lapsed, and a worktree with a dirty file and an unpushed commit. What it does not
+measure:
+
+- **No resume command was run against a live session.** On 2026-10-27 only the installed help was read:
+  `claude --resume [value]` (Claude Code 2.1.311), `codex resume [SESSION_ID]` (codex-cli 0.159.2) and
+  `opencode --session, -s` (OpenCode v2.1.4) exist. That the same session id and context come back was not
+  measured for any of them. Pi and Cursor have no command.
+- **The shape check is a heuristic.** A UUID for `claude` and `codex` and a `ses_` prefix for `opencode` are what
+  the sessions seen so far looked like; a Cursor session whose id is a UUID is registered as `claude` and gets a
+  `claude --resume` command that will not find it.
+- **The claim is read from the store's entries by a substring of the run id**, which imported entries need
+  because their `run_id` column is empty. A prefix collision would only add a row the reducer then drops.
+- **The push state is the commit count against the branch's upstream**, not `branch_identity_verdict`, and it is
+  read from the last fetch; it never asks the remote.
+- **Liveness, `--exec`, the stored runtime binary, Pi's session-file path and the OpenCode `session end` are not
+  built**; neither is the MCP tool, so `resume` is CLI only, and `SessionStart`'s "holds no issue" text does not yet
+  point at `claim`.
+
 ## The session mailbox
 
 `estigia sessions send` writes a `messages` row, `estigia session deliver` takes and stamps the pending rows,

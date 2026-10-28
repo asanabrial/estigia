@@ -255,6 +255,20 @@ pub enum Command {
         cursor: Option<String>,
     },
 
+    /// Print the native command that resumes a stopped session, where to run
+    /// it, and what its claim and worktree look like now.
+    ///
+    /// Read-only: nothing is started, released or handed off. The run is a run
+    /// id or the short name `estigia sessions` shows.
+    Resume {
+        /// The run id or short name of a registry row, live or not.
+        run: String,
+
+        /// Print the command and the state; starting it is not built.
+        #[arg(long, required = true)]
+        print: bool,
+    },
+
     /// Check that everything a run needs before it swears actually works.
     ///
     /// Read-only. A refusal otherwise arrives one edit at a time with no way to
