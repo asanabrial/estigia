@@ -25,7 +25,7 @@ mod loop_stop;
 
 pub use args::{
     Cli, Command, ConfigAction, GoalAction, ReviewAction, SessionAction, SessionsAction,
-    StoreAction,
+    StatusAction, StoreAction,
 };
 
 /// A note for whoever is watching, on standard error.
@@ -312,7 +312,25 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             synced
         }
 
-        Command::Status => status(cli.json),
+        Command::Status { action: None } => status(cli.json),
+
+        Command::Status {
+            action:
+                Some(StatusAction::Set {
+                    text,
+                    phase,
+                    run_id,
+                    session_id,
+                    runtime,
+                }),
+        } => status_set(
+            text,
+            phase.as_deref(),
+            run_id.as_deref(),
+            session_id.as_deref(),
+            runtime.as_deref(),
+            cli.json,
+        ),
 
         Command::Sessions {
             action,
@@ -6178,6 +6196,30 @@ pub(crate) struct GoalReading {
     /// Read whether or not the run is live: a live claim keeps the loop going
     /// regardless, but the value is the same read.
     pub(crate) stop_after: Option<String>,
+}
+
+/// `estigia status set`: this run's self-reported line, written to the local store alone.
+fn status_set(
+    text: &str,
+    phase: Option<&str>,
+    run_id: Option<&str>,
+    session_id: Option<&str>,
+    runtime: Option<&str>,
+    json: bool,
+) -> Result<(), Refusal> {
+    let identity = goal_identity("estigia status set \"<line>\"", run_id, session_id, runtime)?;
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let context = gate_context(&cwd.to_string_lossy())?;
+    let answer = harness::status::set(&context.state_root, &identity, text, phase)?;
+    if json {
+        print_json(&answer);
+    } else {
+        say!(
+            "self-reported status for {identity}: {}",
+            answer["status"].as_str().unwrap_or_default()
+        );
+    }
+    Ok(())
 }
 
 /// `estigia sessions`: the list, or `send`.

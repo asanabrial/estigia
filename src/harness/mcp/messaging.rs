@@ -41,7 +41,7 @@ pub(super) struct Consent<'a> {
     pub(super) client: &'a mut dyn Elicit,
 }
 
-fn text_result(text: String) -> Value {
+pub(super) fn text_result(text: String) -> Value {
     json!({
         "content": [{ "type": "text", "text": text }],
         "isError": false,
