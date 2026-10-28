@@ -2452,3 +2452,106 @@ fn a_change_of_nothing_but_generated_files_measures_nothing_and_is_medium() {
         serde_json::json!(["docs/api.md"])
     );
 }
+
+#[cfg(unix)]
+fn cat_file_calls_to_tier(files: usize) -> usize {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = repo();
+    let at = root.path();
+    let base = oid(at);
+    for index in 0..files {
+        std::fs::create_dir_all(at.join("docs")).expect("docs");
+        std::fs::create_dir_all(at.join("src")).expect("src");
+        std::fs::write(at.join(format!("docs/note{index}.md")), "Ordinary prose.\n")
+            .expect("a document");
+        std::fs::write(at.join(format!("src/part{index}.rs")), "fn part() {}\n")
+            .expect("a source file");
+    }
+    git(at, &["git", "add", "."]);
+    git(at, &["git", "commit", "--quiet", "-m", "many"]);
+    let head = oid(at);
+
+    let shims = tempfile::tempdir().expect("a shim directory");
+    let log = shims.path().join("calls.log");
+    let real = crate::transport::run(
+        &["sh", "-c", "command -v git"],
+        None,
+        crate::transport::How::read(),
+    )
+    .expect("git is on PATH")
+    .stdout
+    .trim()
+    .to_owned();
+    let shim = shims.path().join("git");
+    std::fs::write(
+        &shim,
+        format!(
+            "#!/bin/sh\necho \"$*\" >> '{}'\nexec '{real}' \"$@\"\n",
+            log.display()
+        ),
+    )
+    .expect("a logging git");
+    std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).expect("executable");
+
+    crate::transport::with_process_override(shims.path(), &[], || {
+        review_tier(&test_context(at), &base, &head, None, None).expect("an answer")
+    });
+    std::fs::read_to_string(&log)
+        .expect("the shim logged")
+        .lines()
+        .filter(|line| line.starts_with("cat-file"))
+        .count()
+}
+
+#[cfg(unix)]
+#[test]
+fn a_tier_scan_spawns_the_same_cat_file_processes_for_one_blob_or_many() {
+    let one = cat_file_calls_to_tier(1);
+    assert!(one > 0, "the scan read no blob");
+    assert_eq!(cat_file_calls_to_tier(6), one);
+}
+
+#[test]
+fn a_batch_reads_each_blob_by_its_size_even_when_it_holds_a_header_shaped_line() {
+    let root = repo();
+    let at = root.path();
+    let tricky = b"0123456789abcdef0123456789abcdef01234567 blob 3\nabc\n";
+    commit_file(at, "a.txt", tricky, false);
+    commit_file(at, "b.txt", b"second\n", false);
+    let object = |path: &str| {
+        crate::transport::run(
+            &["git", "rev-parse", &format!("HEAD:{path}")],
+            Some(at),
+            crate::transport::How::read(),
+        )
+        .expect("a blob")
+        .stdout
+        .trim()
+        .to_owned()
+    };
+    let (first, second) = (object("a.txt"), object("b.txt"));
+    let oids = [first.as_str(), second.as_str(), first.as_str()];
+
+    assert_eq!(
+        blob_sizes(at, &oids).expect("sizes"),
+        vec![tricky.len() as u64, 7, tricky.len() as u64]
+    );
+    let tricky_text = String::from_utf8(tricky.to_vec()).expect("ascii");
+    assert_eq!(
+        blob_contents(at, &oids).expect("contents"),
+        vec![tricky_text.clone(), "second\n".to_owned(), tricky_text]
+    );
+}
+
+#[test]
+fn a_missing_object_is_a_failed_read_never_an_empty_blob() {
+    let root = repo();
+    let at = root.path();
+    let missing = "0000000000000000000000000000000000000001";
+    assert!(matches!(blob_sizes(at, &[missing]), Err(Failure::Read(_))));
+    assert!(matches!(
+        blob_contents(at, &[missing]),
+        Err(Failure::Read(_))
+    ));
+}

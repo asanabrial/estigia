@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use super::{
-    DiffStat, Failure, How, RiskReason, SCAN_BYTE_BUDGET, ascii_lower, blob_content, blob_size,
+    DiffStat, Failure, How, RiskReason, SCAN_BYTE_BUDGET, ascii_lower, blob_contents, blob_sizes,
     go_base, go_ext, has_excluded_risk_segment, is_configuration_review_path, is_inspectable_stat,
     pinned_diff_args, run,
 };
@@ -481,27 +481,31 @@ pub(super) fn content_scan_reasons(
         return Ok(Vec::new());
     }
 
+    let sides: Vec<(&DiffStat, &str)> = scanned
+        .iter()
+        .flat_map(|stat| present_sides(stat).map(move |object| (*stat, object)))
+        .collect();
+    let objects: Vec<&str> = sides.iter().map(|(_, object)| *object).collect();
+
     let mut total: u64 = 0;
-    for stat in &scanned {
-        for object in present_sides(stat) {
-            total += blob_size(at, object)?;
-            if total > SCAN_BYTE_BUDGET {
-                return Ok(scan_limit(&stat.path));
-            }
+    for ((stat, _), size) in sides.iter().zip(blob_sizes(at, &objects)?) {
+        total += size;
+        if total > SCAN_BYTE_BUDGET {
+            return Ok(scan_limit(&stat.path));
         }
     }
 
-    let mut reasons = Vec::new();
-    for stat in &scanned {
-        for object in present_sides(stat) {
-            if has_shebang_line(&blob_content(at, object)?) {
-                reasons.push(RiskReason {
-                    code: REASON_PROCESS_BOUNDARY,
-                    signal: Some(SIGNAL_SHELL_PROCESS),
-                    path: Some(stat.path.clone()),
-                });
-                break;
-            }
+    let mut reasons: Vec<RiskReason> = Vec::new();
+    for ((stat, _), content) in sides.iter().zip(blob_contents(at, &objects)?) {
+        let named = reasons
+            .iter()
+            .any(|reason| reason.path.as_deref() == Some(stat.path.as_str()));
+        if !named && has_shebang_line(&content) {
+            reasons.push(RiskReason {
+                code: REASON_PROCESS_BOUNDARY,
+                signal: Some(SIGNAL_SHELL_PROCESS),
+                path: Some(stat.path.clone()),
+            });
         }
     }
 

@@ -1919,10 +1919,8 @@ fn canonical_risk_reasons(mut reasons: Vec<RiskReason>) -> Vec<RiskReason> {
 /// advertises. Sizes are probed before any blob is read so classification
 /// stays bounded — an over-budget candidate set is never proven passive and
 /// fails closed into a higher tier. Ported from `activePassiveContentPaths`
-/// (`risk.go:314-397`), reading each blob by its own object id in place of the
-/// source project's single batched `cat-file --batch` call: this transport has
-/// no stdin-batch protocol, so bounding stays on the total bytes read across
-/// one call per blob rather than on the batch response's own framing.
+/// (`risk.go:314-397`): one `cat-file --batch-check` sizes every candidate and
+/// one `cat-file --batch` reads them, as the source project's batched call does.
 fn active_passive_content_paths(
     at: &Path,
     stats: &[DiffStat],
@@ -1949,18 +1947,16 @@ fn active_passive_content_paths(
     oids.sort_unstable();
     oids.dedup();
 
-    let mut total: u64 = 0;
-    for oid in &oids {
-        total += blob_size(at, oid)?;
-    }
+    let total: u64 = blob_sizes(at, &oids)?.iter().sum();
     if total > SCAN_BYTE_BUDGET {
         return Ok(candidates.iter().map(|stat| stat.path.clone()).collect());
     }
 
-    let mut contents: BTreeMap<&str, String> = BTreeMap::new();
-    for oid in &oids {
-        contents.insert(oid, blob_content(at, oid)?);
-    }
+    let contents: BTreeMap<&str, String> = oids
+        .iter()
+        .copied()
+        .zip(blob_contents(at, &oids)?)
+        .collect();
 
     let mut active = BTreeSet::new();
     for stat in &candidates {
@@ -1986,13 +1982,63 @@ fn active_passive_content_paths(
     Ok(active)
 }
 
-fn blob_size(at: &Path, oid: &str) -> Result<u64, Failure> {
-    let output = run(&["git", "cat-file", "-s", oid], Some(at), How::read())?;
-    output
-        .stdout
-        .trim()
-        .parse::<u64>()
-        .map_err(|_| Failure::Read(format!("git cat-file -s {oid} did not answer a size")))
+pub(super) fn blob_sizes(at: &Path, oids: &[&str]) -> Result<Vec<u64>, Failure> {
+    let answer = cat_file_batch(at, "--batch-check", oids)?;
+    let mut rest = answer.as_slice();
+    oids.iter()
+        .map(|oid| batch_header(&mut rest, oid))
+        .collect()
+}
+
+pub(super) fn blob_contents(at: &Path, oids: &[&str]) -> Result<Vec<String>, Failure> {
+    let answer = cat_file_batch(at, "--batch", oids)?;
+    let mut rest = answer.as_slice();
+    oids.iter()
+        .map(|oid| {
+            let size = usize::try_from(batch_header(&mut rest, oid)?)
+                .map_err(|_| Failure::Read(format!("blob {oid} is too large to read")))?;
+            if rest.get(size) != Some(&b'\n') {
+                return Err(Failure::Read(format!(
+                    "git cat-file --batch answered blob {oid} short"
+                )));
+            }
+            let content = String::from_utf8_lossy(&rest[..size]).into_owned();
+            rest = &rest[size + 1..];
+            Ok(content)
+        })
+        .collect()
+}
+
+fn cat_file_batch(at: &Path, mode: &str, oids: &[&str]) -> Result<Vec<u8>, Failure> {
+    if oids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let input: String = oids.iter().map(|oid| format!("{oid}\n")).collect();
+    super::run_with_stdin(
+        &["git", "cat-file", mode],
+        Some(at),
+        How::read(),
+        input.as_bytes(),
+    )
+}
+
+fn batch_header(rest: &mut &[u8], oid: &str) -> Result<u64, Failure> {
+    let Some(end) = rest.iter().position(|byte| *byte == b'\n') else {
+        return Err(Failure::Read(format!(
+            "git cat-file answered nothing for {oid}"
+        )));
+    };
+    let line = String::from_utf8_lossy(&rest[..end]).into_owned();
+    *rest = &rest[end + 1..];
+    let fields: Vec<&str> = line.split(' ').collect();
+    match fields.as_slice() {
+        [_, _, size] => size
+            .parse::<u64>()
+            .map_err(|_| Failure::Read(format!("git cat-file answered {line:?} for {oid}"))),
+        _ => Err(Failure::Read(format!(
+            "git cat-file could not read {oid}: {line:?}"
+        ))),
+    }
 }
 
 pub(super) fn blob_content(at: &Path, oid: &str) -> Result<String, Failure> {
