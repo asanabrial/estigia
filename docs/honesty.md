@@ -615,7 +615,7 @@ pointer that leaves it names the document it points at.
 - **Three debug-only overrides keep the suite off production waits and double work, and a `--release`
   build compiles all three out.** `ESTIGIA_UNSAFE_SKIP_FSYNC` (`src/paths.rs`'s `fsync_skipped`) turns
   `sync_durably`/`sync_parent` into no-ops and opens the local store with `synchronous = OFF` instead
-  of `FULL` (`durability` in `src/transport/store/mod.rs`), so a fresh store's eighteen migration commits
+  of `FULL` (`durability` in `src/transport/store/mod.rs`), so a fresh store's nineteen migration commits
   flush nothing; in-process tests arm it through
   `set_fsync_skip_for_tests`. `ESTIGIA_TEST_READBACK_NO_WAIT` (`readback_wait_is_disabled` in
   `src/transport/claim.rs`) makes `publish_with` skip the 2+4+…+18 = 90 s read-back sleeps.
@@ -3980,9 +3980,9 @@ answers and an empty registry offering no cursor; four store unit tests). What i
   URL is recorded for any runtime**: the OpenCode service seen on 2026-10-21 (`127.0.0.1:49374`) answered
   `GET /session` with HTML and `GET /api/session` with 401, so a recorded URL would not have been a way in.
 
-### `estigia resume --print`
+### `estigia resume`
 
-Unit tests cover the command per runtime, each refusal, a stale OpenCode run with its worktree, an ended run whose
+Unit tests cover the command per runtime, each refusal, liveness from a row with no process, from another machine, with a dead pid and with a live one, the `--exec` refusals, the command and directory `--exec` prepares and the exit code it returns through an injected launcher, a stale OpenCode run with its worktree, an ended run whose
 claim is live and one whose claim lapsed, and a worktree with a dirty file and an unpushed commit. What it does not
 measure:
 
@@ -3997,9 +3997,25 @@ measure:
   because their `run_id` column is empty. A prefix collision would only add a row the reducer then drops.
 - **The push state is the commit count against the branch's upstream**, not `branch_identity_verdict`, and it is
   read from the last fetch; it never asks the remote.
-- **Liveness, `--exec`, the stored runtime binary, Pi's session-file path and the OpenCode `session end` are not
-  built**; neither is the MCP tool, so `resume` is CLI only, and `SessionStart`'s "holds no issue" text does not yet
-  point at `claim`.
+- **A pid can be reused.** The probe asks whether a process with the recorded pid exists on this machine; a
+  session that ended and whose pid an unrelated process took reads as `live`, and `--exec` refuses it. The safe
+  direction, and not fixed: the process start time is not recorded.
+- **The recorded process is the nearest ancestor that is not a shell, found by `ps`.** From the parent of the
+  registering hook or command, `ps -o ppid=,comm= -p <pid>` is walked up at most eight levels, skipping `sh`,
+  `bash`, `zsh`, `dash`, `fish`, `ksh` (with or without a leading `-`) and `estigia`; the first other ancestor is
+  recorded. A `ps` that fails or cannot be parsed, a walk that reaches pid 1, and eight levels of wrappers all
+  record no token, so liveness is `unknown` and `--exec` is refused. The limits: an agent launched through a
+  wrapper that is not a shell (`env`, `node` running a script, `npx`, a supervisor) is recorded as that wrapper, and
+  the row then reads `gone` or `live` for the wrapper's life rather than the agent's; a wrapper that outlives the
+  agent reads `live`, which refuses safely. **None of this was measured against real hosts**: the walk is tested
+  on fixture chains, and which ancestors Claude Code, Codex, OpenCode and Pi put between themselves and their
+  hooks was not read.
+- **Windows records no process**, so every row there is `unknown` and `--exec` is always refused. A row
+  registered before the process columns existed is the same.
+- **`--exec` was never run against a real agent.** Its launcher is injected in the tests, and the native
+  commands remain unverified against the installed CLIs, as the first bullet says.
+- **The stored runtime binary, Pi's session-file path and the OpenCode `session end` are not built**; neither is
+  the MCP tool, so `resume` is CLI only, and `SessionStart`'s "holds no issue" text does not yet point at `claim`.
 
 ## The session mailbox
 

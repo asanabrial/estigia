@@ -16,9 +16,10 @@ pub(crate) fn record_start(
     ) else {
         return;
     };
-    let _ = opened.session_seen(
+    let run_id = session::run_id(runtime, session_id);
+    let seen = opened.session_seen(
         &SessionSeen {
-            run_id: &session::run_id(runtime, session_id),
+            run_id: &run_id,
             runtime,
             session_id,
             repo_dir: repo_dir.to_str(),
@@ -27,6 +28,11 @@ pub(crate) fn record_start(
         },
         now,
     );
+    if seen.is_ok() {
+        let pid = super::liveness::agent_pid();
+        let host = pid.and_then(|_| super::liveness::host_name());
+        let _ = opened.session_process(&run_id, pid.filter(|_| host.is_some()), host.as_deref());
+    }
 }
 
 /// The host pane the process registering the session was started in.
@@ -61,5 +67,29 @@ pub(crate) fn record_end(state_root: &Path, runtime: &str, session_id: &str, rea
     };
     if let Ok(opened) = store::Store::open(&path) {
         let _ = opened.session_ended(&session::run_id(runtime, session_id), reason, now);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_registered_session_records_the_agent_process_and_this_machine() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        record_start(directory.path(), "claude", "sess-1", directory.path(), None);
+
+        let rows = store::Store::open(&store::beside(directory.path()))
+            .expect("the store opens")
+            .sessions()
+            .expect("the sessions read");
+
+        assert_eq!(rows.len(), 1);
+        let pid = super::super::liveness::agent_pid();
+        assert_eq!(rows[0].host_pid, pid);
+        assert_eq!(
+            rows[0].host_name,
+            pid.and_then(|_| super::super::liveness::host_name())
+        );
     }
 }

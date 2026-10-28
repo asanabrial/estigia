@@ -140,6 +140,9 @@ fn inventory() -> Vec<Refusal> {
         super::resume::no_native("pi-ab12", "pi", "its session file is not recorded"),
         super::resume::misattributed("claude-ab12", "claude", "cursor-7"),
         super::resume::run_ambiguous("repo-1", &[]),
+        super::resume::liveness_unknown("opencode-ab12"),
+        super::resume::session_live("opencode-ab12", 4242),
+        super::resume::launch_failed("opencode-ab12", "opencode", "no such file"),
         crate::harness::mailbox::empty(),
         crate::harness::status::empty(),
         crate::harness::status::phase_unknown("blocked"),
@@ -189,6 +192,8 @@ fn inventory() -> Vec<Refusal> {
                 build: None,
                 wake: None,
                 pane: None,
+                host_pid: None,
+                host_name: None,
                 handoffs: Vec::new(),
                 reported: None,
             };
@@ -10878,13 +10883,22 @@ fn the_gate_command_takes_a_flag_saying_the_caller_can_ask() {
 }
 
 #[test]
-fn resume_takes_a_run_and_requires_print() {
+fn resume_takes_a_run_and_exactly_one_of_print_and_exec() {
     assert!(Cli::try_parse_from(["estigia", "resume", "opencode-ab12"]).is_err());
-    let parsed = Cli::try_parse_from(["estigia", "resume", "opencode-ab12", "--print"])
+    assert!(
+        Cli::try_parse_from(["estigia", "resume", "opencode-ab12", "--print", "--exec"]).is_err()
+    );
+    let printed = Cli::try_parse_from(["estigia", "resume", "opencode-ab12", "--print"])
         .expect("resume --print parses");
     assert!(matches!(
-        parsed.command,
-        Command::Resume { run, print: true } if run == "opencode-ab12"
+        printed.command,
+        Command::Resume { run, print: true, exec: false } if run == "opencode-ab12"
+    ));
+    let executed = Cli::try_parse_from(["estigia", "resume", "opencode-ab12", "--exec"])
+        .expect("resume --exec parses");
+    assert!(matches!(
+        executed.command,
+        Command::Resume { run, print: false, exec: true } if run == "opencode-ab12"
     ));
 }
 

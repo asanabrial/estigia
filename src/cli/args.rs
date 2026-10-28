@@ -263,15 +263,22 @@ pub enum Command {
     /// Print the native command that resumes a stopped session, where to run
     /// it, and what its claim and worktree look like now.
     ///
-    /// Read-only: nothing is started, released or handed off. The run is a run
-    /// id or the short name `estigia sessions` shows.
+    /// `--print` is read-only: nothing is started, released or handed off.
+    /// `--exec` starts the command itself, and only when the registry proves
+    /// the session's process is gone. The run is a run id or the short name
+    /// `estigia sessions` shows.
     Resume {
         /// The run id or short name of a registry row, live or not.
         run: String,
 
-        /// Print the command and the state; starting it is not built.
-        #[arg(long, required = true)]
+        /// Print the command and the state without starting anything.
+        #[arg(long, required_unless_present = "exec", conflicts_with = "exec")]
         print: bool,
+
+        /// Run the command in the run's directory and exit with its code;
+        /// refused while the session's process is live or its liveness is unknown.
+        #[arg(long)]
+        exec: bool,
     },
 
     /// Check that everything a run needs before it swears actually works.

@@ -48,6 +48,7 @@ pub(crate) mod handoff;
 pub mod hook;
 pub mod issue_creation;
 pub mod issue_requirement;
+pub(crate) mod liveness;
 pub mod loop_text;
 pub(crate) mod mailbox;
 pub mod mcp;

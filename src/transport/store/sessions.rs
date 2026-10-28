@@ -26,6 +26,8 @@ pub(crate) struct SessionRow {
     pub(crate) build: Option<String>,
     pub(crate) wake: Option<String>,
     pub(crate) pane: Option<String>,
+    pub(crate) host_pid: Option<u64>,
+    pub(crate) host_name: Option<String>,
 }
 
 fn seconds(value: i64) -> u64 {
@@ -97,6 +99,21 @@ impl Store {
         )))
     }
 
+    pub(crate) fn session_process(
+        &self,
+        run_id: &str,
+        pid: Option<u64>,
+        host: Option<&str>,
+    ) -> Result<(), Failure> {
+        self.connection()
+            .execute(
+                "UPDATE sessions SET host_pid = ?2, host_name = ?3 WHERE run_id = ?1",
+                rusqlite::params![run_id, pid.map(int), host],
+            )
+            .map_err(unreadable("record the process of a session"))?;
+        Ok(())
+    }
+
     pub(crate) fn session_wake(&self, run_id: &str, wake: &str) -> Result<(), Failure> {
         self.connection()
             .execute(
@@ -153,7 +170,7 @@ impl Store {
             .connection()
             .prepare(
                 "SELECT run_id, runtime, session_id, repo_dir, started_at, last_seen, ended_at,
-                        end_reason, name, build, wake, pane FROM sessions
+                        end_reason, name, build, wake, pane, host_pid, host_name FROM sessions
                  ORDER BY last_seen DESC, run_id",
             )
             .map_err(unreadable("read the sessions"))?;
@@ -172,6 +189,8 @@ impl Store {
                     build: row.get(9)?,
                     wake: row.get(10)?,
                     pane: row.get(11)?,
+                    host_pid: row.get::<_, Option<i64>>(12)?.map(seconds),
+                    host_name: row.get(13)?,
                 })
             })
             .map_err(unreadable("read the sessions"))?
