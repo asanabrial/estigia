@@ -380,7 +380,11 @@ the repair returns to them, which is where the ledger settles it.
 sees an approval and then republishes anyway to tidy what the panel merely noted spends a new epoch
 and a new panel. The gate refuses the undeclared shape before it costs anything, as
 `approved-republish-without-cause`: a finding recorded against the parent receipt since
-the verdict, or an advanced base, is what clears it. It is no longer a counted round: nothing
+the verdict, or an advanced base, is what clears it. The rule holds once the ledger computes
+`approved`, not only once the verdict is recorded: an unjudged parent whose every licensed lens has
+reported and which computes `approved` is refused the same way: the author records the verdict and
+delivers, or records a finding since its newest lens report, and one whose licensed lens has not reported is refused
+`republish-before-panel-reported`. It is no longer a counted round: nothing
 charges the author's election to a ceiling, because there is none, and the new lineage it begins owns
 its own corrections.
 

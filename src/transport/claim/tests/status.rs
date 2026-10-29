@@ -1262,7 +1262,12 @@ fn a_pull_request_that_moved_over_an_unjudged_receipt_names_a_publication_that_i
     let world = republish_world();
     let head = world.commit("two.txt", 1);
     let first = world.receipt('1', &head);
-    let comments = [live_claim("claude-a"), published(&first)];
+    let comments = [
+        live_claim("claude-a"),
+        published(&first),
+        recorded_lens_report_for(&first, 3, RELIABILITY_LENS, None),
+        recorded_finding_on(&first, 4, "f-1", "warning", None, None),
+    ];
     let context = context_at(&world.work);
     let moved_head = world.commit("two.txt", 2);
     let moved = ReviewTransaction {

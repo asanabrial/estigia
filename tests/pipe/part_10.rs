@@ -195,6 +195,7 @@ fn a_repair_past_the_frozen_correction_budget_is_refused() {
         ("within-budget", 1u64, false),
         ("exceeds-budget", 10u64, true),
     ] {
+        record_cause_over_latest_receipt(home, 20);
         let branch = format!("fix/20-budget-{label}");
         g(&["checkout", "--quiet", "-b", &branch, "main"]);
         // The original candidate: four added lines. `floor_two(4) == 2`.
@@ -233,9 +234,16 @@ fn a_repair_past_the_frozen_correction_budget_is_refused() {
                  epoch={parent_epoch} -->\n"
             ),
         });
+        let earlier_cause = republish_cause(
+            run_id,
+            &parent_head,
+            &base_sha,
+            &parent_digest,
+            &parent_epoch,
+        );
         let timeline = serde_json::json!({
             "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-            "comments": [claimed, earlier],
+            "comments": [claimed, earlier, earlier_cause[0].clone(), earlier_cause[1].clone(), earlier_cause[2].clone()],
         });
         let pr = serde_json::json!({
             "number": 7, "url": "https://github.com/o/r/pull/7",
@@ -387,9 +395,16 @@ fn a_repair_within_budget_alone_is_refused_by_the_accumulated_total() {
              budget-cumulative=1 -->\n"
         ),
     });
+    let first_repair_publication_cause = republish_cause(
+        run_id,
+        &first_repair_head,
+        &base_sha,
+        &first_repair_digest,
+        &first_repair_epoch,
+    );
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, original_publication, first_repair_publication],
+        "comments": [claimed, original_publication, first_repair_publication, first_repair_publication_cause[0].clone(), first_repair_publication_cause[1].clone(), first_repair_publication_cause[2].clone()],
     });
     let pr = serde_json::json!({
         "number": 7, "url": "https://github.com/o/r/pull/7",
@@ -519,9 +534,16 @@ fn an_unmerged_base_advance_is_refused_before_the_correction_budget_ever_runs() 
              epoch={parent_epoch} -->\n"
         ),
     });
+    let earlier_cause = republish_cause(
+        run_id,
+        &parent_head,
+        &base_sha,
+        &parent_digest,
+        &parent_epoch,
+    );
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, earlier],
+        "comments": [claimed, earlier, earlier_cause[0].clone(), earlier_cause[1].clone(), earlier_cause[2].clone()],
     });
     // `baseRefOid` reports the base branch's **current** tip regardless of
     // whether the branch has merged it.
@@ -794,9 +816,16 @@ fn the_base_advance_refusal_sends_a_repair_round_to_the_merge_and_republish_stil
              epoch={parent_epoch} -->\n"
         ),
     });
+    let earlier_cause = republish_cause(
+        run_id,
+        &parent_head,
+        &base_sha,
+        &parent_digest,
+        &parent_epoch,
+    );
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, earlier],
+        "comments": [claimed, earlier, earlier_cause[0].clone(), earlier_cause[1].clone(), earlier_cause[2].clone()],
     });
 
     // The repair attempt before the recovery: the branch still sits on
@@ -1004,9 +1033,16 @@ fn an_unmerged_base_advance_pushed_from_elsewhere_is_refused_once_the_fetch_move
              epoch={parent_epoch} -->\n"
         ),
     });
+    let earlier_cause = republish_cause(
+        run_id,
+        &parent_head,
+        &base_sha,
+        &parent_digest,
+        &parent_epoch,
+    );
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, earlier],
+        "comments": [claimed, earlier, earlier_cause[0].clone(), earlier_cause[1].clone(), earlier_cause[2].clone()],
     });
     // `baseRefOid` reports the base branch's **current** tip regardless of
     // whether the branch has merged it.
@@ -1242,9 +1278,11 @@ fn a_repair_on_a_new_pull_request_is_not_charged_against_the_old_ones_budget() {
              epoch={parent_epoch} -->\n"
         ),
     });
+    let pr7_published_cause =
+        republish_cause(run_id, &pr7_head, &base_sha, &parent_digest, &parent_epoch);
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, pr7_published],
+        "comments": [claimed, pr7_published, pr7_published_cause[0].clone(), pr7_published_cause[1].clone(), pr7_published_cause[2].clone()],
     });
     // PR #8: a different pull request number than the one the issue timeline
     // last recorded a publication against.
@@ -1381,9 +1419,16 @@ fn a_local_gitattributes_binary_override_cannot_silence_the_budget() {
              epoch={parent_epoch} -->\n"
         ),
     });
+    let earlier_cause = republish_cause(
+        run_id,
+        &parent_head,
+        &base_sha,
+        &parent_digest,
+        &parent_epoch,
+    );
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, earlier],
+        "comments": [claimed, earlier, earlier_cause[0].clone(), earlier_cause[1].clone(), earlier_cause[2].clone()],
     });
     let pr = serde_json::json!({
         "number": 7, "url": "https://github.com/o/r/pull/7",
@@ -1509,9 +1554,16 @@ fn a_side_branch_repair_merged_back_is_counted_in_full_and_refused() {
              epoch={parent_epoch} -->\n"
         ),
     });
+    let earlier_cause = republish_cause(
+        run_id,
+        &parent_head,
+        &base_sha,
+        &parent_digest,
+        &parent_epoch,
+    );
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, earlier],
+        "comments": [claimed, earlier, earlier_cause[0].clone(), earlier_cause[1].clone(), earlier_cause[2].clone()],
     });
     let pr = serde_json::json!({
         "number": 7, "url": "https://github.com/o/r/pull/7",
@@ -1746,9 +1798,16 @@ fn moved_base_round(round: &MovedBaseRound) -> (bool, String, String) {
             "7".repeat(32),
         ),
     });
+    let earlier_cause = republish_cause(
+        run_id,
+        &parent_head,
+        &base_sha,
+        &"8".repeat(64),
+        &"7".repeat(32),
+    );
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, earlier],
+        "comments": [claimed, earlier, earlier_cause[0].clone(), earlier_cause[1].clone(), earlier_cause[2].clone()],
     });
     let pr = serde_json::json!({
         "number": 7, "url": "https://github.com/o/r/pull/7",
@@ -2127,9 +2186,16 @@ fn admission_refuses_a_path_outside_genesis_and_accepts_a_companion_test() {
                  epoch={parent_epoch} -->\n"
             ),
         });
+        let earlier_cause = republish_cause(
+            run_id,
+            &parent_head,
+            &base_sha,
+            &parent_digest,
+            &parent_epoch,
+        );
         let timeline = serde_json::json!({
             "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-            "comments": [claimed, earlier],
+            "comments": [claimed, earlier, earlier_cause[0].clone(), earlier_cause[1].clone(), earlier_cause[2].clone()],
         });
         let pr = serde_json::json!({
             "number": 7, "url": "https://github.com/o/r/pull/7",
@@ -2287,9 +2353,18 @@ fn a_repair_interleaved_with_a_second_pull_requests_publication_is_still_budgete
              pr=8 head={pr8_head} base={base_sha} digest={pr8_digest} epoch={pr8_epoch} -->\n"
         ),
     });
+    let pr8_published_cause =
+        republish_cause(run_id, &pr8_head, &base_sha, &pr8_digest, &pr8_epoch);
+    let pr7_published_cause = republish_cause(
+        run_id,
+        &pr7_original_head,
+        &base_sha,
+        &pr7_digest,
+        &pr7_epoch,
+    );
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, pr7_published, pr8_published],
+        "comments": [claimed, pr7_published, pr7_published_cause[0].clone(), pr7_published_cause[1].clone(), pr7_published_cause[2].clone(), pr8_published, pr8_published_cause[0].clone(), pr8_published_cause[1].clone(), pr8_published_cause[2].clone()],
     });
     let pr = serde_json::json!({
         "number": 7, "url": "https://github.com/o/r/pull/7",
@@ -2416,9 +2491,16 @@ fn a_frozen_genesis_manifest_too_large_to_record_is_refused_before_the_push() {
              epoch={parent_epoch} -->\n"
         ),
     });
+    let earlier_cause = republish_cause(
+        run_id,
+        &parent_head,
+        &base_sha,
+        &parent_digest,
+        &parent_epoch,
+    );
     let timeline = serde_json::json!({
         "state": "OPEN", "assignees": [], "labels": [{"name": "status:in-progress"}],
-        "comments": [claimed, earlier],
+        "comments": [claimed, earlier, earlier_cause[0].clone(), earlier_cause[1].clone(), earlier_cause[2].clone()],
     });
     let pr = serde_json::json!({
         "number": 7, "url": "https://github.com/o/r/pull/7",

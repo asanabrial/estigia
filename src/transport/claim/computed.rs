@@ -274,6 +274,12 @@ fn lens_reports_for(
         .collect()
 }
 
+pub(super) fn report_receipt(
+    marker: &crate::transport::markers::Marker,
+) -> Option<ReviewTransaction> {
+    ReviewLensReport::from_marker(marker).map(|report| report.receipt)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ReviewComputedVerdict {
     operation_id: String,
@@ -546,7 +552,20 @@ fn licensed_lens_roles(
     if lineage.delta_range.as_deref() != Some(super::REPAIR_RANGE_LABEL) {
         return Ok(None);
     }
-    let clearing = super::receipt_standing(comments, &lineage.parent)?.clearing_finding;
+    let parent_standing = super::receipt_standing(comments, &lineage.parent)?;
+    let clearing = match parent_standing.clearing_finding {
+        Some(class) => Some(class),
+        None if parent_standing.standing == super::Standing::Unjudged
+            && parent_standing.finding_since_reports.is_some()
+            && matches!(
+                computed_for(context, comments, &lineage.parent, worktree),
+                Ok((_, ledger)) if ledger.outcome == ComputedOutcome::Approved
+            ) =>
+        {
+            parent_standing.finding_since_reports
+        }
+        None => None,
+    };
     let answer = crate::transport::tier::review_tier_for_repair(
         context,
         &receipt.base,

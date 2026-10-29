@@ -402,6 +402,7 @@ const REFUSED: &[&str] = &[
     "rejected-on-insufficient-evidence",
     "release-repository-mismatch",
     "renewal-kind-unsupported",
+    "republish-before-panel-reported",
     "repair-ceiling-retired",
     "repair-range-disagrees-with-recorded-lineage",
     "repo-ref-malformed",
