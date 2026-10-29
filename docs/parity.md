@@ -41,8 +41,8 @@ Estigia is a **workflow authority** and nothing else. The comparison covers exac
 
 ## ODD and RDD are adopted as FLOW, with two pillars kept
 
-Estigia adopts gentle-ai v4's ODD workflow and RDD review, stated as one contract, FLOW (Fast,
-Lean, Outcome-driven Workflow), in `skill/SKILL.md`: small work stays
+Estigia adopts gentle-ai v4's ODD workflow and RDD review, stated as one contract, FLOW (Focused,
+Lean, Outcome-driven, Witnessed), in `skill/SKILL.md`: small work stays
 small, review is sized by risk, a lineage gets a bounded number of corrections, and Judgment Day is opt-in. The
 differences that follow are each settled in the next section. Two of Estigia's own pillars are kept
 where a literal port would invert them, and both are declared divergences with a cost.

@@ -44,13 +44,14 @@ error: failed to push some refs
 *The tracker could not be read* is a different answer from *you may not push*, and Estigia will not
 turn the first into the second. That distinction is most of the design.
 
-## FLOW — Fast, Lean, Outcome-driven Workflow
+## FLOW — Focused, Lean, Outcome-driven, Witnessed
 
 **FLOW is Estigia's own methodology: how a run takes a piece of work from an issue to a merge.**
 
-- **Fast:** small work stays small. Understood work is done directly, not planned.
+- **Focused:** small work stays small. Understood work is done directly, not planned, and exploration is in proportion.
 - **Lean:** one writer, the smallest topology that works, and review only as heavy as the risk.
 - **Outcome-driven:** done means the issue's acceptance criteria hold, with evidence, merged and verified.
+- **Witnessed:** deterministic evidence first, then review by a context that did not write the change, and the merge at the reviewed head.
 
 It rests on two pillars: *the claimed issue is the record of the work*, and *the publication is the
 review candidate*. Four principles follow from them: small work stays small; review is sized by risk;
