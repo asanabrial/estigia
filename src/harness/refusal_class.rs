@@ -179,6 +179,7 @@ const REFUSED: &[&str] = &[
     "ambiguous-changelog-entry",
     "ambiguous-open-prs",
     "approved-republish-without-cause",
+    "base-integration-not-required",
     "assist-branch-not-adoptable",
     "assist-issue-does-not-match-the-tracker",
     "assisted-api-mutation-unverified",

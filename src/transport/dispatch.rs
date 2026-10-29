@@ -1368,6 +1368,7 @@ fn run_operation(
                     // missing from it is simply read the ordinary way.
                     topology: f.get("topology"),
                     topology_reason: f.get("topology-reason"),
+                    integrate_reason: f.get("integrate-reason"),
                     focus: f.get("focus"),
                     declaration,
                     expected_epoch: f.get("expected-epoch"),
@@ -1422,6 +1423,7 @@ fn run_operation(
                     inline_payload: f.on("inline-payload"),
                     topology: f.get("topology"),
                     topology_reason: f.get("topology-reason"),
+                    integrate_reason: f.get("integrate-reason"),
                     focus: f.get("focus"),
                     declaration,
                     expected_epoch: f.get("expected-epoch"),

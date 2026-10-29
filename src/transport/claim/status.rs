@@ -41,7 +41,9 @@ const FRESH_APPROVED_MOVED: &str = "the pull request's head or base is not the o
     recorded; otherwise it is refused `approved-republish-without-cause`. Read the pull request: \
     record the defect the verdict did not weigh against this receipt with `record_review_finding` \
     and publish again, which admits the publication; when the move is the base's own advance, \
-    `publish_review` integrates it";
+    `publish_review` integrates it where the repository requires the branch to be up to date or the advance \
+    conflicts with or touches this delivery, and `base-integration-not-required` refuses it \
+    otherwise";
 const MERGEABILITY_UNKNOWN: &str = "the head is the reviewed one and the base advanced past the \
     reviewed base, but GitHub is still computing whether the pull request merges: its mergeability \
     is unknown, and unknown is not clean. Ask again once GitHub has answered; nothing is merged, \
