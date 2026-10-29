@@ -46,6 +46,45 @@ fn landing(worktree: &Path, from: &Path, target: &str) -> Landing {
     }
 }
 
+struct Aimed {
+    from: std::path::PathBuf,
+    target: std::path::PathBuf,
+}
+
+// A shell write's target is the verb it ran (`sed -i`), never a path, so only a
+// write tool's absolute path is placed by its target rather than by the caller's cwd.
+fn aimed_at(run: &Run, action: &Action) -> Option<Aimed> {
+    let Action::Write { target } = action else {
+        return None;
+    };
+    if !Path::new(target).is_absolute() {
+        return None;
+    }
+    let placed = crate::paths::placed(Path::new(target))?;
+    let existing = placed
+        .ancestors()
+        .find(|ancestor| ancestor.is_dir())
+        .unwrap_or(&placed);
+    let in_this_repository = run
+        .worktree
+        .iter()
+        .chain(run.repo_dir.iter())
+        .any(|reference| {
+            crate::paths::covers(reference, &placed)
+                || super::same_git_repository(reference, existing)
+        });
+    let worktree = run.worktree.clone()?;
+    let from = if in_this_repository || super::another_git_repository(&worktree, existing) {
+        existing.to_path_buf()
+    } else {
+        worktree
+    };
+    Some(Aimed {
+        from,
+        target: placed,
+    })
+}
+
 fn marker_agrees(
     run: &Run,
     issue: &crate::identity::Identity,
@@ -123,11 +162,14 @@ pub(super) fn decision(
         return Decision::Outside(Aside::NothingSworn);
     };
 
+    let aimed = aimed_at(run, action);
+    let from = aimed
+        .as_ref()
+        .map_or_else(|| context.repo_dir.clone(), |aimed| aimed.from.clone());
     let mut references = run.worktree.iter().chain(run.repo_dir.iter()).peekable();
     if references.peek().is_some()
         && !references.any(|reference| {
-            crate::paths::covers(reference, &context.repo_dir)
-                || super::same_git_repository(reference, &context.repo_dir)
+            crate::paths::covers(reference, &from) || super::same_git_repository(reference, &from)
         })
     {
         return Decision::Outside(Aside::AnotherCheckout);
@@ -171,8 +213,11 @@ pub(super) fn decision(
         ));
     };
 
-    if !crate::paths::covers(&worktree, &context.repo_dir) {
-        return deny(outside_the_worktree(&worktree, &context.repo_dir));
+    if !crate::paths::covers(&worktree, &from) {
+        return deny(match &aimed {
+            Some(aimed) => outside_the_worktree(&worktree, &aimed.target),
+            None => runs_outside_the_worktree(&worktree, &context.repo_dir),
+        });
     }
     if let Action::Write { target } = action {
         match landing(&worktree, &context.repo_dir, target) {
@@ -323,6 +368,22 @@ fn outside_the_worktree(worktree: &Path, landed: &Path) -> Refusal {
             worktree.display()
         ),
         way_out("the same change made inside that worktree"),
+    )
+}
+
+fn runs_outside_the_worktree(worktree: &Path, runs_in: &Path) -> Refusal {
+    Refusal::not_started(
+        "assisted-outside-the-worktree",
+        format!(
+            "this call runs in {}, which is not inside {}, the only place this assisted claim \
+             admits a write",
+            runs_in.display(),
+            worktree.display()
+        ),
+        way_out(
+            "a write tool naming a path inside that worktree, or the command run from a session \
+             whose directory is that worktree",
+        ),
     )
 }
 

@@ -2002,7 +2002,8 @@ pointer that leaves it names the document it points at.
 
 - **The harness gates named populations, not every write.** The editing tools each agent ships, the git
   spellings that change the tree, the irreversible steps, and the shell constructs that visibly write a
-  file: a redirect, a `sed -i`, an interpreter handed code, the utilities that copy, move or delete (also
+  file: a redirect, a `sed -i` (a `curl -o` only when some output is not `/dev/null`, `/dev/stdout` or
+  `/dev/stderr`), an interpreter handed code, the utilities that copy, move or delete (also
   under fifteen prefixes that run them: `sudo`, `flock`, `timeout`, …), and any command with a **long write
   flag** (`--write`, `--in-place`, `--fix`). The command a segment runs is resolved first
   (`shell::candidate_commands`: `if`, `then`, `else`, `elif`, `do`, `while`, `until`, `!`, `{` and
@@ -3119,7 +3120,13 @@ pointer that leaves it names the document it points at.
   against the ownership marker inside the worktree and the branch it has checked out, so a pointer whose
   marker names another run, whose branch was switched or whose worktree is gone is refused at the next
   boundary or when the renewal window ends; the tracker's `verify-claim` is never asked. A write is admitted
-  only inside its worktree on its branch; a write tool whose paths live in its body and a shell command
+  only inside its worktree on its branch. A write tool's absolute path is placed by that path, whatever
+  directory the session runs in: inside the run's repository it is judged against the worktree, in another
+  repository it is that checkout's, and anywhere else (a session scratchpad) it is outside the claim, and a
+  refusal names that path. A shell write names no path, so it is placed by the session's directory, and
+  `cd <worktree> && sed -i …` from the primary checkout is refused `assisted-outside-the-worktree` naming
+  where the call runs (`harness::assisted`,
+  `a_shell_write_from_the_base_checkout_is_still_placed_by_where_it_runs`). A write tool whose paths live in its body and a shell command
   whose destination cannot be placed (`patch -p1 < x.diff`) are refused `assisted-write-unplaced`; delivery
   and `gh pr create` from a shell are refused with `draft_pr` named. What it does not hold:
   - **`git push origin HEAD` is refused**: the hook reads `HEAD` as the local ref

@@ -329,14 +329,7 @@ fn reads_as_a_write(head: &str, flags: &[&str]) -> Option<String> {
     if WRITES_A_FILE.contains(&head) {
         return Some(head.to_owned());
     }
-    if head == "curl"
-        && flags.iter().any(|word| {
-            *word == "--output"
-                || *word == "--remote-name"
-                || word.starts_with("--output=")
-                || (word.starts_with('-') && !word.starts_with("--") && word.contains(['o', 'O']))
-        })
-    {
+    if head == "curl" && curl_writes_a_file(flags) {
         return Some("curl -o".to_owned());
     }
     if head == "openssl"
@@ -572,6 +565,38 @@ fn redirects_into_a_file(command: &str) -> bool {
 }
 
 const DISCARDING_TARGETS: [&str; 3] = ["/dev/null", "/dev/stdout", "/dev/stderr"];
+
+fn curl_writes_a_file(flags: &[&str]) -> bool {
+    let mut index = 0;
+    while index < flags.len() {
+        let word = flags[index];
+        let output = if word == "--output" {
+            index += 1;
+            Some(flags.get(index).copied())
+        } else if let Some(target) = word.strip_prefix("--output=") {
+            Some(Some(target))
+        } else if word == "--remote-name" {
+            Some(None)
+        } else if word.starts_with('-') && !word.starts_with("--") && word.contains(['o', 'O']) {
+            let after = &word[word.find(['o', 'O']).map_or(word.len(), |at| at + 1)..];
+            if after.is_empty() {
+                index += 1;
+                Some(flags.get(index).copied())
+            } else {
+                Some(Some(after))
+            }
+        } else {
+            None
+        };
+        if let Some(target) = output
+            && !target.is_some_and(|target| DISCARDING_TARGETS.contains(&target))
+        {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
 
 /// The word after a redirect operator, and where it ends: optionally quoted,
 /// and `None` when a quote never closes or a word is glued to the closing one.
