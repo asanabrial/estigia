@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use super::{NamedRun, Silent, ToolFailure, address};
 use crate::cli::sessions::Listed;
-use crate::harness::{GateContext, exchange, inbox, mailbox, session};
+use crate::harness::{GateContext, exchange, handoff, inbox, mailbox, session};
 use crate::identity::Identity;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use crate::transport::store;
@@ -313,8 +313,8 @@ fn row_json(row: &Listed) -> Value {
 fn consented(
     consent: &mut Consent<'_>,
     sender: &str,
-    recipient: &Listed,
-    text: &str,
+    prompt: &str,
+    target: &str,
 ) -> Result<(), ToolFailure> {
     if consent.grants.contains(sender) {
         return Ok(());
@@ -322,9 +322,7 @@ fn consented(
     if !consent.declared {
         return Err(refused(needs_a_person(sender)));
     }
-    let answer = consent
-        .client
-        .elicit(&question(sender, recipient, text), requested_schema());
+    let answer = consent.client.elicit(prompt, requested_schema());
     let answer = match answer {
         Ok(answer) => answer,
         Err(Unasked::Unanswered) => Value::Null,
@@ -335,7 +333,7 @@ fn consented(
         ALLOW_SESSION => {
             consent.grants.insert(sender.to_owned());
         }
-        _ => return Err(refused(not_allowed(sender, &recipient.run_id))),
+        _ => return Err(refused(not_allowed(sender, target))),
     }
     Ok(())
 }
@@ -381,6 +379,23 @@ pub(super) fn send_message(
         in_reply_to: None,
         expires_in: count("expires_in")?.and_then(|seconds| u64::try_from(seconds).ok()),
     };
+    if let Some(issue) = count("handoff")? {
+        let outcome = match arguments.get("outcome") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(outcome)) => Some(outcome.as_str()),
+            Some(_) => return Err(malformed("`outcome` is a string".to_owned())),
+        };
+        let completion = handoff::Completion {
+            issue: u64::try_from(issue).unwrap_or_default(),
+            kind: kind.unwrap_or("note"),
+            outcome,
+            text,
+        };
+        return completed(arguments, context, sender, &completion, consent);
+    }
+    if arguments.get("broadcast").and_then(Value::as_bool) == Some(true) {
+        return broadcast(arguments, context, sender, text, repo_dir, &shape, consent);
+    }
     let recipient = match (arguments.get("reply_to"), arguments.get("to")) {
         (Some(reply), None) => {
             if repo_dir.is_some() {
@@ -432,7 +447,12 @@ pub(super) fn send_message(
     let Some(consent) = consent else {
         return Err(refused(needs_a_person(sender)));
     };
-    consented(consent, sender, &recipient, text)?;
+    consented(
+        consent,
+        sender,
+        &question(sender, &recipient, text),
+        &recipient.run_id,
+    )?;
 
     let receipt = mailbox::send_shaped(
         &context.state_root,
@@ -451,6 +471,151 @@ pub(super) fn send_message(
             "delivery": "queued for the recipient's next hook point",
             "wake": wake_word(recipient.wake.as_deref()),
             "recipient_ended": receipt.recipient_ended,
+        })
+        .to_string(),
+    ))
+}
+
+fn sender_of(context: &GateContext, run_id: &str) -> Result<Listed, Refusal> {
+    crate::cli::sessions::entries(&context.state_root)?
+        .into_iter()
+        .find(|entry| entry.run_id == run_id)
+        .ok_or_else(|| reply_sender_gone(run_id))
+}
+
+fn completed(
+    arguments: &Value,
+    context: &GateContext,
+    run_id: &str,
+    completion: &handoff::Completion<'_>,
+    consent: Option<&mut Consent<'_>>,
+) -> Result<Value, ToolFailure> {
+    if ["to", "reply_to", "broadcast"]
+        .iter()
+        .any(|name| arguments.get(*name).is_some_and(|value| !value.is_null()))
+    {
+        return Err(malformed(
+            "`handoff` reports to the run that handed the issue over; give neither `to`,              `reply_to` nor `broadcast` with it"
+                .to_owned(),
+        ));
+    }
+    let duty = handoff::completable(&context.state_root, run_id, completion).map_err(refused)?;
+    let recipient = sender_of(context, &duty.sender).map_err(refused)?;
+    let Some(consent) = consent else {
+        return Err(refused(needs_a_person(run_id)));
+    };
+    consented(
+        consent,
+        run_id,
+        &question(run_id, &recipient, completion.text),
+        &recipient.run_id,
+    )?;
+    let reported = handoff::complete(&context.state_root, run_id, completion).map_err(refused)?;
+    let (message, mail_failure) = match &reported.mail {
+        Ok(id) => (json!(id), Value::Null),
+        Err(detail) => (Value::Null, json!(detail)),
+    };
+    Ok(text_result(
+        json!({
+            "handoff": completion.issue,
+            "outcome": reported.outcome,
+            "to": row_json(&recipient),
+            "message": message,
+            "mail_failure": mail_failure,
+        })
+        .to_string(),
+    ))
+}
+
+fn broadcast_question(sender: &str, members: &[Listed], text: &str) -> String {
+    format!(
+        "{sender} wants to send a message to {} sessions:\n{}\n\n{text}\n\n\
+         Each recipient reads it as another session's request, not as yours.",
+        members.len(),
+        address::Narrowed::lines(members)
+    )
+}
+
+fn broadcast(
+    arguments: &Value,
+    context: &GateContext,
+    sender: &str,
+    text: &str,
+    repo_dir: Option<&str>,
+    shape: &mailbox::Shape<'_>,
+    consent: Option<&mut Consent<'_>>,
+) -> Result<Value, ToolFailure> {
+    if arguments
+        .get("reply_to")
+        .is_some_and(|value| !value.is_null())
+    {
+        return Err(malformed(
+            "a broadcast has no single sender to answer; give `to`, not `reply_to`".to_owned(),
+        ));
+    }
+    let to = arguments
+        .get("to")
+        .and_then(Value::as_str)
+        .ok_or_else(|| malformed("`to` is the group a broadcast goes to".to_owned()))?;
+    let mut narrowed =
+        address::group(&context.state_root, &address::spoken(to), repo_dir).map_err(refused)?;
+    narrowed.matched.retain(|member| member.run_id != sender);
+    if narrowed.matched.is_empty() {
+        return Err(refused(address::no_live_session(to, &narrowed)));
+    }
+    let members = narrowed.matched;
+    for member in &members {
+        mailbox::admissible(
+            &context.state_root,
+            Some(sender),
+            &member.run_id,
+            text,
+            shape,
+        )
+        .map_err(refused)?;
+        if let Some(conflict) = flow_conflict(member, text) {
+            return Err(refused(conflict));
+        }
+    }
+    let Some(consent) = consent else {
+        return Err(refused(needs_a_person(sender)));
+    };
+    consented(
+        consent,
+        sender,
+        &broadcast_question(sender, &members, text),
+        &format!("the {} sessions matching `{to}`", members.len()),
+    )?;
+    let mut reached = Vec::new();
+    let mut failed = Vec::new();
+    for member in &members {
+        match mailbox::send_shaped(
+            &context.state_root,
+            Some(sender),
+            &member.run_id,
+            text,
+            shape,
+        ) {
+            Ok(receipt) => {
+                let mut row = row_json(member);
+                row["message"] = json!(receipt.id);
+                row["thread"] = json!(receipt.thread);
+                row["wake"] = json!(wake_word(member.wake.as_deref()));
+                reached.push(row);
+            }
+            Err(refusal) => {
+                failed.push(json!({ "run_id": member.run_id, "reason": refusal.code }));
+            }
+        }
+    }
+    Ok(text_result(
+        json!({
+            "broadcast": to,
+            "type": shape.kind.unwrap_or("note"),
+            "members": members.len(),
+            "reached": reached,
+            "failed": failed,
+            "delivery": "queued for each member's next hook point",
         })
         .to_string(),
     ))
@@ -574,7 +739,12 @@ pub(super) fn ask(
         return Err(refused(needs_a_person(asker)));
     };
     consent.client.bound(timeout);
-    consented(consent, asker, &recipient, &body)?;
+    consented(
+        consent,
+        asker,
+        &question(asker, &recipient, &body),
+        &recipient.run_id,
+    )?;
 
     let question = exchange::Question {
         asker,
@@ -700,7 +870,7 @@ pub(super) fn list_sessions(
                     .to_owned(),
             ));
         }
-        let narrowed = address::resolve(&context.state_root, asked).map_err(refused)?;
+        let narrowed = address::group(&context.state_root, asked, None).map_err(refused)?;
         let closest: Vec<Value> = if narrowed.matched.is_empty() {
             narrowed.closest.iter().map(row_json).collect()
         } else {

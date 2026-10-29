@@ -5979,7 +5979,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 60_559;
+const TOOLS_LIST_CEILING: usize = 61_376;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -6428,6 +6428,187 @@ mod send_message {
         assert!(questions(&output).is_empty(), "{output:?}");
         assert_eq!(rig.rows_to("opencode-one0a1b2c3d"), 0);
         assert_eq!(rig.rows_to("opencode-two0a1b2c3d"), 0);
+    }
+
+    fn broadcast(id: u64, to: &str, extra: Value) -> Value {
+        let mut arguments =
+            json!({ "run_id": SENDER, "to": to, "text": "no heavy jobs", "broadcast": true });
+        for (key, value) in extra.as_object().expect("an object") {
+            arguments[key] = value.clone();
+        }
+        json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": { "name": "send_message", "arguments": arguments },
+        })
+    }
+
+    fn crowd(rig: &Rig) -> std::path::PathBuf {
+        let repo = rig.root.path().join("investora");
+        std::fs::create_dir_all(&repo).expect("a checkout");
+        let now = crate::harness::session::now_seconds().expect("a clock");
+        let here = repo.display().to_string();
+        rig.seen(
+            "opencode-one0a1b2c3d",
+            "opencode",
+            "ses_one",
+            Some(&here),
+            now,
+        );
+        rig.seen(
+            "opencode-two0a1b2c3d",
+            "opencode",
+            "ses_two",
+            Some(&here),
+            now,
+        );
+        rig.seen("claude-three0a1b2c3d", "claude", "ses_three", None, now);
+        repo
+    }
+
+    #[test]
+    fn a_broadcast_reaches_every_live_member_the_resolver_lists_after_one_question() {
+        let rig = Rig::new();
+        crowd(&rig);
+        let output = rig.serve(&[
+            initialize(asks()),
+            broadcast(2, "runtime:opencode", json!({})),
+            choose(1, "allow_once"),
+        ]);
+        assert_eq!(questions(&output).len(), 1, "{output:?}");
+        let answer: Value = serde_json::from_str(&text_of(reply(&output, 2))).expect("json");
+        let mut reached: Vec<&str> = answer["reached"]
+            .as_array()
+            .expect("the members reached")
+            .iter()
+            .map(|member| member["run_id"].as_str().expect("a run id"))
+            .collect();
+        reached.sort_unstable();
+        assert_eq!(
+            reached,
+            ["opencode-one0a1b2c3d", "opencode-two0a1b2c3d"],
+            "{answer}"
+        );
+        assert_eq!(rig.rows_to("opencode-one0a1b2c3d"), 1);
+        assert_eq!(rig.rows_to("opencode-two0a1b2c3d"), 1);
+        assert_eq!(rig.rows_to("claude-three0a1b2c3d"), 0);
+        assert_eq!(rig.rows_from(SENDER), 2);
+    }
+
+    #[test]
+    fn a_broadcast_the_person_denies_records_nothing_for_any_member() {
+        let rig = Rig::new();
+        crowd(&rig);
+        let output = rig.serve(&[
+            initialize(asks()),
+            broadcast(2, "runtime:opencode", json!({})),
+            choose(1, "deny"),
+        ]);
+        assert_eq!(questions(&output).len(), 1);
+        assert_eq!(reply(&output, 2)["result"]["isError"], true, "{output:?}");
+        assert_eq!(rig.rows_from(SENDER), 0);
+    }
+
+    #[test]
+    fn a_broadcast_never_reaches_its_own_sender_and_names_nobody_when_nobody_is_left() {
+        let rig = Rig::new();
+        let output = rig.serve(&[
+            initialize(asks()),
+            broadcast(2, "runtime:claude", json!({})),
+        ]);
+        let text = text_of(reply(&output, 2));
+        assert!(text.contains("message-no-live-session"), "{text}");
+        assert!(questions(&output).is_empty(), "{output:?}");
+    }
+
+    #[test]
+    fn the_group_words_all_idle_repo_and_worktree_name_the_members_list_sessions_shows() {
+        let rig = Rig::new();
+        let repo = crowd(&rig);
+        let live = |address: &str| -> Vec<String> {
+            let answer = answered(
+                rig.list(json!({ "address": address }))
+                    .expect("the address resolves"),
+            );
+            let mut run_ids: Vec<String> = answer["live"]
+                .as_array()
+                .expect("a list")
+                .iter()
+                .map(|row| row["run_id"].as_str().expect("a run id").to_owned())
+                .collect();
+            run_ids.sort();
+            run_ids
+        };
+        assert!(live("all").len() >= 3);
+        assert!(live("@all").contains(&"claude-three0a1b2c3d".to_owned()));
+        assert_eq!(
+            live("repo:investora"),
+            ["opencode-one0a1b2c3d", "opencode-two0a1b2c3d"]
+        );
+        assert_eq!(
+            live(&format!("worktree:{}", repo.display())),
+            ["opencode-one0a1b2c3d", "opencode-two0a1b2c3d"]
+        );
+        let everywhere = live("idle");
+        assert!(
+            everywhere.contains(&"opencode-one0a1b2c3d".to_owned()),
+            "{everywhere:?}"
+        );
+        rig.hold(12, "opencode-one0a1b2c3d");
+        let idle = live("idle");
+        assert!(
+            idle.contains(&"opencode-two0a1b2c3d".to_owned()),
+            "{idle:?}"
+        );
+        assert!(
+            !idle.contains(&"opencode-one0a1b2c3d".to_owned()),
+            "{idle:?}"
+        );
+    }
+
+    #[test]
+    fn a_done_sent_with_its_handoff_reaches_the_sender_of_the_handoff_without_a_recipient() {
+        let rig = Rig::new();
+        let root = rig.context().state_root;
+        crate::harness::handoff::record(
+            &root,
+            &rig.context().repo_dir,
+            &crate::harness::handoff::Handed {
+                issue: 723,
+                runtime: "codex",
+                from_run: SENDER,
+                projection: "landed",
+                at: "2026-10-22T21:00:00Z",
+                due_in: None,
+            },
+        )
+        .expect("a handoff");
+        assert!(crate::harness::handoff::accept(
+            &root,
+            &rig.context().repo_dir,
+            RECIPIENT,
+            723
+        ));
+        let call = |id: u64, extra: Value| {
+            let mut arguments = json!({ "run_id": RECIPIENT, "text": "shipped", "handoff": 723 });
+            for (key, value) in extra.as_object().expect("an object") {
+                arguments[key] = value.clone();
+            }
+            json!({
+                "jsonrpc": "2.0", "id": id, "method": "tools/call",
+                "params": { "name": "send_message", "arguments": arguments },
+            })
+        };
+        let output = rig.serve(&[
+            initialize(asks()),
+            call(2, json!({ "type": "done", "outcome": "succeeded" })),
+            choose(1, "allow_once"),
+            call(3, json!({ "type": "done", "outcome": "failed" })),
+        ]);
+        assert_eq!(reply(&output, 2)["result"]["isError"], false, "{output:?}");
+        assert_eq!(rig.rows_to(SENDER), 1);
+        let text = text_of(reply(&output, 3));
+        assert!(text.contains("handoff-already-settled"), "{text}");
+        assert_eq!(rig.rows_to(SENDER), 1);
     }
 
     #[test]
@@ -8438,11 +8619,14 @@ mod handoff {
         let refused = crate::harness::handoff::record(
             &rig.context().state_root,
             &rig.context().repo_dir,
-            0,
-            "",
-            SENDER,
-            "landed",
-            "2026-10-22T21:00:00Z",
+            &crate::harness::handoff::Handed {
+                issue: 0,
+                runtime: "",
+                from_run: SENDER,
+                projection: "landed",
+                at: "2026-10-22T21:00:00Z",
+                due_in: None,
+            },
         )
         .expect_err("an answer naming no issue or runtime is not a row");
 

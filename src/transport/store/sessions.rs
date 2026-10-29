@@ -158,7 +158,7 @@ impl Store {
                 rusqlite::params![run_id, int(now), reason],
             )
             .map_err(unreadable("record the end of a session"))?;
-        Ok(())
+        self.duties_abandoned(run_id, now)
     }
 
     pub(crate) fn claims_marked_by(&self, run_id: &str) -> Result<Vec<(Repo, u64)>, Failure> {

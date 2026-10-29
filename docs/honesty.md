@@ -4135,7 +4135,7 @@ measure:
   driven on no live host. A thread is the id of its first message and is not scoped to the parties: any run
   that knows a message id can join its thread. `expires_in` is recorded and shown and decides nothing, so an
   expired message is still delivered. Types, threads and acks are text and rows in a local file; no gate,
-  permission or claim reads them. Not built: broadcast and the completion contract.
+  permission or claim reads them.
 - **`ask` and `wait` wake only what can be woken, and were driven on no live host.** A question reaches a
   session at its next hook point or idle wake. Claude Code (`Stop` waiter), Pi and OpenCode 2 (polling)
   record a wake; Codex and OpenCode 1 record none, so an `ask` to them returns `not_woken` after delivering
@@ -4147,6 +4147,22 @@ measure:
   the answer to it. A session that dies without ending its row is not seen as `ended` and the ask times out.
   The Pi parent-child channel was not moved onto the mailbox: it shares the rules (one outcome, refused
   late answers) and nothing else.
+- **Broadcast and the completion contract were driven on no live host.** A broadcast reaches the members the
+  resolver lists at the moment of the call; one that registers a second later is not in it, and a member that
+  ends between the question and the write still gets a row it will never take. `idle` means a live session
+  whose pointer names no issue, which is not the same as a session between turns: Estigia does not observe
+  that. The one consent covers the group as named in the question, so a person approving ten sessions has
+  approved ten sessions, not a rule. Accepting a handoff is read from a successful `claim` by a run of the
+  recipient runtime in the directory the handoff recorded, so a recipient that starts from a worktree, or that
+  works the issue without claiming it, never accepts and owes nothing; a store that cannot be written at
+  that moment leaves the handoff unaccepted without saying so. The duty is closed by the store, and the mail
+  that tells the sender is a second write: a mailbox that refuses it leaves the outcome standing and
+  reports `mail_failure` to the recipient, and the sender still sees the outcome through `inbox` with
+  `sent`. An abandoned duty is reported when the registry records the session's end; a session that dies
+  without ending its row is never reported, and one that resumes after its end finds the duty abandoned and a
+  late `done` refused. The deadline is a time the sender reads as `overdue`, not a timer: nothing wakes anyone
+  when it passes, and it can be set only through the MCP `handoff` tool, not `estigia handoff`. The
+  hook that accepts on `claim` has a unit test of the acceptance and none that drives a real claim.
 - **A message is text from another session.** Delivery says so in its first lines; nothing stops a model from
   acting on it. **The `flow dev` conflict rule reads the words of the message**: `send_message` and
   `estigia sessions send` refuse text carrying `flow dev <n>` while the recipient's pointer names another

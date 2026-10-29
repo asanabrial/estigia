@@ -301,4 +301,21 @@ pub(super) const MIGRATIONS: &[&str] = &[
         answer_id INTEGER
     );
     ",
+    "
+    CREATE TABLE handoff_duties (
+        repo_dir TEXT NOT NULL,
+        issue INTEGER NOT NULL,
+        runtime TEXT NOT NULL,
+        sender TEXT NOT NULL,
+        due_at INTEGER,
+        accepted_by TEXT,
+        accepted_at INTEGER,
+        outcome TEXT CHECK (outcome IN ('succeeded', 'failed', 'blocked', 'abandoned')),
+        result TEXT,
+        settled_at INTEGER,
+        PRIMARY KEY (repo_dir, issue, runtime)
+    );
+    CREATE INDEX handoff_duties_accepted ON handoff_duties (accepted_by);
+    CREATE INDEX handoff_duties_sender ON handoff_duties (sender);
+    ",
 ];

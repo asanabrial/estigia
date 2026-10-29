@@ -146,7 +146,11 @@ pub(crate) fn run(
     if more {
         listed.remove(0);
     }
-    Ok(json!({
+    let handoffs = match (&reader, request.sent) {
+        (Some(reader), true) => handoffs_of(reader, run_id)?,
+        _ => Vec::new(),
+    };
+    let mut answer = json!({
         "run_id": run_id,
         "box": if request.sent { "sent" } else { "received" },
         "read": request.read,
@@ -154,7 +158,32 @@ pub(crate) fn run(
         "limit": limit,
         "more": more,
         "messages": listed.iter().map(shown).collect::<Vec<_>>(),
-    }))
+    });
+    if request.sent {
+        answer["handoffs"] = json!(handoffs);
+    }
+    Ok(answer)
+}
+
+fn handoffs_of(reader: &store::Store, run_id: &str) -> Result<Vec<Value>, Refusal> {
+    let now = session::now_seconds().ok_or_else(|| unavailable("the clock could not be read"))?;
+    let duties = reader
+        .duties_sent_by(run_id)
+        .map_err(|failure| unavailable(&failure.detail()))?;
+    Ok(duties
+        .iter()
+        .map(|duty| {
+            json!({
+                "issue": duty.issue,
+                "to": duty.runtime,
+                "status": duty.status(now),
+                "due_at": duty.due_at,
+                "accepted_by": duty.accepted_by,
+                "result": duty.result,
+                "settled_at": duty.settled_at,
+            })
+        })
+        .collect())
 }
 
 fn mark(path: &Path, run_id: &str, request: &Request<'_>) -> Result<(), Refusal> {

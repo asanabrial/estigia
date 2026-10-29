@@ -152,6 +152,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `where` joins: one read-only answer to where an issue stands | 44 | 56,332 |
 | `inbox` joins; `send_message` takes `type`, `thread` and `expires_in` | 45 | 58,380 |
 | `ask` and `wait` join: a blocking question to a peer, and a wait on a matching message | 47 | 60,481 |
+| `send_message` takes `broadcast`, `handoff` and `outcome`; `handoff` takes `deadline_seconds` | 47 | 61,376 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the
