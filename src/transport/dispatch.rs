@@ -27,6 +27,7 @@ use super::{Context, Failure};
 /// not on this list takes the next word as its value unconditionally.
 const SWITCHES: &[&str] = &[
     "force",
+    "full",
     "held-by-other",
     "manifest",
     "inline-payload",
@@ -890,7 +891,21 @@ fn run_operation(
                 now,
             },
         ),
-        "tasks" => super::commands::tasks(context, issue()?),
+        "tasks" => {
+            let view = match (f.on("full"), f.get("id")) {
+                (true, Some(_)) => {
+                    return Err(flag_without_its_mode(
+                        operation,
+                        "full",
+                        "--full reads every row whole and --id reads one row whole; name one",
+                    ));
+                }
+                (true, None) => super::commands::TasksView::Full,
+                (false, Some(id)) => super::commands::TasksView::One(id),
+                (false, None) => super::commands::TasksView::Summary,
+            };
+            super::commands::tasks(context, issue()?, view)
+        }
         "transition" => super::commands::transition(
             context,
             issue()?,
