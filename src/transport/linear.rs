@@ -275,6 +275,13 @@ pub fn follow_state(
         Err(failure) => failure.envelope(),
     };
     if let Some(object) = answer.as_object_mut() {
+        if object.contains_key("tracker_written") {
+            if moved["moved"] == true {
+                object.insert("tracker_written".to_owned(), serde_json::Value::Bool(true));
+            } else if moved["world"] == "unknown" {
+                object.insert("tracker_written".to_owned(), serde_json::Value::Null);
+            }
+        }
         object.insert("linear_state".to_owned(), moved);
     }
     answer

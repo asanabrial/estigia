@@ -403,6 +403,32 @@ fn follow_state_moves_only_a_mapped_state_of_a_linear_issue() {
 }
 
 #[test]
+fn tracker_written_says_whether_a_followed_state_wrote_linear() {
+    let names = vec![("review".to_owned(), "In Review".to_owned())];
+    let answer = serde_json::json!({ "ok": true, "tracker_written": false });
+    let key = Identity::Key("ENG-123".to_owned());
+
+    let (moved, _) = through(&a_move("In Progress", accepted(), "In Review"), || {
+        super::follow_state(&names, Some(&key), "review", answer.clone())
+    });
+    assert_eq!(moved["tracker_written"], true, "{moved}");
+
+    let (unknown, _) = through(&a_move("In Progress", accepted(), "In Progress"), || {
+        super::follow_state(&names, Some(&key), "review", answer.clone())
+    });
+    assert_eq!(
+        unknown["tracker_written"],
+        serde_json::Value::Null,
+        "a move that could not be read back was reported as no write: {unknown}"
+    );
+
+    let (unmapped, _) = through(&[], || {
+        super::follow_state(&names, Some(&key), "done", answer.clone())
+    });
+    assert_eq!(unmapped["tracker_written"], false);
+}
+
+#[test]
 fn the_states_follow_state_is_called_with_are_ones_state_names_maps() {
     for state in [super::STARTED, super::IN_REVIEW, super::DELIVERED] {
         assert!(
