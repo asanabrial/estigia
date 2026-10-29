@@ -964,11 +964,7 @@ fn publish_lock(
     body: &[u8],
     write: impl FnOnce(&mut std::fs::File, &[u8]) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
-    let mut staged = lock.as_os_str().to_owned();
-    static STAGED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let sequence = STAGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    staged.push(format!(".{}.{sequence}.tmp", std::process::id()));
-    let staged = std::path::PathBuf::from(staged);
+    let staged = crate::paths::staged_path(lock, "-lock");
     let outcome = std::fs::OpenOptions::new()
         .create(true)
         .truncate(true)

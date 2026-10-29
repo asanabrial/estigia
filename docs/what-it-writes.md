@@ -12,7 +12,7 @@ file by staging a sibling and renaming it over the destination. When the destina
 (a dotfiles manager's `settings.json`, `CLAUDE.md`, `opencode.json`, `config.toml`), the sibling is
 staged beside the file the link names and replaces that file, so the link survives; a link that names nothing is refused and left as it was. The replacement takes
 the permission bits of the file it replaces (on Windows, the read-only flag), so a `0600`
-`~/.claude.json` stays `0600`; a new file gets the platform default. Windows ACLs and ownership are not carried over. The staging lives in `paths::replace_bytes_atomically`.
+`~/.claude.json` stays `0600`; a new file gets the platform default. Windows ACLs and ownership are not carried over. The staging lives in `paths::replace_bytes_atomically`. Every staged write in the crate takes its name from `paths::staged_path` (`<stem>.estigia-<pid>-<sequence>.tmp`), unique per call, so two threads of one process stage apart as two runs do, and `is_staged_write` recognises a leftover.
 
 **Not only setup writes, and not only uninstall takes back.** A run records the branch it started as
 a `branch` marker in the local store. `release` — the last step of a delivery — deletes every

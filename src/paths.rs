@@ -341,6 +341,21 @@ pub fn scratch_file(name: &str) -> std::path::PathBuf {
 /// the spelling that decides it must not be written twice.
 const STAGED: &str = ".estigia-";
 
+static STAGE_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The sibling a write of ours stages `target` in, unique to this call.
+///
+/// Process id plus a process-wide sequence: two threads of one process stage apart, and so do two
+/// runs. Every staged write in the crate is named here, so [`is_staged_write`] recognises all of them.
+pub(crate) fn staged_path(target: &Path, kind: &str) -> std::path::PathBuf {
+    let sequence = STAGE_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    target.with_extension(format!(
+        "{}{}-{sequence}{kind}.tmp",
+        &STAGED[1..],
+        std::process::id()
+    ))
+}
+
 /// Whether this is a file a write of ours staged and did not finish.
 ///
 /// The cleanup in [`replace_atomically`] runs when the write **fails**. A
@@ -359,7 +374,7 @@ pub fn is_staged_write(path: &Path) -> bool {
 /// These are not Estigia's files: `settings.json` is read while the agent runs,
 /// so a truncating write gives it a window in which its own configuration is
 /// half a file. Written beside the target and renamed over it; the temporary
-/// carries this process's id so two runs cannot collide, and stays in the same
+/// is named by `staged_path` so two runs and two threads cannot collide, and stays in the same
 /// directory so the rename does not cross a filesystem.
 pub fn replace_atomically(path: &Path, desired: &str) -> std::io::Result<()> {
     replace_bytes_atomically(path, desired.as_bytes())
@@ -372,7 +387,7 @@ pub fn replace_atomically(path: &Path, desired: &str) -> std::io::Result<()> {
 /// replaces.
 pub fn replace_bytes_atomically(path: &Path, desired: &[u8]) -> std::io::Result<()> {
     let target = resolve_symlink(path)?;
-    let temporary = target.with_extension(format!("{}{}.tmp", &STAGED[1..], std::process::id()));
+    let temporary = staged_path(&target, "");
     let write = write_and_sync(&temporary, desired)
         .and_then(|()| copy_existing_permissions(&target, &temporary))
         .and_then(|()| {
@@ -423,7 +438,7 @@ fn copy_existing_permissions(target: &Path, staged: &Path) -> std::io::Result<()
 /// The body is written and synced under a sibling name, then linked into place. A competing create
 /// therefore wins with `AlreadyExists` and keeps its bytes; readers never see the staged partial body.
 pub fn create_atomically(path: &Path, desired: &str) -> std::io::Result<()> {
-    let temporary = path.with_extension(format!("{}{}-new.tmp", &STAGED[1..], std::process::id()));
+    let temporary = staged_path(path, "-new");
     let write = write_and_sync(&temporary, desired.as_bytes()).and_then(|()| {
         if take_silent_swap_noop_for(path) {
             return Ok(());
@@ -903,16 +918,14 @@ mod staged_tests {
         // And the name it would have used is recognised. Built the way
         // `replace_atomically` builds it rather than typed out, so a change to
         // one is a change to both.
-        let staged = root.path().join("SKILL.md").with_extension(format!(
-            "{}{}.tmp",
-            &STAGED[1..],
-            std::process::id()
-        ));
-        assert!(
-            is_staged_write(&staged),
-            "the name a write stages under is not one the sweep would recognise: {}",
-            staged.display()
-        );
+        for kind in ["", "-new"] {
+            let staged = staged_path(&root.path().join("SKILL.md"), kind);
+            assert!(
+                is_staged_write(&staged),
+                "the name a write stages under is not one the sweep would recognise: {}",
+                staged.display()
+            );
+        }
         // The floor: it does not answer yes to everything.
         for theirs in ["NOTAS.md", "estigia.local.md", "notes.tmp", "SKILL.md"] {
             assert!(
@@ -920,6 +933,37 @@ mod staged_tests {
                 "{theirs} would be swept as Estigia's own residue"
             );
         }
+    }
+
+    #[test]
+    fn two_threads_replacing_one_path_never_lose_their_staged_file() {
+        let root = tempfile::tempdir().expect("a temporary directory");
+        let target = root.path().join("shared.json");
+        let barrier = std::sync::Barrier::new(2);
+        let body = "x".repeat(4096);
+        let lost: Vec<std::io::Error> = std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..2)
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        (0..500)
+                            .filter_map(|_| replace_atomically(&target, &body).err())
+                            .filter(|error| error.kind() == std::io::ErrorKind::NotFound)
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            workers
+                .into_iter()
+                .flat_map(|worker| worker.join().expect("the worker finished"))
+                .collect()
+        });
+        assert!(
+            lost.is_empty(),
+            "{} writes lost the file they staged, first: {}",
+            lost.len(),
+            lost[0]
+        );
     }
 
     #[test]
