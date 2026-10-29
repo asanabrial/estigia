@@ -5242,6 +5242,7 @@ const LOCAL_WRITER_TOOLS: &[&str] = &[
     "blocked_until",
     "task",
     "send_message",
+    "inbox",
     "status",
     "run_checks",
 ];
@@ -5976,7 +5977,7 @@ fn a_description_never_sends_the_caller_to_a_tool_this_server_does_not_expose() 
     assert!(stale.is_empty(), "names no tool exposes: {stale:?}");
 }
 
-const TOOLS_LIST_CEILING: usize = 56_826;
+const TOOLS_LIST_CEILING: usize = 58_380;
 
 #[test]
 fn the_tool_menu_stays_under_its_registered_ceiling() {
@@ -7049,6 +7050,111 @@ mod send_message {
         }
         assert_eq!(rig.rows_to("opencode-one0a1b2c3d"), 0);
         assert_eq!(rig.rows_to("opencode-two0a1b2c3d"), 0);
+    }
+
+    fn inbox_answer(answer: &Value) -> Value {
+        serde_json::from_str(
+            answer["content"][0]["text"]
+                .as_str()
+                .expect("a text result"),
+        )
+        .expect("json")
+    }
+
+    fn typed(id: u64, to: &str, kind: &str, thread: Option<i64>) -> Value {
+        let mut arguments = json!({ "run_id": SENDER, "to": to, "text": "which?", "type": kind });
+        if let Some(thread) = thread {
+            arguments["thread"] = json!(thread);
+        }
+        json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": { "name": "send_message", "arguments": arguments },
+        })
+    }
+
+    #[test]
+    fn a_typed_send_and_a_typed_reply_share_a_thread_the_answer_reports() {
+        let rig = Rig::new();
+        let output = rig.serve(&[
+            initialize(asks()),
+            typed(2, RECIPIENT, "question", None),
+            choose(1, "allow_session"),
+            json!({
+                "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                "params": { "name": "send_message", "arguments": {
+                    "run_id": RECIPIENT, "reply_to": 1, "text": "A", "type": "answer" } },
+            }),
+            choose(2, "allow_once"),
+        ]);
+        let asked: Value = serde_json::from_str(&text_of(reply(&output, 2))).expect("json");
+        let answered: Value = serde_json::from_str(&text_of(reply(&output, 3))).expect("json");
+        assert_eq!(asked["type"], "question");
+        assert_eq!(asked["thread"], 1);
+        assert_eq!(answered["type"], "answer");
+        assert_eq!(answered["thread"], 1);
+        let seen = run_tool(
+            "inbox",
+            &json!({ "run_id": SENDER, "type": "answer", "thread": 1 }),
+            Ok(&rig.context()),
+        )
+        .expect("the inbox answers");
+        let seen = inbox_answer(&seen);
+        assert_eq!(seen["messages"][0]["body"], "A");
+        assert_eq!(seen["messages"][0]["in_reply_to"], 1);
+    }
+
+    #[test]
+    fn a_send_naming_a_type_outside_the_set_or_a_thread_the_mailbox_lacks_is_refused_before_the_person_is_asked()
+     {
+        let rig = Rig::new();
+        let output = rig.serve(&[
+            initialize(asks()),
+            typed(2, RECIPIENT, "gossip", None),
+            typed(3, RECIPIENT, "note", Some(77)),
+        ]);
+        assert!(questions(&output).is_empty(), "{output:?}");
+        assert_eq!(reply(&output, 2)["error"]["code"], -32602, "{output:?}");
+        assert!(text_of(reply(&output, 3)).contains("message-thread-unknown"));
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn the_inbox_tool_lists_without_marking_and_acks_only_on_request() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let id = crate::harness::mailbox::send(&context.state_root, Some(SENDER), RECIPIENT, "hi")
+            .expect("sent")
+            .id;
+        let call = |arguments: Value| {
+            let answer = run_tool("inbox", &arguments, Ok(&context)).expect("answers");
+            inbox_answer(&answer)
+        };
+        for _ in 0..2 {
+            let seen = call(json!({ "run_id": RECIPIENT }));
+            assert_eq!(seen["messages"][0]["state"], "queued");
+        }
+        let acked = call(json!({ "run_id": RECIPIENT, "ack": id }));
+        assert_eq!(acked["messages"][0]["state"], "acked");
+        let sent = call(json!({ "run_id": SENDER, "sent": true }));
+        assert_eq!(sent["messages"][0]["state"], "acked");
+        assert_eq!(rig.rows_to(RECIPIENT), 0);
+    }
+
+    #[test]
+    fn the_inbox_tool_refuses_to_ack_mail_addressed_to_another_run() {
+        let rig = Rig::new();
+        let context = rig.context();
+        let id = crate::harness::mailbox::send(&context.state_root, None, RECIPIENT, "hi")
+            .expect("sent")
+            .id;
+        let Err(ToolFailure::Refused(refusal)) = run_tool(
+            "inbox",
+            &json!({ "run_id": SENDER, "ack": id }),
+            Ok(&context),
+        ) else {
+            panic!("another run's mail was not refused");
+        };
+        assert_eq!(refusal.code, "inbox-message-not-yours");
     }
 
     #[test]

@@ -270,7 +270,7 @@ fn the_store_opens_in_wal_with_foreign_keys_and_a_recorded_schema() {
     assert_eq!(mode, "wal");
     assert_eq!(keys, 1);
     assert_eq!(synchronous, 2, "FULL");
-    assert_eq!(store.schema_version().expect("reads"), 20);
+    assert_eq!(store.schema_version().expect("reads"), 21);
 }
 
 #[cfg(debug_assertions)]
@@ -294,7 +294,7 @@ fn reopening_keeps_the_schema_and_a_newer_one_is_refused() {
             .expect("reopens")
             .schema_version()
             .expect("reads"),
-        20
+        21
     );
 
     rusqlite::Connection::open(&path)
@@ -506,7 +506,7 @@ fn doctor_reports_the_path_the_schema_and_the_last_hours_calls() {
         panic!("a readable store is fine: {:?}", check.health);
     };
     assert!(
-        detail.contains("state.db") && detail.contains("schema 20"),
+        detail.contains("state.db") && detail.contains("schema 21"),
         "{detail}"
     );
     assert!(detail.contains("3 GraphQL, 0 REST"), "{detail}");
@@ -713,7 +713,7 @@ fn a_migration_another_opener_finished_while_this_one_waited_is_not_applied_twic
     })
     .expect("the slower opener finds the schema already laid down");
 
-    assert_eq!(slow.schema_version().expect("reads"), 20);
+    assert_eq!(slow.schema_version().expect("reads"), 21);
 }
 
 #[test]
@@ -1339,7 +1339,7 @@ fn recorded(inserted: super::jobs::Inserted) -> bool {
 #[test]
 fn migration_five_creates_the_review_jobs_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 20);
+    assert_eq!(store.schema_version().expect("a version"), 21);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('review_jobs')")
@@ -1375,7 +1375,7 @@ fn migration_five_creates_the_review_jobs_table() {
 #[test]
 fn migration_six_creates_the_blocked_clauses_table() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 20);
+    assert_eq!(store.schema_version().expect("a version"), 21);
     let columns: Vec<String> = store
         .connection()
         .prepare("SELECT name FROM pragma_table_info('blocked_clauses')")
@@ -1392,7 +1392,7 @@ fn migration_six_creates_the_blocked_clauses_table() {
 #[test]
 fn migration_seven_creates_the_record_tables() {
     let (_directory, store) = open();
-    assert_eq!(store.schema_version().expect("a version"), 20);
+    assert_eq!(store.schema_version().expect("a version"), 21);
     for (table, wanted) in [
         ("decisions", ["at", "body"].as_slice()),
         ("roles", ["at", "body"].as_slice()),
@@ -2989,6 +2989,35 @@ fn migration_eleven_creates_the_messages_table() {
     ] {
         assert!(columns.iter().any(|name| name == wanted), "{columns:?}");
     }
+}
+
+#[test]
+fn migration_twenty_one_adds_the_typed_message_columns_without_touching_old_rows() {
+    let (_directory, store) = open();
+    let columns: Vec<String> = store
+        .connection()
+        .prepare("SELECT name FROM pragma_table_info('messages')")
+        .expect("prepares")
+        .query_map([], |row| row.get(0))
+        .expect("queries")
+        .collect::<Result<_, _>>()
+        .expect("reads");
+    for wanted in [
+        "kind",
+        "thread",
+        "in_reply_to",
+        "read_at",
+        "acked_at",
+        "expires_at",
+    ] {
+        assert!(columns.iter().any(|name| name == wanted), "{columns:?}");
+    }
+    let id = mail(&store, None, "pi-bbbb", "old shape", 100);
+    let held = store.message(id).expect("reads").expect("the row");
+    assert_eq!(
+        (held.kind.as_str(), held.thread, held.state()),
+        ("note", id, "queued")
+    );
 }
 
 #[test]

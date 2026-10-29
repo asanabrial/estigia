@@ -46,6 +46,7 @@ pub mod doctor;
 pub mod guard;
 pub(crate) mod handoff;
 pub mod hook;
+pub(crate) mod inbox;
 pub mod issue_creation;
 pub mod issue_requirement;
 pub(crate) mod liveness;

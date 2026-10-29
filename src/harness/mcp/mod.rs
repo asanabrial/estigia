@@ -857,6 +857,7 @@ fn run_tool_asking(
         "send_message" => {
             return messaging::send_message(arguments, context, named.as_ref(), consent);
         }
+        "inbox" => return messaging::inbox(arguments, context, named.as_ref()),
         "list_sessions" => return messaging::list_sessions(arguments, context),
         "feed" => return messaging::feed(arguments, context),
         "where" => return messaging::standing(arguments, context),

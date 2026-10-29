@@ -3305,6 +3305,55 @@ fn a_sessions_send_refuses_every_listing_flag_before_it_writes() {
 }
 
 #[test]
+fn the_inbox_verb_peeks_acks_and_shows_the_sender_what_became_of_a_typed_message() {
+    let rig = tracker_rig();
+    let sender = pi_start(&rig, "sender");
+    let recipient = pi_start(&rig, "recipient");
+    let (said, stderr, ok) = pi_session_run(
+        &rig,
+        &[
+            "sessions", "send", &recipient, "A or B?", "--type", "question", "--run-id", &sender,
+            "--json",
+        ],
+    );
+    assert!(ok, "{said}{stderr}");
+    let sent: serde_json::Value = serde_json::from_str(said.trim()).expect("JSON");
+    let id = sent["message"].as_i64().expect("a message id");
+    assert_eq!(sent["thread"], id, "{sent}");
+
+    let inbox = |who: &str, extra: &[&str]| -> (serde_json::Value, String, bool) {
+        let mut arguments = vec!["inbox", "--run-id", who, "--json"];
+        arguments.extend_from_slice(extra);
+        let (said, stderr, ok) = pi_session_run(&rig, &arguments);
+        let parsed = serde_json::from_str(said.trim()).unwrap_or(serde_json::Value::Null);
+        (parsed, stderr, ok)
+    };
+    let (first, stderr, ok) = inbox(&recipient, &[]);
+    assert!(ok, "{stderr}");
+    assert_eq!(first["messages"][0]["type"], "question", "{first}");
+    assert_eq!(first["messages"][0]["state"], "queued", "{first}");
+    assert_eq!(
+        inbox(&recipient, &[]).0,
+        first,
+        "a second peek changed the answer"
+    );
+
+    let id_text = id.to_string();
+    let (acked, stderr, ok) = inbox(&recipient, &["--ack", &id_text]);
+    assert!(ok, "{stderr}");
+    assert_eq!(acked["messages"][0]["state"], "acked", "{acked}");
+    let (seen, _, _) = inbox(&sender, &["--sent"]);
+    assert_eq!(seen["messages"][0]["state"], "acked", "{seen}");
+    assert_eq!(seen["messages"][0]["to"], recipient.as_str(), "{seen}");
+
+    let (_, stderr, ok) = inbox(&sender, &["--ack", &id_text]);
+    assert!(
+        !ok && stderr.contains("inbox-message-not-yours"),
+        "another run's ack was not refused: {stderr}"
+    );
+}
+
+#[test]
 fn a_bounded_session_page_answers_an_empty_registry_and_offers_no_cursor_with_nothing_left() {
     let idle = tracker_rig();
     let (said, stderr, ok) = pi_session_run(&idle, &["sessions", "--limit", "5"]);

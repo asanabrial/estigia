@@ -150,6 +150,7 @@ The figure is the compact `serde_json::to_string` of the `result` object a real 
 | `status` joins: a run's self-reported line, local to the store | 43 | 55,520 |
 | `list_sessions` takes `fields`: `status` adds the self-report to each row | 43 | 55,645 |
 | `where` joins: one read-only answer to where an issue stands | 44 | 56,332 |
+| `inbox` joins; `send_message` takes `type`, `thread` and `expires_in` | 45 | 58,380 |
 
 Nineteen names left the surface between the first two rows and 20,532 bytes went with them: the
 capture-only recorders, the retired aggregate verdict and the `NOT_EXPOSED` names were removed, and the
