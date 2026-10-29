@@ -256,6 +256,7 @@ gate treats differently.
 from_run, at}` in `~/.estigia/state.db` and projects `dev:<runtime>` on the issue. It is the one call
 the 2026-10-21 operator request needed: the issue, who handed it over, and where it went. It does not
 message a session and does not claim anything — the recipient still claims through `claim`.
+What the recipient then owes the sender is [the completion contract](#the-completion-contract-for-a-handoff).
 
 - **The row** is keyed by `(repo_dir, issue, runtime)`, so a retry of the same handoff refreshes who
   made it and when rather than reading as two handoffs. `projection` records `landed` (the label was
@@ -324,6 +325,34 @@ what it sent. They name the run the way `sessions send` names its sender (`--run
 - **Mail decides nothing.** A type, a thread or an `ack` is never a permission, a claim or evidence, and no
   gate reads them; an `answer` from another session does not satisfy anything that needs the person.
 
+### The completion contract for a handoff
+
+A handoff opens a **duty**, kept in the `handoff_duties` table beside the handoff row: who handed the issue
+over, the optional deadline (`handoff`'s `deadline_seconds`, counted from the handoff), and, once taken, which
+run accepted it and how it ended. The mail is the notice; the duty row is the record, and the store enforces it.
+
+- **Accepting is claiming.** A successful `claim` of the issue by a run of the runtime it was handed to, in
+  the directory it was handed from, binds the duty to that run. Only the first acceptance takes. A handoff
+  nobody has claimed is `offered` and obliges nobody.
+- **The recipient owes exactly one word.** `send_message` with `handoff: <issue>` closes it: type `done` with
+  `outcome` `succeeded` or `failed`, or type `blocked`, and `text` as the short result. It goes to the run that
+  handed the issue over, takes no `to`, and is put to the person like any agent's send. Anything else is
+  `handoff-completion-invalid`; a run that did not accept is `handoff-not-accepted`.
+- **A second word is refused.** The close is one `UPDATE` that names the open duty and the accepting run, so a
+  second `done`, or a `blocked` after a `done`, changes no row and is refused `handoff-already-settled`, whatever
+  the first said. A repeated `handoff` of the same issue to the same runtime opens a new duty, replacing the
+  settled one, as it replaces the handoff row.
+- **Ending without one is reported.** When a session ends, every duty it accepted and never closed becomes
+  `abandoned` in the same store write, and its sender gets an `escalation` from the ended run naming the issue.
+  Both session-end paths go through that write.
+- **The sender sees overdue handoffs through `inbox` with `sent: true`** (`estigia inbox --sent --json`), which
+  already answers the sender's view of its mail. The answer carries `handoffs`, one entry per handoff the run
+  made: `issue`, `to`, `status` (`offered`, `accepted`, `overdue` once the deadline has passed without a close,
+  then `succeeded`, `failed`, `blocked` or `abandoned`), `due_at`, `accepted_by` and `result`. `where` and
+  `feed` show a different view and were left alone.
+- **Mail decides nothing.** A `done` closes a duty row; no gate, claim, transition or review reads it, and the
+  tracker is untouched.
+
 ## Addressing a session
 
 `send_message`, `list_sessions`, `estigia sessions send` and `estigia sessions` all take one address
@@ -352,6 +381,34 @@ and stays undelivered. Every other form is about who is around, so it reads live
   it to a person without parsing anything.
 - **Several matches** are refused with `message-recipient-ambiguous`, listing every candidate the same
   way. Nothing is sent. Ambiguity is a question, not a guess.
+
+### Broadcast
+
+`send_message` with `broadcast: true` sends one message to **every** live session `to` names, other than
+the sender, instead of refusing several matches. `to` takes the table above and four group words:
+
+| Group | Names |
+|---|---|
+| `all`, `@all` | every live session |
+| `idle`, `@idle` | every live session whose pointer names no issue |
+| `repo:<name>` | every live session in that repository (a name or a directory) |
+| `worktree:<name or path>` | every live session running in that checkout, by its recorded worktree or directory |
+
+`list_sessions` with `address` resolves the same words, so the group can be read before it is sent to.
+`repo_dir` narrows a broadcast as it narrows any send.
+
+- **Consent is asked once for the group.** The question names the sender, each member in the addressable
+  form, and the text; one answer covers every member, and `allow_session` is the same per-sender grant a
+  single send gets. A denial, silence or no way to ask records nothing for any member.
+- **Admission is all or nothing, delivery is per member.** Every member is checked before the person is
+  asked (empty text, size, type, thread, the `flow dev` rule); one refusal refuses the broadcast and
+  writes nothing. After consent each member gets its own row; a row that could not be written is listed
+  under `failed` with the refusal code rather than hiding the members that were reached.
+- **The answer reports the members reached**, each with its message id, thread and how it is woken, beside
+  `members` (how many the group named at the moment of the call). A group with no live member other than the
+  sender is refused `message-no-live-session`.
+- A broadcast takes no `reply_to`: it has no single sender to answer. Nothing about a broadcast is a
+  permission; each recipient reads it as another session's request.
 
 `send_message` also takes `repo_dir`, which narrows `to` to sessions registered in that directory: it
 is how a run says *the live OpenCode session of `investora`* in one call. The comparison is by

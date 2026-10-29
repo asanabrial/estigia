@@ -1467,13 +1467,26 @@ fn run_tool_asking(
         crate::harness::handoff::record(
             &context.state_root,
             &context.repo_dir,
-            issue,
-            field("to"),
-            run_id,
-            field("projection"),
-            field("at"),
+            &crate::harness::handoff::Handed {
+                issue,
+                runtime: field("to"),
+                from_run: run_id,
+                projection: field("projection"),
+                at: field("at"),
+                due_in: arguments.get("deadline_seconds").and_then(Value::as_u64),
+            },
         )
         .map_err(|refusal| ToolFailure::Refused(Box::new(refusal)))?;
+    }
+
+    // Claiming a handed-over issue is how a recipient accepts the handoff, which is what makes
+    // the `done` or `blocked` it owes the sender enforceable.
+    if tool.operation == "claim" {
+        let issue = arguments
+            .get("issue")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        crate::harness::handoff::accept(&context.state_root, &context.repo_dir, run_id, issue);
     }
 
     // A pointer keyed by nothing is a file nobody reads and a state the real

@@ -1132,6 +1132,14 @@ pub(super) fn print_inbox(answer: &serde_json::Value) {
             message["body"].as_str().unwrap_or_default()
         );
     }
+    for handoff in answer["handoffs"].as_array().map_or(&[][..], Vec::as_slice) {
+        say!(
+            "handoff #{} to {}: {}",
+            handoff["issue"],
+            handoff["to"].as_str().unwrap_or_default(),
+            handoff["status"].as_str().unwrap_or_default()
+        );
+    }
 }
 
 pub(super) fn deliver(

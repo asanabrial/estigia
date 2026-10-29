@@ -480,9 +480,10 @@ pub const TOOLS: &[Tool] = &[
         contract_name: "send_message",
         description: "Leave a message for another session, delivered at its next hook point. \
                       Address it as a person speaks; `reply_to` answers a delivered message. \
-                      Zero or several matches answer the candidates and send nothing. A message \
-                      telling a session holding another issue to `flow dev` it is refused. The \
-                      person is asked first.",
+                      Zero or several matches answer the candidates and send nothing, unless \
+                      `broadcast` sends to all of a group. A message telling a session holding \
+                      another issue to `flow dev` it is refused. The person is asked first, once \
+                      per call.",
         operation: "send-message",
         arguments: &[
             RUN_ID,
@@ -519,6 +520,21 @@ pub const TOOLS: &[Tool] = &[
                 "Seconds after which the message is stale. Shown, never enforced.",
             )
             .counting_from(1),
+            Argument::optional(
+                "broadcast",
+                "boolean",
+                "Send to every live session `to` names, other than this one: `all`, `idle`, \
+                 `repo:<name>`, `worktree:<path>`, `runtime:<name>` or `<runtime>@<repo>`.",
+            ),
+            Argument::optional(
+                "handoff",
+                "integer",
+                "The handed-over issue this closes, with type `done` and an `outcome`, or \
+                 `blocked`. Goes to whoever handed it over; give no `to`.",
+            )
+            .counting_from(1),
+            Argument::optional("outcome", "string", "With `done`: `succeeded` or `failed`.")
+                .of(&["succeeded", "failed"]),
         ],
         effect: PointerEffect::None,
         writes: true,
@@ -616,8 +632,10 @@ pub const TOOLS: &[Tool] = &[
         description: "Hand an issue to another runtime: records the handoff in this machine's \
                       store for that runtime's next session in this repository, and projects its \
                       `dev:<runtime>` label with read-back through the outbox. The issue must not \
-                      be held: a handoff is a destination, never a claim. It does not message a \
-                      session; `send_message` does that, addressed with `runtime:<name>`.",
+                      be held: a handoff is a destination, never a claim. The run that claims it \
+                      owes you one `done` or `blocked` (`send_message` with `handoff`); `inbox` \
+                      with `sent` shows each as offered, accepted, overdue or ended. It does not \
+                      message a session; `send_message` does that.",
         operation: "handoff",
         arguments: &[
             ISSUE,
@@ -627,6 +645,12 @@ pub const TOOLS: &[Tool] = &[
                 "string",
                 "The runtime the issue is handed to — a label-safe word such as `opencode`.",
             ),
+            Argument::optional(
+                "deadline_seconds",
+                "integer",
+                "Seconds after which `inbox` with `sent` shows the handoff as overdue.",
+            )
+            .counting_from(1),
         ],
         effect: PointerEffect::None,
         writes: true,
@@ -1919,6 +1943,7 @@ pub fn unexposed_reason(name: &str) -> Option<&'static str> {
 pub const POINTER_ONLY: &[(&str, &str)] = &[
     ("create", "repo"),
     ("claim", "state"),
+    ("handoff", "deadline_seconds"),
     ("transition", "run_id"),
     ("draft_pr", "run_id"),
     ("ready_pr", "run_id"),

@@ -113,6 +113,80 @@ fn known_runtime(rows: &[Listed], word: &str) -> bool {
     rows.iter().any(|row| row.runtime == word)
 }
 
+fn live_in(every: &[Listed], repo_dir: Option<&str>) -> Vec<Listed> {
+    every
+        .iter()
+        .filter(|entry| entry.status == "live")
+        .filter(|entry| {
+            repo_dir.is_none_or(|wanted| {
+                entry.repo_dir.as_deref().is_some_and(|held| {
+                    crate::paths::same_directory(Path::new(held), Path::new(wanted))
+                })
+            })
+        })
+        .cloned()
+        .collect()
+}
+
+fn in_worktree(entry: &Listed, wanted: &str) -> bool {
+    [entry.worktree.as_deref(), entry.repo_dir.as_deref()]
+        .into_iter()
+        .flatten()
+        .any(|held| {
+            basename(held) == wanted
+                || crate::paths::same_directory(Path::new(held), Path::new(wanted))
+        })
+}
+
+/// The live sessions a group address names: [`resolve_in`]'s vocabulary, plus the words that
+/// only make sense for several sessions at once.
+///
+/// `all` and `idle` (a live session holding no issue) take an optional leading `@`; `repo:<name>`
+/// and `worktree:<name or path>` name the checkout a session runs in. Anything else is [`resolve_in`]'s, so a group
+/// is never a vocabulary the single-recipient verbs lack.
+pub(crate) fn group(
+    root: &Path,
+    address: &str,
+    repo_dir: Option<&str>,
+) -> Result<Narrowed, Refusal> {
+    let word = address.trim();
+    let bare = word.strip_prefix('@').unwrap_or(word);
+    let every = crate::cli::sessions::entries(root)?;
+    let live = live_in(&every, repo_dir);
+    let matched: Vec<Listed> = match bare {
+        "all" => live.clone(),
+        "idle" => live
+            .iter()
+            .filter(|entry| issue_of(entry).is_none())
+            .cloned()
+            .collect(),
+        _ => match (bare.strip_prefix("repo:"), bare.strip_prefix("worktree:")) {
+            (Some(repo), _) => live
+                .iter()
+                .filter(|entry| matches_repo(entry, repo.trim()))
+                .cloned()
+                .collect(),
+            (_, Some(worktree)) => live
+                .iter()
+                .filter(|entry| in_worktree(entry, worktree.trim()))
+                .cloned()
+                .collect(),
+            _ => return resolve_in(root, word, repo_dir),
+        },
+    };
+    let closest = live
+        .iter()
+        .filter(|entry| !matched.iter().any(|found| found.run_id == entry.run_id))
+        .take(CLOSEST)
+        .cloned()
+        .collect();
+    Ok(Narrowed {
+        matched,
+        closest,
+        live: live.len(),
+    })
+}
+
 pub(crate) fn resolve(root: &Path, address: &str) -> Result<Narrowed, Refusal> {
     resolve_in(root, address, None)
 }
@@ -128,18 +202,7 @@ pub(crate) fn resolve_in(
     repo_dir: Option<&str>,
 ) -> Result<Narrowed, Refusal> {
     let every = crate::cli::sessions::entries(root)?;
-    let live: Vec<Listed> = every
-        .iter()
-        .filter(|entry| entry.status == "live")
-        .filter(|entry| {
-            repo_dir.is_none_or(|wanted| {
-                entry.repo_dir.as_deref().is_some_and(|held| {
-                    crate::paths::same_directory(Path::new(held), Path::new(wanted))
-                })
-            })
-        })
-        .cloned()
-        .collect();
+    let live = live_in(&every, repo_dir);
     let address = address.trim();
     let explicit_runtime = address.strip_prefix("runtime:");
     let word = explicit_runtime.unwrap_or(address);
