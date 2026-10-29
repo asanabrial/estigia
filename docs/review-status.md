@@ -75,6 +75,12 @@ validator result is refused `recorded-by-capture-only`, so a slot
 | Inferential severe finding, no refuter batch yet | `collect` | `refutation-missing` | one input, `refutation-batch`, annotated as above, listing every finding id that needs an entry |
 | Verdict computable, not recorded | `execute` | `verdict-computable` | `record_computed_verdict` with the receipt |
 | Approved and recorded | `execute` | `approved` | `release_ci` with the receipt |
+
+Over MCP, where `Merge by` is the agent and `Delivery authorisation` is `auto`, the two rows above name
+`deliver` with `{issue}` instead, in `review_status`'s own answer and in the one a publication or a
+collect carries: `deliver` records the verdict and releases CI as its own first steps, so naming them
+alone costs a call each. `reason_code` is unchanged, and it is what `deliver` and `record_verdict` read.
+Anywhere `deliver` would hand back before releasing CI, the rows name what the table says.
 | Rejected, correction unspent | `execute` | `correction-due` | `publish_review`, `expected_epoch: <this epoch>`; when the targeted validator failed the correction, the answer carries a plain `why` naming what it found |
 | Rejected, correction spent | `execute` | `correction-spent` | `escalate_review` with the receipt; the answer carries a plain `why` |
 | Escalated, recovered by a person (also over a moved pull request) | `execute` | `recovered` | `publish_review`, `expected_epoch: <this epoch>` |

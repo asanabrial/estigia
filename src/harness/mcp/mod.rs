@@ -1465,6 +1465,9 @@ fn run_tool_asking(
     };
     let compact = arguments.get("compact").and_then(Value::as_bool) == Some(true);
     let mut body = answer.body;
+    if let Some(body) = body.as_mut() {
+        route_through_deliver(tool.name, body, || delivers(context));
+    }
     if compact
         && tool.name == "review_status"
         && let Some(status) = body.as_mut()
@@ -1857,6 +1860,38 @@ fn success(id: Value, result: Value) -> Value {
 
 fn error_response(id: Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+}
+
+fn route_through_deliver(tool: &str, body: &mut Value, delivers: impl FnOnce() -> bool) {
+    let status = match tool {
+        "review_status" => body,
+        _ => match body.get_mut("review_status") {
+            Some(status) => status,
+            None => return,
+        },
+    };
+    let next = &mut status["next"];
+    if next["kind"] != "execute"
+        || !matches!(
+            next["reason_code"].as_str(),
+            Some("verdict-computable" | "approved")
+        )
+        || !delivers()
+    {
+        return;
+    }
+    next["operation"] = json!("deliver");
+    next["arguments"] = json!({"issue": next["arguments"]["issue"]});
+}
+
+fn delivers(context: &GateContext) -> bool {
+    let layered = crate::transport::Context::live(
+        context.skill_root.clone(),
+        context.repo_dir.clone(),
+        context.tracker.named_repo(),
+    )
+    .layered();
+    layered.merge_by() == crate::config::Party::Agent && layered.delivery.is_autonomous()
 }
 
 fn without_repeated_receipt(status: &mut Value) {

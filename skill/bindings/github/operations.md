@@ -36,6 +36,10 @@ claim is adjudicated first, so its refusals are what a caller meets before anyth
 transition's own refusals follow; omitting the flag claims without moving, which leaves the separate
 `transition` call available.
 
+`--branch` and `--base` (with `start-branch`'s `--worktree-root` and `--no-link`) then run
+`start-branch` in the same call. A refused claim creates no checkout; a failed checkout is reported
+under `start_branch` while the claim stands.
+
 ## Handing an issue to another runtime
 
 `handoff` states where an unheld issue is going, so a session of that runtime in that repository can
@@ -168,7 +172,7 @@ failed read is reported under `review_reads_unavailable`, not refused: a second
 publication mints a new epoch. `--start-review` implies it, moves the issue to `review` and launches
 every `launch_review_input` input unless the lane is `red` or unreadable; the outcome is
 `review_start`. `--record-verdict` on `collect_review_input` records the computed verdict only when
-nothing runs and `review_status` names `record_computed_verdict`; else it returns that status.
+nothing runs and `review_status` finds the verdict computable; else it returns that status.
 
 ## Recording a finding
 

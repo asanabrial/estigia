@@ -3498,7 +3498,7 @@ fn launch_and_collect_review_input_run_the_offered_lens_and_record_it_over_the_r
         "the lens was captured and is still offered: {after}"
     );
     assert_eq!(
-        after["next"]["operation"], "record_computed_verdict",
+        after["next"]["reason_code"], "verdict-computable",
         "{after}"
     );
 
@@ -3744,10 +3744,10 @@ fn a_high_tier_review_launches_and_collects_every_offered_slot_in_batched_calls(
 
     let after = text_of(&ask("review_status", serde_json::json!({"issue": 12})));
     assert_eq!(
-        after["next"]["operation"], "record_computed_verdict",
+        after["next"]["reason_code"], "verdict-computable",
         "{after}"
     );
-    let bound = after["next"]["arguments"].clone();
+    let bound = after["receipt"].clone();
     let recorded = ask(
         "record_computed_verdict",
         serde_json::json!({
@@ -4265,7 +4265,7 @@ fn launch_and_collect_review_input_run_the_offered_refuter_and_record_the_batch_
         "{after}"
     );
     assert_eq!(
-        after["next"]["operation"], "record_computed_verdict",
+        after["next"]["reason_code"], "verdict-computable",
         "{after}"
     );
 }
