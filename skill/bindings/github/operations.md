@@ -139,7 +139,8 @@ a parent on the same pull request that stands rejected or escalated — a comput
 `escalated` verdict, a retired `rejected` `review-verdict`, or a local `escalated` receipt — is a
 correction, and when `review_status`'s `corrections` already counts as many on that lineage as
 `Corrections per lineage` allows it refuses `correction-already-spent`. A publication over a parent nobody has judged is not a correction and is
-not refused as one. A publication over a parent on the same pull request that was approved — by a
+not refused as one, but it is refused `approved-republish-without-cause` when its ledger already
+computes `approved` and `republish-before-panel-reported` when a licensed lens has not reported. A publication over a parent on the same pull request that was approved — by a
 computed `approved`, or by a retired `accepted` verdict — is a **new candidate** and zeroes the count,
 but it is not a new budget: it spends no correction and is still bounded by
 `correction-budget-exceeded` and `correction-outside-reviewed-scope` against its pull request's

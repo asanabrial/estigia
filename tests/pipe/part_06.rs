@@ -2069,6 +2069,9 @@ fn each_publication_starts_one_lane_run_and_records_its_receipt_locally() {
                     "a".repeat(32)
                 ),
             },
+            republish_cause(run_id, &head, &base_sha, &"c".repeat(64), &"a".repeat(32))[0].clone(),
+            republish_cause(run_id, &head, &base_sha, &"c".repeat(64), &"a".repeat(32))[1].clone(),
+            republish_cause(run_id, &head, &base_sha, &"c".repeat(64), &"a".repeat(32))[2].clone(),
         ],
     })
     .to_string();
@@ -2101,6 +2104,7 @@ fn each_publication_starts_one_lane_run_and_records_its_receipt_locally() {
     .expect("the fake tracker script serialises");
 
     for tool in ["publish_review", "republish_review"] {
+        record_cause_over_latest_receipt(home, 12);
         let runs = home.join(".estigia").join("runs");
         // Revision-guarded: the second pass needs a clean pointer.
         let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));

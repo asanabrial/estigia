@@ -1139,6 +1139,125 @@ fn recorded_entries(home: &std::path::Path, issue: u64) -> Vec<String> {
         .collect()
 }
 
+fn republish_cause(
+    run_id: &str,
+    head: &str,
+    base: &str,
+    digest: &str,
+    epoch: &str,
+) -> [serde_json::Value; 3] {
+    republish_cause_on(7, run_id, head, base, digest, epoch)
+}
+
+fn republish_cause_on(
+    pr: u64,
+    run_id: &str,
+    head: &str,
+    base: &str,
+    digest: &str,
+    epoch: &str,
+) -> [serde_json::Value; 3] {
+    let mut cause = republish_cause_roles(
+        pr,
+        run_id,
+        head,
+        base,
+        digest,
+        epoch,
+        &["review-reliability", "review-lens"],
+    );
+    let finding = cause.pop().expect("the finding");
+    let delta = cause.pop().expect("the delta lens report");
+    let lens = cause.pop().expect("the lens report");
+    [lens, delta, finding]
+}
+
+fn republish_cause_roles(
+    pr: u64,
+    run_id: &str,
+    head: &str,
+    base: &str,
+    digest: &str,
+    epoch: &str,
+    roles: &[&str],
+) -> Vec<serde_json::Value> {
+    let receipt = format!("epoch={epoch} pr={pr} head={head} base={base} digest={digest}");
+    let mut comments: Vec<serde_json::Value> = roles
+        .iter()
+        .zip("ce012345".chars())
+        .map(|(role, prefix)| {
+            serde_json::json!({
+                "id": format!("IC_LENS_{prefix}_{epoch}"), "createdAt": "2026-01-01T01:30Z",
+                "viewerDidAuthor": true, "includesCreatedEdit": false,
+                "body": format!(
+                    "<!-- issue-flow: review-lens-report run-id={run_id} op-id={prefix}{} \
+                     role={role} {receipt} -->\n",
+                    &epoch[1..]
+                ),
+            })
+        })
+        .collect();
+    comments.push(serde_json::json!({
+        "id": format!("IC_FINDING_{epoch}"), "createdAt": "2026-01-01T01:40Z",
+        "viewerDidAuthor": true, "includesCreatedEdit": false,
+        "body": format!(
+            "<!-- issue-flow: review-finding run-id={run_id} op-id=d{} reviewer=judge \
+             {receipt} id=f-cause class=warning evidence=observed impact=output -->\n",
+            &epoch[1..]
+        ),
+    }));
+    comments
+}
+
+fn record_cause_over_latest_receipt(home: &std::path::Path, issue: u64) {
+    let _ = try_record_cause(home, issue);
+}
+
+fn try_record_cause(home: &std::path::Path, issue: u64) -> Option<()> {
+    let path = home.join(".estigia").join("state.db");
+    let connection = path
+        .exists()
+        .then(|| rusqlite::Connection::open(path).ok())??;
+    let number = i64::try_from(issue).ok()?;
+    let (repo_id, body) = connection
+        .query_row(
+            "SELECT repo_id, body FROM entries
+             WHERE source = 'local' AND issue = ?1 AND body LIKE '%issue-flow: published %'
+             ORDER BY seq DESC LIMIT 1",
+            [number],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+        )
+        .ok()?;
+    let field = |key: &str| -> String {
+        body.split_whitespace()
+            .find_map(|token| token.strip_prefix(&format!("{key}=")))
+            .unwrap_or_default()
+            .to_owned()
+    };
+    for comment in republish_cause_on(
+        field("pr").parse().ok()?,
+        &field("run-id"),
+        &field("head"),
+        &field("base"),
+        &field("digest"),
+        &field("epoch"),
+    ) {
+        connection
+            .execute(
+                "INSERT INTO entries (repo_id, issue, created_at, body, viewer_did_author,
+                    includes_created_edit, source)
+                 VALUES (?1, ?2, '2026-01-01T01:30Z', ?3, 1, 0, 'local')",
+                rusqlite::params![
+                    repo_id,
+                    number,
+                    comment["body"].as_str().unwrap_or_default()
+                ],
+            )
+            .ok()?;
+    }
+    Some(())
+}
+
 /// The newest entry this run recorded for `issue`, read back from the store: the
 /// receipt a publication just recorded, or the verdict a later call did.
 fn staged_receipt(home: &std::path::Path, issue: u64) -> String {

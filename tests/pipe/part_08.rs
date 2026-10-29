@@ -1086,6 +1086,13 @@ fn a_publication_records_the_one_it_repairs_and_a_first_one_records_nothing() {
         let mut comments = vec![claimed.clone()];
         if repairs {
             comments.push(earlier.clone());
+            comments.extend(republish_cause(
+                run_id,
+                &parent_head,
+                &base_sha,
+                &parent_digest,
+                &parent_epoch,
+            ));
         }
         let timeline = serde_json::json!({
             "state": "OPEN",

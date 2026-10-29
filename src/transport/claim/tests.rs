@@ -6538,6 +6538,124 @@ fn a_republish_over_an_approved_parent_with_no_cause_is_refused() {
     );
 }
 
+fn medium_commit(world: &RepublishWorld, lines: usize) -> String {
+    std::fs::create_dir_all(world.work.join("src")).expect("the src directory");
+    world.commit("src/foo.rs", lines)
+}
+
+#[test]
+fn a_republish_over_an_unjudged_parent_whose_ledger_computes_approved_is_refused() {
+    let world = republish_world();
+    let parent_head = medium_commit(&world, 1);
+    medium_commit(&world, 2);
+    let parent = world.receipt('1', &parent_head);
+
+    let (result, _) = world.publish_logging(
+        &[
+            published(&parent),
+            recorded_finding_on(&parent, 2, "f-1", "warning", None, None),
+            recorded_lens_report_for(&parent, 3, RELIABILITY_LENS, None),
+        ],
+        &parent_head,
+    );
+    let envelope = refusal_of(result);
+    assert_eq!(
+        envelope["reason"], "approved-republish-without-cause",
+        "{envelope}"
+    );
+    assert!(
+        envelope["action"]
+            .as_str()
+            .expect("action")
+            .contains("record_computed_verdict"),
+        "{envelope}"
+    );
+    assert!(!remote_has_branch(&world), "a refused publication pushed");
+}
+
+#[test]
+fn an_author_finding_after_the_newest_lens_report_admits_a_republish_over_an_unjudged_parent() {
+    let world = republish_world();
+    let parent_head = medium_commit(&world, 1);
+    medium_commit(&world, 2);
+    let parent = world.receipt('1', &parent_head);
+    let comments = [
+        published(&parent),
+        recorded_lens_report_for(&parent, 3, RELIABILITY_LENS, None),
+        recorded_finding_on(&parent, 4, "f-1", "warning", None, None),
+    ];
+
+    world
+        .publish(&comments, &parent_head)
+        .expect("a finding since the newest lens report is a cause");
+    let standing = receipt_standing(&comments, &parent).expect("readable");
+    assert_eq!(standing.finding_since_reports.as_deref(), Some("warning"));
+}
+
+#[test]
+fn a_republish_over_an_unjudged_parent_with_a_licensed_lens_unreported_is_refused() {
+    let world = republish_world();
+    let parent_head = medium_commit(&world, 1);
+    medium_commit(&world, 2);
+    let parent = world.receipt('1', &parent_head);
+
+    let envelope = refusal_of(world.publish(&[published(&parent)], &parent_head));
+    assert_eq!(
+        envelope["reason"], "republish-before-panel-reported",
+        "{envelope}"
+    );
+    assert!(!remote_has_branch(&world), "a refused publication pushed");
+}
+
+#[test]
+fn a_standing_severe_over_an_unjudged_parent_with_a_lens_out_still_publishes_its_correction() {
+    let world = republish_world();
+    let parent_head = medium_commit(&world, 1);
+    medium_commit(&world, 2);
+    let parent = world.receipt('1', &parent_head);
+
+    let result = world.publish(
+        &[
+            published(&parent),
+            recorded_finding_on(
+                &parent,
+                2,
+                "f-1",
+                "severe",
+                Some("deterministic"),
+                Some("introduced"),
+            ),
+        ],
+        &parent_head,
+    );
+    if let Err(failure) = result {
+        let envelope = failure.envelope();
+        assert_ne!(envelope["reason"], "republish-before-panel-reported");
+        assert_ne!(envelope["reason"], "approved-republish-without-cause");
+    }
+}
+
+#[test]
+fn an_advanced_base_is_not_refused_over_an_unjudged_parent() {
+    let world = republish_world();
+    let parent_head = medium_commit(&world, 1);
+    git(&world.work, &["checkout", "-q", "main"]);
+    std::fs::write(world.work.join("base-only.txt"), "base\n").expect("content");
+    git(&world.work, &["add", "base-only.txt"]);
+    git(
+        &world.work,
+        &["commit", "--quiet", "-m", "the base advances"],
+    );
+    git(&world.work, &["push", "-q", "origin", "main"]);
+    git(&world.work, &["checkout", "-q", REPUBLISH_BRANCH]);
+    git(&world.work, &["merge", "--no-edit", "main"]);
+    let parent = world.receipt('1', &parent_head);
+
+    world
+        .publish(&[published(&parent)], &parent_head)
+        .expect("an advanced base is not refused by the cause check");
+}
+
 #[test]
 fn a_base_that_moved_backwards_does_not_license_a_republish_over_an_approved_parent() {
     let world = republish_world();
@@ -19129,8 +19247,15 @@ fn a_publication_expecting_the_newest_epoch_is_made() {
     let first = world.receipt('1', &first_head);
     world.commit("two.txt", 2);
 
-    let (answer, _) =
-        world.publish_expecting(&[published(&first)], &first_head, Some(&first.epoch));
+    let (answer, _) = world.publish_expecting(
+        &[
+            published(&first),
+            recorded_lens_report_for(&first, 3, RELIABILITY_LENS, None),
+            recorded_finding_on(&first, 4, "f-1", "warning", None, None),
+        ],
+        &first_head,
+        Some(&first.epoch),
+    );
 
     answer.expect("the newest epoch is the one expected");
     assert!(remote_has_branch(&world));
@@ -19230,7 +19355,11 @@ fn the_expected_epoch_flag_reaches_both_entry_points_and_a_matching_one_publishe
         world.commit("two.txt", 2);
 
         let (answer, _) = world.drive(
-            &[published(&first)],
+            &[
+                published(&first),
+                recorded_lens_report_for(&first, 3, RELIABILITY_LENS, None),
+                recorded_finding_on(&first, 4, "f-1", "warning", None, None),
+            ],
             &first_head,
             Some(&first.epoch),
             Some(operation),

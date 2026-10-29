@@ -139,6 +139,7 @@ fn publish_review_carries_the_payload_only_when_asked_and_never_truncates_it() {
     // so all three reach the identical reused PR and receipt derivation, and
     // only the requested extras differ.
     for (inline, with_review) in [(false, false), (true, false), (false, true)] {
+        record_cause_over_latest_receipt(home, 12);
         let runs = home.join(".estigia").join("runs");
         let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
         let mut run = estigia::harness::session::Run::new(run_id.to_owned());
@@ -458,6 +459,7 @@ fn publish_review_records_a_bare_inline_declaration_over_any_file_count() {
     // marker (`review_transaction` is what answers them now), and this is
     // the only copy that survives the call.
     let call = |arguments: serde_json::Value, log: &std::path::Path| -> (bool, String) {
+        record_cause_over_latest_receipt(home, 13);
         let runs = home.join(".estigia").join("runs");
         let _ = std::fs::remove_file(runs.join(format!("{run_id}.json")));
         let _ = std::fs::remove_file(log);
@@ -790,6 +792,7 @@ fn only_a_forbidden_dispatch_refuses_a_publication_and_the_other_states_report()
     ];
 
     for (label, said, reported) in states {
+        record_cause_over_latest_receipt(home, 12);
         let answers = serde_json::to_string(&serde_json::json!([
             // First, and narrowly: the dispatch is the only call whose answer
             // this test varies, and an entry placed after a broader `matches`
