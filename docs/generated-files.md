@@ -188,6 +188,8 @@ stopping the rest, under a 30 minute deadline for the whole job after which its 
 and the answer is `timed-out`. Each check records its `name`, `exit` (`null` when killed or never
 started), `seconds` and `tail`, the last 2,000 bytes of its combined stdout and stderr.
 
+**When it runs.** `start_review` on a publication calls it before launching any lens, waiting no time, so the first lens is never paid for bytes the declared checks reject. Running or failed, it launches none (`launch_skipped` `checks-running` / `checks-failed`; an unreadable declaration or a refused call is `checks-unavailable`), and `review_status` answers the same in place of a lens offer. Nothing declared launches as before.
+
 **The receipt.** A finished job is recorded as a `checks-receipt` marker in the issue's local ledger,
 carrying `run-id`, `digest` (the target digest), `commands` (a SHA-256 over the declared checks in order,
 each field length-prefixed), `passed`, and `results`, one `name=exit:seconds` entry per check with `none`

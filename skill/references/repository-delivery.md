@@ -197,7 +197,10 @@ push/open/synchronize/reopen. Beside it sits the **publication lane set**: every
 an explicit lane list that replaces discovery). `publish_review` and `republish_review` start each
 once per publication epoch against the head they just pushed — not once per push — record which
 files started and how many on the receipt, and dispatching does not mark the PR ready. Read
-`review_status`'s `lane` for that head before launching the lenses: green, launch; red, do not launch; never-ran
+`review_status`'s `lane` for that head before launching the lenses: green, launch; red, do not launch
+(when the failure does not reproduce locally and the failing test is outside the change's paths,
+`review_status` offers once per epoch `gh run rerun <run-id> --failed` on the same head, which keeps
+the receipt if the jobs go green; a red re-run, or either condition failing, is a correction); never-ran
 (its jobs all report no steps), launch — gated on evidence rather than green; running, wait or
 launch knowing the computed verdict may not be recordable; absent, proceed; disabled, CI cannot run, so proceed
 and merge as *CI, merge and delivery* states for such a repository; unreadable, not clearance.

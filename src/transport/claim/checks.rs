@@ -275,6 +275,51 @@ fn collected(
     ))
 }
 
+/// What the declared checks hold back from a review: `None` when none are declared, a passing
+/// receipt stands, or the job has not been started; the next step to answer when the receipt is red
+/// or the job is running. A declaration that cannot be read holds nothing back here, because the
+/// verdict gate refuses it by name.
+pub(super) fn holding(
+    context: &Context,
+    comments: &[ownership::Comment],
+    issue: u64,
+    receipt: &super::ReviewTransaction,
+) -> Result<Option<serde_json::Value>, Failure> {
+    let Ok(checks) = declared_at(&context.repo_dir, &receipt.base) else {
+        return Ok(None);
+    };
+    if checks.is_empty() {
+        return Ok(None);
+    }
+    let commands = commands_digest(&checks);
+    match receipt_of(comments, &receipt.digest, &commands) {
+        Some(recorded) if recorded.passed => return Ok(None),
+        Some(_) => {
+            return Ok(Some(serde_json::json!({
+                "kind": "stop",
+                "reason_code": "checks-failed",
+                "operation": null,
+                "continuation": "the declared checks failed for these exact bytes, so no lens is \
+                                 launched: correct what they name and `republish_review`",
+            })));
+        }
+        None => {}
+    }
+    let dir = super::capture::jobs_dir()?.join(job_id(issue, &receipt.digest, &commands));
+    if check_job::status(&dir)? != JobStatus::Running {
+        return Ok(None);
+    }
+    let clock = crate::harness::session::now_seconds()
+        .ok_or_else(|| Failure::Read("the clock is unreadable".to_owned()))?;
+    Ok(Some(serde_json::json!({
+        "kind": "collect",
+        "reason_code": "checks-running",
+        "operation": null,
+        "inputs": [],
+        "ask_after": clock + ASK_AFTER_SECONDS,
+    })))
+}
+
 /// Runs the checks the base declares against the clean target of the run's
 /// checkout, in a detached job, and records a `checks-receipt` bound to that
 /// target's digest and to the declared commands.
