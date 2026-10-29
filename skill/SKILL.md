@@ -83,7 +83,7 @@ The analyst's steps, Decision Gates rows and return are in [analyst](references/
 
 #### FLOW
 
-FLOW (Fast, Lean, Outcome-driven Workflow) keeps Estigia's two pillars: the claimed issue is the
+FLOW (Focused, Lean, Outcome-driven, Witnessed) keeps Estigia's two pillars: the claimed issue is the
 record of the work, and the publication is the review candidate. Its capabilities merge or repeat,
 and are not calls, states or agents:
 
