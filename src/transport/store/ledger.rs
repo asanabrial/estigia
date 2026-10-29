@@ -160,6 +160,13 @@ fn status_issue_not_in_store(issue: u64) -> Failure {
     }))
 }
 
+fn lane_rerun_key(repo: &Repo, issue: u64, epoch: &str) -> String {
+    format!(
+        "lane-rerun {}/{}/{} {issue} {epoch}",
+        repo.host, repo.owner, repo.name
+    )
+}
+
 impl Ledger {
     /// The issue's timeline from the local store alone: no GitHub read, no
     /// import, no sync, and a store that does not exist is not created.
@@ -201,6 +208,44 @@ impl Ledger {
         store
             .jobs_on(repo, issue, epoch)
             .map_err(|failure| status_store_unreadable(issue, &failure.detail()))
+    }
+
+    /// The run a re-run of failed jobs was offered for on `epoch`, if one was.
+    pub(crate) fn lane_rerun_at(
+        path: &Path,
+        repo: &Repo,
+        issue: u64,
+        epoch: &str,
+    ) -> Result<Option<String>, Failure> {
+        let store = Self::read_only_store(path, repo, issue)?;
+        store
+            .connection
+            .query_row(
+                "SELECT value FROM store_meta WHERE key = ?1",
+                [lane_rerun_key(repo, issue, epoch)],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| status_store_unreadable(issue, &error.to_string()))
+    }
+
+    /// Records that a re-run of `run_id`'s failed jobs was offered on `epoch`; the first record stands.
+    pub(crate) fn record_lane_rerun_at(
+        path: &Path,
+        repo: &Repo,
+        issue: u64,
+        epoch: &str,
+        run_id: &str,
+    ) -> Result<(), Failure> {
+        let store = Store::open(path)?;
+        store
+            .connection
+            .execute(
+                "INSERT INTO store_meta (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO NOTHING",
+                rusqlite::params![lane_rerun_key(repo, issue, epoch), run_id],
+            )
+            .map(|_| ())
+            .map_err(unreadable("record a lane re-run"))
     }
 
     fn read_only_store(path: &Path, repo: &Repo, issue: u64) -> Result<Store, Failure> {

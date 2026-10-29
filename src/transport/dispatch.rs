@@ -303,6 +303,7 @@ struct ReviewStart<'a> {
     issue: u64,
     run_id: &'a str,
     expect_state: &'a str,
+    worktree: Option<&'a Path>,
     now: &'a str,
 }
 
@@ -352,6 +353,39 @@ fn launch_each(
     Ok(())
 }
 
+fn checks_clear(
+    context: &Context,
+    start: &ReviewStart<'_>,
+    base: &str,
+) -> Option<(&'static str, serde_json::Value)> {
+    let tree = start.worktree.unwrap_or(&context.repo_dir);
+    match super::generated::checks::declared_at(tree, base) {
+        Ok(declared) if declared.is_empty() => return None,
+        Ok(_) => {}
+        Err(failure) => return Some(("checks-unavailable", failure.envelope())),
+    }
+    let request = super::claim::RunChecks {
+        issue: start.issue,
+        run_id: start.run_id,
+        base: Some(base),
+        worktree: start.worktree,
+        wait_seconds: 0,
+        now: start.now,
+    };
+    checks_hold(super::claim::run_checks(context, &request))
+}
+
+fn checks_hold(
+    answer: Result<serde_json::Value, Failure>,
+) -> Option<(&'static str, serde_json::Value)> {
+    match answer {
+        Err(failure) => Some(("checks-unavailable", failure.envelope())),
+        Ok(answer) if answer["state"] == "running" => Some(("checks-running", answer)),
+        Ok(answer) if answer["declared"] == false || answer["passed"] == true => None,
+        Ok(answer) => Some(("checks-failed", answer)),
+    }
+}
+
 fn with_review_start(
     context: &Context,
     start: &ReviewStart<'_>,
@@ -398,19 +432,29 @@ fn with_review_start(
             ),
             Ok(lane) if lane["state"] == "red" => skip(&mut report, "publication-lane-red", lane),
             Ok(_) => {
-                let mut launched = Vec::new();
-                let outcome = launch_each(
-                    context,
-                    (start.issue, start.run_id),
-                    &names,
-                    true,
-                    start.now,
-                    &mut launched,
-                );
-                report["launched"] = serde_json::Value::Array(launched);
-                if let Err((name, failure)) = outcome {
-                    report["launch_failure"] =
-                        serde_json::json!({ "name": name, "failure": failure.envelope() });
+                match (!names.is_empty())
+                    .then(|| {
+                        checks_clear(context, start, answer["base"].as_str().unwrap_or_default())
+                    })
+                    .flatten()
+                {
+                    Some((cause, detail)) => skip(&mut report, cause, detail),
+                    None => {
+                        let mut launched = Vec::new();
+                        let outcome = launch_each(
+                            context,
+                            (start.issue, start.run_id),
+                            &names,
+                            true,
+                            start.now,
+                            &mut launched,
+                        );
+                        report["launched"] = serde_json::Value::Array(launched);
+                        if let Err((name, failure)) = outcome {
+                            report["launch_failure"] =
+                                serde_json::json!({ "name": name, "failure": failure.envelope() });
+                        }
+                    }
                 }
             }
         }
@@ -1345,6 +1389,7 @@ fn run_operation(
                 issue,
                 run_id: run_id()?,
                 expect_state: f.get("expect-state").unwrap_or("in-progress"),
+                worktree: f.path("worktree"),
                 now,
             };
             let answer = super::claim::publish_review(
@@ -1407,6 +1452,7 @@ fn run_operation(
                 issue,
                 run_id: run_id()?,
                 expect_state: f.get("expect-state").unwrap_or("in-progress"),
+                worktree: f.path("worktree"),
                 now,
             };
             let answer = super::claim::republish_review(

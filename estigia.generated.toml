@@ -1,0 +1,11 @@
+[[check]]
+name = "fmt"
+command = ["cargo", "fmt", "--check"]
+
+[[check]]
+name = "clippy"
+command = ["cargo", "clippy", "--all-targets", "--", "-D", "warnings"]
+
+[[check]]
+name = "tests"
+command = ["sh", "scripts/test.sh"]

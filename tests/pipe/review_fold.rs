@@ -467,3 +467,115 @@ fn an_unreadable_lane_launches_nothing_and_the_answer_says_why() {
     );
     assert!(start.get("launched").is_none(), "{published}");
 }
+
+fn declare_check(rig: &TrackerRig, script: &str) {
+    let repo = rig.repo.path();
+    std::fs::write(
+        repo.join("estigia.generated.toml"),
+        format!("[[check]]\nname = \"gate\"\ncommand = [\"sh\", \"-c\", \"{script}\"]\n"),
+    )
+    .expect("the declaration");
+    checked_git(repo, &["add", "--", "estigia.generated.toml"]);
+    checked_git(
+        repo,
+        &[
+            "-c",
+            "user.email=nobody@example.invalid",
+            "-c",
+            "user.name=nobody",
+            "commit",
+            "--quiet",
+            "-m",
+            "declare",
+        ],
+    );
+}
+
+fn settled_checks(rig: &TrackerRig, world: &World) -> serde_json::Value {
+    let mut last = serde_json::Value::Null;
+    for _ in 0..40 {
+        last = answer(&ask(
+            rig,
+            world,
+            "run_checks",
+            serde_json::json!({"issue": 12, "run_id": RUN_ID, "wait_seconds": 5}),
+        ));
+        if last["state"] != "running" {
+            break;
+        }
+    }
+    assert_ne!(
+        last["state"], "running",
+        "the declared checks never settled"
+    );
+    last
+}
+
+#[test]
+fn declared_checks_that_fail_hold_every_lens_back_and_the_status_names_the_failure() {
+    let rig = tracker_rig();
+    let reviewer = tempfile::tempdir().expect("a reviewer directory");
+    declare_check(&rig, "exit 1");
+    let lane = serde_json::json!({"total_count": 1, "check_runs": [{
+        "name": "ci", "status": "completed", "conclusion": "success",
+    }]});
+    let world = published_world(&rig, "src/auth.rs", lane, &gated_reviewer(reviewer.path()));
+    let published = answer(&ask(
+        &rig,
+        &world,
+        "publish_review",
+        publish_arguments(&rig, &world),
+    ));
+    let start = &published["review_start"];
+    assert_eq!(start["transitioned"], true, "{published}");
+    assert!(
+        ["checks-running", "checks-failed"].contains(
+            &start["launch_skipped"]["cause"]
+                .as_str()
+                .unwrap_or_default()
+        ),
+        "{published}"
+    );
+    assert!(start.get("launched").is_none(), "{published}");
+
+    let settled = settled_checks(&rig, &world);
+    assert_eq!(settled["passed"], false, "{settled}");
+    let status = answer(&ask(
+        &rig,
+        &world,
+        "review_status",
+        serde_json::json!({"issue": 12}),
+    ));
+    assert_eq!(status["next"]["reason_code"], "checks-failed", "{status}");
+    std::fs::write(reviewer.path().join("release"), "").expect("the reviewer is released");
+}
+
+#[test]
+fn declared_checks_that_pass_leave_the_lenses_offered() {
+    let rig = tracker_rig();
+    let reviewer = tempfile::tempdir().expect("a reviewer directory");
+    declare_check(&rig, "exit 0");
+    let lane = serde_json::json!({"total_count": 1, "check_runs": [{
+        "name": "ci", "status": "completed", "conclusion": "success",
+    }]});
+    let world = published_world(&rig, "src/auth.rs", lane, &gated_reviewer(reviewer.path()));
+    let published = answer(&ask(
+        &rig,
+        &world,
+        "publish_review",
+        publish_arguments(&rig, &world),
+    ));
+    assert!(
+        published["review_start"].get("launched").is_none()
+            || published["review_start"]["launched"]
+                .as_array()
+                .map(Vec::len)
+                == Some(4),
+        "{published}"
+    );
+
+    let settled = settled_checks(&rig, &world);
+    assert_eq!(settled["passed"], true, "{settled}");
+    assert_eq!(offered(&rig, &world).len(), 4);
+    std::fs::write(reviewer.path().join("release"), "").expect("the reviewer is released");
+}

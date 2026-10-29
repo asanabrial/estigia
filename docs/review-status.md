@@ -2,7 +2,7 @@
 
 gentle-ai v4 answers STATUS with exactly one next transition and the agent runs it
 without deciding; without one the orchestrator chooses the review route, which is what v4 removed.
-`review_status` (MCP) / `review-status --issue <n>` (transport) is that answer. It is read-only, needs
+`review_status` (MCP) / `review-status --issue <n>` (transport) is that answer. It writes one thing, the re-run offer of a red lane below, needs
 no claim, and decides nothing the tools do not already decide: each state below is read from the same
 functions the tools judge with ([`claim.rs`](../src/transport/claim.rs),
 [`claim/status.rs`](../src/transport/claim/status.rs)). `publish_review` and `republish_review` take
@@ -92,7 +92,10 @@ Anywhere `deliver` would hand back before releasing CI, the rows name what the t
 | Approved, CI released, base advanced past the reviewed base, and GitHub still computing the mergeability | `stop` | `mergeability-unknown` | ask again once GitHub has answered; `UNKNOWN` (in `mergeable` or `mergeStateStatus`) is never read as clean |
 | Merged | `stop` | `delivered` | the run holding the receipt completes the delivery with `closing::FOLLOW_UP`: `transition --to done`, then `release`, which is last and not optional |
 | Pull request head or base is not the receipt's (a base that advanced cleanly over an approved, ready receipt is the two rows above, not this one) | `stop` | `pull-request-moved` | `publish_review` deliberately — a genuinely unjudged receipt and an approval already answered by a finding fall through to it — except a lineage whose corrections are all spent (`escalate_review`) or a fresh approval with no cause after its verdict (`record_review_finding`, then publish) |
+| A lens has not reported and the base's declared checks are running | `collect` | `checks-running` | no input; `ask_after` is a Unix second to ask again at |
+| A lens has not reported and the declared checks failed for this digest | `stop` | `checks-failed` | correct what they name and `republish_review` |
 | Computable approval over a lane that is red, never ran or is unfinished | `stop` | the lane's own `publication-lane-*` code | the lane's own action |
+| Computable approval over a red lane, first time on the epoch, the failing log not naming a path in the diff | `stop` | `publication-lane-red` | adds `rerun` (`run_id`, `command`: `gh run rerun <run-id> --failed`); the offer is recorded in the store against the epoch; later answers on the epoch say the head needs a correction |
 
 A recovered escalation is answered `recovered` before the pull request's head or base is compared,
 so a recovered escalation over a moved pull request names its successor publication rather than
