@@ -94,8 +94,8 @@ and are not calls, states or agents:
 3. **Execute.** Bounded changes, Conventional Commits, test-first wherever a deterministic test
    applies — the default, not a flag.
 4. **Verify.** Deterministic evidence, then the review that *Renew before publishing*, in the
-   numbered list below, acquires. When the repository declares checks, call `run_checks` after
-   publishing and collect it before recording the verdict.
+   numbered list below, acquires. When the repository declares checks, they run before the first
+   lens: `start_review` calls `run_checks` and launches no lens while the receipt is red or running.
 5. **Deliver.** That list's delivery and close. A body or commit says `Refs #<n>`, never a closing keyword; the merge
    is the bare `gh pr merge <pr> --merge --match-head-commit <head-sha>`, alone on its line, from
    the primary checkout.

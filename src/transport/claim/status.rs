@@ -398,6 +398,12 @@ fn unjudged(
             .missing_roles
             .iter()
             .any(|role| role != VALIDATOR_ROLE);
+        if lens
+            && let Some(held) =
+                super::checks::holding(context, comments, issue_of(&bound), receipt)?
+        {
+            return Ok(held);
+        }
         let inputs = annotated(
             context,
             issue_of(&bound),
@@ -448,6 +454,9 @@ fn unjudged(
             {
                 let reason = refusal["reason"].as_str().unwrap_or_default().to_owned();
                 let action = refusal["action"].as_str().unwrap_or_default().to_owned();
+                if reason == "publication-lane-red" {
+                    return red_lane(context, issue_of(&bound), receipt, &refusal, &action);
+                }
                 return Ok(halt(&reason, &action));
             }
             Err(other) => return Err(other),
@@ -458,6 +467,43 @@ fn unjudged(
         "verdict-computable",
         bound,
     ))
+}
+
+const RERUN_SPENT: &str = "a re-run of the failed jobs was already offered for this epoch and \
+    the lane is red again, so the head needs a correction: fix it and `republish_review`, which \
+    starts a new epoch and a new lane";
+
+fn red_lane(
+    context: &Context,
+    issue: u64,
+    receipt: &ReviewTransaction,
+    refusal: &Value,
+    action: &str,
+) -> Result<Value, Failure> {
+    let reason = "publication-lane-red";
+    let path = store_path()?;
+    let repo = repo_of(context)?;
+    if Ledger::lane_rerun_at(&path, &repo, issue, &receipt.epoch)?.is_some() {
+        return Ok(halt(reason, &format!("{RERUN_SPENT}. {action}")));
+    }
+    let caused = refusal["outside_diff"] == json!(false);
+    let Some(run_id) = refusal["run_id"].as_str().filter(|_| !caused) else {
+        return Ok(halt(reason, action));
+    };
+    Ledger::record_lane_rerun_at(&path, &repo, issue, &receipt.epoch, run_id)?;
+    let command = format!("gh run rerun {run_id} --failed");
+    let mut next = halt(
+        reason,
+        &format!(
+            "the lane is red on run {run_id}. When the failure does not reproduce locally and the \
+             failing test is outside this change's paths, re-run the failed jobs on this same \
+             head, which keeps the receipt if they go green: `{command}`, then ask \
+             `review_status` again. This is offered once per epoch; when either condition does not \
+             hold, or the re-run is red too, the head needs a correction. {action}"
+        ),
+    );
+    next["rerun"] = json!({"run_id": run_id, "command": command});
+    Ok(next)
 }
 
 fn issue_of(bound: &Value) -> u64 {

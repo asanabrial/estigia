@@ -4238,3 +4238,22 @@ the count cannot show:
 - **The 111 s is the longest MCP call this host was seen to hold, not its limit.** No other host was
   run, so raising `deliver`'s ceiling to 900 s leaves the shorter-host case unmeasured
   ([*What `deliver` does not see*](#what-deliver-does-not-see)).
+
+## Re-running a red lane
+
+`review_status` offers, once per epoch, `gh run rerun <run-id> --failed` for a red lane
+([`review-status.md`](review-status.md)). What the offer cannot prove:
+
+- **The offer is recorded, not the re-run.** The store row (`store_meta`, keyed by repository, issue and
+  epoch) is written when the offer is made, because Estigia does not see the agent run `gh`. An agent that
+  asks twice before re-running is told the head needs a correction, and a re-run that was never started
+  reads the same as one that came back red.
+- **"Does not reproduce locally" is the agent's word.** Nothing runs the suite on the failing job's
+  platform. A failure that exists only on a platform the agent cannot run (Windows, say) can pass
+  the condition and still be a defect in the bytes.
+- **"Outside the change's paths" is read from the failed log.** The offer is withheld when the log names a
+  path in the diff. A log that names no source path, or a path the change does not touch while a changed
+  file caused it, is offered a re-run. A green re-run after a failure in a test the change touched is not
+  proof the change is sound.
+- **One re-run per epoch, whatever the cause.** A second flake on the same epoch is a correction and a new
+  epoch, paid again.

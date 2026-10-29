@@ -1405,3 +1405,19 @@ fn a_claim_naming_half_a_checkout_is_refused_before_anything_is_read() {
         );
     }
 }
+
+#[test]
+fn a_declared_check_holds_the_lenses_back_unless_it_passed() {
+    use super::checks_hold;
+    use serde_json::json;
+    assert!(checks_hold(Ok(json!({"ok": true, "declared": false}))).is_none());
+    assert!(checks_hold(Ok(json!({"ok": true, "declared": true, "passed": true}))).is_none());
+    let running = checks_hold(Ok(json!({"state": "running", "ask_after": 30}))).expect("held");
+    assert_eq!(running.0, "checks-running");
+    let failed = checks_hold(Ok(json!({"declared": true, "passed": false}))).expect("held");
+    assert_eq!(failed.0, "checks-failed");
+    let timed_out = checks_hold(Ok(json!({"state": "timed-out", "passed": false}))).expect("held");
+    assert_eq!(timed_out.0, "checks-failed");
+    let unread = checks_hold(Err(crate::transport::Failure::Read("no".to_owned()))).expect("held");
+    assert_eq!(unread.0, "checks-unavailable");
+}

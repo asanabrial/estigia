@@ -16312,6 +16312,67 @@ fn an_approved_computed_verdict_records_its_receipt_locally_and_posts_no_comment
     );
 }
 
+#[test]
+fn a_green_rerun_over_an_older_red_run_of_the_same_name_keeps_the_receipt_approved() {
+    let (_root, context, receipt) = low_change();
+    let comments = vec![live_claim("claude-a"), published(&receipt)];
+    let directory = tempfile::tempdir().expect("a directory for the log");
+    let path = directory.path().join("state.db");
+    let log = directory.path().join("calls.log");
+    let bin = crate::test_env::scripted_gh();
+    let mut answers = lane_read_answers();
+    answers.insert(
+        0,
+        crate::test_env::issue_view_answer(42, stdout_with(&comments)),
+    );
+    answers.insert(
+        1,
+        serde_json::json!({
+            "matches": "filter=all",
+            "stdout": check_runs(&[
+                check_run("ci", "completed", Some("failure")),
+                check_run("ci", "completed", Some("success")),
+            ])
+            .to_string(),
+            "status": 0,
+        }),
+    );
+    answers[3] = serde_json::json!({
+        "matches": "check-runs",
+        "stdout": check_runs(&[check_run("ci", "completed", Some("success"))]).to_string(),
+        "status": 0,
+    });
+    answers.push(serde_json::json!({"matches": "issue comment 42", "stdout": "", "status": 0}));
+    let script = crate::test_env::answers(&answers);
+    let operation_id = op(9);
+    let request = computed_request(&operation_id, &receipt);
+
+    let (answer, timeline) = crate::transport::store::with_store_at(&path, || {
+        crate::test_env::with_scripted_gh(bin.path(), &script, || {
+            Ledger::open(&context, 42, RECLAIM_NOW).expect("the first touch imports the issue");
+        });
+        crate::test_env::with_logging_gh(bin.path(), &script, &log, || {
+            let answer = record_computed_verdict(&context, &request).expect("the approval records");
+            let timeline = Ledger::open(&context, 42, request.now)
+                .expect("the ledger opens")
+                .timeline()
+                .expect("the timeline reads");
+            (answer, timeline)
+        })
+    });
+
+    assert_eq!(answer["outcome"], "approved", "{answer}");
+    assert!(
+        timeline
+            .iter()
+            .any(|comment| carries_receipt(comment, &receipt, "approved")),
+        "{timeline:?}"
+    );
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(calls.contains("check-runs?per_page=100"), "{calls}");
+    assert!(!calls.contains("filter"), "{calls}");
+}
+
 /// The receipt an approval recorded before its local write failed is written by
 /// replaying the verdict, and a replay posts nothing: the receipt comes out of
 /// the store. An `escalated` receipt already standing does not stop it.

@@ -294,6 +294,53 @@ fn a_red_lane_over_a_computable_approval_is_a_coded_stop() {
     assert_eq!(answer["forecast"]["horizon"], "terminal");
 }
 
+fn red_lane_answers() -> Vec<Value> {
+    let mut answers = vec![open(&low_change().2)];
+    answers.extend(lane_green());
+    answers[2] = json!({
+        "matches": "check-runs",
+        "stdout": check_runs(&[check_run("ci", "completed", Some("failure"))]).to_string(),
+        "status": 0,
+    });
+    answers
+}
+
+fn status_again(context: &Context, answers: &[Value]) -> Value {
+    let bin = crate::test_env::scripted_gh();
+    crate::test_env::with_scripted_gh(bin.path(), &crate::test_env::answers(answers), || {
+        review_status(&named(context), 42)
+    })
+    .unwrap_or_else(|failure| panic!("status refused: {}", failure.envelope()))["next"]
+        .clone()
+}
+
+#[test]
+fn a_red_lane_offers_one_rerun_of_the_failed_jobs_then_asks_for_a_correction() {
+    let (_root, context, receipt) = low_change();
+    let comments = [live_claim("claude-a"), published(&receipt)];
+    let mut answers = vec![open(&receipt)];
+    answers.extend(red_lane_answers().into_iter().skip(1));
+
+    let (first, _) = next_of(&context, &comments, &answers);
+
+    assert_eq!(first["reason_code"], "publication-lane-red");
+    assert_eq!(first["rerun"]["run_id"], "31865504912");
+    assert_eq!(
+        first["rerun"]["command"],
+        "gh run rerun 31865504912 --failed"
+    );
+    let second = status_again(&context, &answers);
+    assert_eq!(second["reason_code"], "publication-lane-red");
+    assert!(second.get("rerun").is_none(), "{second}");
+    assert!(
+        second["continuation"]
+            .as_str()
+            .unwrap()
+            .contains("needs a correction"),
+        "{second}"
+    );
+}
+
 #[test]
 fn an_approved_receipt_is_released_to_ci_with_the_receipt() {
     let (_root, context, receipt) = low_change();

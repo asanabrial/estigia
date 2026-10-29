@@ -1045,6 +1045,7 @@ fn red_refusal(head: &str, red: &RedCheckRun, location: Option<&LaneFailureLocat
         "lane": red.name,
         "conclusion": red.conclusion,
         "run_url": red.run_url,
+        "run_id": watched,
         "action": format!(
             "the publication lane for these exact bytes is red, so a verdict recorded against \
              them would be discarded the moment CI answers \u{2014} {read_it}, fix it, then \
