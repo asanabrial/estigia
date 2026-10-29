@@ -105,6 +105,8 @@ fn advance_base(world: &World, file: &str, text: &str) {
 
 struct Fake {
     repo: PathBuf,
+    outliving: PathBuf,
+    removed_by_release: Option<PathBuf>,
     scratch: tempfile::TempDir,
     receipt: Option<ReviewTransaction>,
     scripts: RefCell<HashMap<String, Vec<Result<Value, Value>>>>,
@@ -188,6 +190,8 @@ fn fake(world: &World) -> Fake {
     );
     Fake {
         repo: world.work.path().to_path_buf(),
+        outliving: world.work.path().to_path_buf(),
+        removed_by_release: None,
         scratch: tempfile::tempdir().expect("a scratch"),
         receipt: Some(receipt),
         scripts: RefCell::new(scripts),
@@ -217,6 +221,9 @@ impl Hands for Fake {
                 .expect("an evidence file");
             *self.evidence.borrow_mut() =
                 std::fs::read_to_string(file).expect("evidence is written");
+            if let Some(checkout) = &self.removed_by_release {
+                std::fs::remove_dir_all(checkout).expect("the checkout is put down");
+            }
         }
         let mut scripts = self.scripts.borrow_mut();
         let script = scripts
@@ -230,7 +237,7 @@ impl Hands for Fake {
     }
 
     fn exec(&self, args: &[&str], how: How) -> Result<Output, Failure> {
-        transport::run(args, Some(&self.repo), how)
+        transport::run(args, Some(exec_directory(&self.repo, &self.outliving)), how)
     }
 
     fn merge_decision(&self, _pr: u64) -> Result<(), Value> {
@@ -444,6 +451,55 @@ fn a_clean_review_runs_to_done_and_reads_the_merge_back() {
             "{needed} missing from:\n{evidence}"
         );
     }
+}
+
+#[test]
+fn a_delivery_run_from_the_checkout_its_release_removes_still_reads_the_close() {
+    let world = world("b.txt", "two\n");
+    let root = tempfile::tempdir().expect("a worktree root");
+    let checkout = root.path().join("checkout");
+    git(
+        world.work.path(),
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            &checkout.display().to_string(),
+        ],
+    );
+    let mut fake = fake(&world);
+    fake.repo = checkout.clone();
+    fake.removed_by_release = Some(checkout.clone());
+    let ran = drive(&fake, &green_script(&world), &request());
+
+    assert!(
+        !checkout.exists(),
+        "the release did not remove the checkout"
+    );
+    assert_eq!(ran.answer["delivered"], true, "{}", ran.answer);
+    assert_eq!(ran.answer["github_issue"]["state"], "CLOSED");
+    assert!(
+        ran.answer.get("delivery_incomplete").is_none(),
+        "{}",
+        ran.answer
+    );
+}
+
+#[test]
+fn a_close_that_cannot_be_read_still_fails_closed() {
+    let world = world("b.txt", "two\n");
+    let mut script = green_script(&world);
+    script.truncate(script.len() - issue_views().len());
+    let fake = fake(&world);
+    let ran = drive(&fake, &script, &request());
+
+    assert_eq!(ran.answer["delivered"], false, "{}", ran.answer);
+    assert_eq!(
+        ran.answer["delivery_incomplete"]["step"], "issue-close",
+        "{}",
+        ran.answer
+    );
 }
 
 #[test]
@@ -892,15 +948,7 @@ fn the_live_merge_decision_is_the_gate_s_own_and_never_allows_a_run_that_holds_n
         repository_host: crate::config::RepositoryHost::Github { repo: None },
         boundaries: Vec::new(),
     };
-    let live = Live {
-        context: &context,
-        run_id: "claude-abcd1234",
-        transport: transport::Context::live(
-            context.skill_root.clone(),
-            context.repo_dir.clone(),
-            None,
-        ),
-    };
+    let live = Live::new(&context, "claude-abcd1234", None);
     let action = Action::Boundary {
         command: "gh pr merge".to_owned(),
         pr: Some(7),
@@ -1134,15 +1182,7 @@ fn an_unreadable_appendix_file_is_handed_back_before_anything_runs() {
 }
 
 fn live_for<'a>(context: &'a GateContext, run_id: &'a str) -> Live<'a> {
-    Live {
-        context,
-        run_id,
-        transport: transport::Context::live(
-            context.skill_root.clone(),
-            context.repo_dir.clone(),
-            None,
-        ),
-    }
+    Live::new(context, run_id, None)
 }
 
 fn shared_checkout_context(root: &Path, repo: &Path) -> GateContext {
@@ -1431,4 +1471,37 @@ fn a_two_minute_wait_reads_thirty_times_not_sixty_one_because_the_sleep_follows_
          and the last at the 120 s deadline; sleeping 2 s throughout would read 61 times"
     );
     assert_eq!(fake.slept.get(), Duration::from_secs(120));
+}
+
+#[test]
+fn a_live_read_after_its_checkout_is_removed_runs_in_the_main_working_tree() {
+    let world = world("b.txt", "two\n");
+    let root = tempfile::tempdir().expect("a root");
+    let checkout = root.path().join("checkout");
+    git(
+        world.work.path(),
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            &checkout.display().to_string(),
+        ],
+    );
+    let context = shared_checkout_context(root.path(), &checkout);
+    let live = live_for(&context, "claude-abcd1234");
+    git(
+        world.work.path(),
+        &[
+            "worktree",
+            "remove",
+            "--force",
+            &checkout.display().to_string(),
+        ],
+    );
+
+    let read = live
+        .exec(&["git", "rev-parse", "HEAD"], How::read())
+        .expect("the read runs somewhere that still exists");
+    assert_eq!(read.stdout.trim(), world.head);
 }
