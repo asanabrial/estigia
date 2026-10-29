@@ -826,7 +826,8 @@ fn task_records_the_checklist_under_the_claim_and_tasks_reads_it_back() {
             call("T2", Some("second"), Some("delegated"), None, None).expect("T2 records");
             let last =
                 call("T1", None, None, Some("done"), Some("abcdef0")).expect("T1 is revised");
-            let read = super::tasks(&context, 5).expect("the checklist reads");
+            let read =
+                super::tasks(&context, 5, super::TasksView::Full).expect("the checklist reads");
             (refusals, last, read)
         })
     });
@@ -910,7 +911,8 @@ fn a_done_task_may_record_evidence_instead_of_a_commit() {
                 Some("recorded in the issue close evidence; no change was required"),
             )
             .expect("a task done by evidence alone");
-            let read = super::tasks(&context, 5).expect("the checklist reads");
+            let read =
+                super::tasks(&context, 5, super::TasksView::Full).expect("the checklist reads");
             (done, read)
         })
     });
@@ -1019,7 +1021,7 @@ fn task_is_refused_for_a_run_that_does_not_hold_the_issue() {
             );
             (
                 refused,
-                super::tasks(&context, 5).expect("the checklist reads"),
+                super::tasks(&context, 5, super::TasksView::Full).expect("the checklist reads"),
             )
         })
     });
@@ -1076,7 +1078,8 @@ fn the_legacy_task_acknowledgment_repeats_the_whole_checklist() {
                 copies += 1 + rows(&answer["tasks"]);
                 last = Some(answer);
             }
-            let read = super::tasks(&context, 5).expect("the checklist reads");
+            let read =
+                super::tasks(&context, 5, super::TasksView::Full).expect("the checklist reads");
             (copies, last.expect("twenty answers"), read)
         })
     });
@@ -1158,7 +1161,8 @@ fn the_compact_task_acknowledgment_carries_only_the_changed_row() {
                 copies += 1 + answer["tasks"].as_array().map_or(0, Vec::len);
                 last = Some(answer);
             }
-            let read = super::tasks(&context, 5).expect("the checklist reads");
+            let read =
+                super::tasks(&context, 5, super::TasksView::Full).expect("the checklist reads");
             (copies, last.expect("twenty answers"), read)
         })
     });
@@ -1262,7 +1266,8 @@ fn a_compact_revision_answers_the_revised_row_and_leaves_the_checklist_alone() {
                 true,
             );
             let legacy = record(&context, "T1", None, None, None, None, false);
-            let read = super::tasks(&context, 5).expect("the checklist reads");
+            let read =
+                super::tasks(&context, 5, super::TasksView::Full).expect("the checklist reads");
             (revised, legacy, read)
         })
     });
@@ -1459,8 +1464,10 @@ fn tasks_for_a_number_held_only_in_another_repository_reads_that_repositorys_che
     let mut context = local_context(root.path());
     context.repo = Some("o/a".to_owned());
 
-    let read = crate::transport::store::with_store_at(&store_path, || super::tasks(&context, 77))
-        .expect("the checklist reads");
+    let read = crate::transport::store::with_store_at(&store_path, || {
+        super::tasks(&context, 77, super::TasksView::Full)
+    })
+    .expect("the checklist reads");
 
     assert_eq!(read["count"], 1, "{read}");
     assert_eq!(read["repo"], "o/b", "{read}");
@@ -1475,8 +1482,10 @@ fn tasks_for_a_number_held_in_two_other_repositories_is_refused_with_both() {
     let mut context = local_context(root.path());
     context.repo = Some("o/a".to_owned());
 
-    let refused = crate::transport::store::with_store_at(&store_path, || super::tasks(&context, 5))
-        .expect_err("two candidates");
+    let refused = crate::transport::store::with_store_at(&store_path, || {
+        super::tasks(&context, 5, super::TasksView::Full)
+    })
+    .expect_err("two candidates");
 
     let envelope = refused.envelope();
     assert_eq!(envelope["reason"], "ambiguous-issue", "{envelope}");
@@ -1491,12 +1500,63 @@ fn tasks_from_a_repository_the_store_never_saw_is_unavailable_and_not_an_empty_l
     let mut context = local_context(root.path());
     context.repo = Some("never/seen".to_owned());
 
-    let read = crate::transport::store::with_store_at(&store_path, || super::tasks(&context, 123))
-        .expect("the read answers");
+    let read = crate::transport::store::with_store_at(&store_path, || {
+        super::tasks(&context, 123, super::TasksView::Full)
+    })
+    .expect("the read answers");
 
     assert!(read["unavailable"].is_string(), "{read}");
     assert!(
         read.get("count").is_none(),
         "an unknown repository counted tasks: {read}"
     );
+}
+
+#[test]
+fn tasks_answer_a_bounded_title_unless_the_full_text_or_one_id_is_asked() {
+    let root = tempfile::tempdir().expect("a directory");
+    let store_path = root.path().join("state.db");
+    two_repository_store(&store_path);
+    let long = format!(
+        "first line of a long task\n{}",
+        "acceptance detail ".repeat(80)
+    );
+    rusqlite::Connection::open(&store_path)
+        .expect("the store opens")
+        .execute(
+            "INSERT INTO tasks (repo_id, issue, id, text, route, done, evidence, at)
+             VALUES (2, 77, 'T2', ?1, 'delegated', 1, ?2, '2026-01-01T00:01Z')",
+            rusqlite::params![long, "e".repeat(2000)],
+        )
+        .expect("the long task seeds");
+    let mut context = local_context(root.path());
+    context.repo = Some("o/b".to_owned());
+    let read = |view: super::TasksView<'_>| {
+        crate::transport::store::with_store_at(&store_path, || super::tasks(&context, 77, view))
+            .expect("the checklist reads")
+    };
+
+    let summary = read(super::TasksView::Summary);
+    assert_eq!(summary["count"], 2, "{summary}");
+    let row = &summary["tasks"][1];
+    assert_eq!(row["id"], "T2", "{summary}");
+    assert_eq!(row["title"], "first line of a long task", "{summary}");
+    assert_eq!(row["done"], true, "{summary}");
+    assert!(
+        row.get("text").is_none() && row.get("evidence").is_none(),
+        "the summary still carries the full text: {summary}"
+    );
+    assert!(
+        summary.to_string().len() < 1000,
+        "a two-row summary is {} bytes",
+        summary.to_string().len()
+    );
+
+    let full = read(super::TasksView::Full);
+    assert_eq!(full["tasks"][1]["text"], long, "{full}");
+
+    let one = read(super::TasksView::One("T2"));
+    assert_eq!(one["count"], 1, "{one}");
+    assert_eq!(one["tasks"][0]["text"], long, "{one}");
+    assert_eq!(one["tasks"][0]["evidence"], "e".repeat(2000), "{one}");
 }

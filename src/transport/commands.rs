@@ -1128,6 +1128,37 @@ fn task_json(row: &super::store::TaskRow) -> serde_json::Value {
     })
 }
 
+const TASK_TITLE_CHARS: usize = 120;
+
+fn task_summary_json(row: &super::store::TaskRow) -> serde_json::Value {
+    let first = row
+        .text
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or_default();
+    let mut title: String = first.trim().chars().take(TASK_TITLE_CHARS).collect();
+    if first.trim().chars().count() > TASK_TITLE_CHARS {
+        title.push('…');
+    }
+    serde_json::json!({
+        "id": row.id,
+        "title": title,
+        "route": row.route,
+        "done": row.done,
+    })
+}
+
+/// Which rows of a checklist `tasks` answers, and how much of each.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TasksView<'a> {
+    /// Every row as id, a bounded first-line title, route and done.
+    Summary,
+    /// Every row with its whole text, commit and evidence.
+    Full,
+    /// The one row with this id, whole.
+    One(&'a str),
+}
+
 /// `task` — record or update one row of the claimed issue's task checklist.
 ///
 /// The checklist lives in the local store, never on the tracker: a write is
@@ -1215,7 +1246,7 @@ pub fn task(context: &Context, call: &TaskCall<'_>) -> Result<serde_json::Value,
     let tasks: Vec<_> = store
         .tasks(&repo, call.issue)?
         .iter()
-        .map(task_json)
+        .map(task_summary_json)
         .collect();
     Ok(serde_json::json!({
         "ok": true,
@@ -1234,7 +1265,11 @@ pub fn task(context: &Context, call: &TaskCall<'_>) -> Result<serde_json::Value,
 /// checklist; several candidates are refused `ambiguous-issue`. A store that does
 /// not exist, or does not hold the repository, answers `unavailable` and no count:
 /// an empty checklist is a read, and nothing was read.
-pub fn tasks(context: &Context, issue: u64) -> Result<serde_json::Value, Failure> {
+pub fn tasks(
+    context: &Context,
+    issue: u64,
+    view: TasksView<'_>,
+) -> Result<serde_json::Value, Failure> {
     let path = super::store::store_path()?;
     let runs = path.with_file_name("runs");
     let scope = super::scope::resolve(
@@ -1254,7 +1289,15 @@ pub fn tasks(context: &Context, issue: u64) -> Result<serde_json::Value, Failure
     };
     Ok(match held {
         Ok(rows) => {
-            let tasks: Vec<_> = rows.iter().map(task_json).collect();
+            let tasks: Vec<_> = match view {
+                TasksView::Summary => rows.iter().map(task_summary_json).collect(),
+                TasksView::Full => rows.iter().map(task_json).collect(),
+                TasksView::One(id) => rows
+                    .iter()
+                    .filter(|row| row.id == id)
+                    .map(task_json)
+                    .collect(),
+            };
             serde_json::json!({
                 "ok": true,
                 "issue": issue,
