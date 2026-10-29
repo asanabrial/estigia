@@ -155,7 +155,8 @@ base — that base is a proper ancestor of this publication's, direction include
 merely differs earns nothing — where the head carries the advanced base by the
 `publication-base-not-ancestor` check above, and the integration may be a merge that keeps the parent
 head or a rebase that rewrites it. A base that did not move forward is the author's republish
-whatever the push shape, so an amend cannot pose as an integration. Nothing has been pushed and no
+whatever the push shape, so an amend cannot pose as an integration.
+A publication whose head integrates a base advance the platform does not require — `required_status_checks.strict` reads `false` (or the branch is unprotected, read through `gh api repos/<owner>/<repo>/branches/<base>/protection`), `git merge-tree` of the parent head against the base reports no conflict and the paths the base touched are disjoint from the delivery's — is refused `base-integration-not-required` before anything is pushed, unless `--integrate-reason` / `integrate_reason` is given; the reason is recorded on the `published` marker. A read that fails is never a refusal and is reported as `integration_unread` in the answer. Nothing has been pushed and no
 pull request was opened. An unmerged base advance never reaches this check at all:
 `publication-base-not-ancestor` refuses it earlier, before the payload is built. When the base has
 moved past what the parent publication's own history contained by being merged or rebased forward

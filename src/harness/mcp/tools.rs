@@ -226,6 +226,12 @@ const TOPOLOGY_REASON: Argument = Argument::optional(
     "string",
     "Why this topology was declared. Recorded beside `topology`; refused alone.",
 );
+const INTEGRATE_REASON: Argument = Argument::optional(
+    "integrate_reason",
+    "string",
+    "Why a base advance the platform does not require is integrated; recorded. Without it that \
+     publication is refused `base-integration-not-required`.",
+);
 const FOCUS: Argument = Argument::optional(
     "focus",
     "string",
@@ -1343,6 +1349,7 @@ pub const TOOLS: &[Tool] = &[
             INLINE_PAYLOAD,
             TOPOLOGY,
             TOPOLOGY_REASON,
+            INTEGRATE_REASON,
             FOCUS,
             FOCUS_REASON,
             RAISE,
@@ -1383,6 +1390,7 @@ pub const TOOLS: &[Tool] = &[
             INLINE_PAYLOAD,
             TOPOLOGY,
             TOPOLOGY_REASON,
+            INTEGRATE_REASON,
             FOCUS,
             FOCUS_REASON,
             RAISE,
