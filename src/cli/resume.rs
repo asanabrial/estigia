@@ -54,6 +54,13 @@ pub(crate) struct Report {
     pub(crate) worktree: Option<WorktreeState>,
     pub(crate) window_closed: bool,
     pub(crate) liveness: Liveness,
+    pub(crate) held_issue: Option<String>,
+}
+
+#[derive(Debug)]
+pub(crate) struct Alternative {
+    pub(crate) action: &'static str,
+    pub(crate) command: Option<String>,
 }
 
 const ALTERNATIVES: &str = "alternatives, none of them done for you: keep the row as it is; \
@@ -317,12 +324,17 @@ pub(crate) fn report(
             session_file: row.session_file.as_deref(),
         },
     )?;
+    let claims = claims_of(root, &row.run_id, now)?;
+    let held_issue = claims
+        .first()
+        .map(|held| held.issue.to_string())
+        .or_else(|| row.issue.as_ref().map(ToString::to_string));
     let worktree = row.worktree.as_deref().map(PathBuf::from);
     let cwd = worktree
         .clone()
         .or_else(|| row.repo_dir.as_deref().map(PathBuf::from));
     Ok(Report {
-        claims: claims_of(root, &row.run_id, now)?,
+        claims,
         worktree: worktree.as_deref().map(worktree_state),
         run_id: row.run_id.clone(),
         runtime: row.runtime.clone(),
@@ -332,6 +344,7 @@ pub(crate) fn report(
         cwd,
         window_closed,
         liveness: liveness::of(row.host_pid, row.host_name.as_deref()),
+        held_issue,
     })
 }
 
@@ -372,6 +385,47 @@ pub(crate) fn execute(
 }
 
 impl Report {
+    pub(crate) fn alternatives(&self) -> Vec<Alternative> {
+        let mut listed = vec![
+            Alternative {
+                action: "keep",
+                command: None,
+            },
+            Alternative {
+                action: "release",
+                command: Some(format!("estigia release --run-id {}", self.run_id)),
+            },
+        ];
+        if let Some(issue) = &self.held_issue {
+            listed.push(Alternative {
+                action: "handoff",
+                command: Some(format!("estigia handoff {issue} --to <runtime>")),
+            });
+        }
+        listed
+    }
+
+    fn alternatives_text(&self) -> String {
+        let lapsed = self.claims.iter().any(|held| held.status == "lapsed");
+        let release = if lapsed {
+            "; the claim is lapsed, and release is still how the issue is put down"
+        } else {
+            ""
+        };
+        let handoff = match &self.held_issue {
+            Some(issue) => format!(
+                "; then `estigia handoff {issue} --to <runtime>`, only after the release, because \
+                 handoff refuses an issue that is still held"
+            ),
+            None => "; no issue is held, so there is nothing to hand over".to_owned(),
+        };
+        format!(
+            "alternatives, none of them done for you, in this order: keep the row as it is; \
+             `estigia release --run-id {}` to put its issue down{release}{handoff}",
+            self.run_id
+        )
+    }
+
     pub(crate) fn text(&self) -> String {
         let mut lines = vec![format!(
             "{} ({}) is {}{}",
@@ -429,7 +483,7 @@ impl Report {
                     .to_owned(),
             );
         }
-        lines.push(alternatives(&self.run_id));
+        lines.push(self.alternatives_text());
         lines.join("\n")
     }
 
@@ -457,6 +511,9 @@ impl Report {
             },
             "after_resume": "the resumed session must call `claim` to get its claim back",
             "window_closed": self.window_closed,
+            "alternatives": self.alternatives().iter().map(|alternative| json!({
+                "action": alternative.action, "command": alternative.command,
+            })).collect::<Vec<_>>(),
         })
     }
 }
@@ -992,5 +1049,76 @@ mod tests {
 
         assert_eq!(refusal.code, "resume-launch-failed");
         assert!(refusal.message.contains("no such file"));
+    }
+
+    fn alternative_actions(report: &Report) -> Vec<&str> {
+        report.alternatives().iter().map(|a| a.action).collect()
+    }
+
+    #[test]
+    fn alternatives_name_the_held_issue_and_hand_it_over_only_after_the_release() {
+        let (_directory, root, mut store) = rig();
+        let run_id = register(&store, "opencode", OPENCODE, now() - 100);
+        store
+            .import(
+                &repo(),
+                7,
+                &claim("IC_1", &run_id, "2020-01-02T00:00Z"),
+                "2026-01-01T00:00Z",
+            )
+            .expect("a lapsed claim imports");
+
+        let answer = report(&root, &run_id, now(), false).expect("a report");
+
+        assert_eq!(alternative_actions(&answer), ["keep", "release", "handoff"]);
+        let alternatives = answer.json()["alternatives"].clone();
+        assert_eq!(
+            alternatives[1]["command"],
+            format!("estigia release --run-id {run_id}")
+        );
+        assert_eq!(
+            alternatives[2]["command"],
+            "estigia handoff 7 --to <runtime>"
+        );
+        assert!(alternatives[0]["command"].is_null());
+        let text = answer.text();
+        assert!(text.find("release --run-id").unwrap() < text.find("handoff 7").unwrap());
+        assert!(text.contains("after the release"));
+        assert!(text.contains("lapsed"));
+    }
+
+    #[test]
+    fn with_no_issue_held_handoff_is_not_offered_and_the_text_says_so() {
+        let (_directory, root, store) = rig();
+        let run_id = register(&store, "opencode", OPENCODE, now() - 100);
+
+        let answer = report(&root, &run_id, now(), false).expect("a report");
+
+        assert_eq!(alternative_actions(&answer), ["keep", "release"]);
+        assert_eq!(
+            answer.json()["alternatives"].as_array().map(Vec::len),
+            Some(2)
+        );
+        assert!(
+            answer
+                .text()
+                .contains("no issue is held, so there is nothing to hand over")
+        );
+    }
+
+    #[test]
+    fn the_pointer_names_the_issue_when_no_claim_marker_does() {
+        let (_directory, root, store) = rig();
+        let run_id = register(&store, "opencode", OPENCODE, now() - 100);
+        let mut pointer = session::load(&root, &run_id);
+        pointer.issue = Some(crate::identity::Identity::Number(9));
+        session::store(&root, &pointer).expect("the pointer is stored");
+
+        let answer = report(&root, &run_id, now(), false).expect("a report");
+
+        assert_eq!(
+            answer.json()["alternatives"][2]["command"],
+            "estigia handoff 9 --to <runtime>"
+        );
     }
 }
