@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 
 use super::{NamedRun, ToolFailure, address};
 use crate::cli::sessions::Listed;
-use crate::harness::{GateContext, mailbox, session};
+use crate::harness::{GateContext, inbox, mailbox, session};
 use crate::identity::Identity;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use crate::transport::store;
@@ -322,6 +322,25 @@ pub(super) fn send_message(
             ));
         }
     };
+    let kind = match arguments.get("type") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(kind)) => Some(kind.as_str()),
+        Some(_) => return Err(malformed("`type` is a string".to_owned())),
+    };
+    let count = |name: &str| match arguments.get(name) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => value
+            .as_i64()
+            .filter(|number| *number >= 1)
+            .map(Some)
+            .ok_or_else(|| malformed(format!("`{name}` is a whole number from 1"))),
+    };
+    let mut shape = mailbox::Shape {
+        kind,
+        thread: count("thread")?,
+        in_reply_to: None,
+        expires_in: count("expires_in")?.and_then(|seconds| u64::try_from(seconds).ok()),
+    };
     let recipient = match (arguments.get("reply_to"), arguments.get("to")) {
         (Some(reply), None) => {
             if repo_dir.is_some() {
@@ -334,6 +353,7 @@ pub(super) fn send_message(
             let id = reply.as_i64().ok_or_else(|| {
                 malformed("`reply_to` is the number of the message being answered".to_owned())
             })?;
+            shape.in_reply_to = Some(id);
             reply_recipient(context, id).map_err(refused)?
         }
         (None, Some(to)) => {
@@ -357,7 +377,7 @@ pub(super) fn send_message(
             ));
         }
     };
-    mailbox::admissible(&context.state_root, &recipient.run_id, text).map_err(refused)?;
+    mailbox::admissible(&context.state_root, &recipient.run_id, text, &shape).map_err(refused)?;
     if let Some(conflict) = flow_conflict(&recipient, text) {
         return Err(refused(conflict));
     }
@@ -386,11 +406,19 @@ pub(super) fn send_message(
         }
     }
 
-    let receipt = mailbox::send(&context.state_root, Some(sender), &recipient.run_id, text)
-        .map_err(refused)?;
+    let receipt = mailbox::send_shaped(
+        &context.state_root,
+        Some(sender),
+        &recipient.run_id,
+        text,
+        &shape,
+    )
+    .map_err(refused)?;
     Ok(text_result(
         json!({
             "message": receipt.id,
+            "thread": receipt.thread,
+            "type": kind.unwrap_or("note"),
             "to": row_json(&recipient),
             "delivery": "queued for the recipient's next hook point",
             "wake": wake_word(recipient.wake.as_deref()),
@@ -398,6 +426,44 @@ pub(super) fn send_message(
         })
         .to_string(),
     ))
+}
+
+pub(super) fn inbox(
+    arguments: &Value,
+    context: &GateContext,
+    named: Option<&NamedRun<'_>>,
+) -> Result<Value, ToolFailure> {
+    let run =
+        named.ok_or_else(|| malformed("`run_id` is this run's id; inbox needs it".to_owned()))?;
+    let text = |name: &str| match arguments.get(name) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) => Ok(Some(value.as_str())),
+        Some(_) => Err(malformed(format!("`{name}` is a string"))),
+    };
+    let number = |name: &str| match arguments.get(name) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => value
+            .as_i64()
+            .filter(|number| *number >= 1)
+            .map(Some)
+            .ok_or_else(|| malformed(format!("`{name}` is a whole number from 1"))),
+    };
+    let request = inbox::Request {
+        sent: arguments
+            .get("sent")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        kind: text("type")?,
+        thread: number("thread")?,
+        from: text("from")?,
+        state: text("state")?,
+        limit: number("limit")?.and_then(|limit| u64::try_from(limit).ok()),
+        read: number("read")?.into_iter().collect(),
+        ack: number("ack")?.into_iter().collect(),
+    };
+    inbox::run(&context.state_root, run.id, &request)
+        .map(|answer| text_result(answer.to_string()))
+        .map_err(refused)
 }
 
 pub(super) fn list_sessions(

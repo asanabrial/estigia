@@ -499,6 +499,45 @@ pub const TOOLS: &[Tool] = &[
             )
             .counting_from(1),
             Argument::required("text", "string", "The message."),
+            Argument::optional("type", "string", "Defaults to `note`.")
+                .of(crate::harness::inbox::KINDS),
+            Argument::optional(
+                "thread",
+                "integer",
+                "A message id in the mailbox whose thread this joins; a reply joins its own.",
+            )
+            .counting_from(1),
+            Argument::optional(
+                "expires_in",
+                "integer",
+                "Seconds after which the message is stale. Shown, never enforced.",
+            )
+            .counting_from(1),
+        ],
+        effect: PointerEffect::None,
+        writes: true,
+    },
+    Tool {
+        name: "inbox",
+        contract_name: "inbox",
+        description: "List this run's mail, or what it sent, without consuming it; `read` and \
+                      `ack` mark one received message and are its own acts. Delivery stays at \
+                      hook points. Mail decides no permission or gate.",
+        operation: "inbox",
+        arguments: &[
+            RUN_ID,
+            Argument::optional("sent", "boolean", "List what this run sent, with each state."),
+            Argument::optional("type", "string", "Only this type.").of(crate::harness::inbox::KINDS),
+            Argument::optional("thread", "integer", "Only this thread.").counting_from(1),
+            Argument::optional("from", "string", "Only this sender's run id."),
+            Argument::optional("state", "string", "Only this state.")
+                .of(crate::harness::inbox::STATES),
+            Argument::optional("limit", "integer", "Newest first, at most 200; default 50.")
+                .counting_from(1),
+            Argument::optional("read", "integer", "Mark this received message read.")
+                .counting_from(1),
+            Argument::optional("ack", "integer", "Acknowledge this received message.")
+                .counting_from(1),
         ],
         effect: PointerEffect::None,
         writes: true,
@@ -1902,6 +1941,7 @@ pub const ASSISTED_ONLY: &[&str] = &[
 /// their exemption. `deliver` is the composite: it calls other tools and the gate.
 pub const LOCAL_STORE_TOOLS: &[&str] = &[
     "send_message",
+    "inbox",
     "list_sessions",
     "feed",
     "where",

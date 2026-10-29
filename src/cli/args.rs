@@ -216,6 +216,56 @@ pub enum Command {
         action: Option<SessionsAction>,
     },
 
+    /// List this run's mail, or with `--sent` what it sent, without consuming
+    /// anything. `--read` and `--ack` are the recipient's own acts on one
+    /// message each; delivery stays at the hook points. Mail decides no
+    /// permission or gate.
+    Inbox {
+        /// List what this run sent, with the state of each, instead of what it received.
+        #[arg(long)]
+        sent: bool,
+
+        /// Only messages of this type.
+        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(crate::harness::inbox::KINDS))]
+        kind: Option<String>,
+
+        /// Only messages in this thread.
+        #[arg(long, value_name = "ID", value_parser = clap::value_parser!(i64).range(1..))]
+        thread: Option<i64>,
+
+        /// Only messages from this sender's run id.
+        #[arg(long, value_name = "RUN-ID")]
+        from: Option<String>,
+
+        /// Only messages in this state.
+        #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(crate::harness::inbox::STATES))]
+        state: Option<String>,
+
+        /// At most this many, newest kept; 50 by default, 200 at most.
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u64).range(1..))]
+        limit: Option<u64>,
+
+        /// Mark this received message read.
+        #[arg(long, value_name = "ID", value_parser = clap::value_parser!(i64).range(1..))]
+        read: Vec<i64>,
+
+        /// Acknowledge this received message.
+        #[arg(long, value_name = "ID", value_parser = clap::value_parser!(i64).range(1..))]
+        ack: Vec<i64>,
+
+        /// This run's id; the ambient `ESTIGIA_RUN_ID` when omitted.
+        #[arg(long, value_parser = present)]
+        run_id: Option<String>,
+
+        /// This session's id, from which its run id is derived.
+        #[arg(long, value_parser = session)]
+        session_id: Option<String>,
+
+        /// The runtime whose run ids `--session-id` derives.
+        #[arg(long, value_parser = runtime)]
+        runtime: Option<String>,
+    },
+
     /// List what the local store recorded across sessions, oldest first.
     ///
     /// Read-only. Transitions, claim and review markers, and messages from this
@@ -752,6 +802,22 @@ pub enum SessionsAction {
         /// Read the message from this file instead.
         #[arg(long)]
         file: Option<std::path::PathBuf>,
+
+        /// The message type; a note when omitted.
+        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(crate::harness::inbox::KINDS))]
+        kind: Option<String>,
+
+        /// Join the thread of this message id.
+        #[arg(long, value_name = "ID", value_parser = clap::value_parser!(i64).range(1..))]
+        thread: Option<i64>,
+
+        /// The message this answers; it joins that message's thread.
+        #[arg(long, value_name = "ID", value_parser = clap::value_parser!(i64).range(1..))]
+        in_reply_to: Option<i64>,
+
+        /// Seconds after which the message is stale; shown, never enforced.
+        #[arg(long, value_name = "SECONDS", value_parser = clap::value_parser!(u64).range(1..))]
+        expires_in: Option<u64>,
 
         /// The sending run's id; the ambient `ESTIGIA_RUN_ID` when omitted.
         #[arg(long, value_parser = present)]

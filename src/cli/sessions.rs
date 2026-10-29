@@ -963,6 +963,7 @@ pub(super) fn send(
     text: Option<&str>,
     file: Option<&Path>,
     sender: Option<&str>,
+    shape: &mailbox::Shape<'_>,
     json: bool,
 ) -> Result<(), Refusal> {
     let body = match (text, file) {
@@ -979,10 +980,11 @@ pub(super) fn send(
     if let Some(conflict) = crate::harness::mcp::messaging::flow_conflict(&row, body) {
         return Err(conflict);
     }
-    let receipt = mailbox::send(&root, sender, &row.run_id, body)?;
+    let receipt = mailbox::send_shaped(&root, sender, &row.run_id, body, shape)?;
     if json {
         super::print_json(&serde_json::json!({
             "message": receipt.id,
+            "thread": receipt.thread,
             "recipient": row.run_id,
             "name": row.spoken(),
             "runtime": row.runtime,
@@ -1005,6 +1007,32 @@ pub(super) fn send(
         );
     }
     Ok(())
+}
+
+pub(super) fn print_inbox(answer: &serde_json::Value) {
+    let messages = answer["messages"].as_array().map_or(&[][..], Vec::as_slice);
+    if messages.is_empty() {
+        say!(
+            "no messages in the {} box",
+            answer["box"].as_str().unwrap_or("received")
+        );
+    }
+    for message in messages {
+        let party = if answer["box"] == "sent" {
+            "to"
+        } else {
+            "from"
+        };
+        say!(
+            "{} {} [{}] thread {} {party} {}: {}",
+            message["id"],
+            message["type"].as_str().unwrap_or_default(),
+            message["state"].as_str().unwrap_or_default(),
+            message["thread"],
+            message[party].as_str().unwrap_or("a person"),
+            message["body"].as_str().unwrap_or_default()
+        );
+    }
 }
 
 pub(super) fn deliver(

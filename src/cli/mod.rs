@@ -353,6 +353,43 @@ fn dispatch(cli: &Cli) -> Result<(), Refusal> {
             cli.json,
         ),
 
+        Command::Inbox {
+            sent,
+            kind,
+            thread,
+            from,
+            state,
+            limit,
+            read,
+            ack,
+            run_id,
+            session_id,
+            runtime,
+        } => {
+            let ambient = std::env::var("ESTIGIA_RUN_ID").ok();
+            let identity = gate_identity(
+                "estigia inbox",
+                run_id.as_deref(),
+                session_id.as_deref(),
+                runtime.as_deref(),
+                ambient.as_deref(),
+            )?;
+            inbox_command(
+                &harness::inbox::Request {
+                    sent: *sent,
+                    kind: kind.as_deref(),
+                    thread: *thread,
+                    from: from.as_deref(),
+                    state: state.as_deref(),
+                    limit: *limit,
+                    read: read.clone(),
+                    ack: ack.clone(),
+                },
+                identity.as_deref(),
+                cli.json,
+            )
+        }
+
         Command::Sessions {
             action,
             all,
@@ -6272,6 +6309,10 @@ fn sessions_command(
             session,
             text,
             file,
+            kind,
+            thread,
+            in_reply_to,
+            expires_in,
             run_id,
             session_id,
             runtime,
@@ -6301,10 +6342,33 @@ fn sessions_command(
                 text.as_deref(),
                 file.as_deref(),
                 sender.as_deref(),
+                &harness::mailbox::Shape {
+                    kind: kind.as_deref(),
+                    thread: *thread,
+                    in_reply_to: *in_reply_to,
+                    expires_in: *expires_in,
+                },
                 json,
             )
         }
     }
+}
+
+/// `estigia inbox`: this run's mail, listed without consuming it, and the acts only its recipient may do.
+fn inbox_command(
+    request: &harness::inbox::Request<'_>,
+    identity: Option<&str>,
+    json: bool,
+) -> Result<(), Refusal> {
+    let run = identity.ok_or_else(harness::inbox::needs_a_run)?;
+    let root = harness::session::state_root(None)?;
+    let answer = harness::inbox::run(&root, run, request)?;
+    if json {
+        print_json(&answer);
+        return Ok(());
+    }
+    sessions::print_inbox(&answer);
+    Ok(())
 }
 
 /// `estigia session`: the context a host's session starts with, and the end of it.
