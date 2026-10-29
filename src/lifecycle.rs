@@ -9,14 +9,12 @@
 use std::cmp::Ordering;
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
 
 const SCHEMA: u8 = 3;
-static STAGE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// The machine-wide lifecycle paths.
 #[derive(Debug, Clone)]
@@ -599,27 +597,8 @@ where
 }
 
 fn create_unique_stage(path: &Path) -> Result<(PathBuf, std::fs::File), StateError> {
-    let parent = path.parent().ok_or_else(|| {
-        StateError::Write(
-            path.into(),
-            std::io::Error::new(std::io::ErrorKind::InvalidInput, "record has no parent"),
-        )
-    })?;
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| {
-            StateError::Write(
-                path.into(),
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "record has no UTF-8 filename",
-                ),
-            )
-        })?;
     for _ in 0..64 {
-        let sequence = STAGE_COUNTER.fetch_add(1, AtomicOrdering::Relaxed);
-        let staged = parent.join(format!(".{name}.{}.{}.stage", std::process::id(), sequence));
+        let staged = crate::paths::staged_path(path, "-stage");
         match std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)

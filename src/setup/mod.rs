@@ -5048,11 +5048,7 @@ fn note_global_install_root(options: &SetupOptions) -> Result<()> {
     if let Some(directory) = entry.parent() {
         fs::create_dir_all(directory)?;
     }
-    let staged = entry.with_extension(format!(
-        "{}.{:?}.new",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+    let staged = crate::paths::staged_path(&entry, "");
     fs::write(&staged, body)?;
     fs::rename(&staged, &entry).inspect_err(|_| {
         let _ = fs::remove_file(&staged);

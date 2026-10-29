@@ -395,6 +395,13 @@ mod tests {
             .copied()
     }
 
+    fn registered_waiter(state_root: &Path, run_id: &str) -> Option<String> {
+        store::open_for_read(&store::beside(state_root))
+            .ok()
+            .flatten()
+            .and_then(|reader| reader.meta(&waiter_key(run_id)).ok().flatten())
+    }
+
     #[test]
     fn mail_already_waiting_is_taken_at_once_and_stamped_delivered() {
         let (_directory, state_root) = rig();
@@ -493,7 +500,14 @@ mod tests {
             })
         };
         let older = start(state_root.clone());
-        std::thread::sleep(Duration::from_millis(200));
+        let give_up = Instant::now() + Duration::from_secs(10);
+        while registered_waiter(&state_root, "claude-aaaa").is_none() {
+            assert!(
+                Instant::now() < give_up,
+                "the older waiter never registered"
+            );
+            std::thread::sleep(TICK);
+        }
         let newer = start(state_root.clone());
         let retired = Instant::now();
         assert_eq!(older.join().expect("the older waiter finishes"), None);

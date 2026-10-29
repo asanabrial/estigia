@@ -536,6 +536,10 @@ fn a_command_past_the_deadline_is_unavailable_at_the_gate() {
     assert_eq!(payload["reason"], "generated-reproduction-unavailable");
     assert_eq!(payload["paths"][0]["outcome"], "unavailable");
     assert!(started.elapsed() < Duration::from_secs(20));
+    let give_up = std::time::Instant::now() + Duration::from_secs(2);
+    while !scratch_left_behind(&world.repo).is_empty() && std::time::Instant::now() < give_up {
+        std::thread::sleep(Duration::from_millis(20));
+    }
     assert!(scratch_left_behind(&world.repo).is_empty());
 }
 

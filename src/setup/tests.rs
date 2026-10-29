@@ -34,7 +34,8 @@ fn setup_fleet(options: &SetupOptions, config: &Config) {
     fleet_each(options, config, true);
 }
 
-/// Take every adapter back out of one home, same grouping as [`setup_fleet`].
+/// Take every adapter back out of one home, one group after another: an
+/// uninstall probes files a sibling group is removing at that moment.
 fn uninstall_fleet(options: &SetupOptions) {
     fleet_each(options, &Config::default(), false);
 }
@@ -55,19 +56,21 @@ fn fleet_groups() -> Vec<Vec<&'static AgentAdapter>> {
 }
 
 fn fleet_each(options: &SetupOptions, config: &Config, install: bool) {
-    std::thread::scope(|scope| {
-        for group in fleet_groups() {
-            scope.spawn(move || {
-                for adapter in group {
-                    if install {
+    if install {
+        std::thread::scope(|scope| {
+            for group in fleet_groups() {
+                scope.spawn(move || {
+                    for adapter in group {
                         setup(adapter, config, options).expect("setup runs");
-                    } else {
-                        uninstall(adapter, options).expect("uninstall runs");
                     }
-                }
-            });
+                });
+            }
+        });
+    } else {
+        for adapter in fleet_groups().into_iter().flatten() {
+            uninstall(adapter, options).expect("uninstall runs");
         }
-    });
+    }
 }
 
 /// A root and path with no ownership record at all, for a `reviewer_is_ours`
