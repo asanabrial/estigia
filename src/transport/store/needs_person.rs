@@ -42,6 +42,43 @@ impl Store {
             .map_err(unreadable("record that a person is needed"))
     }
 
+    /// Takes one of the hour's `cap` notification slots for this record, the
+    /// count read from the store so that every process shares it.
+    pub(crate) fn delivery_claimed(
+        &self,
+        need: &Need<'_>,
+        since: u64,
+        cap: u32,
+    ) -> Result<bool, Failure> {
+        self.connection()
+            .execute(
+                "UPDATE needs_person SET delivery = ?3 WHERE repo = ?1 AND dedup_key = ?2
+                 AND (SELECT COUNT(*) FROM needs_person WHERE at >= ?4
+                      AND delivery IN (?3, ?5)) < ?6",
+                rusqlite::params![
+                    need.repo,
+                    need.dedup_key,
+                    crate::notify::HANDING,
+                    int(since),
+                    crate::notify::HANDED,
+                    cap
+                ],
+            )
+            .map(|changed| changed > 0)
+            .map_err(unreadable("take a notification slot"))
+    }
+
+    /// Records what became of the notification for this record.
+    pub(crate) fn delivery_set(&self, need: &Need<'_>, said: &str) -> Result<(), Failure> {
+        self.connection()
+            .execute(
+                "UPDATE needs_person SET delivery = ?3 WHERE repo = ?1 AND dedup_key = ?2",
+                rusqlite::params![need.repo, need.dedup_key, said],
+            )
+            .map(|_| ())
+            .map_err(unreadable("record what became of a notification"))
+    }
+
     /// The records, newest first, at most `limit` of them.
     pub(crate) fn needs_person(&self, limit: u64) -> Result<Vec<NeedRow>, Failure> {
         let mut statement = self

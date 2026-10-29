@@ -16,6 +16,7 @@ pub(crate) struct Ledger {
     repo: Repo,
     issue: u64,
     open: bool,
+    notifications: crate::config::Notifications,
 }
 
 /// What GitHub still answers for an issue: whether it is open, and whose it is.
@@ -25,6 +26,13 @@ pub(crate) struct Facts {
     pub open: bool,
     /// The repository the issue belongs to.
     pub repo: Repo,
+}
+
+fn notifications_of(context: &Context) -> crate::config::Notifications {
+    let written = context.get("notifications");
+    written
+        .and_then(crate::config::Notifications::parse)
+        .unwrap_or_default()
 }
 
 pub(crate) fn facts_of(data: &serde_json::Value, issue: u64) -> Result<Facts, Failure> {
@@ -269,6 +277,7 @@ impl Ledger {
             repo: facts.repo,
             issue,
             open: facts.open,
+            notifications: notifications_of(context),
         };
         ledger.sync(context)?;
         Ok(ledger)
@@ -309,6 +318,7 @@ impl Ledger {
             repo,
             issue,
             open: true,
+            notifications: notifications_of(context),
         })
     }
 
@@ -465,25 +475,30 @@ impl Ledger {
     }
 
     /// Records that a person is needed for this issue, once per `key`, and
-    /// answers whether this call wrote the record. Best effort: a record that
-    /// cannot be written is not a reason to fail the write it describes.
-    pub(crate) fn needs_person(&self, kind: &str, run_id: Option<&str>, key: &str) -> bool {
-        let Some(now) = crate::harness::session::now_seconds() else {
-            return false;
-        };
+    /// answers whether this call wrote the record. The write it describes never
+    /// fails on account of it, so a record that cannot be written is the error
+    /// the caller reports beside its own answer.
+    pub(crate) fn needs_person(
+        &self,
+        kind: &str,
+        run_id: Option<&str>,
+        key: &str,
+    ) -> Result<bool, Failure> {
+        let now = crate::harness::session::now_seconds()
+            .ok_or_else(|| Failure::Read("this machine could not say what time it is".into()))?;
         let repo = format!("{}/{}/{}", self.repo.host, self.repo.owner, self.repo.name);
-        self.store
-            .need_recorded(
-                &super::Need {
-                    kind,
-                    repo: &repo,
-                    issue: Some(self.issue),
-                    run_id,
-                    dedup_key: &format!("{kind}:{}:{key}", self.issue),
-                },
-                now,
-            )
-            .unwrap_or(false)
+        crate::notify::record(
+            &self.store,
+            &super::Need {
+                kind,
+                repo: &repo,
+                issue: Some(self.issue),
+                run_id,
+                dedup_key: &format!("{kind}:{}:{key}", self.issue),
+            },
+            &self.notifications,
+            now,
+        )
     }
 
     /// Whether this store handed the issue to `runtime` in `repo_dir`.
@@ -791,4 +806,15 @@ fn is_control_instruction(body: &str) -> bool {
             let kind = mark.get("kind").map(String::as_str).unwrap_or_default();
             ADMITTED_FROM_GITHUB.contains(&kind)
         })
+}
+
+/// Adds the failure of a need-for-a-person write to an answer, so a store that
+/// could not record one reads as that and not as there being none.
+pub(crate) fn report_unrecorded(answer: &mut serde_json::Value, recorded: Result<bool, Failure>) {
+    if let (Err(failure), Some(fields)) = (recorded, answer.as_object_mut()) {
+        fields.insert(
+            "needs_person_unrecorded".to_owned(),
+            serde_json::Value::String(failure.detail()),
+        );
+    }
 }

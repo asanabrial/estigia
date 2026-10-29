@@ -311,6 +311,7 @@ pub(super) const TUI_SETTINGS: &[Setting] = &[
     Setting::GoalLoopPlugin,
     Setting::Summary,
     Setting::Body,
+    Setting::Notifications,
 ];
 
 /// The per-agent rows `adapter` is offered: the rows that can act on it.

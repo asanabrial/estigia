@@ -550,23 +550,55 @@ pub(crate) fn note(
     }
 }
 
+/// The same ask for the same run is a new need once this many seconds have passed.
+const ASK_DEDUP_SECONDS: u64 = 1800;
+
+fn ask_key(run_id: &str, code: &str, now: u64) -> String {
+    format!("ask:{run_id}:{code}:{}", now / ASK_DEDUP_SECONDS)
+}
+
 fn record_ask(context: &GateContext, run_id: &str, code: &str) {
-    let (Some(now), Ok(store)) = (
-        session::now_seconds(),
-        crate::transport::store::Store::open(&crate::transport::store::beside(&context.state_root)),
-    ) else {
+    let Some(now) = session::now_seconds() else {
         return;
     };
-    let _ = store.need_recorded(
-        &crate::transport::store::Need {
-            kind: "ask",
-            repo: &context.repo_dir.display().to_string(),
-            issue: None,
-            run_id: Some(run_id),
-            dedup_key: &format!("ask:{run_id}:{code}"),
-        },
-        now,
-    );
+    let repo = context.repo_dir.display().to_string();
+    let recorded =
+        crate::transport::store::Store::open(&crate::transport::store::beside(&context.state_root))
+            .and_then(|store| {
+                let policy = crate::transport::Context::live(
+                    context.skill_root.clone(),
+                    context.repo_dir.clone(),
+                    None,
+                )
+                .get("notifications")
+                .and_then(crate::config::Notifications::parse)
+                .unwrap_or_default();
+                crate::notify::record(
+                    &store,
+                    &crate::transport::store::Need {
+                        kind: "ask",
+                        repo: &repo,
+                        issue: None,
+                        run_id: Some(run_id),
+                        dedup_key: &ask_key(run_id, code, now),
+                    },
+                    &policy,
+                    now,
+                )
+            });
+    if let Err(failure) = recorded {
+        session::record(
+            &context.state_root,
+            &json!({
+                "at": now,
+                "run_id": run_id,
+                "tool": "needs-person",
+                "verdict": "unrecorded",
+                "detail": failure.detail(),
+                "repo_dir": repo,
+            }),
+        );
+    }
 }
 
 /// How a run's workflow state is named in the sentence a session opens with.
@@ -1813,6 +1845,56 @@ mod tests {
         assert_eq!(recorded[0].kind, "ask");
         assert_eq!(recorded[0].run_id.as_deref(), Some("claude-abcd1234"));
         assert_eq!(recorded[0].issue, None);
+    }
+
+    #[test]
+    fn the_same_ask_is_a_new_need_once_the_dedup_window_has_passed() {
+        assert_eq!(ask_key("r", "c", 100), ask_key("r", "c", 101));
+        assert_ne!(
+            ask_key("r", "c", 100),
+            ask_key("r", "c", 100 + ASK_DEDUP_SECONDS)
+        );
+        assert_ne!(ask_key("r", "c", 100), ask_key("r", "d", 100));
+    }
+
+    #[test]
+    fn an_ask_whose_record_cannot_be_written_leaves_a_decision_that_says_so() {
+        let root = tempfile::tempdir().expect("a temporary root");
+        let context = GateContext {
+            integration: crate::config::Integration::Branch,
+            evidence: crate::config::Evidence::Reading,
+            flag: None,
+            stand_down: None,
+            skill_root: root.path().join("skill"),
+            repo_dir: root.path().join("repo"),
+            state_root: root.path().join("state"),
+            operation_window: Default::default(),
+            issue_requirement: crate::config::IssueRequirement::Off,
+            decision_mode: crate::config::DecisionMode::Ask,
+            workflow: Some(crate::config::Workflow::Autonomous),
+            window: super::super::RENEWAL_WINDOW,
+            tracker: crate::config::Tracker::Github { repo: None },
+            repository_host: crate::config::RepositoryHost::Github { repo: None },
+            boundaries: Vec::new(),
+        };
+        std::fs::create_dir_all(&context.state_root).expect("the state directory");
+        let path = crate::transport::store::beside(&context.state_root);
+        crate::transport::store::Store::open(&path).expect("the store opens");
+        rusqlite::Connection::open(&path)
+            .expect("a second handle")
+            .execute_batch("DROP TABLE needs_person")
+            .expect("drops");
+
+        record_ask(&context, "claude-abcd1234", "a-code");
+
+        let kept = crate::transport::store::Store::open(&path)
+            .expect("opens")
+            .records(crate::transport::store::Record::Decision)
+            .expect("reads");
+        assert!(
+            kept.iter().any(|entry| entry["verdict"] == "unrecorded"),
+            "{kept:?}"
+        );
     }
 
     #[test]
