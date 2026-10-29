@@ -1787,11 +1787,17 @@ pub(crate) fn transition_on(
         if let Some(delivery) = delivery {
             deferred["delivery"] = delivery;
         }
-        need_person_for_blocked(ledger, to, before.as_deref(), now);
+        super::store::report_unrecorded(
+            &mut deferred,
+            need_person_for_blocked(ledger, to, before.as_deref(), now),
+        );
         return Ok(deferred);
     }
     let mut result = project_state(context, ledger, issue, to, from, now)?;
-    need_person_for_blocked(ledger, to, before.as_deref(), now);
+    super::store::report_unrecorded(
+        &mut result,
+        need_person_for_blocked(ledger, to, before.as_deref(), now),
+    );
     if let Some(delivery) = delivery {
         result["delivery"] = delivery;
     }
@@ -1803,10 +1809,11 @@ fn need_person_for_blocked(
     to: &str,
     before: Option<&str>,
     now: &str,
-) {
+) -> Result<bool, super::Failure> {
     if to == "blocked" && before != Some("blocked") && !ledger.has_blocked_clause() {
-        ledger.needs_person("blocked", None, now);
+        return ledger.needs_person("blocked", None, now);
     }
+    Ok(false)
 }
 
 /// The projection half of [`transition`]: the board column, the `status:`

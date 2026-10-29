@@ -12,8 +12,8 @@ use crate::outcome::{NoCommandReason, Refusal, Resolution};
 
 use super::{
     Authority, Config, DEFAULT_ASK_TIMEOUT, DecisionMode, Evidence, GitOperationWindow,
-    IssueRequirement, Language, LoopPlugin, Profile, PublicationLane, RepoRef, RepositoryHost,
-    ReviewBudget, Tracker, Workflow, WorktreeRoot, delivery,
+    IssueRequirement, Language, LoopPlugin, Notifications, Profile, PublicationLane, RepoRef,
+    RepositoryHost, ReviewBudget, Tracker, Workflow, WorktreeRoot, delivery,
 };
 use crate::setup::AgentAdapter;
 
@@ -63,6 +63,8 @@ pub enum Setting {
     Summary,
     /// The language the rest of the issue body is written in.
     Body,
+    /// How this machine tells the person a run needs them.
+    Notifications,
     /// What a run holding no claim may write in a checkout whose tracker can name an issue.
     IssueRequirement,
     /// Who witnesses a claim in this repository: Estigia, or the team.
@@ -139,6 +141,7 @@ pub const SETTINGS: &[Setting] = &[
     // This machine.
     Setting::Summary,
     Setting::Body,
+    Setting::Notifications,
 ];
 
 /// The heading a setting sits under, so the screen, `config list` and the
@@ -332,9 +335,10 @@ pub const EVERYWHERE_SETTINGS: &[Setting] = &[
 
 /// The rows that belong to this machine, in table order.
 ///
-/// Two, and both are languages: what somebody writes in does not change
-/// because they opened a different checkout.
-pub const MACHINE_SETTINGS: &[Setting] = &[Setting::Summary, Setting::Body];
+/// Three: two languages, and how the person is told. What somebody writes in
+/// and whether their machine may interrupt them do not change because they
+/// opened a different checkout.
+pub const MACHINE_SETTINGS: &[Setting] = &[Setting::Summary, Setting::Body, Setting::Notifications];
 
 /// The rows only a repository's own file answers, in table order.
 pub const REPOSITORY_SETTINGS: &[Setting] = &[
@@ -380,6 +384,7 @@ pub const OPTIONS_SETTINGS: &[Setting] = &[
     Setting::CorrectionsPerLineage,
     Setting::Summary,
     Setting::Body,
+    Setting::Notifications,
 ];
 
 impl Setting {
@@ -466,7 +471,7 @@ impl Setting {
             | Self::Boundaries => Scope::Everywhere,
             // Written across every checkout somebody has, so they belong to
             // the person rather than to the repository.
-            Self::Summary | Self::Body => Scope::Machine,
+            Self::Summary | Self::Body | Self::Notifications => Scope::Machine,
             Self::IssueRequirement
             | Self::Workflow
             | Self::DeliveryPreset
@@ -511,7 +516,7 @@ impl Setting {
             | Self::ChangeSize
             | Self::CorrectionsPerLineage => Group::ReviewAndChange,
             Self::Models | Self::LoopPlugin | Self::GoalLoopPlugin => Group::AgentRuntime,
-            Self::Summary | Self::Body => Group::Language,
+            Self::Summary | Self::Body | Self::Notifications => Group::Language,
         }
     }
 
@@ -568,6 +573,7 @@ impl Setting {
             | Self::CorrectionsPerLineage
             | Self::Summary
             | Self::Body
+            | Self::Notifications
             | Self::LoopPlugin
             | Self::GoalLoopPlugin
             | Self::DeliveryPreset
@@ -655,6 +661,10 @@ impl Setting {
             Self::Boundaries => "the commands this repository treats as one-way doors",
             Self::Summary => "the language the summary sentence at the top of an issue is in",
             Self::Body => "the language the rest of an issue body is written in",
+            Self::Notifications => {
+                "how this machine tells you a run needs a person: `off`, or `os` with optional \
+                 quiet hours and an hourly cap. A notification is never an approval"
+            }
             Self::LoopPlugin => {
                 "whether this agent gets the loop that continues a session while the run still \
                  holds its issue or another is claimable"
@@ -728,6 +738,7 @@ impl Setting {
                 "npm publish",
             ]),
             Self::Summary | Self::Body => Answers::some(&["English", "Español"]),
+            Self::Notifications => Answers::some(&["off", "os"]),
             Self::LoopPlugin | Self::GoalLoopPlugin => Answers::all(&["on", "off"]),
         }
     }
@@ -754,6 +765,7 @@ impl Setting {
             Self::Boundaries => "Irreversible commands",
             Self::Summary => "Summary language",
             Self::Body => "Issue body language",
+            Self::Notifications => "Notifications",
             Self::IssueRequirement => "Unclaimed write policy",
             Self::Workflow => "Claim workflow",
             Self::DeliveryPreset => "Delivery preset",
@@ -992,6 +1004,10 @@ impl Setting {
             }
             (Self::GoalLoopPlugin, "off") => "no goal and loop plugin is written or read",
             (Self::Summary | Self::Body, _) => "the language that text is written in",
+            (Self::Notifications, "off") => "no OS notification; the need is still recorded",
+            (Self::Notifications, "os") => {
+                "the OS notifier is handed repo, issue, kind and run; never a body, never an approval"
+            }
             // A placeholder rather than a choice: the real answers to these are
             // typed, and there is nothing to explain about the word itself.
             (Self::Worktree | Self::Models, _) => return None,
@@ -1064,6 +1080,7 @@ impl Setting {
             Self::CorrectionsPerLineage => "a positive whole number, such as `3`",
             Self::Boundaries => "`none`, or commands separated by commas such as `npm publish`",
             Self::Summary | Self::Body => "a plain language name such as `English`",
+            Self::Notifications => "`off`, `os`, or `os quiet 22:00-07:00 cap 6`",
             Self::LoopPlugin | Self::GoalLoopPlugin => "`on`, or `off`",
         }
     }
@@ -1362,6 +1379,10 @@ impl Setting {
             }
             Self::Summary => config.summary_language = Language::parse(value)?,
             Self::Body => config.body_language = Language::parse(value)?,
+            Self::Notifications => {
+                config.notifications =
+                    Notifications::parse(value).ok_or_else(|| self.reject(value))?;
+            }
         }
         Ok(())
     }
@@ -1423,6 +1444,7 @@ impl Setting {
             }
             Self::Summary => config.summary_language.as_str().to_owned(),
             Self::Body => config.body_language.as_str().to_owned(),
+            Self::Notifications => config.notifications.as_value(),
             Self::LoopPlugin => config.loop_plugin.as_value().to_owned(),
             Self::GoalLoopPlugin => config.goal_loop_plugin.as_value().to_owned(),
         }
@@ -1624,6 +1646,7 @@ pub const READ_BY_THE_TRANSPORT: &[Setting] = &[
     Setting::GitOperationWindow,
     Setting::Tracker,
     Setting::Models,
+    Setting::Notifications,
 ];
 
 /// Whether a row a person typed is one the transport will match.

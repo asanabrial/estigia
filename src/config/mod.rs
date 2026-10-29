@@ -924,6 +924,90 @@ pub fn parse_civil_minutes(text: &str) -> Option<u16> {
     (hours < 24 && minutes < 60).then_some(hours * 60 + minutes)
 }
 
+/// The default number of OS notifications handed over in one hour.
+pub const DEFAULT_NOTIFICATION_CAP: u32 = 6;
+
+/// How this machine tells the person a run needs them.
+///
+/// `off` is the default: a notification is something a person turns on. `os`
+/// hands one to this machine's notifier, holds it back inside the `quiet`
+/// range and stops at `cap` per hour. The record of the need is written
+/// whichever channel is set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Notifications {
+    /// Whether the OS notifier is used at all.
+    pub os: bool,
+    /// The range in which the OS notification is held back.
+    pub quiet: GitOperationWindow,
+    /// The most notifications handed to the OS in any hour.
+    pub cap: u32,
+}
+
+impl Default for Notifications {
+    fn default() -> Self {
+        Self {
+            os: false,
+            quiet: GitOperationWindow::Disabled,
+            cap: DEFAULT_NOTIFICATION_CAP,
+        }
+    }
+}
+
+impl Notifications {
+    /// Reads one written value: `off`, or `os` with an optional
+    /// `quiet <range>` and an optional `cap <n>`, in that order.
+    pub fn parse(value: &str) -> Option<Self> {
+        let text = value.trim();
+        if text.eq_ignore_ascii_case("off") {
+            return Some(Self::default());
+        }
+        let rest = text.strip_prefix("os")?;
+        if !rest.is_empty() && !rest.starts_with(char::is_whitespace) {
+            return None;
+        }
+        let mut words = rest.split_whitespace().peekable();
+        let mut quiet = GitOperationWindow::Disabled;
+        let mut cap = DEFAULT_NOTIFICATION_CAP;
+        if words
+            .next_if(|word| word.eq_ignore_ascii_case("quiet"))
+            .is_some()
+        {
+            let mut range = Vec::new();
+            while let Some(word) = words.next_if(|word| !word.eq_ignore_ascii_case("cap")) {
+                range.push(word);
+            }
+            quiet = GitOperationWindow::parse(&format!("enabled {}", range.join(" ")))
+                .filter(|window| window.enabled())?;
+        }
+        if words
+            .next_if(|word| word.eq_ignore_ascii_case("cap"))
+            .is_some()
+        {
+            cap = words.next()?.parse().ok().filter(|cap| *cap > 0)?;
+        }
+        words.next().is_none().then_some(Self {
+            os: true,
+            quiet,
+            cap,
+        })
+    }
+
+    /// The value as it is written in the table.
+    pub fn as_value(self) -> String {
+        if !self.os {
+            return "off".to_owned();
+        }
+        let mut value = "os".to_owned();
+        if let Some(range) = self.quiet.as_value().strip_prefix("enabled ") {
+            value.push_str(&format!(" quiet {range}"));
+        }
+        if self.cap != DEFAULT_NOTIFICATION_CAP {
+            value.push_str(&format!(" cap {}", self.cap));
+        }
+        value
+    }
+}
+
 /// Everything `setup` resolves and every operation reads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
@@ -975,6 +1059,8 @@ pub struct Config {
     pub summary_language: Language,
     /// The language the rest of an issue body is written in.
     pub body_language: Language,
+    /// How this machine tells the person a run needs them.
+    pub notifications: Notifications,
     /// Who authorises delivery.
     pub delivery: Authority,
     /// Who authorises a workflow-state transition.
@@ -1084,6 +1170,7 @@ impl Default for Config {
             worktree: WorktreeRoot::Auto,
             summary_language: Language("English".to_owned()),
             body_language: Language("English".to_owned()),
+            notifications: Notifications::default(),
             // The balanced posture. An installation that carries
             // its own rows in the contract keeps them; one that is missing a
             // row takes the new value on the next `setup`.

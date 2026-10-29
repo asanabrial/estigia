@@ -7924,12 +7924,12 @@ pub fn escalate_review(
     // longer bounds the newest publication still governs its own transaction.
     if let Some(standing) = receipts_for(&comments, &transaction).into_iter().last() {
         if standing.terminal_state == "escalated" {
-            ledger.needs_person(
+            let recorded = ledger.needs_person(
                 "escalated",
                 Some(escalation.run_id),
                 &standing.transaction.epoch,
             );
-            return Ok(serde_json::json!({
+            let mut reused = serde_json::json!({
                 "ok": true,
                 "issue": escalation.issue,
                 "epoch": standing.transaction.epoch,
@@ -7938,7 +7938,9 @@ pub fn escalate_review(
                 "escalated_to": standing.escalated_to,
                 "reason_bytes": standing.reason.as_deref().map(str::len).unwrap_or(0),
                 "reused_existing_escalation": true,
-            }));
+            });
+            super::store::report_unrecorded(&mut reused, recorded);
+            return Ok(reused);
         }
         return Err(Failure::Stop(serde_json::json!({
             "ok": false,
@@ -7976,8 +7978,8 @@ pub fn escalate_review(
         escalation.reason,
         escalation.now,
     )?;
-    ledger.needs_person("escalated", Some(escalation.run_id), escalation.epoch);
-    Ok(serde_json::json!({
+    let recorded = ledger.needs_person("escalated", Some(escalation.run_id), escalation.epoch);
+    let mut answer = serde_json::json!({
         "ok": true,
         "issue": escalation.issue,
         "epoch": escalation.epoch,
@@ -7986,7 +7988,9 @@ pub fn escalate_review(
         "escalated_to": escalation.escalated_to,
         "reason_bytes": escalation.reason.len(),
         "reused_existing_escalation": false,
-    }))
+    });
+    super::store::report_unrecorded(&mut answer, recorded);
+    Ok(answer)
 }
 
 fn record_escalated_receipt(

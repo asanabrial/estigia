@@ -29,6 +29,7 @@ pub mod lifecycle;
 /// Extracts the inline-code corpus out of Markdown. See
 /// [`markdown::markdown_inline_code_spans`].
 pub mod markdown;
+pub mod notify;
 pub mod outcome;
 pub mod paths;
 pub mod reviewer;

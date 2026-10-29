@@ -110,6 +110,7 @@ fn every_variant() -> Vec<Setting> {
             | Setting::Boundaries
             | Setting::Summary
             | Setting::Body
+            | Setting::Notifications
             | Setting::IssueRequirement
             | Setting::Workflow
             | Setting::DeliveryPreset
@@ -186,6 +187,7 @@ fn every_setting_is_in_the_table() {
         Setting::Boundaries,
         Setting::Summary,
         Setting::Body,
+        Setting::Notifications,
         Setting::IssueRequirement,
         Setting::Workflow,
         Setting::DeliveryPreset,
@@ -367,6 +369,7 @@ fn a_closed_list_offers_every_value_its_type_can_hold() {
             | Setting::Boundaries
             | Setting::Summary
             | Setting::Body
+            | Setting::Notifications
             | Setting::DeliveryPreset
             | Setting::StateNames
             | Setting::ExternalReviewers => None,
@@ -668,6 +671,8 @@ fn a_rendered_table_reads_back_identically() {
         })),
         summary_language: Language::parse("Español").unwrap(),
         body_language: Language::parse("Deutsch").unwrap(),
+        notifications: crate::config::Notifications::parse("os quiet mon-fri 22:00-07:00 cap 3")
+            .expect("a notification policy"),
         delivery: Authority::Auto,
         transitions: Authority::Auto,
     };

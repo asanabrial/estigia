@@ -1,6 +1,6 @@
 # Configuration
 
-Thirty typed settings, read from one table. Reading it produces a valid configuration or a refusal
+Thirty-one typed settings, read from one table. Reading it produces a valid configuration or a refusal
 that names what may be written instead — there is no third outcome where a misspelled value is
 quietly ignored.
 
@@ -11,7 +11,7 @@ cannot check, and [`review-cost.md`](review-cost.md) measures the one row that o
 the code has, and every value the picker offers is a value named here. A setting that grew a value
 and did not grow a row fails the suite.
 
-Thirty settings, all typed. Reading the table produces a valid configuration or a refusal that
+Thirty-one settings, all typed. Reading the table produces a valid configuration or a refusal that
 names what may be written instead — never a value guessed at and discovered halfway through a
 checkout.
 
@@ -52,6 +52,7 @@ estigia config set "Integration mode" trunk
 | Goal loop plugin | `on` or `off`. Default `off`: `setup` writes `goal-loop.js` beside the gate plugin only when the row is `on`, and takes back one Estigia wrote when it is `off`. It offers the generic `/goal <condition>` and `/loop [interval] <prompt>` and is independent of `Loop plugin`: the file names no Estigia path and runs no Estigia command, and a `/goal` completes when a model judges the transcript, which is never Estigia evidence. Pi gets the same pair as one owned extension, `estigia-goal-loop.ts` (see [what it writes](what-it-writes.md#the-pi-goal-and-loop-extension)). Only OpenCode and Pi read a plugin or extension Estigia writes, so the row is offered for those two and no other agent | Agent runtime | agent |
 | Summary language | a plain language name | This machine | machine |
 | Issue body language | a plain language name | This machine | machine |
+| Notifications | `off`, `os`, or `os quiet <range> cap <n>`, the two parts optional and in that order. Default `off`: a notification is something a person turns on, and the record of the need (`estigia needs-person`) is written whichever it is. `os` hands this machine's notifier the repo, issue, kind and run and nothing else (macOS `osascript`, Linux `notify-send` when on `PATH`, a Windows PowerShell toast), with no action button. `quiet` takes the range grammar of `Git operation window` without the word `enabled` (`22:00-07:00`, `mon-fri 22:00-07:00`) and holds the OS notification back inside it; `cap` is the most handed to the OS in any hour (default `6`, a positive whole number), counted in the store and so shared by every process. What each outcome is called, and what none of them proves, is in [what it records](needs-person.md) and [`honesty.md`](honesty.md#the-needs-person-record) | This machine | machine |
 
 Every one of them is spelled the way `estigia config list` spells it. `Task body language` is a **legacy alias**, kept so an
 older contract still parses, for `Summary language`; it is not
@@ -255,7 +256,7 @@ rest of the crate asks, not another list:
   differently means one agent is being decided for by a file it does not read: `BROKEN`, and the
   resolution names `estigia config set "<row>" "<value>"` with no `--agent`, which writes it into
   every installed contract.
-- **Machine** — `Summary language` and `Issue body language`, facts about this machine, the same
+- **Machine** — `Summary language`, `Issue body language` and `Notifications`, facts about this machine, the same
   whichever repository is open. Also `BROKEN`, and the resolution names the same command as the row
   above: `estigia config set "<row>" "<value>"` with no `--agent` writes it into every installed
   contract. A person writes in one language across every checkout they have, so there is nothing for

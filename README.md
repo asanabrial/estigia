@@ -300,7 +300,7 @@ Arguments are in each tool's schema.
 
 ## Configuration
 
-Thirty typed settings, in [`docs/configuration.md`](docs/configuration.md), grouped by theme and shown
+Thirty-one typed settings, in [`docs/configuration.md`](docs/configuration.md), grouped by theme and shown
 in one order by `estigia config list`, the setup screen and the reference alike. Each row says whose
 answer it is: this agent's, this repository's, every checkout's or this machine's.
 
