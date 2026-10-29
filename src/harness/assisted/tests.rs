@@ -691,7 +691,12 @@ fn a_refused_write_tool_names_its_target_and_a_refused_shell_write_names_where_i
         panic!("a write into the base checkout was not refused");
     };
     assert!(
-        refusal.message.contains("/x is not inside"),
+        refusal
+            .message
+            .contains(&format!("{}x is not inside", std::path::MAIN_SEPARATOR))
+            && !refusal
+                .message
+                .contains(&elsewhere.path().display().to_string()),
         "{}",
         refusal.message
     );
