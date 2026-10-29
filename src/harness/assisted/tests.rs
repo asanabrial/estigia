@@ -638,3 +638,73 @@ fn a_boundary_from_the_base_checkout_is_outside_the_worktree() {
     let decision = decide(&mut rig, &boundary("git pull"), Sensitivity::Boundary);
     assert_eq!(denied_as(&decision), "assisted-outside-the-worktree");
 }
+
+#[test]
+fn a_write_tool_naming_a_path_inside_the_worktree_is_admitted_from_the_base_checkout() {
+    let mut rig = new_rig();
+    rig.context.repo_dir = rig.repo.path().to_path_buf();
+    let target = rig.worktree.join("src.rs");
+    let decision = decide(&mut rig, &write(&target), Sensitivity::Routine);
+    assert!(matches!(decision, Decision::Allow(_)), "{decision:?}");
+}
+
+#[test]
+fn a_write_tool_naming_a_path_in_the_base_checkout_is_refused_from_an_unrelated_directory() {
+    let mut rig = new_rig();
+    let elsewhere = tempfile::tempdir().expect("an unrelated directory");
+    rig.context.repo_dir = elsewhere.path().to_path_buf();
+    let decision = write_in_base(&mut rig);
+    assert_eq!(denied_as(&decision), "assisted-outside-the-worktree");
+}
+
+#[test]
+fn a_shell_write_from_the_base_checkout_is_still_placed_by_where_it_runs() {
+    let mut rig = new_rig();
+    rig.context.repo_dir = rig.repo.path().to_path_buf();
+    let decision = decide(&mut rig, &write(Path::new("sed -i")), Sensitivity::Routine);
+    assert_eq!(denied_as(&decision), "assisted-outside-the-worktree");
+}
+
+#[test]
+fn a_write_tool_naming_a_path_outside_every_repository_is_outside_the_claim_from_the_base_checkout()
+{
+    let mut rig = new_rig();
+    rig.context.repo_dir = rig.repo.path().to_path_buf();
+    let scratch = tempfile::tempdir().expect("a directory in no repository");
+    let decision = decide(
+        &mut rig,
+        &write(&scratch.path().join("probe.txt")),
+        Sensitivity::Routine,
+    );
+    assert!(
+        matches!(decision, Decision::Outside(Aside::OutsideTheClaim)),
+        "{decision:?}"
+    );
+}
+
+#[test]
+fn a_refused_write_tool_names_its_target_and_a_refused_shell_write_names_where_it_runs() {
+    let mut rig = new_rig();
+    let elsewhere = tempfile::tempdir().expect("an unrelated directory");
+    rig.context.repo_dir = elsewhere.path().to_path_buf();
+    let Decision::Deny(refusal) = write_in_base(&mut rig) else {
+        panic!("a write into the base checkout was not refused");
+    };
+    assert!(
+        refusal.message.contains("/x is not inside"),
+        "{}",
+        refusal.message
+    );
+
+    rig.context.repo_dir = rig.repo.path().to_path_buf();
+    let Decision::Deny(refusal) =
+        decide(&mut rig, &write(Path::new("sed -i")), Sensitivity::Routine)
+    else {
+        panic!("a shell write from the base checkout was not refused");
+    };
+    assert!(
+        refusal.message.contains("this call runs in"),
+        "{}",
+        refusal.message
+    );
+}

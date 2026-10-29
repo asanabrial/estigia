@@ -1549,6 +1549,10 @@ pub(crate) fn same_git_repository(left: &std::path::Path, right: &std::path::Pat
     repository_relation(left, right) == Relation::Same
 }
 
+pub(crate) fn another_git_repository(left: &std::path::Path, right: &std::path::Path) -> bool {
+    repository_relation(left, right) == Relation::Different
+}
+
 /// What can be said about two checkouts: the same clone, different ones, or
 /// nothing because git could not answer for one of them.
 #[derive(Clone, Copy, PartialEq, Eq)]
