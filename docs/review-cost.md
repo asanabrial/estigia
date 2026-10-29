@@ -181,7 +181,7 @@ name still dispatches and refuses with its own typed reason.
   The other side of the trade is that a marked schema is paid on every turn of every session. A tool
   stays marked only while most deliveries call it. Over the operator's sessions from 2026-10-24 to
   2026-10-28 (15 sessions, 7,033 turns), `launch_review_input` was called twice, because
-  `publish_review`'s `start_review` launches the slots. Since #310, `review_status` names `deliver`
+  `publish_review`'s `start_review` launches the slots. Over MCP, `review_status` now names `deliver`
   in place of `record_computed_verdict` and `release_ci` wherever `deliver` carries an approval to the
   merge. Those three schemas, about 4 KB together, were unmarked; the run that needs one of them loads
   it with one `ToolSearch`.
