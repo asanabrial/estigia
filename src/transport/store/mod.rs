@@ -43,7 +43,7 @@ pub(crate) use jobs::{Inserted, Job, NewJob};
 pub(crate) use ledger::{Ledger, report_unrecorded, store_path, viewer_login};
 #[cfg(test)]
 pub(crate) use ledger::{forget_scratch_store, ledger_opens, local_bodies};
-pub(crate) use messages::{Message, MessageSent};
+pub(crate) use messages::{Message, MessageListing, MessageSent, MessageShape};
 pub(crate) use needs_person::Need;
 pub(crate) use outbox::{OutboxKind, OutboxRow, OutboxState};
 pub(crate) use records::{Recorded, TaskChange, TaskRow};

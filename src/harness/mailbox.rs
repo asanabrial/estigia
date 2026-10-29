@@ -1,14 +1,15 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use super::session;
+use super::{inbox, session};
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
-use crate::transport::store::{self, Message, MessageSent};
+use crate::transport::store::{self, Message, MessageSent, MessageShape};
 
 pub(crate) const MAX_BODY_BYTES: usize = 8192;
 
 pub(crate) struct Receipt {
     pub(crate) id: i64,
+    pub(crate) thread: i64,
     pub(crate) recipient_ended: bool,
 }
 
@@ -50,11 +51,67 @@ pub(crate) fn recipient_unknown(recipient: &str) -> Refusal {
     )
 }
 
+pub(crate) fn type_unknown(kind: &str) -> Refusal {
+    Refusal::not_started(
+        "message-type-unknown",
+        format!(
+            "`{kind}` is not a message type; the types are {}, and nothing was recorded",
+            inbox::KINDS.join(", ")
+        ),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "one of the listed types, or none for a note",
+        ),
+    )
+}
+
+pub(crate) fn thread_unknown(detail: String) -> Refusal {
+    Refusal::not_started(
+        "message-thread-unknown",
+        format!("{detail}; nothing was recorded"),
+        Resolution::no_command(
+            NoCommandReason::OperatorKnowledge,
+            "the thread a delivered message carried, or none to start a new one",
+        ),
+    )
+}
+
+fn thread_checked(opened: &store::Store, shape: &Shape<'_>) -> Result<(), Refusal> {
+    let read = |id: i64| {
+        opened
+            .message(id)
+            .map_err(|failure| unavailable(&failure.detail()))
+    };
+    let parent = match shape.in_reply_to {
+        Some(id) => {
+            Some(read(id)?.ok_or_else(|| crate::harness::mcp::messaging::reply_unknown(id))?)
+        }
+        None => None,
+    };
+    let Some(thread) = shape.thread else {
+        return Ok(());
+    };
+    match parent {
+        Some(parent) if parent.thread != thread => Err(thread_unknown(format!(
+            "message {} is in thread {}, not {thread}",
+            parent.id, parent.thread
+        ))),
+        Some(_) => Ok(()),
+        None => read(thread)?.map(|_| ()).ok_or_else(|| {
+            thread_unknown(format!("this machine's mailbox holds no message {thread}"))
+        }),
+    }
+}
+
 fn admitted(
     state_root: &Path,
     recipient: &str,
     body: &str,
+    shape: &Shape<'_>,
 ) -> Result<(store::Store, store::SessionRow), Refusal> {
+    if let Some(kind) = shape.kind.filter(|kind| !inbox::KINDS.contains(kind)) {
+        return Err(type_unknown(kind));
+    }
     if body.trim().is_empty() {
         return Err(empty());
     }
@@ -71,34 +128,66 @@ fn admitted(
     let Some(registered) = registered else {
         return Err(recipient_unknown(recipient));
     };
+    thread_checked(&opened, shape)?;
     Ok((opened, registered))
 }
 
 /// Refuses what [`send`] would refuse, writing nothing.
-pub(crate) fn admissible(state_root: &Path, recipient: &str, body: &str) -> Result<(), Refusal> {
-    admitted(state_root, recipient, body).map(|_| ())
+pub(crate) fn admissible(
+    state_root: &Path,
+    recipient: &str,
+    body: &str,
+    shape: &Shape<'_>,
+) -> Result<(), Refusal> {
+    admitted(state_root, recipient, body, shape).map(|_| ())
 }
 
+#[derive(Default)]
+pub(crate) struct Shape<'a> {
+    pub(crate) kind: Option<&'a str>,
+    pub(crate) thread: Option<i64>,
+    pub(crate) in_reply_to: Option<i64>,
+    pub(crate) expires_in: Option<u64>,
+}
+
+#[cfg(test)]
 pub(crate) fn send(
     state_root: &Path,
     sender: Option<&str>,
     recipient: &str,
     body: &str,
 ) -> Result<Receipt, Refusal> {
-    let (opened, registered) = admitted(state_root, recipient, body)?;
+    send_shaped(state_root, sender, recipient, body, &Shape::default())
+}
+
+pub(crate) fn send_shaped(
+    state_root: &Path,
+    sender: Option<&str>,
+    recipient: &str,
+    body: &str,
+    shape: &Shape<'_>,
+) -> Result<Receipt, Refusal> {
+    let (opened, registered) = admitted(state_root, recipient, body, shape)?;
     let now = session::now_seconds().ok_or_else(|| unavailable("the clock could not be read"))?;
-    let id = opened
-        .message_sent(
+    let (id, thread) = opened
+        .message_sent_shaped(
             &MessageSent {
                 sender_run_id: sender,
                 recipient_run_id: recipient,
                 body,
+            },
+            &MessageShape {
+                kind: shape.kind,
+                thread: shape.thread,
+                in_reply_to: shape.in_reply_to,
+                expires_at: shape.expires_in.map(|seconds| now.saturating_add(seconds)),
             },
             now,
         )
         .map_err(|failure| unavailable(&failure.detail()))?;
     Ok(Receipt {
         id,
+        thread,
         recipient_ended: registered.ended_at.is_some(),
     })
 }
@@ -250,10 +339,16 @@ fn render(
                 None => format!("`{run}`"),
             },
         );
+        let mut label = format!("message {}", message.id);
+        if message.kind != "note" {
+            label.push_str(&format!(", {}", message.kind));
+        }
+        if message.thread != message.id {
+            label.push_str(&format!(", thread {}", message.thread));
+        }
         text.push_str(&format!(
-            "\n\nFrom {from}, sent {} (message {}):\n{}",
+            "\n\nFrom {from}, sent {} ({label}):\n{}",
             session::age(now.saturating_sub(message.created_at)),
-            message.id,
             message.body
         ));
         // A row a person wrote has no session behind it, and the id it carries

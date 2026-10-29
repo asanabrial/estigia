@@ -4096,7 +4096,8 @@ measure:
   loss window**: when `ctx.session.prompt` or `synthetic` exists and throws after the rows were taken, the
   rows are stamped delivered that the host refused and the sender sees them delivered; no small fix exists,
   since take and stamp are one statement (a delivery is always stamped before the host acknowledges it, and a
-  killed hook process loses the message as delivered; "read" is never recorded). OpenCode costs one extra
+  killed hook process loses the message as delivered; delivery never records "read", which is the recipient's
+  own act, below). OpenCode costs one extra
   process per tool call.
 - **Waking an idle session was measured live once, by hand, per host, and not under load.** Claude Code 2.1.300
   woke an idle interactive session within 15 seconds when an `asyncRewake` `Stop` hook exited 2 (a new waiter
@@ -4116,6 +4117,14 @@ measure:
   never renders the question waits out the 15 minutes and the send is refused. The grant is per server
   process and keyed by the sender's run id, which the caller names, so an agent naming another run's id
   borrows its grant only if that id was granted in the same process.
+- **`read` and `acked` are what the recipient said, not what a host observed.** Nothing watches a model read
+  its context: `inbox --read` and `--ack` are explicit acts, so a recipient that never calls them leaves
+  every row at `delivered` however carefully it was handled, and one that acks without acting makes the sender's
+  view say so. `inbox` itself is covered by store, unit, MCP and pipe tests against stand-in sessions and was
+  driven on no live host. A thread is the id of its first message and is not scoped to the parties: any run
+  that knows a message id can join its thread. `expires_in` is recorded and shown and decides nothing, so an
+  expired message is still delivered. Types, threads and acks are text and rows in a local file; no gate,
+  permission or claim reads them. Not built: a blocking `ask`, `wait`, broadcast and the completion contract.
 - **A message is text from another session.** Delivery says so in its first lines; nothing stops a model from
   acting on it. **The `flow dev` conflict rule reads the words of the message**: `send_message` and
   `estigia sessions send` refuse text carrying `flow dev <n>` while the recipient's pointer names another

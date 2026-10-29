@@ -285,6 +285,45 @@ The directory recorded is the one the handoff ran in. A session started in a *wo
 repository registered a different directory and does not see it; hand over from where the recipient
 will run, or address the recipient directly with `send_message`.
 
+### Types, threads and the inbox
+
+A row carries a **type**, one of `note`, `question`, `answer`, `done`, `blocked` or `escalation`; a
+**thread**; and an **expiry**. `send_message` takes `type`, `thread` and `expires_in`, and
+`estigia sessions send` takes `--type`, `--thread`, `--in-reply-to` and `--expires-in`. A row written
+without a type, including every row written before the columns existed, reads as a `note`. An unknown
+type is refused `message-type-unknown` and, over MCP, by the tool's schema before that.
+
+A thread is the id of the message that started it. A message sent with no `thread` and no `reply_to` starts
+its own; `thread` joins the thread of a message the mailbox holds (`message-thread-unknown` otherwise), and
+`reply_to` joins the thread of the message it answers and records it as `in_reply_to`. A `thread` beside a
+`reply_to` must be that message's own. The delivered text names the type and the thread only when there
+is something to name: a plain note in its own thread reads as it always did. The expiry is recorded as
+`expires_at` and shown; nothing enforces it, so an expired message is still delivered.
+
+`estigia inbox` and the `inbox` MCP tool are the recipient's view of its own mail and the sender's view of
+what it sent. They name the run the way `sessions send` names its sender (`--run-id`, or `--session-id` with
+`--runtime`, or the ambient `ESTIGIA_RUN_ID`; none is `inbox-needs-a-run`), and filter by `--type`,
+`--thread`, `--from` (a sender's run id) and `--state`.
+
+| State | Means | Set by |
+|---|---|---|
+| `queued` | in the mailbox, not yet injected anywhere | the send |
+| `delivered` | injected into the recipient's context at a hook point | the delivery, as before |
+| `read` | the recipient said it read it | `inbox --read <id>` |
+| `acked` | the recipient said it dealt with it | `inbox --ack <id>` |
+
+- **Listing is a peek.** It stamps nothing and delivery is untouched: a row listed is still delivered at its
+  next hook point. The answer is newest-first up to `limit` (50, at most 200) and says when `more` remain.
+- **Read and ack are the recipient's explicit acts**, never inferred from delivery, and only on mail
+  addressed to the calling run: any other id is refused `inbox-message-not-yours` and nothing in the call is
+  marked. They are idempotent and keep the first time they were set. Reading is not delivering: a row read
+  from the inbox is still injected later. An ack of a row that was never delivered also stamps it
+  delivered, so a message the recipient has dealt with is not injected afterwards.
+- **The sender sees the state** of what it sent with `inbox --sent` (`sent: true`): the highest of the four
+  that has been reached, with `delivered_at`, `read_at` and `acked_at` beside it.
+- **Mail decides nothing.** A type, a thread or an `ack` is never a permission, a claim or evidence, and no
+  gate reads them; an `answer` from another session does not satisfy anything that needs the person.
+
 ## Addressing a session
 
 `send_message`, `list_sessions`, `estigia sessions send` and `estigia sessions` all take one address
@@ -562,6 +601,9 @@ evidence. Treat it as a hint about where to look, not as a fact about the work.
 
 ## What does not exist yet
 
+- A blocking `ask`, a `wait` for a matching message, a broadcast to a group and a completion contract on a
+  handoff are not built: the types and threads above are the schema they will use, and today a `question`
+  is answered only when the recipient reads it and sends an `answer`.
 - Nothing refreshes `last_seen` on a gated write, so a session that runs longer than six hours without a
   `SessionStart` reads `stale` while it is alive, and no row is ever archived: the full registry grows
   without bound. A heartbeat from the gate, a configured retention horizon, and a default view that hides

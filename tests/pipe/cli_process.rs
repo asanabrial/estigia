@@ -361,6 +361,8 @@ fn every_command_that_prints_honours_the_global_json_flag() {
     #[rustfmt::skip]
     let status_set = ["status", "set", "a line", "--run-id", ended_session.as_str(), "--json"];
     #[rustfmt::skip]
+    let inbox = ["inbox", "--run-id", ended_session.as_str(), "--json"];
+    #[rustfmt::skip]
     let session_deliver = ["session", "deliver", "--session-id", "s", "--runtime", "pi", "--json"];
     for arguments in [
         vec!["status", "--json"],
@@ -369,6 +371,7 @@ fn every_command_that_prints_honours_the_global_json_flag() {
         vec!["feed", "--json"],
         vec!["where", "ABC-102", "--json"],
         status_set.to_vec(),
+        inbox.to_vec(),
         session_send.to_vec(),
         session_deliver.to_vec(),
         vec!["update", "--json"],

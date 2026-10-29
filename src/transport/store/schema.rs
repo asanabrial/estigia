@@ -282,4 +282,12 @@ pub(super) const MIGRATIONS: &[&str] = &[
     ALTER TABLE sessions ADD COLUMN binary TEXT;
     ALTER TABLE sessions ADD COLUMN session_file TEXT;
     ",
+    "
+    ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'note';
+    ALTER TABLE messages ADD COLUMN thread INTEGER;
+    ALTER TABLE messages ADD COLUMN in_reply_to INTEGER;
+    ALTER TABLE messages ADD COLUMN read_at INTEGER;
+    ALTER TABLE messages ADD COLUMN acked_at INTEGER;
+    ALTER TABLE messages ADD COLUMN expires_at INTEGER;
+    ",
 ];
