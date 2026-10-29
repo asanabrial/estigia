@@ -8,10 +8,11 @@
 
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
+use std::time::{Duration, Instant};
 
-use super::{NamedRun, ToolFailure, address};
+use super::{NamedRun, Silent, ToolFailure, address};
 use crate::cli::sessions::Listed;
-use crate::harness::{GateContext, inbox, mailbox, session};
+use crate::harness::{GateContext, exchange, inbox, mailbox, session};
 use crate::identity::Identity;
 use crate::outcome::{NoCommandReason, Refusal, Resolution};
 use crate::transport::store;
@@ -32,6 +33,15 @@ pub(super) enum Unasked {
 pub(super) trait Elicit {
     /// The `result` of the client's response, `null` when it answered with an error.
     fn elicit(&mut self, message: &str, schema: Value) -> Result<Value, Unasked>;
+
+    /// Records the progress token the current call carried.
+    fn announce(&mut self, _token: Option<Value>) {}
+
+    /// Caps how long a question to the person may wait for the rest of this call.
+    fn bound(&mut self, _limit: Duration) {}
+
+    /// Tells the client a blocked call is alive, when the call carried a progress token.
+    fn beat(&mut self, _count: u64, _message: &str) {}
 }
 
 /// What the server knows about the person it could ask.
@@ -300,6 +310,36 @@ fn row_json(row: &Listed) -> Value {
     answer
 }
 
+fn consented(
+    consent: &mut Consent<'_>,
+    sender: &str,
+    recipient: &Listed,
+    text: &str,
+) -> Result<(), ToolFailure> {
+    if consent.grants.contains(sender) {
+        return Ok(());
+    }
+    if !consent.declared {
+        return Err(refused(needs_a_person(sender)));
+    }
+    let answer = consent
+        .client
+        .elicit(&question(sender, recipient, text), requested_schema());
+    let answer = match answer {
+        Ok(answer) => answer,
+        Err(Unasked::Unanswered) => Value::Null,
+        Err(Unasked::Unreachable(detail)) => return Err(refused(question_failed(&detail))),
+    };
+    match choice_of(&answer) {
+        ALLOW_ONCE => {}
+        ALLOW_SESSION => {
+            consent.grants.insert(sender.to_owned());
+        }
+        _ => return Err(refused(not_allowed(sender, &recipient.run_id))),
+    }
+    Ok(())
+}
+
 pub(super) fn send_message(
     arguments: &Value,
     context: &GateContext,
@@ -377,7 +417,14 @@ pub(super) fn send_message(
             ));
         }
     };
-    mailbox::admissible(&context.state_root, &recipient.run_id, text, &shape).map_err(refused)?;
+    mailbox::admissible(
+        &context.state_root,
+        Some(sender),
+        &recipient.run_id,
+        text,
+        &shape,
+    )
+    .map_err(refused)?;
     if let Some(conflict) = flow_conflict(&recipient, text) {
         return Err(refused(conflict));
     }
@@ -385,26 +432,7 @@ pub(super) fn send_message(
     let Some(consent) = consent else {
         return Err(refused(needs_a_person(sender)));
     };
-    if !consent.grants.contains(sender) {
-        if !consent.declared {
-            return Err(refused(needs_a_person(sender)));
-        }
-        let answer = consent
-            .client
-            .elicit(&question(sender, &recipient, text), requested_schema());
-        let answer = match answer {
-            Ok(answer) => answer,
-            Err(Unasked::Unanswered) => Value::Null,
-            Err(Unasked::Unreachable(detail)) => return Err(refused(question_failed(&detail))),
-        };
-        match choice_of(&answer) {
-            ALLOW_ONCE => {}
-            ALLOW_SESSION => {
-                consent.grants.insert(sender.to_owned());
-            }
-            _ => return Err(refused(not_allowed(sender, &recipient.run_id))),
-        }
-    }
+    consented(consent, sender, &recipient, text)?;
 
     let receipt = mailbox::send_shaped(
         &context.state_root,
@@ -464,6 +492,177 @@ pub(super) fn inbox(
     inbox::run(&context.state_root, run.id, &request)
         .map(|answer| text_result(answer.to_string()))
         .map_err(refused)
+}
+
+fn timeout_of(arguments: &Value, default: u64) -> Result<Duration, ToolFailure> {
+    match arguments.get("timeout_seconds") {
+        None | Some(Value::Null) => Ok(Duration::from_secs(default)),
+        Some(value) => value
+            .as_u64()
+            .filter(|seconds| (1..=exchange::MAX_SECONDS).contains(seconds))
+            .map(Duration::from_secs)
+            .ok_or_else(|| {
+                malformed(format!(
+                    "`timeout_seconds` is a whole number from 1 to {}",
+                    exchange::MAX_SECONDS
+                ))
+            }),
+    }
+}
+
+fn choices_of(arguments: &Value) -> Result<Vec<String>, ToolFailure> {
+    let invalid = || malformed("`choices` is a list of distinct, non-empty strings".to_owned());
+    let Some(listed) = arguments.get("choices").filter(|value| !value.is_null()) else {
+        return Ok(Vec::new());
+    };
+    let mut choices: Vec<String> = Vec::new();
+    for choice in listed.as_array().ok_or_else(invalid)? {
+        let choice = choice
+            .as_str()
+            .map(str::trim)
+            .filter(|choice| !choice.is_empty());
+        let choice = choice.ok_or_else(invalid)?;
+        if choices.iter().any(|held| held == choice) {
+            return Err(invalid());
+        }
+        choices.push(choice.to_owned());
+    }
+    Ok(choices)
+}
+
+pub(super) fn ask(
+    arguments: &Value,
+    context: &GateContext,
+    named: Option<&NamedRun<'_>>,
+    consent: Option<&mut Consent<'_>>,
+) -> Result<Value, ToolFailure> {
+    let asker = named
+        .ok_or_else(|| malformed("`run_id` is this run's id; ask needs it".to_owned()))?
+        .id;
+    let text = arguments
+        .get("text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| malformed("`text` is a string; ask needs it".to_owned()))?;
+    let to = arguments
+        .get("to")
+        .and_then(Value::as_str)
+        .ok_or_else(|| malformed("`to` is an address string; ask needs it".to_owned()))?;
+    let choices = choices_of(arguments)?;
+    let timeout = timeout_of(arguments, exchange::DEFAULT_ASK_SECONDS)?;
+    let started = Instant::now();
+    let recipient = resolved(context, &address::spoken(to), None).map_err(refused)?;
+    let body = exchange::question_body(text, &choices);
+    let shape = mailbox::Shape {
+        kind: Some("question"),
+        ..mailbox::Shape::default()
+    };
+    mailbox::admissible(
+        &context.state_root,
+        Some(asker),
+        &recipient.run_id,
+        &body,
+        &shape,
+    )
+    .map_err(refused)?;
+    if recipient.run_id == asker {
+        return Err(refused(exchange::ask_to_self(asker)));
+    }
+    if let Some(conflict) = flow_conflict(&recipient, text) {
+        return Err(refused(conflict));
+    }
+    let Some(consent) = consent else {
+        return Err(refused(needs_a_person(asker)));
+    };
+    consent.client.bound(timeout);
+    consented(consent, asker, &recipient, &body)?;
+
+    let question = exchange::Question {
+        asker,
+        recipient: &recipient.run_id,
+        text,
+        choices: &choices,
+    };
+    let remaining = timeout.saturating_sub(started.elapsed());
+    let posed = exchange::pose(&context.state_root, &question, remaining).map_err(refused)?;
+    let client = &mut *consent.client;
+    let waiting = format!("waiting for an answer from {}", recipient.spoken());
+    let outcome = exchange::awaiting(
+        &context.state_root,
+        &question,
+        &posed,
+        started + timeout,
+        &mut exchange::Heartbeat::every_ten_seconds(|count| client.beat(count, &waiting)),
+    )
+    .map_err(refused)?;
+    let mut answer = json!({
+        "question": posed.question,
+        "thread": posed.thread,
+        "to": row_json(&recipient),
+        "waited_seconds": started.elapsed().as_secs(),
+    });
+    exchange::describe(&mut answer, &outcome);
+    Ok(text_result(answer.to_string()))
+}
+
+pub(super) fn wait(
+    arguments: &Value,
+    context: &GateContext,
+    named: Option<&NamedRun<'_>>,
+    consent: Option<&mut Consent<'_>>,
+) -> Result<Value, ToolFailure> {
+    let run =
+        named.ok_or_else(|| malformed("`run_id` is this run's id; wait needs it".to_owned()))?;
+    let text = |name: &str| match arguments.get(name) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) => Ok(Some(value.as_str())),
+        Some(_) => Err(malformed(format!("`{name}` is a string"))),
+    };
+    let kind = text("type")?;
+    if let Some(kind) = kind.filter(|kind| !inbox::KINDS.contains(kind)) {
+        return Err(refused(mailbox::type_unknown(kind)));
+    }
+    let thread = match arguments.get("thread") {
+        None | Some(Value::Null) => None,
+        Some(value) => Some(
+            value
+                .as_i64()
+                .filter(|number| *number >= 1)
+                .ok_or_else(|| malformed("`thread` is a whole number from 1".to_owned()))?,
+        ),
+    };
+    let timeout = timeout_of(arguments, exchange::DEFAULT_WAIT_SECONDS)?;
+    let filter = exchange::Filter {
+        kind,
+        thread,
+        from: text("from")?,
+    };
+    let started = Instant::now();
+    let mut silent = Silent;
+    let client: &mut dyn Elicit = match consent {
+        Some(consent) => &mut *consent.client,
+        None => &mut silent,
+    };
+    let found = exchange::wait(
+        &context.state_root,
+        run.id,
+        &filter,
+        started + timeout,
+        &mut exchange::Heartbeat::every_ten_seconds(|count| {
+            client.beat(count, "waiting for a matching message");
+        }),
+    )
+    .map_err(refused)?;
+    let mut answer = match found {
+        Some(message) => json!({ "outcome": "message", "message": inbox::shown(&message) }),
+        None => json!({ "outcome": "timed_out", "waited_seconds": started.elapsed().as_secs() }),
+    };
+    if run.runtime == "codex" {
+        answer["wake"] = json!(
+            "Codex cannot be woken when idle: this wait held the turn open and covers only it; \
+             mail that arrives after it returns waits for the next hook point"
+        );
+    }
+    Ok(text_result(answer.to_string()))
 }
 
 pub(super) fn list_sessions(

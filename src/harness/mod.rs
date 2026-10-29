@@ -43,6 +43,7 @@ pub mod assisted;
 pub mod changes;
 pub mod decision_mode;
 pub mod doctor;
+pub(crate) mod exchange;
 pub mod guard;
 pub(crate) mod handoff;
 pub mod hook;

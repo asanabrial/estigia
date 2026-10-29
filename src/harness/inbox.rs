@@ -83,7 +83,7 @@ fn unavailable(detail: &str) -> Refusal {
     )
 }
 
-fn shown(message: &Message) -> Value {
+pub(crate) fn shown(message: &Message) -> Value {
     json!({
         "id": message.id,
         "thread": message.thread,
