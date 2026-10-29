@@ -119,7 +119,7 @@ impl Store {
     pub(crate) fn session_binary(&self, run_id: &str, binary: Option<&str>) -> Result<(), Failure> {
         self.connection()
             .execute(
-                "UPDATE sessions SET binary = ?2 WHERE run_id = ?1",
+                "UPDATE sessions SET binary = COALESCE(?2, binary) WHERE run_id = ?1",
                 rusqlite::params![run_id, binary],
             )
             .map_err(unreadable("record the program of a session"))?;

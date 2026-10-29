@@ -133,4 +133,27 @@ mod tests {
 
         assert_eq!(rows[0].session_file.as_deref(), Some("/p/t_019a-pi.jsonl"));
     }
+
+    #[test]
+    fn a_binary_that_cannot_be_read_this_time_keeps_the_one_stored() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let root = directory.path().join("runs");
+        std::fs::create_dir(&root).expect("a state root");
+        let opened = store::Store::open(&store::beside(&root)).expect("the store opens");
+        record_start(&root, "claude", "sess-1", directory.path(), None);
+        let run_id = session::run_id("claude", "sess-1");
+        opened
+            .session_binary(&run_id, Some("/opt/bin/claude"))
+            .expect("stored");
+
+        opened.session_binary(&run_id, None).expect("unreadable");
+        let kept = opened.sessions().expect("read")[0].binary.clone();
+        opened
+            .session_binary(&run_id, Some("/opt/bin/other"))
+            .expect("read again");
+        let updated = opened.sessions().expect("read")[0].binary.clone();
+
+        assert_eq!(kept.as_deref(), Some("/opt/bin/claude"));
+        assert_eq!(updated.as_deref(), Some("/opt/bin/other"));
+    }
 }

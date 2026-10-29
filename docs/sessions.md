@@ -39,6 +39,12 @@ a file named exactly that command; then `resume` prints that path instead (`/opt
   `resume-runtime-misattributed`. A runtime with no
   command is refused `resume-no-native-command`. Both name the alternatives, and perform none: keep the row,
   `estigia release --run-id`, or `handoff`.
+- **The alternatives are ordered and name the issue.** The report knows the held issue from the run's claim
+  marker, else from its pointer. It lists keep, then `estigia release --run-id <run>` (still how a lapsed
+  claim is put down), then `estigia handoff <issue> --to <runtime>`, which comes only after the release
+  because `handoff` refuses a held issue. With no issue held, handoff is not offered and the text says there
+  is nothing to hand over. `--json` carries them as `alternatives`, an ordered list of `{action, command}`
+  (`command` is null for keep). Resume runs none of them.
 - **Liveness** is read from the process the registry recorded: the parent of the `SessionStart` hook or
   `estigia session start`, which is the agent, and the machine's host name. `--print` reports it as `live` (with
   the pid), `gone` or `unknown`. It is `unknown` when the row has no process (it was registered before this, or on
