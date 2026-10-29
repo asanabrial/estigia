@@ -3783,44 +3783,45 @@ fn a_claim_naming_a_branch_creates_the_checkout_in_the_same_call() {
     ]))
     .expect("the fake tracker script serialises");
 
-    let request = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": { "name": "claim", "arguments": {
-            "issue": 12,
-            "run_id": run_id,
-            "horizon": "2099-01-01T00:00Z",
-            "branch": branch,
-            "base": "main",
-            "worktree_root": trees.path().display().to_string(),
-        } },
-    });
     let counts = tempfile::tempdir().expect("a directory for the call counter");
-    let output = tracker_command(home, repo, bin, &answers)
-        .arg("mcp")
-        .env("ESTIGIA_FAKE_COUNT", counts.path().join("count"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .and_then(|mut child| {
-            use std::io::Write;
-            writeln!(child.stdin.take().expect("stdin is piped"), "{request}")?;
-            child.wait_with_output()
-        })
-        .expect("the MCP server runs");
-    let line = String::from_utf8_lossy(&output.stdout);
-    let response: serde_json::Value =
-        serde_json::from_str(line.trim()).unwrap_or_else(|_| panic!("not JSON-RPC: {line:?}"));
-    let text = response["result"]["content"][0]["text"]
-        .as_str()
-        .unwrap_or_default();
-    assert_eq!(
-        response["result"]["isError"], false,
-        "the claim was refused: {text}"
-    );
-    let answer: serde_json::Value = serde_json::from_str(text).expect("the answer is JSON");
+    let claim = |claimant: &str, branch: &str, base: &str| -> (bool, serde_json::Value) {
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": { "name": "claim", "arguments": {
+                "issue": 12,
+                "run_id": claimant,
+                "horizon": "2099-01-01T00:00Z",
+                "branch": branch,
+                "base": base,
+                "worktree_root": trees.path().display().to_string(),
+            } },
+        });
+        let output = tracker_command(home, repo, bin, &answers)
+            .arg("mcp")
+            .env("ESTIGIA_FAKE_COUNT", counts.path().join("count"))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                use std::io::Write;
+                writeln!(child.stdin.take().expect("stdin is piped"), "{request}")?;
+                child.wait_with_output()
+            })
+            .expect("the MCP server runs");
+        let line = String::from_utf8_lossy(&output.stdout);
+        let response: serde_json::Value =
+            serde_json::from_str(line.trim()).unwrap_or_else(|_| panic!("not JSON-RPC: {line:?}"));
+        let text = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default();
+        let answer = serde_json::from_str(text).unwrap_or(serde_json::json!({ "text": text }));
+        (response["result"]["isError"] != false, answer)
+    };
+    let (refused, answer) = claim(run_id, branch, "main");
+    assert!(!refused, "the claim was refused: {answer}");
     assert_eq!(
         answer["start_branch"]["ok"], true,
         "the claim did not create the checkout: {answer}"
@@ -3845,5 +3846,37 @@ fn a_claim_naming_a_branch_creates_the_checkout_in_the_same_call() {
             .covered()
             .any(|covered| estigia::paths::covers(covered, repo)),
         "the claim stopped covering the checkout it was sworn from"
+    );
+
+    let worktrees = || checked_git_stdout(repo, &["worktree", "list", "--porcelain"]);
+    let before = worktrees();
+    let (refused, answer) = claim("claude-0abc1234", "fix-12-loser", "main");
+    assert!(refused, "a claim another run holds was granted: {answer}");
+    assert_eq!(
+        worktrees(),
+        before,
+        "the refused claim created a checkout: {answer}"
+    );
+    let loser = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["rev-parse", "--verify", "-q", "refs/heads/fix-12-loser"])
+        .output()
+        .expect("git runs");
+    assert!(
+        !loser.status.success(),
+        "the refused claim created its branch"
+    );
+
+    let (refused, answer) = claim(run_id, "fix-12-no-base", "no-such-base");
+    assert!(
+        !refused,
+        "a failed checkout refused the whole claim: {answer}"
+    );
+    assert_eq!(answer["start_branch"]["ok"], false, "{answer}");
+    assert_eq!(
+        estigia::harness::session::load(&runs, run_id).issue_number(),
+        Some(12),
+        "the checkout that failed undid the claim before it"
     );
 }
